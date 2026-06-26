@@ -1,0 +1,20 @@
+@use 'components/shared/styles/mixins' as *;
+
+.layout {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+
+    .deriv-header {
+        background: var(--general-main-1);
+        height: 5.6rem;
+    }
+
+    &.quick-strategy-active {
+        .deriv-header {
+            @include mobile-or-tablet-screen {
+                z-index: 10000;
+            }
+        }
+    }
+}

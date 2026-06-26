@@ -1,0 +1,69 @@
+.app-header {
+    &__logo {
+        padding-inline-start: 1.6rem;
+        padding-inline-end: 1.6rem;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        text-decoration: none;
+    }
+
+    // Logo + app name mark (shared by the header and the mobile drawer).
+    &__logo-mark {
+        display: flex;
+        align-items: center;
+        min-width: 0;
+    }
+
+    &__logo-img {
+        width: auto;
+        max-width: 160px;
+        object-fit: contain;
+    }
+
+    // Letter-badge fallback shown when no logo file/data URL is available.
+    &__logo-badge {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: none;
+        border-radius: 0.8rem;
+        background: color-mix(in srgb, var(--brand-primary, var(--text-general)) 10%, transparent);
+        color: var(--brand-primary, var(--text-general));
+        font-weight: 700;
+        font-size: 1.4rem;
+        line-height: 1;
+    }
+
+    &__logo-text {
+        margin-left: 1.2rem;
+        color: var(--text-general);
+        font-weight: 600;
+        font-size: 1.8rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 220px;
+    }
+
+    // On mobile the mark sits next to the hamburger and the account section, so
+    // tighten the padding and show the logo only — the app name is desktop-only
+    // here to avoid crowding. (The mobile drawer header still shows the name.)
+    &--mobile {
+        .app-header__logo {
+            padding-inline-start: 0.8rem;
+            padding-inline-end: 0.8rem;
+        }
+
+        .app-header__logo-text {
+            display: none;
+        }
+    }
+}
+
+// The same mark inside the mobile drawer header shows the app name (the header's
+// --mobile rule hides it, but the drawer has room) and can use the full available width.
+.mobile-menu__header .app-header__logo-text {
+    display: block;
+    max-width: 180px;
+}

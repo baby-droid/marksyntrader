@@ -1,0 +1,23 @@
+@use 'components/shared/styles/themes' as *;
+// Removed IBM Plex Sans Google Font import - now using brand font from brand.config.json
+// Third-party developers can add their own font imports if needed
+
+body {
+    // Updated to use brand font variable from brand.config.json
+    font-family: var(--brand-font-primary);
+    background: var(--general-main-1);
+}
+
+.icon-general-fill-path {
+    path {
+        fill: var(--text-general);
+    }
+}
+
+.icon-general-fill-g-path {
+    g {
+        path {
+            fill: var(--text-general);
+        }
+    }
+}
