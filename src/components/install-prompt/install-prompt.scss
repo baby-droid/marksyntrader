@@ -1,0 +1,79 @@
+.install-prompt {
+  position: fixed;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  animation: slideUp 0.4s ease;
+
+  &__content {
+    display: flex;
+    align-items: center;
+    gap: 1.2rem;
+    background: #1a1a2e;
+    border: 1px solid #4C7DFF;
+    border-radius: 1.6rem;
+    padding: 1.2rem 1.6rem;
+    box-shadow: 0 8px 32px rgba(76, 125, 255, 0.3);
+    min-width: 32rem;
+    max-width: 90vw;
+  }
+
+  &__icon img {
+    width: 4rem;
+    height: 4rem;
+    border-radius: 0.8rem;
+    object-fit: cover;
+  }
+
+  &__text {
+    flex: 1;
+  }
+
+  &__title {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: #fff;
+    margin: 0;
+  }
+
+  &__subtitle {
+    font-size: 1.2rem;
+    color: #aaa;
+    margin: 0;
+  }
+
+  &__actions {
+    display: flex;
+    gap: 0.8rem;
+    align-items: center;
+  }
+
+  &__btn {
+    border: none;
+    cursor: pointer;
+    border-radius: 0.8rem;
+    font-weight: 600;
+    font-size: 1.3rem;
+    padding: 0.6rem 1.4rem;
+    transition: all 0.2s;
+
+    &--install {
+      background: #4C7DFF;
+      color: #fff;
+      &:hover { background: #3a6be0; }
+    }
+
+    &--dismiss {
+      background: transparent;
+      color: #aaa;
+      padding: 0.6rem;
+      &:hover { color: #fff; }
+    }
+  }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateX(-50%) translateY(2rem); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
