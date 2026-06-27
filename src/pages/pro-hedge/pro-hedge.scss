@@ -1,0 +1,268 @@
+.pro-hedge {
+  padding: 1.6rem;
+  max-width: 1400px;
+  margin: 0 auto;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 2rem;
+
+    h1 { font-size: 2.4rem; font-weight: 800; margin: 0; color: var(--text-general, #1a1a2e); }
+    p { margin: 0.2rem 0 0; font-size: 1.3rem; color: #888; }
+  }
+
+  &__balance {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #4C7DFF;
+    background: rgba(76, 125, 255, 0.1);
+    padding: 0.8rem 1.6rem;
+    border-radius: 0.8rem;
+  }
+
+  &__body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.6rem;
+    @media (max-width: 900px) { grid-template-columns: 1fr; }
+  }
+
+  &__card {
+    background: var(--general-main-1, #fff);
+    border: 1px solid var(--general-section-1, #eee);
+    border-radius: 1.2rem;
+    padding: 1.6rem;
+    margin-bottom: 1.2rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+
+    h3 { font-size: 1.3rem; font-weight: 700; color: #666; text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 1.2rem; }
+
+    label { font-size: 1.2rem; color: #888; display: block; margin-bottom: 0.4rem; }
+
+    select {
+      width: 100%;
+      padding: 0.8rem 1rem;
+      border: 1px solid #ddd;
+      border-radius: 0.6rem;
+      font-size: 1.3rem;
+      background: var(--general-main-1, #fff);
+      color: var(--text-general, #333);
+      outline: none;
+    }
+  }
+
+  &__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.2rem;
+    flex-wrap: wrap;
+  }
+
+  &__price-box {
+    text-align: right;
+    strong { display: block; font-size: 2rem; font-weight: 800; color: var(--text-general, #333); }
+    span { font-size: 1.2rem; font-weight: 600; }
+    .live { color: #42B883; }
+    .dead { color: #E24A43; }
+  }
+
+  &__hedge-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.2rem;
+    margin-bottom: 1.2rem;
+  }
+
+  &__direction-card {
+    border-radius: 1.2rem;
+    padding: 1.6rem;
+    border: 2px solid;
+
+    h3 { font-size: 1.4rem; font-weight: 700; margin: 0 0 1rem; }
+    label { font-size: 1.2rem; color: #888; display: block; margin-bottom: 0.4rem; }
+
+    input {
+      width: 100%;
+      padding: 0.8rem 1rem;
+      border: 1px solid rgba(255,255,255,0.3);
+      border-radius: 0.6rem;
+      font-size: 1.4rem;
+      box-sizing: border-box;
+      outline: none;
+    }
+
+    &--call {
+      background: rgba(66, 184, 131, 0.08);
+      border-color: #42B883;
+      h3 { color: #42B883; }
+      input { background: rgba(66, 184, 131, 0.05); color: var(--text-general, #333); }
+    }
+
+    &--put {
+      background: rgba(226, 74, 67, 0.08);
+      border-color: #E24A43;
+      h3 { color: #E24A43; }
+      input { background: rgba(226, 74, 67, 0.05); color: var(--text-general, #333); }
+    }
+  }
+
+  &__params {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 1rem;
+
+    label {
+      display: flex;
+      flex-direction: column;
+      font-size: 1.2rem;
+      color: #888;
+      gap: 0.4rem;
+
+      input {
+        padding: 0.7rem 0.8rem;
+        border: 1px solid #ddd;
+        border-radius: 0.6rem;
+        font-size: 1.3rem;
+        background: var(--general-main-1, #fff);
+        color: var(--text-general, #333);
+        outline: none;
+        &:focus { border-color: #4C7DFF; }
+      }
+    }
+  }
+
+  &__mode {
+    background: var(--general-main-1, #fff);
+    border: 1px solid var(--general-section-1, #eee);
+    border-radius: 1.2rem;
+    padding: 1.6rem;
+    margin-bottom: 1.2rem;
+
+    h3 { font-size: 1.3rem; font-weight: 700; color: #666; text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 1.2rem; }
+  }
+
+  &__mode-btns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+
+    button {
+      padding: 1.2rem;
+      border: 2px solid #ddd;
+      border-radius: 0.8rem;
+      background: #f8f8f8;
+      cursor: pointer;
+      font-size: 1.3rem;
+      text-align: center;
+      transition: all 0.2s;
+      color: var(--text-general, #555);
+      small { color: #888; display: block; font-size: 1.1rem; margin-top: 0.4rem; }
+
+      &.active {
+        background: rgba(76, 125, 255, 0.1);
+        border-color: #4C7DFF;
+        color: #4C7DFF;
+        font-weight: 700;
+      }
+      &:hover:not(.active) { background: #eff0f1; }
+    }
+  }
+
+  &__actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1.2rem;
+  }
+
+  &__btn {
+    padding: 1.4rem;
+    border: none;
+    border-radius: 0.8rem;
+    font-size: 1.5rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: #fff;
+
+    &:disabled { opacity: 0.6; cursor: not-allowed; }
+    &--hedge { background: #4C7DFF; &:hover:not(:disabled) { background: #3a6be0; } }
+    &--auto { background: #42B883; &:hover { background: #35a070; } }
+    &--stop { background: #E24A43; &:hover { background: #c73a34; } }
+  }
+
+  &__summary {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0.8rem;
+    @media (max-width: 600px) { grid-template-columns: repeat(3, 1fr); }
+  }
+
+  &__summary-item {
+    background: var(--general-section-1, #f8f8f8);
+    border-radius: 0.8rem;
+    padding: 1rem;
+    text-align: center;
+
+    span { display: block; font-size: 1.1rem; color: #888; }
+    strong { font-size: 1.6rem; font-weight: 800; color: var(--text-general, #333); }
+    strong.pos { color: #42B883; }
+    strong.neg { color: #E24A43; }
+  }
+
+  &__log {
+    max-height: 20rem;
+    overflow-y: auto;
+    font-size: 1.2rem;
+  }
+
+  &__log-entry {
+    display: flex;
+    gap: 1.2rem;
+    align-items: center;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #f0f0f0;
+    color: var(--text-general, #555);
+  }
+
+  &__mode-tag {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #4C7DFF;
+    background: rgba(76, 125, 255, 0.1);
+    padding: 0.2rem 0.6rem;
+    border-radius: 0.4rem;
+  }
+
+  &__trades {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    max-height: 24rem;
+    overflow-y: auto;
+  }
+
+  &__trade {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.6rem 1rem;
+    border-radius: 0.4rem;
+    font-size: 1.2rem;
+    font-weight: 600;
+
+    &.won { background: rgba(66, 184, 131, 0.08); color: #42B883; }
+    &.lost { background: rgba(226, 74, 67, 0.08); color: #E24A43; }
+  }
+
+  &__empty {
+    color: #aaa;
+    font-size: 1.3rem;
+    text-align: center;
+    padding: 2rem;
+  }
+}
