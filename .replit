@@ -46,4 +46,5 @@ publicDir = "dist"
 [userenv]
 
 [userenv.shared]
-NEXT_PUBLIC_DERIV_REDIRECT_URI = "https://marksyntrader.replit.app"
+NEXT_PUBLIC_DERIV_REDIRECT_URI = "https://marksyntrader.replit.app/callback"
+NEXT_PUBLIC_DERIV_ENV = "production"

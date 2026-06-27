@@ -1,0 +1,182 @@
+.callback-page {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(ellipse at 30% 20%, rgba(14, 165, 233, 0.12) 0%, transparent 60%),
+                radial-gradient(ellipse at 80% 80%, rgba(168, 85, 247, 0.08) 0%, transparent 55%),
+                #0a0f1e;
+    padding: 24px;
+
+    &__card {
+        background: rgba(30, 41, 59, 0.85);
+        border: 1px solid rgba(56, 189, 248, 0.2);
+        border-radius: 24px;
+        padding: 48px 40px;
+        width: 440px;
+        max-width: 100%;
+        text-align: center;
+        backdrop-filter: blur(20px);
+        box-shadow: 0 32px 80px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(56, 189, 248, 0.1);
+        animation: card-in 0.4s cubic-bezier(0.34, 1.2, 0.64, 1);
+
+        @keyframes card-in {
+            from { opacity: 0; transform: translateY(24px) scale(0.96); }
+            to   { opacity: 1; transform: translateY(0) scale(1); }
+        }
+    }
+
+    &__logo {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        margin-bottom: 36px;
+    }
+
+    &__logo-icon {
+        font-size: 28px;
+        filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.6));
+    }
+
+    &__logo-text {
+        font-size: 20px;
+        font-weight: 800;
+        color: #f1f5f9;
+        letter-spacing: -0.02em;
+    }
+
+    &__spinner {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 28px;
+    }
+
+    &__spinner-ring {
+        width: 56px;
+        height: 56px;
+        border: 3px solid rgba(56, 189, 248, 0.15);
+        border-top-color: #38bdf8;
+        border-radius: 50%;
+        animation: spin 0.9s linear infinite;
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    }
+
+    &__title {
+        margin: 0 0 12px;
+        font-size: 20px;
+        font-weight: 700;
+        color: #f1f5f9;
+
+        &--error {
+            color: #f87171;
+        }
+    }
+
+    &__subtitle {
+        margin: 0 0 32px;
+        font-size: 14px;
+        color: #64748b;
+        line-height: 1.6;
+    }
+
+    &__steps {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        text-align: left;
+        background: rgba(15, 23, 42, 0.6);
+        border-radius: 12px;
+        padding: 16px 20px;
+        border: 1px solid rgba(56, 189, 248, 0.1);
+    }
+
+    &__error-icon {
+        font-size: 48px;
+        margin-bottom: 20px;
+        color: #f87171;
+    }
+
+    &__retry-btn {
+        margin-top: 8px;
+        padding: 11px 28px;
+        background: linear-gradient(135deg, #0ea5e9, #38bdf8);
+        color: #fff;
+        border: none;
+        border-radius: 12px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.18s;
+        box-shadow: 0 4px 14px rgba(14, 165, 233, 0.35);
+
+        &:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 18px rgba(14, 165, 233, 0.45);
+        }
+    }
+}
+
+.callback-step {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+
+    &__dot {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        flex-shrink: 0;
+        background: rgba(56, 189, 248, 0.08);
+        border: 1.5px solid rgba(56, 189, 248, 0.2);
+        color: #64748b;
+    }
+
+    &__label {
+        font-size: 13px;
+        color: #64748b;
+        font-weight: 500;
+    }
+
+    &--done {
+        .callback-step__dot {
+            background: rgba(16, 185, 129, 0.15);
+            border-color: #10b981;
+            color: #10b981;
+        }
+        .callback-step__label {
+            color: #94a3b8;
+        }
+    }
+
+    &--active {
+        .callback-step__dot {
+            background: rgba(56, 189, 248, 0.15);
+            border-color: #38bdf8;
+        }
+        .callback-step__label {
+            color: #e2e8f0;
+        }
+    }
+
+    &__pulse {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #38bdf8;
+        display: block;
+        animation: pulse-dot 1s ease-in-out infinite;
+
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50%       { opacity: 0.4; transform: scale(0.6); }
+        }
+    }
+}

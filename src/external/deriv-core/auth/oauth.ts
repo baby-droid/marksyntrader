@@ -25,7 +25,7 @@ async function buildPkceParams(config: AuthConfig): Promise<URLSearchParams> {
   storeCodeVerifier(codeVerifier);
 
   return new URLSearchParams({
-    scope: config.scopes ?? 'trade account_manage',
+    scope: config.scopes ?? 'trade read',
     response_type: 'code',
     client_id: config.clientId,
     redirect_uri: config.redirectUri,

@@ -1,9 +1,10 @@
 // @ts-nocheck — vendored bot code with known upstream type gaps; see AGENTS.md
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import clsx from 'clsx';
 import { observer } from 'mobx-react-lite';
 import { Outlet } from 'react-router-dom';
 import { api_base } from '@/external/bot-skeleton';
+import { useApiBase } from '@/hooks/useApiBase';
 import { useStore } from '@/hooks/useStore';
 import { useDevice } from '@deriv-com/ui';
 import { crypto_currencies_display_order, fiat_currencies_display_order } from '../shared';
@@ -12,9 +13,12 @@ import AppHeader from './header';
 import Body from './main-body';
 import './layout.scss';
 
+const LoginSuspensionPage = lazy(() => import('../../pages/login/login-suspension'));
+
 const Layout = observer(() => {
     const { isDesktop } = useDevice();
     const store = useStore();
+    const { activeLoginid, isAuthorizing } = useApiBase();
     const is_quick_strategy_active = store?.quick_strategy?.is_open;
     const isCallbackPage = window.location.pathname === '/callback';
 
@@ -141,6 +145,21 @@ const Layout = observer(() => {
             return () => clearTimeout(timer);
         }
     }, [isAuthenticating, isInitialAuthCheckComplete]);
+
+    // Show full-page login wall when not authenticated (and not on callback route)
+    const showSuspensionPage =
+        !isCallbackPage &&
+        !isAuthorizing &&
+        isInitialAuthCheckComplete &&
+        !activeLoginid;
+
+    if (showSuspensionPage) {
+        return (
+            <Suspense fallback={null}>
+                <LoginSuspensionPage />
+            </Suspense>
+        );
+    }
 
     return (
         <div
