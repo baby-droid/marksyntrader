@@ -94,9 +94,7 @@ function App() {
                     DerivWSAccountsService.storeAccounts(accounts);
                     const firstAccount = accounts[0];
                     localStorage.setItem('active_loginid', firstAccount.account_id);
-                    const isDemo =
-                        firstAccount.account_id.startsWith('VRT') || firstAccount.account_id.startsWith('VRTC');
-                    localStorage.setItem('account_type', isDemo ? 'demo' : 'real');
+                    localStorage.setItem('account_type', firstAccount.account_type);
 
                     const { api_base } = await import('@/external/bot-skeleton');
                     await api_base.init(true);

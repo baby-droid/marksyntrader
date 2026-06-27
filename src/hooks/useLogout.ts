@@ -31,6 +31,11 @@ export const useLogout = () => {
                 localStorage.removeItem('accountsList');
                 localStorage.removeItem('clientAccounts');
                 localStorage.removeItem('account_type');
+                localStorage.removeItem('deriv_accounts');
+                localStorage.removeItem('auth_info');
+
+                // Clear session-scoped account cache used by the OTP WebSocket flow
+                sessionStorage.removeItem('deriv_accounts');
             } catch (storageError) {
                 ErrorLogger.error('Logout', 'Failed to clear auth storage', storageError);
                 // Last resort: if targeted clearing fails, clear all storage
