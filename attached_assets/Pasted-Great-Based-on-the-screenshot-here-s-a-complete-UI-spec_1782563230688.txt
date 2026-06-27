@@ -1,0 +1,164 @@
+Great. Based on the screenshot, here's a complete UI specification you can use in **Figma, Canva, HTML/CSS, or Flutter**.
+
+## Circle Specifications
+
+| Element                   |                     Size |
+| ------------------------- | -----------------------: |
+| Main Circle               |           **72 × 72 px** |
+| Current Digit Outer Ring  |           **84 × 84 px** |
+| Circle Border             |                 **2 px** |
+| Current Digit Ring Border |                 **3 px** |
+| Corner Radius             | **50% (Perfect Circle)** |
+
+---
+
+## Typography
+
+### Digit (0–9)
+
+* Font: **Inter SemiBold** or **Poppins SemiBold**
+* Size: **22 px**
+* Weight: **600**
+* Color: `#1F2937`
+
+### Percentage
+
+* Font Size: **14 px**
+* Weight: **500**
+* Color: `#555`
+
+---
+
+## Colors
+
+### Normal Circle
+
+* Fill: `#FFFFFF`
+* Border: `#D9D9D9`
+
+### Orange (Digit 3)
+
+```
+Fill: #D88B1F
+```
+
+### Green (Digit 6 & 8)
+
+```
+Fill: #42B883
+```
+
+### Red (Digit 7)
+
+```
+Fill: #E24A43
+```
+
+### Blue (Digit 9)
+
+```
+Fill: #4E7CF5
+```
+
+### Current Digit Ring
+
+```
+Stroke: #4C7DFF
+```
+
+---
+
+## Layout
+
+```
+Circle Width      : 72 px
+Gap Between Circles : 28 px
+Top Margin          : 35 px
+Bottom Margin       : 25 px
+```
+
+Center alignment for every circle.
+
+---
+
+## Shadow
+
+Very subtle shadow.
+
+```
+X: 0
+Y: 2
+Blur: 6
+Opacity: 10%
+```
+
+---
+
+## HTML/CSS Version
+
+```css
+.digit-circle{
+    width:72px;
+    height:72px;
+    border-radius:50%;
+    border:2px solid #ddd;
+    background:#fff;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex-direction:column;
+    font-family:Inter,sans-serif;
+}
+
+.current{
+    width:84px;
+    height:84px;
+    border:3px solid #4C7DFF;
+    border-radius:50%;
+    padding:4px;
+}
+
+.number{
+    font-size:22px;
+    font-weight:600;
+}
+
+.percent{
+    font-size:14px;
+    color:#555;
+}
+```
+
+---
+
+## Figma Settings
+
+```
+Frame Width : 72
+Frame Height: 72
+
+Corner Radius:
+999
+
+Stroke:
+2 px
+
+Auto Layout:
+Vertical
+Center
+Spacing: 4 px
+```
+
+---
+
+## Exact Measurements from the Screenshot
+
+* Main circle: **≈72 px**
+* Selected outer ring: **≈84 px**
+* Border: **≈2 px**
+* Selected ring: **≈3 px**
+* Digit font: **≈22 px**
+* Percentage font: **≈14 px**
+* Distance between circles: **≈28 px**
+
+These settings will reproduce the appearance of the interface in your screenshot very closely (within a few pixels).

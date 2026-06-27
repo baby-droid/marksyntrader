@@ -1,19 +1,37 @@
+// @ts-nocheck
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { getSavedWorkspaces } from '@/external/bot-skeleton';
 import { useStore } from '@/hooks/useStore';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import './bot-library.scss';
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+import speedBotXml from './speed-bot.xml';
+
 interface BotEntry {
     id: string;
     name: string;
     xml: string;
     timestamp: number;
-    source: 'workspace' | 'upload';
+    source: 'workspace' | 'upload' | 'preset';
     size: number;
+    description?: string;
 }
 
 const STORAGE_KEY = 'marksyntrader_bot_library';
+
+const PRESET_BOTS: BotEntry[] = [
+    {
+        id: 'preset_speed_bot_v2',
+        name: 'Speed Bot v2.2',
+        xml: speedBotXml || '',
+        timestamp: 1700000000000,
+        source: 'preset',
+        size: (speedBotXml || '').length,
+        description: 'High-speed digit trading with martingale recovery & take-profit/stop-loss',
+    },
+];
 
 function loadLibrary(): BotEntry[] {
     try {
@@ -44,17 +62,18 @@ function xmlPreview(xml: string) {
 
 function iconFor(name: string) {
     const lower = name.toLowerCase();
-    if (lower.includes('martingale')) return { icon: '📈', bg: 'rgba(16, 185, 129, 0.15)', badge: 'Martingale', badgeBg: 'rgba(16, 185, 129, 0.2)', badgeColor: '#10b981' };
-    if (lower.includes('dAlembertl') || lower.includes('dalembert')) return { icon: '📊', bg: 'rgba(14, 165, 233, 0.15)', badge: "D'Alembert", badgeBg: 'rgba(14, 165, 233, 0.2)', badgeColor: '#0ea5e9' };
-    if (lower.includes('oscar') || lower.includes('grind')) return { icon: '🎯', bg: 'rgba(168, 85, 247, 0.15)', badge: 'Oscar', badgeBg: 'rgba(168, 85, 247, 0.2)', badgeColor: '#a855f7' };
-    if (lower.includes('accum')) return { icon: '💰', bg: 'rgba(245, 158, 11, 0.15)', badge: 'Accumulators', badgeBg: 'rgba(245, 158, 11, 0.2)', badgeColor: '#f59e0b' };
-    if (lower.includes('digit')) return { icon: '🔢', bg: 'rgba(239, 68, 68, 0.15)', badge: 'Digits', badgeBg: 'rgba(239, 68, 68, 0.2)', badgeColor: '#ef4444' };
-    return { icon: '🤖', bg: 'rgba(56, 189, 248, 0.15)', badge: 'Custom', badgeBg: 'rgba(56, 189, 248, 0.2)', badgeColor: '#38bdf8' };
+    if (lower.includes('speed')) return { icon: '⚡', bg: 'rgba(0,255,100,0.15)', badge: 'Speed', badgeBg: 'rgba(0,255,100,0.15)', badgeColor: '#00ff88' };
+    if (lower.includes('martingale')) return { icon: '📈', bg: 'rgba(16,185,129,0.15)', badge: 'Martingale', badgeBg: 'rgba(16,185,129,0.2)', badgeColor: '#10b981' };
+    if (lower.includes('dalembert')) return { icon: '📊', bg: 'rgba(14,165,233,0.15)', badge: "D'Alembert", badgeBg: 'rgba(14,165,233,0.2)', badgeColor: '#0ea5e9' };
+    if (lower.includes('oscar') || lower.includes('grind')) return { icon: '🎯', bg: 'rgba(168,85,247,0.15)', badge: 'Oscar', badgeBg: 'rgba(168,85,247,0.2)', badgeColor: '#a855f7' };
+    if (lower.includes('accum')) return { icon: '💰', bg: 'rgba(245,158,11,0.15)', badge: 'Accumulators', badgeBg: 'rgba(245,158,11,0.2)', badgeColor: '#f59e0b' };
+    if (lower.includes('digit')) return { icon: '🔢', bg: 'rgba(239,68,68,0.15)', badge: 'Digits', badgeBg: 'rgba(239,68,68,0.2)', badgeColor: '#ef4444' };
+    return { icon: '🤖', bg: 'rgba(56,189,248,0.15)', badge: 'Custom', badgeBg: 'rgba(56,189,248,0.2)', badgeColor: '#38bdf8' };
 }
 
 interface ToastProps { message: string; type: 'success' | 'error'; }
 
-const BotLibrary: React.FC = () => {
+const FreeBots: React.FC = () => {
     const { load_modal, dashboard } = useStore();
     const [bots, setBots] = useState<BotEntry[]>([]);
     const [search, setSearch] = useState('');
@@ -79,11 +98,16 @@ const BotLibrary: React.FC = () => {
                 size: (w.xml || '').length,
             }));
             const wsIds = new Set(wsBots.map(b => b.id));
-            const merged = [...wsBots, ...library.filter(b => !wsIds.has(b.id))];
-            merged.sort((a, b) => b.timestamp - a.timestamp);
+            const uploadedBots = library.filter(b => !wsIds.has(b.id) && b.source !== 'preset');
+            const merged = [...PRESET_BOTS, ...wsBots, ...uploadedBots];
+            merged.sort((a, b) => {
+                if (a.source === 'preset') return -1;
+                if (b.source === 'preset') return 1;
+                return b.timestamp - a.timestamp;
+            });
             setBots(merged);
         } catch {
-            setBots(library);
+            setBots([...PRESET_BOTS, ...library.filter(b => b.source !== 'preset')]);
         }
     }, []);
 
@@ -130,13 +154,17 @@ const BotLibrary: React.FC = () => {
             }
             dashboard.setActiveTab(DBOT_TABS.BOT_BUILDER);
             showToast(`"${bot.name}" loaded into workspace`);
-        } catch (err) {
+        } catch {
             showToast('Failed to load bot into workspace', 'error');
         }
     }, [load_modal, dashboard]);
 
     const handleDelete = useCallback((bot: BotEntry, e: React.MouseEvent) => {
         e.stopPropagation();
+        if (bot.source === 'preset') {
+            showToast('Preset bots cannot be deleted', 'error');
+            return;
+        }
         if (bot.source === 'upload') {
             const current = loadLibrary().filter(b => b.id !== bot.id);
             saveLibrary(current);
@@ -149,6 +177,7 @@ const BotLibrary: React.FC = () => {
 
     const filtered = bots.filter(b => b.name.toLowerCase().includes(search.toLowerCase()));
 
+    const presetBots = filtered.filter(b => b.source === 'preset');
     const uploadedBots = filtered.filter(b => b.source === 'upload');
     const workspaceBots = filtered.filter(b => b.source === 'workspace');
 
@@ -156,8 +185,8 @@ const BotLibrary: React.FC = () => {
         <div className='bot-library'>
             <div className='bot-library__header'>
                 <div className='bot-library__title-group'>
-                    <h2>🤖 Bot Library</h2>
-                    <p>Manage, upload and load your trading bot XML files</p>
+                    <h2>🎁 Free Bots</h2>
+                    <p>Ready-to-use trading bots — click Load to import directly into Bot Builder</p>
                 </div>
                 <div className='bot-library__actions'>
                     <div className='bot-library__search-bar'>
@@ -189,15 +218,35 @@ const BotLibrary: React.FC = () => {
             </div>
 
             <div className='bot-library__content'>
-                {filtered.length === 0 ? (
+                {presetBots.length > 0 && (
+                    <>
+                        <p className='bot-library__section-title'>✨ Featured Bots ({presetBots.length})</p>
+                        <div className='bot-library__grid'>
+                            {presetBots.map(bot => <BotCard key={bot.id} bot={bot} onLoad={handleLoad} onDelete={handleDelete} />)}
+                        </div>
+                    </>
+                )}
+                {workspaceBots.length > 0 && (
+                    <>
+                        <p className='bot-library__section-title'>Saved Workspaces ({workspaceBots.length})</p>
+                        <div className='bot-library__grid'>
+                            {workspaceBots.map(bot => <BotCard key={bot.id} bot={bot} onLoad={handleLoad} onDelete={handleDelete} />)}
+                        </div>
+                    </>
+                )}
+                {uploadedBots.length > 0 && (
+                    <>
+                        <p className='bot-library__section-title'>Uploaded Bots ({uploadedBots.length})</p>
+                        <div className='bot-library__grid'>
+                            {uploadedBots.map(bot => <BotCard key={bot.id} bot={bot} onLoad={handleLoad} onDelete={handleDelete} />)}
+                        </div>
+                    </>
+                )}
+                {filtered.length === 0 && (
                     <div className='bot-library__empty'>
                         <div className='bot-library__empty-icon'>🤖</div>
                         <h3>{search ? 'No bots match your search' : 'No bots yet'}</h3>
-                        <p>
-                            {search
-                                ? 'Try a different search term.'
-                                : 'Upload XML bot files or save your workspace bots from the Bot Builder tab.'}
-                        </p>
+                        <p>{search ? 'Try a different search term.' : 'Upload XML bot files or save your workspace bots from the Bot Builder tab.'}</p>
                         {!search && (
                             <button onClick={() => fileInputRef.current?.click()}>
                                 <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5'>
@@ -208,25 +257,6 @@ const BotLibrary: React.FC = () => {
                             </button>
                         )}
                     </div>
-                ) : (
-                    <>
-                        {workspaceBots.length > 0 && (
-                            <>
-                                <p className='bot-library__section-title'>Saved Workspaces ({workspaceBots.length})</p>
-                                <div className='bot-library__grid'>
-                                    {workspaceBots.map(bot => <BotCard key={bot.id} bot={bot} onLoad={handleLoad} onDelete={handleDelete} />)}
-                                </div>
-                            </>
-                        )}
-                        {uploadedBots.length > 0 && (
-                            <>
-                                <p className='bot-library__section-title'>Uploaded Bots ({uploadedBots.length})</p>
-                                <div className='bot-library__grid'>
-                                    {uploadedBots.map(bot => <BotCard key={bot.id} bot={bot} onLoad={handleLoad} onDelete={handleDelete} />)}
-                                </div>
-                            </>
-                        )}
-                    </>
                 )}
             </div>
 
@@ -247,19 +277,19 @@ interface BotCardProps {
 
 const BotCard: React.FC<BotCardProps> = ({ bot, onLoad, onDelete }) => {
     const { icon, bg, badge, badgeBg, badgeColor } = iconFor(bot.name);
+    const isPreset = bot.source === 'preset';
+
     return (
-        <div className='bot-card' onClick={() => onLoad(bot)}>
+        <div className={`bot-card${isPreset ? ' bot-card--preset' : ''}`} onClick={() => onLoad(bot)}>
+            {isPreset && <div className='bot-card__preset-glow' />}
             <div className='bot-card__top'>
                 <div className='bot-card__icon' style={{ background: bg }}>{icon}</div>
-                <span
-                    className='bot-card__badge'
-                    style={{ background: badgeBg, color: badgeColor }}
-                >
-                    {badge}
-                </span>
+                <span className='bot-card__badge' style={{ background: badgeBg, color: badgeColor }}>{badge}</span>
             </div>
 
             <h3 className='bot-card__name' title={bot.name}>{bot.name}</h3>
+
+            {bot.description && <p className='bot-card__description'>{bot.description}</p>}
 
             <div className='bot-card__meta'>
                 <span>
@@ -275,24 +305,29 @@ const BotCard: React.FC<BotCardProps> = ({ bot, onLoad, onDelete }) => {
                     {formatBytes(bot.size)}
                 </span>
                 <span style={{ marginLeft: 'auto', opacity: 0.6, fontSize: '10px' }}>
-                    {bot.source === 'upload' ? '↑ uploaded' : '💾 saved'}
+                    {bot.source === 'preset' ? '⭐ featured' : bot.source === 'upload' ? '↑ uploaded' : '💾 saved'}
                 </span>
             </div>
 
-            {bot.xml && (
+            {bot.xml && !bot.description && (
                 <div className='bot-card__preview'>{xmlPreview(bot.xml)}</div>
             )}
 
-            <div className='bot-card__actions'>
-                <button className='load-btn' onClick={e => { e.stopPropagation(); onLoad(bot); }}>
-                    ▶ Load
+            <div className='bot-card__actions bot-card__actions--always-visible'>
+                <button
+                    className='load-btn'
+                    onClick={e => { e.stopPropagation(); onLoad(bot); }}
+                >
+                    ▶ Load Bot
                 </button>
-                <button className='delete-btn' onClick={e => onDelete(bot, e)}>
-                    🗑 Delete
-                </button>
+                {!isPreset && (
+                    <button className='delete-btn' onClick={e => onDelete(bot, e)}>
+                        🗑
+                    </button>
+                )}
             </div>
         </div>
     );
 };
 
-export default BotLibrary;
+export default FreeBots;

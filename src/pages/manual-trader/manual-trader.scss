@@ -1,0 +1,159 @@
+.manual-trader {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(135deg, #021a0a 0%, #011208 60%, #000e06 100%);
+    overflow-y: auto;
+    padding: 24px 28px;
+
+    &__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 24px;
+    }
+
+    &__title { margin: 0 0 4px; font-size: 22px; font-weight: 700; color: #00ff88; }
+    &__sub { margin: 0; font-size: 13px; color: #4ade80; opacity: 0.7; }
+
+    &__pnl {
+        padding: 10px 20px;
+        border-radius: 10px;
+        font-size: 16px;
+        font-weight: 700;
+        &.pos { background: rgba(34,197,94,0.15); border: 1px solid rgba(34,197,94,0.3); color: #22c55e; }
+        &.neg { background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3); color: #f87171; }
+    }
+
+    &__panel {
+        background: rgba(0,20,10,0.7);
+        border: 1.5px solid rgba(0,255,100,0.15);
+        border-radius: 16px;
+        padding: 24px;
+        margin-bottom: 24px;
+    }
+
+    &__settings {
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
+        margin-bottom: 20px;
+    }
+
+    &__field {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        label { font-size: 10px; color: #4ade80; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.07em; }
+        select, input {
+            background: rgba(0,255,100,0.05);
+            border: 1.5px solid rgba(0,255,100,0.15);
+            border-radius: 8px;
+            color: #86efac;
+            padding: 8px 12px;
+            font-size: 13px;
+            outline: none;
+            min-width: 120px;
+            option { background: #021a0a; }
+        }
+    }
+
+    &__buttons {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+    }
+
+    &__btn {
+        padding: 14px 0;
+        border-radius: 12px;
+        border: 2px solid;
+        font-size: 16px;
+        font-weight: 800;
+        cursor: pointer;
+        transition: all 0.15s;
+        letter-spacing: 0.05em;
+        &:hover { filter: brightness(1.15); transform: translateY(-2px); }
+        &:active { transform: translateY(0); }
+
+        &--rise { background: rgba(34,197,94,0.15); border-color: rgba(34,197,94,0.5); color: #22c55e; }
+        &--fall { background: rgba(239,68,68,0.15); border-color: rgba(239,68,68,0.5); color: #f87171; }
+        &--even { background: rgba(6,182,212,0.15); border-color: rgba(6,182,212,0.5); color: #06b6d4; }
+        &--odd { background: rgba(168,85,247,0.15); border-color: rgba(168,85,247,0.5); color: #a855f7; }
+        &--over { background: rgba(245,158,11,0.15); border-color: rgba(245,158,11,0.5); color: #f59e0b; }
+        &--under { background: rgba(20,184,166,0.15); border-color: rgba(20,184,166,0.5); color: #14b8a6; }
+    }
+
+    &__section { margin-bottom: 20px; }
+
+    &__section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+        h3 { margin: 0; font-size: 14px; font-weight: 700; color: #00ff88; }
+    }
+
+    &__clear-btn {
+        padding: 5px 12px;
+        border-radius: 6px;
+        border: 1px solid rgba(148,163,184,0.2);
+        background: transparent;
+        color: #64748b;
+        font-size: 12px;
+        cursor: pointer;
+        &:hover { color: #94a3b8; }
+    }
+
+    &__positions { display: flex; flex-direction: column; gap: 8px; }
+
+    &__position {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 14px;
+        border-radius: 10px;
+        font-size: 13px;
+        border: 1px solid;
+
+        &.open { background: rgba(234,179,8,0.05); border-color: rgba(234,179,8,0.2); }
+        &.won { background: rgba(34,197,94,0.05); border-color: rgba(34,197,94,0.2); }
+        &.lost { background: rgba(239,68,68,0.05); border-color: rgba(239,68,68,0.15); }
+    }
+
+    &__pos-symbol { font-weight: 600; color: #86efac; min-width: 80px; }
+    &__pos-contract { color: #64748b; flex: 1; }
+    &__pos-stake { color: #94a3b8; }
+
+    &__pos-progress {
+        width: 80px;
+        height: 4px;
+        background: rgba(255,255,255,0.06);
+        border-radius: 2px;
+        overflow: hidden;
+    }
+
+    &__pos-bar {
+        height: 100%;
+        background: #eab308;
+        border-radius: 2px;
+        transition: width 0.3s ease;
+    }
+
+    &__pos-tick { font-size: 11px; color: #64748b; white-space: nowrap; }
+
+    &__pos-badge {
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 700;
+        &.won { background: rgba(34,197,94,0.2); color: #22c55e; }
+        &.lost { background: rgba(239,68,68,0.2); color: #f87171; }
+    }
+
+    &__pos-profit {
+        font-weight: 600;
+        &.pos { color: #22c55e; }
+        &.neg { color: #f87171; }
+    }
+}
