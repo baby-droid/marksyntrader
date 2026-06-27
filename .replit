@@ -42,3 +42,8 @@ externalPort = 3001
 deploymentTarget = "static"
 build = ["npm", "run", "build"]
 publicDir = "dist"
+
+[userenv]
+
+[userenv.shared]
+NEXT_PUBLIC_DERIV_REDIRECT_URI = "https://marksyntrader.replit.app"
