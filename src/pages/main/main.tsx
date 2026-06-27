@@ -46,6 +46,7 @@ import './main.scss';
 
 const ChartWrapper = lazy(() => import('../chart/chart-wrapper'));
 const Tutorial = lazy(() => import('../tutorials'));
+const BotLibrary = lazy(() => import('../bot-library'));
 
 const AppWrapper = observer(() => {
     const { connectionStatus } = useApiBase();
@@ -78,7 +79,7 @@ const AppWrapper = observer(() => {
     const { clear } = summary_card;
     const { DASHBOARD, BOT_BUILDER } = DBOT_TABS;
     const init_render = React.useRef(true);
-    const hash = ['dashboard', 'bot_builder', 'chart', 'tutorial'];
+    const hash = ['dashboard', 'bot_builder', 'chart', 'tutorial', 'bot_library'];
     const { isDesktop } = useDevice();
     const location = useLocation();
     const navigate = useNavigate();
@@ -451,6 +452,33 @@ const AppWrapper = observer(() => {
                                         <Tutorial handleTabChange={handleTabChange} />
                                     </Suspense>
                                 </div>
+                            </div>
+                            <div
+                                label={
+                                    <>
+                                        <svg
+                                            width='20'
+                                            height='20'
+                                            viewBox='0 0 24 24'
+                                            fill='none'
+                                            stroke='var(--text-general)'
+                                            strokeWidth='2'
+                                            strokeLinecap='round'
+                                            strokeLinejoin='round'
+                                        >
+                                            <rect x='3' y='3' width='7' height='7' rx='1' />
+                                            <rect x='14' y='3' width='7' height='7' rx='1' />
+                                            <rect x='3' y='14' width='7' height='7' rx='1' />
+                                            <rect x='14' y='14' width='7' height='7' rx='1' />
+                                        </svg>
+                                        <Localize i18n_default_text='Bot Library' />
+                                    </>
+                                }
+                                id='id-bot-library'
+                            >
+                                <Suspense fallback={<ChunkLoader message={localize('Loading bot library...')} />}>
+                                    <BotLibrary />
+                                </Suspense>
                             </div>
                         </Tabs>
                         {!isDesktop && right_tab_shadow && <span className='tabs-shadow tabs-shadow--right' />}{' '}

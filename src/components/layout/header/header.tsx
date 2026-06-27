@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import clsx from 'clsx';
 import { observer } from 'mobx-react-lite';
 import { generateOAuthURL } from '@/components/shared';
@@ -16,11 +16,14 @@ import MenuItems from './menu-items';
 import MobileMenu from './mobile-menu';
 import './header.scss';
 
+const ApiTokenLoginModal = lazy(() => import('@/components/login-modal/api-token-login-modal'));
+
 const AppHeader = observer(() => {
     const { isDesktop } = useDevice();
     const { isAuthorizing, activeLoginid, setIsAuthorizing, authData } = useApiBase();
     const { client } = useStore() ?? {};
     const [authTimeout, setAuthTimeout] = useState(false);
+    const [isTokenModalOpen, setIsTokenModalOpen] = useState(false);
     const is_account_regenerating = client?.is_account_regenerating || false;
 
     // Detect OAuth callback on mount (before App.tsx cleans up the URL).
@@ -181,6 +184,25 @@ const AppHeader = observer(() => {
                         <Button primary_light disabled={!isAuthConfigured} onClick={handleSignup}>
                             <Localize i18n_default_text='Sign up' />
                         </Button>
+                        <button
+                            onClick={() => setIsTokenModalOpen(true)}
+                            style={{
+                                background: 'none',
+                                border: '1.5px solid rgba(56,189,248,0.5)',
+                                borderRadius: '16px',
+                                color: '#38bdf8',
+                                fontSize: '13px',
+                                fontWeight: 600,
+                                padding: '6px 14px',
+                                cursor: 'pointer',
+                                whiteSpace: 'nowrap',
+                                transition: 'all 0.15s',
+                            }}
+                            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(56,189,248,0.12)'; }}
+                            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}
+                        >
+                            🔑 API Token
+                        </button>
                     </div>
                 );
             }
@@ -246,6 +268,12 @@ const AppHeader = observer(() => {
                     {renderAccountSection('right')}
                 </Wrapper>
             </Header>
+            <Suspense fallback={null}>
+                <ApiTokenLoginModal
+                    isOpen={isTokenModalOpen}
+                    onClose={() => setIsTokenModalOpen(false)}
+                />
+            </Suspense>
         </>
     );
 });
