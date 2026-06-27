@@ -1,0 +1,99 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "title": "Active Symbols (response)",
+  "description": "A message containing the list of active symbols.",
+  "type": "object",
+  "required": [
+    "echo_req",
+    "msg_type"
+  ],
+  "properties": {
+    "active_symbols": {
+      "title": "active_symbols",
+      "description": "List of active symbols.",
+      "type": "array",
+      "items": {
+        "description": "The information about each symbol.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "exchange_is_open",
+          "is_trading_suspended",
+          "market",
+          "pip_size",
+          "subgroup",
+          "submarket",
+          "trade_count",
+          "underlying_symbol",
+          "underlying_symbol_name",
+          "underlying_symbol_type"
+        ],
+        "properties": {
+          "exchange_is_open": {
+            "description": "`1` if market is currently open, `0` if closed.",
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ]
+          },
+          "is_trading_suspended": {
+            "description": "`1` indicates that trading is currently suspended, `0` if not.",
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ]
+          },
+          "market": {
+            "description": "Market category (forex, indices, etc).",
+            "type": "string"
+          },
+          "pip_size": {
+            "description": "Pip size (i.e. minimum fluctuation amount).",
+            "type": "number"
+          },
+          "subgroup": {
+            "description": "Subgroup name.",
+            "type": "string"
+          },
+          "submarket": {
+            "description": "Submarket name.",
+            "type": "string"
+          },
+          "trade_count": {
+            "description": "Trade count.",
+            "type": "integer"
+          },
+          "underlying_symbol": {
+            "description": "The symbol code for this underlying.",
+            "type": "string"
+          },
+          "underlying_symbol_name": {
+            "description": "Symbol display name.",
+            "type": "string"
+          },
+          "underlying_symbol_type": {
+            "description": "Symbol type (forex, commodities, etc).",
+            "type": "string"
+          }
+        }
+      }
+    },
+    "echo_req": {
+      "description": "Echo of the request made.",
+      "type": "object"
+    },
+    "msg_type": {
+      "description": "Action name of the request made.",
+      "type": "string",
+      "enum": [
+        "active_symbols"
+      ]
+    },
+    "req_id": {
+      "description": "Optional field sent in request to map to response, present only when request contains `req_id`.",
+      "type": "integer"
+    }
+  }
+}

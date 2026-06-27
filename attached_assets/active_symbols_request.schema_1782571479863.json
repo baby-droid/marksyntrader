@@ -1,0 +1,74 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "title": "Active Symbols (request)",
+  "description": "Retrieve a list of all currently active symbols (underlying markets upon which contracts are available for trading).",
+  "type": "object",
+  "auth_required": 0,
+  "additionalProperties": false,
+  "required": [
+    "active_symbols"
+  ],
+  "properties": {
+    "active_symbols": {
+      "description": "If you use `brief`, only a subset of fields will be returned.",
+      "type": "string",
+      "enum": [
+        "full",
+        "brief"
+      ]
+    },
+    "contract_type": {
+      "description": "[Optional] The proposed contract type",
+      "type": "array",
+      "items": {
+        "description": "",
+        "type": "string",
+        "enum": [
+          "HIGHER",
+          "LOWER",
+          "MULTUP",
+          "MULTDOWN",
+          "UPORDOWN",
+          "EXPIRYRANGE",
+          "ONETOUCH",
+          "CALLE",
+          "ASIAND",
+          "EXPIRYRANGEE",
+          "DIGITDIFF",
+          "DIGITMATCH",
+          "DIGITOVER",
+          "PUTE",
+          "DIGITUNDER",
+          "NOTOUCH",
+          "CALL",
+          "RANGE",
+          "DIGITODD",
+          "PUT",
+          "ASIANU",
+          "EXPIRYMISSE",
+          "EXPIRYMISS",
+          "DIGITEVEN",
+          "TICKHIGH",
+          "TICKLOW",
+          "RESETCALL",
+          "RESETPUT",
+          "RUNHIGH",
+          "RUNLOW",
+          "ACCU",
+          "VANILLALONGCALL",
+          "VANILLALONGPUT",
+          "TURBOSLONG",
+          "TURBOSSHORT"
+        ]
+      }
+    },
+    "passthrough": {
+      "description": "[Optional] Used to pass data through the websocket, which may be retrieved via the `echo_req` output field.",
+      "type": "object"
+    },
+    "req_id": {
+      "description": "[Optional] Used to map request to response.",
+      "type": "integer"
+    }
+  }
+}

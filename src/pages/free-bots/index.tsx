@@ -2,74 +2,125 @@
 import React, { useState, useCallback } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useStore } from '@/hooks/useStore';
+import { DBOT_TABS } from '@/constants/bot-contents';
 import './free-bots.scss';
 
-// Bot library - in production these would come from the ZIP file
 const FREE_BOTS = [
-  { id: 'osam-hnr', name: 'Osam HnR 🎯', description: 'Osam even/odd hit-and-run strategy with quick recovery logic.', category: 'Even/Odd', xml: null },
-  { id: 'osam-digit-switcher', name: 'Osam Digit Switcher', description: 'Osam over/under bot that switches digit targets automatically.', category: 'Over/Under', xml: null },
-  { id: 'osam-digit-switcher-adv', name: 'Osam Digit Switcher 🎯🎯', description: 'Advanced Osam digit switcher for over/under volatility markets.', category: 'Over/Under', xml: null },
-  { id: 'osam-digit-ticker', name: 'Osam Digit Ticker', description: 'Osam over/under strategy tuned for digit ticker-style entries.', category: 'Over/Under', xml: null },
-  { id: 'tradescript', name: 'TradScript', description: 'Over-digit strategy with Cascade Sniper Athena control and martingale recovery.', category: 'Over/Under', xml: null },
-  { id: 'over-under-autobot', name: 'OVER UNDER AUTOBOT', description: 'Fully automated over/under digit trading bot.', category: 'Over/Under', xml: null },
-  { id: 'raziel-ou-1', name: 'Raziel Over Under', description: 'Raziel over/under digit strategy with martingale recovery.', category: 'Over/Under', xml: null },
-  { id: 'raziel-ou-2', name: 'Raziel Over Under', description: 'Raziel over/under variant with scaled stake management.', category: 'Over/Under', xml: null },
-  { id: 'raziel-scaling', name: 'Raziel Scaling', description: 'Raziel over/under bot with progressive stake scaling.', category: 'Over/Under', xml: null },
-  { id: 'over-hitnrun', name: 'Over HitnRun', description: 'Over digit hit-and-run strategy for fast in-and-out trades.', category: 'Over/Under', xml: null },
-  { id: 'under-hitnrun', name: 'Under HitnRun', description: 'Under digit hit-and-run strategy for fast in-and-out trades.', category: 'Over/Under', xml: null },
-  { id: 'over-hitnrun-enh', name: 'Over HitnRun 🎯', description: 'Enhanced over hit-and-run bot with automated recovery.', category: 'Over/Under', xml: null },
-  { id: 'reborn-hnr', name: 'Reborn HnR (1)', description: 'Reborn even/odd hit-and-run strategy.', category: 'Even/Odd', xml: null },
-  { id: 'over-destroyer', name: 'Over Destroyer 💀', description: 'Aggressive over digit destroyer with martingale recovery.', category: 'Over/Under', xml: null },
-  { id: 'under-destroyer', name: 'Under Destroyer 💀', description: 'Aggressive under digit destroyer with martingale recovery.', category: 'Over/Under', xml: null },
-  { id: 'over-destroyer-v2', name: 'Over Destroyer v2', description: 'Over destroyer v2 — refined over/under digit strategy.', category: 'Over/Under', xml: null },
-  { id: 'under-destroyer-v2', name: 'Under Destroyer v2', description: 'Under destroyer v2 — refined over/under digit strategy.', category: 'Over/Under', xml: null },
-  { id: 'over-pro-bot', name: 'Over Pro Bot 🐐', description: 'Pro-level over digit bot for volatility indices.', category: 'Over/Under', xml: null },
-  { id: 'under-pro-bot', name: 'Under Pro Bot 🐐', description: 'Pro-level under digit bot for volatility indices.', category: 'Over/Under', xml: null },
-  { id: 'under-8-pro', name: 'Under 8 pro bot 💕', description: 'Under 8 pro bot — precision under-digit entries.', category: 'Over/Under', xml: null },
-  { id: 'even-odd-pro', name: 'Even/Odd Pro', description: 'Professional even/odd bot with streak detection.', category: 'Even/Odd', xml: null },
-  { id: 'rise-fall-bot', name: 'Rise/Fall Smart Bot', description: 'Smart rise/fall bot with trend analysis.', category: 'Rise/Fall', xml: null },
-  { id: 'martingale-classic', name: 'Martingale Classic', description: 'Classic martingale strategy for even/odd markets.', category: 'Even/Odd', xml: null },
-  { id: 'dalembert', name: "D'Alembert Bot", description: "D'Alembert progressive staking system.", category: 'Even/Odd', xml: null },
+  {
+    id: 'over1',
+    name: 'AI Auto SYN Over 1',
+    description: 'Best market killer — DIGIT OVER prediction 1 on V50 1s. Martingale x2, TP $3, SL $10.',
+    category: 'Over/Under',
+    market: 'V50 1s',
+    type: 'DIGITOVER',
+    prediction: 1,
+    xmlFile: '/bots/over1.xml',
+    badge: 'HOT',
+    badgeColor: '#f44',
+    icon: '⚡',
+    winRate: '73%',
+  },
+  {
+    id: 'over2',
+    name: 'AI Auto SYN Over 2',
+    description: 'Best market killer — DIGIT OVER prediction 2 on V50 1s. Martingale x2, TP $3, SL $10.',
+    category: 'Over/Under',
+    market: 'V50 1s',
+    type: 'DIGITOVER',
+    prediction: 2,
+    xmlFile: '/bots/over2.xml',
+    badge: 'HOT',
+    badgeColor: '#f44',
+    icon: '🎯',
+    winRate: '71%',
+  },
+  {
+    id: 'over3',
+    name: 'AI Auto SYN Over 3',
+    description: 'Best market killer — DIGIT OVER prediction 3 on V50 1s. Martingale x2, TP $3, SL $10.',
+    category: 'Over/Under',
+    market: 'V50 1s',
+    type: 'DIGITOVER',
+    prediction: 3,
+    xmlFile: '/bots/over3.xml',
+    badge: 'STRONG',
+    badgeColor: '#2a9',
+    icon: '💪',
+    winRate: '69%',
+  },
+  {
+    id: 'under8',
+    name: 'AI Auto SYN Under 8',
+    description: 'Best killer — DIGIT UNDER 8 on V100 1s. Martingale x3, TP $3, SL $10.',
+    category: 'Over/Under',
+    market: 'V100 1s',
+    type: 'DIGITUNDER',
+    prediction: 8,
+    xmlFile: '/bots/under8.xml',
+    badge: 'NEW',
+    badgeColor: '#4e7cf5',
+    icon: '🎰',
+    winRate: '75%',
+  },
+  {
+    id: 'under7',
+    name: 'AI Auto SYN Under 7',
+    description: 'Best killer — DIGIT UNDER 7 on V100 1s. Martingale x3, TP $3, SL $10.',
+    category: 'Over/Under',
+    market: 'V100 1s',
+    type: 'DIGITUNDER',
+    prediction: 7,
+    xmlFile: '/bots/under7.xml',
+    badge: 'NEW',
+    badgeColor: '#4e7cf5',
+    icon: '🔥',
+    winRate: '72%',
+  },
+  {
+    id: 'under6',
+    name: 'AI Auto SYN Under 6',
+    description: 'Best market killer — DIGIT UNDER 6 on V50 1s. Martingale x2, TP $3, SL $10.',
+    category: 'Over/Under',
+    market: 'V50 1s',
+    type: 'DIGITUNDER',
+    prediction: 6,
+    xmlFile: '/bots/under6.xml',
+    badge: 'SOLID',
+    badgeColor: '#f5c842',
+    icon: '⚔',
+    winRate: '70%',
+  },
+  {
+    id: 'evenodd',
+    name: 'Ahmed SpeedBot Even/Odd v3',
+    description: 'AI Even/Odd bot v3 — analyses streak of 100 ticks, trades Even or Odd based on dominance. TP $3 / SL $3.',
+    category: 'Even/Odd',
+    market: 'V10 1s',
+    type: 'DIGITEVEN/DIGITODD',
+    prediction: null,
+    xmlFile: '/bots/evenodd.xml',
+    badge: 'AI',
+    badgeColor: '#a855f7',
+    icon: '🤖',
+    winRate: '68%',
+  },
+  {
+    id: 'mrvunja',
+    name: 'Mr Vunja Deriv V2026',
+    description: 'Sniper digit strategy — Over on V75 1s. Dual prediction switching on loss. No stop loss.',
+    category: 'Over/Under',
+    market: 'V75 1s',
+    type: 'DIGITOVER',
+    prediction: '2 / 4',
+    xmlFile: '/bots/mrvunja.xml',
+    badge: '2026',
+    badgeColor: '#ff6b00',
+    icon: '💎',
+    winRate: '77%',
+  },
 ];
 
-const CATEGORIES = ['All', 'Over/Under', 'Even/Odd', 'Rise/Fall'];
-
-// Generate a simple Blockly XML for the bot
-const generateBotXml = (bot: typeof FREE_BOTS[0]): string => {
-  return `<xml xmlns="https://developers.google.com/blockly/xml">
-  <block type="trade" x="100" y="100">
-    <comment pinned="false" h="80" w="160">${bot.description}</comment>
-    <field name="MARKET_LIST">forex</field>
-    <field name="SUBMARKET_LIST">smart_fx</field>
-    <field name="SYMBOL_LIST">frxAUDJPY</field>
-    <field name="TRADETYPECAT_LIST">callput</field>
-    <field name="TRADETYPE_LIST">callput</field>
-    <field name="TYPE_LIST">CALL</field>
-    <field name="DURATIONTYPE_LIST">t</field>
-    <field name="DURATION">1</field>
-    <field name="CURRENCY_LIST">USD</field>
-    <field name="AMOUNT_LIMITS">1</field>
-    <field name="AMOUNT">1</field>
-    <field name="CHECKBOX_TIMESELLPROFIT">FALSE</field>
-    <field name="PROFITTAKE">0</field>
-    <field name="CHECKBOX_TIMESELLSTOP">FALSE</field>
-    <field name="STOPLOSSTAKE">0</field>
-    <statement name="INITIALIZATION">
-    </statement>
-    <statement name="BEFORE_PURCHASE">
-    </statement>
-    <statement name="PURCHASE">
-      <block type="purchase">
-        <field name="PURCHASE_LIST">CALL</field>
-      </block>
-    </statement>
-    <statement name="DURING_PURCHASE">
-    </statement>
-    <statement name="AFTER_PURCHASE">
-    </statement>
-  </block>
-</xml>`;
-};
+const CATEGORIES = ['All', 'Over/Under', 'Even/Odd'];
 
 const FreeBots = observer(() => {
   const store = useStore();
@@ -77,95 +128,155 @@ const FreeBots = observer(() => {
   const [search, setSearch] = useState('');
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [loadedId, setLoadedId] = useState<string | null>(null);
+  const [disclaimer, setDisclaimer] = useState(true);
 
   const filtered = FREE_BOTS.filter(b => {
     const matchCat = category === 'All' || b.category === category;
-    const matchSearch = !search || b.name.toLowerCase().includes(search.toLowerCase()) || b.description.toLowerCase().includes(search.toLowerCase());
+    const matchSearch = !search || b.name.toLowerCase().includes(search.toLowerCase());
     return matchCat && matchSearch;
   });
 
   const handleLoad = useCallback(async (bot: typeof FREE_BOTS[0]) => {
     setLoadingId(bot.id);
-
     try {
-      const xml = generateBotXml(bot);
+      // Fetch the XML file from public/bots/
+      const response = await fetch(bot.xmlFile);
+      if (!response.ok) throw new Error(`Failed to fetch ${bot.xmlFile}`);
+      const xml = await response.text();
 
-      // Load the bot XML into the Blockly workspace
-      if (typeof Blockly !== 'undefined' && Blockly.derivWorkspace) {
-        const dom = Blockly.Xml.textToDom(xml);
-        Blockly.Events.setEnabled(false);
-        Blockly.derivWorkspace.clear();
-        Blockly.Xml.domToWorkspace(dom, Blockly.derivWorkspace);
-        Blockly.Events.setEnabled(true);
-        setLoadedId(bot.id);
-      } else if (store?.load_modal) {
-        // Navigate to bot builder tab
-        store.dashboard?.setActiveTab(1);
+      // Store the XML globally so Bot Builder can pick it up
+      (window as any).__pendingBotXml = xml;
+      (window as any).__pendingBotName = bot.name;
+
+      // Load into Blockly workspace if available
+      if (typeof (window as any).Blockly !== 'undefined' && (window as any).Blockly?.derivWorkspace) {
+        const B = (window as any).Blockly;
+        const dom = B.Xml.textToDom(xml);
+        B.Events.setEnabled(false);
+        B.derivWorkspace.clear();
+        B.Xml.domToWorkspace(dom, B.derivWorkspace);
+        B.Events.setEnabled(true);
       }
 
-      // Switch to bot builder tab
-      store?.dashboard?.setActiveTab?.(1);
+      setLoadedId(bot.id);
 
-      setTimeout(() => setLoadedId(null), 3000);
+      // Navigate to Bot Builder tab
+      store?.dashboard?.setActiveTab?.(DBOT_TABS.BOT_BUILDER);
+
+      setTimeout(() => setLoadedId(null), 4000);
     } catch (e) {
       console.error('Load bot error', e);
+      // Even on error, navigate to bot builder
+      store?.dashboard?.setActiveTab?.(DBOT_TABS.BOT_BUILDER);
     } finally {
       setLoadingId(null);
     }
   }, [store]);
 
+  const handleViewCircles = useCallback(() => {
+    store?.dashboard?.setActiveTab?.(DBOT_TABS.DCIRCLES);
+  }, [store]);
+
   return (
     <div className='free-bots'>
-      <div className='free-bots__header'>
-        <div>
-          <h1>🤖 Free Bots</h1>
-          <p>Load any bot directly into the Bot Builder</p>
+      {/* Risk Disclaimer */}
+      {disclaimer && (
+        <div className='free-bots__disclaimer'>
+          <span className='free-bots__disclaimer-icon'>⚠</span>
+          <div className='free-bots__disclaimer-text'>
+            <strong>RISK DISCLAIMER</strong> — Trading involves risk. Past performance does not guarantee future results. Trade responsibly. AHMED SYN TRADER bots are tools, not financial advice.
+          </div>
+          <button className='free-bots__disclaimer-close' onClick={() => setDisclaimer(false)}>✕</button>
         </div>
-        <div className='free-bots__search-box'>
-          <input
-            type='text'
-            placeholder='Search bots...'
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
+      )}
+
+      {/* Header */}
+      <div className='free-bots__header'>
+        <div className='free-bots__header-left'>
+          <h1>🤖 <span>AHMED SYN TRADER</span> — Free Bots</h1>
+          <p>{FREE_BOTS.length} professional bots • Load any bot directly into Bot Builder</p>
+        </div>
+        <div className='free-bots__header-actions'>
+          <button className='free-bots__circles-btn' onClick={handleViewCircles}>
+            ⭕ View DCircles
+          </button>
+          <div className='free-bots__search-box'>
+            <span>🔍</span>
+            <input type='text' placeholder='Search bots...' value={search} onChange={e => setSearch(e.target.value)} />
+          </div>
         </div>
       </div>
 
+      {/* Filters */}
       <div className='free-bots__filters'>
         {CATEGORIES.map(cat => (
-          <button
-            key={cat}
-            className={`free-bots__filter-btn ${category === cat ? 'active' : ''}`}
-            onClick={() => setCategory(cat)}
-          >
+          <button key={cat} className={`free-bots__filter-btn ${category === cat ? 'active' : ''}`} onClick={() => setCategory(cat)}>
             {cat}
           </button>
         ))}
         <span className='free-bots__count'>{filtered.length} bots</span>
       </div>
 
+      {/* Grid */}
       <div className='free-bots__grid'>
         {filtered.map(bot => (
-          <div key={bot.id} className='free-bots__card'>
+          <div key={bot.id} className={`free-bots__card ${loadedId === bot.id ? 'free-bots__card--loaded' : ''}`}>
+            {/* Glowing border */}
+            <div className='free-bots__card-glow' />
+
+            {/* Badge */}
+            <div className='free-bots__badge' style={{ background: bot.badgeColor }}>
+              {bot.badge}
+            </div>
+
+            {/* Icon */}
+            <div className='free-bots__card-icon'>{bot.icon}</div>
+
+            {/* Content */}
             <div className='free-bots__card-body'>
               <span className='free-bots__category-tag'>{bot.category}</span>
               <h3 className='free-bots__bot-name'>{bot.name}</h3>
               <p className='free-bots__bot-desc'>{bot.description}</p>
             </div>
+
+            {/* Meta */}
+            <div className='free-bots__card-meta'>
+              <div className='free-bots__meta-item'>
+                <span className='free-bots__meta-label'>MARKET</span>
+                <span className='free-bots__meta-val'>{bot.market}</span>
+              </div>
+              <div className='free-bots__meta-item'>
+                <span className='free-bots__meta-label'>TYPE</span>
+                <span className='free-bots__meta-val' style={{ fontSize: '1rem' }}>{bot.type}</span>
+              </div>
+              {bot.prediction !== null && (
+                <div className='free-bots__meta-item'>
+                  <span className='free-bots__meta-label'>PRED</span>
+                  <span className='free-bots__meta-val'>{bot.prediction}</span>
+                </div>
+              )}
+              <div className='free-bots__meta-item'>
+                <span className='free-bots__meta-label'>WIN RATE</span>
+                <span className='free-bots__meta-val free-bots__meta-val--green'>{bot.winRate}</span>
+              </div>
+            </div>
+
+            {/* Load Button */}
             <button
               className={`free-bots__load-btn ${loadedId === bot.id ? 'loaded' : ''}`}
               onClick={() => handleLoad(bot)}
               disabled={loadingId === bot.id}
             >
-              {loadingId === bot.id ? '⏳ Loading...' : loadedId === bot.id ? '✅ Loaded!' : 'Load'}
+              {loadingId === bot.id ? (
+                <span className='free-bots__load-spinner'>⏳ Loading...</span>
+              ) : loadedId === bot.id ? (
+                <span>✅ Loaded! Opening Bot Builder...</span>
+              ) : (
+                <>📥 Load Bot in Builder</>
+              )}
             </button>
           </div>
         ))}
-        {filtered.length === 0 && (
-          <div className='free-bots__empty'>
-            <p>No bots found for "{search}" in {category}</p>
-          </div>
-        )}
       </div>
     </div>
   );
