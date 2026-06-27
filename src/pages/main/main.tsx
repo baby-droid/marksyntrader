@@ -42,6 +42,7 @@ import RunPanel from '../../components/run-panel';
 import ChartModal from '../chart/chart-modal';
 import Dashboard from '../dashboard';
 import RunStrategy from '../dashboard/run-strategy';
+import SettingsPanel from '@/components/settings-panel';
 import './main.scss';
 
 const ChartWrapper = lazy(() => import('../chart/chart-wrapper'));
@@ -86,7 +87,11 @@ const AppWrapper = observer(() => {
     const { clear } = summary_card;
     const { DASHBOARD, BOT_BUILDER } = DBOT_TABS;
     const init_render = React.useRef(true);
-    const hash = ['dashboard', 'bot_builder', 'chart', 'tutorial', 'bot_library'];
+    const hash = [
+        'free_bots', 'dashboard', 'bot_builder', 'dcircles',
+        'speed_lab', 'pro_hedge', 'chart', 'manual_trader',
+        'tutorial', 'bot_library', 'copy_trading', 'reports',
+    ];
     const { isDesktop } = useDevice();
     const location = useLocation();
     const navigate = useNavigate();
@@ -377,6 +382,10 @@ const AppWrapper = observer(() => {
     return (
         <React.Fragment>
             <div className='main'>
+                {/* Global Settings + Navigation panel — available on all tabs */}
+                <div style={{ position: 'fixed', bottom: '7rem', right: '1.2rem', zIndex: 500 }}>
+                    <SettingsPanel onTabChange={handleTabChange} currentTab={active_tab} />
+                </div>
                 <div
                     className={classNames('main__container', {
                         'main__container--active': active_tour && active_tab === DASHBOARD && !isDesktop,

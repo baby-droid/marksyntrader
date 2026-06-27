@@ -2,29 +2,66 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1.6rem;
-  padding: 1.6rem 0;
+  gap: 1.4rem;
+  padding: 1.2rem 0;
+  font-family: 'Inter', sans-serif;
+
+  /* ── row wrapper keeps cursor in the flow ── */
+  &__row-wrap {
+    position: relative;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+  }
 
   &__row {
+    position: relative;
     display: flex;
     flex-wrap: wrap;
     gap: 1.2rem;
     justify-content: center;
-    margin-top: 35px;
-    margin-bottom: 25px;
+    padding: 1.6rem 0.8rem;
   }
 
+  /* ── animated cursor ring ── */
+  &__cursor {
+    position: absolute;
+    top: 0;
+    left: 0;
+    border-radius: 50%;
+    border: 3px solid #ffffff;
+    pointer-events: none;
+    z-index: 10;
+    transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
+                width 0.25s ease,
+                height 0.25s ease,
+                opacity 0.3s ease;
+    box-shadow: 0 0 0 3px rgba(255,255,255,0.25),
+                0 0 18px rgba(255,255,255,0.5);
+    animation: cursorPulse 1.4s ease-in-out infinite;
+
+    /* inside dark/light theme the ring adapts */
+    .theme--dark & {
+      border-color: #fff;
+      box-shadow: 0 0 0 3px rgba(255,255,255,0.2), 0 0 18px rgba(255,255,255,0.4);
+    }
+  }
+
+  /* ── each digit wrapper ── */
   &__wrapper {
     display: flex;
     flex-direction: column;
     align-items: center;
     position: relative;
+    gap: 0.3rem;
   }
 
   &__wrapper--current .digit-circles__circle {
-    transform: scale(1.1);
+    transform: scale(1.12);
+    z-index: 5;
   }
 
+  /* ── the circle itself ── */
   &__circle {
     width: 72px;
     height: 72px;
@@ -33,84 +70,111 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    font-family: 'Inter', 'Poppins', sans-serif;
     cursor: default;
-    transition: transform 0.2s, box-shadow 0.2s;
+    transition: transform 0.2s, box-shadow 0.25s;
+    position: relative;
 
-    &:hover {
-      transform: scale(1.05);
-    }
+    &:hover { transform: scale(1.06); }
   }
 
   &__number {
     font-size: 22px;
-    font-weight: 600;
+    font-weight: 700;
     line-height: 1;
   }
 
   &__percent {
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 500;
-    color: inherit;
-    opacity: 0.85;
+    opacity: 0.88;
     margin-top: 2px;
   }
 
-  &__badge {
-    font-size: 10px;
-    font-weight: 700;
-    position: absolute;
-    bottom: -1.6rem;
+  /* rank badges */
+  &__rank {
+    font-size: 9px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 1px 4px;
+    border-radius: 3px;
+    line-height: 1.4;
 
-    &--high { color: #42B883; }
-    &--low { color: #E24A43; }
+    &--1st  { background: #42B883; color: #fff; }
+    &--2nd  { background: #4E7CF5; color: #fff; }
+    &--low  { background: #E24A43; color: #fff; }
+    &--low2 { background: #F5C842; color: #1a1a2e; }
   }
 
+  /* ── legend ── */
+  &__legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.8rem 1.4rem;
+    justify-content: center;
+    font-size: 1.1rem;
+    font-weight: 600;
+  }
+
+  &__legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    color: #888;
+
+    &--green  { color: #42B883; }
+    &--blue   { color: #4E7CF5; }
+    &--red    { color: #E24A43; }
+    &--yellow { color: #c8a000; }
+    &--cursor { color: #fff; }
+  }
+
+  /* ── stats bar ── */
   &__stats {
     display: flex;
-    gap: 1.2rem;
+    gap: 1rem;
     flex-wrap: wrap;
     justify-content: center;
+    width: 100%;
   }
 
   &__stat {
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 0.8rem 1.6rem;
+    padding: 0.8rem 1.4rem;
     border-radius: 0.8rem;
     background: var(--general-section-1, #f4f4f4);
-    min-width: 9rem;
+    min-width: 8rem;
+    flex: 1;
+    max-width: 12rem;
 
-    span {
-      font-size: 1rem;
-      color: #888;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
+    span  { font-size: 1rem; color: #888; text-transform: uppercase; letter-spacing: 0.05em; }
+    strong { font-size: 1.5rem; font-weight: 800; }
+    em    { font-size: 2rem; font-weight: 900; font-style: normal; line-height: 1; }
 
-    strong {
-      font-size: 1.4rem;
-      font-weight: 700;
-    }
-
-    &--green strong { color: #42B883; }
-    &--blue strong { color: #4E7CF5; }
-    &--red strong { color: #E24A43; }
-    &--orange strong { color: #D88B1F; }
+    &--green  { strong, em { color: #42B883; } }
+    &--blue   { strong, em { color: #4E7CF5; } }
+    &--red    { strong, em { color: #E24A43; } }
+    &--yellow { strong, em { color: #c8a000; } }
   }
 
-  &--sm .digit-circles__circle {
-    width: 52px;
-    height: 52px;
+  /* ── size variants ── */
+  &--sm {
+    .digit-circles__circle { width: 52px; height: 52px; }
+    .digit-circles__number  { font-size: 16px; }
+    .digit-circles__percent { font-size: 9px; }
+    .digit-circles__cursor  { border-width: 2px; }
   }
-  &--sm .digit-circles__number { font-size: 16px; }
-  &--sm .digit-circles__percent { font-size: 9px; }
 
-  &--lg .digit-circles__circle {
-    width: 88px;
-    height: 88px;
+  &--lg {
+    .digit-circles__circle { width: 88px; height: 88px; }
+    .digit-circles__number  { font-size: 28px; }
+    .digit-circles__percent { font-size: 13px; }
   }
-  &--lg .digit-circles__number { font-size: 28px; }
-  &--lg .digit-circles__percent { font-size: 13px; }
+}
+
+@keyframes cursorPulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(255,255,255,0.25), 0 0 18px rgba(255,255,255,0.5); }
+  50%       { box-shadow: 0 0 0 6px rgba(255,255,255,0.1), 0 0 28px rgba(255,255,255,0.7); }
 }
