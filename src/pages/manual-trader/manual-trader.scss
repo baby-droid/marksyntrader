@@ -1,0 +1,380 @@
+.manual-trader {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  font-family: 'Inter', sans-serif;
+
+  &__topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 1.6rem;
+    border-bottom: 1px solid var(--general-section-1, #eee);
+    background: var(--general-main-1, #fff);
+    flex-wrap: wrap;
+    gap: 0.8rem;
+    min-height: 4.8rem;
+  }
+
+  &__trade-tabs {
+    display: flex;
+    gap: 0.4rem;
+    overflow-x: auto;
+    padding: 0.6rem 0;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+    &::-webkit-scrollbar { display: none; }
+  }
+
+  &__tab {
+    padding: 0.5rem 1.4rem;
+    border: 1px solid #ddd;
+    border-radius: 2rem;
+    background: var(--general-main-1, #fff);
+    font-size: 1.3rem;
+    cursor: pointer;
+    white-space: nowrap;
+    color: var(--text-general, #555);
+    transition: all 0.2s;
+
+    &.active {
+      background: #1a1a2e;
+      border-color: #1a1a2e;
+      color: #fff;
+      font-weight: 600;
+    }
+    &:hover:not(.active) { background: #f0f0f0; }
+  }
+
+  &__header-right { display: flex; align-items: center; gap: 1.2rem; }
+
+  &__balance {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #4C7DFF;
+  }
+
+  &__body {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+
+    @media (max-width: 900px) {
+      flex-direction: column;
+    }
+  }
+
+  &__chart-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-right: 1px solid var(--general-section-1, #eee);
+  }
+
+  &__chart-header {
+    display: flex;
+    align-items: center;
+    gap: 1.2rem;
+    padding: 1rem 1.6rem;
+    border-bottom: 1px solid var(--general-section-1, #eee);
+    background: var(--general-main-1, #fff);
+    flex-wrap: wrap;
+  }
+
+  &__symbol-select {
+    padding: 0.6rem 1rem;
+    border: 1px solid #ddd;
+    border-radius: 0.6rem;
+    font-size: 1.3rem;
+    background: var(--general-main-1, #fff);
+    color: var(--text-general, #333);
+    outline: none;
+    cursor: pointer;
+  }
+
+  &__price {
+    font-size: 1.8rem;
+    font-weight: 800;
+    color: var(--text-general, #1a1a2e);
+  }
+
+  &__live {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #ccc;
+    &.live { color: #42B883; }
+  }
+
+  &__chart {
+    flex: 1;
+    min-height: 30rem;
+    overflow: hidden;
+  }
+
+  &__digits-section {
+    border-top: 1px solid var(--general-section-1, #eee);
+    padding: 1.2rem 1.6rem;
+    background: var(--general-main-1, #fff);
+    overflow-y: auto;
+  }
+
+  &__digits-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.8rem;
+
+    h3 {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin: 0;
+    }
+  }
+
+  &__toggle-chart {
+    background: none;
+    border: 1px solid #ddd;
+    border-radius: 0.6rem;
+    padding: 0.4rem 1rem;
+    font-size: 1.2rem;
+    cursor: pointer;
+    color: #666;
+    &:hover { background: #f0f0f0; }
+  }
+
+  &__panel {
+    width: 32rem;
+    display: flex;
+    flex-direction: column;
+    background: var(--general-main-1, #fff);
+    overflow-y: auto;
+
+    @media (max-width: 900px) {
+      width: 100%;
+    }
+  }
+
+  &__panel-body {
+    padding: 1.6rem;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1.6rem;
+  }
+
+  &__field {
+    label { display: block; font-size: 1.2rem; font-weight: 600; color: #888; margin-bottom: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
+
+    &--toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+
+      label { margin: 0; }
+    }
+  }
+
+  &__duration-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+  }
+
+  &__duration-btn {
+    padding: 0.5rem 1rem;
+    border: 1px solid #ddd;
+    border-radius: 0.6rem;
+    background: var(--general-main-1, #fff);
+    font-size: 1.2rem;
+    cursor: pointer;
+    color: var(--text-general, #555);
+    transition: all 0.2s;
+
+    &.active {
+      background: #4C7DFF;
+      border-color: #4C7DFF;
+      color: #fff;
+      font-weight: 600;
+    }
+    &:hover:not(.active) { background: #f0f0f0; }
+  }
+
+  &__stake-row {
+    display: flex;
+    align-items: center;
+    border: 1px solid #ddd;
+    border-radius: 0.8rem;
+    overflow: hidden;
+  }
+
+  &__stake-adj {
+    width: 4rem;
+    height: 4.2rem;
+    border: none;
+    background: var(--general-section-1, #f8f8f8);
+    font-size: 1.8rem;
+    cursor: pointer;
+    color: #555;
+    flex-shrink: 0;
+    &:hover { background: #eee; }
+  }
+
+  &__stake-input {
+    flex: 1;
+    padding: 0.8rem;
+    border: none;
+    text-align: center;
+    font-size: 1.6rem;
+    font-weight: 700;
+    background: var(--general-main-1, #fff);
+    color: var(--text-general, #333);
+    outline: none;
+    min-width: 0;
+  }
+
+  &__currency {
+    padding: 0 1rem;
+    font-size: 1.3rem;
+    color: #888;
+    border-left: 1px solid #ddd;
+  }
+
+  &__barrier-row {
+    display: flex;
+    gap: 0.4rem;
+  }
+
+  &__barrier-btn {
+    flex: 1;
+    padding: 0.7rem 0;
+    border: 1px solid #ddd;
+    border-radius: 0.4rem;
+    background: var(--general-main-1, #fff);
+    font-size: 1.2rem;
+    cursor: pointer;
+    color: var(--text-general, #555);
+    transition: all 0.2s;
+
+    &.active {
+      background: #1a1a2e;
+      border-color: #1a1a2e;
+      color: #fff;
+      font-weight: 700;
+    }
+  }
+
+  &__toggle {
+    position: relative;
+    display: inline-block;
+    width: 48px;
+    height: 26px;
+
+    input { opacity: 0; width: 0; height: 0; }
+  }
+
+  &__toggle-slider {
+    position: absolute;
+    inset: 0;
+    background: #ccc;
+    border-radius: 26px;
+    cursor: pointer;
+    transition: 0.3s;
+
+    &::before {
+      content: '';
+      position: absolute;
+      height: 20px;
+      width: 20px;
+      left: 3px;
+      bottom: 3px;
+      background: #fff;
+      border-radius: 50%;
+      transition: 0.3s;
+    }
+  }
+
+  input:checked + &__toggle-slider {
+    background: #4C7DFF;
+    &::before { transform: translateX(22px); }
+  }
+
+  &__payout {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.2rem;
+    background: var(--general-section-1, #f8f8f8);
+    border-radius: 0.8rem;
+    font-size: 1.3rem;
+    color: #666;
+    strong { font-size: 1.4rem; font-weight: 700; color: #42B883; }
+  }
+
+  &__buy-btns {
+    padding: 1.6rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+    border-top: 1px solid var(--general-section-1, #eee);
+  }
+
+  &__buy-btn {
+    width: 100%;
+    padding: 1.4rem 1.6rem;
+    border: none;
+    border-radius: 0.8rem;
+    font-size: 1.6rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    transition: all 0.2s;
+    color: #fff;
+
+    &:disabled { opacity: 0.6; cursor: not-allowed; }
+    &:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.05); }
+
+    &--rise, &--even, &--over { background: #42B883; }
+    &--fall, &--odd, &--under { background: #E24A43; }
+  }
+
+  &__buy-payout {
+    font-size: 1.1rem;
+    font-weight: 400;
+    opacity: 0.85;
+    margin-top: 0.2rem;
+  }
+
+  &__results {
+    padding: 1rem 1.6rem;
+    border-top: 1px solid var(--general-section-1, #eee);
+  }
+
+  &__results-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 1.3rem;
+    font-weight: 600;
+    margin-bottom: 0.8rem;
+    .pos { color: #42B883; }
+    .neg { color: #E24A43; }
+  }
+
+  &__trade-list { display: flex; flex-direction: column; gap: 0.3rem; }
+
+  &__trade-item {
+    display: flex;
+    justify-content: space-between;
+    font-size: 1.2rem;
+    padding: 0.4rem 0.8rem;
+    border-radius: 0.4rem;
+
+    &.won { background: rgba(66, 184, 131, 0.1); color: #42B883; }
+    &.lost { background: rgba(226, 74, 67, 0.1); color: #E24A43; }
+  }
+}
