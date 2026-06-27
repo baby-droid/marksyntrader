@@ -1,0 +1,27 @@
+{
+  "name": "Marksyntrader",
+  "short_name": "Marksyntrader",
+  "description": "Automated trading bot for Deriv markets",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0e0e1a",
+  "theme_color": "#4C7DFF",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/logo.jpeg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo.jpeg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "categories": ["finance", "utilities"],
+  "lang": "en"
+}
