@@ -94,8 +94,13 @@ export default defineConfig({
   html: { template: './index.html' },
   server: {
     compress: true,
+    port: 5000,
+    host: '0.0.0.0',
   },
-  dev: { hmr: true },
+  dev: {
+    hmr: false,
+    writeToDisk: false,
+  },
   tools: {
     rspack: {
       module: {

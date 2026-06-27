@@ -6,7 +6,7 @@
     "node": "20.x"
   },
   "scripts": {
-    "dev": "rsbuild dev --port 4003",
+    "dev": "./node_modules/.bin/rsbuild dev --port 5000",
     "build": "rsbuild build",
     "test": "jest",
     "type-check": "tsc --noEmit",
