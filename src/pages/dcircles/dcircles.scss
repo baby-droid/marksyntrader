@@ -1,0 +1,303 @@
+.dcircles {
+  padding: 1.6rem;
+  max-width: 1200px;
+  margin: 0 auto;
+  font-family: 'Inter', sans-serif;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1.2rem;
+    margin-bottom: 2rem;
+  }
+
+  &__price {
+    h1 {
+      font-size: 3.2rem;
+      font-weight: 800;
+      color: var(--text-general, #1a1a2e);
+      margin: 0;
+      line-height: 1;
+    }
+    span {
+      font-size: 1.1rem;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+  }
+
+  &__controls {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+
+    select {
+      padding: 0.8rem 1.2rem;
+      border: 1px solid #ddd;
+      border-radius: 0.8rem;
+      font-size: 1.3rem;
+      background: var(--general-main-1, #fff);
+      color: var(--text-general, #333);
+      cursor: pointer;
+      outline: none;
+    }
+  }
+
+  &__status {
+    font-size: 1.2rem;
+    font-weight: 600;
+    &--live { color: #42B883; }
+  }
+
+  &__balance {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #4C7DFF;
+    background: rgba(76, 125, 255, 0.1);
+    padding: 0.6rem 1.2rem;
+    border-radius: 0.8rem;
+  }
+
+  &__section {
+    background: var(--general-main-1, #fff);
+    border: 1px solid var(--general-section-1, #eee);
+    border-radius: 1.2rem;
+    padding: 1.6rem;
+    margin-bottom: 1.6rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  }
+
+  &__section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    margin-bottom: 1.2rem;
+
+    h2 {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: #888;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin: 0;
+    }
+  }
+
+  &__collapse {
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    color: #888;
+    cursor: pointer;
+    padding: 0.4rem 0.8rem;
+  }
+
+  &__view-toggle {
+    display: flex;
+    gap: 0.4rem;
+  }
+
+  &__view-btn {
+    padding: 0.4rem 1rem;
+    border: 1px solid #ddd;
+    border-radius: 0.6rem;
+    background: #f8f8f8;
+    font-size: 1.2rem;
+    cursor: pointer;
+    color: #666;
+    transition: all 0.2s;
+
+    &.active {
+      background: #4C7DFF;
+      border-color: #4C7DFF;
+      color: #fff;
+      font-weight: 600;
+    }
+  }
+
+  &__bars {
+    display: flex;
+    flex-direction: column;
+    gap: 1.2rem;
+    padding: 1.2rem 0;
+  }
+
+  &__bar-row {
+    display: flex;
+    align-items: center;
+    gap: 1.2rem;
+
+    span {
+      font-size: 1.3rem;
+      color: var(--text-general, #333);
+      min-width: 6rem;
+    }
+  }
+
+  &__bar-track {
+    flex: 1;
+    height: 3.2rem;
+    background: #eee;
+    border-radius: 0.8rem;
+    overflow: hidden;
+  }
+
+  &__bar {
+    height: 100%;
+    border-radius: 0.8rem;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 1rem;
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #fff;
+    transition: width 0.5s ease;
+    min-width: 4rem;
+
+    &--even { background: #42B883; }
+    &--odd { background: #E24A43; }
+  }
+
+  &__last-digits { padding-top: 1.6rem; }
+
+  &__badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin: 0.8rem 0;
+  }
+
+  &__badge {
+    width: 2.8rem;
+    height: 2.8rem;
+    border-radius: 0.4rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #fff;
+
+    &--even, &--over { background: #42B883; }
+    &--odd, &--under { background: #E24A43; }
+  }
+
+  &__streak {
+    font-size: 1.3rem;
+    color: #666;
+    strong { color: var(--text-general, #333); }
+  }
+
+  &__trade-panel { margin-top: 0; }
+
+  &__trade-row {
+    display: flex;
+    gap: 1.2rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.2rem;
+  }
+
+  &__trade-field {
+    flex: 1;
+    min-width: 10rem;
+
+    label {
+      display: block;
+      font-size: 1.1rem;
+      color: #888;
+      margin-bottom: 0.4rem;
+      text-transform: uppercase;
+    }
+
+    input {
+      width: 100%;
+      padding: 0.8rem 1rem;
+      border: 1px solid #ddd;
+      border-radius: 0.6rem;
+      font-size: 1.4rem;
+      box-sizing: border-box;
+      background: var(--general-main-1, #fff);
+      color: var(--text-general, #333);
+      outline: none;
+      &:focus { border-color: #4C7DFF; }
+    }
+  }
+
+  &__trade-btns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.8rem;
+    margin-bottom: 1rem;
+  }
+
+  &__auto {
+    display: flex;
+    gap: 0.8rem;
+    align-items: center;
+    margin-top: 0.8rem;
+
+    select {
+      padding: 0.8rem 1rem;
+      border: 1px solid #ddd;
+      border-radius: 0.6rem;
+      font-size: 1.3rem;
+      background: var(--general-main-1, #fff);
+      color: var(--text-general, #333);
+    }
+  }
+
+  &__btn {
+    padding: 1.2rem;
+    border: none;
+    border-radius: 0.8rem;
+    font-size: 1.4rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: #fff;
+
+    &:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    &--even { background: #42B883; &:hover:not(:disabled) { background: #35a070; } }
+    &--odd { background: #E24A43; &:hover:not(:disabled) { background: #c73a34; } }
+    &--over { background: #4E7CF5; &:hover:not(:disabled) { background: #3a6be0; } }
+    &--under { background: #D88B1F; &:hover:not(:disabled) { background: #c07a10; } }
+    &--auto { background: #4C7DFF; flex: 1; &:hover:not(:disabled) { background: #3a6be0; } }
+    &--stop { background: #E24A43; }
+  }
+
+  &__results { margin-top: 1.2rem; }
+
+  &__results-summary {
+    display: flex;
+    gap: 2rem;
+    font-size: 1.3rem;
+    color: #666;
+    margin-bottom: 0.8rem;
+    strong.pos { color: #42B883; }
+    strong.neg { color: #E24A43; }
+  }
+
+  &__trade-history {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  &__trade-result {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.6rem 1rem;
+    border-radius: 0.4rem;
+    font-size: 1.2rem;
+    font-weight: 600;
+
+    &.won { background: rgba(66, 184, 131, 0.1); color: #42B883; }
+    &.lost { background: rgba(226, 74, 67, 0.1); color: #E24A43; }
+  }
+}
