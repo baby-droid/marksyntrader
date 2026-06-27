@@ -1,0 +1,116 @@
+.digit-circles {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.6rem;
+  padding: 1.6rem 0;
+
+  &__row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.2rem;
+    justify-content: center;
+    margin-top: 35px;
+    margin-bottom: 25px;
+  }
+
+  &__wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+  }
+
+  &__wrapper--current .digit-circles__circle {
+    transform: scale(1.1);
+  }
+
+  &__circle {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Inter', 'Poppins', sans-serif;
+    cursor: default;
+    transition: transform 0.2s, box-shadow 0.2s;
+
+    &:hover {
+      transform: scale(1.05);
+    }
+  }
+
+  &__number {
+    font-size: 22px;
+    font-weight: 600;
+    line-height: 1;
+  }
+
+  &__percent {
+    font-size: 11px;
+    font-weight: 500;
+    color: inherit;
+    opacity: 0.85;
+    margin-top: 2px;
+  }
+
+  &__badge {
+    font-size: 10px;
+    font-weight: 700;
+    position: absolute;
+    bottom: -1.6rem;
+
+    &--high { color: #42B883; }
+    &--low { color: #E24A43; }
+  }
+
+  &__stats {
+    display: flex;
+    gap: 1.2rem;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  &__stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0.8rem 1.6rem;
+    border-radius: 0.8rem;
+    background: var(--general-section-1, #f4f4f4);
+    min-width: 9rem;
+
+    span {
+      font-size: 1rem;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    strong {
+      font-size: 1.4rem;
+      font-weight: 700;
+    }
+
+    &--green strong { color: #42B883; }
+    &--blue strong { color: #4E7CF5; }
+    &--red strong { color: #E24A43; }
+    &--orange strong { color: #D88B1F; }
+  }
+
+  &--sm .digit-circles__circle {
+    width: 52px;
+    height: 52px;
+  }
+  &--sm .digit-circles__number { font-size: 16px; }
+  &--sm .digit-circles__percent { font-size: 9px; }
+
+  &--lg .digit-circles__circle {
+    width: 88px;
+    height: 88px;
+  }
+  &--lg .digit-circles__number { font-size: 28px; }
+  &--lg .digit-circles__percent { font-size: 13px; }
+}
