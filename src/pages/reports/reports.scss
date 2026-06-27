@@ -1,0 +1,250 @@
+.reports {
+  padding: 1.6rem;
+  max-width: 1200px;
+  margin: 0 auto;
+  font-family: 'Inter', sans-serif;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.6rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+
+    h1 { font-size: 2.4rem; font-weight: 800; margin: 0; color: var(--text-general, #1a1a2e); }
+  }
+
+  &__balance {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #4C7DFF;
+    background: rgba(76, 125, 255, 0.1);
+    padding: 0.8rem 1.6rem;
+    border-radius: 0.8rem;
+  }
+
+  &__tabs {
+    display: flex;
+    gap: 0.4rem;
+    border-bottom: 1px solid var(--general-section-1, #eee);
+    margin-bottom: 1.6rem;
+    overflow-x: auto;
+  }
+
+  &__tab {
+    padding: 1rem 2rem;
+    border: none;
+    background: none;
+    font-size: 1.4rem;
+    cursor: pointer;
+    color: #888;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    transition: all 0.2s;
+    font-weight: 500;
+
+    &.active {
+      color: #4C7DFF;
+      border-bottom-color: #4C7DFF;
+      font-weight: 700;
+    }
+    &:hover:not(.active) { color: var(--text-general, #555); }
+  }
+
+  &__filters {
+    display: flex;
+    align-items: center;
+    gap: 1.6rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.6rem;
+    padding: 1.2rem 1.6rem;
+    background: var(--general-section-1, #f8f8f8);
+    border-radius: 0.8rem;
+
+    label {
+      font-size: 1.3rem;
+      color: #666;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+
+      input {
+        padding: 0.6rem 0.8rem;
+        border: 1px solid #ddd;
+        border-radius: 0.6rem;
+        font-size: 1.3rem;
+        outline: none;
+        background: var(--general-main-1, #fff);
+        color: var(--text-general, #333);
+        &:focus { border-color: #4C7DFF; }
+      }
+    }
+  }
+
+  &__refresh-btn {
+    padding: 0.7rem 1.4rem;
+    background: #4C7DFF;
+    color: #fff;
+    border: none;
+    border-radius: 0.6rem;
+    font-size: 1.3rem;
+    cursor: pointer;
+    font-weight: 600;
+    &:hover:not(:disabled) { background: #3a6be0; }
+    &:disabled { opacity: 0.6; }
+  }
+
+  &__summary-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+    gap: 1.2rem;
+    margin-bottom: 2rem;
+  }
+
+  &__summary-card {
+    background: var(--general-main-1, #fff);
+    border: 1px solid var(--general-section-1, #eee);
+    border-radius: 1rem;
+    padding: 1.4rem;
+    text-align: center;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+
+    span { display: block; font-size: 1.2rem; color: #888; margin-bottom: 0.6rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    strong { font-size: 2rem; font-weight: 800; color: var(--text-general, #333); }
+    strong.pos { color: #42B883; }
+    strong.neg { color: #E24A43; }
+  }
+
+  &__loading, &__empty {
+    text-align: center;
+    padding: 4rem;
+    font-size: 1.4rem;
+    color: #aaa;
+  }
+
+  &__day-group {
+    background: var(--general-main-1, #fff);
+    border: 1px solid var(--general-section-1, #eee);
+    border-radius: 1rem;
+    overflow: hidden;
+    margin-bottom: 1.2rem;
+  }
+
+  &__day-header {
+    display: flex;
+    justify-content: space-between;
+    padding: 1.2rem 1.6rem;
+    background: var(--general-section-1, #f8f8f8);
+    font-size: 1.4rem;
+    font-weight: 700;
+    .pos { color: #42B883; }
+    .neg { color: #E24A43; }
+  }
+
+  &__day-trades { display: flex; flex-direction: column; }
+
+  &__trade-row {
+    display: grid;
+    grid-template-columns: 8rem 1fr 14rem 8rem 8rem;
+    gap: 1rem;
+    align-items: center;
+    padding: 1rem 1.6rem;
+    font-size: 1.2rem;
+    border-bottom: 1px solid var(--general-section-1, #f0f0f0);
+
+    &:last-child { border-bottom: none; }
+    &.won { background: rgba(66, 184, 131, 0.03); }
+    &.lost { background: rgba(226, 74, 67, 0.03); }
+
+    @media (max-width: 768px) {
+      grid-template-columns: 1fr 1fr;
+      gap: 0.6rem;
+    }
+  }
+
+  &__trade-type {
+    font-weight: 700;
+    color: var(--text-general, #333);
+    font-size: 1.1rem;
+    background: var(--general-section-1, #f0f0f0);
+    padding: 0.2rem 0.6rem;
+    border-radius: 0.4rem;
+    text-align: center;
+  }
+
+  &__trade-desc { color: #888; font-size: 1.1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  &__trade-time { color: #aaa; font-size: 1.1rem; }
+  &__trade-pnl { font-weight: 700; &.pos { color: #42B883; } &.neg { color: #E24A43; } }
+  &__trade-balance { color: #666; }
+
+  &__open { display: flex; flex-direction: column; gap: 1.2rem; }
+
+  &__open-contract {
+    background: var(--general-main-1, #fff);
+    border: 1px solid var(--general-section-1, #eee);
+    border-radius: 1rem;
+    padding: 1.4rem 1.6rem;
+  }
+
+  &__open-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.8rem;
+    strong { font-size: 1.4rem; font-weight: 700; }
+  }
+
+  &__open-status {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #42B883;
+    background: #d4f7e8;
+    padding: 0.2rem 0.8rem;
+    border-radius: 0.4rem;
+  }
+
+  &__open-details {
+    display: flex;
+    gap: 2rem;
+    flex-wrap: wrap;
+    font-size: 1.3rem;
+    color: #666;
+    .pos { color: #42B883; font-weight: 700; }
+    .neg { color: #E24A43; font-weight: 700; }
+  }
+
+  &__table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--general-main-1, #fff);
+    border-radius: 1rem;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+
+    th {
+      padding: 1.2rem 1.6rem;
+      text-align: left;
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: #888;
+      text-transform: uppercase;
+      background: var(--general-section-1, #f8f8f8);
+      border-bottom: 1px solid #eee;
+    }
+
+    td {
+      padding: 1rem 1.6rem;
+      font-size: 1.3rem;
+      color: var(--text-general, #333);
+      border-bottom: 1px solid var(--general-section-1, #f0f0f0);
+    }
+
+    tr:last-child td { border-bottom: none; }
+    tr.won td { background: rgba(66, 184, 131, 0.03); }
+    tr.lost td { background: rgba(226, 74, 67, 0.03); }
+
+    .pos { color: #42B883; font-weight: 700; }
+    .neg { color: #E24A43; font-weight: 700; }
+  }
+}

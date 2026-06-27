@@ -1,0 +1,2 @@
+- [Marksyntrader tab order](marksyntrader-tabs.md) — DBOT_TABS constants changed; Dashboard is now index 1, Free Bots is 0.
+- [Initialization loading screen](marksyntrader-loading.md) — "Initializing Deriv Bot account..." is normal startup; resolves after retrieveActiveSymbols completes.

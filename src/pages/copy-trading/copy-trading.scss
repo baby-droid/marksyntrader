@@ -1,0 +1,258 @@
+.copy-trading {
+  font-family: 'Inter', sans-serif;
+  padding: 0;
+
+  &__hero {
+    background: linear-gradient(135deg, #fff5f0 0%, #fff 100%);
+    border-bottom: 1px solid #ffe0d0;
+    padding: 3rem 2.4rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2rem;
+    flex-wrap: wrap;
+  }
+
+  &__live-badge {
+    display: inline-block;
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #E24A43;
+    margin-bottom: 1rem;
+    animation: blink 2s infinite;
+  }
+
+  &__hero-content {
+    flex: 1;
+    h1 { font-size: 2.6rem; font-weight: 800; margin: 0 0 1rem; color: #1a1a2e; line-height: 1.25; }
+    h1 span { color: #1a1a2e; }
+    h1 em { color: #E24A43; font-style: normal; }
+    p { font-size: 1.4rem; color: #666; margin: 0 0 2rem; max-width: 50rem; line-height: 1.6; }
+  }
+
+  &__hero-icon {
+    font-size: 8rem;
+    opacity: 0.15;
+    flex-shrink: 0;
+  }
+
+  &__hero-stats {
+    display: flex;
+    gap: 3rem;
+    flex-wrap: wrap;
+  }
+
+  &__stat {
+    strong { display: block; font-size: 2.4rem; font-weight: 800; color: #1a1a2e; }
+    span { font-size: 1.1rem; color: #888; text-transform: uppercase; letter-spacing: 0.08em; }
+
+    &--status {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+      flex-wrap: wrap;
+    }
+  }
+
+  &__status-indicator {
+    width: 1.4rem;
+    height: 1.4rem;
+    border-radius: 50%;
+    background: #ccc;
+    &.active { background: #42B883; box-shadow: 0 0 6px #42B883; animation: blink 1.5s infinite; }
+  }
+
+  &__body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.6rem;
+    padding: 1.6rem;
+
+    @media (max-width: 900px) { grid-template-columns: 1fr; }
+  }
+
+  &__card {
+    background: #fff;
+    border: 1px solid #eee;
+    border-radius: 1.2rem;
+    padding: 2rem;
+    margin-bottom: 1.2rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+
+    h3 { font-size: 1.6rem; font-weight: 700; color: #1a1a2e; margin: 0 0 0.6rem; }
+    p { font-size: 1.3rem; color: #888; margin: 0 0 1.4rem; line-height: 1.5; }
+
+    &--log { max-height: 28rem; overflow: hidden; display: flex; flex-direction: column; }
+  }
+
+  &__card-icon {
+    font-size: 2.4rem;
+    margin-bottom: 1rem;
+  }
+
+  &__token-row {
+    display: flex;
+    gap: 0.8rem;
+    margin-bottom: 1.2rem;
+    flex-wrap: wrap;
+
+    input {
+      flex: 1;
+      padding: 1rem 1.2rem;
+      border: 1px solid #ddd;
+      border-radius: 0.8rem;
+      font-size: 1.3rem;
+      outline: none;
+      min-width: 16rem;
+      &:focus { border-color: #4C7DFF; }
+    }
+  }
+
+  &__btn {
+    padding: 1rem 1.4rem;
+    border: none;
+    border-radius: 0.8rem;
+    font-size: 1.3rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+
+    &--add { background: #E24A43; color: #fff; &:hover { background: #c73a34; } }
+    &--sync { background: #f0f0f0; color: #555; border: 1px solid #ddd; &:hover { background: #e0e0e0; } }
+  }
+
+  &__copy-btn {
+    width: 100%;
+    padding: 1.3rem;
+    background: #E24A43;
+    color: #fff;
+    border: none;
+    border-radius: 0.8rem;
+    font-size: 1.5rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    opacity: 0.85;
+
+    &:hover { opacity: 1; }
+    &--stop { background: #E24A43; opacity: 1; }
+  }
+
+  &__mirror-btn {
+    width: 100%;
+    padding: 1.3rem;
+    background: #E24A43;
+    color: #fff;
+    border: none;
+    border-radius: 0.8rem;
+    font-size: 1.5rem;
+    font-weight: 700;
+    cursor: pointer;
+    opacity: 0.75;
+    transition: all 0.2s;
+    &:hover { opacity: 1; }
+  }
+
+  &__log {
+    flex: 1;
+    overflow-y: auto;
+    max-height: 18rem;
+    font-size: 1.2rem;
+    font-family: monospace;
+  }
+
+  &__log-empty { color: #aaa; text-align: center; padding: 2rem; font-size: 1.3rem; }
+  &__log-entry { padding: 0.4rem 0; border-bottom: 1px solid #f0f0f0; color: #555; }
+
+  &__no-accounts {
+    text-align: center;
+    padding: 3rem 2rem;
+    p { color: #888; font-size: 1.3rem; margin: 0.4rem 0; }
+  }
+
+  &__no-accounts-icon { font-size: 4rem; margin-bottom: 1rem; opacity: 0.3; }
+
+  &__accounts { display: flex; flex-direction: column; gap: 0.8rem; }
+
+  &__account {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.2rem;
+    border-radius: 0.8rem;
+    border: 1px solid #ddd;
+
+    &--active { border-color: #42B883; background: rgba(66,184,131,0.05); }
+    &--error { border-color: #E24A43; background: rgba(226,74,67,0.05); }
+    &--pending { border-color: #D88B1F; background: rgba(216,139,31,0.05); }
+  }
+
+  &__account-info {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+
+    strong { display: block; font-size: 1.3rem; font-weight: 700; color: #1a1a2e; }
+    span { font-size: 1.2rem; color: #888; }
+  }
+
+  &__account-dot {
+    width: 1rem;
+    height: 1rem;
+    border-radius: 50%;
+    flex-shrink: 0;
+
+    &--active { background: #42B883; }
+    &--error { background: #E24A43; }
+    &--pending { background: #D88B1F; }
+  }
+
+  &__account-meta {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    font-size: 1.2rem;
+    color: #888;
+  }
+
+  &__account-status {
+    font-size: 1.1rem;
+    font-weight: 600;
+    padding: 0.2rem 0.6rem;
+    border-radius: 0.4rem;
+
+    &--active { background: #d4f7e8; color: #42B883; }
+    &--error { background: #fde8e8; color: #E24A43; }
+    &--pending { background: #fff3cd; color: #D88B1F; }
+  }
+
+  &__remove {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #bbb;
+    font-size: 1.4rem;
+    &:hover { color: #E24A43; }
+  }
+
+  &__master {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+
+  &__master-balance, &__master-pl {
+    background: #f8f8f8;
+    border-radius: 0.8rem;
+    padding: 1.2rem;
+    span { display: block; font-size: 1.1rem; color: #888; margin-bottom: 0.4rem; }
+    strong { font-size: 1.8rem; font-weight: 800; color: #1a1a2e; }
+    strong.pos { color: #42B883; }
+    strong.neg { color: #E24A43; }
+  }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}

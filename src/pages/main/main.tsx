@@ -47,6 +47,13 @@ import './main.scss';
 const ChartWrapper = lazy(() => import('../chart/chart-wrapper'));
 const Tutorial = lazy(() => import('../tutorials'));
 const BotLibrary = lazy(() => import('../bot-library'));
+const DCircles = lazy(() => import('../dcircles'));
+const SpeedLab = lazy(() => import('../speed-lab'));
+const ProHedge = lazy(() => import('../pro-hedge'));
+const ManualTrader = lazy(() => import('../manual-trader'));
+const FreeBots = lazy(() => import('../free-bots'));
+const CopyTrading = lazy(() => import('../copy-trading'));
+const Reports = lazy(() => import('../reports'));
 
 const AppWrapper = observer(() => {
     const { connectionStatus } = useApiBase();
@@ -378,14 +385,27 @@ const AppWrapper = observer(() => {
                     <div>
                         {!isDesktop && left_tab_shadow && <span className='tabs-shadow tabs-shadow--left' />}{' '}
                         <Tabs active_index={active_tab} className='main__tabs' onTabItemClick={handleTabChange} top>
+                            {/* 0 — Free Bots */}
                             <div
                                 label={
                                     <>
-                                        <LabelPairedObjectsColumnCaptionRegularIcon
-                                            height='24px'
-                                            width='24px'
-                                            fill='var(--text-general)'
-                                        />
+                                        <svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='var(--text-general)' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
+                                            <circle cx='12' cy='8' r='4' /><path d='M6 20v-2a6 6 0 0112 0v2'/><line x1='12' y1='12' x2='12' y2='14'/>
+                                        </svg>
+                                        <Localize i18n_default_text='Free Bots' />
+                                    </>
+                                }
+                                id='id-free-bots'
+                            >
+                                <Suspense fallback={<ChunkLoader message={localize('Loading bots...')} />}>
+                                    <FreeBots />
+                                </Suspense>
+                            </div>
+                            {/* 1 — Dashboard */}
+                            <div
+                                label={
+                                    <>
+                                        <LabelPairedObjectsColumnCaptionRegularIcon height='24px' width='24px' fill='var(--text-general)' />
                                         <Localize i18n_default_text='Dashboard' />
                                     </>
                                 }
@@ -393,83 +413,116 @@ const AppWrapper = observer(() => {
                             >
                                 <Dashboard handleTabChange={handleTabChange} />
                             </div>
+                            {/* 2 — Bot Builder */}
                             <div
                                 label={
                                     <>
-                                        <LabelPairedPuzzlePieceTwoCaptionBoldIcon
-                                            height='24px'
-                                            width='24px'
-                                            fill='var(--text-general)'
-                                        />
+                                        <LabelPairedPuzzlePieceTwoCaptionBoldIcon height='24px' width='24px' fill='var(--text-general)' />
                                         <Localize i18n_default_text='Bot Builder' />
                                     </>
                                 }
                                 id='id-bot-builder'
                             />
+                            {/* 3 — DCircles */}
                             <div
                                 label={
                                     <>
-                                        <LabelPairedChartLineCaptionRegularIcon
-                                            height='24px'
-                                            width='24px'
-                                            fill='var(--text-general)'
-                                        />
+                                        <svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='var(--text-general)' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
+                                            <circle cx='7' cy='12' r='4'/><circle cx='17' cy='12' r='4'/><line x1='11' y1='12' x2='13' y2='12'/>
+                                        </svg>
+                                        <Localize i18n_default_text='DCircles' />
+                                    </>
+                                }
+                                id='id-dcircles'
+                            >
+                                <Suspense fallback={<ChunkLoader message={localize('Loading DCircles...')} />}>
+                                    <DCircles />
+                                </Suspense>
+                            </div>
+                            {/* 4 — Speed Lab */}
+                            <div
+                                label={
+                                    <>
+                                        <svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='var(--text-general)' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
+                                            <polygon points='13 2 3 14 12 14 11 22 21 10 12 10 13 2'/>
+                                        </svg>
+                                        <Localize i18n_default_text='Speed Lab' />
+                                    </>
+                                }
+                                id='id-speed-lab'
+                            >
+                                <Suspense fallback={<ChunkLoader message={localize('Loading Speed Lab...')} />}>
+                                    <SpeedLab />
+                                </Suspense>
+                            </div>
+                            {/* 5 — Pro Hedge */}
+                            <div
+                                label={
+                                    <>
+                                        <svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='var(--text-general)' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
+                                            <path d='M12 2L2 7l10 5 10-5-10-5z'/><path d='M2 17l10 5 10-5'/><path d='M2 12l10 5 10-5'/>
+                                        </svg>
+                                        <Localize i18n_default_text='Pro Hedge' />
+                                    </>
+                                }
+                                id='id-pro-hedge'
+                            >
+                                <Suspense fallback={<ChunkLoader message={localize('Loading Pro Hedge...')} />}>
+                                    <ProHedge />
+                                </Suspense>
+                            </div>
+                            {/* 6 — Charts */}
+                            <div
+                                label={
+                                    <>
+                                        <LabelPairedChartLineCaptionRegularIcon height='24px' width='24px' fill='var(--text-general)' />
                                         <Localize i18n_default_text='Charts' />
                                     </>
                                 }
-                                id={
-                                    is_chart_modal_visible || is_trading_view_modal_visible
-                                        ? 'id-charts--disabled'
-                                        : 'id-charts'
-                                }
+                                id={is_chart_modal_visible || is_trading_view_modal_visible ? 'id-charts--disabled' : 'id-charts'}
                             >
-                                <Suspense
-                                    fallback={<ChunkLoader message={localize('Please wait, loading chart...')} />}
-                                >
+                                <Suspense fallback={<ChunkLoader message={localize('Please wait, loading chart...')} />}>
                                     <ChartWrapper show_digits_stats={false} />
                                 </Suspense>
                             </div>
+                            {/* 7 — Manual Trader */}
                             <div
                                 label={
                                     <>
-                                        <LegacyGuide1pxIcon
-                                            height='16px'
-                                            width='16px'
-                                            fill='var(--text-general)'
-                                            className='icon-general-fill-g-path'
-                                        />
+                                        <svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='var(--text-general)' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
+                                            <path d='M18 20V10'/><path d='M12 20V4'/><path d='M6 20v-6'/>
+                                        </svg>
+                                        <Localize i18n_default_text='Manual Trader' />
+                                    </>
+                                }
+                                id='id-manual-trader'
+                            >
+                                <Suspense fallback={<ChunkLoader message={localize('Loading Manual Trader...')} />}>
+                                    <ManualTrader />
+                                </Suspense>
+                            </div>
+                            {/* 8 — Tutorials */}
+                            <div
+                                label={
+                                    <>
+                                        <LegacyGuide1pxIcon height='16px' width='16px' fill='var(--text-general)' className='icon-general-fill-g-path' />
                                         <Localize i18n_default_text='Tutorials' />
                                     </>
                                 }
                                 id='id-tutorials'
                             >
                                 <div className='tutorials-wrapper'>
-                                    <Suspense
-                                        fallback={
-                                            <ChunkLoader message={localize('Please wait, loading tutorials...')} />
-                                        }
-                                    >
+                                    <Suspense fallback={<ChunkLoader message={localize('Please wait, loading tutorials...')} />}>
                                         <Tutorial handleTabChange={handleTabChange} />
                                     </Suspense>
                                 </div>
                             </div>
+                            {/* 9 — Bot Library */}
                             <div
                                 label={
                                     <>
-                                        <svg
-                                            width='20'
-                                            height='20'
-                                            viewBox='0 0 24 24'
-                                            fill='none'
-                                            stroke='var(--text-general)'
-                                            strokeWidth='2'
-                                            strokeLinecap='round'
-                                            strokeLinejoin='round'
-                                        >
-                                            <rect x='3' y='3' width='7' height='7' rx='1' />
-                                            <rect x='14' y='3' width='7' height='7' rx='1' />
-                                            <rect x='3' y='14' width='7' height='7' rx='1' />
-                                            <rect x='14' y='14' width='7' height='7' rx='1' />
+                                        <svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='var(--text-general)' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
+                                            <rect x='3' y='3' width='7' height='7' rx='1'/><rect x='14' y='3' width='7' height='7' rx='1'/><rect x='3' y='14' width='7' height='7' rx='1'/><rect x='14' y='14' width='7' height='7' rx='1'/>
                                         </svg>
                                         <Localize i18n_default_text='Bot Library' />
                                     </>
@@ -478,6 +531,38 @@ const AppWrapper = observer(() => {
                             >
                                 <Suspense fallback={<ChunkLoader message={localize('Loading bot library...')} />}>
                                     <BotLibrary />
+                                </Suspense>
+                            </div>
+                            {/* 10 — Copy Trading */}
+                            <div
+                                label={
+                                    <>
+                                        <svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='var(--text-general)' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
+                                            <polyline points='17 1 21 5 17 9'/><path d='M3 11V9a4 4 0 014-4h14'/><polyline points='7 23 3 19 7 15'/><path d='M21 13v2a4 4 0 01-4 4H3'/>
+                                        </svg>
+                                        <Localize i18n_default_text='Copy Trading' />
+                                    </>
+                                }
+                                id='id-copy-trading'
+                            >
+                                <Suspense fallback={<ChunkLoader message={localize('Loading Copy Trading...')} />}>
+                                    <CopyTrading />
+                                </Suspense>
+                            </div>
+                            {/* 11 — Reports */}
+                            <div
+                                label={
+                                    <>
+                                        <svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='var(--text-general)' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
+                                            <path d='M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z'/><polyline points='14 2 14 8 20 8'/><line x1='16' y1='13' x2='8' y2='13'/><line x1='16' y1='17' x2='8' y2='17'/><polyline points='10 9 9 9 8 9'/>
+                                        </svg>
+                                        <Localize i18n_default_text='Reports' />
+                                    </>
+                                }
+                                id='id-reports'
+                            >
+                                <Suspense fallback={<ChunkLoader message={localize('Loading Reports...')} />}>
+                                    <Reports />
                                 </Suspense>
                             </div>
                         </Tabs>
