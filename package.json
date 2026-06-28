@@ -14,7 +14,7 @@
     "prebuild": "node scripts/generate-brand-css.js"
   },
   "dependencies": {
-    "@deriv-com/quill-ui": "^1.18.1",
+    "@deriv-com/quill-ui": "^1.24.6",
     "@deriv-com/quill-ui-next": "^2.4.5",
     "@deriv-com/smartcharts-champion": "^1.9.15",
     "@deriv-com/translations": "^1.4.6",
@@ -22,9 +22,9 @@
     "@deriv-com/utils": "^0.0.59",
     "@deriv/deriv-api": "^1.0.15",
     "@deriv/js-interpreter": "^3.0.0",
-    "@deriv/quill-icons": "^2.4.16",
+    "@deriv/quill-icons": "^2.8.2",
     "@svgr/core": "^8.1.0",
-    "@tanstack/react-query": "^5.29.2",
+    "@tanstack/react-query": "^5.101.2",
     "blockly": "^10.4.3",
     "canvas-toBlob": "^1.0.0",
     "classnames": "^2.5.1",
@@ -106,6 +106,7 @@
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^29.7.0",
     "jest-transform-stub": "^2.0.0",
+    "jiti": "^2.7.0",
     "postcss": "^8.5.15",
     "raw-loader": "^4.0.2",
     "rimraf": "^6.1.3",
