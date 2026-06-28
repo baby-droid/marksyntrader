@@ -6,7 +6,6 @@
     width: calc(100vw - 3.2rem);
     height: var(--bot-content-height);
     top: 0;
-    background: #0d0e26;
 
     @include mobile-or-tablet-screen {
         width: 100%;
@@ -32,50 +31,4 @@
     position: relative;
     touch-action: none;
     overflow: hidden;
-    background: #0d0e26 !important;
-}
-
-/* Dark navy bot.deriv.com style for the bot builder workspace */
-.bot-builder--active {
-    background: #0d0e26;
-
-    .db-toolbox {
-        background: #11143a !important;
-        border-right: 1.5px solid rgba(99, 102, 241, 0.25) !important;
-
-        &__header {
-            background: #0a0c22 !important;
-            color: #c7d2fe !important;
-            border-bottom: 1px solid rgba(99, 102, 241, 0.2);
-        }
-
-        &__item {
-            color: #a5b4fc !important;
-
-            &:hover {
-                background: rgba(99, 102, 241, 0.12) !important;
-                color: #e0e7ff !important;
-            }
-        }
-
-        &__row {
-            border-color: rgba(99, 102, 241, 0.12) !important;
-        }
-    }
-
-    /* Blockly canvas background */
-    .blocklyMainBackground {
-        fill: #0d0e26 !important;
-    }
-
-    .blocklyGrid pattern rect {
-        fill: rgba(99, 102, 241, 0.08) !important;
-    }
-
-    /* Quick strategy button */
-    .db-quick-strategy__button {
-        background: #6366f1 !important;
-        border-color: #818cf8 !important;
-        color: #fff !important;
-    }
 }

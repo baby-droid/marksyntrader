@@ -1,9 +1,8 @@
 @use 'components/shared/styles/constants' as *;
 @use 'components/shared/styles/mixins' as *;
 
-/* ── Global green background overlay ─────────────────────────────────── */
 body {
-    background: #0d0e26;
+    background: var(--general-main-1);
 }
 
 .main {
@@ -294,7 +293,7 @@ body {
     top: 6.6rem;
     inset-inline-start: 1.6rem;
     z-index: -1;
-    background: #0d0e26;
+    background: var(--general-main-1);
     height: var(--tab-content-height);
 
     .injectionDiv {
