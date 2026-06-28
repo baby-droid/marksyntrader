@@ -35,9 +35,9 @@ export const LogoMark = ({ height = 32 }: TLogoMarkProps) => {
     // Restart probing whenever the candidate list changes (e.g. a new preview logo).
     useEffect(() => setCandidateIndex(0), [candidates]);
 
-    const appName = previewAppName || getAppName();
+    const appName = (typeof previewAppName === 'string' ? previewAppName : null) || getAppName() || 'Deriv Bot';
     const logoSrc = candidateIndex < candidates.length ? candidates[candidateIndex] : null;
-    const badgeLetter = appName.trim().charAt(0).toUpperCase() || 'A';
+    const badgeLetter = String(appName).trim().charAt(0).toUpperCase() || 'A';
 
     return (
         <span className='app-header__logo-mark'>
@@ -45,7 +45,7 @@ export const LogoMark = ({ height = 32 }: TLogoMarkProps) => {
                 <img
                     data-logo
                     src={logoSrc}
-                    alt={appName}
+                    alt={String(appName)}
                     className='app-header__logo-img'
                     style={{ height: `${height}px` }}
                     onError={() => setCandidateIndex((index) => index + 1)}

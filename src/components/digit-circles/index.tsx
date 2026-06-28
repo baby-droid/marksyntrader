@@ -11,36 +11,40 @@ interface DigitCirclesProps {
 }
 
 /**
- * Color scheme per spec:
- *  - GREEN  (#42B883) → highest %
- *  - BLUE   (#4E7CF5) → 2nd highest %
- *  - RED    (#E24A43) → lowest %
- *  - YELLOW (#F5C842) → 2nd lowest %
+ * Color scheme:
+ *  - GREEN  (#42B883) → ALL digits with the highest % (ties get same color)
+ *  - BLUE   (#4E7CF5) → ALL digits with the 2nd highest %
+ *  - RED    (#E24A43) → ALL digits with the lowest %
+ *  - YELLOW (#F5C842) → ALL digits with the 2nd lowest %
  *  - WHITE  (#FFFFFF) → all others
+ *
+ *  Priority order: green > red > blue > yellow > white
+ *  (so if only 2 unique %s exist: top gets green, bottom gets red)
  */
 function computeColors(digits: DigitStat[]): Map<number, string> {
   if (!digits.length) return new Map();
 
-  const sorted = [...digits].sort((a, b) => b.percentage - a.percentage);
-  const highest     = sorted[0];
-  const secondHigh  = sorted[1];
-  const sortedAsc   = [...digits].sort((a, b) => a.percentage - b.percentage);
-  const lowest      = sortedAsc[0];
-  const secondLow   = sortedAsc[1];
+  // Unique percentages sorted descending
+  const uniquePcts = [...new Set(digits.map(d => d.percentage))].sort((a, b) => b - a);
+  const n = uniquePcts.length;
+
+  const getPctColor = (pct: number): string => {
+    const rankHigh = uniquePcts.indexOf(pct);   // 0 = highest tier
+    const rankLow  = n - 1 - rankHigh;          // 0 = lowest tier
+
+    if (rankHigh === 0) return '#42B883';        // green  — highest
+    if (rankLow  === 0) return '#E24A43';        // red    — lowest
+    if (rankHigh === 1) return '#4E7CF5';        // blue   — 2nd highest
+    if (rankLow  === 1) return '#F5C842';        // yellow — 2nd lowest
+    return '#FFFFFF';
+  };
 
   const map = new Map<number, string>();
-  digits.forEach(d => {
-    if (d.digit === highest.digit)    map.set(d.digit, '#42B883'); // green
-    else if (d.digit === secondHigh?.digit) map.set(d.digit, '#4E7CF5'); // blue
-    else if (d.digit === lowest.digit)      map.set(d.digit, '#E24A43'); // red
-    else if (d.digit === secondLow?.digit)  map.set(d.digit, '#F5C842'); // yellow
-    else map.set(d.digit, '#FFFFFF');
-  });
+  digits.forEach(d => map.set(d.digit, getPctColor(d.percentage)));
   return map;
 }
 
 function textColor(bg: string): string {
-  // Yellow and white need dark text; others get white
   if (bg === '#FFFFFF' || bg === '#F5C842') return '#1a1a2e';
   return '#FFFFFF';
 }
@@ -52,12 +56,18 @@ const DigitCircles: React.FC<DigitCirclesProps> = ({
   size = 'md',
 }) => {
   const colorMap = computeColors(digits);
-  const sorted = [...digits].sort((a, b) => b.percentage - a.percentage);
-  const highest    = sorted[0];
-  const secondHigh = sorted[1];
-  const sortedAsc  = [...digits].sort((a, b) => a.percentage - b.percentage);
-  const lowest     = sortedAsc[0];
-  const secondLow  = sortedAsc[1];
+
+  // For legend/stats — use percentage-group approach (all digits sharing the max %)
+  const uniquePcts = [...new Set(digits.map(d => d.percentage))].sort((a, b) => b - a);
+  const highestPct   = uniquePcts[0];
+  const secondHighPct = uniquePcts[1];
+  const lowestPct    = uniquePcts[uniquePcts.length - 1];
+  const secondLowPct  = uniquePcts[uniquePcts.length - 2];
+
+  const highDigits  = digits.filter(d => d.percentage === highestPct);
+  const high2Digits = digits.filter(d => d.percentage === secondHighPct && secondHighPct !== highestPct);
+  const lowDigits   = digits.filter(d => d.percentage === lowestPct);
+  const low2Digits  = digits.filter(d => d.percentage === secondLowPct && secondLowPct !== lowestPct);
 
   // cursor animation — smoothly moves indicator to active digit
   const cursorRef = useRef<HTMLDivElement>(null);
@@ -74,7 +84,7 @@ const DigitCircles: React.FC<DigitCirclesProps> = ({
     const circRect = circleEl.getBoundingClientRect();
     const cx = circRect.left - rowRect.left + circRect.width / 2;
     const cy = circRect.top  - rowRect.top  + circRect.height / 2;
-    const r  = circRect.width / 2 + 6; // 6px padding around circle
+    const r  = circRect.width / 2 + 6;
     cursorRef.current.style.transform = `translate(${cx}px, ${cy}px)`;
     cursorRef.current.style.width  = `${r * 2}px`;
     cursorRef.current.style.height = `${r * 2}px`;
@@ -99,10 +109,10 @@ const DigitCircles: React.FC<DigitCirclesProps> = ({
             const bg      = colorMap.get(digit) ?? '#FFFFFF';
             const fg      = textColor(bg);
             const isLast  = digit === lastDigit;
-            const isHigh  = digit === highest?.digit;
-            const isHigh2 = digit === secondHigh?.digit;
-            const isLow   = digit === lowest?.digit;
-            const isLow2  = digit === secondLow?.digit;
+            const isHigh  = percentage === highestPct;
+            const isHigh2 = percentage === secondHighPct && secondHighPct !== highestPct;
+            const isLow   = percentage === lowestPct;
+            const isLow2  = percentage === secondLowPct && secondLowPct !== lowestPct;
 
             return (
               <div
@@ -130,9 +140,9 @@ const DigitCircles: React.FC<DigitCirclesProps> = ({
                 </div>
 
                 {/* rank badges */}
-                {isHigh  && <span className='digit-circles__rank digit-circles__rank--1st'>1st</span>}
+                {isHigh  && <span className='digit-circles__rank digit-circles__rank--1st'>▲</span>}
                 {isHigh2 && <span className='digit-circles__rank digit-circles__rank--2nd'>2nd</span>}
-                {isLow   && <span className='digit-circles__rank digit-circles__rank--low'>LOW</span>}
+                {isLow   && <span className='digit-circles__rank digit-circles__rank--low'>▼</span>}
                 {isLow2  && <span className='digit-circles__rank digit-circles__rank--low2'>L2</span>}
               </div>
             );
@@ -142,7 +152,9 @@ const DigitCircles: React.FC<DigitCirclesProps> = ({
 
       {/* Legend */}
       <div className='digit-circles__legend'>
-        <span className='digit-circles__legend-item digit-circles__legend-item--green'>● Highest</span>
+        <span className='digit-circles__legend-item digit-circles__legend-item--green'>
+          ● Highest {highDigits.length > 1 ? `(${highDigits.map(d => d.digit).join(',')})` : ''}
+        </span>
         <span className='digit-circles__legend-item digit-circles__legend-item--blue'>● 2nd High</span>
         <span className='digit-circles__legend-item digit-circles__legend-item--red'>● Lowest</span>
         <span className='digit-circles__legend-item digit-circles__legend-item--yellow'>● 2nd Low</span>
@@ -157,23 +169,23 @@ const DigitCircles: React.FC<DigitCirclesProps> = ({
       <div className='digit-circles__stats'>
         <div className='digit-circles__stat digit-circles__stat--green'>
           <span>HIGHEST</span>
-          <strong>{highest?.percentage.toFixed(2) ?? '--'}%</strong>
-          <em>{highest?.digit}</em>
+          <strong>{highestPct?.toFixed(2) ?? '--'}%</strong>
+          <em>{highDigits.map(d => d.digit).join(', ')}</em>
         </div>
         <div className='digit-circles__stat digit-circles__stat--blue'>
           <span>2ND HIGH</span>
-          <strong>{secondHigh?.percentage.toFixed(2) ?? '--'}%</strong>
-          <em>{secondHigh?.digit}</em>
+          <strong>{secondHighPct?.toFixed(2) ?? '--'}%</strong>
+          <em>{high2Digits.map(d => d.digit).join(', ') || '--'}</em>
         </div>
         <div className='digit-circles__stat digit-circles__stat--red'>
           <span>LOWEST</span>
-          <strong>{lowest?.percentage.toFixed(2) ?? '--'}%</strong>
-          <em>{lowest?.digit}</em>
+          <strong>{lowestPct?.toFixed(2) ?? '--'}%</strong>
+          <em>{lowDigits.map(d => d.digit).join(', ')}</em>
         </div>
         <div className='digit-circles__stat digit-circles__stat--yellow'>
           <span>2ND LOW</span>
-          <strong>{secondLow?.percentage.toFixed(2) ?? '--'}%</strong>
-          <em>{secondLow?.digit}</em>
+          <strong>{secondLowPct?.toFixed(2) ?? '--'}%</strong>
+          <em>{low2Digits.map(d => d.digit).join(', ') || '--'}</em>
         </div>
       </div>
     </div>

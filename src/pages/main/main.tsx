@@ -39,6 +39,7 @@ import { LegacyGuide1pxIcon } from '@deriv/quill-icons/Legacy';
 import { Localize, localize } from '@deriv-com/translations';
 import { useDevice } from '@deriv-com/ui';
 import RunPanel from '../../components/run-panel';
+import BotBuilder from '../bot-builder';
 import ChartModal from '../chart/chart-modal';
 import Dashboard from '../dashboard';
 import RunStrategy from '../dashboard/run-strategy';
@@ -55,6 +56,8 @@ const ManualTrader = lazy(() => import('../manual-trader'));
 const FreeBots = lazy(() => import('../free-bots'));
 const CopyTrading = lazy(() => import('../copy-trading'));
 const Reports = lazy(() => import('../reports'));
+const BulkTrade = lazy(() => import('../bulk-trade'));
+const Analysis = lazy(() => import('../analysis'));
 
 const AppWrapper = observer(() => {
     const { connectionStatus } = useApiBase();
@@ -91,6 +94,7 @@ const AppWrapper = observer(() => {
         'free_bots', 'dashboard', 'bot_builder', 'dcircles',
         'speed_lab', 'pro_hedge', 'chart', 'manual_trader',
         'tutorial', 'bot_library', 'copy_trading', 'reports',
+        'bulk_trade', 'analysis',
     ];
     const { isDesktop } = useDevice();
     const location = useLocation();
@@ -98,42 +102,22 @@ const AppWrapper = observer(() => {
     const [left_tab_shadow, setLeftTabShadow] = useState<boolean>(false);
     const [right_tab_shadow, setRightTabShadow] = useState<boolean>(false);
 
-    // Trade type modal state
     const [tradeTypeModalState, setTradeTypeModalState] = useState(getModalState());
 
-    /**
-     * Helper function to get modal props with enhanced type safety and clear documentation
-     *
-     * Props serve distinct purposes:
-     * - current_trade_type: Technical identifier for API/internal use (format: "category/type")
-     * - current_trade_type_display_name: Human-readable name for UI display
-     *
-     * This separation ensures proper data flow between technical systems and user interface
-     */
     const getTradeTypeModalProps = () => {
         const { tradeTypeData } = tradeTypeModalState;
-
         return {
             is_visible: tradeTypeModalState.isVisible,
             trade_type_display_name: tradeTypeData?.displayName || '',
-
-            // Technical identifier for internal/API use (e.g., "callput/callput")
-            // Used by backend systems and technical integrations
             current_trade_type: tradeTypeData?.currentTradeType
                 ? `${tradeTypeData.currentTradeType.tradeTypeCategory}/${tradeTypeData.currentTradeType.tradeType}`
                 : 'N/A',
-
-            // Human-readable display name for UI (e.g., "Rise/Fall")
-            // Used for user-facing text and modal content
             current_trade_type_display_name: tradeTypeData?.currentTradeTypeDisplayName || 'N/A',
-
             onConfirm: handleTradeTypeConfirm,
             onCancel: handleTradeTypeCancel,
         };
     };
 
-    // App Builder embeds the bot at /bot/preview — open the bot builder there by
-    // default (instead of the dashboard) when no explicit #tab hash is present.
     const is_preview_mode = window.location.pathname.includes('/preview');
     let tab_value: number | string = active_tab;
     const GetHashedValue = (tab: number) => {
@@ -143,51 +127,37 @@ const AppWrapper = observer(() => {
     };
     const active_hash_tab = GetHashedValue(active_tab);
 
-    // Set up modal state change listener
     React.useEffect(() => {
         setModalStateChangeCallback(new_state => {
             setTradeTypeModalState(new_state);
         });
     }, [is_loading]);
 
-    // Reset URL parameter processing when location changes
     React.useEffect(() => {
         resetUrlParamProcessing();
     }, [location.search]);
 
     React.useEffect(() => {
         const el_dashboard = document.getElementById('id-dbot-dashboard');
-        const el_tutorial = document.getElementById('id-tutorials');
+        const el_last = document.getElementById('id-analysis');
 
-        const observer_dashboard = new window.IntersectionObserver(
-            ([entry]) => {
-                if (entry.isIntersecting) {
-                    setLeftTabShadow(false);
-                    return;
-                }
-                setLeftTabShadow(true);
-            },
-            {
-                root: null,
-                threshold: 0.5, // set offset 0.1 means trigger if atleast 10% of element in viewport
-            }
+        const observerDash = new window.IntersectionObserver(
+            ([entry]) => { setLeftTabShadow(!entry.isIntersecting); },
+            { root: null, threshold: 0.5 }
         );
 
-        const observer_tutorial = new window.IntersectionObserver(
-            ([entry]) => {
-                if (entry.isIntersecting) {
-                    setRightTabShadow(false);
-                    return;
-                }
-                setRightTabShadow(true);
-            },
-            {
-                root: null,
-                threshold: 0.5, // set offset 0.1 means trigger if atleast 10% of element in viewport
-            }
+        const observerLast = new window.IntersectionObserver(
+            ([entry]) => { setRightTabShadow(!entry.isIntersecting); },
+            { root: null, threshold: 0.5 }
         );
-        observer_dashboard.observe(el_dashboard);
-        observer_tutorial.observe(el_tutorial);
+
+        if (el_dashboard) observerDash.observe(el_dashboard);
+        if (el_last) observerLast.observe(el_last);
+
+        return () => {
+            if (el_dashboard) observerDash.unobserve(el_dashboard);
+            if (el_last) observerLast.unobserve(el_last);
+        };
     });
 
     React.useEffect(() => {
@@ -202,7 +172,6 @@ const AppWrapper = observer(() => {
         }
     }, [clear, connectionStatus, setWebSocketState, stopBot]);
 
-    // Update tab shadows height to match bot builder height
     const updateTabShadowsHeight = () => {
         const botBuilderEl = document.getElementById('id-bot-builder');
         const leftShadow = document.querySelector('.tabs-shadow--left') as HTMLElement;
@@ -218,64 +187,38 @@ const AppWrapper = observer(() => {
     React.useEffect(() => {
         let pollTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
-        // Handle URL trade type parameters when switching to Bot Builder tab
         if (active_tab === BOT_BUILDER) {
-            // Use requestAnimationFrame to ensure Blockly workspace is fully initialized
             requestAnimationFrame(() => {
-                // Disable automatic URL parameter application to prevent changes before modal
                 disableUrlParameterApplication();
-
-                // Set up listener for manual trade type changes (only once)
                 setupTradeTypeChangeListener();
 
-                // Create unified handler for both immediate and delayed execution
                 const handleTradeTypeModal = () => {
                     checkAndShowTradeTypeModal(
-                        // onConfirm: Changes are now handled by the modal component
-                        () => {
-                            // Re-enable URL parameter application for future parameters
-                            enableUrlParameterApplication();
-                        },
-                        // onCancel: URL parameter removal is now handled by the modal component
+                        () => { enableUrlParameterApplication(); },
                         () => {}
                     );
                 };
 
-                // Wait for Blockly to finish loading before checking for URL parameters
                 if (!blockly_store.is_loading) {
-                    // Blockly is loaded, but add longer delay to ensure workspace is fully initialized
-                    // and trade type fields are populated
-                    setTimeout(() => {
-                        handleTradeTypeModal();
-                    }, 500);
+                    setTimeout(() => { handleTradeTypeModal(); }, 500);
                 } else {
-                    // Blockly is still loading, wait for it to finish with optimized polling
                     let pollAttempts = 0;
-                    const maxPollAttempts = 10; // Maximum 5 seconds (10 * 500ms) - optimized performance
-
+                    const maxPollAttempts = 10;
                     const checkBlocklyLoaded = () => {
                         if (!blockly_store.is_loading) {
                             handleTradeTypeModal();
-                            return; // Exit polling once loaded
+                            return;
                         }
-
                         if (pollAttempts < maxPollAttempts) {
                             pollAttempts++;
-                            // Use 500ms intervals for better performance (5x improvement from 100ms)
                             pollTimeoutId = setTimeout(checkBlocklyLoaded, 500);
-                        } else {
-                            console.warn(
-                                'Blockly loading timeout after 5 seconds - proceeding without URL parameter check'
-                            );
                         }
                     };
-
                     checkBlocklyLoaded();
                 }
             });
         }
 
-        // Cleanup function to prevent memory leaks
         return () => {
             if (pollTimeoutId) {
                 clearTimeout(pollTimeoutId);
@@ -285,7 +228,6 @@ const AppWrapper = observer(() => {
     }, [active_tab, is_loading]);
 
     React.useEffect(() => {
-        // Run on mount and when active tab changes
         updateTabShadowsHeight();
 
         if (is_open) {
@@ -296,7 +238,6 @@ const AppWrapper = observer(() => {
             if (!isDesktop) handleTabChange(Number(active_hash_tab));
             init_render.current = false;
         } else {
-            // Preserve URL parameters when navigating
             const currentSearch = window.location.search;
             navigate(`${currentSearch}#${hash[active_tab] || hash[0]}`);
         }
@@ -304,7 +245,6 @@ const AppWrapper = observer(() => {
             setActiveTour('');
         }
 
-        // Prevent scrolling when tutorial tab is active (only on mobile)
         const mainElement = document.querySelector('.main__container');
         if (active_tab === DBOT_TABS.TUTORIAL && !isDesktop) {
             document.body.style.overflow = 'hidden';
@@ -334,24 +274,16 @@ const AppWrapper = observer(() => {
             }
         }, 100);
 
-        return () => {
-            clearTimeout(trashcan_init_id); // Clear the timeout on unmount
-        };
+        return () => { clearTimeout(trashcan_init_id); };
         //eslint-disable-next-line react-hooks/exhaustive-deps
     }, [active_tab, is_drawer_open]);
 
     useEffect(() => {
         let timer: ReturnType<typeof setTimeout>;
         if (dashboard_strategies.length > 0) {
-            // Needed to pass this to the Callback Queue as on tab changes
-            // document title getting override by 'Bot | Deriv' only
-            timer = setTimeout(() => {
-                updateWorkspaceName();
-            });
+            timer = setTimeout(() => { updateWorkspaceName(); });
         }
-        return () => {
-            if (timer) clearTimeout(timer);
-        };
+        return () => { if (timer) clearTimeout(timer); };
     }, [dashboard_strategies, active_tab]);
 
     const handleTabChange = React.useCallback(
@@ -369,7 +301,6 @@ const AppWrapper = observer(() => {
         [active_tab]
     );
 
-    // [AI]
     const handleLoginGeneration = async () => {
         const oauthUrl = await generateOAuthURL();
         if (oauthUrl) {
@@ -378,14 +309,23 @@ const AppWrapper = observer(() => {
             console.error('Failed to generate OAuth URL');
         }
     };
-    // [/AI]
+
+    const tabLoader = (msg: string) => <ChunkLoader message={localize(msg)} />;
+
+    const mkIcon = (svg: React.ReactNode, text: string) => (
+        <span style={{ display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}>
+            {svg}<span>{text}</span>
+        </span>
+    );
+
     return (
         <React.Fragment>
             <div className='main'>
-                {/* Global Settings + Navigation panel — available on all tabs */}
+                {/* Global Settings + Navigation panel */}
                 <div style={{ position: 'fixed', bottom: '7rem', right: '1.2rem', zIndex: 500 }}>
                     <SettingsPanel onTabChange={handleTabChange} currentTab={active_tab} />
                 </div>
+
                 <div
                     className={classNames('main__container', {
                         'main__container--active': active_tour && active_tab === DASHBOARD && !isDesktop,
@@ -394,191 +334,193 @@ const AppWrapper = observer(() => {
                     <div>
                         {!isDesktop && left_tab_shadow && <span className='tabs-shadow tabs-shadow--left' />}{' '}
                         <Tabs active_index={active_tab} className='main__tabs' onTabItemClick={handleTabChange} top>
+
                             {/* 0 — Free Bots */}
                             <div
-                                label={
-                                    <>
-                                        <svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='var(--text-general)' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
-                                            <circle cx='12' cy='8' r='4' /><path d='M6 20v-2a6 6 0 0112 0v2'/><line x1='12' y1='12' x2='12' y2='14'/>
-                                        </svg>
-                                        <Localize i18n_default_text='Free Bots' />
-                                    </>
-                                }
+                                label={mkIcon(
+                                    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='12' cy='8' r='4'/><path d='M6 20v-2a6 6 0 0112 0v2'/><line x1='12' y1='12' x2='12' y2='14'/></svg>,
+                                    'Free Bots'
+                                )}
                                 id='id-free-bots'
                             >
-                                <Suspense fallback={<ChunkLoader message={localize('Loading bots...')} />}>
+                                <Suspense fallback={tabLoader('Loading bots...')}>
                                     <FreeBots />
                                 </Suspense>
                             </div>
+
                             {/* 1 — Dashboard */}
                             <div
-                                label={
-                                    <>
-                                        <LabelPairedObjectsColumnCaptionRegularIcon height='24px' width='24px' fill='var(--text-general)' />
-                                        <Localize i18n_default_text='Dashboard' />
-                                    </>
-                                }
+                                label={mkIcon(
+                                    <LabelPairedObjectsColumnCaptionRegularIcon height='20px' width='20px' fill='var(--text-general)' />,
+                                    'Dashboard'
+                                )}
                                 id='id-dbot-dashboard'
                             >
                                 <Dashboard handleTabChange={handleTabChange} />
                             </div>
+
                             {/* 2 — Bot Builder */}
                             <div
-                                label={
-                                    <>
-                                        <LabelPairedPuzzlePieceTwoCaptionBoldIcon height='24px' width='24px' fill='var(--text-general)' />
-                                        <Localize i18n_default_text='Bot Builder' />
-                                    </>
-                                }
+                                label={mkIcon(
+                                    <LabelPairedPuzzlePieceTwoCaptionBoldIcon height='20px' width='20px' fill='var(--text-general)' />,
+                                    'Bot Builder'
+                                )}
                                 id='id-bot-builder'
                             />
+
                             {/* 3 — DCircles */}
                             <div
-                                label={
-                                    <>
-                                        <svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='var(--text-general)' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
-                                            <circle cx='7' cy='12' r='4'/><circle cx='17' cy='12' r='4'/><line x1='11' y1='12' x2='13' y2='12'/>
-                                        </svg>
-                                        <Localize i18n_default_text='DCircles' />
-                                    </>
-                                }
+                                label={mkIcon(
+                                    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='7' cy='12' r='4'/><circle cx='17' cy='12' r='4'/></svg>,
+                                    'DCircles'
+                                )}
                                 id='id-dcircles'
                             >
-                                <Suspense fallback={<ChunkLoader message={localize('Loading DCircles...')} />}>
+                                <Suspense fallback={tabLoader('Loading DCircles...')}>
                                     <DCircles />
                                 </Suspense>
                             </div>
+
                             {/* 4 — Speed Lab */}
                             <div
-                                label={
-                                    <>
-                                        <svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='var(--text-general)' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
-                                            <polygon points='13 2 3 14 12 14 11 22 21 10 12 10 13 2'/>
-                                        </svg>
-                                        <Localize i18n_default_text='Speed Lab' />
-                                    </>
-                                }
+                                label={mkIcon(
+                                    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><polygon points='13 2 3 14 12 14 11 22 21 10 12 10 13 2'/></svg>,
+                                    'Speed Lab'
+                                )}
                                 id='id-speed-lab'
                             >
-                                <Suspense fallback={<ChunkLoader message={localize('Loading Speed Lab...')} />}>
+                                <Suspense fallback={tabLoader('Loading Speed Lab...')}>
                                     <SpeedLab />
                                 </Suspense>
                             </div>
+
                             {/* 5 — Pro Hedge */}
                             <div
-                                label={
-                                    <>
-                                        <svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='var(--text-general)' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
-                                            <path d='M12 2L2 7l10 5 10-5-10-5z'/><path d='M2 17l10 5 10-5'/><path d='M2 12l10 5 10-5'/>
-                                        </svg>
-                                        <Localize i18n_default_text='Pro Hedge' />
-                                    </>
-                                }
+                                label={mkIcon(
+                                    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 2L2 7l10 5 10-5-10-5z'/><path d='M2 17l10 5 10-5'/><path d='M2 12l10 5 10-5'/></svg>,
+                                    'Pro Hedge'
+                                )}
                                 id='id-pro-hedge'
                             >
-                                <Suspense fallback={<ChunkLoader message={localize('Loading Pro Hedge...')} />}>
+                                <Suspense fallback={tabLoader('Loading Pro Hedge...')}>
                                     <ProHedge />
                                 </Suspense>
                             </div>
+
                             {/* 6 — Charts */}
                             <div
-                                label={
-                                    <>
-                                        <LabelPairedChartLineCaptionRegularIcon height='24px' width='24px' fill='var(--text-general)' />
-                                        <Localize i18n_default_text='Charts' />
-                                    </>
-                                }
+                                label={mkIcon(
+                                    <LabelPairedChartLineCaptionRegularIcon height='20px' width='20px' fill='var(--text-general)' />,
+                                    'Charts'
+                                )}
                                 id={is_chart_modal_visible || is_trading_view_modal_visible ? 'id-charts--disabled' : 'id-charts'}
                             >
-                                <Suspense fallback={<ChunkLoader message={localize('Please wait, loading chart...')} />}>
+                                <Suspense fallback={tabLoader('Loading chart...')}>
                                     <ChartWrapper show_digits_stats={false} />
                                 </Suspense>
                             </div>
+
                             {/* 7 — Manual Trader */}
                             <div
-                                label={
-                                    <>
-                                        <svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='var(--text-general)' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
-                                            <path d='M18 20V10'/><path d='M12 20V4'/><path d='M6 20v-6'/>
-                                        </svg>
-                                        <Localize i18n_default_text='Manual Trader' />
-                                    </>
-                                }
+                                label={mkIcon(
+                                    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M18 20V10'/><path d='M12 20V4'/><path d='M6 20v-6'/></svg>,
+                                    'Manual Trader'
+                                )}
                                 id='id-manual-trader'
                             >
-                                <Suspense fallback={<ChunkLoader message={localize('Loading Manual Trader...')} />}>
+                                <Suspense fallback={tabLoader('Loading Manual Trader...')}>
                                     <ManualTrader />
                                 </Suspense>
                             </div>
+
                             {/* 8 — Tutorials */}
                             <div
-                                label={
-                                    <>
-                                        <LegacyGuide1pxIcon height='16px' width='16px' fill='var(--text-general)' className='icon-general-fill-g-path' />
-                                        <Localize i18n_default_text='Tutorials' />
-                                    </>
-                                }
+                                label={mkIcon(
+                                    <LegacyGuide1pxIcon height='16px' width='16px' fill='var(--text-general)' className='icon-general-fill-g-path' />,
+                                    'Tutorials'
+                                )}
                                 id='id-tutorials'
                             >
                                 <div className='tutorials-wrapper'>
-                                    <Suspense fallback={<ChunkLoader message={localize('Please wait, loading tutorials...')} />}>
+                                    <Suspense fallback={tabLoader('Loading tutorials...')}>
                                         <Tutorial handleTabChange={handleTabChange} />
                                     </Suspense>
                                 </div>
                             </div>
+
                             {/* 9 — Bot Library */}
                             <div
-                                label={
-                                    <>
-                                        <svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='var(--text-general)' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
-                                            <rect x='3' y='3' width='7' height='7' rx='1'/><rect x='14' y='3' width='7' height='7' rx='1'/><rect x='3' y='14' width='7' height='7' rx='1'/><rect x='14' y='14' width='7' height='7' rx='1'/>
-                                        </svg>
-                                        <Localize i18n_default_text='Bot Library' />
-                                    </>
-                                }
+                                label={mkIcon(
+                                    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='3' width='7' height='7' rx='1'/><rect x='14' y='3' width='7' height='7' rx='1'/><rect x='3' y='14' width='7' height='7' rx='1'/><rect x='14' y='14' width='7' height='7' rx='1'/></svg>,
+                                    'Bot Library'
+                                )}
                                 id='id-bot-library'
                             >
-                                <Suspense fallback={<ChunkLoader message={localize('Loading bot library...')} />}>
+                                <Suspense fallback={tabLoader('Loading Bot Library...')}>
                                     <BotLibrary />
                                 </Suspense>
                             </div>
+
                             {/* 10 — Copy Trading */}
                             <div
-                                label={
-                                    <>
-                                        <svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='var(--text-general)' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
-                                            <polyline points='17 1 21 5 17 9'/><path d='M3 11V9a4 4 0 014-4h14'/><polyline points='7 23 3 19 7 15'/><path d='M21 13v2a4 4 0 01-4 4H3'/>
-                                        </svg>
-                                        <Localize i18n_default_text='Copy Trading' />
-                                    </>
-                                }
+                                label={mkIcon(
+                                    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><polyline points='17 1 21 5 17 9'/><path d='M3 11V9a4 4 0 014-4h14'/><polyline points='7 23 3 19 7 15'/><path d='M21 13v2a4 4 0 01-4 4H3'/></svg>,
+                                    'Copy Trading'
+                                )}
                                 id='id-copy-trading'
                             >
-                                <Suspense fallback={<ChunkLoader message={localize('Loading Copy Trading...')} />}>
+                                <Suspense fallback={tabLoader('Loading Copy Trading...')}>
                                     <CopyTrading />
                                 </Suspense>
                             </div>
+
                             {/* 11 — Reports */}
                             <div
-                                label={
-                                    <>
-                                        <svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='var(--text-general)' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
-                                            <path d='M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z'/><polyline points='14 2 14 8 20 8'/><line x1='16' y1='13' x2='8' y2='13'/><line x1='16' y1='17' x2='8' y2='17'/><polyline points='10 9 9 9 8 9'/>
-                                        </svg>
-                                        <Localize i18n_default_text='Reports' />
-                                    </>
-                                }
+                                label={mkIcon(
+                                    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z'/><polyline points='14 2 14 8 20 8'/><line x1='16' y1='13' x2='8' y2='13'/><line x1='16' y1='17' x2='8' y2='17'/></svg>,
+                                    'Reports'
+                                )}
                                 id='id-reports'
                             >
-                                <Suspense fallback={<ChunkLoader message={localize('Loading Reports...')} />}>
+                                <Suspense fallback={tabLoader('Loading Reports...')}>
                                     <Reports />
                                 </Suspense>
                             </div>
+
+                            {/* 12 — Bulk Trade */}
+                            <div
+                                label={mkIcon(
+                                    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='2' y='3' width='6' height='18' rx='1'/><rect x='9' y='8' width='6' height='13' rx='1'/><rect x='16' y='5' width='6' height='16' rx='1'/></svg>,
+                                    'Bulk Trade'
+                                )}
+                                id='id-bulk-trade'
+                            >
+                                <Suspense fallback={tabLoader('Loading Bulk Trade...')}>
+                                    <BulkTrade />
+                                </Suspense>
+                            </div>
+
+                            {/* 13 — Analysis */}
+                            <div
+                                label={mkIcon(
+                                    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='11' cy='11' r='8'/><line x1='21' y1='21' x2='16.65' y2='16.65'/><line x1='11' y1='8' x2='11' y2='14'/><line x1='8' y1='11' x2='14' y2='11'/></svg>,
+                                    'Analysis'
+                                )}
+                                id='id-analysis'
+                            >
+                                <Suspense fallback={tabLoader('Loading Analysis...')}>
+                                    <Analysis />
+                                </Suspense>
+                            </div>
+
                         </Tabs>
                         {!isDesktop && right_tab_shadow && <span className='tabs-shadow tabs-shadow--right' />}{' '}
                     </div>
                 </div>
             </div>
+
+            <BotBuilder />
+
             <DesktopWrapper>
                 <div className='main__run-strategy-wrapper'>
                     <RunStrategy />
@@ -601,13 +543,12 @@ const AppWrapper = observer(() => {
                 portal_element_id='modal_root'
                 title={title}
                 login={handleLoginGeneration}
-                dismissable={dismissable} // Prevents closing on outside clicks
+                dismissable={dismissable}
                 is_closed_on_cancel={is_closed_on_cancel}
             >
                 {message}
             </Dialog>
 
-            {/* Trade Type Confirmation Modal */}
             {(() => {
                 const modalProps = getTradeTypeModalProps();
                 return (

@@ -8,16 +8,27 @@ import { useDerivTrading } from '@/hooks/useDerivTrading';
 import './dcircles.scss';
 
 const SYMBOLS = [
-  { label: 'Volatility 10 Index', value: 'R_10' },
-  { label: 'Volatility 25 Index', value: 'R_25' },
-  { label: 'Volatility 50 Index', value: 'R_50' },
-  { label: 'Volatility 75 Index', value: 'R_75' },
-  { label: 'Volatility 100 Index', value: 'R_100' },
-  { label: 'Volatility 10 (1s)', value: '1HZ10V' },
-  { label: 'Volatility 25 (1s)', value: '1HZ25V' },
-  { label: 'Volatility 50 (1s)', value: '1HZ50V' },
-  { label: 'Volatility 75 (1s)', value: '1HZ75V' },
-  { label: 'Volatility 100 (1s)', value: '1HZ100V' },
+  { label: 'V10',      value: 'R_10'      },
+  { label: 'V25',      value: 'R_25'      },
+  { label: 'V50',      value: 'R_50'      },
+  { label: 'V75',      value: 'R_75'      },
+  { label: 'V100',     value: 'R_100'     },
+  { label: 'V10 1s',   value: '1HZ10V'   },
+  { label: 'V25 1s',   value: '1HZ25V'   },
+  { label: 'V50 1s',   value: '1HZ50V'   },
+  { label: 'V75 1s',   value: '1HZ75V'   },
+  { label: 'V100 1s',  value: '1HZ100V'  },
+  { label: 'Jump 10',  value: 'JD10'     },
+  { label: 'Jump 25',  value: 'JD25'     },
+  { label: 'Jump 50',  value: 'JD50'     },
+  { label: 'Jump 75',  value: 'JD75'     },
+  { label: 'Jump 100', value: 'JD100'    },
+  { label: 'Crash 300',  value: 'CRASH300N' },
+  { label: 'Crash 500',  value: 'CRASH500'  },
+  { label: 'Crash 1000', value: 'CRASH1000' },
+  { label: 'Boom 300',   value: 'BOOM300N'  },
+  { label: 'Boom 500',   value: 'BOOM500'   },
+  { label: 'Boom 1000',  value: 'BOOM1000'  },
 ];
 
 const PATTERN_VIEWS = ['EVEN/ODD', 'OVER/UNDER'];

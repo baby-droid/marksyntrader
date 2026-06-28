@@ -1,2 +1,3 @@
-- [Marksyntrader tab order](marksyntrader-tabs.md) — DBOT_TABS constants changed; Dashboard is now index 1, Free Bots is 0.
-- [Initialization loading screen](marksyntrader-loading.md) — "Initializing Deriv Bot account..." is normal startup; resolves after retrieveActiveSymbols completes.
+- [Marksyntrader tab order](marksyntrader-tabs.md) — DBOT_TABS: FREE_BOTS=0, DASHBOARD=1, BOT_BUILDER=2, DCIRCLES=3, SPEED_LAB=4, PRO_HEDGE=5, CHART=6, MANUAL_TRADER=7, TUTORIAL=8, BOT_LIBRARY=9, COPY_TRADING=10, REPORTS=11, BULK_TRADE=12, ANALYSIS=13.
+- [Initialization loading screen](marksyntrader-loading.md) — Futuristic LoadingScreen (src/components/loading-screen/) replaces ChunkLoader in app-content.jsx; shows AHMED SYN TRADER branding + animated progress.
+- [Merge conflict pattern](marksyntrader-conflicts.md) — bot-contents.ts and header/* files re-conflict after every task agent merge; resolve with python3 re.sub keeping HEAD section; verify with grep "^<<<<<<< " (7 chars), not "=======" which appears in legit comment dividers.
