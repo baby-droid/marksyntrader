@@ -58,7 +58,7 @@ const getToolsInterface = tradeEngine => {
                         if (this.svgGroup_) {
                             window.Blockly.utils.dom.removeClass(this.svgGroup_, highlight_block_class);
                         }
-                    }, 1505);
+                    }, 0);
                 }
             };
             if (block) {

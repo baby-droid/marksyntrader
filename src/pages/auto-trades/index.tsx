@@ -49,7 +49,7 @@ const AutoTrades: React.FC = () => {
                 lastRun: new Date().toLocaleTimeString(),
             } : s));
             setRunning(p => p.filter(x => x !== id));
-        }, 1500 + Math.random() * 1000);
+        }, 0);
     };
 
     return (

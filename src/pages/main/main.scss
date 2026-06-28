@@ -289,12 +289,13 @@ body {
 }
 
 .bot-builder {
-    position: absolute;
-    top: 6.6rem;
-    inset-inline-start: 1.6rem;
+    position: fixed;
+    top: 9rem;
+    inset-inline-start: 0;
+    width: 100%;
     z-index: -1;
     background: var(--general-main-1);
-    height: var(--tab-content-height);
+    height: calc(100vh - 9rem);
 
     .injectionDiv {
         .blocklyTrash {
@@ -304,14 +305,14 @@ body {
     }
 
     &--tour-active { .blocklyTrash { display: none; } }
-    &--active  { z-index: 1; }
+    &--active  { z-index: 10; }
     &--inactive { display: none; }
 
     @include mobile-or-tablet-screen {
-        top: 5.6rem;
+        top: 6rem;
         inset-inline-start: 0;
         width: 100vw;
-        height: var(--tab-content-height-mobile);
+        height: calc(100vh - 6rem);
     }
 }
 

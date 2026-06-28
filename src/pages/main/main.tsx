@@ -38,7 +38,6 @@ import { LegacyGuide1pxIcon } from '@deriv/quill-icons/Legacy';
 import { localize } from '@deriv-com/translations';
 import { useDevice } from '@deriv-com/ui';
 import RunPanel from '../../components/run-panel';
-import BotBuilder from '../bot-builder';
 import ChartModal from '../chart/chart-modal';
 import Dashboard from '../dashboard';
 import RunStrategy from '../dashboard/run-strategy';
@@ -258,7 +257,7 @@ const AppWrapper = observer(() => {
                                 )}
                                 id='id-ahmed-learning'
                             >
-                                <div style={{ height: '100%', background: '#0d0e26' }} />
+                                <div style={{ height: '100%', background: 'transparent', pointerEvents: 'none' }} />
                             </div>
 
                             {/* 2 — Free Bots (repositioned here, between Ahmed Learning and D-Circles) */}
@@ -411,9 +410,6 @@ const AppWrapper = observer(() => {
                     </div>
                 </div>
             </div>
-
-            {/* BotBuilder workspace always mounts in background (BOT_BUILDER=99, so never activates as a visible tab) */}
-            <BotBuilder />
 
             {/* Floating panels */}
             <AIScanner />
