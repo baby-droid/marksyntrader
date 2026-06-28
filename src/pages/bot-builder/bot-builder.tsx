@@ -1,5 +1,5 @@
 // @ts-nocheck — vendored bot code with known upstream type gaps; see AGENTS.md
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import classNames from 'classnames';
 import { observer } from 'mobx-react-lite';
 import { botNotification } from '@/components/bot-notification/bot-notification';
@@ -13,6 +13,100 @@ import SaveModal from '../dashboard/bot-list/save-modal';
 import BotBuilderTourHandler from '../tutorials/dbot-tours/bot-builder-tour';
 import QuickStrategy1 from './quick-strategy';
 import WorkspaceWrapper from './workspace-wrapper';
+
+const FREE_BOTS_LIST = [
+    { id: 'ahmed-syn-even-odd', name: 'Ahmed SYN Even/Odd v1.2', market: 'V25 1s', badge: 'AHMED ★', badgeColor: '#00ff88', xmlFile: '/bots/ahmed-syn-even-odd.xml', icon: '🤖' },
+    { id: 'over1', name: 'AI Auto SYN Over 1', market: 'V50 1s', badge: 'HOT', badgeColor: '#f44336', xmlFile: '/bots/over1.xml', icon: '⚡' },
+    { id: 'over2', name: 'AI Auto SYN Over 2', market: 'V50 1s', badge: 'HOT', badgeColor: '#f44336', xmlFile: '/bots/over2.xml', icon: '🎯' },
+    { id: 'over3', name: 'AI Auto SYN Over 3', market: 'V50 1s', badge: 'STRONG', badgeColor: '#22a36c', xmlFile: '/bots/over3.xml', icon: '💪' },
+    { id: 'under8', name: 'AI Auto SYN Under 8', market: 'V100 1s', badge: 'NEW', badgeColor: '#4e7cf5', xmlFile: '/bots/under8.xml', icon: '🎰' },
+    { id: 'under7', name: 'AI Auto SYN Under 7', market: 'V100 1s', badge: 'NEW', badgeColor: '#4e7cf5', xmlFile: '/bots/under7.xml', icon: '🔥' },
+    { id: 'under6', name: 'AI Auto SYN Under 6', market: 'V50 1s', badge: 'SOLID', badgeColor: '#f5c842', xmlFile: '/bots/under6.xml', icon: '⚔' },
+    { id: 'evenodd', name: 'Ahmed SpeedBot Even/Odd v3', market: 'V10 1s', badge: 'AI', badgeColor: '#a855f7', xmlFile: '/bots/evenodd.xml', icon: '🤖' },
+    { id: 'mrvunja', name: 'Mr Vunja Deriv V2026', market: 'V75 1s', badge: '2026', badgeColor: '#ff6b00', xmlFile: '/bots/mrvunja.xml', icon: '💎' },
+];
+
+const FreeBotsSidePanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+    const [loadingId, setLoadingId] = useState<string | null>(null);
+    const [loadedId, setLoadedId] = useState<string | null>(null);
+
+    const handleLoad = useCallback(async (bot: typeof FREE_BOTS_LIST[0]) => {
+        setLoadingId(bot.id);
+        try {
+            const response = await fetch(bot.xmlFile);
+            if (!response.ok) throw new Error('Failed to fetch bot XML');
+            const xml = await response.text();
+            (window as any).__pendingBotXml = xml;
+            (window as any).__pendingBotName = bot.name;
+            if (typeof (window as any).Blockly !== 'undefined' && (window as any).Blockly?.derivWorkspace) {
+                const B = (window as any).Blockly;
+                const dom = B.Xml.textToDom(xml);
+                B.Events.setEnabled(false);
+                B.derivWorkspace.clear();
+                B.Xml.domToWorkspace(dom, B.derivWorkspace);
+                B.Events.setEnabled(true);
+            }
+            setLoadedId(bot.id);
+            setTimeout(() => { setLoadedId(null); onClose(); }, 1800);
+        } catch (e) {
+            console.error('Load bot error', e);
+        } finally {
+            setLoadingId(null);
+        }
+    }, [onClose]);
+
+    return (
+        <div style={{
+            position: 'absolute', top: 0, right: 0, width: '300px', height: '100%',
+            background: '#11143a', borderLeft: '1.5px solid rgba(99,102,241,0.35)',
+            zIndex: 20, display: 'flex', flexDirection: 'column', boxShadow: '-6px 0 24px rgba(0,0,0,0.5)',
+        }}>
+            <div style={{
+                padding: '14px 16px', borderBottom: '1px solid rgba(99,102,241,0.25)',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#0d0f2e',
+            }}>
+                <span style={{ color: '#c7d2fe', fontWeight: 700, fontSize: '14px', letterSpacing: '0.05em' }}>📥 FREE BOTS LIBRARY</span>
+                <button onClick={onClose} style={{
+                    background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '18px', lineHeight: 1, padding: '2px 6px', borderRadius: '4px',
+                }}>✕</button>
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
+                {FREE_BOTS_LIST.map(bot => (
+                    <div key={bot.id} style={{
+                        background: loadedId === bot.id ? 'rgba(34,197,94,0.1)' : 'rgba(255,255,255,0.04)',
+                        border: `1px solid ${loadedId === bot.id ? 'rgba(34,197,94,0.5)' : 'rgba(99,102,241,0.18)'}`,
+                        borderRadius: '10px', padding: '11px 13px', marginBottom: '7px',
+                        transition: 'all 0.2s',
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                            <span style={{ fontSize: '18px' }}>{bot.icon}</span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ color: '#e0e7ff', fontSize: '12px', fontWeight: 600, lineHeight: 1.3, marginBottom: '2px' }}>{bot.name}</div>
+                                <div style={{ color: '#6b7280', fontSize: '11px' }}>{bot.market}</div>
+                            </div>
+                            <span style={{
+                                background: bot.badgeColor, color: '#fff', fontSize: '9px', fontWeight: 700,
+                                padding: '2px 6px', borderRadius: '4px', whiteSpace: 'nowrap', flexShrink: 0,
+                            }}>{bot.badge}</span>
+                        </div>
+                        <button
+                            onClick={() => handleLoad(bot)}
+                            disabled={loadingId === bot.id || loadedId === bot.id}
+                            style={{
+                                width: '100%', padding: '7px', borderRadius: '7px', border: 'none', cursor: 'pointer',
+                                background: loadedId === bot.id ? '#16a34a' : 'rgba(99,102,241,0.85)',
+                                color: '#fff', fontSize: '12px', fontWeight: 600, transition: 'all 0.15s',
+                                opacity: loadingId === bot.id ? 0.7 : 1,
+                            }}
+                        >
+                            {loadingId === bot.id ? '⏳ Loading...' : loadedId === bot.id ? '✅ Loaded!' : '▶ Load into Builder'}
+                        </button>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
 
 const BotBuilder = observer(() => {
     const { dashboard, app, run_panel, toolbar, quick_strategy, blockly_store } = useStore();
@@ -110,6 +204,8 @@ const BotBuilder = observer(() => {
         });
     };
 
+    const [showFreeBots, setShowFreeBots] = useState(false);
+
     return (
         <>
             <div
@@ -118,10 +214,34 @@ const BotBuilder = observer(() => {
                     'bot-builder--inactive': is_preview_on_popup,
                     'bot-builder--tour-active': active_tour,
                 })}
+                style={{ position: 'relative' }}
             >
                 <div id='scratch_div' ref={el_ref}>
                     <WorkspaceWrapper />
                 </div>
+
+                {/* Free Bots toggle button */}
+                {active_tab === 1 && (
+                    <button
+                        onClick={() => setShowFreeBots(v => !v)}
+                        title='Free Bots Library'
+                        style={{
+                            position: 'absolute', top: '8px', right: showFreeBots ? '308px' : '8px',
+                            zIndex: 25, background: showFreeBots ? '#4f46e5' : 'rgba(99,102,241,0.88)',
+                            border: '1.5px solid rgba(129,140,248,0.5)', borderRadius: '8px',
+                            color: '#fff', fontSize: '12px', fontWeight: 700, padding: '7px 13px',
+                            cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 10px rgba(0,0,0,0.4)',
+                            display: 'flex', alignItems: 'center', gap: '6px',
+                        }}
+                    >
+                        📥 <span>Free Bots</span>
+                    </button>
+                )}
+
+                {/* Free Bots side panel */}
+                {active_tab === 1 && showFreeBots && (
+                    <FreeBotsSidePanel onClose={() => setShowFreeBots(false)} />
+                )}
             </div>
             {active_tab === 1 && <BotBuilderTourHandler is_mobile={!isDesktop} />}
             {/* removed this outside from toolbar becuase it needs to loaded seperately without dependency */}

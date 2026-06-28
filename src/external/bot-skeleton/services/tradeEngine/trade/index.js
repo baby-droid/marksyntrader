@@ -130,7 +130,7 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
                                 api_base.api.send({ proposal_open_contract: 1, contract_id: contract.contract_id });
                             }, ['PriceMoved']);
                         }
-                    }, 1500);
+                    }, 100);
                 }
                 resolve();
             });

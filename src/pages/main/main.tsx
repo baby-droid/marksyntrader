@@ -250,17 +250,15 @@ const AppWrapper = observer(() => {
                                 <Dashboard handleTabChange={handleTabChange} />
                             </div>
 
-                            {/* 1 — Ahmed Learning (replaces Bot Builder) */}
+                            {/* 1 — Bot Builder */}
                             <div
                                 label={mkIcon(
-                                    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M22 10v6M2 10l10-5 10 5-10 5z'/><path d='M6 12v5c3 3 9 3 12 0v-5'/></svg>,
-                                    'Ahmed Learning'
+                                    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='3' width='6' height='6' rx='1'/><rect x='15' y='3' width='6' height='6' rx='1'/><rect x='3' y='15' width='6' height='6' rx='1'/><path d='M15 18h6M18 15v6M9 6h6M9 18h3M12 9v3'/></svg>,
+                                    'Bot Builder'
                                 )}
                                 id='id-ahmed-learning'
                             >
-                                <Suspense fallback={tabLoader('Loading Ahmed Learning...')}>
-                                    <AhmedLearning />
-                                </Suspense>
+                                <div style={{ height: '100%', background: '#0d0e26' }} />
                             </div>
 
                             {/* 2 — Free Bots (repositioned here, between Ahmed Learning and D-Circles) */}
