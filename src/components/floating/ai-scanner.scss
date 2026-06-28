@@ -1,12 +1,12 @@
 .ai-scanner {
     position: fixed;
     z-index: 9999;
-    width: 260px;
+    width: 280px;
     border-radius: 12px;
-    background: rgba(2,10,4,0.95);
+    background: rgba(2,10,4,0.97);
     border: 1.5px solid rgba(0,255,100,0.3);
-    box-shadow: 0 8px 32px rgba(0,0,0,0.6), 0 0 20px rgba(0,255,100,0.08);
-    backdrop-filter: blur(10px);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.7), 0 0 20px rgba(0,255,100,0.06);
+    backdrop-filter: blur(12px);
     font-size: 12px;
     user-select: none;
 
@@ -14,82 +14,189 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 10px 14px;
-        background: rgba(0,20,10,0.8);
+        padding: 10px 12px;
+        background: rgba(0,20,10,0.9);
         border-radius: 10px 10px 0 0;
-        border-bottom: 1px solid rgba(0,255,100,0.15);
+        border-bottom: 1px solid rgba(0,255,100,0.12);
         cursor: grab;
         &:active { cursor: grabbing; }
     }
 
+    &__header-left { display: flex; align-items: center; gap: 6px; }
+    &__icon { font-size: 14px; }
     &__title { font-size: 12px; font-weight: 700; color: #00ff88; }
 
-    &__header-actions { display: flex; gap: 6px; }
+    &__live-badge {
+        font-size: 9px;
+        font-weight: 800;
+        color: #22c55e;
+        background: rgba(34,197,94,0.15);
+        border: 1px solid rgba(34,197,94,0.3);
+        border-radius: 4px;
+        padding: 1px 5px;
+        letter-spacing: 0.08em;
+        animation: badge-pulse 1.5s ease-in-out infinite;
+    }
+
+    &__header-actions { display: flex; gap: 5px; }
 
     &__scan-btn, &__min-btn {
-        width: 22px;
-        height: 22px;
-        border-radius: 4px;
+        width: 22px; height: 22px;
+        border-radius: 5px;
         border: 1px solid rgba(0,255,100,0.2);
         background: transparent;
         color: #4ade80;
         font-size: 10px;
         cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        display: flex; align-items: center; justify-content: center;
         transition: all 0.15s;
-        &:hover { background: rgba(0,255,100,0.15); }
-        &.active { background: rgba(34,197,94,0.2); color: #22c55e; }
+        &:hover { background: rgba(0,255,100,0.1); }
+        &.active { background: rgba(239,68,68,0.15); border-color: rgba(239,68,68,0.3); color: #f87171; }
     }
 
-    &__body { padding: 10px; max-height: 300px; overflow-y: auto; }
+    &__body { padding: 8px; max-height: 360px; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; }
 
     &__scanning {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 8px;
-        color: #4ade80;
-        font-size: 11px;
-        margin-bottom: 6px;
+        display: flex; align-items: center; gap: 8px;
+        padding: 8px 6px; color: #4ade80; font-size: 11px;
     }
 
     &__pulse {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
+        width: 8px; height: 8px; border-radius: 50%;
         background: #00ff88;
         animation: scanner-pulse 1s ease-in-out infinite;
     }
 
-    &__empty { text-align: center; padding: 16px; color: #334155; font-size: 11px; }
+    &__empty {
+        padding: 14px 8px; text-align: center;
+        p { margin: 0 0 4px; color: #334155; font-size: 11px; }
+        &-sub { font-size: 10px !important; opacity: 0.7; }
+    }
 
     &__signal {
+        padding: 7px 8px;
+        border-radius: 7px;
+        background: rgba(0,10,5,0.7);
+        border: 1px solid rgba(0,255,100,0.06);
+        border-left: 3px solid;
+        animation: signal-in 0.2s ease;
+    }
+
+    &__signal-top {
+        display: flex; align-items: center; gap: 6px; margin-bottom: 4px;
+    }
+
+    &__signal-label { font-size: 11px; font-weight: 700; color: #86efac; flex: 1; }
+    &__signal-type { font-size: 11px; font-weight: 800; }
+    &__signal-conf { font-size: 10px; font-weight: 700; }
+
+    &__signal-bottom {
+        display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    }
+
+    &__shield { font-size: 9px; color: rgba(255,255,255,0.4); }
+    &__ticks { font-size: 9px; color: rgba(255,255,255,0.3); }
+    &__time { font-size: 9px; color: #1e293b; margin-left: auto; }
+
+    &__ahmed-btn {
+        padding: 2px 6px;
+        border-radius: 4px;
+        background: linear-gradient(135deg, #00c853, #00e676);
+        color: #000;
+        border: none;
+        font-size: 9px;
+        font-weight: 700;
+        cursor: pointer;
+        animation: ahmed-glow 1.5s ease-in-out infinite;
+        &:hover { filter: brightness(1.15); }
+    }
+
+    /* Ahmed Bot Popup */
+    &__ahmed-popup {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.7);
+        z-index: 10002;
         display: flex;
         align-items: center;
-        gap: 8px;
-        padding: 6px 8px;
-        border-radius: 6px;
-        margin-bottom: 4px;
-        background: rgba(0,10,5,0.6);
-        border: 1px solid rgba(0,255,100,0.08);
-        animation: signal-in 0.2s ease;
-
-        &.rise { border-left: 3px solid #22c55e; }
-        &.fall { border-left: 3px solid #f87171; }
+        justify-content: center;
+        animation: fade-in 0.2s ease;
     }
 
-    &__signal-symbol { font-size: 11px; color: #86efac; font-weight: 600; flex: 1; }
-    &__signal-dir {
-        font-size: 11px;
+    &__ahmed-popup-inner {
+        background: rgba(2,10,4,0.98);
+        border: 2px solid rgba(0,255,100,0.4);
+        border-radius: 16px;
+        padding: 24px;
+        width: 360px;
+        max-width: calc(100vw - 40px);
+        box-shadow: 0 20px 60px rgba(0,0,0,0.8), 0 0 40px rgba(0,255,100,0.1);
+        animation: popup-in 0.3s cubic-bezier(0.34,1.2,0.64,1);
+    }
+
+    &__ahmed-popup-header {
+        display: flex; align-items: center; justify-content: space-between;
+        margin-bottom: 16px;
+        span { font-size: 15px; font-weight: 700; color: #00ff88; }
+        button { background: none; border: none; color: #64748b; cursor: pointer; font-size: 16px; &:hover { color: #f87171; } }
+    }
+
+    &__ahmed-popup-body {
+        p { font-size: 13px; color: #86efac; margin: 0 0 8px; }
+        strong { color: #00ff88; }
+    }
+
+    &__ahmed-bot-name {
+        margin-top: 12px !important;
+        font-size: 14px !important;
+        font-weight: 700 !important;
+        color: #00ff88 !important;
+        padding: 10px;
+        background: rgba(0,255,100,0.06);
+        border-radius: 8px;
+        border: 1px solid rgba(0,255,100,0.15);
+    }
+
+    &__ahmed-bot-settings {
+        font-size: 11px !important;
+        color: rgba(134,239,172,0.6) !important;
+        margin-top: 6px !important;
+    }
+
+    &__ahmed-popup-actions {
+        display: flex; gap: 10px; margin-top: 20px;
+    }
+
+    &__ahmed-load-btn {
+        flex: 1;
+        padding: 12px;
+        border-radius: 10px;
+        background: linear-gradient(135deg, #00c853, #00e676);
+        color: #000;
+        border: none;
+        font-size: 14px;
         font-weight: 700;
-        &.rise { color: #22c55e; }
-        &.fall { color: #f87171; }
+        cursor: pointer;
+        transition: all 0.18s;
+        box-shadow: 0 4px 15px rgba(0,200,83,0.4);
+        &:hover { filter: brightness(1.1); transform: translateY(-1px); }
     }
-    &__signal-conf { font-size: 11px; font-weight: 700; }
-    &__signal-time { font-size: 9px; color: #334155; }
+
+    &__ahmed-dismiss-btn {
+        padding: 12px 16px;
+        border-radius: 10px;
+        border: 1.5px solid rgba(255,255,255,0.1);
+        background: transparent;
+        color: #64748b;
+        font-size: 13px;
+        cursor: pointer;
+        &:hover { border-color: rgba(255,255,255,0.2); color: #94a3b8; }
+    }
 }
 
-@keyframes scanner-pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.3; transform: scale(0.7); } }
-@keyframes signal-in { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: none; } }
+@keyframes scanner-pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.3; transform:scale(0.7); } }
+@keyframes signal-in { from { opacity:0; transform:translateX(-8px); } to { opacity:1; transform:none; } }
+@keyframes badge-pulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
+@keyframes ahmed-glow { 0%,100% { box-shadow:0 0 6px rgba(0,200,83,0.5); } 50% { box-shadow:0 0 12px rgba(0,200,83,0.9); } }
+@keyframes fade-in { from { opacity:0; } to { opacity:1; } }
+@keyframes popup-in { from { opacity:0; transform:scale(0.9) translateY(20px); } to { opacity:1; transform:none; } }

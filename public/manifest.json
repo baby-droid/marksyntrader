@@ -1,11 +1,11 @@
 {
-  "name": "Marksyntrader",
-  "short_name": "Marksyntrader",
-  "description": "Automated trading bot for Deriv markets",
+  "name": "AHMEDSYNTRADERSITE",
+  "short_name": "AhmedSyn",
+  "description": "Advanced AI Trading Platform on Deriv",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0e0e1a",
-  "theme_color": "#4C7DFF",
+  "background_color": "#000e06",
+  "theme_color": "#00ff88",
   "orientation": "any",
   "icons": [
     {
@@ -22,6 +22,6 @@
     }
   ],
   "screenshots": [],
-  "categories": ["finance", "utilities"],
+  "categories": ["finance", "productivity"],
   "lang": "en"
 }

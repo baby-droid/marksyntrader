@@ -7,6 +7,20 @@ import './free-bots.scss';
 
 const FREE_BOTS = [
   {
+    id: 'ahmed-syn-even-odd',
+    name: 'Ahmed SYN Even/Odd Market Killer v1.2',
+    description: '🔥 FEATURED — Ahmed\'s flagship bot. V25 1s market, Even/Odd, 1 tick, Martingale 2.2x, TP $2, SL $1000. Auto-recovers on loss.',
+    category: 'Even/Odd',
+    market: 'V25 1s (1HZ25V)',
+    type: 'DIGITEVEN/DIGITODD',
+    prediction: null,
+    xmlFile: '/bots/ahmed-syn-even-odd.xml',
+    badge: 'AHMED ★',
+    badgeColor: '#00ff88',
+    icon: '🤖',
+    winRate: '~50%',
+  },
+  {
     id: 'over1',
     name: 'AI Auto SYN Over 1',
     description: 'Best market killer — DIGIT OVER prediction 1 on V50 1s. Martingale x2, TP $3, SL $10.',

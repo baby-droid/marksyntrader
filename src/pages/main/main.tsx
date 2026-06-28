@@ -33,10 +33,9 @@ import {
 import {
     LabelPairedChartLineCaptionRegularIcon,
     LabelPairedObjectsColumnCaptionRegularIcon,
-    LabelPairedPuzzlePieceTwoCaptionBoldIcon,
 } from '@deriv/quill-icons/LabelPaired';
 import { LegacyGuide1pxIcon } from '@deriv/quill-icons/Legacy';
-import { Localize, localize } from '@deriv-com/translations';
+import { localize } from '@deriv-com/translations';
 import { useDevice } from '@deriv-com/ui';
 import RunPanel from '../../components/run-panel';
 import BotBuilder from '../bot-builder';
@@ -44,20 +43,23 @@ import ChartModal from '../chart/chart-modal';
 import Dashboard from '../dashboard';
 import RunStrategy from '../dashboard/run-strategy';
 import SettingsPanel from '@/components/settings-panel';
+import AIScanner from '@/components/floating/AIScanner';
+import FloatingRunButton from '@/components/floating/FloatingRunButton';
+import PWAInstall from '@/components/floating/PWAInstall';
 import './main.scss';
 
-const ChartWrapper = lazy(() => import('../chart/chart-wrapper'));
-const Tutorial = lazy(() => import('../tutorials'));
-const BotLibrary = lazy(() => import('../bot-library'));
-const DCircles = lazy(() => import('../dcircles'));
-const SpeedLab = lazy(() => import('../speed-lab'));
-const ProHedge = lazy(() => import('../pro-hedge'));
-const ManualTrader = lazy(() => import('../manual-trader'));
-const FreeBots = lazy(() => import('../free-bots'));
-const CopyTrading = lazy(() => import('../copy-trading'));
-const Reports = lazy(() => import('../reports'));
-const BulkTrade = lazy(() => import('../bulk-trade'));
-const Analysis = lazy(() => import('../analysis'));
+const ChartWrapper   = lazy(() => import('../chart/chart-wrapper'));
+const Tutorial       = lazy(() => import('../tutorials'));
+const FreeBots       = lazy(() => import('../free-bots'));
+const DCircles       = lazy(() => import('../d-circles'));
+const SpeedLab       = lazy(() => import('../speed-lab'));
+const ProHedge       = lazy(() => import('../hedge-trading'));
+const ManualTrader   = lazy(() => import('../manual-trader'));
+const CopyTrading    = lazy(() => import('../copy-trading'));
+const Reports        = lazy(() => import('../reports'));
+const BulkTrade      = lazy(() => import('../bulk-trade'));
+const Analysis       = lazy(() => import('../analysis'));
+const AhmedLearning  = lazy(() => import('../ahmed-learning'));
 
 const AppWrapper = observer(() => {
     const { connectionStatus } = useApiBase();
@@ -84,24 +86,32 @@ const AppWrapper = observer(() => {
         stopBot,
     } = run_panel;
     const { is_open } = quick_strategy;
-    const { cancel_button_text, ok_button_text, title, message, dismissable, is_closed_on_cancel } = dialog_options as {
-        [key: string]: string;
-    };
+    const { cancel_button_text, ok_button_text, title, message, dismissable, is_closed_on_cancel } = dialog_options as { [key: string]: string };
     const { clear } = summary_card;
     const { DASHBOARD, BOT_BUILDER } = DBOT_TABS;
     const init_render = React.useRef(true);
+
     const hash = [
-        'free_bots', 'dashboard', 'bot_builder', 'dcircles',
-        'speed_lab', 'pro_hedge', 'chart', 'manual_trader',
-        'tutorial', 'bot_library', 'copy_trading', 'reports',
-        'bulk_trade', 'analysis',
+        'dashboard',        // 0
+        'ahmed_learning',   // 1
+        'free_bots',        // 2
+        'dcircles',         // 3
+        'speed_lab',        // 4
+        'pro_hedge',        // 5
+        'chart',            // 6
+        'manual_trader',    // 7
+        'auto_trades',      // 8
+        'copy_trading',     // 9
+        'reports',          // 10
+        'bulk_trade',       // 11
+        'tutorial',         // 12
     ];
+
     const { isDesktop } = useDevice();
     const location = useLocation();
     const navigate = useNavigate();
     const [left_tab_shadow, setLeftTabShadow] = useState<boolean>(false);
     const [right_tab_shadow, setRightTabShadow] = useState<boolean>(false);
-
     const [tradeTypeModalState, setTradeTypeModalState] = useState(getModalState());
 
     const getTradeTypeModalProps = () => {
@@ -127,33 +137,26 @@ const AppWrapper = observer(() => {
     };
     const active_hash_tab = GetHashedValue(active_tab);
 
-    React.useEffect(() => {
-        setModalStateChangeCallback(new_state => {
-            setTradeTypeModalState(new_state);
-        });
-    }, [is_loading]);
+    // Register service worker for PWA
+    useEffect(() => {
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js').catch(() => {});
+        }
+    }, []);
 
     React.useEffect(() => {
-        resetUrlParamProcessing();
-    }, [location.search]);
+        setModalStateChangeCallback(new_state => { setTradeTypeModalState(new_state); });
+    }, [is_loading]);
+
+    React.useEffect(() => { resetUrlParamProcessing(); }, [location.search]);
 
     React.useEffect(() => {
         const el_dashboard = document.getElementById('id-dbot-dashboard');
-        const el_last = document.getElementById('id-analysis');
-
-        const observerDash = new window.IntersectionObserver(
-            ([entry]) => { setLeftTabShadow(!entry.isIntersecting); },
-            { root: null, threshold: 0.5 }
-        );
-
-        const observerLast = new window.IntersectionObserver(
-            ([entry]) => { setRightTabShadow(!entry.isIntersecting); },
-            { root: null, threshold: 0.5 }
-        );
-
+        const el_last = document.getElementById('id-tutorial');
+        const observerDash = new window.IntersectionObserver(([e]) => { setLeftTabShadow(!e.isIntersecting); }, { root: null, threshold: 0.5 });
+        const observerLast = new window.IntersectionObserver(([e]) => { setRightTabShadow(!e.isIntersecting); }, { root: null, threshold: 0.5 });
         if (el_dashboard) observerDash.observe(el_dashboard);
         if (el_last) observerLast.observe(el_last);
-
         return () => {
             if (el_dashboard) observerDash.unobserve(el_dashboard);
             if (el_last) observerLast.unobserve(el_last);
@@ -163,76 +166,12 @@ const AppWrapper = observer(() => {
     React.useEffect(() => {
         if (connectionStatus !== CONNECTION_STATUS.OPENED) {
             const is_bot_running = document.getElementById('db-animation__stop-button') !== null;
-            if (is_bot_running) {
-                clear();
-                stopBot();
-                api_base.setIsRunning(false);
-                setWebSocketState(false);
-            }
+            if (is_bot_running) { clear(); stopBot(); api_base.setIsRunning(false); setWebSocketState(false); }
         }
     }, [clear, connectionStatus, setWebSocketState, stopBot]);
 
-    const updateTabShadowsHeight = () => {
-        const botBuilderEl = document.getElementById('id-bot-builder');
-        const leftShadow = document.querySelector('.tabs-shadow--left') as HTMLElement;
-        const rightShadow = document.querySelector('.tabs-shadow--right') as HTMLElement;
-
-        if (botBuilderEl && leftShadow && rightShadow) {
-            const height = botBuilderEl.offsetHeight;
-            leftShadow.style.height = `${height}px`;
-            rightShadow.style.height = `${height}px`;
-        }
-    };
-
     React.useEffect(() => {
-        let pollTimeoutId: ReturnType<typeof setTimeout> | null = null;
-
-        if (active_tab === BOT_BUILDER) {
-            requestAnimationFrame(() => {
-                disableUrlParameterApplication();
-                setupTradeTypeChangeListener();
-
-                const handleTradeTypeModal = () => {
-                    checkAndShowTradeTypeModal(
-                        () => { enableUrlParameterApplication(); },
-                        () => {}
-                    );
-                };
-
-                if (!blockly_store.is_loading) {
-                    setTimeout(() => { handleTradeTypeModal(); }, 500);
-                } else {
-                    let pollAttempts = 0;
-                    const maxPollAttempts = 10;
-                    const checkBlocklyLoaded = () => {
-                        if (!blockly_store.is_loading) {
-                            handleTradeTypeModal();
-                            return;
-                        }
-                        if (pollAttempts < maxPollAttempts) {
-                            pollAttempts++;
-                            pollTimeoutId = setTimeout(checkBlocklyLoaded, 500);
-                        }
-                    };
-                    checkBlocklyLoaded();
-                }
-            });
-        }
-
-        return () => {
-            if (pollTimeoutId) {
-                clearTimeout(pollTimeoutId);
-                pollTimeoutId = null;
-            }
-        };
-    }, [active_tab, is_loading]);
-
-    React.useEffect(() => {
-        updateTabShadowsHeight();
-
-        if (is_open) {
-            setTourDialogVisibility(false);
-        }
+        if (is_open) setTourDialogVisibility(false);
         if (init_render.current) {
             setActiveTab(Number(active_hash_tab));
             if (!isDesktop) handleTabChange(Number(active_hash_tab));
@@ -241,48 +180,21 @@ const AppWrapper = observer(() => {
             const currentSearch = window.location.search;
             navigate(`${currentSearch}#${hash[active_tab] || hash[0]}`);
         }
-        if (active_tour !== '') {
-            setActiveTour('');
-        }
-
+        if (active_tour !== '') setActiveTour('');
         const mainElement = document.querySelector('.main__container');
         if (active_tab === DBOT_TABS.TUTORIAL && !isDesktop) {
             document.body.style.overflow = 'hidden';
-            if (mainElement instanceof HTMLElement) {
-                mainElement.classList.add('no-scroll');
-            }
+            if (mainElement instanceof HTMLElement) mainElement.classList.add('no-scroll');
         } else {
             document.body.style.overflow = '';
-            if (mainElement instanceof HTMLElement) {
-                mainElement.classList.remove('no-scroll');
-            }
+            if (mainElement instanceof HTMLElement) mainElement.classList.remove('no-scroll');
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [active_tab]);
 
-    React.useEffect(() => {
-        const trashcan_init_id = setTimeout(() => {
-            if (active_tab === BOT_BUILDER && Blockly?.derivWorkspace?.trashcan) {
-                const trashcanY = window.innerHeight - 250;
-                let trashcanX;
-                if (is_drawer_open) {
-                    trashcanX = isDbotRTL() ? 380 : window.innerWidth - 460;
-                } else {
-                    trashcanX = isDbotRTL() ? 20 : window.innerWidth - 100;
-                }
-                Blockly?.derivWorkspace?.trashcan?.setTrashcanPosition(trashcanX, trashcanY);
-            }
-        }, 100);
-
-        return () => { clearTimeout(trashcan_init_id); };
-        //eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [active_tab, is_drawer_open]);
-
     useEffect(() => {
         let timer: ReturnType<typeof setTimeout>;
-        if (dashboard_strategies.length > 0) {
-            timer = setTimeout(() => { updateWorkspaceName(); });
-        }
+        if (dashboard_strategies.length > 0) { timer = setTimeout(() => { updateWorkspaceName(); }); }
         return () => { if (timer) clearTimeout(timer); };
     }, [dashboard_strategies, active_tab]);
 
@@ -292,9 +204,7 @@ const AppWrapper = observer(() => {
             const el_id = TAB_IDS[tab_index];
             if (el_id) {
                 const el_tab = document.getElementById(el_id);
-                setTimeout(() => {
-                    el_tab?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
-                }, 10);
+                setTimeout(() => { el_tab?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' }); }, 10);
             }
         },
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -303,11 +213,7 @@ const AppWrapper = observer(() => {
 
     const handleLoginGeneration = async () => {
         const oauthUrl = await generateOAuthURL();
-        if (oauthUrl) {
-            window.location.replace(oauthUrl);
-        } else {
-            console.error('Failed to generate OAuth URL');
-        }
+        if (oauthUrl) window.location.replace(oauthUrl);
     };
 
     const tabLoader = (msg: string) => <ChunkLoader message={localize(msg)} />;
@@ -321,34 +227,19 @@ const AppWrapper = observer(() => {
     return (
         <React.Fragment>
             <div className='main'>
-                {/* Global Settings + Navigation panel */}
+                {/* Settings Panel */}
                 <div style={{ position: 'fixed', bottom: '7rem', right: '1.2rem', zIndex: 500 }}>
                     <SettingsPanel onTabChange={handleTabChange} currentTab={active_tab} />
                 </div>
 
-                <div
-                    className={classNames('main__container', {
-                        'main__container--active': active_tour && active_tab === DASHBOARD && !isDesktop,
-                    })}
-                >
+                <div className={classNames('main__container', {
+                    'main__container--active': active_tour && active_tab === DASHBOARD && !isDesktop,
+                })}>
                     <div>
-                        {!isDesktop && left_tab_shadow && <span className='tabs-shadow tabs-shadow--left' />}{' '}
+                        {!isDesktop && left_tab_shadow && <span className='tabs-shadow tabs-shadow--left' />}
                         <Tabs active_index={active_tab} className='main__tabs' onTabItemClick={handleTabChange} top>
 
-                            {/* 0 — Free Bots */}
-                            <div
-                                label={mkIcon(
-                                    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='12' cy='8' r='4'/><path d='M6 20v-2a6 6 0 0112 0v2'/><line x1='12' y1='12' x2='12' y2='14'/></svg>,
-                                    'Free Bots'
-                                )}
-                                id='id-free-bots'
-                            >
-                                <Suspense fallback={tabLoader('Loading bots...')}>
-                                    <FreeBots />
-                                </Suspense>
-                            </div>
-
-                            {/* 1 — Dashboard */}
+                            {/* 0 — Dashboard */}
                             <div
                                 label={mkIcon(
                                     <LabelPairedObjectsColumnCaptionRegularIcon height='20px' width='20px' fill='var(--text-general)' />,
@@ -359,24 +250,41 @@ const AppWrapper = observer(() => {
                                 <Dashboard handleTabChange={handleTabChange} />
                             </div>
 
-                            {/* 2 — Bot Builder */}
+                            {/* 1 — Ahmed Learning (replaces Bot Builder) */}
                             <div
                                 label={mkIcon(
-                                    <LabelPairedPuzzlePieceTwoCaptionBoldIcon height='20px' width='20px' fill='var(--text-general)' />,
-                                    'Bot Builder'
+                                    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M22 10v6M2 10l10-5 10 5-10 5z'/><path d='M6 12v5c3 3 9 3 12 0v-5'/></svg>,
+                                    'Ahmed Learning'
                                 )}
-                                id='id-bot-builder'
-                            />
+                                id='id-ahmed-learning'
+                            >
+                                <Suspense fallback={tabLoader('Loading Ahmed Learning...')}>
+                                    <AhmedLearning />
+                                </Suspense>
+                            </div>
 
-                            {/* 3 — DCircles */}
+                            {/* 2 — Free Bots (repositioned here, between Ahmed Learning and D-Circles) */}
+                            <div
+                                label={mkIcon(
+                                    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='12' cy='8' r='4'/><path d='M6 20v-2a6 6 0 0112 0v2'/><line x1='12' y1='12' x2='12' y2='14'/></svg>,
+                                    'Free Bots'
+                                )}
+                                id='id-bot-library'
+                            >
+                                <Suspense fallback={tabLoader('Loading Free Bots...')}>
+                                    <FreeBots />
+                                </Suspense>
+                            </div>
+
+                            {/* 3 — D-Circles */}
                             <div
                                 label={mkIcon(
                                     <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='7' cy='12' r='4'/><circle cx='17' cy='12' r='4'/></svg>,
-                                    'DCircles'
+                                    'D-Circles'
                                 )}
                                 id='id-dcircles'
                             >
-                                <Suspense fallback={tabLoader('Loading DCircles...')}>
+                                <Suspense fallback={tabLoader('Loading D-Circles...')}>
                                     <DCircles />
                                 </Suspense>
                             </div>
@@ -394,15 +302,15 @@ const AppWrapper = observer(() => {
                                 </Suspense>
                             </div>
 
-                            {/* 5 — Pro Hedge */}
+                            {/* 5 — Hedge Trading */}
                             <div
                                 label={mkIcon(
                                     <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 2L2 7l10 5 10-5-10-5z'/><path d='M2 17l10 5 10-5'/><path d='M2 12l10 5 10-5'/></svg>,
-                                    'Pro Hedge'
+                                    'Hedge'
                                 )}
                                 id='id-pro-hedge'
                             >
-                                <Suspense fallback={tabLoader('Loading Pro Hedge...')}>
+                                <Suspense fallback={tabLoader('Loading Hedge Trading...')}>
                                     <ProHedge />
                                 </Suspense>
                             </div>
@@ -433,35 +341,7 @@ const AppWrapper = observer(() => {
                                 </Suspense>
                             </div>
 
-                            {/* 8 — Tutorials */}
-                            <div
-                                label={mkIcon(
-                                    <LegacyGuide1pxIcon height='16px' width='16px' fill='var(--text-general)' className='icon-general-fill-g-path' />,
-                                    'Tutorials'
-                                )}
-                                id='id-tutorials'
-                            >
-                                <div className='tutorials-wrapper'>
-                                    <Suspense fallback={tabLoader('Loading tutorials...')}>
-                                        <Tutorial handleTabChange={handleTabChange} />
-                                    </Suspense>
-                                </div>
-                            </div>
-
-                            {/* 9 — Bot Library */}
-                            <div
-                                label={mkIcon(
-                                    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='3' width='7' height='7' rx='1'/><rect x='14' y='3' width='7' height='7' rx='1'/><rect x='3' y='14' width='7' height='7' rx='1'/><rect x='14' y='14' width='7' height='7' rx='1'/></svg>,
-                                    'Bot Library'
-                                )}
-                                id='id-bot-library'
-                            >
-                                <Suspense fallback={tabLoader('Loading Bot Library...')}>
-                                    <BotLibrary />
-                                </Suspense>
-                            </div>
-
-                            {/* 10 — Copy Trading */}
+                            {/* 8 — Copy Trading */}
                             <div
                                 label={mkIcon(
                                     <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><polyline points='17 1 21 5 17 9'/><path d='M3 11V9a4 4 0 014-4h14'/><polyline points='7 23 3 19 7 15'/><path d='M21 13v2a4 4 0 01-4 4H3'/></svg>,
@@ -474,7 +354,7 @@ const AppWrapper = observer(() => {
                                 </Suspense>
                             </div>
 
-                            {/* 11 — Reports */}
+                            {/* 9 — Reports */}
                             <div
                                 label={mkIcon(
                                     <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z'/><polyline points='14 2 14 8 20 8'/><line x1='16' y1='13' x2='8' y2='13'/><line x1='16' y1='17' x2='8' y2='17'/></svg>,
@@ -487,7 +367,7 @@ const AppWrapper = observer(() => {
                                 </Suspense>
                             </div>
 
-                            {/* 12 — Bulk Trade */}
+                            {/* 10 — Bulk Trade */}
                             <div
                                 label={mkIcon(
                                     <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='2' y='3' width='6' height='18' rx='1'/><rect x='9' y='8' width='6' height='13' rx='1'/><rect x='16' y='5' width='6' height='16' rx='1'/></svg>,
@@ -500,10 +380,10 @@ const AppWrapper = observer(() => {
                                 </Suspense>
                             </div>
 
-                            {/* 13 — Analysis */}
+                            {/* 11 — Analysis */}
                             <div
                                 label={mkIcon(
-                                    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='11' cy='11' r='8'/><line x1='21' y1='21' x2='16.65' y2='16.65'/><line x1='11' y1='8' x2='11' y2='14'/><line x1='8' y1='11' x2='14' y2='11'/></svg>,
+                                    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='11' cy='11' r='8'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>,
                                     'Analysis'
                                 )}
                                 id='id-analysis'
@@ -513,13 +393,34 @@ const AppWrapper = observer(() => {
                                 </Suspense>
                             </div>
 
+                            {/* 12 — Tutorials */}
+                            <div
+                                label={mkIcon(
+                                    <LegacyGuide1pxIcon height='16px' width='16px' fill='var(--text-general)' className='icon-general-fill-g-path' />,
+                                    'Tutorials'
+                                )}
+                                id='id-tutorial'
+                            >
+                                <div className='tutorials-wrapper'>
+                                    <Suspense fallback={tabLoader('Loading tutorials...')}>
+                                        <Tutorial handleTabChange={handleTabChange} />
+                                    </Suspense>
+                                </div>
+                            </div>
+
                         </Tabs>
-                        {!isDesktop && right_tab_shadow && <span className='tabs-shadow tabs-shadow--right' />}{' '}
+                        {!isDesktop && right_tab_shadow && <span className='tabs-shadow tabs-shadow--right' />}
                     </div>
                 </div>
             </div>
 
+            {/* BotBuilder workspace always mounts in background (BOT_BUILDER=99, so never activates as a visible tab) */}
             <BotBuilder />
+
+            {/* Floating panels */}
+            <AIScanner />
+            <FloatingRunButton />
+            <PWAInstall />
 
             <DesktopWrapper>
                 <div className='main__run-strategy-wrapper'>
@@ -530,6 +431,7 @@ const AppWrapper = observer(() => {
                 <TradingViewModal />
             </DesktopWrapper>
             <MobileWrapper>{!is_open && <RunPanel />}</MobileWrapper>
+
             <Dialog
                 cancel_button_text={cancel_button_text || localize('Cancel')}
                 className='dc-dialog__wrapper--fixed'
