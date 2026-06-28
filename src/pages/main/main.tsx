@@ -163,7 +163,9 @@ const AppWrapper = observer(() => {
     });
 
     React.useEffect(() => {
-        if (connectionStatus !== CONNECTION_STATUS.OPENED) {
+        if (connectionStatus === CONNECTION_STATUS.OPENED) {
+            setWebSocketState(true);
+        } else {
             const is_bot_running = document.getElementById('db-animation__stop-button') !== null;
             if (is_bot_running) { clear(); stopBot(); api_base.setIsRunning(false); setWebSocketState(false); }
         }

@@ -214,7 +214,6 @@ const BotBuilder = observer(() => {
                     'bot-builder--inactive': is_preview_on_popup,
                     'bot-builder--tour-active': active_tour,
                 })}
-                style={{ position: 'relative' }}
             >
                 <div id='scratch_div' ref={el_ref}>
                     <WorkspaceWrapper />

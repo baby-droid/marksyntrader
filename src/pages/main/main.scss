@@ -139,7 +139,7 @@ body {
     &__run-strategy-wrapper {
         inset-inline-end: 1.6rem;
         top: 1.6rem;
-        z-index: 2;
+        z-index: 12;
 
         @include desktop-screen { position: absolute; }
 
@@ -272,7 +272,7 @@ body {
     &__run-strategy-wrapper {
         inset-inline-end: 1.6rem;
         top: 1.6rem;
-        z-index: 2;
+        z-index: 12;
 
         @include desktop-screen { position: absolute; }
 

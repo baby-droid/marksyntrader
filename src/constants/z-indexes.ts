@@ -1,7 +1,7 @@
 export const popover_zindex = Object.freeze({
     QUICK_STRATEGY: 99999,
     TOOLBAR: 100,
-    TRANSACTION: 10,
-    SUMMARY_TOOLTIPS: 5,
-    RUN_PANEL: 6,
+    TRANSACTION: 20,
+    SUMMARY_TOOLTIPS: 15,
+    RUN_PANEL: 20,
 });

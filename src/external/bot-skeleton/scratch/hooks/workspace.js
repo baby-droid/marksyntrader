@@ -102,7 +102,7 @@ window.Blockly.Workspace.prototype.dispatchBlockEventEffects = function (event) 
                 setTimeout(() => {
                     wait_event.promise.resolve();
                     this.wait_events.splice(idx, 1);
-                }, 500);
+                }, 0);
             }
         }
     });

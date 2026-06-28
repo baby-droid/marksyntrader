@@ -157,7 +157,7 @@ export const load = async ({
 
     setLoading(true);
     // Delay execution to allow fully previewing previous strategy if users quickly switch between strategies.
-    await delayExecution(100);
+    await delayExecution(0);
     const showInvalidStrategyError = () => {
         setLoadedLocalFile(null);
         botNotification(notification_message().invalid_xml);

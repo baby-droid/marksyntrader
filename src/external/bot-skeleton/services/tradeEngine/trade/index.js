@@ -121,7 +121,7 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
             // solve the issue. This is a backup!
             const subscription = api_base.api.onMessage().subscribe(({ data }) => {
                 if (data.msg_type === 'transaction' && data.transaction.action === 'sell') {
-                    this.transaction_recovery_timeout = setTimeout(() => {
+                    this.transaction_recovery_timeout = setTimeout(() => { /* 0ms recovery */ 
                         const { contract } = this.data;
                         const is_same_contract = contract.contract_id === data.transaction.contract_id;
                         const is_open_contract = contract.status === 'open';
@@ -130,7 +130,7 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
                                 api_base.api.send({ proposal_open_contract: 1, contract_id: contract.contract_id });
                             }, ['PriceMoved']);
                         }
-                    }, 100);
+                    }, 0);
                 }
                 resolve();
             });

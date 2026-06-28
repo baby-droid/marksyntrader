@@ -134,8 +134,8 @@ export const getLastDigitForList = (tick, pip_size = 0) => {
 };
 
 const getBackoffDelayInMs = (error_obj, delay_index) => {
-    const base_delay = 0.5;
-    const max_delay = 5;
+    const base_delay = 0;
+    const max_delay = 0;
     const next_delay_in_seconds = Math.min(base_delay * delay_index, max_delay);
 
     const { error = {}, msg_type = '', echo_req = {} } = error_obj;
