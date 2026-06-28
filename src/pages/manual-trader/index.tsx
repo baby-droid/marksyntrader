@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useDerivTrade } from '@/hooks/useDerivTrade';
+import { applyCommission } from '@/utils/commission';
 import './manual-trader.scss';
 
 function getLastDigit(quote: number): number {
@@ -108,7 +109,8 @@ const ManualTrader: React.FC = () => {
                 if (t >= duration) {
                     clearInterval(iv);
                     const won = Math.random() > 0.45;
-                    const profit = won ? s * 0.87 : -s;
+                    const rawProfit = won ? s * 0.87 : -s;
+                    const profit = applyCommission(rawProfit);
                     setPositions(p => p.map(x => x.id === pos.id ? { ...x, status: won ? 'won' : 'lost', profit } : x));
                     setPnl(prev => prev + profit);
                 }

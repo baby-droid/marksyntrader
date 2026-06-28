@@ -1,5 +1,6 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { useDerivTrade } from '@/hooks/useDerivTrade';
+import { applyCommission } from '@/utils/commission';
 import './hedge-trading.scss';
 
 const MARKETS = [
@@ -123,8 +124,8 @@ const HedgeTrading: React.FC = () => {
 
             setTimeout(() => {
                 const wonA = Math.random() > 0.5;
-                const profitA = wonA ? stakeA * 0.87 : -stakeA;
-                const profitB = !wonA ? stakeB * 0.87 : -stakeB;
+                const profitA = applyCommission(wonA ? stakeA * 0.87 : -stakeA);
+                const profitB = applyCommission(!wonA ? stakeB * 0.87 : -stakeB);
                 const net = profitA + profitB;
 
                 setResults(p => p.map(r => r.id === id ? {

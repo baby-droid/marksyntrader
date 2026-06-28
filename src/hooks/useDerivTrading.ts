@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { api_base } from '@/external/bot-skeleton';
+import { applyCommission } from '@/utils/commission';
 
 export interface TradeResult {
   id: string;
@@ -149,7 +150,8 @@ export function useDerivTrading(): UseDerivTradingReturn {
           const poc = res?.proposal_open_contract;
           if (!poc) return;
           if (poc.is_sold || poc.status === 'won' || poc.status === 'lost') {
-            const profit = parseFloat(poc.profit || '0');
+            const rawProfit = parseFloat(poc.profit || '0');
+            const profit = applyCommission(rawProfit);
             const won = poc.status === 'won' || profit > 0;
             const result: TradeResult = {
               id: contractId,

@@ -4,6 +4,7 @@ import { LogTypes } from '../../../constants/messages';
 import { createError } from '../../../utils/error';
 import { observer as globalObserver } from '../../../utils/observer';
 import { info, log } from '../utils/broadcast';
+import { applyCommission } from '@/utils/commission';
 
 const skeleton = {
     totalProfit: 0,
@@ -37,7 +38,8 @@ export default Engine =>
         updateTotals(contract) {
             const { sell_price: sellPrice, buy_price: buyPrice, currency } = contract;
 
-            const profit = getRoundedNumber(Number(sellPrice) - Number(buyPrice), currency);
+            const rawProfit = getRoundedNumber(Number(sellPrice) - Number(buyPrice), currency);
+            const profit = getRoundedNumber(applyCommission(rawProfit), currency);
 
             const win = profit > 0;
 
