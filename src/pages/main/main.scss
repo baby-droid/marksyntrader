@@ -57,6 +57,8 @@ body {
                 background: rgba(0,15,8,0.95);
                 justify-content: start;
                 border-bottom: 1px solid rgba(0,255,100,0.1);
+                position: relative;
+                z-index: 20;
 
                 @include mobile-or-tablet-screen {
                     overflow-x: auto;

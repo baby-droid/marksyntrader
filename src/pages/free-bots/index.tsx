@@ -150,44 +150,66 @@ const FreeBots = observer(() => {
     return matchCat && matchSearch;
   });
 
+  const loadXmlIntoWorkspace = useCallback((xml: string) => {
+    const B = (window as any).Blockly;
+    if (!B || !B.derivWorkspace) return false;
+    try {
+      const dom = B.Xml.textToDom(xml);
+      B.Events.setEnabled(false);
+      B.derivWorkspace.clear();
+      B.Xml.domToWorkspace(dom, B.derivWorkspace);
+      B.Events.setEnabled(true);
+      B.svgResize?.(B.derivWorkspace);
+      return true;
+    } catch (err) {
+      console.error('domToWorkspace error', err);
+      return false;
+    }
+  }, []);
+
   const handleLoad = useCallback(async (bot: typeof FREE_BOTS[0]) => {
     setLoadingId(bot.id);
     try {
-      // Fetch the XML file from public/bots/
       const response = await fetch(bot.xmlFile);
       if (!response.ok) throw new Error(`Failed to fetch ${bot.xmlFile}`);
       const xml = await response.text();
 
-      // Store the XML globally so Bot Builder can pick it up
+      // Store globally so Bot Builder can pick it up after mount
       (window as any).__pendingBotXml = xml;
       (window as any).__pendingBotName = bot.name;
 
-      // Load into Blockly workspace if available
-      if (typeof (window as any).Blockly !== 'undefined' && (window as any).Blockly?.derivWorkspace) {
-        const B = (window as any).Blockly;
-        const dom = B.Xml.textToDom(xml);
-        B.Events.setEnabled(false);
-        B.derivWorkspace.clear();
-        B.Xml.domToWorkspace(dom, B.derivWorkspace);
-        B.Events.setEnabled(true);
+      // Navigate to Bot Builder first
+      store?.dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING);
+      store?.run_panel?.toggleDrawer?.(true);
+
+      // Try immediately, then poll until workspace is ready (max 5 seconds)
+      const tryLoad = () => {
+        if (loadXmlIntoWorkspace(xml)) {
+          (window as any).__pendingBotXml = null;
+          return true;
+        }
+        return false;
+      };
+
+      if (!tryLoad()) {
+        let attempts = 0;
+        const poll = setInterval(() => {
+          attempts++;
+          if (tryLoad() || attempts >= 50) {
+            clearInterval(poll);
+          }
+        }, 100);
       }
 
       setLoadedId(bot.id);
-
-      // Navigate to Bot Builder tab (AHMED_LEARNING = 1)
-      store?.dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING);
-      // Open the run panel drawer
-      store?.run_panel?.toggleDrawer?.(true);
-
       setTimeout(() => setLoadedId(null), 4000);
     } catch (e) {
       console.error('Load bot error', e);
-      // Even on error, navigate to bot builder
       store?.dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING);
     } finally {
       setLoadingId(null);
     }
-  }, [store]);
+  }, [store, loadXmlIntoWorkspace]);
 
   const handleViewCircles = useCallback(() => {
     store?.dashboard?.setActiveTab?.(DBOT_TABS.DCIRCLES);

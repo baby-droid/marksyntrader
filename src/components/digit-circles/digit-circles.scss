@@ -120,15 +120,17 @@
     .digit-circles__row {
       flex-wrap: nowrap;
       overflow-x: auto;
-      gap: 0.5rem;
-      padding: 1rem 0.4rem;
+      gap: 0.7rem;
+      padding: 0.8rem 0.4rem;
       &::-webkit-scrollbar { height: 3px; }
       &::-webkit-scrollbar-track { background: transparent; }
       &::-webkit-scrollbar-thumb { background: rgba(139,92,246,0.4); border-radius: 2px; }
     }
-    .digit-circles__circle { width: 48px !important; height: 48px !important; }
-    .digit-circles__number { font-size: 15px !important; }
-    .digit-circles__percent { font-size: 8px !important; }
+    .digit-circles__circle { width: 66px !important; height: 66px !important; }
+    .digit-circles__number { font-size: 20px !important; }
+    .digit-circles__percent { font-size: 9px !important; }
+    .digit-circles__legend { display: none; }
+    .digit-circles__stats  { display: none; }
   }
 
   /* ── legend ── */

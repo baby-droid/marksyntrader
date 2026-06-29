@@ -53,7 +53,7 @@ const SpeedLab = observer(() => {
   const [targetProfit, setTargetProfit] = useState(10);
   const [stopLoss, setStopLoss] = useState(5);
   const [isRunning, setIsRunning] = useState(false);
-  const [speed, setSpeed] = useState(100); // ms between trades
+  const [speed, setSpeed] = useState(0);
   const [executionLog, setExecutionLog] = useState<string[]>([]);
   const runRef = useRef(false);
   const currentStakeRef = useRef(stake);
@@ -81,12 +81,12 @@ const SpeedLab = observer(() => {
       logEntry(`Bought ${ct} @ ${currentStakeRef.current.toFixed(2)} ${currency}`);
     }
 
-    // Wait for result then continue
-    await new Promise(r => setTimeout(r, speed));
+    if (speed > 0) {
+      await new Promise(r => setTimeout(r, speed));
+    }
 
     if (!runRef.current) return;
 
-    // Check stop conditions
     if (sessionProfitRef.current >= targetProfit) {
       logEntry(`✅ Target profit reached: +${sessionProfitRef.current.toFixed(2)}`);
       runRef.current = false;
@@ -154,6 +154,12 @@ const SpeedLab = observer(() => {
             </div>
           </div>
 
+          {/* Digit Distribution below Market */}
+          <div className='speed-lab__card speed-lab__digits-card'>
+            <h3>Digit Distribution</h3>
+            <DigitCircles digits={digits} lastDigit={lastDigit} size='sm' nowrap />
+          </div>
+
           <div className='speed-lab__card'>
             <h3>Contract Type</h3>
             <div className='speed-lab__types'>
@@ -176,7 +182,7 @@ const SpeedLab = observer(() => {
               <label>Ticks<input type='number' value={duration} min={1} max={10} onChange={e => setDuration(Number(e.target.value))} /></label>
               {selectedType?.needsBarrier && <label>Barrier<input type='number' value={barrier} min={0} max={9} onChange={e => setBarrier(Number(e.target.value))} /></label>}
               <label>Martingale<input type='number' value={martingale} min={1} step={0.1} onChange={e => setMartingale(Number(e.target.value))} /></label>
-              <label>Speed (ms)<input type='number' value={speed} min={50} max={5000} step={50} onChange={e => setSpeed(Number(e.target.value))} /></label>
+              <label>Speed (ms)<input type='number' value={speed} min={0} max={5000} step={50} onChange={e => setSpeed(Number(e.target.value))} /></label>
               <label>Target Profit<input type='number' value={targetProfit} min={0} step={0.5} onChange={e => setTargetProfit(Number(e.target.value))} /></label>
               <label>Stop Loss<input type='number' value={stopLoss} min={0} step={0.5} onChange={e => setStopLoss(Number(e.target.value))} /></label>
             </div>
@@ -210,11 +216,6 @@ const SpeedLab = observer(() => {
         </div>
 
         <div className='speed-lab__right'>
-          <div className='speed-lab__card'>
-            <h3>Digit Distribution</h3>
-            <DigitCircles digits={digits} lastDigit={lastDigit} size='sm' nowrap />
-          </div>
-
           <div className='speed-lab__card speed-lab__log-card'>
             <h3>Execution Log</h3>
             <div className='speed-lab__log'>
