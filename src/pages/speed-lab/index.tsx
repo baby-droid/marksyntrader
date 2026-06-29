@@ -212,7 +212,7 @@ const SpeedLab = observer(() => {
         <div className='speed-lab__right'>
           <div className='speed-lab__card'>
             <h3>Digit Distribution</h3>
-            <DigitCircles digits={digits} lastDigit={lastDigit} size='sm' />
+            <DigitCircles digits={digits} lastDigit={lastDigit} size='sm' nowrap />
           </div>
 
           <div className='speed-lab__card speed-lab__log-card'>

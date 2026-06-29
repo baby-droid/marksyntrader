@@ -234,7 +234,7 @@ export const recoverFromError = (promiseFn, recoverFn, errors_to_ignore, delay_i
                         // Emit click_stop event to trigger the stopBot method in run-panel-store
                         setTimeout(() => {
                             globalObserver.emit('bot.stop_button_click');
-                        }, 500);
+                        }, 0);
                     }
 
                     reject(error);

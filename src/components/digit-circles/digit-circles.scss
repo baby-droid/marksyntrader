@@ -100,10 +100,35 @@
     border-radius: 3px;
     line-height: 1.4;
 
+    &--current {
+      background: transparent;
+      color: #8b5cf6;
+      font-size: 14px;
+      font-weight: 900;
+      padding: 0 2px;
+      text-shadow: 0 0 10px rgba(139,92,246,0.9), 0 0 4px rgba(139,92,246,0.5);
+      animation: trianglePulse 0.5s ease-in-out infinite alternate;
+    }
     &--1st  { background: #42B883; color: #fff; }
     &--2nd  { background: #4E7CF5; color: #fff; }
     &--low  { background: #E24A43; color: #fff; }
     &--low2 { background: #F5C842; color: #1a1a2e; }
+  }
+
+  /* ── no-wrap variant (speed lab single line) ── */
+  &--nowrap {
+    .digit-circles__row {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      gap: 0.5rem;
+      padding: 1rem 0.4rem;
+      &::-webkit-scrollbar { height: 3px; }
+      &::-webkit-scrollbar-track { background: transparent; }
+      &::-webkit-scrollbar-thumb { background: rgba(139,92,246,0.4); border-radius: 2px; }
+    }
+    .digit-circles__circle { width: 48px !important; height: 48px !important; }
+    .digit-circles__number { font-size: 15px !important; }
+    .digit-circles__percent { font-size: 8px !important; }
   }
 
   /* ── legend ── */
@@ -177,4 +202,9 @@
 @keyframes cursorPulse {
   0%, 100% { box-shadow: 0 0 0 3px rgba(255,255,255,0.25), 0 0 18px rgba(255,255,255,0.5); }
   50%       { box-shadow: 0 0 0 6px rgba(255,255,255,0.1), 0 0 28px rgba(255,255,255,0.7); }
+}
+
+@keyframes trianglePulse {
+  from { opacity: 0.6; text-shadow: 0 0 6px rgba(139,92,246,0.6); transform: translateY(0); }
+  to   { opacity: 1;   text-shadow: 0 0 14px rgba(139,92,246,1), 0 0 4px rgba(139,92,246,0.8); transform: translateY(-2px); }
 }

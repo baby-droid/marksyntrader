@@ -174,14 +174,16 @@ const FreeBots = observer(() => {
 
       setLoadedId(bot.id);
 
-      // Navigate to Bot Builder tab
-      store?.dashboard?.setActiveTab?.(DBOT_TABS.BOT_BUILDER);
+      // Navigate to Bot Builder tab (AHMED_LEARNING = 1)
+      store?.dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING);
+      // Open the run panel drawer
+      store?.run_panel?.toggleDrawer?.(true);
 
       setTimeout(() => setLoadedId(null), 4000);
     } catch (e) {
       console.error('Load bot error', e);
       // Even on error, navigate to bot builder
-      store?.dashboard?.setActiveTab?.(DBOT_TABS.BOT_BUILDER);
+      store?.dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING);
     } finally {
       setLoadingId(null);
     }

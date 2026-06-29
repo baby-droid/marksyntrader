@@ -8,6 +8,7 @@ interface DigitCirclesProps {
   lastDigit: number | null;
   showPercentage?: boolean;
   size?: 'sm' | 'md' | 'lg';
+  nowrap?: boolean;
 }
 
 /**
@@ -54,6 +55,7 @@ const DigitCircles: React.FC<DigitCirclesProps> = ({
   lastDigit,
   showPercentage = true,
   size = 'md',
+  nowrap = false,
 }) => {
   const colorMap = computeColors(digits);
 
@@ -94,7 +96,7 @@ const DigitCircles: React.FC<DigitCirclesProps> = ({
   }, [lastDigit, digits, size]);
 
   return (
-    <div className={`digit-circles digit-circles--${size}`}>
+    <div className={`digit-circles digit-circles--${size}${nowrap ? ' digit-circles--nowrap' : ''}`}>
       {/* Row with positioned cursor */}
       <div className='digit-circles__row-wrap'>
         <div className='digit-circles__row' ref={rowRef}>
@@ -140,9 +142,10 @@ const DigitCircles: React.FC<DigitCirclesProps> = ({
                 </div>
 
                 {/* rank badges */}
-                {isHigh  && <span className='digit-circles__rank digit-circles__rank--1st'>▲</span>}
+                {isLast  && <span className='digit-circles__rank digit-circles__rank--current'>▼</span>}
+                {isHigh  && !isLast && <span className='digit-circles__rank digit-circles__rank--1st'>▲</span>}
                 {isHigh2 && <span className='digit-circles__rank digit-circles__rank--2nd'>2nd</span>}
-                {isLow   && <span className='digit-circles__rank digit-circles__rank--low'>▼</span>}
+                {isLow   && !isLast && <span className='digit-circles__rank digit-circles__rank--low'>▼</span>}
                 {isLow2  && <span className='digit-circles__rank digit-circles__rank--low2'>L2</span>}
               </div>
             );
