@@ -1,7 +1,12 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useDerivTrade } from '@/hooks/useDerivTrade';
 import { applyCommission } from '@/utils/commission';
 import './hedge-trading.scss';
+
+function getLastDigitFromQuote(q: number): number {
+    const s = q.toFixed(2).replace('.', '');
+    return parseInt(s[s.length - 1], 10);
+}
 
 const MARKETS = [
     'V10','V25','V50','V75','V100',
@@ -59,7 +64,7 @@ function initLeg(): LegState {
 }
 
 const HedgeTrading: React.FC = () => {
-    const { buyContract, connected, balance, currency } = useDerivTrade();
+    const { buyContract, connected, balance, currency, subscribeTicks } = useDerivTrade();
     const [market, setMarket] = useState('V50');
     const [contractTab, setContractTab] = useState(0);
     const [legA, setLegA] = useState<LegState>(initLeg());
@@ -74,8 +79,30 @@ const HedgeTrading: React.FC = () => {
     const [tpEnabled, setTpEnabled] = useState(true);
     const [slEnabled, setSlEnabled] = useState(true);
     const [showSettings, setShowSettings] = useState(false);
+    const [lastDigit, setLastDigit] = useState<number | null>(null);
+    const [currentPrice, setCurrentPrice] = useState<string | null>(null);
+    const [digitFlash, setDigitFlash] = useState(false);
     const autoRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const tradeCountRef = useRef(0);
+    const prevDigitRef = useRef<number | null>(null);
+
+    // Subscribe to live ticks for current digit display
+    useEffect(() => {
+        if (!connected) return;
+        const sym = MARKET_MAP[market] || 'R_50';
+        const unsub = subscribeTicks(sym, (tick) => {
+            setLastDigit(tick.digit);
+            setCurrentPrice(tick.quote.toFixed(2));
+            if (tick.digit !== prevDigitRef.current) {
+                prevDigitRef.current = tick.digit;
+                setDigitFlash(true);
+                setTimeout(() => setDigitFlash(false), 300);
+            }
+        });
+        setLastDigit(null);
+        setCurrentPrice(null);
+        return unsub;
+    }, [connected, market, subscribeTicks]);
 
     const updateLegA = (k: keyof LegState, v: any) => setLegA(p => ({ ...p, [k]: v }));
     const updateLegB = (k: keyof LegState, v: any) => setLegB(p => ({ ...p, [k]: v }));
@@ -160,6 +187,21 @@ const HedgeTrading: React.FC = () => {
 
     return (
         <div className='hedge-pro'>
+            {/* Current Digit Triangle Banner */}
+            <div className='hedge-pro__digit-banner'>
+                <div className={`hedge-pro__digit-tri-wrap ${digitFlash ? 'flash' : ''}`}>
+                    <div className='hedge-pro__digit-tri'>▲</div>
+                    <div className='hedge-pro__digit-val'>{lastDigit !== null ? lastDigit : '—'}</div>
+                    <div className='hedge-pro__digit-label'>CURRENT DIGIT</div>
+                </div>
+                {currentPrice && (
+                    <div className='hedge-pro__banner-price'>
+                        <span>Live Price</span>
+                        <strong>{currentPrice}</strong>
+                    </div>
+                )}
+            </div>
+
             {/* Connection bar */}
             <div className='hedge-pro__topbar'>
                 <div className='hedge-pro__market-row'>

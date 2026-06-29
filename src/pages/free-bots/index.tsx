@@ -160,6 +160,8 @@ const FreeBots = observer(() => {
       B.Xml.domToWorkspace(dom, B.derivWorkspace);
       B.Events.setEnabled(true);
       B.svgResize?.(B.derivWorkspace);
+      // Scroll to center so blocks are visible
+      try { B.derivWorkspace.scrollCenter?.(); } catch (_) {}
       return true;
     } catch (err) {
       console.error('domToWorkspace error', err);

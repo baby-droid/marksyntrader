@@ -89,41 +89,58 @@ export function useDerivTrading(): UseDerivTradingReturn {
     const { symbol, contract_type, stake, duration, duration_unit = 't', barrier, currency: cur = currency } = params;
     try {
       setIsTrading(true);
-      // Get proposal
-      const proposalReq: any = {
-        proposal: 1,
-        amount: stake,
-        basis: 'stake',
-        contract_type,
-        currency: cur,
-        duration,
-        duration_unit,
-        symbol,
+      // Direct buy — single round-trip, no proposal step needed
+      const buyParams: any = {
+        buy: '1',
+        price: stake,
+        parameters: {
+          amount: stake,
+          basis: 'stake',
+          contract_type,
+          currency: cur,
+          duration,
+          duration_unit,
+          symbol,
+        },
       };
-      if (barrier !== undefined) proposalReq.barrier = String(barrier);
+      if (barrier !== undefined) buyParams.parameters.barrier = String(barrier);
 
-      const proposalRes = await api_base.api.send(proposalReq);
-      if (!proposalRes?.proposal?.id) {
-        console.error('No proposal id', proposalRes);
-        return null;
-      }
-
-      // Immediately buy
-      const buyRes = await api_base.api.send({
-        buy: proposalRes.proposal.id,
-        price: proposalRes.proposal.ask_price,
-      });
+      const buyRes = await api_base.api.send(buyParams);
 
       if (!buyRes?.buy?.contract_id) {
-        console.error('Buy failed', buyRes);
-        return null;
+        // Fallback: proposal + buy
+        const proposalReq: any = {
+          proposal: 1,
+          amount: stake,
+          basis: 'stake',
+          contract_type,
+          currency: cur,
+          duration,
+          duration_unit,
+          symbol,
+        };
+        if (barrier !== undefined) proposalReq.barrier = String(barrier);
+        const proposalRes = await api_base.api.send(proposalReq);
+        if (!proposalRes?.proposal?.id) return null;
+        const buyRes2 = await api_base.api.send({
+          buy: proposalRes.proposal.id,
+          price: proposalRes.proposal.ask_price,
+        });
+        if (!buyRes2?.buy?.contract_id) return null;
+        const cid2 = String(buyRes2.buy.contract_id);
+        activeContracts.current.add(cid2);
+        monitorContract(cid2, contract_type, stake);
+        return { id: cid2, type: contract_type, stake, profit: 0, won: false, time: Date.now() };
       }
 
       const contractId = String(buyRes.buy.contract_id);
       activeContracts.current.add(contractId);
 
-      // Monitor contract to get result
+      // Monitor contract to get result (non-blocking)
       monitorContract(contractId, contract_type, stake);
+
+      // Immediately refresh balance
+      subscribeBalance();
 
       return {
         id: contractId,
@@ -139,7 +156,7 @@ export function useDerivTrading(): UseDerivTradingReturn {
     } finally {
       setIsTrading(false);
     }
-  }, [currency]);
+  }, [currency, subscribeBalance]);
 
   const monitorContract = useCallback((contractId: string, type: string, stake: number) => {
     let obs: any;

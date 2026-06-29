@@ -56,6 +56,17 @@ const BulkTrade = observer(() => {
   const { balance, currency, buyContract } = useDerivTrading();
   const { digits, lastDigit, currentPrice, isConnected } = useDigitStats(market);
 
+  const prevDigitRef = React.useRef<number | null>(null);
+  const [digitFlash, setDigitFlash] = React.useState(false);
+  React.useEffect(() => {
+    if (lastDigit !== null && lastDigit !== prevDigitRef.current) {
+      prevDigitRef.current = lastDigit;
+      setDigitFlash(true);
+      const t = setTimeout(() => setDigitFlash(false), 300);
+      return () => clearTimeout(t);
+    }
+  }, [lastDigit]);
+
   const needsPrediction = ['DIGITOVER', 'DIGITUNDER', 'DIGITMATCH', 'DIGITDIFF'].includes(tradeType);
 
   const runBulk = useCallback(async () => {
@@ -123,13 +134,22 @@ const BulkTrade = observer(() => {
         </div>
       </div>
 
-      {/* Digit Circles */}
-      <div className='bulk-trade__circles-section'>
-        <DigitCircles digits={digits} lastDigit={lastDigit} />
-        <div className='bulk-trade__price-box'>
+      {/* Current Digit Triangle Display */}
+      <div className='bulk-trade__digit-display'>
+        <div className={`bulk-trade__digit-triangle-wrap ${digitFlash ? 'flash' : ''}`}>
+          <div className='bulk-trade__digit-triangle'>▲</div>
+          <div className='bulk-trade__digit-value'>{lastDigit !== null ? lastDigit : '—'}</div>
+          <div className='bulk-trade__digit-tag'>CURRENT DIGIT</div>
+        </div>
+        <div className='bulk-trade__price-live'>
           <span>Live Price</span>
           <strong>{currentPrice ?? '—'}</strong>
         </div>
+      </div>
+
+      {/* Digit Circles */}
+      <div className='bulk-trade__circles-section'>
+        <DigitCircles digits={digits} lastDigit={lastDigit} />
       </div>
 
       {/* Controls Card */}

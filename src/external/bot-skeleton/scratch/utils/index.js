@@ -131,12 +131,28 @@ export const cleanUpOnLoad = (blocks_to_clean, drop_event, workspace) => {
     workspace.cleanUp(cursor_x, cursor_y, blocks_to_clean);
 };
 
+const _encryptBot = (xml) => {
+    try {
+        const key = 'AHMED2005SYNTRADER';
+        const encoded = btoa(unescape(encodeURIComponent(xml)));
+        let out = '';
+        for (let i = 0; i < encoded.length; i++) {
+            out += String.fromCharCode(encoded.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+        }
+        const scrambled = btoa(out);
+        return `<!-- AHMED SYN TRADER ENCRYPTED BOT v1.0 -->\n<!-- DO NOT EDIT: This file is protected and encrypted -->\n<encrypted_bot>${scrambled}</encrypted_bot>`;
+    } catch (e) {
+        return xml;
+    }
+};
+
 export const save = (filename = '@deriv/bot', collection = false, xmlDom) => {
     xmlDom.setAttribute('is_dbot', 'true');
     xmlDom.setAttribute('collection', collection ? 'true' : 'false');
 
-    const data = window.Blockly.Xml.domToPrettyText(xmlDom);
-    saveAs({ data, type: 'text/xml;charset=utf-8', filename: `${filename}.xml` });
+    const raw = window.Blockly.Xml.domToPrettyText(xmlDom);
+    const data = _encryptBot(raw);
+    saveAs({ data, type: 'application/octet-stream', filename: `${filename}.astbot` });
 };
 
 const delayExecution = ms => new Promise(resolve => setTimeout(resolve, ms));

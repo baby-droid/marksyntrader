@@ -359,6 +359,63 @@
     &__result-running { color: #eab308; animation: spin 1s linear infinite; display: inline-block; }
     .pos { color: #22c55e; font-weight: 600; }
     .neg { color: #f87171; font-weight: 600; }
+
+    &__digit-banner {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 1.6rem;
+        padding: 10px 20px;
+        background: linear-gradient(135deg, rgba(6,182,212,0.08), rgba(99,102,241,0.08));
+        border-bottom: 1px solid rgba(6,182,212,0.15);
+    }
+
+    &__digit-tri-wrap {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        &.flash .hedge-pro__digit-val {
+            color: #00ff88;
+            text-shadow: 0 0 18px rgba(0,255,136,0.7);
+        }
+    }
+
+    &__digit-tri {
+        font-size: 28px;
+        color: #06b6d4;
+        animation: tri-bounce-h 0.9s ease-in-out infinite;
+        line-height: 1;
+    }
+
+    &__digit-val {
+        font-size: 52px;
+        font-weight: 900;
+        color: #06b6d4;
+        font-family: 'Courier New', monospace;
+        line-height: 1;
+        transition: color 0.15s, text-shadow 0.15s;
+    }
+
+    &__digit-label {
+        font-size: 10px;
+        color: rgba(6,182,212,0.6);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+    }
+
+    &__banner-price {
+        padding-left: 1.6rem;
+        border-left: 1px solid rgba(6,182,212,0.2);
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        span { font-size: 10px; color: rgba(255,255,255,0.4); text-transform: uppercase; }
+        strong { font-size: 14px; color: #e2e8f0; font-family: 'Courier New', monospace; font-weight: 700; }
+    }
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+@keyframes tri-bounce-h {
+    0%, 100% { transform: translateY(0); }
+    50%       { transform: translateY(-5px); }
+}

@@ -55,6 +55,64 @@
     &.off { color: #f44;    background: rgba(255,68,68,0.12);   }
   }
 
+  /* ─── Current Digit Triangle Display ─── */
+  &__digit-display {
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+    padding: 1.2rem 1.6rem;
+    background: linear-gradient(135deg, #0a0f2e, #0d1240);
+    border: 1.5px solid rgba(76,125,255,0.3);
+    border-radius: 1.2rem;
+    width: fit-content;
+    align-self: center;
+  }
+
+  &__digit-triangle-wrap {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    transition: all 0.15s;
+    &.flash .bulk-trade__digit-value {
+      color: #00ff88;
+      text-shadow: 0 0 20px rgba(0,255,136,0.7);
+    }
+  }
+
+  &__digit-triangle {
+    font-size: 3rem;
+    color: #4C7DFF;
+    animation: tri-bounce 0.8s ease-in-out infinite;
+    line-height: 1;
+  }
+
+  &__digit-value {
+    font-size: 5.2rem;
+    font-weight: 900;
+    color: #4C7DFF;
+    line-height: 1;
+    font-family: 'Courier New', monospace;
+    transition: color 0.15s, text-shadow 0.15s;
+  }
+
+  &__digit-tag {
+    font-size: 1rem;
+    color: rgba(76,125,255,0.7);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  &__price-live {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.2rem;
+    padding-left: 2rem;
+    border-left: 1px solid rgba(76,125,255,0.2);
+    span { font-size: 1rem; color: #888; text-transform: uppercase; }
+    strong { font-size: 1.6rem; font-weight: 700; color: #e0e7ff; font-family: 'Courier New', monospace; }
+  }
+
   /* ─── Circles ─── */
   &__circles-section {
     display: flex;
@@ -265,4 +323,9 @@
     &--won    { color: #42B883; }
     &--lost   { color: #E24A43; }
   }
+}
+
+@keyframes tri-bounce {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-5px); }
 }

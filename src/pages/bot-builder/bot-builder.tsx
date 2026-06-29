@@ -30,6 +30,24 @@ const FreeBotsSidePanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     const [loadingId, setLoadingId] = useState<string | null>(null);
     const [loadedId, setLoadedId] = useState<string | null>(null);
 
+    const loadXmlNow = useCallback((xml: string) => {
+        const B = (window as any).Blockly;
+        if (!B || !B.derivWorkspace) return false;
+        try {
+            const dom = B.Xml.textToDom(xml);
+            B.Events.setEnabled(false);
+            B.derivWorkspace.clear();
+            B.Xml.domToWorkspace(dom, B.derivWorkspace);
+            B.Events.setEnabled(true);
+            B.svgResize?.(B.derivWorkspace);
+            B.derivWorkspace.scrollCenter?.();
+            return true;
+        } catch (err) {
+            console.error('domToWorkspace error', err);
+            return false;
+        }
+    }, []);
+
     const handleLoad = useCallback(async (bot: typeof FREE_BOTS_LIST[0]) => {
         setLoadingId(bot.id);
         try {
@@ -38,14 +56,21 @@ const FreeBotsSidePanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             const xml = await response.text();
             (window as any).__pendingBotXml = xml;
             (window as any).__pendingBotName = bot.name;
-            if (typeof (window as any).Blockly !== 'undefined' && (window as any).Blockly?.derivWorkspace) {
-                const B = (window as any).Blockly;
-                const dom = B.Xml.textToDom(xml);
-                B.Events.setEnabled(false);
-                B.derivWorkspace.clear();
-                B.Xml.domToWorkspace(dom, B.derivWorkspace);
-                B.Events.setEnabled(true);
+
+            // Try immediately; poll until workspace is ready (max 8s)
+            if (!loadXmlNow(xml)) {
+                let attempts = 0;
+                const poll = setInterval(() => {
+                    attempts++;
+                    if (loadXmlNow(xml) || attempts >= 80) {
+                        clearInterval(poll);
+                        (window as any).__pendingBotXml = null;
+                    }
+                }, 100);
+            } else {
+                (window as any).__pendingBotXml = null;
             }
+
             setLoadedId(bot.id);
             setTimeout(() => { setLoadedId(null); onClose(); }, 1800);
         } catch (e) {
@@ -53,7 +78,7 @@ const FreeBotsSidePanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         } finally {
             setLoadingId(null);
         }
-    }, [onClose]);
+    }, [onClose, loadXmlNow]);
 
     return (
         <div style={{
