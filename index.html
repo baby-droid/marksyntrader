@@ -1,6 +1,34 @@
 <!doctype html>
 <html lang="en" dir="auto" class="light">
     <head>
+        <script>
+            /* Runtime public path for GitHub Pages: when the app is hosted at
+               username.github.io/<repo>/ we set __webpack_public_path__ to
+               '/<repo>/' so built assets referenced by webpack/rspack load from
+               the correct base without changing the build config (rsbuild).
+               This is a non-invasive runtime-only fix that preserves existing
+               logic in rsbuild.config.ts. */
+            (function () {
+                try {
+                    var hostname = location.hostname || '';
+                    if (hostname.endsWith('.github.io')) {
+                        var segments = location.pathname.split('/');
+                        // For a repo page the first segment is empty and the second is the repo name
+                        var repo = segments[1];
+                        if (repo) {
+                            window.__webpack_public_path__ = '/' + repo + '/';
+                        } else {
+                            window.__webpack_public_path__ = '/';
+                        }
+                    } else {
+                        // Preserve existing behavior for other hosts
+                        window.__webpack_public_path__ = window.__webpack_public_path__ || '/';
+                    }
+                } catch (e) {
+                    window.__webpack_public_path__ = window.__webpack_public_path__ || '/';
+                }
+            })();
+        </script>
         <!-- Google Tag Manager -->
         <script>
             (function (w, d, s, l, i) {
