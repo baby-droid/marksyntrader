@@ -114,7 +114,7 @@ function evaluate(freq: DigitFreq, type: ContractType, predictionDigit: number):
 }
 
 const AIAssistant: React.FC = () => {
-    const { dashboard, run_panel } = useStore() as any;
+    const { dashboard, run_panel, load_modal } = useStore() as any;
 
     const [isOpen, setIsOpen] = useState(false);
     const [isPulsing, setIsPulsing] = useState(true);
@@ -225,19 +225,30 @@ const AIAssistant: React.FC = () => {
             const xml = applyStakeAndMartingale(raw);
 
             (window as any).__pendingBotXml = xml;
+            (window as any).__pendingBotName = `AI ${best.type.toUpperCase()}${best.barrier ?? ''}`;
             setExecutionSpeed('turbo');
             dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING);
             run_panel?.toggleDrawer?.(true);
 
-            const loadNow = () => {
-                const B = (window as any).Blockly;
-                if (!B?.derivWorkspace) return false;
+            const loadNow = async () => {
+                if (!(window as any).Blockly?.derivWorkspace) return false;
+                if (load_modal?.loadStrategyToBuilder) {
+                    try {
+                        await load_modal.loadStrategyToBuilder(
+                            { id: `ai_${key}`, xml, name: (window as any).__pendingBotName, save_type: 'unsaved' },
+                            false
+                        );
+                        return true;
+                    } catch {
+                        /* fall through */
+                    }
+                }
                 try {
+                    const B = (window as any).Blockly;
                     const dom = B.Xml.textToDom(xml);
-                    B.Events.setEnabled(false);
-                    B.derivWorkspace.clear();
+                    B.derivWorkspace.asyncClear();
                     B.Xml.domToWorkspace(dom, B.derivWorkspace);
-                    B.Events.setEnabled(true);
+                    B.derivWorkspace.strategy_to_load = xml;
                     B.svgResize?.(B.derivWorkspace);
                     B.derivWorkspace.scrollCenter?.();
                     return true;
@@ -246,25 +257,29 @@ const AIAssistant: React.FC = () => {
                 }
             };
 
-            if (!loadNow()) {
+            const finish = () => {
+                (window as any).__pendingBotXml = null;
+                (window as any).__pendingBotName = null;
+                setTimeout(() => run_panel?.onRunButtonClick?.(), 700);
+            };
+
+            if (!(await loadNow())) {
                 let attempts = 0;
-                const poll = setInterval(() => {
+                const poll = setInterval(async () => {
                     attempts += 1;
-                    if (loadNow() || attempts >= 80) {
+                    if ((await loadNow()) || attempts >= 80) {
                         clearInterval(poll);
-                        (window as any).__pendingBotXml = null;
-                        if (attempts < 80) setTimeout(() => run_panel?.onRunButtonClick?.(), 600);
+                        if (attempts < 80) finish();
                     }
                 }, 100);
             } else {
-                (window as any).__pendingBotXml = null;
-                setTimeout(() => run_panel?.onRunButtonClick?.(), 600);
+                finish();
             }
             setIsOpen(false);
         } catch (err) {
             console.error('AI load & run failed', err);
         }
-    }, [best, isOverUnder, dashboard, run_panel, stake, martingale]);
+    }, [best, isOverUnder, dashboard, run_panel, load_modal, stake, martingale]);
 
     const digitOptions = contractType === 'over' ? [0, 1, 2, 3, 4, 5, 6, 7] : [1, 2, 3, 4, 5, 6, 7, 8, 9];
 
