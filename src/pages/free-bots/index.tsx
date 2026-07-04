@@ -150,24 +150,38 @@ const FreeBots = observer(() => {
     return matchCat && matchSearch;
   });
 
-  const loadXmlIntoWorkspace = useCallback((xml: string) => {
-    const B = (window as any).Blockly;
-    if (!B || !B.derivWorkspace) return false;
+  const loadXmlIntoWorkspace = useCallback(async (bot: typeof FREE_BOTS[0], xml: string) => {
+    const workspace = (window as any).Blockly?.derivWorkspace;
+    if (!workspace) return false;
+    // Prefer the canonical loader used across the app — it clears, loads and
+    // centres the strategy and registers it as the active workspace bot.
+    const lm: any = store?.load_modal;
+    if (lm?.loadStrategyToBuilder) {
+      try {
+        await lm.loadStrategyToBuilder(
+          { id: bot.id, xml, name: bot.name, save_type: 'unsaved' },
+          false
+        );
+        return true;
+      } catch (err) {
+        // fall through to raw loader below
+      }
+    }
+    // Raw fallback
     try {
+      const B = (window as any).Blockly;
       const dom = B.Xml.textToDom(xml);
-      B.Events.setEnabled(false);
-      B.derivWorkspace.clear();
+      B.derivWorkspace.asyncClear();
       B.Xml.domToWorkspace(dom, B.derivWorkspace);
-      B.Events.setEnabled(true);
+      B.derivWorkspace.strategy_to_load = xml;
       B.svgResize?.(B.derivWorkspace);
-      // Scroll to center so blocks are visible
       try { B.derivWorkspace.scrollCenter?.(); } catch (_) {}
       return true;
     } catch (err) {
       console.error('domToWorkspace error', err);
       return false;
     }
-  }, []);
+  }, [store]);
 
   const handleLoad = useCallback(async (bot: typeof FREE_BOTS[0]) => {
     setLoadingId(bot.id);
@@ -176,7 +190,7 @@ const FreeBots = observer(() => {
       if (!response.ok) throw new Error(`Failed to fetch ${bot.xmlFile}`);
       const xml = await response.text();
 
-      // Store globally so Bot Builder can pick it up after mount
+      // Store globally so Bot Builder can pick it up if it mounts fresh
       (window as any).__pendingBotXml = xml;
       (window as any).__pendingBotName = bot.name;
 
@@ -184,20 +198,12 @@ const FreeBots = observer(() => {
       store?.dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING);
       store?.run_panel?.toggleDrawer?.(true);
 
-      // Try immediately, then poll until workspace is ready (max 5 seconds)
-      const tryLoad = () => {
-        if (loadXmlIntoWorkspace(xml)) {
-          (window as any).__pendingBotXml = null;
-          return true;
-        }
-        return false;
-      };
-
-      if (!tryLoad()) {
+      // Load into the (persistent) workspace. Poll until it is ready.
+      if (!(await loadXmlIntoWorkspace(bot, xml))) {
         let attempts = 0;
-        const poll = setInterval(() => {
+        const poll = setInterval(async () => {
           attempts++;
-          if (tryLoad() || attempts >= 50) {
+          if ((await loadXmlIntoWorkspace(bot, xml)) || attempts >= 50) {
             clearInterval(poll);
           }
         }, 100);
