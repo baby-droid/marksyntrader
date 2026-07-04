@@ -1,0 +1,295 @@
+name: Weekly Workflow Summary Collector
+
+on:
+    schedule:
+        - cron: '0 10 * * 3' # Every Wednesday at 10:00 UTC (14:00 GST)
+        - cron: '0 10 * * 5' # Every Friday at 10:00 UTC (14:00 GST)
+    workflow_dispatch:
+
+permissions:
+    actions: read
+    contents: read
+
+env:
+    # Prefixes only — run_id suffix is appended by the source workflows
+    DOCSYNC_PREFIX: 'docsync-event-log-' # file inside zip: docsync-payload.json  (JSON array)
+    CLAUDE_PREFIX: 'claude-review-summary-' # file inside zip: click2fix-payload.json (JSON object)
+    MAX_RUNS: '30'
+
+jobs:
+    collect-summaries:
+        name: Collect and compile workflow artifacts
+        runs-on: ubuntu-latest
+
+        steps:
+            # ── Step 1: Metadata ─────────────────────────────────────────────────
+            - name: Compute metadata
+              id: meta
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  REPO: ${{ github.repository }}
+              run: |
+                  echo "date=$(date -u +%Y-%m-%d)" >> $GITHUB_OUTPUT
+                  echo "week=$(date -u +%Y-W%V)"   >> $GITHUB_OUTPUT
+
+                  # Determine the artifact collection cutoff using the ACTUAL completion time of the
+                  # last successful run of this workflow (not a hardcoded schedule time).
+                  # This correctly handles:
+                  #   - Cron delays (15 min, 1 hr, or any amount)
+                  #   - Both directions: Wed→Fri and Fri→next Wed
+                  #   - Manual triggers: also start from where the last run left off
+                  # The current run is still "in_progress" so querying status=success returns
+                  # the previous successful run — exactly the cutoff we need.
+                  LAST_RUN=$(gh api \
+                    "/repos/$REPO/actions/workflows/weekly-workflow-collector.yml/runs?status=success&per_page=1" \
+                    --jq '.workflow_runs[0] | {id: .id, completed_at: .updated_at, event: .event}')
+
+                  if [ -n "$LAST_RUN" ] && [ "$(echo "$LAST_RUN" | jq -r '.id')" != "null" ]; then
+                    SINCE=$(echo "$LAST_RUN"          | jq -r '.completed_at')
+                    SINCE_RUN_ID=$(echo "$LAST_RUN"   | jq -r '.id')
+                    SINCE_RUN_EVENT=$(echo "$LAST_RUN"| jq -r '.event')
+                    SINCE_FALLBACK="false"
+                    echo "Cutoff: artifacts created after run #$SINCE_RUN_ID (trigger: $SINCE_RUN_EVENT) completed at $SINCE"
+                  else
+                    SINCE=$(date -u -d "7 days ago" +%Y-%m-%dT%H:%M:%SZ)
+                    SINCE_RUN_ID="none"
+                    SINCE_RUN_EVENT="none"
+                    SINCE_FALLBACK="true"
+                    echo "No previous successful run found — falling back to 7 days ago: $SINCE"
+                  fi
+
+                  echo "since=$SINCE"                       >> $GITHUB_OUTPUT
+                  echo "since_run_id=$SINCE_RUN_ID"         >> $GITHUB_OUTPUT
+                  echo "since_run_event=$SINCE_RUN_EVENT"   >> $GITHUB_OUTPUT
+                  echo "since_fallback=$SINCE_FALLBACK"     >> $GITHUB_OUTPUT
+
+            # ── Step 2: Download DocSync artifacts ──────────────────────────────
+            # Artifact name: docsync-event-log-<run_id>
+            # File inside:   docsync-payload.json  (JSON array of events)
+            # Retention:     90 days
+            - name: Download DocSync AI artifacts
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  REPO: ${{ github.repository }}
+                  SINCE: ${{ steps.meta.outputs.since }}
+              run: |
+                  mkdir -p downloads/docsync
+
+                  artifact_ids=$(gh api "/repos/$REPO/actions/artifacts?per_page=100" \
+                    --jq "[.artifacts[]
+                            | select(.name | startswith(\"$DOCSYNC_PREFIX\"))
+                            | select(.expired == false)
+                            | select(.created_at >= \"$SINCE\")]
+                          | sort_by(.created_at) | reverse | .[:$MAX_RUNS] | .[].id")
+
+                  if [ -z "$artifact_ids" ]; then
+                    echo "WARNING: No non-expired artifacts found matching prefix '$DOCSYNC_PREFIX'"
+                    exit 0
+                  fi
+
+                  for id in $artifact_ids; do
+                    echo "Downloading docsync artifact id=$id"
+                    curl -sL \
+                      -H "Authorization: Bearer $GH_TOKEN" \
+                      -H "Accept: application/vnd.github+json" \
+                      "https://api.github.com/repos/$REPO/actions/artifacts/$id/zip" \
+                      -o "downloads/docsync/$id.zip"
+                    unzip -q "downloads/docsync/$id.zip" -d "downloads/docsync/$id/"
+                    rm "downloads/docsync/$id.zip"
+                  done
+
+                  echo "DocSync: downloaded $(ls -d downloads/docsync/*/ 2>/dev/null | wc -l) artifact(s)"
+
+            # ── Step 3: Download Claude PR Review artifacts ──────────────────────
+            # Artifact name: claude-review-summary-<run_id>
+            # File inside:   click2fix-payload.json  (single JSON object)
+            # Retention:     7 days  ← cron must run before these expire
+            - name: Download Claude PR Review artifacts
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  REPO: ${{ github.repository }}
+                  SINCE: ${{ steps.meta.outputs.since }}
+              run: |
+                  mkdir -p downloads/claude
+
+                  artifact_ids=$(gh api "/repos/$REPO/actions/artifacts?per_page=100" \
+                    --jq "[.artifacts[]
+                            | select(.name | startswith(\"$CLAUDE_PREFIX\"))
+                            | select(.expired == false)
+                            | select(.created_at >= \"$SINCE\")]
+                          | sort_by(.created_at) | reverse | .[:$MAX_RUNS] | .[].id")
+
+                  if [ -z "$artifact_ids" ]; then
+                    echo "WARNING: No non-expired artifacts found matching prefix '$CLAUDE_PREFIX'"
+                    echo "NOTE: Claude artifacts expire after 7 days — ensure this cron runs within that window."
+                    exit 0
+                  fi
+
+                  for id in $artifact_ids; do
+                    echo "Downloading claude artifact id=$id"
+                    curl -sL \
+                      -H "Authorization: Bearer $GH_TOKEN" \
+                      -H "Accept: application/vnd.github+json" \
+                      "https://api.github.com/repos/$REPO/actions/artifacts/$id/zip" \
+                      -o "downloads/claude/$id.zip"
+                    unzip -q "downloads/claude/$id.zip" -d "downloads/claude/$id/"
+                    rm "downloads/claude/$id.zip"
+                  done
+
+                  echo "Claude: downloaded $(ls -d downloads/claude/*/ 2>/dev/null | wc -l) artifact(s)"
+
+            # ── Step 4: Merge into one structured JSON file ──────────────────────
+            - name: Compile into workflow-summaries.json
+              env:
+                  REPO: ${{ github.repository }}
+                  COLLECTION_WEEK: ${{ steps.meta.outputs.week }}
+                  COLLECTION_DATE: ${{ steps.meta.outputs.date }}
+              run: |
+                  python3 - <<'PYEOF'
+                  import json, os
+                  from datetime import datetime, timezone
+                  from pathlib import Path
+
+                  REPO            = os.environ["REPO"]
+                  COLLECTION_WEEK = os.environ["COLLECTION_WEEK"]
+                  COLLECTION_DATE = os.environ["COLLECTION_DATE"]
+
+                  # Describes where to find each workflow's artifacts and how to read them.
+                  # data_format:
+                  #   "array"  -> the JSON file is a list of event objects (DocSync JSONL -> jq -s)
+                  #   "object" -> the JSON file is a single payload object (Claude EVENT_PAYLOAD)
+                  SOURCES = {
+                      "DocSync AI - Documentation Sync": {
+                          "dir":         Path("downloads/docsync"),
+                          "filename":    "docsync-payload.json",
+                          "data_format": "array",
+                      },
+                      "Claude PR Review": {
+                          "dir":         Path("downloads/claude"),
+                          "filename":    "click2fix-payload.json",
+                          "data_format": "object",
+                          "retention_warning": "Artifacts expire after 7 days",
+                      },
+                  }
+
+                  result = {
+                      "generated_at":    datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                      "collection_week": COLLECTION_WEEK,
+                      "collection_date": COLLECTION_DATE,
+                      "repository":      REPO,
+                      "workflows":       {},
+                  }
+
+                  for wf_name, cfg in SOURCES.items():
+                      base_dir    = cfg["dir"]
+                      target_file = cfg["filename"]
+                      fmt         = cfg["data_format"]
+                      runs        = []
+
+                      if not base_dir.exists() or not any(base_dir.iterdir()):
+                          entry = {
+                              "workflow_name":        wf_name,
+                              "total_runs_collected": 0,
+                              "warning":              "No artifacts downloaded",
+                              "runs":                 [],
+                          }
+                          if "retention_warning" in cfg:
+                              entry["retention_note"] = cfg["retention_warning"]
+                          result["workflows"][wf_name] = entry
+                          print(f"  {wf_name}: 0 runs")
+                          continue
+
+                      # artifact_id is the folder name (we named folders by GitHub artifact id)
+                      for artifact_dir in sorted(base_dir.iterdir(), reverse=True):
+                          if not artifact_dir.is_dir():
+                              continue
+
+                          payload_file = artifact_dir / target_file
+                          if not payload_file.exists():
+                              # Fallback: grab any JSON file present
+                              candidates = list(artifact_dir.rglob("*.json"))
+                              if not candidates:
+                                  print(f"  WARN: No JSON in {artifact_dir.name}, skipping")
+                                  continue
+                              payload_file = candidates[0]
+                              print(f"  NOTE: Using fallback file '{payload_file.name}' in {artifact_dir.name}")
+
+                          try:
+                              raw = json.loads(payload_file.read_text(encoding="utf-8"))
+                          except json.JSONDecodeError as e:
+                              print(f"  WARN: Could not parse {payload_file}: {e}")
+                              continue
+
+                          run_entry = {
+                              "artifact_id": artifact_dir.name,
+                              "source_file": payload_file.name,
+                          }
+
+                          if fmt == "array":
+                              # DocSync: JSON array of individual event objects
+                              events = raw if isinstance(raw, list) else [raw]
+                              run_entry["event_count"] = len(events)
+                              run_entry["events"]      = events
+                          else:
+                              # Claude: single JSON object -> the entire payload
+                              run_entry["event_count"] = 1
+                              run_entry["payload"]     = raw
+
+                          runs.append(run_entry)
+
+                      wf_entry = {
+                          "workflow_name":        wf_name,
+                          "total_runs_collected": len(runs),
+                          "runs":                 runs,
+                      }
+                      if "retention_warning" in cfg:
+                          wf_entry["retention_note"] = cfg["retention_warning"]
+
+                      result["workflows"][wf_name] = wf_entry
+                      total_events = sum(r["event_count"] for r in runs)
+                      print(f"  {wf_name}: {len(runs)} run(s), {total_events} event(s) total")
+
+                  Path("workflow-summaries.json").write_text(
+                      json.dumps(result, indent=2, ensure_ascii=False),
+                      encoding="utf-8",
+                  )
+                  print("\\nworkflow-summaries.json written")
+                  PYEOF
+
+            # ── Step 5: Job summary ──────────────────────────────────────────────
+            - name: Write job summary
+              run: |
+                  {
+                    echo "## Weekly Workflow Summary Collector"
+                    echo ""
+                    echo "| | |"
+                    echo "|---|---|"
+                    echo "| **Week** | \`${{ steps.meta.outputs.week }}\` |"
+                    echo "| **Date** | \`${{ steps.meta.outputs.date }}\` |"
+                    echo "| **Repo** | \`${{ github.repository }}\` |"
+                    echo "| **Triggered by** | \`${{ github.event_name }}\` |"
+                    echo "| **Collecting artifacts from** | \`${{ steps.meta.outputs.since }}\` UTC onwards |"
+                    if [ "${{ steps.meta.outputs.since_fallback }}" = "true" ]; then
+                      echo "| **Cutoff basis** | ⚠️ No previous successful run found — used 7-day fallback |"
+                    else
+                      echo "| **Cutoff basis** | Last successful run [#${{ steps.meta.outputs.since_run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ steps.meta.outputs.since_run_id }}) (triggered by: \`${{ steps.meta.outputs.since_run_event }}\`) |"
+                    fi
+                    echo ""
+                    jq -r '
+                      .workflows | to_entries[] |
+                      "### \(.key)\n" +
+                      "- **Runs collected**: \(.value.total_runs_collected)\n" +
+                      "- **Total events**: \([.value.runs[].event_count] | add // 0)\n" +
+                      (if .value.warning then "- ⚠️ Warning: \(.value.warning)\n" else "" end) +
+                      (if .value.retention_note then "- ℹ️ Note: \(.value.retention_note)\n" else "" end)
+                    ' workflow-summaries.json
+                  } >> $GITHUB_STEP_SUMMARY
+
+            # ── Step 6: Upload compiled artifact ────────────────────────────────
+            - name: Upload workflow-summaries artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: workflow-summaries-${{ steps.meta.outputs.week }}
+                  path: workflow-summaries.json
+                  retention-days: 90
+                  if-no-files-found: error

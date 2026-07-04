@@ -2,7 +2,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { observer } from 'mobx-react-lite';
 import DigitCircles from '@/components/digit-circles';
-import AIAssistant from '@/components/ai-assistant';
 import { useDigitStats } from '@/hooks/useDigitStats';
 import { useDerivTrading } from '@/hooks/useDerivTrading';
 import './speed-lab.scss';
@@ -242,7 +241,6 @@ const SpeedLab = observer(() => {
         </div>
       </div>
 
-      <AIAssistant digits={digits} lastDigit={lastDigit} symbol={symbol} />
     </div>
   );
 });

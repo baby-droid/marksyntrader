@@ -1,0 +1,63 @@
+.speed-control {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+
+    &__label {
+        font-size: 1rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--text-less-prominent, #999);
+    }
+
+    &__group {
+        display: inline-flex;
+        background: var(--general-section-1, #f2f3f4);
+        border: 1px solid var(--border-normal, #d6dadb);
+        border-radius: 1.6rem;
+        padding: 0.2rem;
+        gap: 0.2rem;
+    }
+
+    &__btn {
+        border: none;
+        background: transparent;
+        border-radius: 1.4rem;
+        padding: 0.4rem 1rem;
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--text-general, #333);
+        cursor: pointer;
+        transition: all 0.15s ease;
+        white-space: nowrap;
+
+        &:hover:not(.active) {
+            background: rgba(0, 0, 0, 0.05);
+        }
+
+        &.active {
+            color: #fff;
+        }
+
+        &--normal.active {
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+        }
+
+        &--crazy.active {
+            background: linear-gradient(135deg, #f59e0b, #ea580c);
+        }
+
+        &--turbo.active {
+            background: linear-gradient(135deg, #ef4444, #b91c1c);
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+        }
+    }
+
+    &--compact {
+        .speed-control__btn {
+            padding: 0.3rem 0.7rem;
+            font-size: 1rem;
+        }
+    }
+}
