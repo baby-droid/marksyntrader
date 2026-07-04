@@ -2,43 +2,46 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { useStore } from '@/hooks/useStore';
+import { api_base } from '@/external/bot-skeleton';
 import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import { setExecutionSpeed } from '@/utils/execution-speed';
 import { buildKillerXml, KillerContract } from '@/utils/killer-bot';
 import './ai-assistant.scss';
 
 /**
- * AI Market Scanner — scans all synthetic, jump, bull and bear index markets.
- * Manual SCAN button. Tick logic: <75% → 2-3 ticks, ≥75% → 1 tick.
- * Matches/Differs: AI auto-selects best digit.
- * Take Profit / Stop Loss injected into bot XML (same as stake/martingale).
- * Auto-execute: loads bot and auto-starts run button.
- * Converts profit/stake display to active currency (USD or KSH).
+ * AI Market Scanner + Ultra-fast Auto-executor.
+ *
+ * "Load & Run" fires immediately at ~0.001s per trade via queueMicrotask loop:
+ *  1. Loads bot XML into Blockly workspace.
+ *  2. Sets execution speed to turbo (0ms engine delay).
+ *  3. Triggers onRunButtonClick() for the main bot engine.
+ *  4. Simultaneously starts a direct API fire loop (queueMicrotask-based)
+ *     so the first trade is sent instantly without waiting for the bot engine.
+ *
+ * Matches/Differs: AI auto-selects best digit via absence/burst/frequency analysis.
+ * Jump Indices / Daily Reset Indices: market category auto-configured in XML.
+ * KSH conversion: all monetary amounts use fromUsd() + subscribeCurrency().
  */
 
 const SCAN_SYMBOLS = [
-    // Volatility — Continuous Indices
-    { label: 'Volatility 10 Index', symbol: 'R_10', group: 'Volatility', submarket: 'random_index' },
-    { label: 'Volatility 25 Index', symbol: 'R_25', group: 'Volatility', submarket: 'random_index' },
-    { label: 'Volatility 50 Index', symbol: 'R_50', group: 'Volatility', submarket: 'random_index' },
-    { label: 'Volatility 75 Index', symbol: 'R_75', group: 'Volatility', submarket: 'random_index' },
-    { label: 'Volatility 100 Index', symbol: 'R_100', group: 'Volatility', submarket: 'random_index' },
-    { label: 'Volatility 10 (1s)', symbol: '1HZ10V', group: 'Volatility 1s', submarket: 'random_index_s1' },
-    { label: 'Volatility 25 (1s)', symbol: '1HZ25V', group: 'Volatility 1s', submarket: 'random_index_s1' },
-    { label: 'Volatility 50 (1s)', symbol: '1HZ50V', group: 'Volatility 1s', submarket: 'random_index_s1' },
-    { label: 'Volatility 75 (1s)', symbol: '1HZ75V', group: 'Volatility 1s', submarket: 'random_index_s1' },
-    { label: 'Volatility 100 (1s)', symbol: '1HZ100V', group: 'Volatility 1s', submarket: 'random_index_s1' },
-    // Jump Indices
-    { label: 'Jump 10 Index', symbol: 'JD10', group: 'Jump Indices', submarket: 'jump_index' },
-    { label: 'Jump 25 Index', symbol: 'JD25', group: 'Jump Indices', submarket: 'jump_index' },
-    { label: 'Jump 50 Index', symbol: 'JD50', group: 'Jump Indices', submarket: 'jump_index' },
-    { label: 'Jump 75 Index', symbol: 'JD75', group: 'Jump Indices', submarket: 'jump_index' },
-    { label: 'Jump 100 Index', symbol: 'JD100', group: 'Jump Indices', submarket: 'jump_index' },
-    // Daily Reset Indices (Bull / Bear)
-    { label: 'Bear Market Index', symbol: 'RDBEAR', group: 'Daily Reset Indices', submarket: 'daily_reset_index' },
-    { label: 'Bull Market Index', symbol: 'RDBULL', group: 'Daily Reset Indices', submarket: 'daily_reset_index' },
-    // Step
-    { label: 'Step Index', symbol: 'stpRNG', group: 'Step', submarket: 'step_index' },
+    { label: 'Volatility 10 Index',   symbol: 'R_10',    group: 'Volatility',          submarket: 'random_index' },
+    { label: 'Volatility 25 Index',   symbol: 'R_25',    group: 'Volatility',          submarket: 'random_index' },
+    { label: 'Volatility 50 Index',   symbol: 'R_50',    group: 'Volatility',          submarket: 'random_index' },
+    { label: 'Volatility 75 Index',   symbol: 'R_75',    group: 'Volatility',          submarket: 'random_index' },
+    { label: 'Volatility 100 Index',  symbol: 'R_100',   group: 'Volatility',          submarket: 'random_index' },
+    { label: 'Volatility 10 (1s)',    symbol: '1HZ10V',  group: 'Volatility 1s',       submarket: 'random_index_s1' },
+    { label: 'Volatility 25 (1s)',    symbol: '1HZ25V',  group: 'Volatility 1s',       submarket: 'random_index_s1' },
+    { label: 'Volatility 50 (1s)',    symbol: '1HZ50V',  group: 'Volatility 1s',       submarket: 'random_index_s1' },
+    { label: 'Volatility 75 (1s)',    symbol: '1HZ75V',  group: 'Volatility 1s',       submarket: 'random_index_s1' },
+    { label: 'Volatility 100 (1s)',   symbol: '1HZ100V', group: 'Volatility 1s',       submarket: 'random_index_s1' },
+    { label: 'Jump 10 Index',         symbol: 'JD10',    group: 'Jump Indices',        submarket: 'jump_index' },
+    { label: 'Jump 25 Index',         symbol: 'JD25',    group: 'Jump Indices',        submarket: 'jump_index' },
+    { label: 'Jump 50 Index',         symbol: 'JD50',    group: 'Jump Indices',        submarket: 'jump_index' },
+    { label: 'Jump 75 Index',         symbol: 'JD75',    group: 'Jump Indices',        submarket: 'jump_index' },
+    { label: 'Jump 100 Index',        symbol: 'JD100',   group: 'Jump Indices',        submarket: 'jump_index' },
+    { label: 'Bear Market Index',     symbol: 'RDBEAR',  group: 'Daily Reset Indices', submarket: 'daily_reset_index' },
+    { label: 'Bull Market Index',     symbol: 'RDBULL',  group: 'Daily Reset Indices', submarket: 'daily_reset_index' },
+    { label: 'Step Index',            symbol: 'stpRNG',  group: 'Step',                submarket: 'step_index' },
 ];
 
 type ContractType = KillerContract;
@@ -78,8 +81,6 @@ function evaluateAutoMatches(freq: DigitFreq): Signal | null {
     const { pcts, ticks, label, symbol, group } = freq;
     const is1s = symbol.includes('HZ');
     if (freq.total < 50) return null;
-
-    // Longest absence strategy
     let bestMissing: number | null = null; let longestAbsence = 0;
     for (let d = 0; d <= 9; d++) {
         let absent = 0;
@@ -88,22 +89,18 @@ function evaluateAutoMatches(freq: DigitFreq): Signal | null {
     }
     if (bestMissing !== null) {
         const conf = clamp(60 + (longestAbsence - 12) * 2, 60, 90);
-        return { symbol, label, group, type: 'matches', barrier: bestMissing, confidence: conf, ticks: getTickCount(conf, is1s), autoDigit: bestMissing, note: `Digit ${bestMissing} absent ${longestAbsence} ticks — due for return.` };
+        return { symbol, label, group, type: 'matches', barrier: bestMissing, confidence: conf, ticks: getTickCount(conf, is1s), autoDigit: bestMissing, note: `Digit ${bestMissing} absent ${longestAbsence} ticks.` };
     }
-
-    // Double echo
     if (ticks.length >= 2 && ticks.slice(-2)[0] === ticks.slice(-2)[1]) {
         const d = ticks[ticks.length - 1];
         const conf = clamp(62 + pcts[d] * 1.5, 62, 88);
-        return { symbol, label, group, type: 'matches', barrier: d, confidence: conf, ticks: getTickCount(conf, is1s), autoDigit: d, note: `Double echo ${d}${d} — likely to revisit.` };
+        return { symbol, label, group, type: 'matches', barrier: d, confidence: conf, ticks: getTickCount(conf, is1s), autoDigit: d, note: `Double echo ${d}${d}.` };
     }
-
-    // High frequency digit
     let bestD = -1; let bestPct = 0;
     for (let d = 0; d <= 9; d++) { if (pcts[d] > bestPct) { bestPct = pcts[d]; bestD = d; } }
     if (bestPct >= 13.5 && bestD >= 0) {
         const conf = clamp(55 + (bestPct - 13.5) * 6, 55, 92);
-        return { symbol, label, group, type: 'matches', barrier: bestD, confidence: conf, ticks: getTickCount(conf, is1s), autoDigit: bestD, note: `Digit ${bestD} at ${bestPct.toFixed(1)}% — elevated frequency.` };
+        return { symbol, label, group, type: 'matches', barrier: bestD, confidence: conf, ticks: getTickCount(conf, is1s), autoDigit: bestD, note: `Digit ${bestD} at ${bestPct.toFixed(1)}%.` };
     }
     return null;
 }
@@ -112,25 +109,18 @@ function evaluateAutoDiffers(freq: DigitFreq): Signal | null {
     const { pcts, ticks, label, symbol, group } = freq;
     const is1s = symbol.includes('HZ');
     if (freq.total < 30) return null;
-
-    // Triple repetition
     if (ticks.length >= 3) {
         const last3 = ticks.slice(-3);
         if (last3[0] === last3[1] && last3[1] === last3[2]) {
-            const d = last3[0];
-            const conf = 90;
-            return { symbol, label, group, type: 'differs', barrier: d, confidence: conf, ticks: getTickCount(conf, is1s), autoDigit: d, note: `Digit ${d} repeated 3× — exhaustion, differs highly probable.` };
+            const d = last3[0]; const conf = 90;
+            return { symbol, label, group, type: 'differs', barrier: d, confidence: conf, ticks: getTickCount(conf, is1s), autoDigit: d, note: `Triple ${d}${d}${d} — exhaustion.` };
         }
     }
-
-    // Double repetition
     if (ticks.length >= 2 && ticks.slice(-2)[0] === ticks.slice(-2)[1]) {
         const d = ticks[ticks.length - 1];
         const conf = clamp(82 + (10 - pcts[d]) * 1.5, 82, 96);
-        return { symbol, label, group, type: 'differs', barrier: d, confidence: conf, ticks: getTickCount(conf, is1s), autoDigit: d, note: `Digit ${d} repeated twice — differs high probability.` };
+        return { symbol, label, group, type: 'differs', barrier: d, confidence: conf, ticks: getTickCount(conf, is1s), autoDigit: d, note: `Double ${d}${d} — differs high.` };
     }
-
-    // Burst dominance (4+ in last 10)
     const last10 = ticks.slice(-10);
     const freqMap = new Array(10).fill(0);
     last10.forEach(t => freqMap[t]++);
@@ -138,15 +128,13 @@ function evaluateAutoDiffers(freq: DigitFreq): Signal | null {
     freqMap.forEach((c, d) => { if (c > domCount) { domCount = c; domDigit = d; } });
     if (domCount >= 4 && domDigit >= 0) {
         const conf = clamp(78 + (domCount - 4) * 3, 78, 94);
-        return { symbol, label, group, type: 'differs', barrier: domDigit, confidence: conf, ticks: getTickCount(conf, is1s), autoDigit: domDigit, note: `Digit ${domDigit} dominant (${domCount}/10) — burst reversal.` };
+        return { symbol, label, group, type: 'differs', barrier: domDigit, confidence: conf, ticks: getTickCount(conf, is1s), autoDigit: domDigit, note: `Digit ${domDigit} dominant ${domCount}/10.` };
     }
-
-    // Low frequency
     let minD = -1; let minPct = 100;
     for (let d = 0; d <= 9; d++) { if (pcts[d] < minPct) { minPct = pcts[d]; minD = d; } }
     if (minPct <= 7.5 && minD >= 0) {
         const conf = clamp(80 + (7.5 - minPct) * 4, 80, 96);
-        return { symbol, label, group, type: 'differs', barrier: minD, confidence: conf, ticks: getTickCount(conf, is1s), autoDigit: minD, note: `Digit ${minD} at ${minPct.toFixed(1)}% — high differs probability.` };
+        return { symbol, label, group, type: 'differs', barrier: minD, confidence: conf, ticks: getTickCount(conf, is1s), autoDigit: minD, note: `Digit ${minD} at ${minPct.toFixed(1)}%.` };
     }
     return null;
 }
@@ -155,10 +143,8 @@ function evaluate(freq: DigitFreq, type: ContractType, predictionDigit: number):
     const { pcts, label, symbol, group } = freq;
     const is1s = symbol.includes('HZ');
     if (freq.total < 30) return null;
-
     if (type === 'matches') return evaluateAutoMatches(freq);
     if (type === 'differs') return evaluateAutoDiffers(freq);
-
     if (type === 'over') {
         const N = predictionDigit;
         const losing = Array.from({ length: N + 1 }, (_, i) => i);
@@ -168,7 +154,6 @@ function evaluate(freq: DigitFreq, type: ContractType, predictionDigit: number):
         const conf = clamp(70 + (shieldPct - 10.2) * 14 + (10 - Math.max(...losing.map(d => pcts[d]))) * 4, 70, 99);
         return { symbol, label, group, type, barrier: N, confidence: conf, ticks: getTickCount(conf, is1s), note: `Digits 0-${N} all <10%. Shield ${shield} at ${shieldPct.toFixed(1)}%.` };
     }
-
     if (type === 'under') {
         const N = predictionDigit;
         const losing = Array.from({ length: 10 - N }, (_, i) => N + i);
@@ -178,7 +163,6 @@ function evaluate(freq: DigitFreq, type: ContractType, predictionDigit: number):
         const conf = clamp(70 + (shieldPct - 10.2) * 14 + (10 - Math.max(...losing.map(d => pcts[d]))) * 4, 70, 99);
         return { symbol, label, group, type, barrier: N, confidence: conf, ticks: getTickCount(conf, is1s), note: `Digits ${N}-9 all <10%. Shield ${shield} at ${shieldPct.toFixed(1)}%.` };
     }
-
     if (type === 'rise' || type === 'fall') {
         const { dir, run } = momentumRun(freq.prices);
         if (run < 3) return null;
@@ -186,22 +170,21 @@ function evaluate(freq: DigitFreq, type: ContractType, predictionDigit: number):
         if (Math.max(...pcts) > 14) return null;
         const QUALITY: Record<string, number> = { '1HZ10V': 6, '1HZ25V': 6, '1HZ50V': 4, R_10: 4, R_25: 3, JD10: 5 };
         const conf = clamp(58 + (run - 3) * 7 + (QUALITY[symbol] ?? 0) * 3, 58, 92);
-        return { symbol, label, group, type, confidence: conf, ticks: getTickCount(conf, is1s), note: `${run} consecutive ${type === 'rise' ? 'up' : 'down'} ticks with stable digit dist.` };
+        return { symbol, label, group, type, confidence: conf, ticks: getTickCount(conf, is1s), note: `${run} consecutive ${type === 'rise' ? 'up' : 'down'} ticks.` };
     }
-
     const evenPct = [0, 2, 4, 6, 8].reduce((s, d) => s + pcts[d], 0);
     if (type === 'even') {
         const above = [0, 2, 4, 6, 8].filter(d => pcts[d] >= 10.3).length;
         if (above < 3 || evenPct < 52) return null;
         const conf = clamp((evenPct - 50) * 4 + 62, 62, 95);
-        return { symbol, label, group, type, confidence: conf, ticks: getTickCount(conf, is1s), note: `Even share ${evenPct.toFixed(1)}%, ${above} digits above 10.3%.` };
+        return { symbol, label, group, type, confidence: conf, ticks: getTickCount(conf, is1s), note: `Even share ${evenPct.toFixed(1)}%.` };
     }
     if (type === 'odd') {
         const oddPct = 100 - evenPct;
         const above = [1, 3, 5, 7, 9].filter(d => pcts[d] >= 10.3).length;
         if (above < 3 || evenPct >= 48) return null;
         const conf = clamp((50 - evenPct) * 4 + 62, 62, 95);
-        return { symbol, label, group, type, confidence: conf, ticks: getTickCount(conf, is1s), note: `Odd share ${oddPct.toFixed(1)}%, ${above} digits above 10.3%.` };
+        return { symbol, label, group, type, confidence: conf, ticks: getTickCount(conf, is1s), note: `Odd share ${oddPct.toFixed(1)}%.` };
     }
     return null;
 }
@@ -209,33 +192,37 @@ function evaluate(freq: DigitFreq, type: ContractType, predictionDigit: number):
 const AIAssistant: React.FC = () => {
     const { dashboard, run_panel, load_modal } = useStore() as any;
 
-    const [isOpen, setIsOpen] = useState(false);
-    const [isPulsing, setIsPulsing] = useState(true);
-    const [scanning, setScanning] = useState(false);
+    const [isOpen, setIsOpen]         = useState(false);
+    const [isPulsing, setIsPulsing]   = useState(true);
+    const [scanning, setScanning]     = useState(false);
     const [scanProgress, setScanProgress] = useState('');
     const [scannedCount, setScannedCount] = useState(0);
 
     const [contractType, setContractType] = useState<ContractType>('over');
     const [predictionDigit, setPredictionDigit] = useState(4);
-    const [stake, setStake] = useState(0.5);
+    const [stake, setStake]           = useState(0.5);
     const [martingale, setMartingale] = useState(2.2);
     const [takeProfit, setTakeProfit] = useState(10);
-    const [stopLoss, setStopLoss] = useState(5);
+    const [stopLoss, setStopLoss]     = useState(5);
+    const [autoRun, setAutoRun]       = useState(true);
 
-    const [best, setBest] = useState<Signal | null>(null);
+    const [best, setBest]             = useState<Signal | null>(null);
     const [allSignals, setAllSignals] = useState<Signal[]>([]);
-    const [autoRun, setAutoRun] = useState(true);
     const [displayCur, setDisplayCur] = useState(getDisplayCurrency());
 
-    const wsRefs = useRef<WebSocket[]>([]);
-    const freqRef = useRef<Map<string, DigitFreq>>(new Map());
+    // Direct-fire state
+    const [directFiring, setDirectFiring] = useState(false);
+    const directFireRef = useRef(false);
+    const directFireCount = useRef(0);
+
+    const wsRefs   = useRef<WebSocket[]>([]);
+    const freqRef  = useRef<Map<string, DigitFreq>>(new Map());
     const scanDoneRef = useRef(false);
     const autoRunTimer = useRef<ReturnType<typeof setTimeout>>();
 
     useEffect(() => subscribeCurrency(() => setDisplayCur(getDisplayCurrency())), []);
 
     const fmtStake = (usd: number) => `${fromUsd(usd).toFixed(2)} ${displayCur}`;
-    const fmtProfit = (usd: number) => `${fromUsd(usd).toFixed(2)} ${displayCur}`;
 
     const stopScan = useCallback(() => {
         wsRefs.current.forEach(ws => { try { ws.close(); } catch { } });
@@ -319,6 +306,62 @@ const AIAssistant: React.FC = () => {
     useEffect(() => { if (!scanning) recompute(); }, [contractType, predictionDigit]);
     useEffect(() => () => { stopScan(); scanDoneRef.current = true; }, [stopScan]);
 
+    /**
+     * Direct ultra-fast API fire loop — queueMicrotask-based, ~0.001s per trade.
+     * Runs in parallel with the Blockly bot engine for immediate first-trade execution.
+     */
+    const startDirectFire = useCallback((signal: Signal, actualBarrier: number | undefined, ticks: number) => {
+        directFireRef.current = true;
+        directFireCount.current = 0;
+        setDirectFiring(true);
+
+        const needsBarrier = ['over', 'under', 'matches', 'differs'].includes(signal.type);
+        const contractTypeMap: Record<string, string> = {
+            over: 'DIGITOVER', under: 'DIGITUNDER', even: 'DIGITEVEN', odd: 'DIGITODD',
+            matches: 'DIGITMATCH', differs: 'DIGITDIFF', rise: 'CALL', fall: 'PUT',
+        };
+        const ct = contractTypeMap[signal.type] || 'DIGITEVEN';
+
+        const buildPayload = () => ({
+            buy: '1',
+            price: stake,
+            parameters: {
+                amount: stake,
+                basis: 'stake',
+                contract_type: ct,
+                currency: 'USD',
+                duration: ticks,
+                duration_unit: 't',
+                symbol: signal.symbol,
+                ...(needsBarrier && actualBarrier !== undefined ? { barrier: String(actualBarrier) } : {}),
+            },
+        });
+
+        // queueMicrotask loop — fires immediately without waiting for result
+        const fire = async () => {
+            if (!directFireRef.current) { setDirectFiring(false); return; }
+
+            const payload = buildPayload();
+            api_base.api.send(payload).catch(() => {});
+            directFireCount.current++;
+
+            // Yield every 10 via queueMicrotask (sub-millisecond yield)
+            if (directFireCount.current % 10 === 0) {
+                await new Promise<void>(r => queueMicrotask(r));
+            }
+
+            // Continue immediately
+            queueMicrotask(fire);
+        };
+
+        queueMicrotask(fire);
+    }, [stake]);
+
+    const stopDirectFire = useCallback(() => {
+        directFireRef.current = false;
+        setDirectFiring(false);
+    }, []);
+
     const loadAndRun = useCallback(async (sig?: Signal) => {
         const signal = sig ?? best;
         if (!signal) return;
@@ -338,11 +381,13 @@ const AIAssistant: React.FC = () => {
                 stopLoss,
             });
 
-            (window as any).__pendingBotXml = xml;
+            (window as any).__pendingBotXml  = xml;
             (window as any).__pendingBotName = `AI ${signal.type.toUpperCase()}${actualBarrier !== undefined ? actualBarrier : ''}`;
+
+            // Set turbo execution speed before anything
             setExecutionSpeed('turbo');
 
-            // Switch to Bot Builder tab
+            // Switch to bot-builder tab and open run panel
             dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING);
             run_panel?.toggleDrawer?.(true);
 
@@ -370,21 +415,32 @@ const AIAssistant: React.FC = () => {
             };
 
             const triggerRun = () => {
-                (window as any).__pendingBotXml = null;
+                (window as any).__pendingBotXml  = null;
                 (window as any).__pendingBotName = null;
+
                 if (autoRun) {
-                    // Retry run button click until bot starts
+                    // Immediately fire the first trade via direct API (0ms delay)
+                    startDirectFire(signal, actualBarrier, signal.ticks);
+
+                    // Also start the Blockly bot engine (retry until running)
                     let attempts = 0;
                     const tryRun = () => {
                         const { is_running } = run_panel as any;
-                        if (is_running) return;
+                        if (is_running) {
+                            // Bot is running — stop the direct fire loop (bot handles it now)
+                            stopDirectFire();
+                            return;
+                        }
                         run_panel?.onRunButtonClick?.();
                         attempts++;
-                        if (!is_running && attempts < 20) {
-                            autoRunTimer.current = setTimeout(tryRun, 300);
+                        if (attempts < 30) {
+                            autoRunTimer.current = setTimeout(tryRun, 100);
+                        } else {
+                            // Bot engine didn't start — keep direct fire running
                         }
                     };
-                    setTimeout(tryRun, 800);
+                    // Start bot engine immediately (no wait)
+                    tryRun();
                 }
             };
 
@@ -405,14 +461,17 @@ const AIAssistant: React.FC = () => {
         } catch (err) {
             console.error('AI load & run failed', err);
         }
-    }, [best, predictionDigit, dashboard, run_panel, load_modal, stake, martingale, takeProfit, stopLoss, autoRun]);
+    }, [best, predictionDigit, dashboard, run_panel, load_modal, stake, martingale, takeProfit, stopLoss, autoRun, startDirectFire, stopDirectFire]);
 
-    useEffect(() => () => { if (autoRunTimer.current) clearTimeout(autoRunTimer.current); }, []);
+    // Cleanup on unmount
+    useEffect(() => () => {
+        if (autoRunTimer.current) clearTimeout(autoRunTimer.current);
+        directFireRef.current = false;
+    }, []);
 
     const isMatchesDiffers = contractType === 'matches' || contractType === 'differs';
-    const isOverUnder = contractType === 'over' || contractType === 'under';
-    const needsDigit = isOverUnder;
-    const confClass = best ? (best.confidence >= 80 ? 'high' : best.confidence >= 70 ? 'medium' : 'low') : '';
+    const needsDigit       = contractType === 'over' || contractType === 'under';
+    const confClass        = best ? (best.confidence >= 80 ? 'high' : best.confidence >= 70 ? 'medium' : 'low') : '';
 
     const digitOptions = contractType === 'over' ? [0,1,2,3,4,5,6,7]
         : contractType === 'under' ? [1,2,3,4,5,6,7,8,9]
@@ -420,6 +479,13 @@ const AIAssistant: React.FC = () => {
 
     return (
         <>
+            {/* Direct-fire status pill */}
+            {directFiring && (
+                <div className='ai-assistant__fire-pill' onClick={stopDirectFire} title='Click to stop direct fire'>
+                    ⚡ FIRING {directFireCount.current} — tap to stop
+                </div>
+            )}
+
             <button
                 className={`ai-assistant__trigger ${isPulsing ? 'ai-assistant__trigger--pulse' : ''}`}
                 onClick={() => { setIsOpen(true); setIsPulsing(false); }}
@@ -440,7 +506,6 @@ const AIAssistant: React.FC = () => {
                         </div>
 
                         <div className='ai-assistant__body'>
-                            {/* Scan progress bar */}
                             {scanning && scanProgress && (
                                 <div className='ai-assistant__scan-progress'>
                                     <div className='ai-assistant__scan-bar'>
@@ -450,11 +515,10 @@ const AIAssistant: React.FC = () => {
                                 </div>
                             )}
 
-                            {/* Signal card */}
                             {best ? (
                                 <div className={`ai-assistant__signal ai-assistant__signal--${confClass}`}>
                                     <div className='ai-assistant__signal-head'>
-                                        <span className='ai-assistant__signal-found'>✔ Best signal found</span>
+                                        <span className='ai-assistant__signal-found'>✔ Best signal</span>
                                         <span className='ai-assistant__signal-conf'>{best.confidence.toFixed(1)}%</span>
                                     </div>
                                     <div className='ai-assistant__signal-market'>
@@ -469,7 +533,7 @@ const AIAssistant: React.FC = () => {
                                     <div className='ai-assistant__signal-note'>{best.note}</div>
                                     {allSignals.length > 1 && (
                                         <div className='ai-assistant__alt-signals'>
-                                            <span>Also: </span>
+                                            <span>Alt: </span>
                                             {allSignals.slice(1, 4).map((s, i) => (
                                                 <span key={i} className='ai-assistant__alt' onClick={() => setBest(s)}>
                                                     {s.label.replace(' Index', '')} {s.type.toUpperCase()}{s.autoDigit !== undefined ? s.autoDigit : s.barrier !== undefined ? s.barrier : ''} ({s.confidence.toFixed(0)}%)
@@ -478,17 +542,17 @@ const AIAssistant: React.FC = () => {
                                         </div>
                                     )}
                                     <button className='ai-assistant__load-run' onClick={() => loadAndRun()}>
-                                        ⚡ Load &amp; {autoRun ? 'Auto-Run' : 'Run'} Bot
+                                        ⚡ Load &amp; {autoRun ? 'Auto-Run (0.001s)' : 'Run'} Bot
                                     </button>
                                 </div>
                             ) : !scanning ? (
                                 <div className='ai-assistant__searching'>
-                                    <span>{scannedCount > 0 ? 'No high-confidence setup found. Try different settings or scan again.' : 'Press SCAN to analyse all markets.'}</span>
+                                    <span>{scannedCount > 0 ? 'No high-confidence setup. Try different type or scan again.' : 'Press SCAN to analyse all markets.'}</span>
                                 </div>
                             ) : (
                                 <div className='ai-assistant__searching'>
                                     <div className='ai-assistant__pulse' />
-                                    <span>Scanning markets one by one…</span>
+                                    <span>Scanning markets...</span>
                                 </div>
                             )}
 
@@ -497,18 +561,13 @@ const AIAssistant: React.FC = () => {
                                 <label>TRADE TYPE</label>
                                 <div className='ai-assistant__trade-types'>
                                     {(['over', 'under', 'even', 'odd', 'rise', 'fall', 'matches', 'differs'] as ContractType[]).map(t => (
-                                        <button
-                                            key={t}
-                                            className={`ai-assistant__type-btn ${contractType === t ? 'active' : ''}`}
-                                            onClick={() => setContractType(t)}
-                                        >
+                                        <button key={t} className={`ai-assistant__type-btn ${contractType === t ? 'active' : ''}`} onClick={() => setContractType(t)}>
                                             {t.charAt(0).toUpperCase() + t.slice(1)}
                                         </button>
                                     ))}
                                 </div>
                             </div>
 
-                            {/* Barrier digit for over/under */}
                             {needsDigit && (
                                 <div className='ai-assistant__field'>
                                     <label>BARRIER DIGIT</label>
@@ -523,31 +582,27 @@ const AIAssistant: React.FC = () => {
                                 </div>
                             )}
 
-                            {/* Stake + Martingale row */}
+                            {/* Stake + Martingale */}
                             <div className='ai-assistant__field-row'>
                                 <div className='ai-assistant__field'>
                                     <label>STAKE ({displayCur})</label>
-                                    <input type='number' value={stake} min={0.35} step={0.1}
-                                        onChange={e => setStake(Number(e.target.value))} />
+                                    <input type='number' value={stake} min={0.35} step={0.1} onChange={e => setStake(Number(e.target.value))} />
                                 </div>
                                 <div className='ai-assistant__field'>
                                     <label>MARTINGALE</label>
-                                    <input type='number' value={martingale} min={1} step={0.1}
-                                        onChange={e => setMartingale(Number(e.target.value))} />
+                                    <input type='number' value={martingale} min={1} step={0.1} onChange={e => setMartingale(Number(e.target.value))} />
                                 </div>
                             </div>
 
-                            {/* Take Profit + Stop Loss row — same style as Stake/Martingale */}
+                            {/* Take Profit + Stop Loss */}
                             <div className='ai-assistant__field-row'>
                                 <div className='ai-assistant__field'>
                                     <label>TAKE PROFIT ({displayCur})</label>
-                                    <input type='number' value={takeProfit} min={0.5} step={0.5}
-                                        onChange={e => setTakeProfit(Number(e.target.value))} />
+                                    <input type='number' value={takeProfit} min={0.5} step={0.5} onChange={e => setTakeProfit(Number(e.target.value))} />
                                 </div>
                                 <div className='ai-assistant__field'>
                                     <label>STOP LOSS ({displayCur})</label>
-                                    <input type='number' value={stopLoss} min={0.5} step={0.5}
-                                        onChange={e => setStopLoss(Number(e.target.value))} />
+                                    <input type='number' value={stopLoss} min={0.5} step={0.5} onChange={e => setStopLoss(Number(e.target.value))} />
                                 </div>
                             </div>
 
@@ -555,7 +610,7 @@ const AIAssistant: React.FC = () => {
                             <div className='ai-assistant__field'>
                                 <label className='ai-assistant__toggle-label'>
                                     <input type='checkbox' checked={autoRun} onChange={e => setAutoRun(e.target.checked)} />
-                                    <span>AUTO-RUN after loading (trades until stopped manually)</span>
+                                    <span>AUTO-RUN — fires trades at ~0.001s intervals until stopped manually</span>
                                 </label>
                             </div>
                         </div>

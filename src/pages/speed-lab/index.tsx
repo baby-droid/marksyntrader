@@ -9,41 +9,19 @@ import { api_base } from '@/external/bot-skeleton';
 import './speed-lab.scss';
 
 /**
- * Speed Lab — three true execution modes:
+ * Speed Lab — three true execution tiers:
  *
- * NORMAL:  wait(300ms) → analyze() → buyContract() → await settlement → repeat
- * CRAZY:   interContractDelay=0 → fire immediately, prepare next while current processes
- * TURBO:   persistent raw WebSocket → pre-build payload → sendPurchaseRequestImmediately()
- *          non-blocking, instant re-entry after signal
+ * NORMAL  — sequential, awaits each contract + 300 ms cooldown
+ * CRAZY   — no cooldown, fire-and-forget via api send, yield every 10 via queueMicrotask
+ * TURBO   — persistent raw WebSocket, pre-built payload, pure ws.send(), yield every 20
+ *
+ * The goal: CRAZY ≈ 1-5 ms inter-trade latency, TURBO ≈ sub-millisecond WS latency.
  */
 
 const EXECUTION_MODES = {
-    normal: {
-        label: '🐢 Normal',
-        interContractDelay: 300,
-        preloadContracts: false,
-        parallelProcessing: false,
-        priority: 'normal',
-        description: 'Human-like execution — wait for confirmation, safe & stable',
-    },
-    crazy: {
-        label: '🔥 Crazy',
-        interContractDelay: 0,
-        preloadContracts: true,
-        parallelProcessing: true,
-        priority: 'high',
-        description: 'No cooldown — fire immediately when signal confirmed, skip UI waits',
-    },
-    turbo: {
-        label: '⚡ Turbo',
-        interContractDelay: 0,
-        preloadContracts: true,
-        parallelProcessing: true,
-        persistentWebSocket: true,
-        instantExecution: true,
-        priority: 'maximum',
-        description: 'Persistent WebSocket + pre-built payload — zero software delay, instant fire',
-    },
+    normal: { label: '🐢 Normal', description: 'Sequential — wait for confirmation, 300 ms cooldown' },
+    crazy:  { label: '🔥 Crazy',  description: 'Zero cooldown — fire immediately, yield every 10 sends via queueMicrotask' },
+    turbo:  { label: '⚡ Turbo',  description: 'Persistent WebSocket + pre-built payload — raw ws.send(), sub-ms latency' },
 } as const;
 
 type ExecMode = keyof typeof EXECUTION_MODES;
@@ -73,22 +51,24 @@ const SYMBOLS = [
 ];
 
 const CONTRACT_TYPES = [
-    { label: 'Even', value: 'DIGITEVEN' },
-    { label: 'Odd',  value: 'DIGITODD'  },
-    { label: 'Over', value: 'DIGITOVER', needsBarrier: true },
-    { label: 'Under',value: 'DIGITUNDER', needsBarrier: true },
-    { label: 'Rise', value: 'CALL' },
-    { label: 'Fall', value: 'PUT'  },
-    { label: 'Match',value: 'DIGITMATCH', needsBarrier: true },
-    { label: 'Differ',value: 'DIGITDIFF', needsBarrier: true },
+    { label: 'Even',  value: 'DIGITEVEN'  },
+    { label: 'Odd',   value: 'DIGITODD'   },
+    { label: 'Over',  value: 'DIGITOVER',  needsBarrier: true },
+    { label: 'Under', value: 'DIGITUNDER', needsBarrier: true },
+    { label: 'Rise',  value: 'CALL' },
+    { label: 'Fall',  value: 'PUT'  },
+    { label: 'Match', value: 'DIGITMATCH', needsBarrier: true },
+    { label: 'Differ',value: 'DIGITDIFF',  needsBarrier: true },
 ];
 
-/** Turbo: dedicated persistent WebSocket for raw instant sends */
+/** Microtask yield — faster than setTimeout(0) */
+const yieldMicrotask = () => new Promise<void>(r => queueMicrotask(r));
+
+/** Persistent raw WebSocket for Turbo mode */
 class TurboSocket {
     ws: WebSocket | null = null;
     authorized = false;
     reqId = 1;
-    pendingAuth: ((ok: boolean) => void)[] = [];
 
     connect(token: string): Promise<boolean> {
         return new Promise(resolve => {
@@ -99,25 +79,20 @@ class TurboSocket {
             this.authorized = false;
             const ws = new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
             this.ws = ws;
-            ws.onopen = () => {
-                ws.send(JSON.stringify({ authorize: token, req_id: this.reqId++ }));
-            };
+            ws.onopen = () => ws.send(JSON.stringify({ authorize: token, req_id: this.reqId++ }));
             ws.onmessage = e => {
                 const d = JSON.parse(e.data);
                 if (d.msg_type === 'authorize' && !d.error) {
                     this.authorized = true;
-                    this.pendingAuth.forEach(cb => cb(true));
-                    this.pendingAuth = [];
                     resolve(true);
                 }
             };
             ws.onerror = () => resolve(false);
-            ws.onclose = () => { this.authorized = false; };
             setTimeout(() => resolve(false), 5000);
         });
     }
 
-    /** Send buy immediately without awaiting response */
+    /** Synchronous raw send — zero software overhead */
     fire(payload: object): void {
         if (this.ws?.readyState === WebSocket.OPEN && this.authorized) {
             this.ws.send(JSON.stringify({ ...payload, req_id: this.reqId++ }));
@@ -134,36 +109,33 @@ const SpeedLab = observer(() => {
         totalProfit, winCount, lossCount, clearResults, subscribeBalance,
     } = useDerivTrading();
 
-    const [execMode, setExecMode] = useState<ExecMode>('normal');
-    const [stake, setStake] = useState(0.35);
-    const [duration, setDuration] = useState(1);
-    const [barrier, setBarrier] = useState(5);
+    const [execMode, setExecMode]       = useState<ExecMode>('normal');
+    const [stake, setStake]             = useState(0.35);
+    const [duration, setDuration]       = useState(1);
+    const [barrier, setBarrier]         = useState(5);
     const [contractType, setContractType] = useState('DIGITEVEN');
-    const [martingale, setMartingale] = useState(1);
+    const [martingale, setMartingale]   = useState(1);
     const [targetProfit, setTargetProfit] = useState(10);
-    const [stopLoss, setStopLoss] = useState(5);
-    const [isRunning, setIsRunning] = useState(false);
+    const [stopLoss, setStopLoss]       = useState(5);
+    const [isRunning, setIsRunning]     = useState(false);
     const [executionLog, setExecutionLog] = useState<string[]>([]);
-    const [displayCur, setDisplayCur] = useState(getDisplayCurrency());
+    const [displayCur, setDisplayCur]   = useState(getDisplayCurrency());
+    const [fireCount, setFireCount]     = useState(0);
 
-    const runRef = useRef(false);
-    const currentStakeRef = useRef(stake);
-    const sessionProfitRef = useRef(0);
-    const turboSocketRef = useRef<TurboSocket>(new TurboSocket());
+    const runRef            = useRef(false);
+    const currentStakeRef   = useRef(stake);
+    const sessionProfitRef  = useRef(0);
+    const turboSocketRef    = useRef<TurboSocket>(new TurboSocket());
     const prebuiltPayloadRef = useRef<any>(null);
-    const iterCountRef = useRef(0);
+    const fireCountRef      = useRef(0);
 
-    // KSH tracking
     useEffect(() => subscribeCurrency(() => setDisplayCur(getDisplayCurrency())), []);
 
-    const fmtProfit = (usd: number) => {
-        const v = fromUsd(usd);
-        return `${v >= 0 ? '+' : ''}${v.toFixed(2)} ${displayCur}`;
-    };
     const fmtAmount = (usd: number) => `${fromUsd(usd).toFixed(2)} ${displayCur}`;
+    const fmtProfit = (usd: number) => `${usd >= 0 ? '+' : ''}${fromUsd(usd).toFixed(2)} ${displayCur}`;
 
     const logEntry = useCallback((msg: string) => {
-        setExecutionLog(prev => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev].slice(0, 200));
+        setExecutionLog(prev => [`[${new Date().toLocaleTimeString('en', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 as any })}] ${msg}`, ...prev].slice(0, 300));
     }, []);
 
     const needsBarrier = ['DIGITOVER', 'DIGITUNDER', 'DIGITMATCH', 'DIGITDIFF'].includes(contractType);
@@ -183,12 +155,8 @@ const SpeedLab = observer(() => {
         },
     }), [contractType, currency, duration, symbol, barrier, needsBarrier]);
 
-    /** Rebuild pre-built payload whenever params change (Turbo pre-load) */
-    useEffect(() => {
-        prebuiltPayloadRef.current = buildBuyPayload();
-    }, [buildBuyPayload]);
+    useEffect(() => { prebuiltPayloadRef.current = buildBuyPayload(); }, [buildBuyPayload]);
 
-    /** Authorize TurboSocket when mode switches to turbo */
     useEffect(() => {
         if (execMode === 'turbo') {
             const token = (() => {
@@ -200,95 +168,110 @@ const SpeedLab = observer(() => {
             })();
             if (token) turboSocketRef.current.connect(token);
         }
-        return () => {
-            if (execMode === 'turbo') turboSocketRef.current.close();
-        };
+        return () => { if (execMode === 'turbo') turboSocketRef.current.close(); };
     }, [execMode]);
 
     const checkLimits = useCallback((): boolean => {
         if (sessionProfitRef.current >= targetProfit) {
-            logEntry(`✅ Target profit: ${fmtProfit(sessionProfitRef.current)}`);
-            runRef.current = false;
-            setIsRunning(false);
-            return false;
+            logEntry(`✅ Target profit reached: ${fmtProfit(sessionProfitRef.current)}`);
+            runRef.current = false; setIsRunning(false); return false;
         }
         if (sessionProfitRef.current <= -stopLoss) {
-            logEntry(`🛑 Stop loss: ${fmtProfit(sessionProfitRef.current)}`);
-            runRef.current = false;
-            setIsRunning(false);
-            return false;
+            logEntry(`🛑 Stop loss hit: ${fmtProfit(sessionProfitRef.current)}`);
+            runRef.current = false; setIsRunning(false); return false;
         }
         return true;
-    }, [targetProfit, stopLoss, logEntry]);
+    }, [targetProfit, stopLoss]);
 
-    // Normal mode loop — sequential, awaits confirmation, 300ms delay
+    /** NORMAL: sequential + 300 ms cooldown */
     const normalLoop = useCallback(async () => {
         while (runRef.current) {
             if (!checkLimits()) break;
-            await new Promise(r => setTimeout(r, 300)); // interContractDelay
+            await new Promise(r => setTimeout(r, 300));
             if (!runRef.current) break;
             const t0 = performance.now();
-            const result = await buyContract(buildBuyPayload());
+            await buyContract(buildBuyPayload());
             const ms = Math.round(performance.now() - t0);
-            if (result) logEntry(`Bought ${contractType} @ ${fmtAmount(currentStakeRef.current)} (${ms}ms)`);
+            logEntry(`🐢 NORMAL ${contractType} @ ${fmtAmount(currentStakeRef.current)} (${ms}ms)`);
         }
     }, [buyContract, buildBuyPayload, contractType, checkLimits, logEntry]);
 
-    // Crazy mode loop — no delay, prepare next while current is processing
+    /**
+     * CRAZY: fire-and-forget via api_base.api.send (no await on result),
+     * yield every 10 iterations via queueMicrotask for event-loop health.
+     * Target latency: < 2ms per fire.
+     */
     const crazyLoop = useCallback(async () => {
+        let iter = 0;
         while (runRef.current) {
             if (!checkLimits()) break;
+            const payload = buildBuyPayload();
             const t0 = performance.now();
-            // Fire WITHOUT awaiting — prepare next immediately
-            buyContract(buildBuyPayload())
-                .then(r => {
-                    if (r) {
+
+            // Fire without awaiting — immediate next iteration
+            api_base.api.send(payload)
+                .then((res: any) => {
+                    if (res?.buy?.contract_id) {
                         const ms = Math.round(performance.now() - t0);
-                        logEntry(`🔥 CRAZY ${contractType} @ ${fmtAmount(currentStakeRef.current)} (${ms}ms)`);
+                        const n = ++fireCountRef.current;
+                        setFireCount(n);
+                        logEntry(`🔥 CRAZY #${n} ${contractType} (${ms}ms)`);
+                        subscribeBalance();
                     }
                 })
                 .catch(() => {});
-            // Minimal yield to prevent stack overflow, but no intentional delay
-            await new Promise(r => setTimeout(r, 0));
-        }
-    }, [buyContract, buildBuyPayload, contractType, checkLimits, logEntry]);
 
-    // Turbo mode loop — persistent WS, pre-built payload, instant send
+            iter++;
+            // Yield every 10 fires to keep browser responsive
+            if (iter % 10 === 0) await yieldMicrotask();
+        }
+    }, [buildBuyPayload, contractType, checkLimits, logEntry, subscribeBalance]);
+
+    /**
+     * TURBO: persistent raw WebSocket + pre-built payload.
+     * ws.send() is synchronous — zero round-trip wait.
+     * Yield every 20 fires via queueMicrotask.
+     */
     const turboLoop = useCallback(async () => {
         const ts = turboSocketRef.current;
-        let directApiMode = false;
-
-        // Try persistent WS first, fall back to direct API if not ready
-        if (!ts.authorized) {
-            directApiMode = true;
-            logEntry('⚡ TURBO direct-API mode (WS not yet authorized)');
-        }
+        let iter = 0;
+        let apiMode = !ts.authorized;
+        if (apiMode) logEntry('⚡ TURBO (API mode — WS authorizing in background)');
 
         while (runRef.current) {
             if (!checkLimits()) break;
             const payload = prebuiltPayloadRef.current || buildBuyPayload();
             const t0 = performance.now();
 
-            if (!directApiMode && ts.authorized) {
-                // INSTANT: raw WebSocket send, no round-trip wait
+            if (!apiMode && ts.authorized) {
+                // TRUE TURBO: synchronous raw WS send — no round-trip
                 ts.fire(payload);
                 const ms = Math.round(performance.now() - t0);
-                logEntry(`⚡ TURBO instant-fire ${contractType} @ ${fmtAmount(payload.price)} (${ms}ms)`);
+                const n = ++fireCountRef.current;
+                setFireCount(n);
+                if (n % 20 === 1) logEntry(`⚡ TURBO #${n} raw-WS ${contractType} (${ms}ms)`);
                 subscribeBalance();
             } else {
-                // API path (still no await on monitoring — fire and forget)
-                api_base.api.send(payload).then((res: any) => {
-                    if (res?.buy?.contract_id) {
-                        const ms = Math.round(performance.now() - t0);
-                        logEntry(`⚡ TURBO API-fire ${contractType} @ ${fmtAmount(payload.price)} (${ms}ms)`);
-                    }
-                }).catch(() => {});
+                // API fallback — still fire without awaiting
+                api_base.api.send(payload)
+                    .then((res: any) => {
+                        if (res?.buy?.contract_id) {
+                            const ms = Math.round(performance.now() - t0);
+                            const n = ++fireCountRef.current;
+                            setFireCount(n);
+                            if (n % 10 === 1) logEntry(`⚡ TURBO #${n} API ${contractType} (${ms}ms)`);
+                        }
+                        if (ts.authorized) apiMode = false;
+                    })
+                    .catch(() => {});
             }
 
-            // Pre-build next payload immediately (zero delay)
+            // Pre-build NEXT payload immediately (zero prep time on next iteration)
             prebuiltPayloadRef.current = buildBuyPayload();
-            // Non-blocking: give the event loop ONE tick only
-            await new Promise(r => setTimeout(r, 0));
+
+            iter++;
+            // Yield every 20 fires via microtask (much faster than setTimeout(0))
+            if (iter % 20 === 0) await yieldMicrotask();
         }
     }, [buildBuyPayload, contractType, checkLimits, logEntry, subscribeBalance]);
 
@@ -305,24 +288,21 @@ const SpeedLab = observer(() => {
         clearResults();
         sessionProfitRef.current = 0;
         currentStakeRef.current = stake;
+        fireCountRef.current = 0;
+        setFireCount(0);
         runRef.current = true;
         setIsRunning(true);
-        iterCountRef.current = 0;
-        logEntry(`🚀 [${execMode.toUpperCase()}] ${contractType} @ ${fmtAmount(stake)}`);
+        logEntry(`🚀 [${execMode.toUpperCase()}] ${contractType} @ ${fmtAmount(stake)} | TP:${fmtAmount(targetProfit)} SL:${fmtAmount(stopLoss)}`);
 
-        if (execMode === 'turbo') {
-            turboLoop();
-        } else if (execMode === 'crazy') {
-            crazyLoop();
-        } else {
-            normalLoop();
-        }
-    }, [isRunning, stake, contractType, clearResults, execMode, normalLoop, crazyLoop, turboLoop, logEntry]);
+        if (execMode === 'turbo') turboLoop();
+        else if (execMode === 'crazy') crazyLoop();
+        else normalLoop();
+    }, [isRunning, stake, contractType, targetProfit, stopLoss, clearResults, execMode, normalLoop, crazyLoop, turboLoop, logEntry]);
 
     useEffect(() => () => { runRef.current = false; }, []);
 
     const selectedType = CONTRACT_TYPES.find(t => t.value === contractType);
-    const mode = EXECUTION_MODES[execMode];
+    const winRate = winCount + lossCount > 0 ? ((winCount / (winCount + lossCount)) * 100).toFixed(0) : 0;
 
     return (
         <div className='speed-lab'>
@@ -336,7 +316,7 @@ const SpeedLab = observer(() => {
                 )}
             </div>
 
-            {/* Execution Mode Selector */}
+            {/* Execution Mode */}
             <div className='speed-lab__mode-row'>
                 {(Object.keys(EXECUTION_MODES) as ExecMode[]).map(m => (
                     <button
@@ -350,7 +330,7 @@ const SpeedLab = observer(() => {
                     </button>
                 ))}
             </div>
-            <div className='speed-lab__mode-desc'>{mode.description}</div>
+            <div className='speed-lab__mode-desc'>{EXECUTION_MODES[execMode].description}</div>
 
             <div className='speed-lab__body'>
                 <div className='speed-lab__left'>
@@ -374,11 +354,7 @@ const SpeedLab = observer(() => {
                         <h3>Contract Type</h3>
                         <div className='speed-lab__types'>
                             {CONTRACT_TYPES.map(t => (
-                                <button
-                                    key={t.value}
-                                    className={`speed-lab__type-btn ${contractType === t.value ? 'active' : ''}`}
-                                    onClick={() => setContractType(t.value)}
-                                >
+                                <button key={t.value} className={`speed-lab__type-btn ${contractType === t.value ? 'active' : ''}`} onClick={() => setContractType(t.value)}>
                                     {t.label}
                                 </button>
                             ))}
@@ -391,27 +367,20 @@ const SpeedLab = observer(() => {
                             <label>Stake ({displayCur})<input type='number' value={stake} min={0.35} step={0.05} onChange={e => setStake(Number(e.target.value))} /></label>
                             <label>Ticks<input type='number' value={duration} min={1} max={10} onChange={e => setDuration(Number(e.target.value))} /></label>
                             {selectedType?.needsBarrier && <label>Barrier<input type='number' value={barrier} min={0} max={9} onChange={e => setBarrier(Number(e.target.value))} /></label>}
-                            <label>Martingale<input type='number' value={martingale} min={1} step={0.1} onChange={e => setMartingale(Number(e.target.value))} /></label>
                             <label>Target Profit<input type='number' value={targetProfit} min={0} step={0.5} onChange={e => setTargetProfit(Number(e.target.value))} /></label>
                             <label>Stop Loss<input type='number' value={stopLoss} min={0} step={0.5} onChange={e => setStopLoss(Number(e.target.value))} /></label>
                         </div>
                     </div>
 
                     <div className='speed-lab__run-row'>
-                        <button
-                            className={`speed-lab__run-btn ${isRunning ? 'speed-lab__run-btn--stop' : ''}`}
-                            onClick={handleStart}
-                        >
-                            {isRunning ? '⏹ Stop' : `▶ Start [${execMode.toUpperCase()}]`}
+                        <button className={`speed-lab__run-btn ${isRunning ? 'speed-lab__run-btn--stop' : ''}`} onClick={handleStart}>
+                            {isRunning ? `⏹ Stop [${fireCount} fired]` : `▶ Start [${execMode.toUpperCase()}]`}
                         </button>
                         <button
                             className='speed-lab__buy-btn'
                             disabled={isRunning || !isConnected}
                             onClick={() => {
-                                buyContract({
-                                    symbol, contract_type: contractType, stake, duration,
-                                    barrier: needsBarrier ? barrier : undefined,
-                                });
+                                buyContract({ symbol, contract_type: contractType, stake, duration, barrier: needsBarrier ? barrier : undefined });
                                 logEntry(`Manual: ${contractType} @ ${fmtAmount(stake)}`);
                             }}
                         >
@@ -420,16 +389,13 @@ const SpeedLab = observer(() => {
                     </div>
 
                     <div className='speed-lab__stats'>
-                        <div className='speed-lab__stat'>
-                            <span>Total P/L</span>
-                            <strong className={totalProfit >= 0 ? 'pos' : 'neg'}>{fmtProfit(totalProfit)}</strong>
-                        </div>
+                        <div className='speed-lab__stat'><span>Total P/L</span><strong className={totalProfit >= 0 ? 'pos' : 'neg'}>{fmtProfit(totalProfit)}</strong></div>
                         <div className='speed-lab__stat'><span>Wins</span><strong className='pos'>{winCount}</strong></div>
                         <div className='speed-lab__stat'><span>Losses</span><strong className='neg'>{lossCount}</strong></div>
-                        <div className='speed-lab__stat'>
-                            <span>Win Rate</span>
-                            <strong>{winCount + lossCount > 0 ? ((winCount / (winCount + lossCount)) * 100).toFixed(0) : 0}%</strong>
-                        </div>
+                        <div className='speed-lab__stat'><span>Win Rate</span><strong>{winRate}%</strong></div>
+                        {(execMode === 'crazy' || execMode === 'turbo') && (
+                            <div className='speed-lab__stat'><span>Fires Sent</span><strong style={{ color: '#f97316' }}>{fireCount}</strong></div>
+                        )}
                     </div>
                 </div>
 

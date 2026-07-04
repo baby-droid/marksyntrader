@@ -41,7 +41,7 @@ const AppContent = observer(() => {
     const [is_loading, setIsLoading] = React.useState(true);
     const [min_time_elapsed, setMinTimeElapsed] = React.useState(false);
     React.useEffect(() => {
-        const t = setTimeout(() => setMinTimeElapsed(true), 1750);
+        const t = setTimeout(() => setMinTimeElapsed(true), 4500);
         return () => clearTimeout(t);
     }, []);
 

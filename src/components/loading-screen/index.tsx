@@ -1,13 +1,20 @@
 // @ts-nocheck
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import './loading-screen.scss';
 
+const TOTAL_MS = 4500; // exactly 4.5 seconds 0 → 100%
+const TICK_MS  = 40;   // ~25fps updates, super smooth
+const INCREMENT = 100 / (TOTAL_MS / TICK_MS); // ~0.89% per tick
+
 const PHRASES = [
-  'Preparing your trading experience...',
+  'Initializing trading engines...',
   'Connecting to live markets...',
-  'Loading AI engines...',
-  'Syncing real-time data...',
-  'Almost ready...',
+  'Loading AI signal scanner...',
+  'Syncing real-time data feeds...',
+  'Calibrating market algorithms...',
+  'Warming up execution systems...',
+  'Preparing your trading environment...',
+  'Almost ready — stand by...',
 ];
 
 const FEATURES_LEFT = [
@@ -23,14 +30,37 @@ const FEATURES_RIGHT = [
 ];
 
 const LoadingScreen: React.FC = () => {
-  const [phrase, setPhrase] = useState(0);
   const [progress, setProgress] = useState(0);
+  const [phraseIdx, setPhraseIdx] = useState(0);
+  const startRef = useRef<number>(performance.now());
+  const rafRef = useRef<number>(0);
 
   useEffect(() => {
-    const phraseTimer = setInterval(() => setPhrase(p => (p + 1) % PHRASES.length), 1800);
-    const progressTimer = setInterval(() => setProgress(p => Math.min(p + Math.random() * 8, 95)), 400);
-    return () => { clearInterval(phraseTimer); clearInterval(progressTimer); };
+    startRef.current = performance.now();
+
+    // Smooth linear progress via requestAnimationFrame
+    const tick = (now: number) => {
+      const elapsed = now - startRef.current;
+      const pct = Math.min((elapsed / TOTAL_MS) * 100, 100);
+      setProgress(pct);
+      if (pct < 100) {
+        rafRef.current = requestAnimationFrame(tick);
+      }
+    };
+    rafRef.current = requestAnimationFrame(tick);
+
+    // Cycle phrases every ~560ms (8 phrases over 4.5s)
+    const phraseInterval = setInterval(() => {
+      setPhraseIdx(p => (p + 1) % PHRASES.length);
+    }, 560);
+
+    return () => {
+      cancelAnimationFrame(rafRef.current);
+      clearInterval(phraseInterval);
+    };
   }, []);
+
+  const pct = Math.floor(progress);
 
   return (
     <div className='at-loading'>
@@ -90,17 +120,26 @@ const LoadingScreen: React.FC = () => {
 
           {/* Loading section */}
           <div className='at-loading__loading-label'>
-            LOADING <span className='at-loading__bars'>▐▐▐</span>
+            L O A D I N G <span className='at-loading__bars'>▐▐▐</span>
           </div>
+
+          {/* Progress bar — smooth linear 0→100% over 4.5s */}
           <div className='at-loading__bar-wrap'>
             <div className='at-loading__bar'>
-              <div className='at-loading__bar-fill' style={{ width: `${progress}%` }}>
+              <div
+                className='at-loading__bar-fill'
+                style={{
+                  width: `${progress}%`,
+                  transition: 'width 40ms linear',
+                }}
+              >
                 <div className='at-loading__bar-glow' />
               </div>
             </div>
-            <span className='at-loading__percent'>{Math.floor(progress)}%</span>
+            <span className='at-loading__percent'>{pct}%</span>
           </div>
-          <p className='at-loading__phrase' key={phrase}>{PHRASES[phrase]}</p>
+
+          <p className='at-loading__phrase' key={phraseIdx}>{PHRASES[phraseIdx]}</p>
 
           {/* Hologram circle */}
           <div className='at-loading__hologram'>
