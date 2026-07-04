@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { api_base } from '@/external/bot-skeleton';
+
+const DERIV_WS_URL = 'wss://ws.binaryws.com/websockets/v3?app_id=1089';
 
 export interface DigitStat {
   digit: number;
@@ -31,7 +32,7 @@ export function useDigitStats(initialSymbol = 'R_10'): UseDigitStatsReturn {
   const [isConnected, setIsConnected] = useState(false);
 
   const tickHistory = useRef<number[]>([]);
-  const subscriptionRef = useRef<any>(null);
+  const wsRef = useRef<WebSocket | null>(null);
   const symbolRef = useRef(symbol);
   symbolRef.current = symbol;
 
@@ -50,23 +51,42 @@ export function useDigitStats(initialSymbol = 'R_10'): UseDigitStatsReturn {
     }));
   }, []);
 
-  const subscribe = useCallback(async (sym: string) => {
-    try {
-      if (subscriptionRef.current) {
-        try { subscriptionRef.current.unsubscribe(); } catch (_) {}
-        subscriptionRef.current = null;
-      }
-      tickHistory.current = [];
+  const ingestTick = useCallback((rawPrice: number, sym: string) => {
+    if (sym !== symbolRef.current) return;
+    const p = Number(rawPrice);
+    if (!isFinite(p)) return;
+    setCurrentPrice(p);
+    tickHistory.current = [...tickHistory.current, p].slice(-HISTORY_SIZE);
+    setLastTicks(prev => [...prev, p].slice(-50));
+    const s = p.toFixed(2);
+    const d = parseInt(s[s.length - 1], 10);
+    if (!isNaN(d)) setLastDigit(d);
+    setDigits(computeDigits(tickHistory.current));
+  }, [computeDigits]);
 
-      // Get history first
-      const histRes = await api_base.api.send({
-        ticks_history: sym,
-        count: 500,
-        end: 'latest',
-        style: 'ticks',
-      });
-      if (histRes?.history?.prices) {
-        const prices = histRes.history.prices.map(Number);
+  const subscribe = useCallback((sym: string) => {
+    if (wsRef.current) {
+      try { wsRef.current.close(); } catch (_) {}
+      wsRef.current = null;
+    }
+    tickHistory.current = [];
+    setIsConnected(false);
+
+    const ws = new WebSocket(DERIV_WS_URL);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ ticks_history: sym, count: 500, end: 'latest', style: 'ticks' }));
+      ws.send(JSON.stringify({ ticks: sym, subscribe: 1 }));
+    };
+
+    ws.onmessage = (e: MessageEvent) => {
+      if (sym !== symbolRef.current) return;
+      let data;
+      try { data = JSON.parse(e.data); } catch (_) { return; }
+
+      if (data.msg_type === 'history' && data.history?.prices) {
+        const prices = data.history.prices.map(Number);
         tickHistory.current = prices.slice(-HISTORY_SIZE);
         setCurrentPrice(prices[prices.length - 1]);
         setLastTicks(prices.slice(-50));
@@ -74,36 +94,23 @@ export function useDigitStats(initialSymbol = 'R_10'): UseDigitStatsReturn {
         const lastP = prices[prices.length - 1];
         const s = lastP.toFixed(2);
         setLastDigit(parseInt(s[s.length - 1], 10));
+        setIsConnected(true);
+      } else if (data.msg_type === 'tick' && data.tick?.quote != null) {
+        setIsConnected(true);
+        ingestTick(data.tick.quote, sym);
       }
+    };
 
-      // Subscribe to live ticks
-      const obs = api_base.api.subscribe({ ticks: sym });
-      subscriptionRef.current = obs.subscribe({
-        next: (res: any) => {
-          const price = res?.tick?.quote;
-          if (price == null) return;
-          setIsConnected(true);
-          const p = Number(price);
-          setCurrentPrice(p);
-          tickHistory.current = [...tickHistory.current, p].slice(-HISTORY_SIZE);
-          setLastTicks(prev => [...prev, p].slice(-50));
-          const s = p.toFixed(2);
-          const d = parseInt(s[s.length - 1], 10);
-          if (!isNaN(d)) setLastDigit(d);
-          setDigits(computeDigits(tickHistory.current));
-        },
-        error: () => setIsConnected(false),
-      });
-    } catch (e) {
-      console.error('useDigitStats subscribe error', e);
-    }
-  }, [computeDigits]);
+    ws.onerror = () => setIsConnected(false);
+    ws.onclose = () => setIsConnected(false);
+  }, [computeDigits, ingestTick]);
 
   useEffect(() => {
     subscribe(symbol);
     return () => {
-      if (subscriptionRef.current) {
-        try { subscriptionRef.current.unsubscribe(); } catch (_) {}
+      if (wsRef.current) {
+        try { wsRef.current.close(); } catch (_) {}
+        wsRef.current = null;
       }
     };
   }, [symbol, subscribe]);

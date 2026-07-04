@@ -42,7 +42,6 @@ import ChartModal from '../chart/chart-modal';
 import Dashboard from '../dashboard';
 import RunStrategy from '../dashboard/run-strategy';
 import SettingsPanel from '@/components/settings-panel';
-import AIScanner from '@/components/floating/AIScanner';
 import FloatingRunButton from '@/components/floating/FloatingRunButton';
 import PWAInstall from '@/components/floating/PWAInstall';
 import './main.scss';
@@ -414,7 +413,6 @@ const AppWrapper = observer(() => {
             </div>
 
             {/* Floating panels */}
-            <AIScanner />
             <FloatingRunButton />
             <PWAInstall />
 

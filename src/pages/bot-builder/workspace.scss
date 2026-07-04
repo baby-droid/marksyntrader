@@ -6,6 +6,7 @@
     width: calc(100vw - 3.2rem);
     height: var(--bot-content-height);
     top: 0;
+    margin-top: 1.6rem;
 
     @include mobile-or-tablet-screen {
         width: 100%;

@@ -151,7 +151,16 @@
 
     &__balance-section {
         display: flex;
-        align-items: center;
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    &__ksh {
+        font-size: 1rem;
+        line-height: 1.2;
+        font-weight: 600;
+        color: var(--text-less-prominent, #86909c);
+        white-space: nowrap;
     }
 
     &__balance {
@@ -315,7 +324,7 @@
     &__wrapper {
         border-radius: $BORDER_RADIUS;
         position: absolute;
-        z-index: 3;
+        z-index: 10050;
         transition:
             transform 0.3s cubic-bezier(0.25, 0.1, 0.25, 1),
             opacity 0.25s linear;
@@ -726,7 +735,7 @@
     position: absolute;
     top: calc(100% + 4px);
     right: 0;
-    z-index: 3;
+    z-index: 10050;
     min-width: 16rem;
     background-color: var(--general-main-2);
     border-radius: $BORDER_RADIUS;
@@ -769,6 +778,66 @@
         color: var(--text-prominent);
         line-height: 1.4;
         font-size: 1.2rem;
+    }
+}
+
+/** @define acc-currency */
+.acc-currency {
+    position: relative;
+    display: flex;
+    align-items: center;
+    margin-right: 0.8rem;
+
+    &__toggle {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.4rem 0.8rem;
+        border: 1px solid var(--general-section-1);
+        border-radius: 0.6rem;
+        background: var(--general-main-2);
+        color: var(--text-prominent);
+        cursor: pointer;
+        font-size: 1.2rem;
+        font-weight: 700;
+        line-height: 1.2;
+
+        &:hover {
+            background: var(--state-hover);
+        }
+
+        svg path {
+            stroke: var(--text-general);
+        }
+    }
+
+    &__menu {
+        position: absolute;
+        top: calc(100% + 4px);
+        right: 0;
+        z-index: 10060;
+        min-width: 7rem;
+        background-color: var(--general-main-2);
+        border-radius: 0.6rem;
+        box-shadow: 0 8px 16px 0 var(--shadow-menu);
+        overflow: hidden;
+    }
+
+    &__option {
+        padding: 0.8rem 1.2rem;
+        cursor: pointer;
+        font-size: 1.3rem;
+        font-weight: 600;
+        color: var(--text-prominent);
+
+        &:hover {
+            background: var(--state-hover);
+        }
+
+        &--selected {
+            background: var(--state-active);
+            color: var(--status-success);
+        }
     }
 }
 

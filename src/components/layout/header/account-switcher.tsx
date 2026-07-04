@@ -5,6 +5,7 @@ import { addComma, getCurrencyDisplayCode, getDecimalPlaces } from '@/components
 import Text from '@/components/shared_ui/text';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { useApiBase } from '@/hooks/useApiBase';
+import { useCurrencyDisplay } from '@/hooks/useCurrencyDisplay';
 import { useStore } from '@/hooks/useStore';
 import { isDemoAccount } from '@/utils/account-helpers';
 import { Localize } from '@deriv-com/translations';
@@ -14,7 +15,9 @@ import './account-switcher.scss';
 
 const AccountSwitcher = observer(({ activeAccount }: TAccountSwitcher) => {
     const [isOpen, setIsOpen] = useState(false);
+    const [isCurOpen, setIsCurOpen] = useState(false);
     const wrapperRef = useRef<HTMLDivElement>(null);
+    const curRef = useRef<HTMLDivElement>(null);
     const { accountList, activeLoginid } = useApiBase();
     const { client, run_panel } = useStore() ?? {};
 
@@ -26,9 +29,15 @@ const AccountSwitcher = observer(({ activeAccount }: TAccountSwitcher) => {
             if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
                 setIsOpen(false);
             }
+            if (curRef.current && !curRef.current.contains(e.target as Node)) {
+                setIsCurOpen(false);
+            }
         };
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') setIsOpen(false);
+            if (e.key === 'Escape') {
+                setIsOpen(false);
+                setIsCurOpen(false);
+            }
         };
         document.addEventListener('mousedown', handleClickOutside);
         document.addEventListener('keydown', handleKeyDown);
@@ -65,10 +74,14 @@ const AccountSwitcher = observer(({ activeAccount }: TAccountSwitcher) => {
             .sort((a, b) => (a.isActive ? -1 : b.isActive ? 1 : 0));
     }, [accountList, activeLoginid]);
 
+    const { currency: displayCurrency, code: displayCode, setCurrency, format } = useCurrencyDisplay();
+
     if (!activeAccount) return null;
 
     const { currency, isVirtual, balance } = activeAccount;
     const showChevron = !isSingleAccount && !is_bot_running;
+    const numericBalance = Number(String(balance ?? 0).replace(/,/g, '')) || 0;
+    const balanceText = currency ? format(numericBalance) : null;
 
     return (
         <div className='acc-info__wrapper' ref={wrapperRef}>
@@ -131,7 +144,7 @@ const AccountSwitcher = observer(({ activeAccount }: TAccountSwitcher) => {
                                     {!currency ? (
                                         <Localize i18n_default_text='No currency assigned' />
                                     ) : (
-                                        `${balance} ${getCurrencyDisplayCode(currency)}`
+                                        balanceText
                                     )}
                                 </p>
                             </div>
@@ -139,6 +152,54 @@ const AccountSwitcher = observer(({ activeAccount }: TAccountSwitcher) => {
                     </div>
                 </div>
             </AccountInfoWrapper>
+            <div className='acc-currency' ref={curRef}>
+                <button
+                    type='button'
+                    className='acc-currency__toggle'
+                    aria-haspopup='listbox'
+                    aria-expanded={isCurOpen}
+                    onClick={() => setIsCurOpen(prev => !prev)}
+                >
+                    <span>{displayCode}</span>
+                    <svg width='10' height='10' viewBox='0 0 12 12' fill='none'>
+                        <path
+                            d='M2 4L6 8L10 4'
+                            stroke='currentColor'
+                            strokeWidth='1.5'
+                            strokeLinecap='round'
+                            strokeLinejoin='round'
+                        />
+                    </svg>
+                </button>
+                {isCurOpen && (
+                    <div className='acc-currency__menu' role='listbox'>
+                        {(['USD', 'KSH'] as const).map(code => (
+                            <div
+                                key={code}
+                                role='option'
+                                aria-selected={displayCurrency === code}
+                                tabIndex={0}
+                                className={classNames('acc-currency__option', {
+                                    'acc-currency__option--selected': displayCurrency === code,
+                                })}
+                                onClick={() => {
+                                    setCurrency(code);
+                                    setIsCurOpen(false);
+                                }}
+                                onKeyDown={e => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault();
+                                        setCurrency(code);
+                                        setIsCurOpen(false);
+                                    }
+                                }}
+                            >
+                                {code}
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
             {isOpen && (
                 <div className='acc-dropdown' role='listbox'>
                     {formattedAccounts.map(account => (

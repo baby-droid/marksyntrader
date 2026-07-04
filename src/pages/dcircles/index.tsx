@@ -2,7 +2,6 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { observer } from 'mobx-react-lite';
 import DigitCircles from '@/components/digit-circles';
-import AIAssistant from '@/components/ai-assistant';
 import { useDigitStats } from '@/hooks/useDigitStats';
 import { useDerivTrading } from '@/hooks/useDerivTrading';
 import './dcircles.scss';
@@ -246,7 +245,6 @@ const DCircles = observer(() => {
         )}
       </div>
 
-      <AIAssistant digits={digits} lastDigit={lastDigit} symbol={symbol} onTrade={handleBuy} />
     </div>
   );
 });

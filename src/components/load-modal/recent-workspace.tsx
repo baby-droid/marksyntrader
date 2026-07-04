@@ -23,8 +23,8 @@ export const getRecentFileIcon = (save_type: string): React.ReactElement => {
         [save_types.UNSAVED]: (
             <LegacyReportsIcon iconSize='xs' fill='var(--text-general)' className='icon-general-fill-g-path' />
         ),
-        [save_types.LOCAL]: <DerivLightMyComputerIcon height='16px' width='16px' fill='var(--text-general)' />,
-        [save_types.GOOGLE_DRIVE]: <DerivLightGoogleDriveIcon height='16px' width='16px' fill='var(--text-general)' />,
+        [save_types.LOCAL]: <DerivLightMyComputerIcon height='16px' width='16px' />,
+        [save_types.GOOGLE_DRIVE]: <DerivLightGoogleDriveIcon height='16px' width='16px' />,
     };
     return icons[save_type as string] as React.ReactElement;
 };

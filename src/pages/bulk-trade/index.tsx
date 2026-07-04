@@ -48,12 +48,10 @@ const BulkTrade = observer(() => {
   const [count, setCount] = useState(5);
   const [martingale, setMartingale] = useState(false);
   const [martMult, setMartMult] = useState(2);
-  const [results, setResults] = useState<any[]>([]);
   const [isRunning, setIsRunning] = useState(false);
-  const [totalProfit, setTotalProfit] = useState(0);
   const [disclaimer, setDisclaimer] = useState(true);
 
-  const { balance, currency, buyContract } = useDerivTrading();
+  const { balance, currency, buyContract, tradeResults, winCount, lossCount, totalProfit, clearResults } = useDerivTrading();
   const { digits, lastDigit, currentPrice, isConnected } = useDigitStats(market);
 
   const prevDigitRef = React.useRef<number | null>(null);
@@ -73,38 +71,27 @@ const BulkTrade = observer(() => {
     if (isRunning) return;
     setIsRunning(true);
     try {
-      const promises = Array.from({ length: count }, async (_, i) => {
-        const s = stake;
-        const res = await buyContract({
+      // Single click → open `count` identical contracts at the same entry.
+      const promises = Array.from({ length: count }, () =>
+        buyContract({
           symbol: market,
           contract_type: tradeType,
-          stake: s,
+          stake,
           duration: ticks,
           barrier: needsPrediction ? String(prediction) : undefined,
-        });
-        const r = {
-          id: Date.now() + i,
-          type: tradeType,
-          stake: s,
-          market,
-          status: res ? 'sent' : 'failed',
-          time: new Date().toLocaleTimeString(),
-          contractId: res?.contract_id || null,
-        };
-        setResults(prev => [r, ...prev].slice(0, 300));
-        return r;
-      });
+        })
+      );
       await Promise.all(promises);
     } catch (e) {
       console.error('Bulk trade error', e);
     } finally {
       setIsRunning(false);
     }
-  }, [isRunning, count, stake, market, tradeType, ticks, prediction, martingale, martMult, buyContract, needsPrediction]);
+  }, [isRunning, count, stake, market, tradeType, ticks, prediction, buyContract, needsPrediction]);
 
-  const wins   = results.filter(r => r.status === 'won').length;
-  const losses = results.filter(r => r.status === 'lost').length;
-  const sent   = results.filter(r => r.status === 'sent').length;
+  const wins = winCount;
+  const losses = lossCount;
+  const settled = winCount + lossCount;
 
   return (
     <div className='bulk-trade'>
@@ -278,10 +265,13 @@ const BulkTrade = observer(() => {
           <span>Type</span><strong>{tradeType}{needsPrediction ? ` [${prediction}]` : ''}</strong>
         </div>
         <div className='bulk-trade__summary-item bulk-trade__summary-item--green'>
-          <span>Sent</span><strong>{sent}</strong>
+          <span>Wins</span><strong>{wins}</strong>
         </div>
         <div className='bulk-trade__summary-item bulk-trade__summary-item--red'>
-          <span>Failed</span><strong>{results.filter(r => r.status === 'failed').length}</strong>
+          <span>Losses</span><strong>{losses}</strong>
+        </div>
+        <div className={`bulk-trade__summary-item ${totalProfit >= 0 ? 'bulk-trade__summary-item--green' : 'bulk-trade__summary-item--red'}`}>
+          <span>Net P/L</span><strong>{currency} {totalProfit.toFixed(2)}</strong>
         </div>
       </div>
 
@@ -298,25 +288,27 @@ const BulkTrade = observer(() => {
       </button>
 
       {/* Results log */}
-      {results.length > 0 && (
+      {(tradeResults.length > 0 || isRunning) && (
         <div className='bulk-trade__results'>
           <div className='bulk-trade__results-hdr'>
-            <h3>Trade Log ({results.length})</h3>
-            <button onClick={() => setResults([])}>Clear</button>
+            <h3>Trade Log ({tradeResults.length}{isRunning ? ` · ${count - settled} pending` : ''})</h3>
+            <button onClick={clearResults}>Clear</button>
           </div>
           <div className='bulk-trade__results-list'>
-            {results.map((r, i) => (
-              <div key={r.id} className={`bulk-trade__result-row bulk-trade__result-row--${r.status}`}>
-                <span className='bulk-trade__result-time'>{r.time}</span>
-                <span>{r.type}</span>
-                <span>{r.market}</span>
-                <span>${r.stake}</span>
-                <span className={`bulk-trade__result-status bulk-trade__result-status--${r.status}`}>
-                  {r.status === 'sent' ? '✓ Sent' : r.status === 'failed' ? '✗ Failed' : r.status}
-                </span>
-                {r.contractId && <span style={{ fontSize: '1rem', opacity: 0.5 }}>#{r.contractId}</span>}
-              </div>
-            ))}
+            {tradeResults.map(r => {
+              const st = r.won ? 'won' : 'lost';
+              return (
+                <div key={r.id} className={`bulk-trade__result-row bulk-trade__result-row--${st}`}>
+                  <span className='bulk-trade__result-time'>{new Date(r.time).toLocaleTimeString()}</span>
+                  <span>{r.type}</span>
+                  <span>{market}</span>
+                  <span>{currency} {r.stake.toFixed(2)}</span>
+                  <span className={`bulk-trade__result-status bulk-trade__result-status--${st}`}>
+                    {r.won ? '✓ Won' : '✗ Lost'} {r.profit >= 0 ? '+' : ''}{r.profit.toFixed(2)}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

@@ -187,12 +187,25 @@ class DBot {
                     window.Blockly.getMainWorkspace().current_strategy_id = latest_file.id;
                 }
 
+                // A Free Bots / AI-selected strategy takes priority over the default so it
+                // survives the tab remount that occurs when navigating into the Bot Builder.
+                if (window.__pendingBotXml) {
+                    window.Blockly.derivWorkspace.strategy_to_load = window.__pendingBotXml;
+                    window.Blockly.getMainWorkspace().strategy_to_load = window.__pendingBotXml;
+                    if (window.__pendingBotName) file_name = window.__pendingBotName;
+                }
+
                 const event_group = `dbot-load${Date.now()}`;
                 window.Blockly.Events.setGroup(event_group);
                 window.Blockly.Xml.domToWorkspace(
                     window.Blockly.utils.xml.textToDom(window.Blockly.derivWorkspace.strategy_to_load),
                     this.workspace
                 );
+                if (window.__pendingBotXml) {
+                    window.__pendingBotXml = null;
+                    window.__pendingBotName = null;
+                }
+
                 const { save_modal } = DBotStore.instance;
 
                 save_modal.updateBotName(file_name);

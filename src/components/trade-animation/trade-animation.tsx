@@ -10,6 +10,7 @@ import { Localize, localize } from '@deriv-com/translations';
 import { useDevice } from '@deriv-com/ui';
 /* [AI] - Analytics event tracking removed - see migrate-docs/MONITORING_PACKAGES.md for re-implementation guide */
 /* [/AI] */
+import SpeedControl from '@/components/speed-control/speed-control';
 import Button from '../shared_ui/button';
 import Tooltip from '../shared_ui/tooltip/tooltip';
 import CircularWrapper from './circular-wrapper';
@@ -166,6 +167,7 @@ const TradeAnimation = observer(({ className, should_show_overlay }: TTradeAnima
 
     return (
         <div className={classNames('animation__wrapper', className)}>
+            <SpeedControl className='animation__speed-control' compact />
             {should_show_tooltip ? (
                 <div className='run__button_wrapper'>
                     <Tooltip

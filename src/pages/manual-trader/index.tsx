@@ -93,28 +93,31 @@ const ManualTrader: React.FC = () => {
         setPositions(p => [pos, ...p]);
 
         try {
-            const result = await buyContract({
-                symbol: symbol.value,
-                contract_type: contractType as any,
-                duration,
-                duration_unit: 't',
-                stake: s,
-                barrier,
-            });
-
             let t = 0;
             const iv = setInterval(() => {
                 t++;
-                setPositions(p => p.map(x => x.id === pos.id ? { ...x, tick: t } : x));
-                if (t >= duration) {
+                setPositions(p => p.map(x => (x.id === pos.id && x.status === 'open' ? { ...x, tick: Math.min(t, duration) } : x)));
+                if (t >= duration) clearInterval(iv);
+            }, 1000);
+
+            await buyContract(
+                {
+                    symbol: symbol.value,
+                    contract_type: contractType as any,
+                    duration,
+                    duration_unit: 't',
+                    stake: s,
+                    barrier,
+                },
+                c => {
                     clearInterval(iv);
-                    const won = Math.random() > 0.45;
-                    const rawProfit = won ? s * 0.87 : -s;
-                    const profit = applyCommission(rawProfit);
-                    setPositions(p => p.map(x => x.id === pos.id ? { ...x, status: won ? 'won' : 'lost', profit } : x));
+                    const profit = applyCommission(c.profit);
+                    setPositions(p => p.map(x => (x.id === pos.id
+                        ? { ...x, status: c.status, profit, entry: c.entry_spot, exit: c.exit_spot }
+                        : x)));
                     setPnl(prev => prev + profit);
                 }
-            }, 1000);
+            );
         } catch {
             setPositions(p => p.filter(x => x.id !== pos.id));
         }

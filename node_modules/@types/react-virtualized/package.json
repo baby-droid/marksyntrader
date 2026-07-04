@@ -1,0 +1,54 @@
+{
+    "name": "@types/react-virtualized",
+    "version": "9.22.3",
+    "description": "TypeScript definitions for react-virtualized",
+    "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react-virtualized",
+    "license": "MIT",
+    "contributors": [
+        {
+            "name": "Kalle Ott",
+            "githubUsername": "kaoDev",
+            "url": "https://github.com/kaoDev"
+        },
+        {
+            "name": "John Gunther",
+            "githubUsername": "guntherjh",
+            "url": "https://github.com/guntherjh"
+        },
+        {
+            "name": "Konstantin Nesterov",
+            "githubUsername": "wasd171",
+            "url": "https://github.com/wasd171"
+        },
+        {
+            "name": "Steve Zhang",
+            "githubUsername": "Stevearzh",
+            "url": "https://github.com/Stevearzh"
+        },
+        {
+            "name": "Brandon Hall",
+            "githubUsername": "brandonhall",
+            "url": "https://github.com/brandonhall"
+        },
+        {
+            "name": "Adam Zmenak",
+            "githubUsername": "azmenak",
+            "url": "https://github.com/azmenak"
+        }
+    ],
+    "main": "",
+    "types": "index.d.ts",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/DefinitelyTyped/DefinitelyTyped.git",
+        "directory": "types/react-virtualized"
+    },
+    "scripts": {},
+    "dependencies": {
+        "@types/prop-types": "*",
+        "@types/react": "*"
+    },
+    "peerDependencies": {},
+    "typesPublisherContentHash": "51650bffe4990ed558a70bbfb25ffcdf45e024a60b5d2dce94bd96f39ca4963b",
+    "typeScriptVersion": "5.2"
+}

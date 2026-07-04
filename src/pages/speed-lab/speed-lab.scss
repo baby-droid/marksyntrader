@@ -142,8 +142,14 @@
     }
   }
 
+  &__run-row {
+    display: flex;
+    gap: 0.8rem;
+    margin-bottom: 1.2rem;
+  }
+
   &__run-btn {
-    width: 100%;
+    flex: 1;
     padding: 1.4rem;
     background: #4C7DFF;
     color: #fff;
@@ -153,11 +159,27 @@
     font-weight: 800;
     cursor: pointer;
     transition: all 0.2s;
-    margin-bottom: 1.2rem;
 
     &:hover { background: #3a6be0; transform: translateY(-1px); }
     &:active { transform: translateY(0); }
     &--stop { background: #E24A43; &:hover { background: #c73a34; } }
+  }
+
+  &__buy-btn {
+    padding: 1.4rem 1.8rem;
+    background: #42B883;
+    color: #fff;
+    border: none;
+    border-radius: 0.8rem;
+    font-size: 1.5rem;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+
+    &:hover { background: #37a473; transform: translateY(-1px); }
+    &:active { transform: translateY(0); }
+    &:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
   }
 
   &__stats {

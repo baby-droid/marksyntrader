@@ -1,120 +1,79 @@
 // @ts-nocheck
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useDerivTrading } from '@/hooks/useDerivTrading';
-import { api_base } from '@/external/bot-skeleton';
+import { copyEngine, CopyMode, Follower } from '@/utils/copy-trading';
 import './copy-trading.scss';
 
-interface LinkedAccount {
-  token: string;
-  loginid: string;
-  currency: string;
-  balance?: number;
-  status: 'active' | 'error' | 'pending';
-  replicatedTrades: number;
-}
+const MODES: { id: CopyMode; title: string; desc: string; icon: string }[] = [
+  {
+    id: 'real_real',
+    title: 'Real → Real',
+    desc: "Mirror your real-account trades to each follower's real account, stake scaled by their ratio.",
+    icon: '💵',
+  },
+  {
+    id: 'demo_real',
+    title: 'Demo → Real',
+    desc: "Test on demo — signals are copied to each follower's real account with a risk multiplier.",
+    icon: '🧪',
+  },
+];
 
 const CopyTrading = observer(() => {
-  const { balance, currency, tradeResults, totalProfit } = useDerivTrading();
-  const [linkedAccounts, setLinkedAccounts] = useState<LinkedAccount[]>([]);
+  const { balance, currency, totalProfit } = useDerivTrading();
+  const [followers, setFollowers] = useState<Follower[]>([]);
+  const [mode, setMode] = useState<CopyMode>(copyEngine.getMode());
+  const [isCopying, setIsCopying] = useState(copyEngine.isRunning());
   const [tokenInput, setTokenInput] = useState('');
-  const [isCopying, setIsCopying] = useState(false);
-  const [copyMode, setCopyMode] = useState<'demo_real' | 'token'>('token');
-  const [totalReplicated, setTotalReplicated] = useState(0);
+  const [ratioInput, setRatioInput] = useState(1);
   const [log, setLog] = useState<string[]>([]);
-  const copyRef = useRef(false);
 
-  const addLog = useCallback((msg: string) => {
-    setLog(prev => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev].slice(0, 50));
+  useEffect(() => {
+    const offChange = copyEngine.onChange(setFollowers);
+    const offLog = copyEngine.onLog(msg =>
+      setLog(prev => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev].slice(0, 60))
+    );
+    return () => {
+      offChange();
+      offLog();
+    };
   }, []);
 
-  const handleAddToken = useCallback(async () => {
+  const selectMode = useCallback((m: CopyMode) => {
+    setMode(m);
+    copyEngine.setMode(m);
+  }, []);
+
+  const addToken = useCallback(() => {
     if (!tokenInput.trim()) return;
-    const token = tokenInput.trim();
+    copyEngine.addFollower(tokenInput, ratioInput);
     setTokenInput('');
-
-    const pending: LinkedAccount = {
-      token,
-      loginid: 'Verifying...',
-      currency: '---',
-      status: 'pending',
-      replicatedTrades: 0,
-    };
-    setLinkedAccounts(prev => [...prev, pending]);
-
-    try {
-      // Verify token by authorizing
-      const res = await api_base.api.send({ authorize: token });
-      if (res?.authorize) {
-        const { loginid, currency: cur, balance: bal } = res.authorize;
-        setLinkedAccounts(prev =>
-          prev.map(a => a.token === token
-            ? { ...a, loginid, currency: cur, balance: parseFloat(bal || '0'), status: 'active' }
-            : a
-          )
-        );
-        addLog(`✅ Linked account: ${loginid} (${cur})`);
-      } else {
-        setLinkedAccounts(prev =>
-          prev.map(a => a.token === token ? { ...a, loginid: 'Invalid', status: 'error' } : a)
-        );
-        addLog(`❌ Invalid token`);
-      }
-    } catch (e) {
-      setLinkedAccounts(prev =>
-        prev.map(a => a.token === token ? { ...a, loginid: 'Error', status: 'error' } : a)
-      );
-      addLog(`❌ Token verification failed`);
-    }
-  }, [tokenInput, addLog]);
-
-  const handleRemoveAccount = useCallback((token: string) => {
-    setLinkedAccounts(prev => prev.filter(a => a.token !== token));
-    addLog(`Removed linked account`);
-  }, [addLog]);
+  }, [tokenInput, ratioInput]);
 
   const toggleCopy = useCallback(() => {
     if (isCopying) {
-      copyRef.current = false;
+      copyEngine.stop();
       setIsCopying(false);
-      addLog('⏸ Copy trading stopped');
     } else {
-      if (linkedAccounts.filter(a => a.status === 'active').length === 0) {
-        addLog('⚠️ No active linked accounts to copy to');
-        return;
-      }
-      copyRef.current = true;
-      setIsCopying(true);
-      addLog('▶ Copy trading started');
+      copyEngine.start();
+      setIsCopying(copyEngine.isRunning());
     }
-  }, [isCopying, linkedAccounts, addLog]);
+  }, [isCopying]);
 
-  // When a new trade result comes in, replicate to linked accounts
-  useEffect(() => {
-    if (!isCopying || tradeResults.length === 0) return;
-    const latest = tradeResults[0];
-    const activeAccounts = linkedAccounts.filter(a => a.status === 'active');
-    if (activeAccounts.length === 0) return;
-
-    addLog(`🔁 Replicating trade: ${latest.type} @ ${latest.stake.toFixed(2)}`);
-    setTotalReplicated(prev => prev + activeAccounts.length);
-    setLinkedAccounts(prev =>
-      prev.map(a => a.status === 'active'
-        ? { ...a, replicatedTrades: a.replicatedTrades + 1 }
-        : a
-      )
-    );
-  }, [tradeResults.length]);
+  const active = followers.filter(f => f.status === 'active');
+  const totalReplicated = followers.reduce((s, f) => s + f.replicated, 0);
+  const ratioLabel = mode === 'real_real' ? 'Stake ratio' : 'Risk multiplier';
 
   return (
     <div className='copy-trading'>
       <div className='copy-trading__hero'>
         <div className='copy-trading__hero-content'>
           <div className='copy-trading__live-badge'>● LIVE COPY TRADING</div>
-          <h1>Your account, your control.<br /><span>Maximize Gains with <em>CopyTrading</em></span></h1>
-          <p>Mirror trades from your master account to multiple client accounts in real time — automatically and instantly.</p>
+          <h1>Your account, your control.<br /><span>Mirror trades to <em>10 accounts</em></span></h1>
+          <p>Copy trades from your master account to up to 10 client accounts in real time — automatically and instantly.</p>
           <div className='copy-trading__hero-stats'>
-            <div className='copy-trading__stat'><strong>{linkedAccounts.filter(a => a.status === 'active').length}</strong><span>LINKED ACCOUNTS</span></div>
+            <div className='copy-trading__stat'><strong>{active.length}/10</strong><span>LINKED ACCOUNTS</span></div>
             <div className='copy-trading__stat copy-trading__stat--status'>
               <div className={`copy-trading__status-indicator ${isCopying ? 'active' : ''}`} />
               <strong>{isCopying ? 'Active' : 'Idle'}</strong>
@@ -128,36 +87,61 @@ const CopyTrading = observer(() => {
 
       <div className='copy-trading__body'>
         <div className='copy-trading__left'>
-          {copyMode === 'token' && (
-            <div className='copy-trading__card'>
-              <div className='copy-trading__card-icon'>🔑</div>
-              <h3>Token Replicator</h3>
-              <p>Add client API tokens. When you trade, all linked accounts receive the same trade instantly.</p>
-              <div className='copy-trading__token-row'>
+          {/* Mode selector */}
+          <div className='copy-trading__card'>
+            <h3>Copy Mode</h3>
+            <div className='copy-trading__modes'>
+              {MODES.map(m => (
+                <button
+                  key={m.id}
+                  className={`copy-trading__mode ${mode === m.id ? 'active' : ''}`}
+                  onClick={() => selectMode(m.id)}
+                >
+                  <span className='copy-trading__mode-icon'>{m.icon}</span>
+                  <strong>{m.title}</strong>
+                  <span className='copy-trading__mode-desc'>{m.desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Token adder */}
+          <div className='copy-trading__card'>
+            <div className='copy-trading__card-icon'>🔑</div>
+            <h3>Link Follower ({followers.length}/10)</h3>
+            <p>Add a client API token (Read + Trade scope). Each follower gets its own live connection.</p>
+            <div className='copy-trading__token-row'>
+              <input
+                type='text'
+                placeholder='Paste client API token…'
+                value={tokenInput}
+                onChange={e => setTokenInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && addToken()}
+              />
+              <div className='copy-trading__ratio'>
+                <label>{ratioLabel}</label>
                 <input
-                  type='text'
-                  placeholder='Paste client API token...'
-                  value={tokenInput}
-                  onChange={e => setTokenInput(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleAddToken()}
+                  type='number'
+                  min={0.01}
+                  step={0.1}
+                  value={ratioInput}
+                  onChange={e => setRatioInput(Math.max(0.01, Number(e.target.value)))}
                 />
-                <button className='copy-trading__btn copy-trading__btn--add' onClick={handleAddToken}>Add</button>
-                <button className='copy-trading__btn copy-trading__btn--sync' onClick={() => {}}>🔄 Sync</button>
               </div>
               <button
-                className={`copy-trading__copy-btn ${isCopying ? 'copy-trading__copy-btn--stop' : ''}`}
-                onClick={toggleCopy}
+                className='copy-trading__btn copy-trading__btn--add'
+                onClick={addToken}
+                disabled={followers.length >= 10}
               >
-                {isCopying ? '⏹ Stop Copy Trading' : '▶ Start Copy Trading'}
+                Add
               </button>
             </div>
-          )}
-
-          <div className='copy-trading__card'>
-            <div className='copy-trading__card-icon'>📊</div>
-            <h3>Demo → Real</h3>
-            <p>Mirror trades from your demo account to your real account automatically.</p>
-            <button className='copy-trading__mirror-btn'>▶ Start Demo → Real</button>
+            <button
+              className={`copy-trading__copy-btn ${isCopying ? 'copy-trading__copy-btn--stop' : ''}`}
+              onClick={toggleCopy}
+            >
+              {isCopying ? '⏹ Stop Copy Trading' : '▶ Start Copy Trading'}
+            </button>
           </div>
 
           <div className='copy-trading__card copy-trading__card--log'>
@@ -172,30 +156,40 @@ const CopyTrading = observer(() => {
         <div className='copy-trading__right'>
           <div className='copy-trading__card'>
             <div className='copy-trading__card-icon'>👥</div>
-            <h3>Replicated Accounts</h3>
-            {linkedAccounts.length === 0 ? (
+            <h3>Follower Accounts ({active.length} active)</h3>
+            {followers.length === 0 ? (
               <div className='copy-trading__no-accounts'>
                 <div className='copy-trading__no-accounts-icon'>🔗</div>
                 <p>No accounts linked yet.</p>
-                <p>Add a client API token or create accounts in settings.</p>
+                <p>Add a client API token to start mirroring trades.</p>
               </div>
             ) : (
               <div className='copy-trading__accounts'>
-                {linkedAccounts.map((acc, i) => (
-                  <div key={i} className={`copy-trading__account copy-trading__account--${acc.status}`}>
+                {followers.map(acc => (
+                  <div key={acc.id} className={`copy-trading__account copy-trading__account--${acc.status}`}>
                     <div className='copy-trading__account-info'>
                       <div className={`copy-trading__account-dot copy-trading__account-dot--${acc.status}`} />
                       <div>
-                        <strong>{acc.loginid}</strong>
+                        <strong>{acc.loginid}{acc.is_virtual ? ' (demo)' : ''}</strong>
                         <span>{acc.currency} {acc.balance?.toFixed(2) ?? '---'}</span>
                       </div>
                     </div>
                     <div className='copy-trading__account-meta'>
+                      <div className='copy-trading__account-ratio'>
+                        <label>{ratioLabel === 'Stake ratio' ? '×' : 'risk×'}</label>
+                        <input
+                          type='number'
+                          min={0.01}
+                          step={0.1}
+                          value={acc.ratio}
+                          onChange={e => copyEngine.setRatio(acc.id, Number(e.target.value))}
+                        />
+                      </div>
                       <span className={`copy-trading__account-status copy-trading__account-status--${acc.status}`}>
-                        {acc.status}
+                        {acc.status === 'error' ? (acc.lastError || 'error') : acc.status}
                       </span>
-                      <span>{acc.replicatedTrades} trades</span>
-                      <button className='copy-trading__remove' onClick={() => handleRemoveAccount(acc.token)}>✕</button>
+                      <span>{acc.replicated} trades</span>
+                      <button className='copy-trading__remove' onClick={() => copyEngine.removeFollower(acc.id)}>✕</button>
                     </div>
                   </div>
                 ))}

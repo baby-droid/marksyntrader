@@ -2,10 +2,18 @@
 // Removed IBM Plex Sans Google Font import - now using brand font from brand.config.json
 // Third-party developers can add their own font imports if needed
 
+// The Deriv design system (and this app's rem-based layout) assumes 1rem = 10px.
+// Without this base the browser default of 16px makes the whole UI render ~1.6x
+// too large ("zoomed"). Anchor the rem scale so sizes render as designed.
+html {
+    font-size: 62.5%;
+}
+
 body {
     // Updated to use brand font variable from brand.config.json
     font-family: var(--brand-font-primary);
     background: var(--general-main-1);
+    font-size: 1.4rem;
 }
 
 .icon-general-fill-path {

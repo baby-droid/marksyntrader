@@ -2,7 +2,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { observer } from 'mobx-react-lite';
 import DigitCircles from '@/components/digit-circles';
-import AIAssistant from '@/components/ai-assistant';
 import { useDigitStats } from '@/hooks/useDigitStats';
 import { useDerivTrading } from '@/hooks/useDerivTrading';
 import './speed-lab.scss';
@@ -188,12 +187,31 @@ const SpeedLab = observer(() => {
             </div>
           </div>
 
-          <button
-            className={`speed-lab__run-btn ${isRunning ? 'speed-lab__run-btn--stop' : ''}`}
-            onClick={handleStart}
-          >
-            {isRunning ? '⏹ Stop' : '▶ Start Auto Trade'}
-          </button>
+          <div className='speed-lab__run-row'>
+            <button
+              className={`speed-lab__run-btn ${isRunning ? 'speed-lab__run-btn--stop' : ''}`}
+              onClick={handleStart}
+            >
+              {isRunning ? '⏹ Stop' : '▶ Start Auto Trade'}
+            </button>
+            <button
+              className='speed-lab__buy-btn'
+              disabled={isRunning || !isConnected}
+              onClick={() => {
+                const needsBarrier = ['DIGITOVER', 'DIGITUNDER', 'DIGITMATCH', 'DIGITDIFF'].includes(contractType);
+                buyContract({
+                  symbol,
+                  contract_type: contractType,
+                  stake,
+                  duration,
+                  barrier: needsBarrier ? barrier : undefined,
+                });
+                logEntry(`Bought ${contractType} @ ${stake.toFixed(2)} ${currency}`);
+              }}
+            >
+              ⚡ Buy 1
+            </button>
+          </div>
 
           <div className='speed-lab__stats'>
             <div className='speed-lab__stat'>
@@ -242,7 +260,6 @@ const SpeedLab = observer(() => {
         </div>
       </div>
 
-      <AIAssistant digits={digits} lastDigit={lastDigit} symbol={symbol} />
     </div>
   );
 });

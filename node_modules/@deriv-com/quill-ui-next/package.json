@@ -1,0 +1,113 @@
+{
+  "name": "@deriv-com/quill-ui-next",
+  "private": false,
+  "version": "2.4.5",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "style": "./dist/style.css",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs",
+      "types": "./dist/index.d.ts"
+    },
+    "./style.css": "./dist/style.css",
+    "./hooks": {
+      "import": "./dist/hooks/index.mjs",
+      "require": "./dist/hooks/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "unpkg": "./dist/cdn/quill-ui-next.umd.js",
+  "jsdelivr": "./dist/cdn/quill-ui-next.umd.js",
+  "scripts": {
+    "dev": "vite",
+    "build:storybook": "npm run lint:css && storybook build",
+    "build": "npm run build:lib && npm run build:cdn",
+    "build:lib": "npm run lint:css && vite build",
+    "build:cdn": "vite build --config vite.config.cdn.ts",
+    "watch": "vite build --watch",
+    "preview": "vite preview",
+    "storybook": "npm run lint:css && storybook dev -p 6006",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run build",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "prebuild": "npm run generate:exports",
+    "ci": "npm run test && npm run build:all",
+    "trigger-release": "git checkout -b release/$(date +%Y%m%d-%H%M%S) && git commit --allow-empty -m \"chore: trigger release\" && git push origin HEAD",
+    "lint:css": "node scripts/standardize-styles.js",
+    "generate:exports": "node scripts/generate-exports.js",
+    "generate:snapshots": "node scripts/generate-storybook-snapshots.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@chromatic-com/storybook": "^3.2.4",
+    "@jest/types": "^29.6.3",
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/github": "^11.0.1",
+    "@semantic-release/npm": "^12.0.1",
+    "@semantic-release/release-notes-generator": "^14.0.3",
+    "@storybook/addon-essentials": "^8.5.1",
+    "@storybook/addon-interactions": "^8.5.1",
+    "@storybook/addon-links": "^8.5.1",
+    "@storybook/addon-onboarding": "^8.5.1",
+    "@storybook/addon-themes": "^8.6.7",
+    "@storybook/blocks": "^8.5.1",
+    "@storybook/builder-vite": "^8.5.1",
+    "@storybook/react": "^8.5.1",
+    "@storybook/react-vite": "^8.5.1",
+    "@storybook/test": "^8.5.1",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.2.0",
+    "@types/jest": "^30.0.0",
+    "@types/react": "^19.0.8",
+    "@types/react-calendar": "^4.1.0",
+    "@types/react-datepicker": "^6.2.0",
+    "@types/react-dom": "^19.0.3",
+    "@vitejs/plugin-react": "^4.2.1",
+    "identity-obj-proxy": "^3.0.0",
+    "jest": "^30.0.5",
+    "jest-environment-jsdom": "^29.7.0",
+    "sass": "^1.84.0",
+    "semantic-release": "^24.2.2",
+    "storybook": "^8.5.1",
+    "ts-jest": "^29.2.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.3",
+    "vite": "^6.3.0",
+    "vite-plugin-dts": "^4.5.3",
+    "puppeteer": "^24.12.1",
+    "@storybook/test-runner": "^0.23.0"
+  },
+  "dependencies": {
+    "@deriv/quill-icons": "^2.4.4",
+    "@tippyjs/react": "^4.2.6",
+    "date-fns": "^4.1.0",
+    "framer-motion": "^12.5.0",
+    "glob": "^11.0.1",
+    "react-calendar": "^6.0.0",
+    "react-markdown": "^10.0.0"
+  },
+  "peerDependencies": {
+    "react": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0",
+    "react-dom": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/deriv-com/quill-ui-next.git"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}

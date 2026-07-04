@@ -25,6 +25,21 @@ const LoadingScreen: React.FC = () => {
       {/* Animated grid background */}
       <div className='loading-screen__grid' />
 
+      {/* Floating particles */}
+      <div className='loading-screen__particles'>
+        {Array.from({ length: 18 }).map((_, i) => (
+          <span
+            key={i}
+            className='loading-screen__particle'
+            style={{
+              left: `${(i * 5.5 + 3) % 100}%`,
+              animationDelay: `${(i % 6) * 0.7}s`,
+              animationDuration: `${6 + (i % 5)}s`,
+            }}
+          />
+        ))}
+      </div>
+
       {/* Orbiting rings */}
       <div className='loading-screen__rings'>
         <div className='loading-screen__ring loading-screen__ring--1' />
@@ -61,6 +76,17 @@ const LoadingScreen: React.FC = () => {
         {/* Dots */}
         <div className='loading-screen__dots'>
           {[0,1,2,3,4].map(i => <span key={i} className='loading-screen__dot' style={{ animationDelay: `${i * 0.18}s` }} />)}
+        </div>
+
+        {/* Live market ticker */}
+        <div className='loading-screen__ticker'>
+          <div className='loading-screen__ticker-track'>
+            {['V10','V25','V50','V75','V100','V10 1s','V25 1s','V50 1s','V100 1s','V10','V25','V50','V75','V100'].map((s, i) => (
+              <span key={i} className='loading-screen__ticker-item'>
+                {s}<i className={i % 2 ? 'down' : 'up'}>{i % 2 ? '▼' : '▲'}</i>
+              </span>
+            ))}
+          </div>
         </div>
       </div>
 
