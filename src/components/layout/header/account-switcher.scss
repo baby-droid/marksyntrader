@@ -151,7 +151,16 @@
 
     &__balance-section {
         display: flex;
-        align-items: center;
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    &__ksh {
+        font-size: 1rem;
+        line-height: 1.2;
+        font-weight: 600;
+        color: var(--text-less-prominent, #86909c);
+        white-space: nowrap;
     }
 
     &__balance {
@@ -315,7 +324,7 @@
     &__wrapper {
         border-radius: $BORDER_RADIUS;
         position: absolute;
-        z-index: 3;
+        z-index: 10050;
         transition:
             transform 0.3s cubic-bezier(0.25, 0.1, 0.25, 1),
             opacity 0.25s linear;
@@ -726,7 +735,7 @@
     position: absolute;
     top: calc(100% + 4px);
     right: 0;
-    z-index: 3;
+    z-index: 10050;
     min-width: 16rem;
     background-color: var(--general-main-2);
     border-radius: $BORDER_RADIUS;

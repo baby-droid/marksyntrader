@@ -5,6 +5,7 @@ import { addComma, getCurrencyDisplayCode, getDecimalPlaces } from '@/components
 import Text from '@/components/shared_ui/text';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { useApiBase } from '@/hooks/useApiBase';
+import { useFxRate } from '@/hooks/useFxRate';
 import { useStore } from '@/hooks/useStore';
 import { isDemoAccount } from '@/utils/account-helpers';
 import { Localize } from '@deriv-com/translations';
@@ -65,10 +66,14 @@ const AccountSwitcher = observer(({ activeAccount }: TAccountSwitcher) => {
             .sort((a, b) => (a.isActive ? -1 : b.isActive ? 1 : 0));
     }, [accountList, activeLoginid]);
 
+    const fxRate = useFxRate(activeAccount?.currency || 'USD', 'KES');
+
     if (!activeAccount) return null;
 
     const { currency, isVirtual, balance } = activeAccount;
     const showChevron = !isSingleAccount && !is_bot_running;
+    const numericBalance = Number(String(balance ?? 0).replace(/,/g, '')) || 0;
+    const kshValue = currency && fxRate ? numericBalance * fxRate : null;
 
     return (
         <div className='acc-info__wrapper' ref={wrapperRef}>
@@ -134,6 +139,11 @@ const AccountSwitcher = observer(({ activeAccount }: TAccountSwitcher) => {
                                         `${balance} ${getCurrencyDisplayCode(currency)}`
                                     )}
                                 </p>
+                                {kshValue !== null && (
+                                    <span className='acc-info__ksh' data-testid='dt_balance_ksh'>
+                                        ≈ KES {addComma(kshValue.toFixed(2))}
+                                    </span>
+                                )}
                             </div>
                         )}
                     </div>
