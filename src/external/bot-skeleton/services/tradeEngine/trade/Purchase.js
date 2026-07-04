@@ -1,3 +1,4 @@
+import { getExecutionSpeedDelay } from '../../../../../utils/execution-speed';
 import { LogTypes } from '../../../constants/messages';
 import { api_base } from '../../api/api-base';
 import { contractStatus, info, log } from '../utils/broadcast';
@@ -16,6 +17,21 @@ export default Engine =>
                 return Promise.resolve();
             }
 
+            // Execution-speed throttle (Normal/Crazy/Turbo selector beside Run).
+            // Turbo => 0ms (fastest the API allows); slower modes pace re-entry.
+            const speed_delay = getExecutionSpeedDelay();
+            if (speed_delay > 0) {
+                return new Promise(resolve => setTimeout(resolve, speed_delay)).then(() => {
+                    if (this.store.getState().scope !== BEFORE_PURCHASE) {
+                        return Promise.resolve();
+                    }
+                    return this._executePurchase(contract_type);
+                });
+            }
+            return this._executePurchase(contract_type);
+        }
+
+        _executePurchase(contract_type) {
             const onSuccess = response => {
                 // Don't unnecessarily send a forget request for a purchased contract.
                 const { buy } = response;
