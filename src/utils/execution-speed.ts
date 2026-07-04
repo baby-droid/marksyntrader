@@ -16,8 +16,8 @@ const STORAGE_KEY = 'execution_speed';
 // Inter-trade delay (ms) applied by the engine between purchases per speed.
 export const SPEED_DELAY_MS: Record<ExecutionSpeed, number> = {
     normal: 1000,
-    crazy: 300,
-    turbo: 0,
+    crazy: 1, // ~0.001s between re-entries
+    turbo: 0, // no artificial delay — fastest the API allows
 };
 
 const listeners = new Set<(speed: ExecutionSpeed) => void>();

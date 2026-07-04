@@ -2,6 +2,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { api_base } from '@/external/bot-skeleton';
 import { applyCommission } from '@/utils/commission';
+import { publishMasterTrade } from '@/utils/trade-bus';
 
 export interface TradeResult {
   id: string;
@@ -106,6 +107,18 @@ export function useDerivTrading(): UseDerivTradingReturn {
       if (barrier !== undefined) buyParams.parameters.barrier = String(barrier);
 
       const buyRes = await api_base.api.send(buyParams);
+
+      // Broadcast to the copy-trading engine (mirror to follower accounts).
+      publishMasterTrade({
+        symbol,
+        contract_type,
+        stake,
+        duration,
+        duration_unit,
+        barrier,
+        source: api_base?.account_info?.is_virtual ? 'demo' : 'real',
+        time: Date.now(),
+      });
 
       if (!buyRes?.buy?.contract_id) {
         // Fallback: proposal + buy

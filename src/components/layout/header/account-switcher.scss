@@ -781,6 +781,66 @@
     }
 }
 
+/** @define acc-currency */
+.acc-currency {
+    position: relative;
+    display: flex;
+    align-items: center;
+    margin-right: 0.8rem;
+
+    &__toggle {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.4rem 0.8rem;
+        border: 1px solid var(--general-section-1);
+        border-radius: 0.6rem;
+        background: var(--general-main-2);
+        color: var(--text-prominent);
+        cursor: pointer;
+        font-size: 1.2rem;
+        font-weight: 700;
+        line-height: 1.2;
+
+        &:hover {
+            background: var(--state-hover);
+        }
+
+        svg path {
+            stroke: var(--text-general);
+        }
+    }
+
+    &__menu {
+        position: absolute;
+        top: calc(100% + 4px);
+        right: 0;
+        z-index: 10060;
+        min-width: 7rem;
+        background-color: var(--general-main-2);
+        border-radius: 0.6rem;
+        box-shadow: 0 8px 16px 0 var(--shadow-menu);
+        overflow: hidden;
+    }
+
+    &__option {
+        padding: 0.8rem 1.2rem;
+        cursor: pointer;
+        font-size: 1.3rem;
+        font-weight: 600;
+        color: var(--text-prominent);
+
+        &:hover {
+            background: var(--state-hover);
+        }
+
+        &--selected {
+            background: var(--state-active);
+            color: var(--status-success);
+        }
+    }
+}
+
 .header {
     &__logout-button {
         margin-right: 0.8rem;

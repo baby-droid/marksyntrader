@@ -19,6 +19,14 @@ export interface ContractResult {
     exit_spot?: number;
 }
 
+export interface SettledContract {
+    contract_id: number;
+    profit: number;
+    status: 'won' | 'lost';
+    entry_spot?: number;
+    exit_spot?: number;
+}
+
 export type ContractType =
     | 'CALL' | 'PUT' | 'DIGITEVEN' | 'DIGITODD'
     | 'DIGITMATCH' | 'DIGITDIFF' | 'DIGITOVER' | 'DIGITUNDER';
@@ -63,6 +71,7 @@ export function useDerivTrade() {
     const reqIdRef = useRef(1);
     const pendingRef = useRef<Map<number, (d: any) => void>>(new Map());
     const tickCallbacksRef = useRef<Map<string, (t: TickData) => void>>(new Map());
+    const pocCallbacksRef = useRef<Map<number, (c: SettledContract) => void>>(new Map());
     const [connected, setConnected] = useState(false);
     const [balance, setBalance] = useState<number | null>(null);
     const [currency, setCurrency] = useState('USD');
@@ -126,6 +135,24 @@ export function useDerivTrade() {
                 setBalance(d.balance.balance);
                 setCurrency(d.balance.currency || 'USD');
             }
+            if (d.proposal_open_contract) {
+                const poc = d.proposal_open_contract;
+                const cid = Number(poc.contract_id);
+                if (poc.is_sold || poc.status === 'won' || poc.status === 'lost') {
+                    const cb = pocCallbacksRef.current.get(cid);
+                    if (cb) {
+                        const profit = parseFloat(poc.profit ?? '0');
+                        cb({
+                            contract_id: cid,
+                            profit,
+                            status: poc.status === 'won' || profit > 0 ? 'won' : 'lost',
+                            entry_spot: poc.entry_spot,
+                            exit_spot: poc.exit_spot,
+                        });
+                        pocCallbacksRef.current.delete(cid);
+                    }
+                }
+            }
         };
 
         ws.onclose = () => {
@@ -153,26 +180,36 @@ export function useDerivTrade() {
         };
     }, [send]);
 
-    const buyContract = useCallback(async (params: BuyParams): Promise<ContractResult> => {
-        const { symbol, contract_type, duration, duration_unit = 't', stake, barrier, currency: cur = 'USD' } = params;
-        const buyParams: any = {
-            contract_type,
-            currency: cur,
-            duration,
-            duration_unit,
-            basis: 'stake',
-            amount: stake,
-            symbol,
-        };
-        if (barrier !== undefined) buyParams.barrier = barrier;
+    const buyContract = useCallback(
+        async (params: BuyParams, onSettled?: (c: SettledContract) => void): Promise<ContractResult> => {
+            const { symbol, contract_type, duration, duration_unit = 't', stake, barrier, currency: cur = 'USD' } = params;
+            const buyParams: any = {
+                contract_type,
+                currency: cur,
+                duration,
+                duration_unit,
+                basis: 'stake',
+                amount: stake,
+                symbol,
+            };
+            if (barrier !== undefined) buyParams.barrier = barrier;
 
-        const res = await send({ buy: '1', price: stake, parameters: buyParams });
-        return {
-            contract_id: res.buy?.contract_id || 0,
-            buy_price: res.buy?.buy_price || stake,
-            status: 'open',
-        };
-    }, [send]);
+            const res = await send({ buy: '1', price: stake, parameters: buyParams });
+            const contract_id = res.buy?.contract_id || 0;
+            // Refresh balance right after the buy debits the account.
+            send({ balance: 1 }).catch(() => {});
+            if (contract_id && onSettled) {
+                pocCallbacksRef.current.set(Number(contract_id), onSettled);
+                send({ proposal_open_contract: 1, contract_id, subscribe: 1 }).catch(() => {});
+            }
+            return {
+                contract_id,
+                buy_price: res.buy?.buy_price || stake,
+                status: 'open',
+            };
+        },
+        [send]
+    );
 
     const getDigitStats = useCallback(async (symbol: string, count = 1000): Promise<number[]> => {
         const res = await send({ ticks_history: symbol, count, end: 'latest', style: 'ticks' });

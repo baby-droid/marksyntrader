@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { useStore } from '@/hooks/useStore';
 import { setExecutionSpeed } from '@/utils/execution-speed';
+import { buildKillerXml, KillerContract } from '@/utils/killer-bot';
 import './ai-assistant.scss';
 
 /**
@@ -27,13 +28,24 @@ const SCAN_SYMBOLS = [
     { label: 'Volatility 100 (1s) Index', symbol: '1HZ100V' },
 ];
 
-type ContractType = 'over' | 'under' | 'even' | 'odd';
+type ContractType = KillerContract;
+
+// Markets the PDF rates best for tick-momentum (High/Low tick) trading.
+const MOMENTUM_QUALITY: Record<string, number> = {
+    '1HZ10V': 6,
+    '1HZ25V': 6,
+    R_10: 4,
+    R_25: 3,
+    R_50: 1,
+    '1HZ50V': 1,
+};
 
 interface DigitFreq {
     symbol: string;
     label: string;
     pcts: number[];
     ticks: number[];
+    prices: number[];
     total: number;
 }
 
@@ -49,19 +61,29 @@ interface Signal {
     note: string;
 }
 
-// Pre-built bots that ship with the app, keyed by contract type + barrier.
-const PREBUILT_BOTS: Record<string, string> = {
-    over1: '/bots/over1.xml',
-    over2: '/bots/over2.xml',
-    over3: '/bots/over3.xml',
-    under6: '/bots/under6.xml',
-    under7: '/bots/under7.xml',
-    under8: '/bots/under8.xml',
-    even: '/bots/ahmed-syn-even-odd.xml',
-    odd: '/bots/ahmed-syn-even-odd.xml',
-};
+// The user's shared template that the AI adapts to any found signal.
+const KILLER_TEMPLATE = '/bots/any-market-killer.xml';
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+
+/** Trailing consecutive up/down run from a price series (micro-momentum). */
+function momentumRun(prices: number[]): { dir: 1 | -1 | 0; run: number } {
+    if (prices.length < 3) return { dir: 0, run: 0 };
+    let dir: 1 | -1 | 0 = 0;
+    let run = 0;
+    for (let i = prices.length - 1; i > 0; i--) {
+        const step = prices[i] - prices[i - 1];
+        const d = step > 0 ? 1 : step < 0 ? -1 : 0;
+        if (d === 0) break;
+        if (dir === 0) {
+            dir = d;
+            run = 1;
+        } else if (d === dir) {
+            run += 1;
+        } else break;
+    }
+    return { dir, run };
+}
 
 /** Evaluate one market against the user's target (contract type + prediction digit). */
 function evaluate(freq: DigitFreq, type: ContractType, predictionDigit: number): Signal | null {
@@ -102,6 +124,42 @@ function evaluate(freq: DigitFreq, type: ContractType, predictionDigit: number):
         };
     }
 
+    if (type === 'matches' || type === 'differs') {
+        const N = predictionDigit;
+        const p = pcts[N];
+        if (type === 'matches') {
+            // Matches wins when digit N appears (base ~10%); need a clear surplus.
+            if (p < 13.5) return null;
+            return {
+                symbol, label, type, barrier: N,
+                confidence: clamp(55 + (p - 13.5) * 6, 55, 95), ticks: 1,
+                note: `Digit ${N} appears ${p.toFixed(1)}% (edge for Matches).`,
+            };
+        }
+        // Differs wins when digit N does NOT appear (base ~90%); safest when p is low.
+        if (p > 7.5) return null;
+        return {
+            symbol, label, type, barrier: N,
+            confidence: clamp(80 + (7.5 - p) * 4, 80, 98), ticks: 1,
+            note: `Digit ${N} only ${p.toFixed(1)}% → high Differs win rate.`,
+        };
+    }
+
+    if (type === 'rise' || type === 'fall') {
+        // Tick micro-momentum continuation (per High/Low-tick PDF).
+        const { dir, run } = momentumRun(freq.prices);
+        const wantUp = type === 'rise';
+        if (run < 3) return null;
+        if ((wantUp && dir !== 1) || (!wantUp && dir !== -1)) return null;
+        const quality = MOMENTUM_QUALITY[symbol] ?? 0;
+        const confidence = clamp(58 + (run - 3) * 7 + quality * 3, 58, 95);
+        return {
+            symbol, label, type,
+            confidence, ticks: 1,
+            note: `${run} consecutive ${wantUp ? 'up' : 'down'} ticks — momentum ${wantUp ? 'rising' : 'falling'}.`,
+        };
+    }
+
     // Even / Odd — driven by even-digit share.
     const evenPct = [0, 2, 4, 6, 8].reduce((s, d) => s + pcts[d], 0);
     if (type === 'even' && evenPct >= 52) {
@@ -133,6 +191,7 @@ const AIAssistant: React.FC = () => {
     const freqRef = useRef<Map<string, DigitFreq>>(new Map());
 
     const isOverUnder = contractType === 'over' || contractType === 'under';
+    const needsDigit = isOverUnder || contractType === 'matches' || contractType === 'differs';
 
     const stopScan = useCallback(() => {
         wsRefs.current.forEach(ws => {
@@ -162,7 +221,7 @@ const AIAssistant: React.FC = () => {
         setScanning(true);
 
         SCAN_SYMBOLS.forEach(({ symbol, label }) => {
-            freqRef.current.set(symbol, { symbol, label, pcts: new Array(10).fill(10), ticks: [], total: 0 });
+            freqRef.current.set(symbol, { symbol, label, pcts: new Array(10).fill(10), ticks: [], prices: [], total: 0 });
             const ws = new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
             wsRefs.current.push(ws);
             ws.onopen = () => {
@@ -175,7 +234,8 @@ const AIAssistant: React.FC = () => {
                 if (!freq) return;
 
                 if (d.history?.prices) {
-                    const prices = d.history.prices;
+                    const prices = d.history.prices as number[];
+                    freq.prices = prices.slice(-500);
                     freq.ticks = prices.map((p: number) => {
                         const s = p.toFixed(2).replace('.', '');
                         return parseInt(s[s.length - 1], 10);
@@ -183,7 +243,9 @@ const AIAssistant: React.FC = () => {
                     freq.total = freq.ticks.length;
                 }
                 if (d.tick) {
-                    const s = d.tick.quote.toFixed(2).replace('.', '');
+                    const q = d.tick.quote as number;
+                    freq.prices = [...freq.prices.slice(-499), q];
+                    const s = q.toFixed(2).replace('.', '');
                     freq.ticks = [...freq.ticks.slice(-499), parseInt(s[s.length - 1], 10)];
                     freq.total = freq.ticks.length;
                 }
@@ -202,27 +264,20 @@ const AIAssistant: React.FC = () => {
 
     useEffect(() => () => stopScan(), [stopScan]);
 
-    const applyStakeAndMartingale = (xml: string): string => {
-        let out = xml;
-        // Stake: first two math_number values are stake + initial stake in the shipped bots.
-        let replaced = 0;
-        out = out.replace(/(<field name="NUM">)0\.5(<\/field>)/g, (m, a, b) => {
-            replaced += 1;
-            return replaced <= 2 ? `${a}${stake}${b}` : m;
-        });
-        // Martingale multiplier (2.2 in the shipped bots).
-        out = out.replace(/(<field name="NUM">)2\.2(<\/field>)/g, `$1${martingale}$2`);
-        return out;
-    };
-
     const loadAndRun = useCallback(async () => {
         if (!best) return;
-        const key = isOverUnder ? `${best.type}${best.barrier}` : best.type;
-        const file = PREBUILT_BOTS[key] || PREBUILT_BOTS.over2;
+        const key = best.barrier !== undefined ? `${best.type}${best.barrier}` : best.type;
         try {
-            const res = await fetch(file);
+            const res = await fetch(KILLER_TEMPLATE);
             const raw = await res.text();
-            const xml = applyStakeAndMartingale(raw);
+            const xml = buildKillerXml(raw, {
+                symbol: best.symbol,
+                contract: best.type,
+                barrier: best.barrier,
+                ticks: best.ticks,
+                stake,
+                martingale,
+            });
 
             (window as any).__pendingBotXml = xml;
             (window as any).__pendingBotName = `AI ${best.type.toUpperCase()}${best.barrier ?? ''}`;
@@ -281,7 +336,21 @@ const AIAssistant: React.FC = () => {
         }
     }, [best, isOverUnder, dashboard, run_panel, load_modal, stake, martingale]);
 
-    const digitOptions = contractType === 'over' ? [0, 1, 2, 3, 4, 5, 6, 7] : [1, 2, 3, 4, 5, 6, 7, 8, 9];
+    const digitOptions =
+        contractType === 'over'
+            ? [0, 1, 2, 3, 4, 5, 6, 7]
+            : contractType === 'under'
+              ? [1, 2, 3, 4, 5, 6, 7, 8, 9]
+              : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+
+    const digitLabel =
+        contractType === 'over'
+            ? 'Over'
+            : contractType === 'under'
+              ? 'Under'
+              : contractType === 'matches'
+                ? 'Matches'
+                : 'Differs';
 
     return (
         <>
@@ -337,7 +406,7 @@ const AIAssistant: React.FC = () => {
                             <div className='ai-assistant__field'>
                                 <label>TRADE TYPE</label>
                                 <div className='ai-assistant__trade-types'>
-                                    {(['over', 'under', 'even', 'odd'] as ContractType[]).map(t => (
+                                    {(['over', 'under', 'even', 'odd', 'rise', 'fall', 'matches', 'differs'] as ContractType[]).map(t => (
                                         <button
                                             key={t}
                                             className={`ai-assistant__type-btn ${contractType === t ? 'active' : ''}`}
@@ -349,15 +418,15 @@ const AIAssistant: React.FC = () => {
                                 </div>
                             </div>
 
-                            {isOverUnder && (
+                            {needsDigit && (
                                 <div className='ai-assistant__field'>
-                                    <label>PREDICTION DIGIT (scans for {contractType} {predictionDigit})</label>
+                                    <label>PREDICTION DIGIT (scans for {digitLabel.toLowerCase()} {predictionDigit})</label>
                                     <select
                                         value={predictionDigit}
                                         onChange={e => setPredictionDigit(Number(e.target.value))}
                                     >
                                         {digitOptions.map(d => (
-                                            <option key={d} value={d}>{contractType === 'over' ? 'Over' : 'Under'} {d}</option>
+                                            <option key={d} value={d}>{digitLabel} {d}</option>
                                         ))}
                                     </select>
                                 </div>

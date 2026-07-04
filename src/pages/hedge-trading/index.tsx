@@ -129,43 +129,48 @@ const HedgeTrading: React.FC = () => {
         };
         setResults(p => [entry, ...p].slice(0, 30));
 
+        const needsBarrier = ['Over / Under', 'Match / Differ'].includes(CONTRACT_TABS[contractTab]);
+        const settled = { a: false, b: false, pa: 0, pb: 0 };
+        const finalize = () => {
+            if (!settled.a || !settled.b) return;
+            const net = settled.pa + settled.pb;
+            setResults(p => p.map(r => (r.id === id
+                ? { ...r, status: settled.pa >= settled.pb ? 'won-a' : 'won-b', profitA: settled.pa, profitB: settled.pb }
+                : r)));
+            setPnl(prev => {
+                const next = prev + net;
+                if (tpEnabled && next >= takeProfitVal) stopAll();
+                if (slEnabled && next <= -stopLossVal) stopAll();
+                return next;
+            });
+            if (!autoHedge) setRunning(false);
+        };
+
         try {
-            const [resA, resB] = await Promise.all([
-                buyContract({
-                    symbol: symbolKey,
-                    contract_type: contractTypes.a as any,
-                    duration,
-                    duration_unit: 't',
-                    stake: stakeA,
-                    barrier: ['Over / Under','Match / Differ'].includes(CONTRACT_TABS[contractTab]) ? legA.barrier : undefined,
-                }),
-                buyContract({
-                    symbol: symbolKey,
-                    contract_type: contractTypes.b as any,
-                    duration,
-                    duration_unit: 't',
-                    stake: stakeB,
-                    barrier: ['Over / Under','Match / Differ'].includes(CONTRACT_TABS[contractTab]) ? legB.barrier : undefined,
-                }),
+            await Promise.all([
+                buyContract(
+                    {
+                        symbol: symbolKey,
+                        contract_type: contractTypes.a as any,
+                        duration,
+                        duration_unit: 't',
+                        stake: stakeA,
+                        barrier: needsBarrier ? legA.barrier : undefined,
+                    },
+                    c => { settled.a = true; settled.pa = applyCommission(c.profit); finalize(); }
+                ),
+                buyContract(
+                    {
+                        symbol: symbolKey,
+                        contract_type: contractTypes.b as any,
+                        duration,
+                        duration_unit: 't',
+                        stake: stakeB,
+                        barrier: needsBarrier ? legB.barrier : undefined,
+                    },
+                    c => { settled.b = true; settled.pb = applyCommission(c.profit); finalize(); }
+                ),
             ]);
-
-            setTimeout(() => {
-                const wonA = Math.random() > 0.5;
-                const profitA = applyCommission(wonA ? stakeA * 0.87 : -stakeA);
-                const profitB = applyCommission(!wonA ? stakeB * 0.87 : -stakeB);
-                const net = profitA + profitB;
-
-                setResults(p => p.map(r => r.id === id ? {
-                    ...r, status: wonA ? 'won-a' : 'won-b', profitA, profitB,
-                } : r));
-                setPnl(prev => {
-                    const next = prev + net;
-                    if (tpEnabled && next >= takeProfitVal) stopAll();
-                    if (slEnabled && next <= -stopLossVal) stopAll();
-                    return next;
-                });
-                if (!autoHedge) setRunning(false);
-            }, duration * 1000 + 200);
         } catch {
             setResults(p => p.map(r => r.id === id ? { ...r, status: 'running' } : r));
             if (!autoHedge) setRunning(false);
