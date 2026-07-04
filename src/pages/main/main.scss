@@ -60,13 +60,16 @@ body {
                 border-bottom: 1px solid rgba(0,255,100,0.1);
                 position: relative;
                 z-index: 30;
+                overflow-x: auto;
+                overflow-y: hidden;
+                -ms-overflow-style: none;
+                scrollbar-width: none;
+                &::-webkit-scrollbar { display: none; }
+                flex-wrap: nowrap;
 
                 @include mobile-or-tablet-screen {
                     overflow-x: auto;
                     overflow-y: hidden;
-                    -ms-overflow-style: none;
-                    scrollbar-width: none;
-                    &::-webkit-scrollbar { display: none; }
                 }
 
                 &--header--main__tabs {

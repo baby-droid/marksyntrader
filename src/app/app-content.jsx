@@ -39,6 +39,11 @@ const PreviewBranding =
 const AppContent = observer(() => {
     const [is_api_initialized, setIsApiInitialized] = React.useState(false);
     const [is_loading, setIsLoading] = React.useState(true);
+    const [min_time_elapsed, setMinTimeElapsed] = React.useState(false);
+    React.useEffect(() => {
+        const t = setTimeout(() => setMinTimeElapsed(true), 1750);
+        return () => clearTimeout(t);
+    }, []);
 
     const store = useStore();
     const { app, transactions, common, client } = store;
@@ -191,7 +196,7 @@ const AppContent = observer(() => {
                     <PreviewBranding />
                 </Suspense>
             )}
-            {is_loading ? (
+            {(is_loading || !min_time_elapsed) ? (
                 <LoadingScreen />
             ) : (
                 <AuthLoadingWrapper>

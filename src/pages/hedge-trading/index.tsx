@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useDerivTrade } from '@/hooks/useDerivTrade';
 import { applyCommission } from '@/utils/commission';
+import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import './hedge-trading.scss';
 
 function getLastDigitFromQuote(q: number): number {
@@ -66,6 +67,8 @@ function initLeg(): LegState {
 const HedgeTrading: React.FC = () => {
     const { buyContract, connected, balance, currency, subscribeTicks } = useDerivTrade();
     const [market, setMarket] = useState('V50');
+    const [displayCur, setDisplayCur] = useState(getDisplayCurrency());
+    useEffect(() => { return subscribeCurrency(() => setDisplayCur(getDisplayCurrency())); }, []);
     const [contractTab, setContractTab] = useState(0);
     const [legA, setLegA] = useState<LegState>(initLeg());
     const [legB, setLegB] = useState<LegState>({ ...initLeg(), barrier: 5 });
@@ -288,7 +291,7 @@ const HedgeTrading: React.FC = () => {
             {/* PnL */}
             {totalPnl !== 0 && (
                 <div className={`hedge-pro__pnl ${totalPnl >= 0 ? 'pos' : 'neg'}`}>
-                    P&L: {totalPnl >= 0 ? '+' : ''}{totalPnl.toFixed(2)} {currency}
+                    P&L: {totalPnl >= 0 ? '+' : ''}{fromUsd(totalPnl).toFixed(2)} {displayCur}
                 </div>
             )}
 
@@ -313,9 +316,9 @@ const HedgeTrading: React.FC = () => {
                             <span>{r.legA} vs {r.legB}</span>
                             {r.status === 'running' ? <span className='hedge-pro__result-running'>⟳</span> : (
                                 <>
-                                    <span className={r.profitA >= 0 ? 'pos' : 'neg'}>{r.legA}: {r.profitA >= 0 ? '+' : ''}{r.profitA.toFixed(2)}</span>
-                                    <span className={r.profitB >= 0 ? 'pos' : 'neg'}>{r.legB}: {r.profitB >= 0 ? '+' : ''}{r.profitB.toFixed(2)}</span>
-                                    <span className={(r.profitA + r.profitB) >= 0 ? 'pos' : 'neg'}>Net: {(r.profitA + r.profitB) >= 0 ? '+' : ''}{(r.profitA + r.profitB).toFixed(2)}</span>
+                                    <span className={r.profitA >= 0 ? 'pos' : 'neg'}>{r.legA}: {r.profitA >= 0 ? '+' : ''}{fromUsd(r.profitA).toFixed(2)} {displayCur}</span>
+                                    <span className={r.profitB >= 0 ? 'pos' : 'neg'}>{r.legB}: {r.profitB >= 0 ? '+' : ''}{fromUsd(r.profitB).toFixed(2)} {displayCur}</span>
+                                    <span className={(r.profitA + r.profitB) >= 0 ? 'pos' : 'neg'}>Net: {(r.profitA + r.profitB) >= 0 ? '+' : ''}{fromUsd(r.profitA + r.profitB).toFixed(2)} {displayCur}</span>
                                 </>
                             )}
                         </div>

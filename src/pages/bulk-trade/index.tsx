@@ -1,9 +1,10 @@
 // @ts-nocheck
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useDerivTrading } from '@/hooks/useDerivTrading';
 import { useDigitStats } from '@/hooks/useDigitStats';
 import DigitCircles from '@/components/digit-circles';
+import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import './bulk-trade.scss';
 
 const MARKETS = [
@@ -50,6 +51,12 @@ const BulkTrade = observer(() => {
   const [martMult, setMartMult] = useState(2);
   const [isRunning, setIsRunning] = useState(false);
   const [disclaimer, setDisclaimer] = useState(true);
+  const [displayCur, setDisplayCur] = useState(getDisplayCurrency());
+
+  useEffect(() => subscribeCurrency(() => setDisplayCur(getDisplayCurrency())), []);
+
+  const fmt = (usd: number) => `${fromUsd(usd).toFixed(2)} ${displayCur}`;
+  const fmtProfit = (usd: number) => `${usd >= 0 ? '+' : ''}${fromUsd(usd).toFixed(2)} ${displayCur}`;
 
   const { balance, currency, buyContract, tradeResults, winCount, lossCount, totalProfit, clearResults } = useDerivTrading();
   const { digits, lastDigit, currentPrice, isConnected } = useDigitStats(market);
@@ -113,7 +120,7 @@ const BulkTrade = observer(() => {
         <div className='bulk-trade__header-right'>
           <div className='bulk-trade__balance'>
             <span>Balance</span>
-            <strong>{currency} {Number(balance).toFixed(2)}</strong>
+            <strong>{fmt(Number(balance))}</strong>
           </div>
           <div className={`bulk-trade__conn ${isConnected ? 'on' : 'off'}`}>
             {isConnected ? '● Live' : '○ Offline'}
@@ -256,7 +263,7 @@ const BulkTrade = observer(() => {
           <span>Contracts</span><strong>{count}</strong>
         </div>
         <div className='bulk-trade__summary-item'>
-          <span>Total Stake</span><strong>{currency} {(stake * count).toFixed(2)}</strong>
+          <span>Total Stake</span><strong>{fmt(stake * count)}</strong>
         </div>
         <div className='bulk-trade__summary-item'>
           <span>Market</span><strong>{market}</strong>
@@ -271,7 +278,7 @@ const BulkTrade = observer(() => {
           <span>Losses</span><strong>{losses}</strong>
         </div>
         <div className={`bulk-trade__summary-item ${totalProfit >= 0 ? 'bulk-trade__summary-item--green' : 'bulk-trade__summary-item--red'}`}>
-          <span>Net P/L</span><strong>{currency} {totalProfit.toFixed(2)}</strong>
+          <span>Net P/L</span><strong>{fmtProfit(totalProfit)}</strong>
         </div>
       </div>
 
@@ -283,7 +290,7 @@ const BulkTrade = observer(() => {
       >
         {isRunning
           ? `⏳ Sending ${count} contracts...`
-          : `⚡ Execute ${count} ${tradeType} Contracts — ${currency} ${(stake * count).toFixed(2)} total`
+          : `⚡ Execute ${count} ${tradeType} Contracts — ${fmt(stake * count)} total`
         }
       </button>
 
@@ -302,9 +309,9 @@ const BulkTrade = observer(() => {
                   <span className='bulk-trade__result-time'>{new Date(r.time).toLocaleTimeString()}</span>
                   <span>{r.type}</span>
                   <span>{market}</span>
-                  <span>{currency} {r.stake.toFixed(2)}</span>
+                  <span>{fmt(r.stake)}</span>
                   <span className={`bulk-trade__result-status bulk-trade__result-status--${st}`}>
-                    {r.won ? '✓ Won' : '✗ Lost'} {r.profit >= 0 ? '+' : ''}{r.profit.toFixed(2)}
+                    {r.won ? '✓ Won' : '✗ Lost'} {fmtProfit(r.profit)}
                   </span>
                 </div>
               );

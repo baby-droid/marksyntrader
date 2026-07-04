@@ -5,12 +5,9 @@ import { useStore } from '@/hooks/useStore';
 import './floating-run-button.scss';
 
 const FloatingRunButton: React.FC = observer(() => {
-    const { run_panel, dashboard } = useStore();
+    const { run_panel } = useStore();
     const { is_running, onRunButtonClick, onStopButtonClick } = run_panel as any;
-    const { active_tab } = dashboard;
     const [collapsed, setCollapsed] = useState(false);
-
-    if (active_tab === 0) return null;
 
     return (
         <div className={`floating-run-btn ${collapsed ? 'collapsed' : ''}`}>
