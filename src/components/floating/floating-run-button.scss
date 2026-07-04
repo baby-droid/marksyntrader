@@ -21,6 +21,14 @@
 
     &__info {
         padding: 0 4px;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        align-items: flex-start;
+    }
+
+    &__speed {
+        margin: 0;
     }
 
     &__status {

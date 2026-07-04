@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { observer } from 'mobx-react-lite';
+import SpeedControl from '@/components/speed-control/speed-control';
 import { useStore } from '@/hooks/useStore';
 import './floating-run-button.scss';
 
@@ -18,6 +19,7 @@ const FloatingRunButton: React.FC = observer(() => {
                     <span className={`floating-run-btn__status ${is_running ? 'running' : 'idle'}`}>
                         {is_running ? '● BOT RUNNING' : '○ Bot Idle'}
                     </span>
+                    <SpeedControl className='floating-run-btn__speed' compact />
                 </div>
             )}
             <div className='floating-run-btn__actions'>
