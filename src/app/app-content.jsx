@@ -25,7 +25,6 @@ import BotBuilder from '../pages/bot-builder';
 import Main from '../pages/main';
 import AIAssistant from '../components/ai-assistant';
 import InstallPrompt from '../components/install-prompt';
-import InspectLock from '../components/inspect-lock';
 import './app.scss';
 import 'react-toastify/dist/ReactToastify.css';
 import '../components/bot-notification/bot-notification.scss';
@@ -206,7 +205,6 @@ const AppContent = observer(() => {
                             <TransactionDetailsModal />
                             <ToastContainer limit={3} draggable={false} />
                             <InstallPrompt />
-                            <InspectLock />
                             <AIAssistant />
                         </div>
                     </ThemeProvider>

@@ -3,11 +3,23 @@ import React, { useEffect, useState } from 'react';
 import './loading-screen.scss';
 
 const PHRASES = [
-  'Connecting to markets...',
+  'Preparing your trading experience...',
+  'Connecting to live markets...',
   'Loading AI engines...',
-  'Syncing live ticks...',
-  'Initializing trade systems...',
+  'Syncing real-time data...',
   'Almost ready...',
+];
+
+const FEATURES_LEFT = [
+  { icon: '📊', title: 'MARKET ANALYSIS', sub: 'REAL-TIME DATA' },
+  { icon: '🛡️', title: 'SECURE PLATFORM', sub: 'ENCRYPTED & SAFE' },
+  { icon: '⚡', title: 'FAST EXECUTION', sub: 'SPEED MATTERS' },
+];
+
+const FEATURES_RIGHT = [
+  { icon: '🎯', title: 'PRECISE STRATEGY', sub: 'ACCURATE SIGNALS' },
+  { icon: '👥', title: 'COPY TRADING', sub: 'FOLLOW EXPERTS' },
+  { icon: '🏆', title: 'GROW TOGETHER', sub: 'WIN AS A TEAM' },
 ];
 
 const LoadingScreen: React.FC = () => {
@@ -21,85 +33,102 @@ const LoadingScreen: React.FC = () => {
   }, []);
 
   return (
-    <div className='loading-screen'>
-      {/* Animated grid background */}
-      <div className='loading-screen__grid' />
+    <div className='at-loading'>
+      <div
+        className='at-loading__bg'
+        style={{ backgroundImage: "url('/ahmed-trade-loading.png')", backgroundSize: 'cover', backgroundPosition: 'center' }}
+      />
+      <div className='at-loading__overlay' />
 
-      {/* Floating particles */}
-      <div className='loading-screen__particles'>
-        {Array.from({ length: 18 }).map((_, i) => (
-          <span
-            key={i}
-            className='loading-screen__particle'
-            style={{
-              left: `${(i * 5.5 + 3) % 100}%`,
-              animationDelay: `${(i % 6) * 0.7}s`,
-              animationDuration: `${6 + (i % 5)}s`,
-            }}
-          />
-        ))}
+      {/* Corner labels */}
+      <div className='at-loading__corner-tl'>
+        <span className='at-loading__corner-logo'>AT</span>
+        <span className='at-loading__corner-name'>AHMED TRADE</span>
       </div>
-
-      {/* Orbiting rings */}
-      <div className='loading-screen__rings'>
-        <div className='loading-screen__ring loading-screen__ring--1' />
-        <div className='loading-screen__ring loading-screen__ring--2' />
-        <div className='loading-screen__ring loading-screen__ring--3' />
+      <div className='at-loading__corner-tr'>
+        <span>TRUST THE PLAN</span>
+        <span>TRADE THE FUTURE</span>
       </div>
+      <div className='at-loading__corner-bl'>
+        <span>🛡️ RELIABLE | TRANSPARENT | SECURE</span>
+      </div>
+      <div className='at-loading__corner-br'>
+        <span className='at-loading__globe'>🌐</span>
+        <span>AHMEDTRADE.COM</span>
+      </div>
+      <div className='at-loading__bottom-center'>BUILT FOR TRADERS, BY TRADERS</div>
 
-      {/* Center card */}
-      <div className='loading-screen__card'>
-        {/* Logo */}
-        <div className='loading-screen__logo-wrap'>
-          <img src='/logo.jpeg' alt='Ahmed Syn Trader' className='loading-screen__logo' />
-          <div className='loading-screen__logo-glow' />
+      {/* Main content */}
+      <div className='at-loading__main'>
+        {/* Left features */}
+        <div className='at-loading__features at-loading__features--left'>
+          {FEATURES_LEFT.map((f, i) => (
+            <div key={i} className='at-loading__feature'>
+              <span className='at-loading__feature-icon'>{f.icon}</span>
+              <div>
+                <div className='at-loading__feature-title'>{f.title}</div>
+                <div className='at-loading__feature-sub'>{f.sub}</div>
+              </div>
+            </div>
+          ))}
         </div>
 
-        {/* Brand name */}
-        <div className='loading-screen__brand'>
-          <h1 className='loading-screen__name'>AHMED SYN TRADER</h1>
-          <p className='loading-screen__tagline'>Professional Deriv Trading Platform</p>
-        </div>
-
-        {/* Progress bar */}
-        <div className='loading-screen__bar-wrap'>
-          <div className='loading-screen__bar'>
-            <div className='loading-screen__bar-fill' style={{ width: `${progress}%` }} />
-            <div className='loading-screen__bar-glow' style={{ left: `${progress}%` }} />
+        {/* Center branding */}
+        <div className='at-loading__center'>
+          <div className='at-loading__logo-ring'>
+            <div className='at-loading__logo-ring-inner'>
+              <span className='at-loading__logo-text'>AT</span>
+              <div className='at-loading__logo-arrow'>↗</div>
+            </div>
           </div>
-          <span className='loading-screen__percent'>{Math.floor(progress)}%</span>
-        </div>
 
-        {/* Phrase */}
-        <p className='loading-screen__phrase' key={phrase}>{PHRASES[phrase]}</p>
+          <h1 className='at-loading__brand'>
+            <span className='at-loading__brand-ahmed'>AHMED</span>
+            <span className='at-loading__brand-trade'> TRADE</span>
+          </h1>
+          <p className='at-loading__tagline'>— SMART TRADING. BETTER FUTURE. —</p>
 
-        {/* Dots */}
-        <div className='loading-screen__dots'>
-          {[0,1,2,3,4].map(i => <span key={i} className='loading-screen__dot' style={{ animationDelay: `${i * 0.18}s` }} />)}
-        </div>
+          {/* Loading section */}
+          <div className='at-loading__loading-label'>
+            LOADING <span className='at-loading__bars'>▐▐▐</span>
+          </div>
+          <div className='at-loading__bar-wrap'>
+            <div className='at-loading__bar'>
+              <div className='at-loading__bar-fill' style={{ width: `${progress}%` }}>
+                <div className='at-loading__bar-glow' />
+              </div>
+            </div>
+            <span className='at-loading__percent'>{Math.floor(progress)}%</span>
+          </div>
+          <p className='at-loading__phrase' key={phrase}>{PHRASES[phrase]}</p>
 
-        {/* Live market ticker */}
-        <div className='loading-screen__ticker'>
-          <div className='loading-screen__ticker-track'>
-            {['V10','V25','V50','V75','V100','V10 1s','V25 1s','V50 1s','V100 1s','V10','V25','V50','V75','V100'].map((s, i) => (
-              <span key={i} className='loading-screen__ticker-item'>
-                {s}<i className={i % 2 ? 'down' : 'up'}>{i % 2 ? '▼' : '▲'}</i>
-              </span>
+          {/* Hologram circle */}
+          <div className='at-loading__hologram'>
+            <div className='at-loading__hologram-ring at-loading__hologram-ring--1' />
+            <div className='at-loading__hologram-ring at-loading__hologram-ring--2' />
+            <div className='at-loading__hologram-core' />
+          </div>
+
+          {/* Chart bars decoration */}
+          <div className='at-loading__chart-bars'>
+            {[3,5,2,7,4,6,3,5,8,4,6,3].map((h, i) => (
+              <div key={i} className='at-loading__chart-bar' style={{ height: `${h * 4}px` }} />
             ))}
           </div>
         </div>
-      </div>
 
-      {/* Corner decorations */}
-      <div className='loading-screen__corner loading-screen__corner--tl' />
-      <div className='loading-screen__corner loading-screen__corner--tr' />
-      <div className='loading-screen__corner loading-screen__corner--bl' />
-      <div className='loading-screen__corner loading-screen__corner--br' />
-
-      {/* Bottom watermark */}
-      <div className='loading-screen__footer'>
-        <span>Powered by Deriv WebSocket API</span>
-        <span className='loading-screen__version'>v2.0</span>
+        {/* Right features */}
+        <div className='at-loading__features at-loading__features--right'>
+          {FEATURES_RIGHT.map((f, i) => (
+            <div key={i} className='at-loading__feature at-loading__feature--right'>
+              <div>
+                <div className='at-loading__feature-title'>{f.title}</div>
+                <div className='at-loading__feature-sub'>{f.sub}</div>
+              </div>
+              <span className='at-loading__feature-icon'>{f.icon}</span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
