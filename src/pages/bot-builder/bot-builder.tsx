@@ -27,7 +27,10 @@ const FREE_BOTS_LIST = [
 ];
 
 const FreeBotsSidePanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
-    const [loadingId, setLoadingId] = useState<string | null>(null);
+    const { run_panel } = useStore();
+    // Single global lock: only one bot action runs at a time across all cards
+    const [activeBotId, setActiveBotId] = useState<string | null>(null);
+    const [actionType, setActionType] = useState<'load' | 'run' | null>(null);
     const [loadedId, setLoadedId] = useState<string | null>(null);
 
     const loadXmlNow = useCallback((xml: string) => {
@@ -48,37 +51,104 @@ const FreeBotsSidePanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         }
     }, []);
 
-    const handleLoad = useCallback(async (bot: typeof FREE_BOTS_LIST[0]) => {
-        setLoadingId(bot.id);
+    // Wait until the workspace has the expected blocks loaded (state-based, not time-based)
+    const waitForWorkspaceReady = useCallback((): Promise<void> => {
+        return new Promise((resolve, reject) => {
+            let attempts = 0;
+            const check = setInterval(() => {
+                attempts++;
+                const B = (window as any).Blockly;
+                const ws = B?.derivWorkspace;
+                // Workspace is ready when it has at least one block rendered
+                if (ws && ws.getAllBlocks && ws.getAllBlocks(false).length > 0) {
+                    clearInterval(check);
+                    resolve();
+                } else if (attempts >= 100) {
+                    clearInterval(check);
+                    reject(new Error('Workspace did not become ready in time'));
+                }
+            }, 100);
+        });
+    }, []);
+
+    // Fetch XML and load into the Blockly workspace
+    const fetchAndLoad = useCallback(async (bot: typeof FREE_BOTS_LIST[0]): Promise<void> => {
+        const response = await fetch(bot.xmlFile);
+        if (!response.ok) throw new Error(`Failed to fetch bot XML: ${response.status}`);
+        const xml = await response.text();
+
+        // Always clean up pending markers in finally
         try {
-            const response = await fetch(bot.xmlFile);
-            if (!response.ok) throw new Error('Failed to fetch bot XML');
-            const xml = await response.text();
             (window as any).__pendingBotXml = xml;
             (window as any).__pendingBotName = bot.name;
 
-            // Try immediately; poll until workspace is ready (max 8s)
             if (!loadXmlNow(xml)) {
+                // Workspace not ready yet — poll until it is (max 10 s)
                 let attempts = 0;
-                const poll = setInterval(() => {
-                    attempts++;
-                    if (loadXmlNow(xml) || attempts >= 80) {
-                        clearInterval(poll);
-                        (window as any).__pendingBotXml = null;
-                    }
-                }, 100);
-            } else {
-                (window as any).__pendingBotXml = null;
+                await new Promise<void>((resolve, reject) => {
+                    const poll = setInterval(() => {
+                        attempts++;
+                        if (loadXmlNow(xml)) {
+                            clearInterval(poll);
+                            resolve();
+                        } else if (attempts >= 100) {
+                            clearInterval(poll);
+                            reject(new Error('Workspace not available after 10 s'));
+                        }
+                    }, 100);
+                });
             }
 
+            // State-based readiness: wait until blocks are actually rendered
+            await waitForWorkspaceReady();
+        } finally {
+            (window as any).__pendingBotXml = null;
+            (window as any).__pendingBotName = null;
+        }
+    }, [loadXmlNow, waitForWorkspaceReady]);
+
+    // Load only — just put the bot into the builder
+    const handleLoad = useCallback(async (bot: typeof FREE_BOTS_LIST[0]) => {
+        if (activeBotId) return; // global lock
+        setActiveBotId(bot.id);
+        setActionType('load');
+        try {
+            await fetchAndLoad(bot);
             setLoadedId(bot.id);
             setTimeout(() => { setLoadedId(null); onClose(); }, 1800);
         } catch (e) {
             console.error('Load bot error', e);
         } finally {
-            setLoadingId(null);
+            setActiveBotId(null);
+            setActionType(null);
         }
-    }, [onClose, loadXmlNow]);
+    }, [activeBotId, fetchAndLoad, onClose]);
+
+    // Load & Run — load the bot then immediately start trading
+    const handleLoadAndRun = useCallback(async (bot: typeof FREE_BOTS_LIST[0]) => {
+        if (activeBotId) return; // global lock
+        // If already running, don't start another execution on top
+        if (run_panel.is_running) {
+            console.warn('Bot is already running; stop it before starting a new one.');
+            return;
+        }
+        setActiveBotId(bot.id);
+        setActionType('run');
+        try {
+            await fetchAndLoad(bot);
+            setLoadedId(bot.id);
+            // Close the panel first so the workspace is fully visible
+            onClose();
+            // Kick off trading — workspace is confirmed ready via waitForWorkspaceReady
+            run_panel.onRunButtonClick();
+        } catch (e) {
+            console.error('Load & Run bot error', e);
+        } finally {
+            setActiveBotId(null);
+            setActionType(null);
+            setTimeout(() => setLoadedId(null), 2000);
+        }
+    }, [activeBotId, fetchAndLoad, onClose, run_panel]);
 
     return (
         <div style={{
@@ -96,38 +166,68 @@ const FreeBotsSidePanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                 }}>✕</button>
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
-                {FREE_BOTS_LIST.map(bot => (
-                    <div key={bot.id} style={{
-                        background: loadedId === bot.id ? 'rgba(34,197,94,0.1)' : 'rgba(255,255,255,0.04)',
-                        border: `1px solid ${loadedId === bot.id ? 'rgba(34,197,94,0.5)' : 'rgba(99,102,241,0.18)'}`,
-                        borderRadius: '10px', padding: '11px 13px', marginBottom: '7px',
-                        transition: 'all 0.2s',
-                    }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                            <span style={{ fontSize: '18px' }}>{bot.icon}</span>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ color: '#e0e7ff', fontSize: '12px', fontWeight: 600, lineHeight: 1.3, marginBottom: '2px' }}>{bot.name}</div>
-                                <div style={{ color: '#6b7280', fontSize: '11px' }}>{bot.market}</div>
+                {FREE_BOTS_LIST.map(bot => {
+                    // Global lock: disable ALL cards while any action is in-flight
+                    const anyBusy = activeBotId !== null;
+                    const isThisBusy = activeBotId === bot.id;
+                    const isDone = loadedId === bot.id;
+                    const isLoading = isThisBusy && actionType === 'load';
+                    const isStarting = isThisBusy && actionType === 'run';
+                    return (
+                        <div key={bot.id} style={{
+                            background: isDone ? 'rgba(34,197,94,0.1)' : 'rgba(255,255,255,0.04)',
+                            border: `1px solid ${isDone ? 'rgba(34,197,94,0.5)' : 'rgba(99,102,241,0.18)'}`,
+                            borderRadius: '10px', padding: '11px 13px', marginBottom: '7px',
+                            transition: 'all 0.2s',
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                                <span style={{ fontSize: '18px' }}>{bot.icon}</span>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ color: '#e0e7ff', fontSize: '12px', fontWeight: 600, lineHeight: 1.3, marginBottom: '2px' }}>{bot.name}</div>
+                                    <div style={{ color: '#6b7280', fontSize: '11px' }}>{bot.market}</div>
+                                </div>
+                                <span style={{
+                                    background: bot.badgeColor, color: '#fff', fontSize: '9px', fontWeight: 700,
+                                    padding: '2px 6px', borderRadius: '4px', whiteSpace: 'nowrap', flexShrink: 0,
+                                }}>{bot.badge}</span>
                             </div>
-                            <span style={{
-                                background: bot.badgeColor, color: '#fff', fontSize: '9px', fontWeight: 700,
-                                padding: '2px 6px', borderRadius: '4px', whiteSpace: 'nowrap', flexShrink: 0,
-                            }}>{bot.badge}</span>
+
+                            {/* Load into Builder */}
+                            <button
+                                onClick={() => handleLoad(bot)}
+                                disabled={anyBusy || isDone}
+                                style={{
+                                    width: '100%', padding: '6px', borderRadius: '7px', border: 'none',
+                                    cursor: anyBusy || isDone ? 'not-allowed' : 'pointer',
+                                    background: isDone ? '#16a34a' : 'rgba(99,102,241,0.85)',
+                                    color: '#fff', fontSize: '11px', fontWeight: 600, transition: 'all 0.15s',
+                                    opacity: anyBusy && !isThisBusy ? 0.4 : isLoading ? 0.7 : 1,
+                                    marginBottom: '5px',
+                                }}
+                            >
+                                {isLoading ? '⏳ Loading...' : isDone ? '✅ Loaded!' : '📥 Load into Builder'}
+                            </button>
+
+                            {/* Load & Run */}
+                            <button
+                                onClick={() => handleLoadAndRun(bot)}
+                                disabled={anyBusy}
+                                style={{
+                                    width: '100%', padding: '6px', borderRadius: '7px', border: 'none',
+                                    cursor: anyBusy ? 'not-allowed' : 'pointer',
+                                    background: isStarting
+                                        ? 'linear-gradient(90deg,#16a34a,#15803d)'
+                                        : 'linear-gradient(90deg,#f59e0b,#d97706)',
+                                    color: '#fff', fontSize: '11px', fontWeight: 700, transition: 'all 0.15s',
+                                    opacity: anyBusy && !isThisBusy ? 0.4 : isStarting ? 0.7 : 1,
+                                    boxShadow: anyBusy ? 'none' : '0 0 8px rgba(245,158,11,0.5)',
+                                }}
+                            >
+                                {isStarting ? '⏳ Starting...' : '▶ Load & Run'}
+                            </button>
                         </div>
-                        <button
-                            onClick={() => handleLoad(bot)}
-                            disabled={loadingId === bot.id || loadedId === bot.id}
-                            style={{
-                                width: '100%', padding: '7px', borderRadius: '7px', border: 'none', cursor: 'pointer',
-                                background: loadedId === bot.id ? '#16a34a' : 'rgba(99,102,241,0.85)',
-                                color: '#fff', fontSize: '12px', fontWeight: 600, transition: 'all 0.15s',
-                                opacity: loadingId === bot.id ? 0.7 : 1,
-                            }}
-                        >
-                            {loadingId === bot.id ? '⏳ Loading...' : loadedId === bot.id ? '✅ Loaded!' : '▶ Load into Builder'}
-                        </button>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         </div>
     );
