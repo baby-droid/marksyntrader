@@ -40,8 +40,12 @@ const AppContent = observer(() => {
     const [is_api_initialized, setIsApiInitialized] = React.useState(false);
     const [is_loading, setIsLoading] = React.useState(true);
     const [min_time_elapsed, setMinTimeElapsed] = React.useState(false);
+    // Once the app has shown its initial loading screen and revealed content, we
+    // never show the full-screen loader again for the rest of the session — brief
+    // reconnects/token refreshes should not re-trigger the "Loading..." screen.
+    const has_loaded_once_ref = React.useRef(false);
     React.useEffect(() => {
-        const t = setTimeout(() => setMinTimeElapsed(true), 4500);
+        const t = setTimeout(() => setMinTimeElapsed(true), 1200);
         return () => clearTimeout(t);
     }, []);
 
@@ -152,6 +156,7 @@ const AppContent = observer(() => {
 
             active_symbols.retrieveActiveSymbols(true).then(() => {
                 setIsLoading(false);
+                has_loaded_once_ref.current = true;
             });
         };
 
@@ -172,7 +177,12 @@ const AppContent = observer(() => {
     React.useEffect(() => {
         if (is_api_initialized) {
             init();
-            setIsLoading(true);
+            // Only show the full-screen loader for the very first connection of the
+            // session — subsequent reconnects (network blips, token refresh) should
+            // not flash "Loading..." over content that's already on screen.
+            if (!has_loaded_once_ref.current) {
+                setIsLoading(true);
+            }
             if (!client.is_logged_in) {
                 changeActiveSymbolLoadingState();
             }

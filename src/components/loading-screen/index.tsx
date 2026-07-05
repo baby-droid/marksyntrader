@@ -64,10 +64,10 @@ const LoadingScreen: React.FC = () => {
 
   return (
     <div className='at-loading'>
-      <div
-        className='at-loading__bg'
-        style={{ backgroundImage: "url('/ahmed-trade-loading.png')", backgroundSize: 'cover', backgroundPosition: 'center' }}
-      />
+      {/* Plain animated gradient backdrop (from loading-screen.scss) — the mockup
+          PNG is NOT used here since it bakes in its own static "LOADING 78%" text,
+          which visually duplicated/clashed with the real live progress bar below. */}
+      <div className='at-loading__bg' />
       <div className='at-loading__overlay' />
 
       {/* Corner labels */}

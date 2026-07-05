@@ -1,8 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getTradingToken } from '@/utils/trading-token';
+import { api_base } from '@/external/bot-skeleton';
+import {
+    CONNECTION_STATUS,
+    connectionStatus$,
+    isAuthorized$,
+} from '@/external/bot-skeleton/services/api/observables/connection-status-stream';
 
-const APP_ID = (process.env.NEXT_PUBLIC_DERIV_APP_ID as string) || '1089';
-const WS_URL = `wss://ws.binaryws.com/websockets/v3?app_id=${APP_ID}`;
+/**
+ * Trading hook — rides on the SAME authenticated WebSocket connection the rest
+ * of the app already uses (api_base, authorized via the user's normal Deriv
+ * login). No separate API token, no second login — if the user is logged in
+ * to the app, this hook can trade on their account immediately.
+ */
 
 export interface TickData {
     symbol: string;
@@ -48,70 +57,49 @@ function getLastDigit(quote: number): number {
 }
 
 export function useDerivTrade() {
-    const wsRef = useRef<WebSocket | null>(null);
-    const reqIdRef = useRef(1);
-    const pendingRef = useRef<Map<number, (d: any) => void>>(new Map());
     const tickCallbacksRef = useRef<Map<string, (t: TickData) => void>>(new Map());
     const pocCallbacksRef = useRef<Map<number, (c: SettledContract) => void>>(new Map());
-    const [connected, setConnected] = useState(false);
+    const [connected, setConnected] = useState(connectionStatus$.value === CONNECTION_STATUS.OPENED);
     const [balance, setBalance] = useState<number | null>(null);
     const [currency, setCurrency] = useState('USD');
-    const [authorized, setAuthorized] = useState(false);
-    const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [authorized, setAuthorized] = useState(isAuthorized$.value);
+    const balanceSubscribedRef = useRef(false);
     const mountedRef = useRef(true);
 
-    const send = useCallback((msg: object): Promise<any> => {
-        return new Promise((resolve, reject) => {
-            const id = reqIdRef.current++;
-            const payload = { ...msg, req_id: id };
-            pendingRef.current.set(id, (d) => {
-                if (d.error) reject(d);
-                else resolve(d);
-            });
-            if (wsRef.current?.readyState === WebSocket.OPEN) {
-                wsRef.current.send(JSON.stringify(payload));
-            } else {
-                pendingRef.current.delete(id);
-                reject(new Error('WebSocket not connected'));
+    // Track connection + auth off the shared observables — same ones the rest
+    // of the app (header, trade panel, etc.) already relies on.
+    useEffect(() => {
+        mountedRef.current = true;
+        const connSub = connectionStatus$.subscribe(status => {
+            if (!mountedRef.current) return;
+            setConnected(status === CONNECTION_STATUS.OPENED);
+        });
+        const authSub = isAuthorized$.subscribe(isAuth => {
+            if (!mountedRef.current) return;
+            setAuthorized(isAuth);
+            if (isAuth && !balanceSubscribedRef.current) {
+                balanceSubscribedRef.current = true;
+                (api_base.api?.send as unknown as ((data: unknown) => Promise<any>) | undefined)?.({ balance: 1, subscribe: 1 })?.catch(() => {});
             }
         });
+        return () => {
+            mountedRef.current = false;
+            connSub.unsubscribe();
+            authSub.unsubscribe();
+        };
     }, []);
 
-    const connect = useCallback(() => {
-        if (wsRef.current?.readyState === WebSocket.OPEN || wsRef.current?.readyState === WebSocket.CONNECTING) return;
-        const ws = new WebSocket(WS_URL);
-        wsRef.current = ws;
+    // Single shared message listener — reads balance/tick/contract pushes
+    // from the same message stream every other part of the app listens on.
+    useEffect(() => {
+        const sub = api_base.api?.onMessage()?.subscribe(({ data: d }: { data: any }) => {
+            if (!d || typeof d !== 'object') return;
 
-        ws.onopen = async () => {
-            if (!mountedRef.current) return;
-            setConnected(true);
-            const token = getTradingToken();
-            if (token) {
-                try {
-                    const auth = await send({ authorize: token });
-                    if (auth.authorize && mountedRef.current) {
-                        setAuthorized(true);
-                        setBalance(parseFloat(auth.authorize.balance ?? '0'));
-                        setCurrency(auth.authorize.currency || 'USD');
-                        // Subscribe to live balance updates
-                        send({ balance: 1, subscribe: 1 }).catch(() => {});
-                    }
-                } catch (err: any) {
-                    console.warn('[useDerivTrade] Auth failed:', err?.error?.message || err?.message);
-                    setAuthorized(false);
-                }
+            if (d.balance && d.balance.balance != null && mountedRef.current) {
+                setBalance(parseFloat(d.balance.balance));
+                setCurrency(d.balance.currency || 'USD');
             }
-        };
 
-        ws.onmessage = (e) => {
-            const d = JSON.parse(e.data);
-            // Resolve pending requests
-            if (d.req_id && pendingRef.current.has(d.req_id)) {
-                const cb = pendingRef.current.get(d.req_id)!;
-                pendingRef.current.delete(d.req_id);
-                cb(d);
-            }
-            // Live tick data
             if (d.tick) {
                 const q = d.tick.quote;
                 const tick: TickData = {
@@ -122,12 +110,7 @@ export function useDerivTrade() {
                 };
                 tickCallbacksRef.current.get(d.tick.symbol)?.(tick);
             }
-            // Balance updates
-            if (d.balance && d.balance.balance != null && mountedRef.current) {
-                setBalance(parseFloat(d.balance.balance));
-                setCurrency(d.balance.currency || 'USD');
-            }
-            // Contract settlement
+
             if (d.proposal_open_contract) {
                 const poc = d.proposal_open_contract;
                 const cid = Number(poc.contract_id);
@@ -146,28 +129,18 @@ export function useDerivTrade() {
                     }
                 }
             }
-        };
+        });
+        return () => sub?.unsubscribe?.();
+    }, []);
 
-        ws.onclose = () => {
-            if (!mountedRef.current) return;
-            setConnected(false);
-            setAuthorized(false);
-            // Reconnect after 3 seconds
-            reconnectRef.current = setTimeout(connect, 3000);
-        };
-
-        ws.onerror = () => ws.close();
-    }, [send]);
-
-    useEffect(() => {
-        mountedRef.current = true;
-        connect();
-        return () => {
-            mountedRef.current = false;
-            if (reconnectRef.current) clearTimeout(reconnectRef.current);
-            wsRef.current?.close();
-        };
-    }, [connect]);
+    // NOTE: api_base's TApiBaseApi type declares send() as returning void, but the
+    // underlying DerivAPIBasic implementation actually returns a Promise at runtime
+    // (see e.g. contracts-for.js `await api_base.api.send(...)`, network_monitor.js
+    // `.send(...).then(...)`). Cast to reflect real behavior.
+    const send = useCallback((msg: object): Promise<any> => {
+        if (!api_base.api) return Promise.reject(new Error('Not connected'));
+        return (api_base.api.send as unknown as (data: unknown) => Promise<any>)(msg);
+    }, []);
 
     const subscribeTicks = useCallback((symbol: string, cb: (t: TickData) => void) => {
         tickCallbacksRef.current.set(symbol, cb);
@@ -196,8 +169,6 @@ export function useDerivTrade() {
             if (res.error) throw res;
 
             const contract_id = res.buy?.contract_id || 0;
-            // Refresh balance after buy
-            send({ balance: 1 }).catch(() => {});
 
             if (contract_id && onSettled) {
                 pocCallbacksRef.current.set(Number(contract_id), onSettled);

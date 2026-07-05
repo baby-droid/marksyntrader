@@ -7,7 +7,6 @@ import { useDerivTrade } from '@/hooks/useDerivTrade';
 import { useDerivTrading } from '@/hooks/useDerivTrading';
 import { buildKillerXml, KillerContract } from '@/utils/killer-bot';
 import { getExecutionSpeed } from '@/utils/execution-speed';
-import { hasTradingToken } from '@/utils/trading-token';
 import './ai-assistant.scss';
 
 /**
@@ -95,6 +94,10 @@ function getTickCount(confidence: number, is1s: boolean, capAt2 = false): number
     return confidence >= 75 ? 1 : is1s ? 2 : 3;
 }
 
+// Entry thresholds below follow the "Delayed Digit Exhaustion" MATCHES strategy
+// and "Double Repetition Reversal" DIFFERS strategy from the attached professional
+// Deriv strategy PDFs: MATCHES waits for a digit absent 15-22 ticks (V25) /
+// 12-18 ticks (V10) before entry; DIFFERS enters after 2 consecutive repeats.
 function evaluateAutoMatches(freq: DigitFreq): Signal | null {
     const { pcts, ticks, label, symbol, group } = freq;
     const is1s = symbol.includes('HZ');
@@ -103,10 +106,10 @@ function evaluateAutoMatches(freq: DigitFreq): Signal | null {
     for (let d = 0; d <= 9; d++) {
         let absent = 0;
         for (let i = ticks.length - 1; i >= 0; i--) { if (ticks[i] === d) break; absent++; }
-        if (absent >= 12 && absent > longestAbsence) { longestAbsence = absent; bestMissing = d; }
+        if (absent >= 15 && absent > longestAbsence) { longestAbsence = absent; bestMissing = d; }
     }
     if (bestMissing !== null) {
-        const conf = clamp(60 + (longestAbsence - 12) * 2, 60, 90);
+        const conf = clamp(60 + (longestAbsence - 15) * 2, 60, 90);
         return { symbol, label, group, type: 'matches', barrier: bestMissing, confidence: conf, ticks: getTickCount(conf, is1s, true), autoDigit: bestMissing, note: `Digit ${bestMissing} absent ${longestAbsence} ticks.` };
     }
     if (ticks.length >= 2 && ticks.slice(-2)[0] === ticks.slice(-2)[1]) {
@@ -237,20 +240,12 @@ const DEFAULT_SIGNAL: Signal = {
 const AIAssistant: React.FC = () => {
     const { dashboard, load_modal, run_panel } = useStore() as any;
     const { currency: accountCurrency } = useDerivTrading();
-    // useDerivTrade opens its own authenticated WebSocket → guaranteed live account trades
+    // useDerivTrade rides the app's existing authenticated connection — same login, no separate token
     const derivTrade = useDerivTrade();
     const derivTradeRef = useRef(derivTrade);
     useEffect(() => { derivTradeRef.current = derivTrade; }, [derivTrade]);
 
     const [isOpen, setIsOpen]         = useState(false);
-    const [hasToken, setHasToken]     = useState(() => hasTradingToken());
-    useEffect(() => {
-        const check = () => setHasToken(hasTradingToken());
-        window.addEventListener('storage', check);
-        window.addEventListener('focus', check);
-        const interval = setInterval(check, 3000);
-        return () => { window.removeEventListener('storage', check); window.removeEventListener('focus', check); clearInterval(interval); };
-    }, []);
     const [isPulsing, setIsPulsing]   = useState(true);
     const [scanning, setScanning]     = useState(false);
     const [scanProgress, setScanProgress] = useState('');
@@ -273,6 +268,11 @@ const AIAssistant: React.FC = () => {
     const autoRestartRef = useRef(false);
     useEffect(() => { autoRestartRef.current = autoRestart; }, [autoRestart]);
 
+    // T007: antenna on/off toggle + live last-digit readout for the currently tracked market
+    const [antennaOn, setAntennaOn] = useState(true);
+    const [liveDigit, setLiveDigit] = useState<number | null>(null);
+    const antennaWsRef = useRef<WebSocket | null>(null);
+
     const wsRefs    = useRef<WebSocket[]>([]);
     const freqRef   = useRef<Map<string, DigitFreq>>(new Map());
     const scanDoneRef = useRef(false);
@@ -282,6 +282,27 @@ const AIAssistant: React.FC = () => {
     const sessionProfitRef = useRef(0);
 
     useEffect(() => { stakeRef.current = stake; }, [stake]);
+
+    // Antenna: live last-digit stream for whichever symbol the AI is currently tracking (best signal, or first scan target)
+    useEffect(() => {
+        if (antennaWsRef.current) { try { antennaWsRef.current.close(); } catch { } antennaWsRef.current = null; }
+        setLiveDigit(null);
+        if (!antennaOn) return;
+        const symbol = best?.symbol ?? SCAN_SYMBOLS[0]?.symbol;
+        if (!symbol) return;
+        const ws = new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
+        antennaWsRef.current = ws;
+        ws.onopen = () => ws.send(JSON.stringify({ ticks: symbol, subscribe: 1 }));
+        ws.onmessage = e => {
+            const d = JSON.parse(e.data);
+            const quote = d.tick?.quote;
+            if (typeof quote === 'number') {
+                const s = quote.toFixed(quote < 10 ? 4 : 2).replace('.', '');
+                setLiveDigit(parseInt(s[s.length - 1], 10));
+            }
+        };
+        return () => { try { ws.close(); } catch { } };
+    }, [antennaOn, best?.symbol]);
 
     // AI always operates in USD — no display-currency conversion here.
     const fmtProfit = (usd: number) => `${usd >= 0 ? '+' : ''}${usd.toFixed(2)} USD`;
@@ -417,24 +438,23 @@ const AIAssistant: React.FC = () => {
 
     // Keep a stable ref so auto-restart can call loadAndRun without stale closure
     const loadAndRunRef = useRef<(sig?: Signal) => void>(() => {});
+    // "Fire Now" caps the session at exactly 3 trades then auto-stops, regardless
+    // of TP/SL. "Load & Run Bot" leaves this unset and runs until TP/SL/user-stop.
+    const maxRunsRef = useRef<number | null>(null);
 
-    const loadAndRun = useCallback(async (sig?: Signal) => {
+    const loadAndRun = useCallback(async (sig?: Signal, maxRuns?: number) => {
         // Use best scanned signal, or instant-fire with the default if none available
         const signal = sig ?? best ?? DEFAULT_SIGNAL;
         if (botRunning) { stopBot(); return; }
+        maxRunsRef.current = maxRuns ?? null;
 
         // ─── Guard: refuse to fire without a live, authenticated trading connection ───
-        // Without this, buyContract() rejects instantly on every attempt ("WebSocket not
-        // connected" / auth error) while the panel is already closed, so trades silently
-        // never execute and the user just sees the bot "running" with 0 trades.
-        if (!hasTradingToken()) {
-            setIsOpen(true);
-            addLog('🛑 No trading token found. Go to Connect Account and add your Deriv API token (with Trade scope) before running the bot.');
-            return;
-        }
+        // useDerivTrade now rides the SAME connection the user is already logged in
+        // with (no separate token/login) — this just waits out the brief moment
+        // right after app load where that connection is still authorizing.
         if (!derivTradeRef.current.authorized) {
             setIsOpen(true);
-            addLog('⏳ Waiting for trading connection to authorize...');
+            addLog('⏳ Waiting for your account connection to be ready...');
             const ready = await new Promise<boolean>(resolve => {
                 const start = Date.now();
                 const poll = () => {
@@ -445,10 +465,10 @@ const AIAssistant: React.FC = () => {
                 poll();
             });
             if (!ready) {
-                addLog('🛑 Could not authorize the trading connection. Check your API token in Connect Account and try again.');
+                addLog('🛑 Not connected to your Deriv account yet. Please make sure you are logged in.');
                 return;
             }
-            addLog('✅ Trading connection authorized.');
+            addLog('✅ Connected — ready to trade.');
         }
 
         const barrier = signal.autoDigit !== undefined ? signal.autoDigit : (signal.barrier ?? predictionDigit);
@@ -560,9 +580,21 @@ const AIAssistant: React.FC = () => {
                         setTimeout(() => { if (autoRestartRef.current) loadAndRunRef.current?.(); }, 2000);
                     }
                 }
+                // Fire Now: exactly N trades then hard-stop, regardless of TP/SL.
+                if (maxRunsRef.current != null && tc >= maxRunsRef.current) {
+                    addLog(`🏁 Fire Now complete — ${tc} trade${tc === 1 ? '' : 's'} run. Session P/L: ${fmtProfit(sp)}`);
+                    runRef.current = false;
+                    setBotRunning(false);
+                    run_panel?.setIsRunning?.(false);
+                }
             };
 
+            let firedCount = 0;
             while (runRef.current) {
+                // Fire Now + Turbo: since Turbo doesn't await settlement, guard against
+                // firing more trades than the requested cap before results come back.
+                if (maxRunsRef.current != null && firedCount >= maxRunsRef.current) break;
+                firedCount++;
                 const curStake = stakeRef.current;
                 const speed = getExecutionSpeed();
                 try {
@@ -633,18 +665,45 @@ const AIAssistant: React.FC = () => {
                 <div className='ai-assistant__overlay' onClick={() => setIsOpen(false)}>
                     <div className='ai-assistant__modal' onClick={e => e.stopPropagation()}>
                         <div className='ai-assistant__modal-header'>
+                            <div
+                                className='ai-assistant__live-digit'
+                                title={antennaOn ? 'Live last digit of tracked market' : 'Antenna is off'}
+                                style={{ display: 'flex', alignItems: 'center', gap: 4, marginRight: 6, opacity: antennaOn ? 1 : 0.35 }}
+                            >
+                                <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#8aa0b8' }}>DIGIT</span>
+                                <span style={{
+                                    minWidth: 22, height: 22, borderRadius: '50%', display: 'inline-flex',
+                                    alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.8rem',
+                                    background: antennaOn && liveDigit !== null ? '#00ff9622' : 'rgba(255,255,255,0.06)',
+                                    color: antennaOn && liveDigit !== null ? '#00ff96' : '#8aa0b8', border: '1px solid rgba(255,255,255,0.12)',
+                                }}>
+                                    {antennaOn && liveDigit !== null ? liveDigit : '–'}
+                                </span>
+                            </div>
                             <div className={`ai-assistant__status-dot ${scanning ? 'live' : botRunning ? 'running' : ''}`} />
                             <h3>AI Market Scanner</h3>
                             {scanning && <span className='ai-assistant__live'>SCANNING {scannedCount}/{SCAN_SYMBOLS.length}</span>}
                             {botRunning && <span className='ai-assistant__live' style={{ color: '#00ff96' }}>🤖 #{tradeCount} | {fmtProfit(sessionProfit)}</span>}
+                            <button
+                                className='ai-assistant__antenna-toggle'
+                                onClick={() => setAntennaOn(v => !v)}
+                                title={antennaOn ? 'Turn antenna off' : 'Turn antenna on'}
+                                style={{
+                                    marginLeft: 'auto', border: 'none', borderRadius: 6, padding: '3px 8px', fontSize: '0.85rem',
+                                    cursor: 'pointer', background: antennaOn ? '#00ff9622' : 'rgba(255,255,255,0.08)',
+                                    color: antennaOn ? '#00ff96' : '#8aa0b8',
+                                }}
+                            >
+                                📡 {antennaOn ? 'ON' : 'OFF'}
+                            </button>
                             <button className='ai-assistant__close' onClick={() => setIsOpen(false)}>✕</button>
                         </div>
 
-                        {/* Trading connection status — must be LIVE before the bot can actually fire trades */}
+                        {/* Trading connection status — rides the same login as the rest of the app */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 12px', fontSize: '0.7rem', fontWeight: 700 }}>
-                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: derivTrade.authorized ? '#00ff96' : hasToken ? '#f97316' : '#ff4d4f', display: 'inline-block' }} />
-                            <span style={{ color: derivTrade.authorized ? '#00ff96' : hasToken ? '#f97316' : '#ff4d4f' }}>
-                                {!hasToken ? 'NO TRADING TOKEN — CONNECT ACCOUNT' : derivTrade.authorized ? 'TRADING CONNECTION LIVE' : derivTrade.connected ? 'AUTHORIZING...' : 'CONNECTING...'}
+                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: derivTrade.authorized ? '#00ff96' : derivTrade.connected ? '#f97316' : '#ff4d4f', display: 'inline-block' }} />
+                            <span style={{ color: derivTrade.authorized ? '#00ff96' : derivTrade.connected ? '#f97316' : '#ff4d4f' }}>
+                                {derivTrade.authorized ? 'ACCOUNT CONNECTED' : derivTrade.connected ? 'AUTHORIZING...' : 'CONNECTING...'}
                             </span>
                         </div>
 
@@ -760,9 +819,9 @@ const AIAssistant: React.FC = () => {
                                 <button
                                     className='ai-assistant__btn ai-assistant__btn--load'
                                     style={{ background: 'linear-gradient(135deg,#f97316,#ef4444)', fontSize: '0.8rem' }}
-                                    onClick={() => loadAndRun(best ?? DEFAULT_SIGNAL)}
-                                    disabled={!hasToken}
-                                    title={!hasToken ? 'Connect your Deriv trading account first' : undefined}
+                                    onClick={() => loadAndRun(best ?? DEFAULT_SIGNAL, 3)}
+                                    disabled={!derivTrade.connected}
+                                    title={!derivTrade.connected ? 'Waiting for account connection...' : 'Fires exactly 3 trades then auto-stops'}
                                 >
                                     ⚡ FIRE NOW
                                 </button>
@@ -770,10 +829,10 @@ const AIAssistant: React.FC = () => {
                             <button
                                 className={`ai-assistant__btn ${botRunning ? 'ai-assistant__btn--stop-bot' : 'ai-assistant__btn--load'}`}
                                 onClick={() => loadAndRun()}
-                                disabled={!botRunning && (!best || !hasToken)}
-                                title={!botRunning && !hasToken ? 'Connect your Deriv trading account first' : undefined}
+                                disabled={!botRunning && (!best || !derivTrade.connected)}
+                                title={!botRunning && !derivTrade.connected ? 'Waiting for account connection...' : undefined}
                             >
-                                {botRunning ? `⏹ Stop Bot (#${tradeCount})` : !hasToken ? '— connect account first —' : !best ? '— scan first —' : '⚡ Load & Run Bot'}
+                                {botRunning ? `⏹ Stop Bot (#${tradeCount})` : !derivTrade.connected ? '— connecting to account —' : !best ? '— scan first —' : '⚡ Load & Run Bot'}
                             </button>
                         </div>
                         {/* Auto-restart toggle */}
