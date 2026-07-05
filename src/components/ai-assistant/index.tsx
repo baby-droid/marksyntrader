@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { reaction } from 'mobx';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { useStore } from '@/hooks/useStore';
-import { api_base } from '@/external/bot-skeleton';
+import { useDerivTrade } from '@/hooks/useDerivTrade';
 import { useDerivTrading } from '@/hooks/useDerivTrading';
 import { buildKillerXml, KillerContract } from '@/utils/killer-bot';
 import { getExecutionSpeed } from '@/utils/execution-speed';
@@ -236,6 +236,10 @@ const DEFAULT_SIGNAL: Signal = {
 const AIAssistant: React.FC = () => {
     const { dashboard, load_modal, run_panel } = useStore() as any;
     const { currency: accountCurrency } = useDerivTrading();
+    // useDerivTrade opens its own authenticated WebSocket → guaranteed live account trades
+    const derivTrade = useDerivTrade();
+    const derivTradeRef = useRef(derivTrade);
+    useEffect(() => { derivTradeRef.current = derivTrade; }, [derivTrade]);
 
     const [isOpen, setIsOpen]         = useState(false);
     const [isPulsing, setIsPulsing]   = useState(true);
@@ -456,24 +460,37 @@ const AIAssistant: React.FC = () => {
 
         addLog(`🚀 Starting ${signal.type.toUpperCase()}${barrier !== undefined ? barrier : ''} on ${signal.label} | Stake:${fmtVal(stake)} | Mart:${martingale}x | TP:${fmtVal(takeProfit)} | SL:${fmtVal(stopLoss)}`);
 
-        // ─── Direct-fire loop ───
+        // ─── Direct-fire loop via useDerivTrade (own authenticated WS) ───
         // Speed modes:
-        //   Normal  — proposal + buy + wait for settlement (reliable, sequential)
-        //   Crazy   — skip proposal, inline buy + wait for settlement (faster: saves 1 round-trip)
-        //   Turbo   — skip proposal, inline buy, NO settlement wait (fire-and-forget, superhuman speed)
+        //   Normal  — buy + await settlement (full P/L capture, sequential)
+        //   Crazy   — same but no micro-delay between trades (slightly faster)
+        //   Turbo   — fire-and-forget: settlement tracked in background, loop fires immediately
         (async () => {
-            const inlineBuy = async (curStake: number) => {
-                const res = await api_base.api.send({
-                    buy: '1', price: curStake,
-                    parameters: {
-                        amount: curStake, basis: 'stake', contract_type: apiContractType,
-                        currency: accountCurrency || 'USD', duration: signal.ticks, duration_unit: 't',
-                        symbol: signal.symbol,
-                        ...(NEEDS_BARRIER.has(signal.type) ? { barrier: String(barrier) } : {}),
-                    },
-                });
-                return res?.buy?.contract_id ?? null;
+            const tradeParams = {
+                symbol: signal.symbol,
+                contract_type: apiContractType as any,
+                duration: signal.ticks,
+                duration_unit: 't' as any,
+                stake: 0,               // filled each iteration
+                ...(NEEDS_BARRIER.has(signal.type) ? { barrier } : {}),
             };
+
+            /** Buys one contract and resolves with the settlement profit. */
+            const buyAndSettle = (curStake: number): Promise<number> =>
+                new Promise(resolve => {
+                    const bail = setTimeout(() => { addLog('⏱ Timeout waiting for settlement'); resolve(0); }, 15000);
+                    derivTradeRef.current.buyContract(
+                        { ...tradeParams, stake: curStake },
+                        settled => { clearTimeout(bail); resolve(settled.profit ?? 0); }
+                    ).then(result => {
+                        if (!result?.contract_id) { clearTimeout(bail); resolve(0); }
+                    }).catch(err => {
+                        clearTimeout(bail);
+                        const msg = err?.message || err?.error?.message || 'Buy failed';
+                        addLog(`⚠️ ${msg}`);
+                        resolve(0);
+                    });
+                });
 
             const applyResult = (profit: number) => {
                 tradeCountRef.current++;
@@ -512,53 +529,26 @@ const AIAssistant: React.FC = () => {
                 const curStake = stakeRef.current;
                 const speed = getExecutionSpeed();
                 try {
-                    if (speed === 'normal') {
-                        // Normal: proposal → buy → wait settlement (most reliable)
-                        let proposalId: string | null = null;
-                        try {
-                            const propRes = await api_base.api.send({
-                                proposal: 1, amount: curStake, basis: 'stake',
-                                contract_type: apiContractType, currency: accountCurrency || 'USD',
-                                duration: signal.ticks, duration_unit: 't', symbol: signal.symbol,
-                                ...(NEEDS_BARRIER.has(signal.type) ? { barrier: String(barrier) } : {}),
-                            });
-                            proposalId = propRes?.proposal?.id ?? null;
-                        } catch { /* fallthrough to inline */ }
-
-                        let contractId: string | null = null;
-                        if (proposalId && runRef.current) {
-                            try {
-                                const buyRes = await api_base.api.send({ buy: proposalId, price: curStake });
-                                contractId = buyRes?.buy?.contract_id ?? null;
-                            } catch { /* fallthrough to inline */ }
-                        }
-                        if (!contractId) contractId = await inlineBuy(curStake);
-                        if (!contractId || !runRef.current) break;
-                        const profit = await waitForSettlement(contractId);
-                        if (!runRef.current) break;
-                        applyResult(profit);
-
-                    } else if (speed === 'crazy') {
-                        // Crazy: skip proposal, inline buy → wait settlement (1 round-trip faster)
-                        const contractId = await inlineBuy(curStake);
-                        if (!contractId || !runRef.current) break;
-                        const profit = await waitForSettlement(contractId);
-                        if (!runRef.current) break;
-                        applyResult(profit);
-
-                    } else {
-                        // Turbo: inline buy, settlement tracked in background — fire immediately
-                        const contractId = await inlineBuy(curStake);
-                        if (!contractId) { await new Promise(r => setTimeout(r, 100)); continue; }
-                        waitForSettlement(contractId).then(profit => {
-                            if (runRef.current || profit !== 0) applyResult(profit);
+                    if (speed === 'turbo') {
+                        // Turbo: fire immediately, settlement tracked in background
+                        derivTradeRef.current.buyContract(
+                            { ...tradeParams, stake: curStake },
+                            settled => { if (runRef.current || settled.profit !== 0) applyResult(settled.profit ?? 0); }
+                        ).catch(err => {
+                            const msg = err?.message || err?.error?.message || 'Buy error';
+                            addLog(`⚠️ ${msg}`);
                         });
-                        // No waiting — loop instantly for next trade
+                        // No await — loop immediately
+                    } else {
+                        // Normal / Crazy: buy, wait for settlement, then next trade
+                        const profit = await buyAndSettle(curStake);
+                        if (!runRef.current) break;
+                        applyResult(profit);
                     }
                 } catch (err: any) {
                     const msg = err?.error?.message || err?.message || 'Unknown error';
                     addLog(`⚠️ ${msg}`);
-                    await new Promise(r => setTimeout(r, 200));
+                    await new Promise(r => setTimeout(r, 300));
                 }
             }
 
