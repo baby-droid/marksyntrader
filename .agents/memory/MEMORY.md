@@ -4,3 +4,4 @@
 - [BotBuilder architecture](marksyntrader-botbuilder.md) — Single BotBuilder instance only in app-content.jsx (line 203); bot-builder tab content must be transparent (no background); BotBuilder uses position:fixed top:9rem z-index:10 when active_tab===1.
 - [Currency display pattern](marksyntrader-currency.md) — All P/L/profit/stake values must use fromUsd()+displayCur from src/utils/currency-display.ts; subscribeCurrency() for live KSH/USD switch; never hardcode currency string.
 - [Speed Lab execution modes](marksyntrader-speedlab.md) — Normal=await+300ms, Crazy=fire without await immediately, Turbo=TurboSocket class (persistent WS raw ws.send()) + prebuiltPayloadRef; buyContract from useDerivTrading already non-blocking on settlement.
+- [Copy-trading app id](marksyntrader-copytrading.md) — follower WS connections must authorize under the same NEXT_PUBLIC_DERIV_APP_ID as the main connection, not a generic/demo app id, or linking and reciprocation become unreliable.
