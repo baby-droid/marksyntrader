@@ -549,3 +549,39 @@
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
 }
+
+.ai-assistant {
+  &__fire-pill {
+    position: fixed;
+    bottom: 8rem;
+    right: 2rem;
+    z-index: 10000;
+    padding: 0.8rem 1.6rem;
+    background: linear-gradient(135deg, #0d1a2e, #1a2a4a);
+    border: 1px solid #00ff96;
+    border-radius: 2.4rem;
+    color: #00ff96;
+    font-size: 1.2rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    box-shadow: 0 0 18px rgba(0, 255, 150, 0.35);
+    animation: blink 1.8s infinite;
+
+    &--loading {
+      border-color: #4c7dff;
+      color: #4c7dff;
+      box-shadow: 0 0 18px rgba(76, 125, 255, 0.35);
+    }
+  }
+
+  &__tp-note {
+    margin-top: 0.8rem;
+    padding: 0.8rem 1.2rem;
+    background: rgba(76, 125, 255, 0.08);
+    border-left: 3px solid #4c7dff;
+    border-radius: 0 0.6rem 0.6rem 0;
+    color: #555;
+    font-size: 1.2rem;
+    line-height: 1.5;
+  }
+}

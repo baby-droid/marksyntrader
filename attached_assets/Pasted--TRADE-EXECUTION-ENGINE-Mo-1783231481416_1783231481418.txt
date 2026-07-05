@@ -1,0 +1,192 @@
+/*****************************************************************
+ * TRADE EXECUTION ENGINE
+ * Modes:
+ *  - NORMAL
+ *  - CRAZY
+ *  - TURBO
+ *****************************************************************/
+
+const SpeedMode = {
+    NORMAL: {
+        name: "NORMAL",
+        delay: 500,
+        preload: false,
+        queue: false,
+        pipeline: false
+    },
+
+    CRAZY: {
+        name: "CRAZY",
+        delay: 0,
+        preload: true,
+        queue: true,
+        pipeline: false
+    },
+
+    TURBO: {
+        name: "TURBO",
+        delay: 0,
+        preload: true,
+        queue: true,
+        pipeline: true
+    }
+};
+
+class TradeEngine {
+
+    constructor(mode = SpeedMode.NORMAL) {
+
+        this.mode = mode;
+
+        this.busy = false;
+
+        this.queue = [];
+
+        this.cachedProposal = null;
+
+    }
+
+    setMode(mode){
+        this.mode = mode;
+        console.log("Mode:", mode.name);
+    }
+
+    async preloadProposal(signal){
+
+        if(!this.mode.preload) return;
+
+        this.cachedProposal = await preloadProposal(signal);
+
+    }
+
+    addTrade(signal){
+
+        if(this.mode.queue){
+
+            this.queue.push(signal);
+
+            if(!this.busy){
+                this.processQueue();
+            }
+
+        }else{
+
+            this.execute(signal);
+
+        }
+
+    }
+
+    async processQueue(){
+
+        while(this.queue.length){
+
+            const signal = this.queue.shift();
+
+            await this.execute(signal);
+
+        }
+
+    }
+
+    async execute(signal){
+
+        if(this.busy) return;
+
+        this.busy = true;
+
+        try{
+
+            if(this.mode.preload){
+                await this.preloadProposal(signal);
+            }
+
+            const proposal = this.cachedProposal || signal;
+
+            const result = await buyContract(proposal);
+
+            console.log("Contract Purchased", result);
+
+            if(this.mode.pipeline){
+
+                if(this.queue.length){
+
+                    this.preloadProposal(this.queue[0]);
+
+                }
+
+            }
+
+            if(this.mode.delay > 0){
+
+                await wait(this.mode.delay);
+
+            }
+
+        }
+        catch(error){
+
+            console.error(error);
+
+        }
+        finally{
+
+            this.busy = false;
+
+        }
+
+    }
+
+}
+
+
+/**************************************************************
+ * HELPER FUNCTIONS
+ **************************************************************/
+
+function wait(ms){
+
+    return new Promise(resolve=>setTimeout(resolve,ms));
+
+}
+
+// Replace these with your platform-specific implementations.
+async function preloadProposal(signal){
+
+    return signal;
+
+}
+
+async function buyContract(proposal){
+
+    console.log("Buying:", proposal);
+
+    return {
+        success:true,
+        timestamp:Date.now()
+    };
+
+}
+
+
+/**************************************************************
+ * EXAMPLE USAGE
+ **************************************************************/
+
+const engine = new TradeEngine(SpeedMode.NORMAL);
+
+// Change modes as needed
+// engine.setMode(SpeedMode.CRAZY);
+// engine.setMode(SpeedMode.TURBO);
+
+engine.addTrade({
+    market:"R_100",
+    contract:"DIGITEVEN",
+    stake:1
+});
+
+engine.addTrade({
+    market:"R_100",
+    contract:"DIGITODD",
+    stake:1
+});

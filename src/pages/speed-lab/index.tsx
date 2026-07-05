@@ -9,22 +9,170 @@ import { api_base } from '@/external/bot-skeleton';
 import './speed-lab.scss';
 
 /**
- * Speed Lab — three true execution tiers:
+ * Speed Lab — three execution tiers modelled on the TradeEngine pattern:
  *
- * NORMAL  — sequential, awaits each contract + 300 ms cooldown
- * CRAZY   — no cooldown, fire-and-forget via api send, yield every 10 via queueMicrotask
- * TURBO   — persistent raw WebSocket, pre-built payload, pure ws.send(), yield every 20
- *
- * The goal: CRAZY ≈ 1-5 ms inter-trade latency, TURBO ≈ sub-millisecond WS latency.
+ *  NORMAL — sequential, await each contract, 500 ms cooldown.
+ *  CRAZY  — queue-based, no cooldown, preloads proposal before each buy.
+ *  TURBO  — queue-based, no cooldown, preloads + pipelines next proposal
+ *            while the current contract settles (fastest possible re-entry).
  */
 
-const EXECUTION_MODES = {
-    normal: { label: '🐢 Normal', description: 'Sequential — wait for confirmation, 300 ms cooldown' },
-    crazy:  { label: '🔥 Crazy',  description: 'Zero cooldown — fire immediately, yield every 10 sends via queueMicrotask' },
-    turbo:  { label: '⚡ Turbo',  description: 'Persistent WebSocket + pre-built payload — raw ws.send(), sub-ms latency' },
+const SPEED_MODES = {
+    normal: {
+        name: 'NORMAL',
+        delay: 500,
+        preload: false,
+        queue: true,
+        pipeline: false,
+        label: '🐢 Normal',
+        desc: 'Sequential — wait for result, 500 ms cooldown',
+    },
+    crazy: {
+        name: 'CRAZY',
+        delay: 0,
+        preload: true,
+        queue: true,
+        pipeline: false,
+        label: '🔥 Crazy',
+        desc: 'Queue + preload proposal — zero cooldown, fastest re-entry',
+    },
+    turbo: {
+        name: 'TURBO',
+        delay: 0,
+        preload: true,
+        queue: true,
+        pipeline: true,
+        label: '⚡ Turbo',
+        desc: 'Queue + preload + pipeline next proposal while settling',
+    },
 } as const;
 
-type ExecMode = keyof typeof EXECUTION_MODES;
+type SpeedMode = keyof typeof SPEED_MODES;
+
+interface TradeSignal {
+    symbol: string;
+    contract_type: string;
+    stake: number;
+    duration: number;
+    barrier?: string;
+    currency: string;
+}
+
+/**
+ * TradeEngine — manages the buy queue with proposal pre-caching.
+ */
+class TradeEngine {
+    private mode = SPEED_MODES.normal;
+    private busy = false;
+    private queue: TradeSignal[] = [];
+    private cachedProposal: { id: string; price: number } | null = null;
+    private active = false;
+    fireCount = 0;
+    onFire?: (n: number, ms: number) => void;
+    onError?: (msg: string) => void;
+
+    setMode(m: typeof SPEED_MODES[SpeedMode]) { this.mode = m; }
+    start() { this.active = true; this.fireCount = 0; }
+    stop() { this.active = false; this.queue = []; this.cachedProposal = null; this.busy = false; }
+
+    /** Preload a Deriv proposal so the buy step is instant. */
+    private async preloadProposal(sig: TradeSignal): Promise<{ id: string; price: number } | null> {
+        try {
+            const res = await api_base.api.send({
+                proposal: 1,
+                amount: sig.stake,
+                basis: 'stake',
+                contract_type: sig.contract_type,
+                currency: sig.currency,
+                duration: sig.duration,
+                duration_unit: 't',
+                symbol: sig.symbol,
+                ...(sig.barrier !== undefined ? { barrier: sig.barrier } : {}),
+            });
+            if (res?.proposal?.id) return { id: res.proposal.id, price: sig.stake };
+        } catch { /* fall through */ }
+        return null;
+    }
+
+    /** Execute one trade: use cached proposal or fall back to inline params. */
+    private async executeSingle(sig: TradeSignal): Promise<boolean> {
+        const t0 = performance.now();
+
+        // Preload if mode requires it and we don't have a cached one
+        if (this.mode.preload && !this.cachedProposal) {
+            this.cachedProposal = await this.preloadProposal(sig);
+        }
+
+        let result: any;
+        try {
+            if (this.cachedProposal) {
+                result = await api_base.api.send({ buy: this.cachedProposal.id, price: this.cachedProposal.price });
+                this.cachedProposal = null; // consumed
+            } else {
+                result = await api_base.api.send({
+                    buy: '1',
+                    price: sig.stake,
+                    parameters: {
+                        amount: sig.stake,
+                        basis: 'stake',
+                        contract_type: sig.contract_type,
+                        currency: sig.currency,
+                        duration: sig.duration,
+                        duration_unit: 't',
+                        symbol: sig.symbol,
+                        ...(sig.barrier !== undefined ? { barrier: sig.barrier } : {}),
+                    },
+                });
+            }
+        } catch (e: any) {
+            this.onError?.(`Buy error: ${e?.message || e}`);
+            return false;
+        }
+
+        if (result?.buy?.contract_id) {
+            const ms = Math.round(performance.now() - t0);
+            this.fireCount++;
+            this.onFire?.(this.fireCount, ms);
+            return true;
+        }
+        if (result?.error) {
+            this.onError?.(`API: ${result.error.message}`);
+        }
+        return false;
+    }
+
+    /** Process the queue until empty or stopped. */
+    async processQueue(): Promise<void> {
+        while (this.queue.length > 0 && this.active) {
+            const sig = this.queue.shift()!;
+            this.busy = true;
+
+            await this.executeSingle(sig);
+
+            // Pipeline: preload next while we (potentially) wait
+            if (this.mode.pipeline && this.queue.length > 0 && !this.cachedProposal) {
+                this.preloadProposal(this.queue[0]).then(p => {
+                    if (!this.cachedProposal && p) this.cachedProposal = p;
+                });
+            }
+
+            if (this.mode.delay > 0) {
+                await new Promise(r => setTimeout(r, this.mode.delay));
+            }
+
+            this.busy = false;
+        }
+    }
+
+    /** Add a trade to the queue and start processing if idle. */
+    addTrade(sig: TradeSignal): void {
+        if (!this.active) return;
+        this.queue.push(sig);
+        if (!this.busy) {
+            this.processQueue();
+        }
+    }
+}
 
 const SYMBOLS = [
     { label: 'V10',      value: 'R_10'      },
@@ -51,56 +199,15 @@ const SYMBOLS = [
 ];
 
 const CONTRACT_TYPES = [
-    { label: 'Even',  value: 'DIGITEVEN'  },
-    { label: 'Odd',   value: 'DIGITODD'   },
-    { label: 'Over',  value: 'DIGITOVER',  needsBarrier: true },
-    { label: 'Under', value: 'DIGITUNDER', needsBarrier: true },
-    { label: 'Rise',  value: 'CALL' },
-    { label: 'Fall',  value: 'PUT'  },
-    { label: 'Match', value: 'DIGITMATCH', needsBarrier: true },
-    { label: 'Differ',value: 'DIGITDIFF',  needsBarrier: true },
+    { label: 'Even',   value: 'DIGITEVEN'  },
+    { label: 'Odd',    value: 'DIGITODD'   },
+    { label: 'Over',   value: 'DIGITOVER',  needsBarrier: true },
+    { label: 'Under',  value: 'DIGITUNDER', needsBarrier: true },
+    { label: 'Rise',   value: 'CALL' },
+    { label: 'Fall',   value: 'PUT'  },
+    { label: 'Match',  value: 'DIGITMATCH', needsBarrier: true },
+    { label: 'Differ', value: 'DIGITDIFF',  needsBarrier: true },
 ];
-
-/** Microtask yield — faster than setTimeout(0) */
-const yieldMicrotask = () => new Promise<void>(r => queueMicrotask(r));
-
-/** Persistent raw WebSocket for Turbo mode */
-class TurboSocket {
-    ws: WebSocket | null = null;
-    authorized = false;
-    reqId = 1;
-
-    connect(token: string): Promise<boolean> {
-        return new Promise(resolve => {
-            if (this.ws?.readyState === WebSocket.OPEN && this.authorized) {
-                resolve(true); return;
-            }
-            this.ws?.close();
-            this.authorized = false;
-            const ws = new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
-            this.ws = ws;
-            ws.onopen = () => ws.send(JSON.stringify({ authorize: token, req_id: this.reqId++ }));
-            ws.onmessage = e => {
-                const d = JSON.parse(e.data);
-                if (d.msg_type === 'authorize' && !d.error) {
-                    this.authorized = true;
-                    resolve(true);
-                }
-            };
-            ws.onerror = () => resolve(false);
-            setTimeout(() => resolve(false), 5000);
-        });
-    }
-
-    /** Synchronous raw send — zero software overhead */
-    fire(payload: object): void {
-        if (this.ws?.readyState === WebSocket.OPEN && this.authorized) {
-            this.ws.send(JSON.stringify({ ...payload, req_id: this.reqId++ }));
-        }
-    }
-
-    close() { this.ws?.close(); this.ws = null; this.authorized = false; }
-}
 
 const SpeedLab = observer(() => {
     const { digits, lastDigit, currentPrice, symbol, setSymbol, isConnected } = useDigitStats('1HZ100V');
@@ -109,12 +216,11 @@ const SpeedLab = observer(() => {
         totalProfit, winCount, lossCount, clearResults, subscribeBalance,
     } = useDerivTrading();
 
-    const [execMode, setExecMode]       = useState<ExecMode>('normal');
+    const [speedMode, setSpeedMode]     = useState<SpeedMode>('normal');
     const [stake, setStake]             = useState(0.35);
     const [duration, setDuration]       = useState(1);
     const [barrier, setBarrier]         = useState(5);
     const [contractType, setContractType] = useState('DIGITEVEN');
-    const [martingale, setMartingale]   = useState(1);
     const [targetProfit, setTargetProfit] = useState(10);
     const [stopLoss, setStopLoss]       = useState(5);
     const [isRunning, setIsRunning]     = useState(false);
@@ -122,12 +228,10 @@ const SpeedLab = observer(() => {
     const [displayCur, setDisplayCur]   = useState(getDisplayCurrency());
     const [fireCount, setFireCount]     = useState(0);
 
+    const engineRef         = useRef<TradeEngine>(new TradeEngine());
     const runRef            = useRef(false);
-    const currentStakeRef   = useRef(stake);
     const sessionProfitRef  = useRef(0);
-    const turboSocketRef    = useRef<TurboSocket>(new TurboSocket());
-    const prebuiltPayloadRef = useRef<any>(null);
-    const fireCountRef      = useRef(0);
+    const currentStakeRef   = useRef(stake);
 
     useEffect(() => subscribeCurrency(() => setDisplayCur(getDisplayCurrency())), []);
 
@@ -135,174 +239,115 @@ const SpeedLab = observer(() => {
     const fmtProfit = (usd: number) => `${usd >= 0 ? '+' : ''}${fromUsd(usd).toFixed(2)} ${displayCur}`;
 
     const logEntry = useCallback((msg: string) => {
-        setExecutionLog(prev => [`[${new Date().toLocaleTimeString('en', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 as any })}] ${msg}`, ...prev].slice(0, 300));
+        setExecutionLog(prev => [
+            `[${new Date().toLocaleTimeString('en', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}] ${msg}`,
+            ...prev,
+        ].slice(0, 200));
     }, []);
 
     const needsBarrier = ['DIGITOVER', 'DIGITUNDER', 'DIGITMATCH', 'DIGITDIFF'].includes(contractType);
 
-    const buildBuyPayload = useCallback(() => ({
-        buy: '1',
-        price: currentStakeRef.current,
-        parameters: {
-            amount: currentStakeRef.current,
-            basis: 'stake',
-            contract_type: contractType,
-            currency,
-            duration,
-            duration_unit: 't',
-            symbol,
-            ...(needsBarrier ? { barrier: String(barrier) } : {}),
-        },
-    }), [contractType, currency, duration, symbol, barrier, needsBarrier]);
-
-    useEffect(() => { prebuiltPayloadRef.current = buildBuyPayload(); }, [buildBuyPayload]);
-
-    useEffect(() => {
-        if (execMode === 'turbo') {
-            const token = (() => {
-                try {
-                    const accts = JSON.parse(localStorage.getItem('client.accounts') || '{}');
-                    const active = localStorage.getItem('active_loginid') || '';
-                    return accts[active]?.token || '';
-                } catch { return ''; }
-            })();
-            if (token) turboSocketRef.current.connect(token);
-        }
-        return () => { if (execMode === 'turbo') turboSocketRef.current.close(); };
-    }, [execMode]);
-
-    const checkLimits = useCallback((): boolean => {
-        if (sessionProfitRef.current >= targetProfit) {
-            logEntry(`✅ Target profit reached: ${fmtProfit(sessionProfitRef.current)}`);
-            runRef.current = false; setIsRunning(false); return false;
-        }
-        if (sessionProfitRef.current <= -stopLoss) {
-            logEntry(`🛑 Stop loss hit: ${fmtProfit(sessionProfitRef.current)}`);
-            runRef.current = false; setIsRunning(false); return false;
-        }
-        return true;
-    }, [targetProfit, stopLoss]);
-
-    /** NORMAL: sequential + 300 ms cooldown */
-    const normalLoop = useCallback(async () => {
-        while (runRef.current) {
-            if (!checkLimits()) break;
-            await new Promise(r => setTimeout(r, 300));
-            if (!runRef.current) break;
-            const t0 = performance.now();
-            await buyContract(buildBuyPayload());
-            const ms = Math.round(performance.now() - t0);
-            logEntry(`🐢 NORMAL ${contractType} @ ${fmtAmount(currentStakeRef.current)} (${ms}ms)`);
-        }
-    }, [buyContract, buildBuyPayload, contractType, checkLimits, logEntry]);
-
-    /**
-     * CRAZY: fire-and-forget via api_base.api.send (no await on result),
-     * yield every 10 iterations via queueMicrotask for event-loop health.
-     * Target latency: < 2ms per fire.
-     */
-    const crazyLoop = useCallback(async () => {
-        let iter = 0;
-        while (runRef.current) {
-            if (!checkLimits()) break;
-            const payload = buildBuyPayload();
-            const t0 = performance.now();
-
-            // Fire without awaiting — immediate next iteration
-            api_base.api.send(payload)
-                .then((res: any) => {
-                    if (res?.buy?.contract_id) {
-                        const ms = Math.round(performance.now() - t0);
-                        const n = ++fireCountRef.current;
-                        setFireCount(n);
-                        logEntry(`🔥 CRAZY #${n} ${contractType} (${ms}ms)`);
-                        subscribeBalance();
-                    }
-                })
-                .catch(() => {});
-
-            iter++;
-            // Yield every 10 fires to keep browser responsive
-            if (iter % 10 === 0) await yieldMicrotask();
-        }
-    }, [buildBuyPayload, contractType, checkLimits, logEntry, subscribeBalance]);
-
-    /**
-     * TURBO: persistent raw WebSocket + pre-built payload.
-     * ws.send() is synchronous — zero round-trip wait.
-     * Yield every 20 fires via queueMicrotask.
-     */
-    const turboLoop = useCallback(async () => {
-        const ts = turboSocketRef.current;
-        let iter = 0;
-        let apiMode = !ts.authorized;
-        if (apiMode) logEntry('⚡ TURBO (API mode — WS authorizing in background)');
-
-        while (runRef.current) {
-            if (!checkLimits()) break;
-            const payload = prebuiltPayloadRef.current || buildBuyPayload();
-            const t0 = performance.now();
-
-            if (!apiMode && ts.authorized) {
-                // TRUE TURBO: synchronous raw WS send — no round-trip
-                ts.fire(payload);
-                const ms = Math.round(performance.now() - t0);
-                const n = ++fireCountRef.current;
-                setFireCount(n);
-                if (n % 20 === 1) logEntry(`⚡ TURBO #${n} raw-WS ${contractType} (${ms}ms)`);
-                subscribeBalance();
-            } else {
-                // API fallback — still fire without awaiting
-                api_base.api.send(payload)
-                    .then((res: any) => {
-                        if (res?.buy?.contract_id) {
-                            const ms = Math.round(performance.now() - t0);
-                            const n = ++fireCountRef.current;
-                            setFireCount(n);
-                            if (n % 10 === 1) logEntry(`⚡ TURBO #${n} API ${contractType} (${ms}ms)`);
-                        }
-                        if (ts.authorized) apiMode = false;
-                    })
-                    .catch(() => {});
-            }
-
-            // Pre-build NEXT payload immediately (zero prep time on next iteration)
-            prebuiltPayloadRef.current = buildBuyPayload();
-
-            iter++;
-            // Yield every 20 fires via microtask (much faster than setTimeout(0))
-            if (iter % 20 === 0) await yieldMicrotask();
-        }
-    }, [buildBuyPayload, contractType, checkLimits, logEntry, subscribeBalance]);
+    const buildSignal = useCallback((): TradeSignal => ({
+        symbol,
+        contract_type: contractType,
+        stake: currentStakeRef.current,
+        duration,
+        currency: currency || 'USD',
+        ...(needsBarrier ? { barrier: String(barrier) } : {}),
+    }), [symbol, contractType, duration, currency, barrier, needsBarrier]);
 
     useEffect(() => { sessionProfitRef.current = totalProfit; }, [totalProfit]);
     useEffect(() => { currentStakeRef.current = stake; }, [stake]);
 
+    const checkLimits = useCallback((): boolean => {
+        if (sessionProfitRef.current >= targetProfit) {
+            logEntry(`✅ Target profit reached: ${fmtProfit(sessionProfitRef.current)}`);
+            return false;
+        }
+        if (sessionProfitRef.current <= -stopLoss) {
+            logEntry(`🛑 Stop loss hit: ${fmtProfit(sessionProfitRef.current)}`);
+            return false;
+        }
+        return true;
+    }, [targetProfit, stopLoss, logEntry]);
+
+    // Wire engine callbacks
+    useEffect(() => {
+        const engine = engineRef.current;
+        engine.onFire = (n, ms) => {
+            setFireCount(n);
+            const mode = SPEED_MODES[speedMode];
+            logEntry(`${mode.name === 'NORMAL' ? '🐢' : mode.name === 'CRAZY' ? '🔥' : '⚡'} [${mode.name}] #${n} ${contractType} @ ${fmtAmount(currentStakeRef.current)} (${ms}ms)`);
+            subscribeBalance();
+        };
+        engine.onError = (msg) => {
+            logEntry(`❌ ${msg}`);
+        };
+    }, [speedMode, contractType, subscribeBalance, logEntry]);
+
+    /**
+     * Main run loop — feeds the TradeEngine queue while running.
+     * Engine handles proposal preloading (CRAZY) + pipeline (TURBO).
+     */
+    const runLoop = useCallback(async () => {
+        const engine = engineRef.current;
+
+        // For CRAZY/TURBO, keep feeding the queue (engine processes sequentially)
+        // For NORMAL, the queue also handles one-at-a-time with a delay
+        while (runRef.current && checkLimits()) {
+            engine.addTrade(buildSignal());
+
+            // Pace the loop: for NORMAL wait for queue to drain before adding more
+            // For CRAZY/TURBO we can stay slightly ahead (max 3 queued)
+            const maxQueue = speedMode === 'normal' ? 1 : 3;
+            if ((engine as any).queue.length >= maxQueue) {
+                await new Promise(r => setTimeout(r, speedMode === 'normal' ? 200 : 50));
+            }
+        }
+
+        runRef.current = false;
+        setIsRunning(false);
+        engine.stop();
+        logEntry(`⏹ Stopped — ${fmtProfit(sessionProfitRef.current)}`);
+    }, [buildSignal, checkLimits, speedMode, logEntry]);
+
     const handleStart = useCallback(async () => {
         if (isRunning) {
             runRef.current = false;
+            engineRef.current.stop();
             setIsRunning(false);
-            logEntry('⏸ Stopped');
+            logEntry('⏸ Stopped by user');
             return;
         }
+
         clearResults();
         sessionProfitRef.current = 0;
         currentStakeRef.current = stake;
-        fireCountRef.current = 0;
         setFireCount(0);
+
+        const cfg = SPEED_MODES[speedMode];
+        engineRef.current = new TradeEngine();
+        engineRef.current.setMode(cfg);
+        engineRef.current.onFire = (n, ms) => {
+            setFireCount(n);
+            logEntry(`${speedMode === 'normal' ? '🐢' : speedMode === 'crazy' ? '🔥' : '⚡'} [${cfg.name}] #${n} ${contractType} @ ${fmtAmount(currentStakeRef.current)} (${ms}ms)`);
+            subscribeBalance();
+        };
+        engineRef.current.onError = (msg) => logEntry(`❌ ${msg}`);
+        engineRef.current.start();
+
         runRef.current = true;
         setIsRunning(true);
-        logEntry(`🚀 [${execMode.toUpperCase()}] ${contractType} @ ${fmtAmount(stake)} | TP:${fmtAmount(targetProfit)} SL:${fmtAmount(stopLoss)}`);
+        logEntry(`🚀 [${cfg.name}] ${contractType} @ ${fmtAmount(stake)} | TP:${fmtAmount(targetProfit)} SL:${fmtAmount(stopLoss)} | ${cfg.desc}`);
 
-        if (execMode === 'turbo') turboLoop();
-        else if (execMode === 'crazy') crazyLoop();
-        else normalLoop();
-    }, [isRunning, stake, contractType, targetProfit, stopLoss, clearResults, execMode, normalLoop, crazyLoop, turboLoop, logEntry]);
+        runLoop();
+    }, [isRunning, stake, contractType, targetProfit, stopLoss, speedMode, clearResults, runLoop, subscribeBalance, logEntry]);
 
-    useEffect(() => () => { runRef.current = false; }, []);
+    useEffect(() => () => { runRef.current = false; engineRef.current.stop(); }, []);
 
     const selectedType = CONTRACT_TYPES.find(t => t.value === contractType);
     const winRate = winCount + lossCount > 0 ? ((winCount / (winCount + lossCount)) * 100).toFixed(0) : 0;
+    const cfg = SPEED_MODES[speedMode];
 
     return (
         <div className='speed-lab'>
@@ -316,21 +361,21 @@ const SpeedLab = observer(() => {
                 )}
             </div>
 
-            {/* Execution Mode */}
+            {/* Speed Mode selector */}
             <div className='speed-lab__mode-row'>
-                {(Object.keys(EXECUTION_MODES) as ExecMode[]).map(m => (
+                {(Object.keys(SPEED_MODES) as SpeedMode[]).map(m => (
                     <button
                         key={m}
-                        className={`speed-lab__mode-btn speed-lab__mode-btn--${m} ${execMode === m ? 'active' : ''}`}
-                        onClick={() => !isRunning && setExecMode(m)}
+                        className={`speed-lab__mode-btn speed-lab__mode-btn--${m} ${speedMode === m ? 'active' : ''}`}
+                        onClick={() => !isRunning && setSpeedMode(m)}
                         disabled={isRunning}
-                        title={EXECUTION_MODES[m].description}
+                        title={SPEED_MODES[m].desc}
                     >
-                        {EXECUTION_MODES[m].label}
+                        {SPEED_MODES[m].label}
                     </button>
                 ))}
             </div>
-            <div className='speed-lab__mode-desc'>{EXECUTION_MODES[execMode].description}</div>
+            <div className='speed-lab__mode-desc'>{cfg.desc}</div>
 
             <div className='speed-lab__body'>
                 <div className='speed-lab__left'>
@@ -367,24 +412,19 @@ const SpeedLab = observer(() => {
                             <label>Stake ({displayCur})<input type='number' value={stake} min={0.35} step={0.05} onChange={e => setStake(Number(e.target.value))} /></label>
                             <label>Ticks<input type='number' value={duration} min={1} max={10} onChange={e => setDuration(Number(e.target.value))} /></label>
                             {selectedType?.needsBarrier && <label>Barrier<input type='number' value={barrier} min={0} max={9} onChange={e => setBarrier(Number(e.target.value))} /></label>}
-                            <label>Target Profit<input type='number' value={targetProfit} min={0} step={0.5} onChange={e => setTargetProfit(Number(e.target.value))} /></label>
-                            <label>Stop Loss<input type='number' value={stopLoss} min={0} step={0.5} onChange={e => setStopLoss(Number(e.target.value))} /></label>
+                            <label>Take Profit ({displayCur})<input type='number' value={targetProfit} min={0} step={0.5} onChange={e => setTargetProfit(Number(e.target.value))} /></label>
+                            <label>Stop Loss ({displayCur})<input type='number' value={stopLoss} min={0} step={0.5} onChange={e => setStopLoss(Number(e.target.value))} /></label>
                         </div>
                     </div>
 
                     <div className='speed-lab__run-row'>
-                        <button className={`speed-lab__run-btn ${isRunning ? 'speed-lab__run-btn--stop' : ''}`} onClick={handleStart}>
-                            {isRunning ? `⏹ Stop [${fireCount} fired]` : `▶ Start [${execMode.toUpperCase()}]`}
-                        </button>
                         <button
-                            className='speed-lab__buy-btn'
-                            disabled={isRunning || !isConnected}
-                            onClick={() => {
-                                buyContract({ symbol, contract_type: contractType, stake, duration, barrier: needsBarrier ? barrier : undefined });
-                                logEntry(`Manual: ${contractType} @ ${fmtAmount(stake)}`);
-                            }}
+                            className={`speed-lab__run-btn ${isRunning ? 'speed-lab__run-btn--stop' : ''}`}
+                            onClick={handleStart}
                         >
-                            ⚡ Buy 1
+                            {isRunning
+                                ? `⏹ Stop [${cfg.name} · ${fireCount} fired]`
+                                : `▶ Start [${cfg.name}]`}
                         </button>
                     </div>
 
@@ -393,8 +433,8 @@ const SpeedLab = observer(() => {
                         <div className='speed-lab__stat'><span>Wins</span><strong className='pos'>{winCount}</strong></div>
                         <div className='speed-lab__stat'><span>Losses</span><strong className='neg'>{lossCount}</strong></div>
                         <div className='speed-lab__stat'><span>Win Rate</span><strong>{winRate}%</strong></div>
-                        {(execMode === 'crazy' || execMode === 'turbo') && (
-                            <div className='speed-lab__stat'><span>Fires Sent</span><strong style={{ color: '#f97316' }}>{fireCount}</strong></div>
+                        {isRunning && (
+                            <div className='speed-lab__stat'><span>Fires</span><strong style={{ color: '#f97316' }}>{fireCount}</strong></div>
                         )}
                     </div>
                 </div>
@@ -403,7 +443,7 @@ const SpeedLab = observer(() => {
                     <div className='speed-lab__card speed-lab__log-card'>
                         <h3>
                             Execution Log
-                            <span className={`speed-lab__mode-badge speed-lab__mode-badge--${execMode}`}>{execMode.toUpperCase()}</span>
+                            <span className={`speed-lab__mode-badge speed-lab__mode-badge--${speedMode}`}>{cfg.name}</span>
                         </h3>
                         <div className='speed-lab__log'>
                             {executionLog.length === 0 && <p className='speed-lab__log-empty'>Waiting to start...</p>}

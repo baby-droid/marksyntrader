@@ -4,53 +4,60 @@ import { DBOT_TABS } from '@/constants/bot-contents';
 import { useStore } from '@/hooks/useStore';
 import { api_base } from '@/external/bot-skeleton';
 import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
-import { setExecutionSpeed } from '@/utils/execution-speed';
 import { buildKillerXml, KillerContract } from '@/utils/killer-bot';
 import './ai-assistant.scss';
 
 /**
- * AI Market Scanner + Ultra-fast Auto-executor.
+ * AI Market Scanner + Direct-Fire Auto-Bot.
  *
- * "Load & Run" fires immediately at ~0.001s per trade via queueMicrotask loop:
- *  1. Loads bot XML into Blockly workspace.
- *  2. Sets execution speed to turbo (0ms engine delay).
- *  3. Triggers onRunButtonClick() for the main bot engine.
- *  4. Simultaneously starts a direct API fire loop (queueMicrotask-based)
- *     so the first trade is sent instantly without waiting for the bot engine.
+ * "Load & Run Bot" flow:
+ *  1. Injects stake / martingale / TP / SL into the killer-bot XML and loads
+ *     it into the Blockly workspace for display.
+ *  2. Starts a direct-fire trading loop:
+ *       proposal → buy → wait for settlement → martingale → repeat
+ *     This runs continuously until the TP or SL threshold is hit or the user
+ *     clicks "Stop Bot".
  *
- * Matches/Differs: AI auto-selects best digit via absence/burst/frequency analysis.
- * Jump Indices / Daily Reset Indices: market category auto-configured in XML.
- * KSH conversion: all monetary amounts use fromUsd() + subscribeCurrency().
+ * No checkbox required — Load & Run always fires continuously.
  */
 
 const SCAN_SYMBOLS = [
-    { label: 'Volatility 10 Index',   symbol: 'R_10',    group: 'Volatility',          submarket: 'random_index' },
-    { label: 'Volatility 25 Index',   symbol: 'R_25',    group: 'Volatility',          submarket: 'random_index' },
-    { label: 'Volatility 50 Index',   symbol: 'R_50',    group: 'Volatility',          submarket: 'random_index' },
-    { label: 'Volatility 75 Index',   symbol: 'R_75',    group: 'Volatility',          submarket: 'random_index' },
-    { label: 'Volatility 100 Index',  symbol: 'R_100',   group: 'Volatility',          submarket: 'random_index' },
-    { label: 'Volatility 10 (1s)',    symbol: '1HZ10V',  group: 'Volatility 1s',       submarket: 'random_index_s1' },
-    { label: 'Volatility 25 (1s)',    symbol: '1HZ25V',  group: 'Volatility 1s',       submarket: 'random_index_s1' },
-    { label: 'Volatility 50 (1s)',    symbol: '1HZ50V',  group: 'Volatility 1s',       submarket: 'random_index_s1' },
-    { label: 'Volatility 75 (1s)',    symbol: '1HZ75V',  group: 'Volatility 1s',       submarket: 'random_index_s1' },
-    { label: 'Volatility 100 (1s)',   symbol: '1HZ100V', group: 'Volatility 1s',       submarket: 'random_index_s1' },
-    { label: 'Jump 10 Index',         symbol: 'JD10',    group: 'Jump Indices',        submarket: 'jump_index' },
-    { label: 'Jump 25 Index',         symbol: 'JD25',    group: 'Jump Indices',        submarket: 'jump_index' },
-    { label: 'Jump 50 Index',         symbol: 'JD50',    group: 'Jump Indices',        submarket: 'jump_index' },
-    { label: 'Jump 75 Index',         symbol: 'JD75',    group: 'Jump Indices',        submarket: 'jump_index' },
-    { label: 'Jump 100 Index',        symbol: 'JD100',   group: 'Jump Indices',        submarket: 'jump_index' },
-    { label: 'Bear Market Index',     symbol: 'RDBEAR',  group: 'Daily Reset Indices', submarket: 'daily_reset_index' },
-    { label: 'Bull Market Index',     symbol: 'RDBULL',  group: 'Daily Reset Indices', submarket: 'daily_reset_index' },
-    { label: 'Step Index',            symbol: 'stpRNG',  group: 'Step',                submarket: 'step_index' },
+    { label: 'Volatility 10 Index',   symbol: 'R_10',    group: 'Volatility'          },
+    { label: 'Volatility 25 Index',   symbol: 'R_25',    group: 'Volatility'          },
+    { label: 'Volatility 50 Index',   symbol: 'R_50',    group: 'Volatility'          },
+    { label: 'Volatility 75 Index',   symbol: 'R_75',    group: 'Volatility'          },
+    { label: 'Volatility 100 Index',  symbol: 'R_100',   group: 'Volatility'          },
+    { label: 'Volatility 10 (1s)',    symbol: '1HZ10V',  group: 'Volatility 1s'       },
+    { label: 'Volatility 25 (1s)',    symbol: '1HZ25V',  group: 'Volatility 1s'       },
+    { label: 'Volatility 50 (1s)',    symbol: '1HZ50V',  group: 'Volatility 1s'       },
+    { label: 'Volatility 75 (1s)',    symbol: '1HZ75V',  group: 'Volatility 1s'       },
+    { label: 'Volatility 100 (1s)',   symbol: '1HZ100V', group: 'Volatility 1s'       },
+    { label: 'Jump 10 Index',         symbol: 'JD10',    group: 'Jump Indices'        },
+    { label: 'Jump 25 Index',         symbol: 'JD25',    group: 'Jump Indices'        },
+    { label: 'Jump 50 Index',         symbol: 'JD50',    group: 'Jump Indices'        },
+    { label: 'Jump 75 Index',         symbol: 'JD75',    group: 'Jump Indices'        },
+    { label: 'Jump 100 Index',        symbol: 'JD100',   group: 'Jump Indices'        },
+    { label: 'Bear Market Index',     symbol: 'RDBEAR',  group: 'Daily Reset Indices' },
+    { label: 'Bull Market Index',     symbol: 'RDBULL',  group: 'Daily Reset Indices' },
+    { label: 'Step Index',            symbol: 'stpRNG',  group: 'Step'                },
 ];
 
 type ContractType = KillerContract;
 
-const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+const CONTRACT_TYPE_MAP: Record<ContractType, string> = {
+    over:    'DIGITOVER',
+    under:   'DIGITUNDER',
+    even:    'DIGITEVEN',
+    odd:     'DIGITODD',
+    matches: 'DIGITMATCH',
+    differs: 'DIGITDIFF',
+    rise:    'CALL',
+    fall:    'PUT',
+};
 
-function getTickCount(confidence: number, is1s: boolean): number {
-    return confidence >= 75 ? 1 : is1s ? 2 : 3;
-}
+const NEEDS_BARRIER: Set<ContractType> = new Set(['over', 'under', 'matches', 'differs']);
+
+const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 
 function momentumRun(prices: number[]): { dir: 1 | -1 | 0; run: number } {
     if (prices.length < 3) return { dir: 0, run: 0 };
@@ -66,16 +73,10 @@ function momentumRun(prices: number[]): { dir: 1 | -1 | 0; run: number } {
     return { dir, run };
 }
 
-interface DigitFreq {
-    symbol: string; label: string; group: string;
-    pcts: number[]; ticks: number[]; prices: number[]; total: number;
-}
+interface DigitFreq { symbol: string; label: string; group: string; pcts: number[]; ticks: number[]; prices: number[]; total: number; }
+interface Signal { symbol: string; label: string; group: string; type: ContractType; barrier?: number; confidence: number; ticks: number; note: string; autoDigit?: number; }
 
-interface Signal {
-    symbol: string; label: string; group: string;
-    type: ContractType; barrier?: number; confidence: number;
-    ticks: number; note: string; autoDigit?: number;
-}
+function getTickCount(confidence: number, is1s: boolean): number { return confidence >= 75 ? 1 : is1s ? 2 : 3; }
 
 function evaluateAutoMatches(freq: DigitFreq): Signal | null {
     const { pcts, ticks, label, symbol, group } = freq;
@@ -121,8 +122,7 @@ function evaluateAutoDiffers(freq: DigitFreq): Signal | null {
         const conf = clamp(82 + (10 - pcts[d]) * 1.5, 82, 96);
         return { symbol, label, group, type: 'differs', barrier: d, confidence: conf, ticks: getTickCount(conf, is1s), autoDigit: d, note: `Double ${d}${d} — differs high.` };
     }
-    const last10 = ticks.slice(-10);
-    const freqMap = new Array(10).fill(0);
+    const last10 = ticks.slice(-10); const freqMap = new Array(10).fill(0);
     last10.forEach(t => freqMap[t]++);
     let domDigit = -1; let domCount = 0;
     freqMap.forEach((c, d) => { if (c > domCount) { domCount = c; domDigit = d; } });
@@ -189,8 +189,30 @@ function evaluate(freq: DigitFreq, type: ContractType, predictionDigit: number):
     return null;
 }
 
+/** Wait for a digit/short-duration contract to settle and return its profit. */
+async function waitForSettlement(contractId: string): Promise<number> {
+    return new Promise(resolve => {
+        let sub: any;
+        const bail = setTimeout(() => { try { sub?.unsubscribe(); } catch { } resolve(0); }, 15000);
+        try {
+            const obs = api_base.api.subscribe({ proposal_open_contract: 1, contract_id: contractId, subscribe: 1 });
+            sub = obs.subscribe({
+                next: (res: any) => {
+                    const poc = res?.proposal_open_contract;
+                    if (poc?.is_sold || poc?.is_expired) {
+                        clearTimeout(bail);
+                        try { sub?.unsubscribe(); } catch { }
+                        resolve(parseFloat(poc.profit ?? '0'));
+                    }
+                },
+                error: () => { clearTimeout(bail); resolve(0); },
+            });
+        } catch { clearTimeout(bail); resolve(0); }
+    });
+}
+
 const AIAssistant: React.FC = () => {
-    const { dashboard, run_panel, load_modal } = useStore() as any;
+    const { dashboard, load_modal } = useStore() as any;
 
     const [isOpen, setIsOpen]         = useState(false);
     const [isPulsing, setIsPulsing]   = useState(true);
@@ -204,26 +226,35 @@ const AIAssistant: React.FC = () => {
     const [martingale, setMartingale] = useState(2.2);
     const [takeProfit, setTakeProfit] = useState(10);
     const [stopLoss, setStopLoss]     = useState(5);
-    const [autoRun, setAutoRun]       = useState(true);
 
     const [best, setBest]             = useState<Signal | null>(null);
     const [allSignals, setAllSignals] = useState<Signal[]>([]);
     const [displayCur, setDisplayCur] = useState(getDisplayCurrency());
+    const [botRunning, setBotRunning] = useState(false);
+    const [sessionProfit, setSessionProfit] = useState(0);
+    const [tradeCount, setTradeCount] = useState(0);
+    const [botLog, setBotLog]         = useState<string[]>([]);
 
-    // Direct-fire state
-    const [directFiring, setDirectFiring] = useState(false);
-    const directFireRef = useRef(false);
-    const directFireCount = useRef(0);
-
-    const wsRefs   = useRef<WebSocket[]>([]);
-    const freqRef  = useRef<Map<string, DigitFreq>>(new Map());
+    const wsRefs    = useRef<WebSocket[]>([]);
+    const freqRef   = useRef<Map<string, DigitFreq>>(new Map());
     const scanDoneRef = useRef(false);
-    const autoRunTimer = useRef<ReturnType<typeof setTimeout>>();
+    const runRef    = useRef(false);
+    const stakeRef  = useRef(stake);
+    const tradeCountRef = useRef(0);
+    const sessionProfitRef = useRef(0);
 
+    useEffect(() => { stakeRef.current = stake; }, [stake]);
     useEffect(() => subscribeCurrency(() => setDisplayCur(getDisplayCurrency())), []);
 
-    const fmtStake = (usd: number) => `${fromUsd(usd).toFixed(2)} ${displayCur}`;
+    const fmtStake  = (usd: number) => `${fromUsd(usd).toFixed(2)} ${displayCur}`;
+    const fmtProfit = (usd: number) => `${usd >= 0 ? '+' : ''}${fromUsd(usd).toFixed(2)} ${displayCur}`;
 
+    const addLog = useCallback((msg: string) => {
+        const ts = new Date().toLocaleTimeString('en', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        setBotLog(prev => [`[${ts}] ${msg}`, ...prev].slice(0, 80));
+    }, []);
+
+    /* ─────────── Market scanner ─────────── */
     const stopScan = useCallback(() => {
         wsRefs.current.forEach(ws => { try { ws.close(); } catch { } });
         wsRefs.current = [];
@@ -236,11 +267,7 @@ const AIAssistant: React.FC = () => {
         const signals: Signal[] = [];
         let ready = 0;
         freqRef.current.forEach(freq => {
-            if (freq.total > 30) {
-                ready++;
-                const sig = evaluate(freq, contractType, predictionDigit);
-                if (sig) signals.push(sig);
-            }
+            if (freq.total > 30) { ready++; const sig = evaluate(freq, contractType, predictionDigit); if (sig) signals.push(sig); }
         });
         signals.sort((a, b) => b.confidence - a.confidence);
         setScannedCount(ready);
@@ -251,31 +278,20 @@ const AIAssistant: React.FC = () => {
     const startScan = useCallback(() => {
         stopScan();
         freqRef.current.clear();
-        setBest(null);
-        setAllSignals([]);
-        setScannedCount(0);
-        setScanning(true);
-        scanDoneRef.current = false;
-
+        setBest(null); setAllSignals([]); setScannedCount(0);
+        setScanning(true); scanDoneRef.current = false;
         SCAN_SYMBOLS.forEach(({ symbol, label, group }) => {
             freqRef.current.set(symbol, { symbol, label, group, pcts: new Array(10).fill(10), ticks: [], prices: [], total: 0 });
         });
-
         let idx = 0;
         const scanNext = () => {
-            if (idx >= SCAN_SYMBOLS.length || scanDoneRef.current) {
-                setScanning(false);
-                setScanProgress(`Scan complete — ${SCAN_SYMBOLS.length} markets`);
-                return;
-            }
-            const { symbol, label, group } = SCAN_SYMBOLS[idx];
+            if (idx >= SCAN_SYMBOLS.length || scanDoneRef.current) { setScanning(false); setScanProgress(`Scan complete — ${SCAN_SYMBOLS.length} markets`); return; }
+            const { symbol, label } = SCAN_SYMBOLS[idx];
             setScanProgress(`Scanning ${label}... (${idx + 1}/${SCAN_SYMBOLS.length})`);
-
             const ws = new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
             wsRefs.current.push(ws);
             let received = false;
-
-            ws.onopen = () => { ws.send(JSON.stringify({ ticks_history: symbol, count: 500, end: 'latest', style: 'ticks' })); };
+            ws.onopen = () => ws.send(JSON.stringify({ ticks_history: symbol, count: 500, end: 'latest', style: 'ticks' }));
             ws.onmessage = e => {
                 if (received) return;
                 const d = JSON.parse(e.data);
@@ -292,8 +308,7 @@ const AIAssistant: React.FC = () => {
                     freq.pcts = counts.map(c => freq.total > 0 ? (c / freq.total) * 100 : 10);
                     recompute();
                     try { ws.close(); } catch { }
-                    idx++;
-                    setTimeout(scanNext, 80);
+                    idx++; setTimeout(scanNext, 80);
                 }
                 if (d.error) { received = true; try { ws.close(); } catch { } idx++; setTimeout(scanNext, 80); }
             };
@@ -304,204 +319,179 @@ const AIAssistant: React.FC = () => {
     }, [recompute, stopScan]);
 
     useEffect(() => { if (!scanning) recompute(); }, [contractType, predictionDigit]);
-    useEffect(() => () => { stopScan(); scanDoneRef.current = true; }, [stopScan]);
+    useEffect(() => () => { stopScan(); scanDoneRef.current = true; runRef.current = false; }, [stopScan]);
 
-    /**
-     * Direct ultra-fast API fire loop — queueMicrotask-based, ~0.001s per trade.
-     * Runs in parallel with the Blockly bot engine for immediate first-trade execution.
-     */
-    const startDirectFire = useCallback((signal: Signal, actualBarrier: number | undefined, ticks: number) => {
-        directFireRef.current = true;
-        directFireCount.current = 0;
-        setDirectFiring(true);
-
-        const needsBarrier = ['over', 'under', 'matches', 'differs'].includes(signal.type);
-        const contractTypeMap: Record<string, string> = {
-            over: 'DIGITOVER', under: 'DIGITUNDER', even: 'DIGITEVEN', odd: 'DIGITODD',
-            matches: 'DIGITMATCH', differs: 'DIGITDIFF', rise: 'CALL', fall: 'PUT',
-        };
-        const ct = contractTypeMap[signal.type] || 'DIGITEVEN';
-
-        const buildPayload = () => ({
-            buy: '1',
-            price: stake,
-            parameters: {
-                amount: stake,
-                basis: 'stake',
-                contract_type: ct,
-                currency: 'USD',
-                duration: ticks,
-                duration_unit: 't',
-                symbol: signal.symbol,
-                ...(needsBarrier && actualBarrier !== undefined ? { barrier: String(actualBarrier) } : {}),
-            },
-        });
-
-        // queueMicrotask loop — fires immediately without waiting for result
-        const fire = async () => {
-            if (!directFireRef.current) { setDirectFiring(false); return; }
-
-            const payload = buildPayload();
-            api_base.api.send(payload).catch(() => {});
-            directFireCount.current++;
-
-            // Yield every 10 via queueMicrotask (sub-millisecond yield)
-            if (directFireCount.current % 10 === 0) {
-                await new Promise<void>(r => queueMicrotask(r));
-            }
-
-            // Continue immediately
-            queueMicrotask(fire);
-        };
-
-        queueMicrotask(fire);
-    }, [stake]);
-
-    const stopDirectFire = useCallback(() => {
-        directFireRef.current = false;
-        setDirectFiring(false);
-    }, []);
+    /* ─────────── Direct-fire bot loop ─────────── */
+    const stopBot = useCallback(() => {
+        runRef.current = false;
+        setBotRunning(false);
+        addLog('⏹ Bot stopped by user.');
+    }, [addLog]);
 
     const loadAndRun = useCallback(async (sig?: Signal) => {
         const signal = sig ?? best;
         if (!signal) return;
-        const actualBarrier = signal.autoDigit !== undefined ? signal.autoDigit : (signal.barrier ?? predictionDigit);
+        if (botRunning) { stopBot(); return; }
 
+        const barrier = signal.autoDigit !== undefined ? signal.autoDigit : (signal.barrier ?? predictionDigit);
+        const apiContractType = CONTRACT_TYPE_MAP[signal.type];
+
+        // Reset session state
+        sessionProfitRef.current = 0;
+        tradeCountRef.current = 0;
+        stakeRef.current = stake;
+        setSessionProfit(0);
+        setTradeCount(0);
+        setBotLog([]);
+        setBotRunning(true);
+        runRef.current = true;
+        setIsOpen(false);
+
+        // Load XML into workspace for display (fire-and-forget)
         try {
             const res = await fetch('/bots/any-market-killer.xml');
-            const raw = await res.text();
-            const xml = buildKillerXml(raw, {
-                symbol: signal.symbol,
-                contract: signal.type,
-                barrier: actualBarrier,
-                ticks: signal.ticks,
-                stake,
-                martingale,
-                takeProfit,
-                stopLoss,
-            });
-
-            (window as any).__pendingBotXml  = xml;
-            (window as any).__pendingBotName = `AI ${signal.type.toUpperCase()}${actualBarrier !== undefined ? actualBarrier : ''}`;
-
-            // Set turbo execution speed before anything
-            setExecutionSpeed('turbo');
-
-            // Switch to bot-builder tab and open run panel
-            dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING);
-            run_panel?.toggleDrawer?.(true);
-
-            const loadNow = async (): Promise<boolean> => {
-                if (!(window as any).Blockly?.derivWorkspace) return false;
-                if (load_modal?.loadStrategyToBuilder) {
-                    try {
-                        await load_modal.loadStrategyToBuilder(
-                            { id: `ai_${signal.type}${actualBarrier ?? ''}`, xml, name: (window as any).__pendingBotName, save_type: 'unsaved' },
-                            false
-                        );
-                        return true;
-                    } catch { }
-                }
-                try {
+            if (res.ok) {
+                const raw = await res.text();
+                const xml = buildKillerXml(raw, { symbol: signal.symbol, contract: signal.type, barrier, ticks: signal.ticks, stake, martingale, takeProfit, stopLoss });
+                (window as any).__pendingBotXml  = xml;
+                (window as any).__pendingBotName = `AI ${signal.type.toUpperCase()}${barrier !== undefined ? barrier : ''}`;
+                dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING);
+                const loadWs = async () => {
                     const B = (window as any).Blockly;
-                    const dom = B.Xml.textToDom(xml);
-                    B.derivWorkspace.asyncClear?.() ?? B.derivWorkspace.clear?.();
-                    B.Xml.domToWorkspace(dom, B.derivWorkspace);
-                    B.derivWorkspace.strategy_to_load = xml;
-                    B.svgResize?.(B.derivWorkspace);
-                    B.derivWorkspace.scrollCenter?.();
-                    return true;
-                } catch { return false; }
-            };
-
-            const triggerRun = () => {
-                (window as any).__pendingBotXml  = null;
-                (window as any).__pendingBotName = null;
-
-                if (autoRun) {
-                    // Immediately fire the first trade via direct API (0ms delay)
-                    startDirectFire(signal, actualBarrier, signal.ticks);
-
-                    // Also start the Blockly bot engine (retry until running)
-                    let attempts = 0;
-                    const tryRun = () => {
-                        const { is_running } = run_panel as any;
-                        if (is_running) {
-                            // Bot is running — stop the direct fire loop (bot handles it now)
-                            stopDirectFire();
-                            return;
-                        }
-                        run_panel?.onRunButtonClick?.();
-                        attempts++;
-                        if (attempts < 30) {
-                            autoRunTimer.current = setTimeout(tryRun, 100);
+                    if (!B?.derivWorkspace) return false;
+                    try {
+                        if (load_modal?.loadStrategyToBuilder) {
+                            await load_modal.loadStrategyToBuilder({ id: `ai_${Date.now()}`, xml, name: (window as any).__pendingBotName, save_type: 'unsaved' }, false);
                         } else {
-                            // Bot engine didn't start — keep direct fire running
+                            const dom = B.Xml.textToDom(xml);
+                            B.derivWorkspace.asyncClear?.(); B.Xml.domToWorkspace(dom, B.derivWorkspace);
                         }
-                    };
-                    // Start bot engine immediately (no wait)
-                    tryRun();
-                }
-            };
+                        return true;
+                    } catch { return false; }
+                };
+                loadWs().catch(() => {});
+            }
+        } catch { /* workspace load failed — direct fire still works */ }
 
-            if (!(await loadNow())) {
-                let attempts = 0;
-                const poll = setInterval(async () => {
-                    attempts++;
-                    if (await loadNow() || attempts >= 80) {
-                        clearInterval(poll);
-                        if (attempts < 80) triggerRun();
+        addLog(`🚀 Starting ${signal.type.toUpperCase()}${barrier !== undefined ? barrier : ''} on ${signal.label} | Stake:${fmtStake(stake)} | Mart:${martingale}x | TP:${fmtStake(takeProfit)} | SL:${fmtStake(stopLoss)}`);
+
+        // ─── Direct-fire loop ───
+        (async () => {
+            while (runRef.current) {
+                const curStake = stakeRef.current;
+                try {
+                    // Step 1: Proposal
+                    let proposalId: string | null = null;
+                    try {
+                        const propRes = await api_base.api.send({
+                            proposal: 1,
+                            amount: curStake,
+                            basis: 'stake',
+                            contract_type: apiContractType,
+                            currency: 'USD',
+                            duration: signal.ticks,
+                            duration_unit: 't',
+                            symbol: signal.symbol,
+                            ...(NEEDS_BARRIER.has(signal.type) ? { barrier: String(barrier) } : {}),
+                        });
+                        proposalId = propRes?.proposal?.id ?? null;
+                    } catch { /* inline buy fallback */ }
+
+                    if (!runRef.current) break;
+
+                    // Step 2: Buy
+                    let contractId: string | null = null;
+                    if (proposalId) {
+                        try {
+                            const buyRes = await api_base.api.send({ buy: proposalId, price: curStake });
+                            contractId = buyRes?.buy?.contract_id ?? null;
+                        } catch { /* proposal may have expired */ }
                     }
-                }, 100);
-            } else {
-                triggerRun();
+
+                    // Fallback: inline buy (no proposal step)
+                    if (!contractId) {
+                        try {
+                            const buyRes = await api_base.api.send({
+                                buy: '1', price: curStake,
+                                parameters: {
+                                    amount: curStake, basis: 'stake', contract_type: apiContractType,
+                                    currency: 'USD', duration: signal.ticks, duration_unit: 't',
+                                    symbol: signal.symbol,
+                                    ...(NEEDS_BARRIER.has(signal.type) ? { barrier: String(barrier) } : {}),
+                                },
+                            });
+                            contractId = buyRes?.buy?.contract_id ?? null;
+                        } catch { await new Promise(r => setTimeout(r, 300)); continue; }
+                    }
+
+                    if (!contractId || !runRef.current) break;
+
+                    // Step 3: Wait for settlement
+                    const profit = await waitForSettlement(contractId);
+                    if (!runRef.current) break;
+
+                    // Update counters
+                    tradeCountRef.current++;
+                    sessionProfitRef.current += profit;
+                    const sp = sessionProfitRef.current;
+                    const tc = tradeCountRef.current;
+                    setTradeCount(tc);
+                    setSessionProfit(sp);
+
+                    const won = profit >= 0;
+                    addLog(`${won ? '✅' : '❌'} #${tc} ${won ? 'WIN' : 'LOSS'} ${fmtProfit(profit)} | Session: ${fmtProfit(sp)} | Stake: ${fmtStake(curStake)}`);
+
+                    // TP / SL check
+                    if (sp >= takeProfit) { addLog(`🏆 TAKE PROFIT hit! Session P/L: ${fmtProfit(sp)}`); break; }
+                    if (sp <= -stopLoss)  { addLog(`🛑 STOP LOSS hit! Session P/L: ${fmtProfit(sp)}`); break; }
+
+                    // Martingale on loss, reset on win
+                    if (!won) {
+                        stakeRef.current = Math.max(0.35, +(curStake * martingale).toFixed(2));
+                    } else {
+                        stakeRef.current = stake;
+                    }
+                } catch (err: any) {
+                    addLog(`⚠️ Error: ${err?.message || err}`);
+                    await new Promise(r => setTimeout(r, 500));
+                }
             }
 
-            setIsOpen(false);
-        } catch (err) {
-            console.error('AI load & run failed', err);
-        }
-    }, [best, predictionDigit, dashboard, run_panel, load_modal, stake, martingale, takeProfit, stopLoss, autoRun, startDirectFire, stopDirectFire]);
-
-    // Cleanup on unmount
-    useEffect(() => () => {
-        if (autoRunTimer.current) clearTimeout(autoRunTimer.current);
-        directFireRef.current = false;
-    }, []);
+            runRef.current = false;
+            setBotRunning(false);
+        })();
+    }, [best, predictionDigit, stake, martingale, takeProfit, stopLoss, botRunning, dashboard, load_modal, addLog, stopBot]);
 
     const isMatchesDiffers = contractType === 'matches' || contractType === 'differs';
     const needsDigit       = contractType === 'over' || contractType === 'under';
     const confClass        = best ? (best.confidence >= 80 ? 'high' : best.confidence >= 70 ? 'medium' : 'low') : '';
-
-    const digitOptions = contractType === 'over' ? [0,1,2,3,4,5,6,7]
-        : contractType === 'under' ? [1,2,3,4,5,6,7,8,9]
-        : [0,1,2,3,4,5,6,7,8,9];
+    const digitOptions     = contractType === 'over' ? [0,1,2,3,4,5,6,7] : contractType === 'under' ? [1,2,3,4,5,6,7,8,9] : [0,1,2,3,4,5,6,7,8,9];
 
     return (
         <>
-            {/* Direct-fire status pill */}
-            {directFiring && (
-                <div className='ai-assistant__fire-pill' onClick={stopDirectFire} title='Click to stop direct fire'>
-                    ⚡ FIRING {directFireCount.current} — tap to stop
+            {/* Status pill */}
+            {botRunning && (
+                <div className='ai-assistant__fire-pill' onClick={stopBot} title='Click to stop the bot'>
+                    🤖 RUNNING #{tradeCount} | {fmtProfit(sessionProfit)} &nbsp;·&nbsp; <span style={{ color: '#ff6b6b' }}>⏹ STOP</span>
                 </div>
             )}
 
             <button
-                className={`ai-assistant__trigger ${isPulsing ? 'ai-assistant__trigger--pulse' : ''}`}
+                className={`ai-assistant__trigger ${isPulsing ? 'ai-assistant__trigger--pulse' : ''} ${botRunning ? 'ai-assistant__trigger--running' : ''}`}
                 onClick={() => { setIsOpen(true); setIsPulsing(false); }}
                 title='AI Market Scanner'
             >
-                <div className='ai-assistant__sphere'><span>AI</span></div>
+                <div className='ai-assistant__sphere'><span>{botRunning ? '⏸' : 'AI'}</span></div>
             </button>
 
             {isOpen && (
                 <div className='ai-assistant__overlay' onClick={() => setIsOpen(false)}>
                     <div className='ai-assistant__modal' onClick={e => e.stopPropagation()}>
                         <div className='ai-assistant__modal-header'>
-                            <div className={`ai-assistant__status-dot ${scanning ? 'live' : ''}`} />
+                            <div className={`ai-assistant__status-dot ${scanning ? 'live' : botRunning ? 'running' : ''}`} />
                             <h3>AI Market Scanner</h3>
                             {scanning && <span className='ai-assistant__live'>SCANNING {scannedCount}/{SCAN_SYMBOLS.length}</span>}
-                            {!scanning && scannedCount > 0 && <span className='ai-assistant__live' style={{ color: '#00ff96' }}>✔ {scannedCount}/{SCAN_SYMBOLS.length}</span>}
+                            {botRunning && <span className='ai-assistant__live' style={{ color: '#00ff96' }}>🤖 #{tradeCount} | {fmtProfit(sessionProfit)}</span>}
                             <button className='ai-assistant__close' onClick={() => setIsOpen(false)}>✕</button>
                         </div>
 
@@ -515,6 +505,13 @@ const AIAssistant: React.FC = () => {
                                 </div>
                             )}
 
+                            {/* Bot live log */}
+                            {botRunning && botLog.length > 0 && (
+                                <div className='ai-assistant__bot-log'>
+                                    {botLog.slice(0, 5).map((l, i) => <div key={i} className='ai-assistant__bot-log-entry'>{l}</div>)}
+                                </div>
+                            )}
+
                             {best ? (
                                 <div className={`ai-assistant__signal ai-assistant__signal--${confClass}`}>
                                     <div className='ai-assistant__signal-head'>
@@ -522,8 +519,7 @@ const AIAssistant: React.FC = () => {
                                         <span className='ai-assistant__signal-conf'>{best.confidence.toFixed(1)}%</span>
                                     </div>
                                     <div className='ai-assistant__signal-market'>
-                                        {best.label}
-                                        <span className='ai-assistant__signal-group'> [{best.group}]</span>
+                                        {best.label}<span className='ai-assistant__signal-group'> [{best.group}]</span>
                                     </div>
                                     <div className='ai-assistant__signal-type'>
                                         {best.type.toUpperCase()}{(best.autoDigit !== undefined ? best.autoDigit : best.barrier) !== undefined ? ` ${best.autoDigit !== undefined ? best.autoDigit : best.barrier}` : ''}
@@ -541,13 +537,10 @@ const AIAssistant: React.FC = () => {
                                             ))}
                                         </div>
                                     )}
-                                    <button className='ai-assistant__load-run' onClick={() => loadAndRun()}>
-                                        ⚡ Load &amp; {autoRun ? 'Auto-Run (0.001s)' : 'Run'} Bot
-                                    </button>
                                 </div>
                             ) : !scanning ? (
                                 <div className='ai-assistant__searching'>
-                                    <span>{scannedCount > 0 ? 'No high-confidence setup. Try different type or scan again.' : 'Press SCAN to analyse all markets.'}</span>
+                                    <span>{scannedCount > 0 ? 'No high-confidence setup. Try a different type or scan again.' : 'Press SCAN to analyse all markets.'}</span>
                                 </div>
                             ) : (
                                 <div className='ai-assistant__searching'>
@@ -576,25 +569,21 @@ const AIAssistant: React.FC = () => {
                                     </select>
                                 </div>
                             )}
-                            {isMatchesDiffers && (
-                                <div className='ai-assistant__auto-note'>
-                                    🤖 AI auto-selects best digit for {contractType}
-                                </div>
-                            )}
+                            {isMatchesDiffers && <div className='ai-assistant__auto-note'>🤖 AI auto-selects best digit for {contractType}</div>}
 
                             {/* Stake + Martingale */}
                             <div className='ai-assistant__field-row'>
                                 <div className='ai-assistant__field'>
                                     <label>STAKE ({displayCur})</label>
-                                    <input type='number' value={stake} min={0.35} step={0.1} onChange={e => setStake(Number(e.target.value))} />
+                                    <input type='number' value={stake} min={0.35} step={0.1} onChange={e => { setStake(Number(e.target.value)); stakeRef.current = Number(e.target.value); }} />
                                 </div>
                                 <div className='ai-assistant__field'>
-                                    <label>MARTINGALE</label>
+                                    <label>MARTINGALE ×</label>
                                     <input type='number' value={martingale} min={1} step={0.1} onChange={e => setMartingale(Number(e.target.value))} />
                                 </div>
                             </div>
 
-                            {/* Take Profit + Stop Loss */}
+                            {/* TP + SL */}
                             <div className='ai-assistant__field-row'>
                                 <div className='ai-assistant__field'>
                                     <label>TAKE PROFIT ({displayCur})</label>
@@ -605,14 +594,6 @@ const AIAssistant: React.FC = () => {
                                     <input type='number' value={stopLoss} min={0.5} step={0.5} onChange={e => setStopLoss(Number(e.target.value))} />
                                 </div>
                             </div>
-
-                            {/* Auto-run toggle */}
-                            <div className='ai-assistant__field'>
-                                <label className='ai-assistant__toggle-label'>
-                                    <input type='checkbox' checked={autoRun} onChange={e => setAutoRun(e.target.checked)} />
-                                    <span>AUTO-RUN — fires trades at ~0.001s intervals until stopped manually</span>
-                                </label>
-                            </div>
                         </div>
 
                         <div className='ai-assistant__footer'>
@@ -621,8 +602,12 @@ const AIAssistant: React.FC = () => {
                             ) : (
                                 <button className='ai-assistant__btn ai-assistant__btn--scan' onClick={startScan}>🔍 SCAN ALL MARKETS</button>
                             )}
-                            <button className='ai-assistant__btn ai-assistant__btn--load' onClick={() => loadAndRun()} disabled={!best}>
-                                {best ? `⚡ Load & ${autoRun ? 'Auto-Run' : 'Run'}` : 'No signal yet'}
+                            <button
+                                className={`ai-assistant__btn ${botRunning ? 'ai-assistant__btn--stop-bot' : 'ai-assistant__btn--load'}`}
+                                onClick={() => loadAndRun()}
+                                disabled={!botRunning && !best}
+                            >
+                                {botRunning ? `⏹ Stop Bot (#${tradeCount})` : !best ? 'No signal yet' : '⚡ Load & Run Bot'}
                             </button>
                         </div>
                     </div>

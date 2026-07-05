@@ -21,6 +21,34 @@ const FREE_BOTS = [
     winRate: '~50%',
   },
   {
+    id: 'ahmed-over-dt-oppo-killer',
+    name: 'Ahmed OVER DT Oppo Killer',
+    description: '🎯 Dual-prediction OVER strategy — V75 1s, switches prediction on loss (2→5). Martingale 2x, TP $5, SL $1000. Grace of God mode.',
+    category: 'Over/Under',
+    market: 'V75 1s (1HZ75V)',
+    type: 'DIGITOVER',
+    prediction: '2 / 5',
+    xmlFile: '/bots/ahmed-over-dt-oppo-killer.xml',
+    badge: 'NEW ★',
+    badgeColor: '#ff6600',
+    icon: '🔥',
+    winRate: '73%',
+  },
+  {
+    id: 'ahmed-under-dt-oppo-killer',
+    name: 'Ahmed UNDER DT Oppo Killer',
+    description: '⚔ Dual-prediction UNDER strategy — V75 1s, switches prediction on loss (7→5). Martingale 2x, TP $5, SL $1000. Grace of God mode.',
+    category: 'Over/Under',
+    market: 'V75 1s (1HZ75V)',
+    type: 'DIGITUNDER',
+    prediction: '7 / 5',
+    xmlFile: '/bots/ahmed-under-dt-oppo-killer.xml',
+    badge: 'NEW ★',
+    badgeColor: '#4488ff',
+    icon: '⚡',
+    winRate: '72%',
+  },
+  {
     id: 'over1',
     name: 'AI Auto SYN Over 1',
     description: 'Best market killer — DIGIT OVER prediction 1 on V50 1s. Martingale x2, TP $3, SL $10.',
@@ -153,8 +181,6 @@ const FreeBots = observer(() => {
   const loadXmlIntoWorkspace = useCallback(async (bot: typeof FREE_BOTS[0], xml: string) => {
     const workspace = (window as any).Blockly?.derivWorkspace;
     if (!workspace) return false;
-    // Prefer the canonical loader used across the app — it clears, loads and
-    // centres the strategy and registers it as the active workspace bot.
     const lm: any = store?.load_modal;
     if (lm?.loadStrategyToBuilder) {
       try {
@@ -164,14 +190,13 @@ const FreeBots = observer(() => {
         );
         return true;
       } catch (err) {
-        // fall through to raw loader below
+        /* fall through */
       }
     }
-    // Raw fallback
     try {
       const B = (window as any).Blockly;
       const dom = B.Xml.textToDom(xml);
-      B.derivWorkspace.asyncClear();
+      B.derivWorkspace.asyncClear?.();
       B.Xml.domToWorkspace(dom, B.derivWorkspace);
       B.derivWorkspace.strategy_to_load = xml;
       B.svgResize?.(B.derivWorkspace);
@@ -190,15 +215,12 @@ const FreeBots = observer(() => {
       if (!response.ok) throw new Error(`Failed to fetch ${bot.xmlFile}`);
       const xml = await response.text();
 
-      // Store globally so Bot Builder can pick it up if it mounts fresh
       (window as any).__pendingBotXml = xml;
       (window as any).__pendingBotName = bot.name;
 
-      // Navigate to Bot Builder first
       store?.dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING);
       store?.run_panel?.toggleDrawer?.(true);
 
-      // Load into the (persistent) workspace. Poll until it is ready.
       if (!(await loadXmlIntoWorkspace(bot, xml))) {
         let attempts = 0;
         const poll = setInterval(async () => {
@@ -225,7 +247,6 @@ const FreeBots = observer(() => {
 
   return (
     <div className='free-bots'>
-      {/* Risk Disclaimer */}
       {disclaimer && (
         <div className='free-bots__disclaimer'>
           <span className='free-bots__disclaimer-icon'>⚠</span>
@@ -236,7 +257,6 @@ const FreeBots = observer(() => {
         </div>
       )}
 
-      {/* Header */}
       <div className='free-bots__header'>
         <div className='free-bots__header-left'>
           <h1>🤖 <span>AHMED SYN TRADER</span> — Free Bots</h1>
@@ -253,7 +273,6 @@ const FreeBots = observer(() => {
         </div>
       </div>
 
-      {/* Filters */}
       <div className='free-bots__filters'>
         {CATEGORIES.map(cat => (
           <button key={cat} className={`free-bots__filter-btn ${category === cat ? 'active' : ''}`} onClick={() => setCategory(cat)}>
@@ -263,29 +282,17 @@ const FreeBots = observer(() => {
         <span className='free-bots__count'>{filtered.length} bots</span>
       </div>
 
-      {/* Grid */}
       <div className='free-bots__grid'>
         {filtered.map(bot => (
           <div key={bot.id} className={`free-bots__card ${loadedId === bot.id ? 'free-bots__card--loaded' : ''}`}>
-            {/* Glowing border */}
             <div className='free-bots__card-glow' />
-
-            {/* Badge */}
-            <div className='free-bots__badge' style={{ background: bot.badgeColor }}>
-              {bot.badge}
-            </div>
-
-            {/* Icon */}
+            <div className='free-bots__badge' style={{ background: bot.badgeColor }}>{bot.badge}</div>
             <div className='free-bots__card-icon'>{bot.icon}</div>
-
-            {/* Content */}
             <div className='free-bots__card-body'>
               <span className='free-bots__category-tag'>{bot.category}</span>
               <h3 className='free-bots__bot-name'>{bot.name}</h3>
               <p className='free-bots__bot-desc'>{bot.description}</p>
             </div>
-
-            {/* Meta */}
             <div className='free-bots__card-meta'>
               <div className='free-bots__meta-item'>
                 <span className='free-bots__meta-label'>MARKET</span>
@@ -306,8 +313,6 @@ const FreeBots = observer(() => {
                 <span className='free-bots__meta-val free-bots__meta-val--green'>{bot.winRate}</span>
               </div>
             </div>
-
-            {/* Load Button */}
             <button
               className={`free-bots__load-btn ${loadedId === bot.id ? 'loaded' : ''}`}
               onClick={() => handleLoad(bot)}

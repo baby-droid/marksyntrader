@@ -1,8 +1,9 @@
 // @ts-nocheck
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useDerivTrading } from '@/hooks/useDerivTrading';
 import { copyEngine, CopyMode, Follower } from '@/utils/copy-trading';
+import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import './copy-trading.scss';
 
 const MODES: { id: CopyMode; title: string; desc: string; icon: string }[] = [
@@ -21,18 +22,40 @@ const MODES: { id: CopyMode; title: string; desc: string; icon: string }[] = [
 ];
 
 const CopyTrading = observer(() => {
-  const { balance, currency, totalProfit } = useDerivTrading();
+  const { balance, currency, totalProfit, subscribeBalance } = useDerivTrading() as any;
   const [followers, setFollowers] = useState<Follower[]>([]);
   const [mode, setMode] = useState<CopyMode>(copyEngine.getMode());
   const [isCopying, setIsCopying] = useState(copyEngine.isRunning());
   const [tokenInput, setTokenInput] = useState('');
   const [ratioInput, setRatioInput] = useState(1);
   const [log, setLog] = useState<string[]>([]);
+  const [displayCur, setDisplayCur] = useState(getDisplayCurrency());
+  const prevActiveCount = useRef(0);
+
+  useEffect(() => subscribeCurrency(() => setDisplayCur(getDisplayCurrency())), []);
 
   useEffect(() => {
-    const offChange = copyEngine.onChange(setFollowers);
+    subscribeBalance?.();
+  }, []);
+
+  useEffect(() => {
+    const offChange = copyEngine.onChange(newFollowers => {
+      setFollowers(newFollowers);
+
+      // Auto-start copy trading when a new follower becomes active and
+      // copy trading is not yet running
+      const activeCount = newFollowers.filter(f => f.status === 'active').length;
+      if (activeCount > prevActiveCount.current && !copyEngine.isRunning()) {
+        // Slight delay to let the auth complete log message render first
+        setTimeout(() => {
+          copyEngine.start();
+          setIsCopying(copyEngine.isRunning());
+        }, 400);
+      }
+      prevActiveCount.current = activeCount;
+    });
     const offLog = copyEngine.onLog(msg =>
-      setLog(prev => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev].slice(0, 60))
+      setLog(prev => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev].slice(0, 100))
     );
     return () => {
       offChange();
@@ -46,8 +69,9 @@ const CopyTrading = observer(() => {
   }, []);
 
   const addToken = useCallback(() => {
-    if (!tokenInput.trim()) return;
-    copyEngine.addFollower(tokenInput, ratioInput);
+    const token = tokenInput.trim();
+    if (!token) return;
+    copyEngine.addFollower(token, ratioInput);
     setTokenInput('');
   }, [tokenInput, ratioInput]);
 
@@ -61,6 +85,9 @@ const CopyTrading = observer(() => {
     }
   }, [isCopying]);
 
+  const fmt = (usd: number) => `${fromUsd(usd).toFixed(2)} ${displayCur}`;
+  const fmtProfit = (usd: number) => `${usd >= 0 ? '+' : ''}${fromUsd(usd).toFixed(2)} ${displayCur}`;
+
   const active = followers.filter(f => f.status === 'active');
   const totalReplicated = followers.reduce((s, f) => s + f.replicated, 0);
   const ratioLabel = mode === 'real_real' ? 'Stake ratio' : 'Risk multiplier';
@@ -71,7 +98,7 @@ const CopyTrading = observer(() => {
         <div className='copy-trading__hero-content'>
           <div className='copy-trading__live-badge'>● LIVE COPY TRADING</div>
           <h1>Your account, your control.<br /><span>Mirror trades to <em>10 accounts</em></span></h1>
-          <p>Copy trades from your master account to up to 10 client accounts in real time — automatically and instantly.</p>
+          <p>Add a follower API token — copy trading starts automatically once verified.</p>
           <div className='copy-trading__hero-stats'>
             <div className='copy-trading__stat'><strong>{active.length}/10</strong><span>LINKED ACCOUNTS</span></div>
             <div className='copy-trading__stat copy-trading__stat--status'>
@@ -109,11 +136,14 @@ const CopyTrading = observer(() => {
           <div className='copy-trading__card'>
             <div className='copy-trading__card-icon'>🔑</div>
             <h3>Link Follower ({followers.length}/10)</h3>
-            <p>Add a client API token (Read + Trade scope). Each follower gets its own live connection.</p>
+            <p>
+              Add a follower API token (Read + Trade scope). Copy trading starts automatically
+              after the token is verified. You can also start/stop it manually below.
+            </p>
             <div className='copy-trading__token-row'>
               <input
                 type='text'
-                placeholder='Paste client API token…'
+                placeholder='Paste follower API token…'
                 value={tokenInput}
                 onChange={e => setTokenInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && addToken()}
@@ -131,23 +161,33 @@ const CopyTrading = observer(() => {
               <button
                 className='copy-trading__btn copy-trading__btn--add'
                 onClick={addToken}
-                disabled={followers.length >= 10}
+                disabled={followers.length >= 10 || !tokenInput.trim()}
               >
-                Add
+                Add &amp; Join
               </button>
             </div>
+
+            {/* Manual start / stop override */}
             <button
               className={`copy-trading__copy-btn ${isCopying ? 'copy-trading__copy-btn--stop' : ''}`}
               onClick={toggleCopy}
+              disabled={!isCopying && active.length === 0}
+              title={!isCopying && active.length === 0 ? 'Add and verify a follower token first' : undefined}
             >
-              {isCopying ? '⏹ Stop Copy Trading' : '▶ Start Copy Trading'}
+              {isCopying ? '⏹ Stop Copy Trading' : active.length === 0 ? '⏳ Waiting for follower…' : '▶ Start Copy Trading'}
             </button>
+
+            {isCopying && (
+              <div className='copy-trading__running-notice'>
+                ✅ Copy trading is active — trades from your master account will be mirrored automatically.
+              </div>
+            )}
           </div>
 
           <div className='copy-trading__card copy-trading__card--log'>
             <h3>Activity Log</h3>
             <div className='copy-trading__log'>
-              {log.length === 0 && <p className='copy-trading__log-empty'>No activity yet.</p>}
+              {log.length === 0 && <p className='copy-trading__log-empty'>No activity yet. Add a follower token to begin.</p>}
               {log.map((entry, i) => <div key={i} className='copy-trading__log-entry'>{entry}</div>)}
             </div>
           </div>
@@ -161,7 +201,7 @@ const CopyTrading = observer(() => {
               <div className='copy-trading__no-accounts'>
                 <div className='copy-trading__no-accounts-icon'>🔗</div>
                 <p>No accounts linked yet.</p>
-                <p>Add a client API token to start mirroring trades.</p>
+                <p>Add a follower API token above — it will auto-join after verification.</p>
               </div>
             ) : (
               <div className='copy-trading__accounts'>
@@ -186,7 +226,7 @@ const CopyTrading = observer(() => {
                         />
                       </div>
                       <span className={`copy-trading__account-status copy-trading__account-status--${acc.status}`}>
-                        {acc.status === 'error' ? (acc.lastError || 'error') : acc.status}
+                        {acc.status === 'pending' ? '⏳ verifying…' : acc.status === 'error' ? (acc.lastError || 'error') : acc.status}
                       </span>
                       <span>{acc.replicated} trades</span>
                       <button className='copy-trading__remove' onClick={() => copyEngine.removeFollower(acc.id)}>✕</button>
@@ -203,12 +243,12 @@ const CopyTrading = observer(() => {
               <div className='copy-trading__master'>
                 <div className='copy-trading__master-balance'>
                   <span>Balance</span>
-                  <strong>{currency} {balance.toFixed(2)}</strong>
+                  <strong>{fmt(balance)}</strong>
                 </div>
                 <div className='copy-trading__master-pl'>
                   <span>Session P/L</span>
                   <strong className={totalProfit >= 0 ? 'pos' : 'neg'}>
-                    {totalProfit >= 0 ? '+' : ''}{totalProfit.toFixed(2)}
+                    {fmtProfit(totalProfit)}
                   </strong>
                 </div>
               </div>

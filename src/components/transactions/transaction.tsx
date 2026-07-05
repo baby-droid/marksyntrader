@@ -1,5 +1,5 @@
 // @ts-nocheck — vendored bot code with known upstream type gaps; see AGENTS.md
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import classNames from 'classnames';
 import ContentLoader from 'react-content-loader';
 import Money from '@/components/shared_ui/money';
@@ -8,6 +8,7 @@ import { popover_zindex } from '@/constants/z-indexes';
 import { getContractTypeName } from '@/external/bot-skeleton';
 import { isDbotRTL } from '@/external/bot-skeleton/utils/workspace';
 import { getSymbolDisplayNameSync } from '@/utils/symbol-display-name';
+import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import { LegacyRadioOffIcon, LegacyRadioOnIcon } from '@deriv/quill-icons';
 import { Localize, localize } from '@deriv-com/translations';
 import { MarketIcon } from '../market/market-icon';
@@ -36,6 +37,41 @@ type TTransaction = {
     contract?: TContractInfo | null;
     onClickTransaction?: (transaction_id: null | number) => void;
     active_transaction_id?: number | null;
+};
+
+/**
+ * KSH-aware money display.
+ * When the user's display currency is KSH we convert the USD amount using
+ * fromUsd() and label it KSH.  Otherwise we fall back to the standard
+ * Money component so formatting / rounding stays consistent.
+ */
+const KshMoney: React.FC<{
+    amount: number;
+    contractCurrency: string;
+    showCurrency?: boolean;
+    className?: string;
+}> = ({ amount, contractCurrency, showCurrency = false, className }) => {
+    const [displayCur, setDisplayCur] = useState(getDisplayCurrency());
+    useEffect(() => subscribeCurrency(() => setDisplayCur(getDisplayCurrency())), []);
+
+    if (displayCur === 'USD' || displayCur === contractCurrency) {
+        return (
+            <Money
+                amount={amount}
+                currency={contractCurrency}
+                show_currency={showCurrency}
+                className={className}
+            />
+        );
+    }
+    // KSH (or other non-USD display) mode — convert + label
+    const converted = fromUsd(amount);
+    const formatted = converted.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return (
+        <span className={className}>
+            {formatted}{showCurrency ? ` ${displayCur}` : ''}
+        </span>
+    );
 };
 
 const TransactionIconWithText = ({ icon, title, message, className }: TTransactionIconWithText) => (
@@ -220,7 +256,11 @@ const Transaction = ({ contract, active_transaction_id, onClickTransaction }: TT
                 </div>
                 <div className='transactions__cell transactions__stake'>
                     {contract ? (
-                        <Money amount={contract.buy_price} currency={contract.currency} show_currency />
+                        <KshMoney
+                            amount={contract.buy_price}
+                            contractCurrency={contract.currency}
+                            showCurrency
+                        />
                     ) : (
                         <TransactionFieldLoader />
                     )}
@@ -233,7 +273,11 @@ const Transaction = ({ contract, active_transaction_id, onClickTransaction }: TT
                                 'transactions__profit--loss': contract?.profit && contract?.profit < 0,
                             })}
                         >
-                            <Money amount={Math.abs(contract.profit || 0)} currency={contract.currency} show_currency />
+                            <KshMoney
+                                amount={Math.abs(contract.profit || 0)}
+                                contractCurrency={contract.currency}
+                                showCurrency
+                            />
                         </div>
                     ) : (
                         <TransactionFieldLoader />
