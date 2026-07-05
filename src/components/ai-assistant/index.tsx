@@ -389,8 +389,9 @@ const AIAssistant: React.FC = () => {
     const stopBot = useCallback(() => {
         runRef.current = false;
         setBotRunning(false);
+        run_panel?.setIsRunning?.(false);
         addLog('⏹ Bot stopped by user.');
-    }, [addLog]);
+    }, [addLog, run_panel]);
 
     const loadAndRun = useCallback(async (sig?: Signal) => {
         const signal = sig ?? best;
@@ -411,12 +412,16 @@ const AIAssistant: React.FC = () => {
         runRef.current = true;
         setIsOpen(false);
 
-        // Load XML into workspace for display (fire-and-forget)
+        // Signal the main run panel to show "running" state
+        run_panel?.setIsRunning?.(true);
+
+        // Load the user's EVEN/ODD XML into the workspace for display (fire-and-forget)
         try {
-            const res = await fetch('/bots/any-market-killer.xml');
+            const res = await fetch('/bots/ahmed-syn-even-odd-killer.xml');
             if (res.ok) {
                 const raw = await res.text();
-                const xml = buildKillerXml(raw, { symbol: signal.symbol, contract: signal.type, barrier, ticks: signal.ticks, stake: toUsd(stake), martingale, takeProfit: toUsd(takeProfit), stopLoss: toUsd(stopLoss) });
+                // Stake/TP/SL are always in USD — no conversion needed
+                const xml = buildKillerXml(raw, { symbol: signal.symbol, contract: signal.type, barrier, ticks: signal.ticks, stake, martingale, takeProfit, stopLoss });
                 (window as any).__pendingBotXml  = xml;
                 (window as any).__pendingBotName = `AI ${signal.type.toUpperCase()}${barrier !== undefined ? barrier : ''}`;
                 dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING);
@@ -437,107 +442,103 @@ const AIAssistant: React.FC = () => {
             }
         } catch { /* workspace load failed — direct fire still works */ }
 
-        addLog(`🚀 Starting ${signal.type.toUpperCase()}${barrier !== undefined ? barrier : ''} on ${signal.label} | Stake:${fmtDisplayVal(stake)} | Mart:${martingale}x | TP:${fmtDisplayVal(takeProfit)} | SL:${fmtDisplayVal(stopLoss)}`);
+        addLog(`🚀 Starting ${signal.type.toUpperCase()}${barrier !== undefined ? barrier : ''} on ${signal.label} | Stake:${fmtVal(stake)} | Mart:${martingale}x | TP:${fmtVal(takeProfit)} | SL:${fmtVal(stopLoss)}`);
 
         // ─── Direct-fire loop ───
+        // Speed modes:
+        //   Normal  — proposal + buy + wait for settlement (reliable, sequential)
+        //   Crazy   — skip proposal, inline buy + wait for settlement (faster: saves 1 round-trip)
+        //   Turbo   — skip proposal, inline buy, NO settlement wait (fire-and-forget, superhuman speed)
         (async () => {
+            const inlineBuy = async (curStake: number) => {
+                const res = await api_base.api.send({
+                    buy: '1', price: curStake,
+                    parameters: {
+                        amount: curStake, basis: 'stake', contract_type: apiContractType,
+                        currency: accountCurrency || 'USD', duration: signal.ticks, duration_unit: 't',
+                        symbol: signal.symbol,
+                        ...(NEEDS_BARRIER.has(signal.type) ? { barrier: String(barrier) } : {}),
+                    },
+                });
+                return res?.buy?.contract_id ?? null;
+            };
+
+            const applyResult = (profit: number) => {
+                tradeCountRef.current++;
+                sessionProfitRef.current += profit;
+                const sp = sessionProfitRef.current;
+                const tc = tradeCountRef.current;
+                setTradeCount(tc);
+                setSessionProfit(sp);
+                const won = profit >= 0;
+                addLog(`${won ? '✅' : '❌'} #${tc} ${won ? 'WIN' : 'LOSS'} ${fmtProfit(profit)} | Session: ${fmtProfit(sp)} | Stake: ${fmtVal(stakeRef.current)}`);
+                if (sp >= takeProfit) { addLog(`🏆 TAKE PROFIT hit! Session P/L: ${fmtProfit(sp)}`); runRef.current = false; setBotRunning(false); run_panel?.setIsRunning?.(false); }
+                if (sp <= -stopLoss)  { addLog(`🛑 STOP LOSS hit! Session P/L: ${fmtProfit(sp)}`); runRef.current = false; setBotRunning(false); run_panel?.setIsRunning?.(false); }
+                // Martingale: all in USD
+                if (runRef.current) {
+                    stakeRef.current = won ? stake : Math.max(0.35, +(stakeRef.current * martingale).toFixed(2));
+                }
+            };
+
             while (runRef.current) {
-                // stakeRef.current is tracked in the *display* currency (KSH or USD, matching
-                // the "STAKE (KSH)" input label) — convert to the real account currency amount
-                // right before sending it to the API, or KSH stakes get sent as raw USD amounts
-                // and the buy call fails/over-trades.
-                const curStakeDisplay = stakeRef.current;
-                const curStake = toUsd(curStakeDisplay);
+                const curStake = stakeRef.current;
+                const speed = getExecutionSpeed();
                 try {
-                    // Step 1: Proposal
-                    let proposalId: string | null = null;
-                    try {
-                        const propRes = await api_base.api.send({
-                            proposal: 1,
-                            amount: curStake,
-                            basis: 'stake',
-                            contract_type: apiContractType,
-                            currency: accountCurrency || 'USD',
-                            duration: signal.ticks,
-                            duration_unit: 't',
-                            symbol: signal.symbol,
-                            ...(NEEDS_BARRIER.has(signal.type) ? { barrier: String(barrier) } : {}),
-                        });
-                        proposalId = propRes?.proposal?.id ?? null;
-                    } catch { /* inline buy fallback */ }
-
-                    if (!runRef.current) break;
-
-                    // Step 2: Buy
-                    let contractId: string | null = null;
-                    if (proposalId) {
+                    if (speed === 'normal') {
+                        // Normal: proposal → buy → wait settlement (most reliable)
+                        let proposalId: string | null = null;
                         try {
-                            const buyRes = await api_base.api.send({ buy: proposalId, price: curStake });
-                            contractId = buyRes?.buy?.contract_id ?? null;
-                        } catch { /* proposal may have expired */ }
-                    }
-
-                    // Fallback: inline buy (no proposal step)
-                    if (!contractId) {
-                        try {
-                            const buyRes = await api_base.api.send({
-                                buy: '1', price: curStake,
-                                parameters: {
-                                    amount: curStake, basis: 'stake', contract_type: apiContractType,
-                                    currency: accountCurrency || 'USD', duration: signal.ticks, duration_unit: 't',
-                                    symbol: signal.symbol,
-                                    ...(NEEDS_BARRIER.has(signal.type) ? { barrier: String(barrier) } : {}),
-                                },
+                            const propRes = await api_base.api.send({
+                                proposal: 1, amount: curStake, basis: 'stake',
+                                contract_type: apiContractType, currency: accountCurrency || 'USD',
+                                duration: signal.ticks, duration_unit: 't', symbol: signal.symbol,
+                                ...(NEEDS_BARRIER.has(signal.type) ? { barrier: String(barrier) } : {}),
                             });
-                            contractId = buyRes?.buy?.contract_id ?? null;
-                        } catch (buyErr: any) {
-                            const msg = buyErr?.error?.message || buyErr?.message || (typeof buyErr === 'string' ? buyErr : 'Buy failed');
-                            addLog(`⚠️ ${msg}`);
-                            await new Promise(r => setTimeout(r, 300)); continue;
+                            proposalId = propRes?.proposal?.id ?? null;
+                        } catch { /* fallthrough to inline */ }
+
+                        let contractId: string | null = null;
+                        if (proposalId && runRef.current) {
+                            try {
+                                const buyRes = await api_base.api.send({ buy: proposalId, price: curStake });
+                                contractId = buyRes?.buy?.contract_id ?? null;
+                            } catch { /* fallthrough to inline */ }
                         }
-                    }
+                        if (!contractId) contractId = await inlineBuy(curStake);
+                        if (!contractId || !runRef.current) break;
+                        const profit = await waitForSettlement(contractId);
+                        if (!runRef.current) break;
+                        applyResult(profit);
 
-                    if (!contractId || !runRef.current) break;
+                    } else if (speed === 'crazy') {
+                        // Crazy: skip proposal, inline buy → wait settlement (1 round-trip faster)
+                        const contractId = await inlineBuy(curStake);
+                        if (!contractId || !runRef.current) break;
+                        const profit = await waitForSettlement(contractId);
+                        if (!runRef.current) break;
+                        applyResult(profit);
 
-                    // Step 3: Wait for settlement
-                    const profit = await waitForSettlement(contractId);
-                    if (!runRef.current) break;
-
-                    // Update counters
-                    tradeCountRef.current++;
-                    sessionProfitRef.current += profit;
-                    const sp = sessionProfitRef.current;
-                    const tc = tradeCountRef.current;
-                    setTradeCount(tc);
-                    setSessionProfit(sp);
-
-                    const won = profit >= 0;
-                    addLog(`${won ? '✅' : '❌'} #${tc} ${won ? 'WIN' : 'LOSS'} ${fmtProfit(profit)} | Session: ${fmtProfit(sp)} | Stake: ${fmtDisplayVal(curStakeDisplay)}`);
-
-                    // TP / SL check — takeProfit/stopLoss are entered in display currency, sp is
-                    // the real (USD) session P/L, so convert the thresholds before comparing.
-                    const takeProfitUsd = toUsd(takeProfit);
-                    const stopLossUsd = toUsd(stopLoss);
-                    if (sp >= takeProfitUsd) { addLog(`🏆 TAKE PROFIT hit! Session P/L: ${fmtProfit(sp)}`); break; }
-                    if (sp <= -stopLossUsd)  { addLog(`🛑 STOP LOSS hit! Session P/L: ${fmtProfit(sp)}`); break; }
-
-                    // Martingale on loss, reset on win (kept in display-currency units)
-                    if (!won) {
-                        stakeRef.current = Math.max(0.35, +(curStakeDisplay * martingale).toFixed(2));
                     } else {
-                        stakeRef.current = stake;
+                        // Turbo: inline buy, settlement tracked in background — fire immediately
+                        const contractId = await inlineBuy(curStake);
+                        if (!contractId) { await new Promise(r => setTimeout(r, 100)); continue; }
+                        waitForSettlement(contractId).then(profit => {
+                            if (runRef.current || profit !== 0) applyResult(profit);
+                        });
+                        // No waiting — loop instantly for next trade
                     }
                 } catch (err: any) {
-                    const msg = err?.error?.message || err?.message || (typeof err === 'string' ? err : 'Unknown error');
-                    addLog(`⚠️ Error: ${msg}`);
-                    await new Promise(r => setTimeout(r, 500));
+                    const msg = err?.error?.message || err?.message || 'Unknown error';
+                    addLog(`⚠️ ${msg}`);
+                    await new Promise(r => setTimeout(r, 200));
                 }
             }
 
             runRef.current = false;
             setBotRunning(false);
+            run_panel?.setIsRunning?.(false);
         })();
-    }, [best, predictionDigit, stake, martingale, takeProfit, stopLoss, botRunning, dashboard, load_modal, addLog, stopBot]);
+    }, [best, predictionDigit, stake, martingale, takeProfit, stopLoss, botRunning, dashboard, load_modal, run_panel, addLog, stopBot]);
 
     const isMatchesDiffers = contractType === 'matches' || contractType === 'differs';
     const needsDigit       = contractType === 'over' || contractType === 'under';
@@ -660,7 +661,7 @@ const AIAssistant: React.FC = () => {
                             {/* Stake + Martingale */}
                             <div className='ai-assistant__field-row'>
                                 <div className='ai-assistant__field'>
-                                    <label>STAKE ({displayCur})</label>
+                                    <label>STAKE (USD)</label>
                                     <input type='number' value={stake} min={0.35} step={0.1} onChange={e => { setStake(Number(e.target.value)); stakeRef.current = Number(e.target.value); }} />
                                 </div>
                                 <div className='ai-assistant__field'>
@@ -672,11 +673,11 @@ const AIAssistant: React.FC = () => {
                             {/* TP + SL */}
                             <div className='ai-assistant__field-row'>
                                 <div className='ai-assistant__field'>
-                                    <label>TAKE PROFIT ({displayCur})</label>
+                                    <label>TAKE PROFIT (USD)</label>
                                     <input type='number' value={takeProfit} min={0.5} step={0.5} onChange={e => setTakeProfit(Number(e.target.value))} />
                                 </div>
                                 <div className='ai-assistant__field'>
-                                    <label>STOP LOSS ({displayCur})</label>
+                                    <label>STOP LOSS (USD)</label>
                                     <input type='number' value={stopLoss} min={0.5} step={0.5} onChange={e => setStopLoss(Number(e.target.value))} />
                                 </div>
                             </div>
