@@ -1,1 +1,26 @@
-const CACHE_NAME="ahmedsyntrader-v2",STATIC_ASSETS=["/","/index.html","/manifest.json"];self.addEventListener("install",e=>{e.waitUntil(caches.open(CACHE_NAME).then(e=>e.addAll(STATIC_ASSETS)).catch(()=>{})),self.skipWaiting()}),self.addEventListener("activate",e=>{e.waitUntil(caches.keys().then(e=>Promise.all(e.filter(e=>e!==CACHE_NAME).map(e=>caches.delete(e))))),self.clients.claim()}),self.addEventListener("fetch",e=>{"GET"!==e.request.method||e.request.url.includes("api.derivws.com")||e.respondWith(fetch(e.request).catch(()=>caches.match(e.request)))});
+const CACHE_NAME = 'ahmedsyntrader-v2';
+const STATIC_ASSETS = ['/', '/index.html', '/manifest.json'];
+
+self.addEventListener('install', event => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then(cache => cache.addAll(STATIC_ASSETS)).catch(() => {})
+  );
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
+    )
+  );
+  self.clients.claim();
+});
+
+self.addEventListener('fetch', event => {
+  if (event.request.method !== 'GET') return;
+  if (event.request.url.includes('api.derivws.com')) return;
+  event.respondWith(
+    fetch(event.request).catch(() => caches.match(event.request))
+  );
+});
