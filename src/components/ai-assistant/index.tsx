@@ -227,6 +227,12 @@ async function waitForSettlement(contractId: string): Promise<number> {
     });
 }
 
+/** Instant-fire default — fires immediately with no scan required. */
+const DEFAULT_SIGNAL: Signal = {
+    symbol: '1HZ25V', label: 'Volatility 25 (1s)', group: 'Volatility 1s',
+    type: 'even', confidence: 70, ticks: 1, note: 'Default instant-fire signal',
+};
+
 const AIAssistant: React.FC = () => {
     const { dashboard, load_modal, run_panel } = useStore() as any;
     const { currency: accountCurrency } = useDerivTrading();
@@ -250,6 +256,9 @@ const AIAssistant: React.FC = () => {
     const [sessionProfit, setSessionProfit] = useState(0);
     const [tradeCount, setTradeCount] = useState(0);
     const [botLog, setBotLog]         = useState<string[]>([]);
+    const [autoRestart, setAutoRestart] = useState(false);
+    const autoRestartRef = useRef(false);
+    useEffect(() => { autoRestartRef.current = autoRestart; }, [autoRestart]);
 
     const wsRefs    = useRef<WebSocket[]>([]);
     const freqRef   = useRef<Map<string, DigitFreq>>(new Map());
@@ -393,9 +402,12 @@ const AIAssistant: React.FC = () => {
         addLog('⏹ Bot stopped by user.');
     }, [addLog, run_panel]);
 
+    // Keep a stable ref so auto-restart can call loadAndRun without stale closure
+    const loadAndRunRef = useRef<(sig?: Signal) => void>(() => {});
+
     const loadAndRun = useCallback(async (sig?: Signal) => {
-        const signal = sig ?? best;
-        if (!signal) return;
+        // Use best scanned signal, or instant-fire with the default if none available
+        const signal = sig ?? best ?? DEFAULT_SIGNAL;
         if (botRunning) { stopBot(); return; }
 
         const barrier = signal.autoDigit !== undefined ? signal.autoDigit : (signal.barrier ?? predictionDigit);
@@ -472,11 +484,27 @@ const AIAssistant: React.FC = () => {
                 setSessionProfit(sp);
                 const won = profit >= 0;
                 addLog(`${won ? '✅' : '❌'} #${tc} ${won ? 'WIN' : 'LOSS'} ${fmtProfit(profit)} | Session: ${fmtProfit(sp)} | Stake: ${fmtVal(stakeRef.current)}`);
-                if (sp >= takeProfit) { addLog(`🏆 TAKE PROFIT hit! Session P/L: ${fmtProfit(sp)}`); runRef.current = false; setBotRunning(false); run_panel?.setIsRunning?.(false); }
-                if (sp <= -stopLoss)  { addLog(`🛑 STOP LOSS hit! Session P/L: ${fmtProfit(sp)}`); runRef.current = false; setBotRunning(false); run_panel?.setIsRunning?.(false); }
                 // Martingale: all in USD
-                if (runRef.current) {
-                    stakeRef.current = won ? stake : Math.max(0.35, +(stakeRef.current * martingale).toFixed(2));
+                stakeRef.current = won ? stake : Math.max(0.35, +(stakeRef.current * martingale).toFixed(2));
+                if (sp >= takeProfit) {
+                    addLog(`🏆 TAKE PROFIT hit! Session P/L: ${fmtProfit(sp)}`);
+                    runRef.current = false;
+                    setBotRunning(false);
+                    run_panel?.setIsRunning?.(false);
+                    if (autoRestartRef.current) {
+                        addLog('🔄 Auto-restarting in 2s...');
+                        setTimeout(() => { if (autoRestartRef.current) loadAndRunRef.current?.(); }, 2000);
+                    }
+                }
+                if (sp <= -stopLoss) {
+                    addLog(`🛑 STOP LOSS hit! Session P/L: ${fmtProfit(sp)}`);
+                    runRef.current = false;
+                    setBotRunning(false);
+                    run_panel?.setIsRunning?.(false);
+                    if (autoRestartRef.current) {
+                        addLog('🔄 Auto-restarting in 2s...');
+                        setTimeout(() => { if (autoRestartRef.current) loadAndRunRef.current?.(); }, 2000);
+                    }
                 }
             };
 
@@ -539,6 +567,9 @@ const AIAssistant: React.FC = () => {
             run_panel?.setIsRunning?.(false);
         })();
     }, [best, predictionDigit, stake, martingale, takeProfit, stopLoss, botRunning, dashboard, load_modal, run_panel, addLog, stopBot]);
+
+    // Keep ref in sync so auto-restart can call without stale closure
+    useEffect(() => { loadAndRunRef.current = loadAndRun; }, [loadAndRun]);
 
     const isMatchesDiffers = contractType === 'matches' || contractType === 'differs';
     const needsDigit       = contractType === 'over' || contractType === 'under';
@@ -689,13 +720,33 @@ const AIAssistant: React.FC = () => {
                             ) : (
                                 <button className='ai-assistant__btn ai-assistant__btn--scan' onClick={startScan}>🔍 SCAN ALL MARKETS</button>
                             )}
+                            {/* FIRE NOW — starts immediately with best signal or default */}
+                            {!botRunning && (
+                                <button
+                                    className='ai-assistant__btn ai-assistant__btn--load'
+                                    style={{ background: 'linear-gradient(135deg,#f97316,#ef4444)', fontSize: '0.8rem' }}
+                                    onClick={() => loadAndRun(best ?? DEFAULT_SIGNAL)}
+                                >
+                                    ⚡ FIRE NOW
+                                </button>
+                            )}
                             <button
                                 className={`ai-assistant__btn ${botRunning ? 'ai-assistant__btn--stop-bot' : 'ai-assistant__btn--load'}`}
                                 onClick={() => loadAndRun()}
                                 disabled={!botRunning && !best}
                             >
-                                {botRunning ? `⏹ Stop Bot (#${tradeCount})` : !best ? 'No signal yet' : '⚡ Load & Run Bot'}
+                                {botRunning ? `⏹ Stop Bot (#${tradeCount})` : !best ? '— scan first —' : '⚡ Load & Run Bot'}
                             </button>
+                        </div>
+                        {/* Auto-restart toggle */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+                            <button
+                                onClick={() => setAutoRestart(p => !p)}
+                                style={{ background: autoRestart ? '#00ff96' : 'rgba(255,255,255,0.1)', color: autoRestart ? '#000' : '#aaa', border: 'none', borderRadius: '12px', padding: '3px 10px', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 700 }}
+                            >
+                                🔄 AUTO-RESTART {autoRestart ? 'ON' : 'OFF'}
+                            </button>
+                            <span style={{ fontSize: '0.68rem', color: '#666' }}>Re-fires after TP/SL hit</span>
                         </div>
                     </div>
                 </div>

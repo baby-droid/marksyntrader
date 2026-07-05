@@ -88,6 +88,9 @@ const HedgeTrading: React.FC = () => {
     const autoRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const tradeCountRef = useRef(0);
     const prevDigitRef = useRef<number | null>(null);
+    const pnlRef = useRef(0);  // safe ref for P/L — avoids stale closure in callbacks
+    const autoHedgeRef = useRef(false);
+    const executeHedgeRef = useRef<(() => void) | null>(null);
 
     // Subscribe to live ticks for current digit display
     useEffect(() => {
@@ -115,8 +118,17 @@ const HedgeTrading: React.FC = () => {
     const is1s = market.includes('1s');
     const durTicks = [1,2,3,5,10];
 
+    // Keep autoHedgeRef in sync so settlement callbacks can safely read it
+    useEffect(() => { autoHedgeRef.current = autoHedge; }, [autoHedge]);
+
+    const stopAll = useCallback(() => {
+        setRunning(false);
+        setAutoHedge(false);
+        autoHedgeRef.current = false;
+    }, []);
+
     const executeHedge = useCallback(async () => {
-        if (running && !autoHedge) { setRunning(false); return; }
+        if (running && !autoHedgeRef.current) { setRunning(false); return; }
         setRunning(true);
         tradeCountRef.current++;
         const id = tradeCountRef.current;
@@ -134,19 +146,25 @@ const HedgeTrading: React.FC = () => {
 
         const needsBarrier = ['Over / Under', 'Match / Differ'].includes(CONTRACT_TABS[contractTab]);
         const settled = { a: false, b: false, pa: 0, pb: 0 };
+
         const finalize = () => {
             if (!settled.a || !settled.b) return;
             const net = settled.pa + settled.pb;
             setResults(p => p.map(r => (r.id === id
                 ? { ...r, status: settled.pa >= settled.pb ? 'won-a' : 'won-b', profitA: settled.pa, profitB: settled.pb }
                 : r)));
-            setPnl(prev => {
-                const next = prev + net;
-                if (tpEnabled && next >= takeProfitVal) stopAll();
-                if (slEnabled && next <= -stopLossVal) stopAll();
-                return next;
-            });
-            if (!autoHedge) setRunning(false);
+            // Update P/L via ref (safe in async callbacks)
+            pnlRef.current += net;
+            setPnl(pnlRef.current);
+            // TP/SL check — safe here since we're NOT inside a state setter
+            if (tpEnabled && pnlRef.current >= takeProfitVal) { stopAll(); return; }
+            if (slEnabled && pnlRef.current <= -stopLossVal)  { stopAll(); return; }
+            // Auto-hedge: re-fire immediately after settlement (not on a timer)
+            if (autoHedgeRef.current) {
+                executeHedgeRef.current?.();
+            } else {
+                setRunning(false);
+            }
         };
 
         try {
@@ -176,21 +194,20 @@ const HedgeTrading: React.FC = () => {
             ]);
         } catch {
             setResults(p => p.map(r => r.id === id ? { ...r, status: 'running' } : r));
-            if (!autoHedge) setRunning(false);
+            if (!autoHedgeRef.current) setRunning(false);
         }
-    }, [buyContract, contractTab, contractTypes, legA, legB, market, symbolKey, autoHedge, running, takeProfitVal, stopLossVal, tpEnabled, slEnabled]);
+    }, [buyContract, contractTab, contractTypes, legA, legB, market, symbolKey, running, takeProfitVal, stopLossVal, tpEnabled, slEnabled, stopAll]);
 
-    const stopAll = () => {
-        if (autoRef.current) { clearInterval(autoRef.current); autoRef.current = null; }
-        setRunning(false);
-        setAutoHedge(false);
-    };
+    // Keep ref updated so finalize callbacks always call the latest version
+    useEffect(() => { executeHedgeRef.current = () => executeHedge(); }, [executeHedge]);
 
     const startAutoHedge = () => {
         if (autoHedge) { stopAll(); return; }
+        pnlRef.current = totalPnl; // sync ref with current displayed P/L
         setAutoHedge(true);
-        const dur = durTicks[legA.durationIdx] * 1000 + 500;
-        autoRef.current = setInterval(() => { executeHedge(); }, dur);
+        autoHedgeRef.current = true;
+        // Fire immediately — next trade auto-fires inside finalize() after each settlement
+        executeHedge();
     };
 
     return (

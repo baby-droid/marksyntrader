@@ -4,140 +4,25 @@ import { observer } from 'mobx-react-lite';
 import DigitCircles from '@/components/digit-circles';
 import { useDigitStats } from '@/hooks/useDigitStats';
 import { useDerivTrading } from '@/hooks/useDerivTrading';
-import { fromUsd, toUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import { api_base } from '@/external/bot-skeleton';
 import './speed-lab.scss';
 
 /**
- * Speed Lab — three execution tiers.
+ * Speed Lab — three execution tiers with full P/L tracking and martingale.
  *
- * All three fire a single direct "buy with parameters" call (one WS round
- * trip, no separate proposal step — this is the same reliable shape used by
- * useDerivTrading's buyContract / Bot Builder's Run button).
- *
- *  NORMAL — sequential: fire, await the result, then a 500 ms cooldown.
- *  CRAZY  — fire-and-forget: dispatch the next buy immediately without
- *            waiting for the previous one's response (up to 4 in flight).
- *  TURBO  — fire-and-forget with no in-flight cap and no pacing at all —
- *            fires as fast as the JS event loop allows (super-human speed,
- *            zero delay between contracts).
+ *  NORMAL — sequential: fire, await settlement, then next trade.
+ *  CRAZY  — skip proposal, inline buy, await settlement, immediately loop.
+ *  TURBO  — fire-and-forget: buy instantly, settlement tracked in background.
+ *           Multiple contracts in flight simultaneously — super-human speed.
  */
 
 const SPEED_MODES = {
-    normal: {
-        name: 'NORMAL',
-        delay: 500,
-        maxInFlight: 1,
-        label: '🐢 Normal',
-        desc: 'Sequential — wait for result, 500 ms cooldown',
-    },
-    crazy: {
-        name: 'CRAZY',
-        delay: 0,
-        maxInFlight: 4,
-        label: '🔥 Crazy',
-        desc: 'Fire-and-forget — no cooldown, multiple contracts in flight',
-    },
-    turbo: {
-        name: 'TURBO',
-        delay: 0,
-        maxInFlight: Infinity,
-        label: '⚡ Turbo',
-        desc: 'Zero delay, unlimited in-flight — super-human fire rate',
-    },
+    normal: { name: 'NORMAL', label: '🐢 Normal', desc: 'Sequential — one trade at a time, full settlement wait' },
+    crazy:  { name: 'CRAZY',  label: '🔥 Crazy',  desc: 'Faster — no proposal, inline buy, await settlement' },
+    turbo:  { name: 'TURBO',  label: '⚡ Turbo',  desc: 'Super-human — fire-and-forget, settlement in background' },
 } as const;
 
 type SpeedMode = keyof typeof SPEED_MODES;
-
-interface TradeSignal {
-    symbol: string;
-    contract_type: string;
-    stake: number;
-    duration: number;
-    barrier?: string;
-    currency: string;
-}
-
-/**
- * TradeEngine — dispatches buys as fast as the selected mode allows.
- * NORMAL serializes them; CRAZY/TURBO fire concurrently (fire-and-forget)
- * so there is no artificial delay switching to the next contract.
- */
-class TradeEngine {
-    private mode: typeof SPEED_MODES[SpeedMode] = SPEED_MODES.normal;
-    private queue: TradeSignal[] = [];
-    private inFlight = 0;
-    private active = false;
-    fireCount = 0;
-    onFire?: (n: number, ms: number) => void;
-    onError?: (msg: string) => void;
-
-    setMode(m: typeof SPEED_MODES[SpeedMode]) { this.mode = m; }
-    start() { this.active = true; this.fireCount = 0; this.inFlight = 0; this.queue = []; }
-    stop() { this.active = false; this.queue = []; this.inFlight = 0; }
-    get queueLength() { return this.queue.length; }
-
-    /** Fire one trade with a single direct buy call — no proposal round trip. */
-    private async executeSingle(sig: TradeSignal): Promise<void> {
-        const t0 = performance.now();
-        this.inFlight++;
-        try {
-            const result = await api_base.api.send({
-                buy: '1',
-                price: sig.stake,
-                parameters: {
-                    amount: sig.stake,
-                    basis: 'stake',
-                    contract_type: sig.contract_type,
-                    currency: sig.currency,
-                    duration: sig.duration,
-                    duration_unit: 't',
-                    symbol: sig.symbol,
-                    ...(sig.barrier !== undefined ? { barrier: sig.barrier } : {}),
-                },
-            });
-
-            if (result?.buy?.contract_id) {
-                const ms = Math.round(performance.now() - t0);
-                this.fireCount++;
-                this.onFire?.(this.fireCount, ms);
-            } else if (result?.error) {
-                this.onError?.(`API: ${result.error.message}`);
-            }
-        } catch (e: any) {
-            const msg = e?.error?.message || e?.message || (typeof e === 'string' ? e : 'Unknown error');
-            this.onError?.(`Buy error: ${msg}`);
-        } finally {
-            this.inFlight--;
-            if (this.active) this.drainQueue();
-        }
-    }
-
-    /** Drain the queue respecting the mode's max concurrent in-flight buys. */
-    private drainQueue(): void {
-        while (this.active && this.queue.length > 0 && this.inFlight < this.mode.maxInFlight) {
-            const sig = this.queue.shift()!;
-            if (this.mode.name === 'NORMAL') {
-                // Sequential: fire, then wait for it (and cooldown) before the next drain.
-                this.executeSingle(sig).then(() => {
-                    if (this.mode.delay > 0 && this.active) {
-                        setTimeout(() => this.drainQueue(), this.mode.delay);
-                    }
-                });
-                break; // wait for this one to finish (maxInFlight = 1 enforces this too)
-            }
-            // CRAZY / TURBO: fire-and-forget, immediately try to fire the next one too.
-            this.executeSingle(sig);
-        }
-    }
-
-    /** Add a trade to the queue and dispatch immediately if capacity allows. */
-    addTrade(sig: TradeSignal): void {
-        if (!this.active) return;
-        this.queue.push(sig);
-        this.drainQueue();
-    }
-}
 
 const SYMBOLS = [
     { label: 'V10',      value: 'R_10'      },
@@ -174,38 +59,57 @@ const CONTRACT_TYPES = [
     { label: 'Differ', value: 'DIGITDIFF',  needsBarrier: true },
 ];
 
+/** Wait for a contract to settle and return its profit. */
+function waitForSettlement(contractId: string): Promise<number> {
+    return new Promise(resolve => {
+        let sub: any;
+        const bail = setTimeout(() => { try { sub?.unsubscribe(); } catch {} resolve(0); }, 15000);
+        try {
+            const obs = api_base.api.subscribe({ proposal_open_contract: 1, contract_id: contractId, subscribe: 1 });
+            sub = obs.subscribe({
+                next: (res: any) => {
+                    const poc = res?.proposal_open_contract;
+                    if (poc?.is_sold || poc?.is_expired) {
+                        clearTimeout(bail);
+                        try { sub?.unsubscribe(); } catch {}
+                        resolve(parseFloat(poc.profit ?? '0'));
+                    }
+                },
+                error: () => { clearTimeout(bail); resolve(0); },
+            });
+        } catch { clearTimeout(bail); resolve(0); }
+    });
+}
+
 const SpeedLab = observer(() => {
     const { digits, lastDigit, currentPrice, symbol, setSymbol, isConnected } = useDigitStats('1HZ100V');
-    const {
-        balance, currency, buyContract, tradeResults,
-        totalProfit, winCount, lossCount, clearResults, subscribeBalance,
-    } = useDerivTrading();
+    const { balance, currency, subscribeBalance } = useDerivTrading();
 
-    const [speedMode, setSpeedMode]     = useState<SpeedMode>('normal');
-    const [stake, setStake]             = useState(0.35);
-    const [duration, setDuration]       = useState(1);
-    const [barrier, setBarrier]         = useState(5);
+    const [speedMode, setSpeedMode]       = useState<SpeedMode>('normal');
+    const [stake, setStake]               = useState(0.35);
+    const [duration, setDuration]         = useState(1);
+    const [barrier, setBarrier]           = useState(5);
     const [contractType, setContractType] = useState('DIGITEVEN');
     const [targetProfit, setTargetProfit] = useState(10);
-    const [stopLoss, setStopLoss]       = useState(5);
-    const [isRunning, setIsRunning]     = useState(false);
+    const [stopLoss, setStopLoss]         = useState(5);
+    const [martingale, setMartingale]     = useState(1.0);
+    const [isRunning, setIsRunning]       = useState(false);
     const [executionLog, setExecutionLog] = useState<string[]>([]);
-    const [displayCur, setDisplayCur]   = useState(getDisplayCurrency());
-    const [fireCount, setFireCount]     = useState(0);
+    const [fireCount, setFireCount]       = useState(0);
+    const [sessionProfit, setSessionProfit] = useState(0);
+    const [winCount, setWinCount]         = useState(0);
+    const [lossCount, setLossCount]       = useState(0);
 
-    const engineRef         = useRef<TradeEngine>(new TradeEngine());
     const runRef            = useRef(false);
     const sessionProfitRef  = useRef(0);
     const currentStakeRef   = useRef(stake);
+    const baseStakeRef      = useRef(stake);
+    const fireCountRef      = useRef(0);
 
-    useEffect(() => subscribeCurrency(() => setDisplayCur(getDisplayCurrency())), []);
+    useEffect(() => { currentStakeRef.current = stake; baseStakeRef.current = stake; }, [stake]);
 
-    const fmtAmount = (usd: number) => `${fromUsd(usd).toFixed(2)} ${displayCur}`;
-    const fmtProfit = (usd: number) => `${usd >= 0 ? '+' : ''}${fromUsd(usd).toFixed(2)} ${displayCur}`;
-    // Stake / TP / SL inputs are entered directly in the display currency
-    // (label shows "(KSH)" when in KSH mode) — do NOT re-run fromUsd() on
-    // them, that would double-convert. Use this for those three fields only.
-    const fmtDisplay = (displayAmt: number) => `${displayAmt.toFixed(2)} ${displayCur}`;
+    const fmtProfit = (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(2)} USD`;
+    const fmtVal    = (v: number) => `${v.toFixed(2)} USD`;
 
     const logEntry = useCallback((msg: string) => {
         setExecutionLog(prev => [
@@ -216,113 +120,111 @@ const SpeedLab = observer(() => {
 
     const needsBarrier = ['DIGITOVER', 'DIGITUNDER', 'DIGITMATCH', 'DIGITDIFF'].includes(contractType);
 
-    // NOTE: stake/targetProfit/stopLoss are entered by the user in the
-    // *display* currency (KSH or USD). The trading API always expects the
-    // actual account currency, so we must convert with toUsd() here — sending
-    // the raw KSH figure as the USD amount was causing the buy API to reject
-    // wildly oversized stakes ("Buy error" spam) whenever KSH mode was on.
-    const buildSignal = useCallback((): TradeSignal => ({
-        symbol,
-        contract_type: contractType,
-        stake: toUsd(currentStakeRef.current),
-        duration,
-        currency: currency || 'USD',
-        ...(needsBarrier ? { barrier: String(barrier) } : {}),
-    }), [symbol, contractType, duration, currency, barrier, needsBarrier]);
+    const inlineBuy = useCallback(async () => {
+        const res = await api_base.api.send({
+            buy: '1',
+            price: currentStakeRef.current,
+            parameters: {
+                amount: currentStakeRef.current,
+                basis: 'stake',
+                contract_type: contractType,
+                currency: currency || 'USD',
+                duration,
+                duration_unit: 't',
+                symbol,
+                ...(needsBarrier ? { barrier: String(barrier) } : {}),
+            },
+        });
+        return res?.buy?.contract_id ?? null;
+    }, [contractType, currency, duration, symbol, barrier, needsBarrier]);
 
-    useEffect(() => { sessionProfitRef.current = totalProfit; }, [totalProfit]);
-    useEffect(() => { currentStakeRef.current = stake; }, [stake]);
-
-    const checkLimits = useCallback((): boolean => {
-        const targetProfitUsd = toUsd(targetProfit);
-        const stopLossUsd = toUsd(stopLoss);
-        if (sessionProfitRef.current >= targetProfitUsd) {
-            logEntry(`✅ Target profit reached: ${fmtProfit(sessionProfitRef.current)}`);
-            return false;
-        }
-        if (sessionProfitRef.current <= -stopLossUsd) {
-            logEntry(`🛑 Stop loss hit: ${fmtProfit(sessionProfitRef.current)}`);
-            return false;
-        }
-        return true;
-    }, [targetProfit, stopLoss, logEntry]);
-
-    // Wire engine callbacks
-    useEffect(() => {
-        const engine = engineRef.current;
-        engine.onFire = (n, ms) => {
-            setFireCount(n);
-            const mode = SPEED_MODES[speedMode];
-            logEntry(`${mode.name === 'NORMAL' ? '🐢' : mode.name === 'CRAZY' ? '🔥' : '⚡'} [${mode.name}] #${n} ${contractType} @ ${fmtDisplay(currentStakeRef.current)} (${ms}ms)`);
-            subscribeBalance();
-        };
-        engine.onError = (msg) => {
-            logEntry(`❌ ${msg}`);
-        };
-    }, [speedMode, contractType, subscribeBalance, logEntry]);
-
-    /**
-     * Main run loop — feeds the TradeEngine while running.
-     * NORMAL fires one at a time (sequential + cooldown). CRAZY/TURBO fire
-     * concurrently with no artificial pacing — the only throttle is the
-     * mode's maxInFlight cap (4 for CRAZY, unlimited for TURBO), so trades
-     * fire back-to-back at super-human speed with zero delay.
-     */
-    const runLoop = useCallback(async () => {
-        const engine = engineRef.current;
-
-        while (runRef.current && checkLimits()) {
-            engine.addTrade(buildSignal());
-
-            if (speedMode === 'normal') {
-                // Sequential mode: wait for the in-flight trade to drain before adding more.
-                while (runRef.current && engine.queueLength > 0) {
-                    await new Promise(r => setTimeout(r, 20));
-                }
-            }
-            // CRAZY/TURBO: no delay — loop immediately re-fires the next signal.
-            await new Promise(r => setTimeout(r, 0));
-        }
-
+    const stopSession = useCallback((reason: string) => {
         runRef.current = false;
         setIsRunning(false);
-        engine.stop();
-        logEntry(`⏹ Stopped — ${fmtProfit(sessionProfitRef.current)}`);
-    }, [buildSignal, checkLimits, speedMode, logEntry]);
+        logEntry(`⏹ ${reason} | Total: ${fmtProfit(sessionProfitRef.current)}`);
+    }, [logEntry]);
 
-    const handleStart = useCallback(async () => {
-        if (isRunning) {
-            runRef.current = false;
-            engineRef.current.stop();
-            setIsRunning(false);
-            logEntry('⏸ Stopped by user');
-            return;
+    const applyResult = useCallback((profit: number, ms?: number) => {
+        const won = profit >= 0;
+        sessionProfitRef.current += profit;
+        fireCountRef.current++;
+        setSessionProfit(sessionProfitRef.current);
+        setFireCount(fireCountRef.current);
+        if (won) setWinCount(p => p + 1);
+        else     setLossCount(p => p + 1);
+
+        const modeIcon = speedMode === 'normal' ? '🐢' : speedMode === 'crazy' ? '🔥' : '⚡';
+        logEntry(`${won ? '✅' : '❌'} [${SPEED_MODES[speedMode].name}] #${fireCountRef.current} ${contractType} ${fmtProfit(profit)} @ ${fmtVal(currentStakeRef.current)}${ms ? ` (${ms}ms)` : ''} | Session: ${fmtProfit(sessionProfitRef.current)}`);
+
+        // Martingale
+        if (won) {
+            currentStakeRef.current = baseStakeRef.current;
+        } else if (martingale > 1) {
+            currentStakeRef.current = Math.max(0.35, +(currentStakeRef.current * martingale).toFixed(2));
         }
 
-        clearResults();
-        sessionProfitRef.current = 0;
-        currentStakeRef.current = stake;
-        setFireCount(0);
+        subscribeBalance?.();
 
-        const cfg = SPEED_MODES[speedMode];
-        engineRef.current = new TradeEngine();
-        engineRef.current.setMode(cfg);
-        engineRef.current.onFire = (n, ms) => {
-            setFireCount(n);
-            logEntry(`${speedMode === 'normal' ? '🐢' : speedMode === 'crazy' ? '🔥' : '⚡'} [${cfg.name}] #${n} ${contractType} @ ${fmtDisplay(currentStakeRef.current)} (${ms}ms)`);
-            subscribeBalance();
-        };
-        engineRef.current.onError = (msg) => logEntry(`❌ ${msg}`);
-        engineRef.current.start();
+        // TP / SL
+        if (sessionProfitRef.current >= targetProfit)  stopSession(`✅ Target profit hit (${fmtProfit(sessionProfitRef.current)})`);
+        if (sessionProfitRef.current <= -Math.abs(stopLoss)) stopSession(`🛑 Stop loss hit (${fmtProfit(sessionProfitRef.current)})`);
+    }, [speedMode, contractType, martingale, targetProfit, stopLoss, subscribeBalance, stopSession]);
+
+    const runLoop = useCallback(async () => {
+        while (runRef.current) {
+            const t0 = performance.now();
+            try {
+                if (speedMode === 'turbo') {
+                    // Turbo: fire immediately, track settlement in background
+                    const contractId = await inlineBuy();
+                    if (contractId) {
+                        const ms = Math.round(performance.now() - t0);
+                        waitForSettlement(contractId).then(profit => {
+                            if (runRef.current || profit !== 0) applyResult(profit, ms);
+                        });
+                    }
+                    // No await — loop immediately for next buy
+                } else {
+                    // Normal / Crazy: wait for full settlement before next trade
+                    const contractId = await inlineBuy();
+                    if (!contractId) { await new Promise(r => setTimeout(r, 200)); continue; }
+                    const ms = Math.round(performance.now() - t0);
+                    const profit = await waitForSettlement(contractId);
+                    if (!runRef.current) break;
+                    applyResult(profit, ms);
+                    // Crazy: no extra delay; Normal: tiny yield to keep UI responsive
+                    if (speedMode === 'normal') await new Promise(r => setTimeout(r, 0));
+                }
+            } catch (e: any) {
+                const msg = e?.error?.message || e?.message || 'Unknown error';
+                logEntry(`❌ ${msg}`);
+                await new Promise(r => setTimeout(r, 300));
+            }
+        }
+        setIsRunning(false);
+    }, [inlineBuy, applyResult, speedMode, logEntry]);
+
+    const handleStart = useCallback(async () => {
+        if (isRunning) { runRef.current = false; setIsRunning(false); logEntry('⏸ Stopped by user'); return; }
+
+        // Reset session
+        sessionProfitRef.current = 0;
+        fireCountRef.current = 0;
+        currentStakeRef.current = stake;
+        baseStakeRef.current = stake;
+        setSessionProfit(0);
+        setFireCount(0);
+        setWinCount(0);
+        setLossCount(0);
 
         runRef.current = true;
         setIsRunning(true);
-        logEntry(`🚀 [${cfg.name}] ${contractType} @ ${fmtDisplay(stake)} | TP:${fmtDisplay(targetProfit)} SL:${fmtDisplay(stopLoss)} | ${cfg.desc}`);
-
+        const cfg = SPEED_MODES[speedMode];
+        logEntry(`🚀 [${cfg.name}] ${contractType} @ ${fmtVal(stake)} | TP:${fmtVal(targetProfit)} SL:${fmtVal(stopLoss)} | Mart:${martingale}x | ${cfg.desc}`);
         runLoop();
-    }, [isRunning, stake, contractType, targetProfit, stopLoss, speedMode, clearResults, runLoop, subscribeBalance, logEntry]);
+    }, [isRunning, stake, contractType, targetProfit, stopLoss, martingale, speedMode, runLoop, logEntry]);
 
-    useEffect(() => () => { runRef.current = false; engineRef.current.stop(); }, []);
+    useEffect(() => () => { runRef.current = false; }, []);
 
     const selectedType = CONTRACT_TYPES.find(t => t.value === contractType);
     const winRate = winCount + lossCount > 0 ? ((winCount / (winCount + lossCount)) * 100).toFixed(0) : 0;
@@ -336,11 +238,10 @@ const SpeedLab = observer(() => {
                     <p>Ultra-fast execution trading</p>
                 </div>
                 {balance !== null && (
-                    <div className='speed-lab__balance'>{fmtAmount(balance)}</div>
+                    <div className='speed-lab__balance'>{balance?.toFixed(2)} {currency || 'USD'}</div>
                 )}
             </div>
 
-            {/* Speed Mode selector */}
             <div className='speed-lab__mode-row'>
                 {(Object.keys(SPEED_MODES) as SpeedMode[]).map(m => (
                     <button
@@ -388,11 +289,12 @@ const SpeedLab = observer(() => {
                     <div className='speed-lab__card'>
                         <h3>Parameters</h3>
                         <div className='speed-lab__params'>
-                            <label>Stake ({displayCur})<input type='number' value={stake} min={0.35} step={0.05} onChange={e => setStake(Number(e.target.value))} /></label>
+                            <label>Stake (USD)<input type='number' value={stake} min={0.35} step={0.05} onChange={e => setStake(Number(e.target.value))} /></label>
                             <label>Ticks<input type='number' value={duration} min={1} max={10} onChange={e => setDuration(Number(e.target.value))} /></label>
                             {selectedType?.needsBarrier && <label>Barrier<input type='number' value={barrier} min={0} max={9} onChange={e => setBarrier(Number(e.target.value))} /></label>}
-                            <label>Take Profit ({displayCur})<input type='number' value={targetProfit} min={0} step={0.5} onChange={e => setTargetProfit(Number(e.target.value))} /></label>
-                            <label>Stop Loss ({displayCur})<input type='number' value={stopLoss} min={0} step={0.5} onChange={e => setStopLoss(Number(e.target.value))} /></label>
+                            <label>Martingale ×<input type='number' value={martingale} min={1} max={4} step={0.1} onChange={e => setMartingale(Number(e.target.value))} /></label>
+                            <label>Take Profit (USD)<input type='number' value={targetProfit} min={0} step={0.5} onChange={e => setTargetProfit(Number(e.target.value))} /></label>
+                            <label>Stop Loss (USD)<input type='number' value={stopLoss} min={0} step={0.5} onChange={e => setStopLoss(Number(e.target.value))} /></label>
                         </div>
                     </div>
 
@@ -408,7 +310,7 @@ const SpeedLab = observer(() => {
                     </div>
 
                     <div className='speed-lab__stats'>
-                        <div className='speed-lab__stat'><span>Total P/L</span><strong className={totalProfit >= 0 ? 'pos' : 'neg'}>{fmtProfit(totalProfit)}</strong></div>
+                        <div className='speed-lab__stat'><span>Session P/L</span><strong className={sessionProfit >= 0 ? 'pos' : 'neg'}>{fmtProfit(sessionProfit)}</strong></div>
                         <div className='speed-lab__stat'><span>Wins</span><strong className='pos'>{winCount}</strong></div>
                         <div className='speed-lab__stat'><span>Losses</span><strong className='neg'>{lossCount}</strong></div>
                         <div className='speed-lab__stat'><span>Win Rate</span><strong>{winRate}%</strong></div>
@@ -429,20 +331,6 @@ const SpeedLab = observer(() => {
                             {executionLog.map((entry, i) => (
                                 <div key={i} className='speed-lab__log-entry'>{entry}</div>
                             ))}
-                        </div>
-                    </div>
-
-                    <div className='speed-lab__card'>
-                        <h3>Recent Trades</h3>
-                        <div className='speed-lab__trades'>
-                            {tradeResults.slice(0, 20).map(r => (
-                                <div key={r.id} className={`speed-lab__trade ${r.won ? 'won' : 'lost'}`}>
-                                    <span>{r.type}</span>
-                                    <span>{fmtAmount(r.stake)}</span>
-                                    <span className={r.won ? 'pos' : 'neg'}>{fmtProfit(r.profit)}</span>
-                                </div>
-                            ))}
-                            {tradeResults.length === 0 && <p className='speed-lab__empty'>No trades yet</p>}
                         </div>
                     </div>
                 </div>
