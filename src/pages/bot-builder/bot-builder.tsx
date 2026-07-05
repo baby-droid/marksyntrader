@@ -2,6 +2,7 @@
 import React, { useState, useCallback } from 'react';
 import classNames from 'classnames';
 import { observer } from 'mobx-react-lite';
+import { load, save_types } from '@/external/bot-skeleton';
 import { botNotification } from '@/components/bot-notification/bot-notification';
 import { notification_message } from '@/components/bot-notification/bot-notification-utils';
 import { useStore } from '@/hooks/useStore';
@@ -38,51 +39,39 @@ const FreeBotsSidePanel: React.FC<TFreeBotsPanelProps> = ({ onClose, onLoadDone 
     const [actionType, setActionType] = useState<'load' | 'run' | null>(null);
     const [loadedId, setLoadedId] = useState<string | null>(null);
 
-    /** Inject XML into the Blockly workspace synchronously. Returns true on success. */
-    const loadXmlNow = useCallback((xml: string): boolean => {
-        const B = (window as any).Blockly;
-        if (!B?.derivWorkspace) return false;
-        try {
-            const dom = B.Xml.textToDom(xml);
-            B.Events.setEnabled(false);
-            B.derivWorkspace.clear();
-            B.Xml.domToWorkspace(dom, B.derivWorkspace);
-            B.Events.setEnabled(true);
-            B.svgResize?.(B.derivWorkspace);
-            B.derivWorkspace.scrollCenter?.();
-            return true;
-        } catch (err) {
-            console.error('domToWorkspace error', err);
-            return false;
-        }
-    }, []);
-
-    /** Fetch XML from the bot's URL and inject it into the workspace.
-     *  Polls until the workspace is initialised if it isn't ready yet (max 10 s). */
+    /** Fetch XML from the bot's URL and load it into the workspace via the official
+     *  DBot `load()` pipeline — same path the Load Modal uses — so BlockConversion,
+     *  removeLimitedBlocks, asyncClear, and clearWorkspaceAndLoadFromXml all run
+     *  in the correct order and the trade engine receives properly initialised blocks. */
     const fetchAndLoad = useCallback(async (bot: typeof FREE_BOTS_LIST[0]): Promise<void> => {
         const response = await fetch(bot.xmlFile);
         if (!response.ok) throw new Error(`Failed to fetch bot XML: ${response.status}`);
-        const xml = await response.text();
+        const block_string = await response.text();
 
-        (window as any).__pendingBotXml = xml;
-        (window as any).__pendingBotName = bot.name;
-        try {
-            if (!loadXmlNow(xml)) {
-                // Workspace not ready yet — poll until it is (max 10 s)
-                await new Promise<void>((resolve, reject) => {
-                    let attempts = 0;
-                    const poll = setInterval(() => {
-                        attempts++;
-                        if (loadXmlNow(xml)) { clearInterval(poll); resolve(); }
-                        else if (attempts >= 100) { clearInterval(poll); reject(new Error('Workspace unavailable after 10 s')); }
-                    }, 100);
-                });
-            }
-        } finally {
-            (window as any).__pendingBotXml = null;
-            (window as any).__pendingBotName = null;
+        const workspace = (window as any).Blockly?.derivWorkspace;
+        if (!workspace) {
+            // Workspace not mounted yet — wait up to 10 s
+            await new Promise<void>((resolve, reject) => {
+                let attempts = 0;
+                const poll = setInterval(() => {
+                    attempts++;
+                    if ((window as any).Blockly?.derivWorkspace) { clearInterval(poll); resolve(); }
+                    else if (attempts >= 100) { clearInterval(poll); reject(new Error('Workspace unavailable after 10 s')); }
+                }, 100);
+            });
         }
-    }, [loadXmlNow]);
+
+        await load({
+            block_string,
+            drop_event: null,
+            file_name: bot.name,
+            strategy_id: '',
+            from: save_types.LOCAL,
+            workspace: (window as any).Blockly.derivWorkspace,
+            showIncompatibleStrategyDialog: false,
+            show_snackbar: false,
+        });
+    }, []);
 
     /** Load only — puts the bot into the builder then closes the panel. */
     const handleLoad = useCallback(async (bot: typeof FREE_BOTS_LIST[0]) => {
