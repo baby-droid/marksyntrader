@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { getTradingToken } from '@/utils/trading-token';
 
-const APP_ID = 1089;
+const APP_ID = (process.env.NEXT_PUBLIC_DERIV_APP_ID as string) || '1089';
 const WS_URL = `wss://ws.binaryws.com/websockets/v3?app_id=${APP_ID}`;
 
 export interface TickData {
@@ -46,26 +47,6 @@ function getLastDigit(quote: number): number {
     return parseInt(s[s.length - 1], 10);
 }
 
-function getAuthToken(): string | null {
-    try {
-        const keys = Object.keys(localStorage);
-        for (const k of keys) {
-            if (k.startsWith('client.accounts')) {
-                const data = JSON.parse(localStorage.getItem(k) || '{}');
-                if (data?.token) return data.token;
-            }
-        }
-        const loginInfo = localStorage.getItem('active_loginid');
-        if (loginInfo) {
-            const accountsKey = `client.accounts`;
-            const accounts = JSON.parse(localStorage.getItem(accountsKey) || '{}');
-            const account = accounts[loginInfo];
-            if (account?.token) return account.token;
-        }
-    } catch {/* */}
-    return null;
-}
-
 export function useDerivTrade() {
     const wsRef = useRef<WebSocket | null>(null);
     const reqIdRef = useRef(1);
@@ -75,51 +56,62 @@ export function useDerivTrade() {
     const [connected, setConnected] = useState(false);
     const [balance, setBalance] = useState<number | null>(null);
     const [currency, setCurrency] = useState('USD');
+    const [authorized, setAuthorized] = useState(false);
     const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const mountedRef = useRef(true);
 
     const send = useCallback((msg: object): Promise<any> => {
         return new Promise((resolve, reject) => {
             const id = reqIdRef.current++;
             const payload = { ...msg, req_id: id };
             pendingRef.current.set(id, (d) => {
-                if (d.error) reject(d.error);
+                if (d.error) reject(d);
                 else resolve(d);
             });
             if (wsRef.current?.readyState === WebSocket.OPEN) {
                 wsRef.current.send(JSON.stringify(payload));
             } else {
+                pendingRef.current.delete(id);
                 reject(new Error('WebSocket not connected'));
             }
         });
     }, []);
 
     const connect = useCallback(() => {
-        if (wsRef.current?.readyState === WebSocket.OPEN) return;
+        if (wsRef.current?.readyState === WebSocket.OPEN || wsRef.current?.readyState === WebSocket.CONNECTING) return;
         const ws = new WebSocket(WS_URL);
         wsRef.current = ws;
 
         ws.onopen = async () => {
+            if (!mountedRef.current) return;
             setConnected(true);
-            const token = getAuthToken();
+            const token = getTradingToken();
             if (token) {
                 try {
                     const auth = await send({ authorize: token });
-                    if (auth.authorize) {
-                        setBalance(auth.authorize.balance);
+                    if (auth.authorize && mountedRef.current) {
+                        setAuthorized(true);
+                        setBalance(parseFloat(auth.authorize.balance ?? '0'));
                         setCurrency(auth.authorize.currency || 'USD');
-                        send({ balance: 1, subscribe: 1 });
+                        // Subscribe to live balance updates
+                        send({ balance: 1, subscribe: 1 }).catch(() => {});
                     }
-                } catch {/* demo mode */}
+                } catch (err: any) {
+                    console.warn('[useDerivTrade] Auth failed:', err?.error?.message || err?.message);
+                    setAuthorized(false);
+                }
             }
         };
 
         ws.onmessage = (e) => {
             const d = JSON.parse(e.data);
+            // Resolve pending requests
             if (d.req_id && pendingRef.current.has(d.req_id)) {
                 const cb = pendingRef.current.get(d.req_id)!;
                 pendingRef.current.delete(d.req_id);
                 cb(d);
             }
+            // Live tick data
             if (d.tick) {
                 const q = d.tick.quote;
                 const tick: TickData = {
@@ -128,13 +120,14 @@ export function useDerivTrade() {
                     quote: q,
                     epoch: d.tick.epoch,
                 };
-                const cb = tickCallbacksRef.current.get(d.tick.symbol);
-                if (cb) cb(tick);
+                tickCallbacksRef.current.get(d.tick.symbol)?.(tick);
             }
-            if (d.balance) {
-                setBalance(d.balance.balance);
+            // Balance updates
+            if (d.balance && d.balance.balance != null && mountedRef.current) {
+                setBalance(parseFloat(d.balance.balance));
                 setCurrency(d.balance.currency || 'USD');
             }
+            // Contract settlement
             if (d.proposal_open_contract) {
                 const poc = d.proposal_open_contract;
                 const cid = Number(poc.contract_id);
@@ -156,7 +149,10 @@ export function useDerivTrade() {
         };
 
         ws.onclose = () => {
+            if (!mountedRef.current) return;
             setConnected(false);
+            setAuthorized(false);
+            // Reconnect after 3 seconds
             reconnectRef.current = setTimeout(connect, 3000);
         };
 
@@ -164,8 +160,10 @@ export function useDerivTrade() {
     }, [send]);
 
     useEffect(() => {
+        mountedRef.current = true;
         connect();
         return () => {
+            mountedRef.current = false;
             if (reconnectRef.current) clearTimeout(reconnectRef.current);
             wsRef.current?.close();
         };
@@ -182,10 +180,10 @@ export function useDerivTrade() {
 
     const buyContract = useCallback(
         async (params: BuyParams, onSettled?: (c: SettledContract) => void): Promise<ContractResult> => {
-            const { symbol, contract_type, duration, duration_unit = 't', stake, barrier, currency: cur = 'USD' } = params;
+            const { symbol, contract_type, duration, duration_unit = 't', stake, barrier, currency: cur } = params;
             const buyParams: any = {
                 contract_type,
-                currency: cur,
+                currency: cur || currency || 'USD',
                 duration,
                 duration_unit,
                 basis: 'stake',
@@ -195,9 +193,12 @@ export function useDerivTrade() {
             if (barrier !== undefined) buyParams.barrier = barrier;
 
             const res = await send({ buy: '1', price: stake, parameters: buyParams });
+            if (res.error) throw res;
+
             const contract_id = res.buy?.contract_id || 0;
-            // Refresh balance right after the buy debits the account.
+            // Refresh balance after buy
             send({ balance: 1 }).catch(() => {});
+
             if (contract_id && onSettled) {
                 pocCallbacksRef.current.set(Number(contract_id), onSettled);
                 send({ proposal_open_contract: 1, contract_id, subscribe: 1 }).catch(() => {});
@@ -208,7 +209,7 @@ export function useDerivTrade() {
                 status: 'open',
             };
         },
-        [send]
+        [send, currency]
     );
 
     const getDigitStats = useCallback(async (symbol: string, count = 1000): Promise<number[]> => {
@@ -219,5 +220,5 @@ export function useDerivTrade() {
         return freq.map((c: number) => (prices.length > 0 ? (c / prices.length) * 100 : 10));
     }, [send]);
 
-    return { connected, balance, currency, send, subscribeTicks, buyContract, getDigitStats };
+    return { connected, authorized, balance, currency, send, subscribeTicks, buyContract, getDigitStats };
 }
