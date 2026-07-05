@@ -6,6 +6,7 @@ import { useStore } from '@/hooks/useStore';
 import { api_base } from '@/external/bot-skeleton';
 import { useDerivTrading } from '@/hooks/useDerivTrading';
 import { buildKillerXml, KillerContract } from '@/utils/killer-bot';
+import { getDisplayCurrency, fromUsd, subscribeCurrency } from '@/utils/currency-display';
 import './ai-assistant.scss';
 
 /**
