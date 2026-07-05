@@ -1,0 +1,31 @@
+yes , update my free bot cards to a more cooler designs , each bot unique card , the trade types like rise and fall normalize 1 tick or 2 , matches differs 1 or 2 ticks , when I click load and run button it should automatic enable the default run button and strat executing trades , unless I stop the run button , the add and join button in copy trading should follow the login with API token to allow the API to add , the stake in AI should remain in usd so that it does not bring errors because the bot stakes and take profit and stop loss are in usd so the AI should use only usd , the other logic remains as it is in the run page , when I press LOAD AND RUN button in AI it should enable the run button and start excuting trades automatically , markets like over 4 to over 7 and under 6 to under 1 it should work with any confidence level , so that the AI gets a market to trade , the crazy speed and turbo speed in run button are not the logic I sent , they should be super fast with no delays switching to the next contract , fix that class TradeEngine {
+constructor(api) {
+this.api = api;
+this.running = false;
+}
+
+async start() {
+    this.running = true;
+    // Connection should already be established.
+    while (this.running) {
+        const signal = await this.waitForSignal();
+        if (!signal) continue;
+        try {
+            await this.buy(signal);
+        } catch (err) {
+            console.error(err);
+        }
+    }
+}
+stop() {
+    this.running = false;
+}
+async waitForSignal() {
+    // Strategy decides when to trade.
+    // Return trade parameters when conditions are met.
+}
+async buy(signal) {
+    return this.api.buy(signal);
+}
+
+} and I mean super speeds more than a human speed , in crazy speed should be more than normal speed , turbo speed should be more than crazy speed super human speeds no delays in buying individual contracts fix that research on how to fix this and do it , all pages should be able to execute and buy contracts offered buy bderiv fix that , https://developers.deriv.com/llms.txt , the AI should automatic run the bot and start buying contracts at super human speeds , the AI should know when to use 1 tick in all trade types ,

@@ -6,7 +6,7 @@ import { useStore } from '@/hooks/useStore';
 import { api_base } from '@/external/bot-skeleton';
 import { useDerivTrading } from '@/hooks/useDerivTrading';
 import { buildKillerXml, KillerContract } from '@/utils/killer-bot';
-import { getDisplayCurrency, fromUsd, subscribeCurrency } from '@/utils/currency-display';
+import { getExecutionSpeed } from '@/utils/execution-speed';
 import './ai-assistant.scss';
 
 /**
@@ -228,7 +228,7 @@ async function waitForSettlement(contractId: string): Promise<number> {
 }
 
 const AIAssistant: React.FC = () => {
-    const { dashboard, load_modal } = useStore() as any;
+    const { dashboard, load_modal, run_panel } = useStore() as any;
     const { currency: accountCurrency } = useDerivTrading();
 
     const [isOpen, setIsOpen]         = useState(false);
@@ -246,7 +246,6 @@ const AIAssistant: React.FC = () => {
 
     const [best, setBest]             = useState<Signal | null>(null);
     const [allSignals, setAllSignals] = useState<Signal[]>([]);
-    const [displayCur, setDisplayCur] = useState(getDisplayCurrency());
     const [botRunning, setBotRunning] = useState(false);
     const [sessionProfit, setSessionProfit] = useState(0);
     const [tradeCount, setTradeCount] = useState(0);
@@ -261,14 +260,10 @@ const AIAssistant: React.FC = () => {
     const sessionProfitRef = useRef(0);
 
     useEffect(() => { stakeRef.current = stake; }, [stake]);
-    useEffect(() => subscribeCurrency(() => setDisplayCur(getDisplayCurrency())), []);
 
-    const fmtStake  = (usd: number) => `${fromUsd(usd).toFixed(2)} ${displayCur}`;
-    const fmtProfit = (usd: number) => `${usd >= 0 ? '+' : ''}${fromUsd(usd).toFixed(2)} ${displayCur}`;
-    // Stake / TP / SL inputs are typed directly in the display currency
-    // (label shows "(KSH)" in KSH mode) — fmtStake would double-convert
-    // those, so use this instead when logging the raw input value.
-    const fmtDisplayVal = (displayAmt: number) => `${displayAmt.toFixed(2)} ${displayCur}`;
+    // AI always operates in USD — no display-currency conversion here.
+    const fmtProfit = (usd: number) => `${usd >= 0 ? '+' : ''}${usd.toFixed(2)} USD`;
+    const fmtVal    = (usd: number) => `${usd.toFixed(2)} USD`;
 
     /* ─────────── Draggable trigger button ─────────── */
     const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
