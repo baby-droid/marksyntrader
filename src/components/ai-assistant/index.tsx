@@ -7,6 +7,7 @@ import { useDerivTrade } from '@/hooks/useDerivTrade';
 import { useDerivTrading } from '@/hooks/useDerivTrading';
 import { buildKillerXml, KillerContract } from '@/utils/killer-bot';
 import { getExecutionSpeed } from '@/utils/execution-speed';
+import { hasTradingToken } from '@/utils/trading-token';
 import './ai-assistant.scss';
 
 /**
@@ -242,6 +243,14 @@ const AIAssistant: React.FC = () => {
     useEffect(() => { derivTradeRef.current = derivTrade; }, [derivTrade]);
 
     const [isOpen, setIsOpen]         = useState(false);
+    const [hasToken, setHasToken]     = useState(() => hasTradingToken());
+    useEffect(() => {
+        const check = () => setHasToken(hasTradingToken());
+        window.addEventListener('storage', check);
+        window.addEventListener('focus', check);
+        const interval = setInterval(check, 3000);
+        return () => { window.removeEventListener('storage', check); window.removeEventListener('focus', check); clearInterval(interval); };
+    }, []);
     const [isPulsing, setIsPulsing]   = useState(true);
     const [scanning, setScanning]     = useState(false);
     const [scanProgress, setScanProgress] = useState('');
@@ -413,6 +422,34 @@ const AIAssistant: React.FC = () => {
         // Use best scanned signal, or instant-fire with the default if none available
         const signal = sig ?? best ?? DEFAULT_SIGNAL;
         if (botRunning) { stopBot(); return; }
+
+        // ─── Guard: refuse to fire without a live, authenticated trading connection ───
+        // Without this, buyContract() rejects instantly on every attempt ("WebSocket not
+        // connected" / auth error) while the panel is already closed, so trades silently
+        // never execute and the user just sees the bot "running" with 0 trades.
+        if (!hasTradingToken()) {
+            setIsOpen(true);
+            addLog('🛑 No trading token found. Go to Connect Account and add your Deriv API token (with Trade scope) before running the bot.');
+            return;
+        }
+        if (!derivTradeRef.current.authorized) {
+            setIsOpen(true);
+            addLog('⏳ Waiting for trading connection to authorize...');
+            const ready = await new Promise<boolean>(resolve => {
+                const start = Date.now();
+                const poll = () => {
+                    if (derivTradeRef.current.authorized) return resolve(true);
+                    if (Date.now() - start > 8000) return resolve(false);
+                    setTimeout(poll, 250);
+                };
+                poll();
+            });
+            if (!ready) {
+                addLog('🛑 Could not authorize the trading connection. Check your API token in Connect Account and try again.');
+                return;
+            }
+            addLog('✅ Trading connection authorized.');
+        }
 
         const barrier = signal.autoDigit !== undefined ? signal.autoDigit : (signal.barrier ?? predictionDigit);
         const apiContractType = CONTRACT_TYPE_MAP[signal.type];
@@ -603,6 +640,14 @@ const AIAssistant: React.FC = () => {
                             <button className='ai-assistant__close' onClick={() => setIsOpen(false)}>✕</button>
                         </div>
 
+                        {/* Trading connection status — must be LIVE before the bot can actually fire trades */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 12px', fontSize: '0.7rem', fontWeight: 700 }}>
+                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: derivTrade.authorized ? '#00ff96' : hasToken ? '#f97316' : '#ff4d4f', display: 'inline-block' }} />
+                            <span style={{ color: derivTrade.authorized ? '#00ff96' : hasToken ? '#f97316' : '#ff4d4f' }}>
+                                {!hasToken ? 'NO TRADING TOKEN — CONNECT ACCOUNT' : derivTrade.authorized ? 'TRADING CONNECTION LIVE' : derivTrade.connected ? 'AUTHORIZING...' : 'CONNECTING...'}
+                            </span>
+                        </div>
+
                         <div className='ai-assistant__body'>
                             {scanning && scanProgress && (
                                 <div className='ai-assistant__scan-progress'>
@@ -716,6 +761,8 @@ const AIAssistant: React.FC = () => {
                                     className='ai-assistant__btn ai-assistant__btn--load'
                                     style={{ background: 'linear-gradient(135deg,#f97316,#ef4444)', fontSize: '0.8rem' }}
                                     onClick={() => loadAndRun(best ?? DEFAULT_SIGNAL)}
+                                    disabled={!hasToken}
+                                    title={!hasToken ? 'Connect your Deriv trading account first' : undefined}
                                 >
                                     ⚡ FIRE NOW
                                 </button>
@@ -723,9 +770,10 @@ const AIAssistant: React.FC = () => {
                             <button
                                 className={`ai-assistant__btn ${botRunning ? 'ai-assistant__btn--stop-bot' : 'ai-assistant__btn--load'}`}
                                 onClick={() => loadAndRun()}
-                                disabled={!botRunning && !best}
+                                disabled={!botRunning && (!best || !hasToken)}
+                                title={!botRunning && !hasToken ? 'Connect your Deriv trading account first' : undefined}
                             >
-                                {botRunning ? `⏹ Stop Bot (#${tradeCount})` : !best ? '— scan first —' : '⚡ Load & Run Bot'}
+                                {botRunning ? `⏹ Stop Bot (#${tradeCount})` : !hasToken ? '— connect account first —' : !best ? '— scan first —' : '⚡ Load & Run Bot'}
                             </button>
                         </div>
                         {/* Auto-restart toggle */}
