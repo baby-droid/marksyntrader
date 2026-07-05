@@ -1,0 +1,492 @@
+## Complete Logic Flow: Deriv Copy Trading System
+
+A copy trading system has two main components:
+
+1. **Master Account** (the account whose trades are copied)
+2. **Follower Account** (the account that copies the master's trades)
+
+The overall flow looks like this:
+
+```text
+                  MASTER ACCOUNT
+                 (API TOKEN LOGIN)
+                        │
+                        ▼
+               WebSocket Connection
+                        │
+                        ▼
+               Authenticate API Token
+                        │
+                        ▼
+               Listen for Trade Events
+                        │
+      ┌─────────────────┴─────────────────┐
+      ▼                                   ▼
+ Contract Bought                  Contract Closed
+      │                                   │
+      └──────────────┬────────────────────┘
+                     ▼
+             Trade Information
+                     │
+                     ▼
+          Copy Trading Engine
+                     │
+      ┌──────────────┴──────────────┐
+      ▼                             ▼
+ Demo Followers              Real Followers
+      │                             │
+      ▼                             ▼
+ Authenticate Token         Authenticate Token
+      │                             │
+      ▼                             ▼
+ Execute Same Trade         Execute Same Trade
+      │                             │
+      ▼                             ▼
+ Monitor Position          Monitor Position
+      │                             │
+      ▼                             ▼
+Close When Master Closes   Close When Master Closes
+```
+
+---
+
+# Step 1: User Connects Using API Token
+
+The user enters their API token.
+
+```text
+User
+
+↓
+
+Paste API Token
+
+↓
+
+Validate Token
+
+↓
+
+Open WebSocket
+
+↓
+
+Authorize Token
+
+↓
+
+Account Connected
+```
+
+Example request:
+
+```json
+{
+  "authorize":"YOUR_API_TOKEN"
+}
+```
+
+Response
+
+```json
+{
+   "authorize":{
+      "loginid":"CR123456",
+      "balance":1000,
+      "currency":"USD"
+   }
+}
+```
+
+After authorization:
+
+```text
+Account ID
+
+Balance
+
+Currency
+
+Token Permissions
+
+Landing Company
+
+Account Type
+```
+
+---
+
+# Step 2: Store Connected Account
+
+```text
+Connected User
+
+↓
+
+Save
+
+Account ID
+
+Token
+
+Balance
+
+Currency
+
+Mode
+
+↓
+
+Dashboard Ready
+```
+
+---
+
+# Step 3: Connect Master Account
+
+Master also connects exactly the same way.
+
+```text
+Master Token
+
+↓
+
+Authorize
+
+↓
+
+Connected
+
+↓
+
+Receive Live Events
+```
+
+---
+
+# Step 4: Monitor Master
+
+The engine continuously watches the master.
+
+```text
+Master
+
+↓
+
+Waiting...
+
+↓
+
+Trade Opened?
+
+↓
+
+YES
+
+↓
+
+Capture Trade
+```
+
+Captured data
+
+```text
+Market
+
+Symbol
+
+Stake
+
+Contract Type
+
+Barrier
+
+Duration
+
+Prediction
+
+Purchase Time
+
+Contract ID
+```
+
+---
+
+# Step 5: Send Trade to Followers
+
+```text
+Master Bought Trade
+
+↓
+
+Trade Packet Created
+
+↓
+
+Broadcast
+
+↓
+
+Follower 1
+
+Follower 2
+
+Follower 3
+
+Follower 100...
+```
+
+Packet example
+
+```json
+{
+ "symbol":"R_100",
+ "contract":"DIGITEVEN",
+ "stake":2,
+ "duration":5,
+ "barrier":5
+}
+```
+
+---
+
+# Step 6: Copy Engine
+
+The copy engine decides what to do.
+
+```text
+Receive Master Trade
+
+↓
+
+Check
+
+Copy Enabled?
+
+↓
+
+YES
+
+↓
+
+Risk Rules
+
+↓
+
+Enough Balance?
+
+↓
+
+YES
+
+↓
+
+Execute Trade
+```
+
+---
+
+# Step 7: Stake Calculation
+
+Different stake modes
+
+### Fixed
+
+```text
+Master Stake = $5
+
+↓
+
+Follower Stake = $5
+```
+
+---
+
+### Multiplier
+
+```text
+Master = $5
+
+Multiplier = 2
+
+↓
+
+Follower = $10
+```
+
+---
+
+### Percentage
+
+```text
+Master = 2%
+
+Follower Balance = $1000
+
+↓
+
+Trade = $20
+```
+
+---
+
+### Custom Formula
+
+```text
+Follower Stake
+
+=
+
+Master Stake
+
+×
+
+Risk %
+
+×
+
+Multiplier
+```
+
+---
+
+# Step 8: Execute Trade
+
+```text
+Follower
+
+↓
+
+Proposal
+
+↓
+
+Buy Contract
+
+↓
+
+Receive Contract ID
+
+↓
+
+Track Contract
+```
+
+---
+
+# Step 9: Monitor Both Accounts
+
+```text
+Master
+
+Running
+
+↓
+
+Profit?
+
+Loss?
+
+↓
+
+Follower
+
+Running
+
+↓
+
+Profit?
+
+Loss?
+```
+
+---
+
+# Step 10: Master Closes
+
+When master finishes
+
+```text
+Master Closed
+
+↓
+
+Notify Followers
+
+↓
+
+Stop Tracking
+
+↓
+
+Wait Next Trade
+```
+
+---
+
+# Complete Architecture
+
+```text
+                    USER
+                     │
+                     ▼
+              Enter API Token
+                     │
+                     ▼
+              Validate Token
+                     │
+                     ▼
+              WebSocket Login
+                     │
+                     ▼
+             Connected Account
+                     │
+                     ▼
+          Select Master or Follower
+             ┌─────────────┐
+             ▼             ▼
+        MASTER MODE   FOLLOWER MODE
+             │             │
+             ▼             ▼
+     Listen Trades    Wait Trades
+             │             ▲
+             └──────┬──────┘
+                    ▼
+            Copy Trading Engine
+                    │
+        ┌───────────┼───────────┐
+        ▼           ▼           ▼
+    Risk Check   Stake Calc   Validation
+        │           │           │
+        └───────────┼───────────┘
+                    ▼
+             Execute Buy
+                    │
+                    ▼
+            Monitor Contract
+                    │
+                    ▼
+          Contract Finished
+                    │
+                    ▼
+             Update Statistics
+                    │
+                    ▼
+            Wait Next Trade
+```
+
+## Additional components to make the system robust
+
+A production-quality copy trading system typically includes:
+
+* **Connection Manager:** Maintains persistent WebSocket connections and automatically reconnects if disconnected.
+* **Authentication Manager:** Validates API tokens, checks permissions, and refreshes session state after reconnects.
+* **Trade Listener:** Subscribes to the master's trade updates and converts them into internal trade events.
+* **Copy Engine:** Receives trade events, validates copy rules, and submits corresponding trades for followers.
+* **Risk Manager:** Enforces limits such as maximum stake, daily loss, maximum concurrent trades, and account balance checks.
+* **Stake Manager:** Calculates follower stake using fixed, proportional, percentage, or custom formulas.
+* **Execution Manager:** Sends proposals and buy requests, handles API responses, retries when appropriate, and records execution results.
+* **Position Monitor:** Tracks open contracts, updates profit/loss, and synchronizes follower state with the master's lifecycle where applicable.
+* **Logging & Analytics:** Records every authorization, trade, error, execution latency, win/loss, and account statistic for monitoring and debugging.
+
+This modular design makes it easier to test, maintain, and extend the system while keeping the trading logic separate from connection handling and risk management.

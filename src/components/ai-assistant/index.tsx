@@ -3,7 +3,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { useStore } from '@/hooks/useStore';
 import { api_base } from '@/external/bot-skeleton';
-import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
+import { useDerivTrading } from '@/hooks/useDerivTrading';
+import { fromUsd, toUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import { buildKillerXml, KillerContract } from '@/utils/killer-bot';
 import './ai-assistant.scss';
 
@@ -213,6 +214,7 @@ async function waitForSettlement(contractId: string): Promise<number> {
 
 const AIAssistant: React.FC = () => {
     const { dashboard, load_modal } = useStore() as any;
+    const { currency: accountCurrency } = useDerivTrading();
 
     const [isOpen, setIsOpen]         = useState(false);
     const [isPulsing, setIsPulsing]   = useState(true);
@@ -248,6 +250,58 @@ const AIAssistant: React.FC = () => {
 
     const fmtStake  = (usd: number) => `${fromUsd(usd).toFixed(2)} ${displayCur}`;
     const fmtProfit = (usd: number) => `${usd >= 0 ? '+' : ''}${fromUsd(usd).toFixed(2)} ${displayCur}`;
+    // Stake / TP / SL inputs are typed directly in the display currency
+    // (label shows "(KSH)" in KSH mode) — fmtStake would double-convert
+    // those, so use this instead when logging the raw input value.
+    const fmtDisplayVal = (displayAmt: number) => `${displayAmt.toFixed(2)} ${displayCur}`;
+
+    /* ─────────── Draggable trigger button ─────────── */
+    const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
+    const dragStateRef = useRef<{ startX: number; startY: number; origX: number; origY: number; dragging: boolean } | null>(null);
+    const triggerRef = useRef<HTMLButtonElement | null>(null);
+
+    const onDragPointerDown = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
+        const btn = triggerRef.current;
+        if (!btn) return;
+        const rect = btn.getBoundingClientRect();
+        dragStateRef.current = {
+            startX: e.clientX,
+            startY: e.clientY,
+            origX: dragPos?.x ?? rect.left,
+            origY: dragPos?.y ?? rect.top,
+            dragging: false,
+        };
+        (e.target as HTMLButtonElement).setPointerCapture?.(e.pointerId);
+    }, [dragPos]);
+
+    const onDragPointerMove = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
+        const st = dragStateRef.current;
+        if (!st) return;
+        const dx = e.clientX - st.startX;
+        const dy = e.clientY - st.startY;
+        if (!st.dragging && Math.hypot(dx, dy) < 4) return;
+        st.dragging = true;
+        const btn = triggerRef.current;
+        const w = btn?.offsetWidth ?? 60;
+        const h = btn?.offsetHeight ?? 60;
+        const x = Math.max(4, Math.min(window.innerWidth - w - 4, st.origX + dx));
+        const y = Math.max(4, Math.min(window.innerHeight - h - 4, st.origY + dy));
+        setDragPos({ x, y });
+    }, []);
+
+    const onDragPointerUp = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
+        const st = dragStateRef.current;
+        (e.target as HTMLButtonElement).releasePointerCapture?.(e.pointerId);
+        dragStateRef.current = null;
+        if (st?.dragging) {
+            // swallow the click that follows a drag so it doesn't reopen/close the modal
+            const btn = triggerRef.current;
+            if (btn) {
+                const suppressClick = (ev: MouseEvent) => { ev.stopPropagation(); ev.preventDefault(); };
+                btn.addEventListener('click', suppressClick, { capture: true, once: true });
+            }
+        }
+    }, []);
 
     const addLog = useCallback((msg: string) => {
         const ts = new Date().toLocaleTimeString('en', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -352,7 +406,7 @@ const AIAssistant: React.FC = () => {
             const res = await fetch('/bots/any-market-killer.xml');
             if (res.ok) {
                 const raw = await res.text();
-                const xml = buildKillerXml(raw, { symbol: signal.symbol, contract: signal.type, barrier, ticks: signal.ticks, stake, martingale, takeProfit, stopLoss });
+                const xml = buildKillerXml(raw, { symbol: signal.symbol, contract: signal.type, barrier, ticks: signal.ticks, stake: toUsd(stake), martingale, takeProfit: toUsd(takeProfit), stopLoss: toUsd(stopLoss) });
                 (window as any).__pendingBotXml  = xml;
                 (window as any).__pendingBotName = `AI ${signal.type.toUpperCase()}${barrier !== undefined ? barrier : ''}`;
                 dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING);
@@ -373,12 +427,17 @@ const AIAssistant: React.FC = () => {
             }
         } catch { /* workspace load failed — direct fire still works */ }
 
-        addLog(`🚀 Starting ${signal.type.toUpperCase()}${barrier !== undefined ? barrier : ''} on ${signal.label} | Stake:${fmtStake(stake)} | Mart:${martingale}x | TP:${fmtStake(takeProfit)} | SL:${fmtStake(stopLoss)}`);
+        addLog(`🚀 Starting ${signal.type.toUpperCase()}${barrier !== undefined ? barrier : ''} on ${signal.label} | Stake:${fmtDisplayVal(stake)} | Mart:${martingale}x | TP:${fmtDisplayVal(takeProfit)} | SL:${fmtDisplayVal(stopLoss)}`);
 
         // ─── Direct-fire loop ───
         (async () => {
             while (runRef.current) {
-                const curStake = stakeRef.current;
+                // stakeRef.current is tracked in the *display* currency (KSH or USD, matching
+                // the "STAKE (KSH)" input label) — convert to the real account currency amount
+                // right before sending it to the API, or KSH stakes get sent as raw USD amounts
+                // and the buy call fails/over-trades.
+                const curStakeDisplay = stakeRef.current;
+                const curStake = toUsd(curStakeDisplay);
                 try {
                     // Step 1: Proposal
                     let proposalId: string | null = null;
@@ -388,7 +447,7 @@ const AIAssistant: React.FC = () => {
                             amount: curStake,
                             basis: 'stake',
                             contract_type: apiContractType,
-                            currency: 'USD',
+                            currency: accountCurrency || 'USD',
                             duration: signal.ticks,
                             duration_unit: 't',
                             symbol: signal.symbol,
@@ -415,13 +474,17 @@ const AIAssistant: React.FC = () => {
                                 buy: '1', price: curStake,
                                 parameters: {
                                     amount: curStake, basis: 'stake', contract_type: apiContractType,
-                                    currency: 'USD', duration: signal.ticks, duration_unit: 't',
+                                    currency: accountCurrency || 'USD', duration: signal.ticks, duration_unit: 't',
                                     symbol: signal.symbol,
                                     ...(NEEDS_BARRIER.has(signal.type) ? { barrier: String(barrier) } : {}),
                                 },
                             });
                             contractId = buyRes?.buy?.contract_id ?? null;
-                        } catch { await new Promise(r => setTimeout(r, 300)); continue; }
+                        } catch (buyErr: any) {
+                            const msg = buyErr?.error?.message || buyErr?.message || (typeof buyErr === 'string' ? buyErr : 'Buy failed');
+                            addLog(`⚠️ ${msg}`);
+                            await new Promise(r => setTimeout(r, 300)); continue;
+                        }
                     }
 
                     if (!contractId || !runRef.current) break;
@@ -439,20 +502,24 @@ const AIAssistant: React.FC = () => {
                     setSessionProfit(sp);
 
                     const won = profit >= 0;
-                    addLog(`${won ? '✅' : '❌'} #${tc} ${won ? 'WIN' : 'LOSS'} ${fmtProfit(profit)} | Session: ${fmtProfit(sp)} | Stake: ${fmtStake(curStake)}`);
+                    addLog(`${won ? '✅' : '❌'} #${tc} ${won ? 'WIN' : 'LOSS'} ${fmtProfit(profit)} | Session: ${fmtProfit(sp)} | Stake: ${fmtDisplayVal(curStakeDisplay)}`);
 
-                    // TP / SL check
-                    if (sp >= takeProfit) { addLog(`🏆 TAKE PROFIT hit! Session P/L: ${fmtProfit(sp)}`); break; }
-                    if (sp <= -stopLoss)  { addLog(`🛑 STOP LOSS hit! Session P/L: ${fmtProfit(sp)}`); break; }
+                    // TP / SL check — takeProfit/stopLoss are entered in display currency, sp is
+                    // the real (USD) session P/L, so convert the thresholds before comparing.
+                    const takeProfitUsd = toUsd(takeProfit);
+                    const stopLossUsd = toUsd(stopLoss);
+                    if (sp >= takeProfitUsd) { addLog(`🏆 TAKE PROFIT hit! Session P/L: ${fmtProfit(sp)}`); break; }
+                    if (sp <= -stopLossUsd)  { addLog(`🛑 STOP LOSS hit! Session P/L: ${fmtProfit(sp)}`); break; }
 
-                    // Martingale on loss, reset on win
+                    // Martingale on loss, reset on win (kept in display-currency units)
                     if (!won) {
-                        stakeRef.current = Math.max(0.35, +(curStake * martingale).toFixed(2));
+                        stakeRef.current = Math.max(0.35, +(curStakeDisplay * martingale).toFixed(2));
                     } else {
                         stakeRef.current = stake;
                     }
                 } catch (err: any) {
-                    addLog(`⚠️ Error: ${err?.message || err}`);
+                    const msg = err?.error?.message || err?.message || (typeof err === 'string' ? err : 'Unknown error');
+                    addLog(`⚠️ Error: ${msg}`);
                     await new Promise(r => setTimeout(r, 500));
                 }
             }
@@ -477,9 +544,15 @@ const AIAssistant: React.FC = () => {
             )}
 
             <button
+                ref={triggerRef}
                 className={`ai-assistant__trigger ${isPulsing ? 'ai-assistant__trigger--pulse' : ''} ${botRunning ? 'ai-assistant__trigger--running' : ''}`}
+                style={dragPos ? { left: dragPos.x, top: dragPos.y, right: 'auto', bottom: 'auto' } : undefined}
                 onClick={() => { setIsOpen(true); setIsPulsing(false); }}
-                title='AI Market Scanner'
+                onPointerDown={onDragPointerDown}
+                onPointerMove={onDragPointerMove}
+                onPointerUp={onDragPointerUp}
+                onPointerCancel={onDragPointerUp}
+                title='AI Market Scanner (drag to move)'
             >
                 <div className='ai-assistant__sphere'><span>{botRunning ? '⏸' : 'AI'}</span></div>
             </button>

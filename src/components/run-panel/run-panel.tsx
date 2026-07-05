@@ -6,7 +6,7 @@ import Journal from '@/components/journal';
 import Button from '@/components/shared_ui/button';
 import Drawer from '@/components/shared_ui/drawer';
 import Modal from '@/components/shared_ui/modal';
-import Money from '@/components/shared_ui/money';
+import KshMoney from '@/components/shared_ui/ksh-money/ksh-money';
 import Tabs from '@/components/shared_ui/tabs';
 import Text from '@/components/shared_ui/text';
 import Summary from '@/components/summary';
@@ -93,19 +93,19 @@ export const StatisticsSummary = ({
             <StatisticsTile
                 title={localize('Total stake')}
                 alignment='top'
-                content={<Money amount={total_stake} currency={currency} show_currency />}
+                content={<KshMoney amount={total_stake} contractCurrency={currency} showCurrency />}
             />
             <StatisticsTile
                 title={localize('Total payout')}
                 alignment='top'
-                content={<Money amount={total_payout} currency={currency} show_currency />}
+                content={<KshMoney amount={total_payout} contractCurrency={currency} showCurrency />}
             />
             <StatisticsTile title={localize('No. of runs')} alignment='top' content={number_of_runs} />
             <StatisticsTile title={localize('Contracts lost')} alignment='bottom' content={lost_contracts} />
             <StatisticsTile title={localize('Contracts won')} alignment='bottom' content={won_contracts} />
             <StatisticsTile
                 title={localize('Total profit/loss')}
-                content={<Money amount={total_profit} currency={currency} has_sign show_currency />}
+                content={<KshMoney amount={total_profit} contractCurrency={currency} hasSign showCurrency />}
                 alignment='bottom'
                 contentClassName={classNames('run-panel__stat-amount', {
                     'run-panel__stat-amount--positive': total_profit > 0,

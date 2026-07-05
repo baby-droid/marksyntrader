@@ -14,7 +14,12 @@
  */
 import { MasterTradeSignal, subscribeMasterTrades } from './trade-bus';
 
-const APP_ID = 1089;
+// Follower connections must authorize under the SAME registered app as the
+// main app's own connection (api-token-login-modal / derivws-accounts.service)
+// — using the generic demo app id (1089) here caused follower authorize/buy
+// calls to run under a different app's trading scopes, which is the root
+// cause of followers failing to link or reciprocate trades reliably.
+const APP_ID = process.env.NEXT_PUBLIC_DERIV_APP_ID || 1089;
 const WS_URL = `wss://ws.binaryws.com/websockets/v3?app_id=${APP_ID}`;
 
 export type CopyMode = 'real_real' | 'demo_real';

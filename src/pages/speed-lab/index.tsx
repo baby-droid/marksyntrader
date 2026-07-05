@@ -4,7 +4,7 @@ import { observer } from 'mobx-react-lite';
 import DigitCircles from '@/components/digit-circles';
 import { useDigitStats } from '@/hooks/useDigitStats';
 import { useDerivTrading } from '@/hooks/useDerivTrading';
-import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
+import { fromUsd, toUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import { api_base } from '@/external/bot-skeleton';
 import './speed-lab.scss';
 
@@ -125,7 +125,8 @@ class TradeEngine {
                 });
             }
         } catch (e: any) {
-            this.onError?.(`Buy error: ${e?.message || e}`);
+            const msg = e?.error?.message || e?.message || (typeof e === 'string' ? e : 'Unknown error');
+            this.onError?.(`Buy error: ${msg}`);
             return false;
         }
 
@@ -237,6 +238,10 @@ const SpeedLab = observer(() => {
 
     const fmtAmount = (usd: number) => `${fromUsd(usd).toFixed(2)} ${displayCur}`;
     const fmtProfit = (usd: number) => `${usd >= 0 ? '+' : ''}${fromUsd(usd).toFixed(2)} ${displayCur}`;
+    // Stake / TP / SL inputs are entered directly in the display currency
+    // (label shows "(KSH)" when in KSH mode) — do NOT re-run fromUsd() on
+    // them, that would double-convert. Use this for those three fields only.
+    const fmtDisplay = (displayAmt: number) => `${displayAmt.toFixed(2)} ${displayCur}`;
 
     const logEntry = useCallback((msg: string) => {
         setExecutionLog(prev => [
@@ -247,10 +252,15 @@ const SpeedLab = observer(() => {
 
     const needsBarrier = ['DIGITOVER', 'DIGITUNDER', 'DIGITMATCH', 'DIGITDIFF'].includes(contractType);
 
+    // NOTE: stake/targetProfit/stopLoss are entered by the user in the
+    // *display* currency (KSH or USD). The trading API always expects the
+    // actual account currency, so we must convert with toUsd() here — sending
+    // the raw KSH figure as the USD amount was causing the buy API to reject
+    // wildly oversized stakes ("Buy error" spam) whenever KSH mode was on.
     const buildSignal = useCallback((): TradeSignal => ({
         symbol,
         contract_type: contractType,
-        stake: currentStakeRef.current,
+        stake: toUsd(currentStakeRef.current),
         duration,
         currency: currency || 'USD',
         ...(needsBarrier ? { barrier: String(barrier) } : {}),
@@ -260,11 +270,13 @@ const SpeedLab = observer(() => {
     useEffect(() => { currentStakeRef.current = stake; }, [stake]);
 
     const checkLimits = useCallback((): boolean => {
-        if (sessionProfitRef.current >= targetProfit) {
+        const targetProfitUsd = toUsd(targetProfit);
+        const stopLossUsd = toUsd(stopLoss);
+        if (sessionProfitRef.current >= targetProfitUsd) {
             logEntry(`✅ Target profit reached: ${fmtProfit(sessionProfitRef.current)}`);
             return false;
         }
-        if (sessionProfitRef.current <= -stopLoss) {
+        if (sessionProfitRef.current <= -stopLossUsd) {
             logEntry(`🛑 Stop loss hit: ${fmtProfit(sessionProfitRef.current)}`);
             return false;
         }
@@ -277,7 +289,7 @@ const SpeedLab = observer(() => {
         engine.onFire = (n, ms) => {
             setFireCount(n);
             const mode = SPEED_MODES[speedMode];
-            logEntry(`${mode.name === 'NORMAL' ? '🐢' : mode.name === 'CRAZY' ? '🔥' : '⚡'} [${mode.name}] #${n} ${contractType} @ ${fmtAmount(currentStakeRef.current)} (${ms}ms)`);
+            logEntry(`${mode.name === 'NORMAL' ? '🐢' : mode.name === 'CRAZY' ? '🔥' : '⚡'} [${mode.name}] #${n} ${contractType} @ ${fmtDisplay(currentStakeRef.current)} (${ms}ms)`);
             subscribeBalance();
         };
         engine.onError = (msg) => {
@@ -330,7 +342,7 @@ const SpeedLab = observer(() => {
         engineRef.current.setMode(cfg);
         engineRef.current.onFire = (n, ms) => {
             setFireCount(n);
-            logEntry(`${speedMode === 'normal' ? '🐢' : speedMode === 'crazy' ? '🔥' : '⚡'} [${cfg.name}] #${n} ${contractType} @ ${fmtAmount(currentStakeRef.current)} (${ms}ms)`);
+            logEntry(`${speedMode === 'normal' ? '🐢' : speedMode === 'crazy' ? '🔥' : '⚡'} [${cfg.name}] #${n} ${contractType} @ ${fmtDisplay(currentStakeRef.current)} (${ms}ms)`);
             subscribeBalance();
         };
         engineRef.current.onError = (msg) => logEntry(`❌ ${msg}`);
@@ -338,7 +350,7 @@ const SpeedLab = observer(() => {
 
         runRef.current = true;
         setIsRunning(true);
-        logEntry(`🚀 [${cfg.name}] ${contractType} @ ${fmtAmount(stake)} | TP:${fmtAmount(targetProfit)} SL:${fmtAmount(stopLoss)} | ${cfg.desc}`);
+        logEntry(`🚀 [${cfg.name}] ${contractType} @ ${fmtDisplay(stake)} | TP:${fmtDisplay(targetProfit)} SL:${fmtDisplay(stopLoss)} | ${cfg.desc}`);
 
         runLoop();
     }, [isRunning, stake, contractType, targetProfit, stopLoss, speedMode, clearResults, runLoop, subscribeBalance, logEntry]);

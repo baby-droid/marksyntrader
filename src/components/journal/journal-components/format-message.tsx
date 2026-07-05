@@ -1,11 +1,24 @@
+import { useEffect, useState } from 'react';
 import classnames from 'classnames';
 import { formatMoney, getCurrencyDisplayCode } from '@/components/shared';
 import Text from '@/components/shared_ui/text';
 import { LogTypes } from '@/external/bot-skeleton';
+import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import { Localize, localize } from '@deriv-com/translations';
 import { TFormatMessageProps } from '../journal.types';
 
 const FormatMessage = ({ logType, className, extra }: TFormatMessageProps) => {
+    const [displayCur, setDisplayCur] = useState(getDisplayCurrency());
+    useEffect(() => subscribeCurrency(() => setDisplayCur(getDisplayCurrency())), []);
+
+    /** Renders a profit/loss amount respecting the KSH display toggle. */
+    const fmtPnl = (currency: string, amount: number): string => {
+        if (displayCur === 'KSH') {
+            return `${fromUsd(amount).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} KSH`;
+        }
+        return `${formatMoney(currency, amount, true)} ${getCurrencyDisplayCode(currency)}`;
+    };
+
     const getLogMessage = () => {
         switch (logType) {
             case LogTypes.LOAD_BLOCK: {
@@ -41,7 +54,7 @@ const FormatMessage = ({ logType, className, extra }: TFormatMessageProps) => {
                     <Localize
                         i18n_default_text='Profit amount: <0>{{profit}}</0>'
                         values={{
-                            profit: `${formatMoney(currency, profit, true)} ${getCurrencyDisplayCode(currency)}`,
+                            profit: fmtPnl(currency, profit),
                         }}
                         components={[<Text key={0} size='xxs' styles={{ color: 'var(--status-success)' }} />]}
                     />
@@ -53,7 +66,7 @@ const FormatMessage = ({ logType, className, extra }: TFormatMessageProps) => {
                     <Localize
                         i18n_default_text='Loss amount: <0>{{profit}}</0>'
                         values={{
-                            profit: `${formatMoney(currency, profit, true)} ${getCurrencyDisplayCode(currency)}`,
+                            profit: fmtPnl(currency, profit),
                         }}
                         components={[<Text key={0} size='xxs' styles={{ color: 'var(--status-danger)' }} />]}
                     />

@@ -1,10 +1,11 @@
-import { ReactElement } from 'react';
+import { ReactElement, useEffect, useState } from 'react';
 import classNames from 'classnames';
 import ContentLoader from 'react-content-loader';
 import { transaction_elements } from '@/constants/transactions';
 import { getContractTypeName } from '@/external/bot-skeleton';
 import { isDbotRTL } from '@/external/bot-skeleton/utils/workspace';
 import { getSymbolDisplayNameSync } from '@/utils/symbol-display-name';
+import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import { MarketIcon } from '../market/market-icon';
 import { convertDateFormat } from '../shared';
 import Popover from '../shared_ui/popover';
@@ -64,6 +65,10 @@ export default function DesktopTransactionTable({
     account,
     balance,
 }: TDesktopTransactionTable) {
+    const [, setDisplayCurTick] = useState(getDisplayCurrency());
+    useEffect(() => subscribeCurrency(() => setDisplayCurTick(getDisplayCurrency())), []);
+    const ksh = (usd: number) => fromUsd(Math.abs(usd ?? 0)).toFixed(2);
+
     return (
         <div data-testid='transaction_details_tables' className='transaction-details-tables'>
             <div
@@ -114,7 +119,7 @@ export default function DesktopTransactionTable({
                                 />
                                 <TableCell label={data?.entry_spot} loader={!data?.entry_spot} />
                                 <TableCell label={data?.exit_spot} loader={!data.exit_spot} />
-                                <TableCell label={Math.abs(data?.buy_price ?? 0).toFixed(2)} />
+                                <TableCell label={ksh(data?.buy_price)} />
                                 <TableCell
                                     label={
                                         <div
@@ -123,7 +128,7 @@ export default function DesktopTransactionTable({
                                                 [`${PARENT_CLASS}__profit--loss`]: data?.profit < 0,
                                             })}
                                         >
-                                            {Math.abs(data?.profit ?? 0).toFixed(2)}
+                                            {ksh(data?.profit)}
                                         </div>
                                     }
                                     loader={!data.is_completed}
@@ -151,8 +156,8 @@ export default function DesktopTransactionTable({
                 <div className={`${PARENT_CLASS}__table-row`}>
                     <TableCell label={account} extra_classes={[`${PARENT_CLASS}__table-cell--grow-mid`]} />
                     <TableCell label={result?.number_of_runs} />
-                    <TableCell label={Math.abs(result?.total_stake ?? 0).toFixed(2)} />
-                    <TableCell label={Math.abs(result?.total_payout ?? 0).toFixed(2)} />
+                    <TableCell label={ksh(result?.total_stake)} />
+                    <TableCell label={ksh(result?.total_payout)} />
                     <TableCell label={result?.won_contracts} />
                     <TableCell label={result?.lost_contracts} extra_classes={[`${PARENT_CLASS}__loss`]} />
                     <TableCell
@@ -166,7 +171,7 @@ export default function DesktopTransactionTable({
                                 )}
                                 data-testid='transaction_details_table_profit'
                             >
-                                {Math.abs(result?.total_profit ?? 0).toFixed(2)}
+                                {ksh(result?.total_profit)}
                             </div>
                         }
                     />
