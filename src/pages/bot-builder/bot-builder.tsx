@@ -26,16 +26,22 @@ const FREE_BOTS_LIST = [
     { id: 'mrvunja', name: 'Mr Vunja Deriv V2026', market: 'V75 1s', badge: '2026', badgeColor: '#ff6b00', xmlFile: '/bots/mrvunja.xml', icon: '💎' },
 ];
 
-const FreeBotsSidePanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
-    const { run_panel } = useStore();
-    // Single global lock: only one bot action runs at a time across all cards
+type TFreeBotsPanelProps = {
+    onClose: () => void;
+    /** Called after XML is loaded into the workspace. shouldRun=true triggers auto-trade. */
+    onLoadDone: (shouldRun: boolean) => void;
+};
+
+const FreeBotsSidePanel: React.FC<TFreeBotsPanelProps> = ({ onClose, onLoadDone }) => {
+    // Single global lock: only one action at a time across all cards
     const [activeBotId, setActiveBotId] = useState<string | null>(null);
     const [actionType, setActionType] = useState<'load' | 'run' | null>(null);
     const [loadedId, setLoadedId] = useState<string | null>(null);
 
-    const loadXmlNow = useCallback((xml: string) => {
+    /** Inject XML into the Blockly workspace synchronously. Returns true on success. */
+    const loadXmlNow = useCallback((xml: string): boolean => {
         const B = (window as any).Blockly;
-        if (!B || !B.derivWorkspace) return false;
+        if (!B?.derivWorkspace) return false;
         try {
             const dom = B.Xml.textToDom(xml);
             B.Events.setEnabled(false);
@@ -51,104 +57,73 @@ const FreeBotsSidePanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         }
     }, []);
 
-    // Wait until the workspace has the expected blocks loaded (state-based, not time-based)
-    const waitForWorkspaceReady = useCallback((): Promise<void> => {
-        return new Promise((resolve, reject) => {
-            let attempts = 0;
-            const check = setInterval(() => {
-                attempts++;
-                const B = (window as any).Blockly;
-                const ws = B?.derivWorkspace;
-                // Workspace is ready when it has at least one block rendered
-                if (ws && ws.getAllBlocks && ws.getAllBlocks(false).length > 0) {
-                    clearInterval(check);
-                    resolve();
-                } else if (attempts >= 100) {
-                    clearInterval(check);
-                    reject(new Error('Workspace did not become ready in time'));
-                }
-            }, 100);
-        });
-    }, []);
-
-    // Fetch XML and load into the Blockly workspace
+    /** Fetch XML from the bot's URL and inject it into the workspace.
+     *  Polls until the workspace is initialised if it isn't ready yet (max 10 s). */
     const fetchAndLoad = useCallback(async (bot: typeof FREE_BOTS_LIST[0]): Promise<void> => {
         const response = await fetch(bot.xmlFile);
         if (!response.ok) throw new Error(`Failed to fetch bot XML: ${response.status}`);
         const xml = await response.text();
 
-        // Always clean up pending markers in finally
+        (window as any).__pendingBotXml = xml;
+        (window as any).__pendingBotName = bot.name;
         try {
-            (window as any).__pendingBotXml = xml;
-            (window as any).__pendingBotName = bot.name;
-
             if (!loadXmlNow(xml)) {
                 // Workspace not ready yet — poll until it is (max 10 s)
-                let attempts = 0;
                 await new Promise<void>((resolve, reject) => {
+                    let attempts = 0;
                     const poll = setInterval(() => {
                         attempts++;
-                        if (loadXmlNow(xml)) {
-                            clearInterval(poll);
-                            resolve();
-                        } else if (attempts >= 100) {
-                            clearInterval(poll);
-                            reject(new Error('Workspace not available after 10 s'));
-                        }
+                        if (loadXmlNow(xml)) { clearInterval(poll); resolve(); }
+                        else if (attempts >= 100) { clearInterval(poll); reject(new Error('Workspace unavailable after 10 s')); }
                     }, 100);
                 });
             }
-
-            // State-based readiness: wait until blocks are actually rendered
-            await waitForWorkspaceReady();
         } finally {
             (window as any).__pendingBotXml = null;
             (window as any).__pendingBotName = null;
         }
-    }, [loadXmlNow, waitForWorkspaceReady]);
+    }, [loadXmlNow]);
 
-    // Load only — just put the bot into the builder
+    /** Load only — puts the bot into the builder then closes the panel. */
     const handleLoad = useCallback(async (bot: typeof FREE_BOTS_LIST[0]) => {
-        if (activeBotId) return; // global lock
+        if (activeBotId) return;
         setActiveBotId(bot.id);
         setActionType('load');
         try {
             await fetchAndLoad(bot);
             setLoadedId(bot.id);
-            setTimeout(() => { setLoadedId(null); onClose(); }, 1800);
+            // Show success briefly, then hand control back to parent
+            setTimeout(() => {
+                setLoadedId(null);
+                onLoadDone(false); // false = load only, don't auto-run
+            }, 1500);
         } catch (e) {
             console.error('Load bot error', e);
         } finally {
             setActiveBotId(null);
             setActionType(null);
         }
-    }, [activeBotId, fetchAndLoad, onClose]);
+    }, [activeBotId, fetchAndLoad, onLoadDone]);
 
-    // Load & Run — load the bot then immediately start trading
+    /** Load & Run — loads the bot then signals parent to start trading. */
     const handleLoadAndRun = useCallback(async (bot: typeof FREE_BOTS_LIST[0]) => {
-        if (activeBotId) return; // global lock
-        // If already running, don't start another execution on top
-        if (run_panel.is_running) {
-            console.warn('Bot is already running; stop it before starting a new one.');
-            return;
-        }
+        if (activeBotId) return;
         setActiveBotId(bot.id);
         setActionType('run');
         try {
             await fetchAndLoad(bot);
-            setLoadedId(bot.id);
-            // Close the panel first so the workspace is fully visible
-            onClose();
-            // Kick off trading — workspace is confirmed ready via waitForWorkspaceReady
-            run_panel.onRunButtonClick();
+            // Signal parent immediately — parent is responsible for closing
+            // panel and triggering the run in the correct order/lifecycle.
+            onLoadDone(true); // true = auto-run after panel closes
         } catch (e) {
             console.error('Load & Run bot error', e);
-        } finally {
             setActiveBotId(null);
             setActionType(null);
-            setTimeout(() => setLoadedId(null), 2000);
         }
-    }, [activeBotId, fetchAndLoad, onClose, run_panel]);
+        // Note: we don't reset activeBotId here for the run case because the
+        // component will unmount shortly (parent closes it). Resetting would
+        // cause a flicker. If load fails the catch above resets it.
+    }, [activeBotId, fetchAndLoad, onLoadDone]);
 
     return (
         <div style={{
@@ -162,24 +137,25 @@ const FreeBotsSidePanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             }}>
                 <span style={{ color: '#c7d2fe', fontWeight: 700, fontSize: '14px', letterSpacing: '0.05em' }}>📥 FREE BOTS LIBRARY</span>
                 <button onClick={onClose} style={{
-                    background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '18px', lineHeight: 1, padding: '2px 6px', borderRadius: '4px',
+                    background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer',
+                    fontSize: '18px', lineHeight: 1, padding: '2px 6px', borderRadius: '4px',
                 }}>✕</button>
             </div>
+
             <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
                 {FREE_BOTS_LIST.map(bot => {
-                    // Global lock: disable ALL cards while any action is in-flight
-                    const anyBusy = activeBotId !== null;
-                    const isThisBusy = activeBotId === bot.id;
-                    const isDone = loadedId === bot.id;
-                    const isLoading = isThisBusy && actionType === 'load';
-                    const isStarting = isThisBusy && actionType === 'run';
+                    const anyBusy  = activeBotId !== null;
+                    const isThis   = activeBotId === bot.id;
+                    const isDone   = loadedId === bot.id;
+                    const isLoading  = isThis && actionType === 'load';
+                    const isStarting = isThis && actionType === 'run';
                     return (
                         <div key={bot.id} style={{
                             background: isDone ? 'rgba(34,197,94,0.1)' : 'rgba(255,255,255,0.04)',
                             border: `1px solid ${isDone ? 'rgba(34,197,94,0.5)' : 'rgba(99,102,241,0.18)'}`,
-                            borderRadius: '10px', padding: '11px 13px', marginBottom: '7px',
-                            transition: 'all 0.2s',
+                            borderRadius: '10px', padding: '11px 13px', marginBottom: '7px', transition: 'all 0.2s',
                         }}>
+                            {/* Bot info row */}
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
                                 <span style={{ fontSize: '18px' }}>{bot.icon}</span>
                                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -201,7 +177,7 @@ const FreeBotsSidePanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                                     cursor: anyBusy || isDone ? 'not-allowed' : 'pointer',
                                     background: isDone ? '#16a34a' : 'rgba(99,102,241,0.85)',
                                     color: '#fff', fontSize: '11px', fontWeight: 600, transition: 'all 0.15s',
-                                    opacity: anyBusy && !isThisBusy ? 0.4 : isLoading ? 0.7 : 1,
+                                    opacity: anyBusy && !isThis ? 0.4 : isLoading ? 0.7 : 1,
                                     marginBottom: '5px',
                                 }}
                             >
@@ -219,11 +195,11 @@ const FreeBotsSidePanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                                         ? 'linear-gradient(90deg,#16a34a,#15803d)'
                                         : 'linear-gradient(90deg,#f59e0b,#d97706)',
                                     color: '#fff', fontSize: '11px', fontWeight: 700, transition: 'all 0.15s',
-                                    opacity: anyBusy && !isThisBusy ? 0.4 : isStarting ? 0.7 : 1,
+                                    opacity: anyBusy && !isThis ? 0.4 : isStarting ? 0.8 : 1,
                                     boxShadow: anyBusy ? 'none' : '0 0 8px rgba(245,158,11,0.5)',
                                 }}
                             >
-                                {isStarting ? '⏳ Starting...' : '▶ Load & Run'}
+                                {isStarting ? '⏳ Loading bot...' : '▶ Load & Run'}
                             </button>
                         </div>
                     );
@@ -330,6 +306,33 @@ const BotBuilder = observer(() => {
     };
 
     const [showFreeBots, setShowFreeBots] = useState(false);
+    // When true, fire onRunButtonClick as soon as the panel finishes unmounting
+    const pendingAutoRun = React.useRef(false);
+
+    // After the panel fully unmounts (showFreeBots flips to false), trigger the run.
+    // Using double requestAnimationFrame so Blockly has had its own paint cycle to
+    // finalise block layout before shouldRunBot / generateCode execute.
+    React.useEffect(() => {
+        if (!showFreeBots && pendingAutoRun.current) {
+            pendingAutoRun.current = false;
+            // Skip if a bot is already running
+            if (run_panel.is_running) return;
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    run_panel.onRunButtonClick();
+                });
+            });
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [showFreeBots]);
+
+    /** Called by FreeBotsSidePanel once XML is loaded. */
+    const handleBotLoadDone = useCallback((shouldRun: boolean) => {
+        if (shouldRun) {
+            pendingAutoRun.current = true;
+        }
+        setShowFreeBots(false); // unmount panel → triggers the useEffect above
+    }, []);
 
     return (
         <>
@@ -344,14 +347,14 @@ const BotBuilder = observer(() => {
                     <WorkspaceWrapper />
                 </div>
 
-                {/* Free Bots toggle button */}
-                {active_tab === 1 && (
+                {/* Free Bots toggle button — hidden while panel is open to avoid overlap with run drawer */}
+                {active_tab === 1 && !showFreeBots && (
                     <button
-                        onClick={() => setShowFreeBots(v => !v)}
+                        onClick={() => setShowFreeBots(true)}
                         title='Free Bots Library'
                         style={{
-                            position: 'absolute', top: '8px', right: showFreeBots ? '308px' : '8px',
-                            zIndex: 25, background: showFreeBots ? '#4f46e5' : 'rgba(99,102,241,0.88)',
+                            position: 'absolute', top: '8px', right: '8px',
+                            zIndex: 25, background: 'rgba(99,102,241,0.88)',
                             border: '1.5px solid rgba(129,140,248,0.5)', borderRadius: '8px',
                             color: '#fff', fontSize: '12px', fontWeight: 700, padding: '7px 13px',
                             cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 10px rgba(0,0,0,0.4)',
@@ -364,7 +367,10 @@ const BotBuilder = observer(() => {
 
                 {/* Free Bots side panel */}
                 {active_tab === 1 && showFreeBots && (
-                    <FreeBotsSidePanel onClose={() => setShowFreeBots(false)} />
+                    <FreeBotsSidePanel
+                        onClose={() => setShowFreeBots(false)}
+                        onLoadDone={handleBotLoadDone}
+                    />
                 )}
             </div>
             {active_tab === 1 && <BotBuilderTourHandler is_mobile={!isDesktop} />}
