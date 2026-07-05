@@ -59,6 +59,28 @@
     }
   }
 
+  /* Spinning clock-hand accent in the center of the AI orb — reinforces the
+     "always scanning / always live" feel of the assistant. */
+  &__clock-hand {
+    position: absolute;
+    width: 2px;
+    height: 16px;
+    left: 50%;
+    top: 50%;
+    background: linear-gradient(to top, rgba(255,255,255,0.95), rgba(255,255,255,0));
+    border-radius: 2px;
+    transform-origin: 50% 100%;
+    transform: translate(-50%, -100%) rotate(0deg);
+    animation: aiClockSpin 2.4s linear infinite;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  @keyframes aiClockSpin {
+    from { transform: translate(-50%, -100%) rotate(0deg); }
+    to   { transform: translate(-50%, -100%) rotate(360deg); }
+  }
+
   &__overlay {
     position: fixed;
     inset: 0;

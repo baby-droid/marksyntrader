@@ -14,10 +14,14 @@ export type ExecutionSpeed = 'normal' | 'crazy' | 'turbo';
 const STORAGE_KEY = 'execution_speed';
 
 // Inter-trade delay (ms) applied by the engine between purchases per speed.
+// Crazy and Turbo both fire with zero artificial delay — any positive value
+// (even 1ms) adds a real setTimeout/event-loop tick per trade, which is not
+// "no delay". Turbo additionally skips proposal pre-checks where possible
+// (see Purchase.js) so it re-enters purchase the instant the engine allows it.
 export const SPEED_DELAY_MS: Record<ExecutionSpeed, number> = {
     normal: 1000,
-    crazy: 1, // ~0.001s between re-entries
-    turbo: 0, // no artificial delay — fastest the API allows
+    crazy: 0, // no artificial delay — fires the instant the engine is ready
+    turbo: 0, // no artificial delay — fastest re-entry the API allows
 };
 
 const listeners = new Set<(speed: ExecutionSpeed) => void>();

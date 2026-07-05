@@ -149,11 +149,17 @@
     gap: 1.8rem;
   }
 
-  /* ─── Card ─── */
+  /* ─── Card ───
+     Each card carries a per-bot `--accent` custom property (set inline from
+     badgeColor) so every card gets its own glow / border / icon-ring color
+     instead of the previous one-size-fits-all blue theme. */
   &__card {
+    --accent: #00c8ff;
     position: relative;
-    background: linear-gradient(135deg, rgba(10, 22, 50, 0.9) 0%, rgba(5, 12, 30, 0.95) 100%);
-    border: 1px solid rgba(0, 200, 255, 0.15);
+    background:
+      radial-gradient(120% 140% at 100% 0%, color-mix(in srgb, var(--accent) 14%, transparent) 0%, transparent 55%),
+      linear-gradient(135deg, rgba(10, 22, 50, 0.9) 0%, rgba(5, 12, 30, 0.95) 100%);
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
     border-radius: 1.6rem;
     padding: 2rem;
     display: flex;
@@ -164,8 +170,8 @@
     cursor: default;
 
     &:hover {
-      border-color: rgba(0, 200, 255, 0.4);
-      box-shadow: 0 0 30px rgba(0, 200, 255, 0.12), 0 8px 24px rgba(0,0,0,0.3);
+      border-color: color-mix(in srgb, var(--accent) 65%, transparent);
+      box-shadow: 0 0 32px color-mix(in srgb, var(--accent) 25%, transparent), 0 8px 24px rgba(0,0,0,0.3);
       transform: translateY(-3px);
     }
 
@@ -179,7 +185,19 @@
     position: absolute;
     top: 0; left: 0; right: 0;
     height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(0, 200, 255, 0.5), transparent);
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 70%, transparent), transparent);
+  }
+
+  &__card-icon-ring {
+    width: 5.2rem;
+    height: 5.2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 1.2rem;
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+    box-shadow: 0 0 22px color-mix(in srgb, var(--accent) 20%, transparent);
   }
 
   /* ─── Badge ─── */
@@ -276,7 +294,7 @@
   &__load-btn {
     width: 100%;
     padding: 1.2rem;
-    background: linear-gradient(135deg, #4C7DFF, #7b6cff);
+    background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #7b6cff));
     color: #fff;
     border: none;
     border-radius: 0.8rem;

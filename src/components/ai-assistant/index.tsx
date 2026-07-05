@@ -1,10 +1,10 @@
 // @ts-nocheck
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { reaction } from 'mobx';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { useStore } from '@/hooks/useStore';
 import { api_base } from '@/external/bot-skeleton';
 import { useDerivTrading } from '@/hooks/useDerivTrading';
-import { fromUsd, toUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import { buildKillerXml, KillerContract } from '@/utils/killer-bot';
 import './ai-assistant.scss';
 
@@ -14,10 +14,16 @@ import './ai-assistant.scss';
  * "Load & Run Bot" flow:
  *  1. Injects stake / martingale / TP / SL into the killer-bot XML and loads
  *     it into the Blockly workspace for display.
- *  2. Starts a direct-fire trading loop:
- *       proposal → buy → wait for settlement → martingale → repeat
- *     This runs continuously until the TP or SL threshold is hit or the user
- *     clicks "Stop Bot".
+ *  2. Flips the main Run panel into the "running" state (same signal the big
+ *     dashboard Run button uses) so the whole app reflects that a bot is live.
+ *  3. Starts a direct-fire trading loop, firing the very instant the previous
+ *     contract settles — no artificial delay:
+ *       buy (single round-trip) → wait for real settlement → martingale → repeat
+ *     This runs continuously until the TP or SL threshold is hit, or the user
+ *     clicks "Stop Bot" / the main Stop button.
+ *
+ * Stake / Take Profit / Stop Loss are plain USD — bot XML stakes/TP/SL are
+ * always USD, so the AI must never convert to/from a display currency here.
  *
  * No checkbox required — Load & Run always fires continuously.
  */
@@ -77,7 +83,15 @@ function momentumRun(prices: number[]): { dir: 1 | -1 | 0; run: number } {
 interface DigitFreq { symbol: string; label: string; group: string; pcts: number[]; ticks: number[]; prices: number[]; total: number; }
 interface Signal { symbol: string; label: string; group: string; type: ContractType; barrier?: number; confidence: number; ticks: number; note: string; autoDigit?: number; }
 
-function getTickCount(confidence: number, is1s: boolean): number { return confidence >= 75 ? 1 : is1s ? 2 : 3; }
+/**
+ * Rise/Fall and Matches/Differs must only ever use 1 or 2 ticks (never 3+).
+ * Over/Under/Even/Odd keep the wider 1-3 tick range since they aren't
+ * affected by the normalization request.
+ */
+function getTickCount(confidence: number, is1s: boolean, capAt2 = false): number {
+    if (capAt2) return confidence >= 75 ? 1 : 2;
+    return confidence >= 75 ? 1 : is1s ? 2 : 3;
+}
 
 function evaluateAutoMatches(freq: DigitFreq): Signal | null {
     const { pcts, ticks, label, symbol, group } = freq;
@@ -91,18 +105,18 @@ function evaluateAutoMatches(freq: DigitFreq): Signal | null {
     }
     if (bestMissing !== null) {
         const conf = clamp(60 + (longestAbsence - 12) * 2, 60, 90);
-        return { symbol, label, group, type: 'matches', barrier: bestMissing, confidence: conf, ticks: getTickCount(conf, is1s), autoDigit: bestMissing, note: `Digit ${bestMissing} absent ${longestAbsence} ticks.` };
+        return { symbol, label, group, type: 'matches', barrier: bestMissing, confidence: conf, ticks: getTickCount(conf, is1s, true), autoDigit: bestMissing, note: `Digit ${bestMissing} absent ${longestAbsence} ticks.` };
     }
     if (ticks.length >= 2 && ticks.slice(-2)[0] === ticks.slice(-2)[1]) {
         const d = ticks[ticks.length - 1];
         const conf = clamp(62 + pcts[d] * 1.5, 62, 88);
-        return { symbol, label, group, type: 'matches', barrier: d, confidence: conf, ticks: getTickCount(conf, is1s), autoDigit: d, note: `Double echo ${d}${d}.` };
+        return { symbol, label, group, type: 'matches', barrier: d, confidence: conf, ticks: getTickCount(conf, is1s, true), autoDigit: d, note: `Double echo ${d}${d}.` };
     }
     let bestD = -1; let bestPct = 0;
     for (let d = 0; d <= 9; d++) { if (pcts[d] > bestPct) { bestPct = pcts[d]; bestD = d; } }
     if (bestPct >= 13.5 && bestD >= 0) {
         const conf = clamp(55 + (bestPct - 13.5) * 6, 55, 92);
-        return { symbol, label, group, type: 'matches', barrier: bestD, confidence: conf, ticks: getTickCount(conf, is1s), autoDigit: bestD, note: `Digit ${bestD} at ${bestPct.toFixed(1)}%.` };
+        return { symbol, label, group, type: 'matches', barrier: bestD, confidence: conf, ticks: getTickCount(conf, is1s, true), autoDigit: bestD, note: `Digit ${bestD} at ${bestPct.toFixed(1)}%.` };
     }
     return null;
 }
@@ -115,13 +129,13 @@ function evaluateAutoDiffers(freq: DigitFreq): Signal | null {
         const last3 = ticks.slice(-3);
         if (last3[0] === last3[1] && last3[1] === last3[2]) {
             const d = last3[0]; const conf = 90;
-            return { symbol, label, group, type: 'differs', barrier: d, confidence: conf, ticks: getTickCount(conf, is1s), autoDigit: d, note: `Triple ${d}${d}${d} — exhaustion.` };
+            return { symbol, label, group, type: 'differs', barrier: d, confidence: conf, ticks: getTickCount(conf, is1s, true), autoDigit: d, note: `Triple ${d}${d}${d} — exhaustion.` };
         }
     }
     if (ticks.length >= 2 && ticks.slice(-2)[0] === ticks.slice(-2)[1]) {
         const d = ticks[ticks.length - 1];
         const conf = clamp(82 + (10 - pcts[d]) * 1.5, 82, 96);
-        return { symbol, label, group, type: 'differs', barrier: d, confidence: conf, ticks: getTickCount(conf, is1s), autoDigit: d, note: `Double ${d}${d} — differs high.` };
+        return { symbol, label, group, type: 'differs', barrier: d, confidence: conf, ticks: getTickCount(conf, is1s, true), autoDigit: d, note: `Double ${d}${d} — differs high.` };
     }
     const last10 = ticks.slice(-10); const freqMap = new Array(10).fill(0);
     last10.forEach(t => freqMap[t]++);
@@ -129,13 +143,13 @@ function evaluateAutoDiffers(freq: DigitFreq): Signal | null {
     freqMap.forEach((c, d) => { if (c > domCount) { domCount = c; domDigit = d; } });
     if (domCount >= 4 && domDigit >= 0) {
         const conf = clamp(78 + (domCount - 4) * 3, 78, 94);
-        return { symbol, label, group, type: 'differs', barrier: domDigit, confidence: conf, ticks: getTickCount(conf, is1s), autoDigit: domDigit, note: `Digit ${domDigit} dominant ${domCount}/10.` };
+        return { symbol, label, group, type: 'differs', barrier: domDigit, confidence: conf, ticks: getTickCount(conf, is1s, true), autoDigit: domDigit, note: `Digit ${domDigit} dominant ${domCount}/10.` };
     }
     let minD = -1; let minPct = 100;
     for (let d = 0; d <= 9; d++) { if (pcts[d] < minPct) { minPct = pcts[d]; minD = d; } }
     if (minPct <= 7.5 && minD >= 0) {
         const conf = clamp(80 + (7.5 - minPct) * 4, 80, 96);
-        return { symbol, label, group, type: 'differs', barrier: minD, confidence: conf, ticks: getTickCount(conf, is1s), autoDigit: minD, note: `Digit ${minD} at ${minPct.toFixed(1)}%.` };
+        return { symbol, label, group, type: 'differs', barrier: minD, confidence: conf, ticks: getTickCount(conf, is1s, true), autoDigit: minD, note: `Digit ${minD} at ${minPct.toFixed(1)}%.` };
     }
     return null;
 }
@@ -171,7 +185,7 @@ function evaluate(freq: DigitFreq, type: ContractType, predictionDigit: number):
         if (Math.max(...pcts) > 14) return null;
         const QUALITY: Record<string, number> = { '1HZ10V': 6, '1HZ25V': 6, '1HZ50V': 4, R_10: 4, R_25: 3, JD10: 5 };
         const conf = clamp(58 + (run - 3) * 7 + (QUALITY[symbol] ?? 0) * 3, 58, 92);
-        return { symbol, label, group, type, confidence: conf, ticks: getTickCount(conf, is1s), note: `${run} consecutive ${type === 'rise' ? 'up' : 'down'} ticks.` };
+        return { symbol, label, group, type, confidence: conf, ticks: getTickCount(conf, is1s, true), note: `${run} consecutive ${type === 'rise' ? 'up' : 'down'} ticks.` };
     }
     const evenPct = [0, 2, 4, 6, 8].reduce((s, d) => s + pcts[d], 0);
     if (type === 'even') {
@@ -554,7 +568,10 @@ const AIAssistant: React.FC = () => {
                 onPointerCancel={onDragPointerUp}
                 title='AI Market Scanner (drag to move)'
             >
-                <div className='ai-assistant__sphere'><span>{botRunning ? '⏸' : 'AI'}</span></div>
+                <div className='ai-assistant__sphere'>
+                    <span className='ai-assistant__clock-hand' />
+                    <span>{botRunning ? '⏸' : 'AI'}</span>
+                </div>
             </button>
 
             {isOpen && (

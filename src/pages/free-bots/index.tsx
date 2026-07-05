@@ -208,6 +208,18 @@ const FreeBots = observer(() => {
     }
   }, [store]);
 
+  /** Auto-press the main Run button once the bot's XML is loaded into the workspace. */
+  const autoRun = useCallback(async () => {
+    const run_panel: any = store?.run_panel;
+    if (!run_panel?.onRunButtonClick) return;
+    if (run_panel.is_running) return; // already running — don't double-fire
+    try {
+      await run_panel.onRunButtonClick();
+    } catch (err) {
+      console.error('Auto-run bot error', err);
+    }
+  }, [store]);
+
   const handleLoad = useCallback(async (bot: typeof FREE_BOTS[0]) => {
     setLoadingId(bot.id);
     try {
@@ -221,25 +233,37 @@ const FreeBots = observer(() => {
       store?.dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING);
       store?.run_panel?.toggleDrawer?.(true);
 
-      if (!(await loadXmlIntoWorkspace(bot, xml))) {
-        let attempts = 0;
-        const poll = setInterval(async () => {
-          attempts++;
-          if ((await loadXmlIntoWorkspace(bot, xml)) || attempts >= 50) {
-            clearInterval(poll);
-          }
-        }, 100);
+      let loaded = await loadXmlIntoWorkspace(bot, xml);
+      if (!loaded) {
+        loaded = await new Promise<boolean>(resolve => {
+          let attempts = 0;
+          const poll = setInterval(async () => {
+            attempts++;
+            const ok = await loadXmlIntoWorkspace(bot, xml);
+            if (ok || attempts >= 50) {
+              clearInterval(poll);
+              resolve(ok);
+            }
+          }, 100);
+        });
       }
 
       setLoadedId(bot.id);
       setTimeout(() => setLoadedId(null), 4000);
+
+      // Auto-enable & press the main Run button — the bot then trades
+      // continuously (with its own martingale/TP/SL logic) until the user
+      // hits Stop, exactly like manually clicking Run after loading a bot.
+      if (loaded) {
+        setTimeout(() => autoRun(), 400);
+      }
     } catch (e) {
       console.error('Load bot error', e);
       store?.dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING);
     } finally {
       setLoadingId(null);
     }
-  }, [store, loadXmlIntoWorkspace]);
+  }, [store, loadXmlIntoWorkspace, autoRun]);
 
   const handleViewCircles = useCallback(() => {
     store?.dashboard?.setActiveTab?.(DBOT_TABS.DCIRCLES);
@@ -284,10 +308,16 @@ const FreeBots = observer(() => {
 
       <div className='free-bots__grid'>
         {filtered.map(bot => (
-          <div key={bot.id} className={`free-bots__card ${loadedId === bot.id ? 'free-bots__card--loaded' : ''}`}>
+          <div
+            key={bot.id}
+            className={`free-bots__card ${loadedId === bot.id ? 'free-bots__card--loaded' : ''}`}
+            style={{ '--accent': bot.badgeColor } as React.CSSProperties}
+          >
             <div className='free-bots__card-glow' />
+            <div className='free-bots__card-icon-ring'>
+              <div className='free-bots__card-icon'>{bot.icon}</div>
+            </div>
             <div className='free-bots__badge' style={{ background: bot.badgeColor }}>{bot.badge}</div>
-            <div className='free-bots__card-icon'>{bot.icon}</div>
             <div className='free-bots__card-body'>
               <span className='free-bots__category-tag'>{bot.category}</span>
               <h3 className='free-bots__bot-name'>{bot.name}</h3>
@@ -321,9 +351,9 @@ const FreeBots = observer(() => {
               {loadingId === bot.id ? (
                 <span className='free-bots__load-spinner'>⏳ Loading...</span>
               ) : loadedId === bot.id ? (
-                <span>✅ Loaded! Opening Bot Builder...</span>
+                <span>🚀 Loaded — Running...</span>
               ) : (
-                <>📥 Load Bot in Builder</>
+                <>▶ Load &amp; Run Bot</>
               )}
             </button>
           </div>

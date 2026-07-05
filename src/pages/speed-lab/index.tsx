@@ -9,41 +9,41 @@ import { api_base } from '@/external/bot-skeleton';
 import './speed-lab.scss';
 
 /**
- * Speed Lab — three execution tiers modelled on the TradeEngine pattern:
+ * Speed Lab — three execution tiers.
  *
- *  NORMAL — sequential, await each contract, 500 ms cooldown.
- *  CRAZY  — queue-based, no cooldown, preloads proposal before each buy.
- *  TURBO  — queue-based, no cooldown, preloads + pipelines next proposal
- *            while the current contract settles (fastest possible re-entry).
+ * All three fire a single direct "buy with parameters" call (one WS round
+ * trip, no separate proposal step — this is the same reliable shape used by
+ * useDerivTrading's buyContract / Bot Builder's Run button).
+ *
+ *  NORMAL — sequential: fire, await the result, then a 500 ms cooldown.
+ *  CRAZY  — fire-and-forget: dispatch the next buy immediately without
+ *            waiting for the previous one's response (up to 4 in flight).
+ *  TURBO  — fire-and-forget with no in-flight cap and no pacing at all —
+ *            fires as fast as the JS event loop allows (super-human speed,
+ *            zero delay between contracts).
  */
 
 const SPEED_MODES = {
     normal: {
         name: 'NORMAL',
         delay: 500,
-        preload: false,
-        queue: true,
-        pipeline: false,
+        maxInFlight: 1,
         label: '🐢 Normal',
         desc: 'Sequential — wait for result, 500 ms cooldown',
     },
     crazy: {
         name: 'CRAZY',
         delay: 0,
-        preload: true,
-        queue: true,
-        pipeline: false,
+        maxInFlight: 4,
         label: '🔥 Crazy',
-        desc: 'Queue + preload proposal — zero cooldown, fastest re-entry',
+        desc: 'Fire-and-forget — no cooldown, multiple contracts in flight',
     },
     turbo: {
         name: 'TURBO',
         delay: 0,
-        preload: true,
-        queue: true,
-        pipeline: true,
+        maxInFlight: Infinity,
         label: '⚡ Turbo',
-        desc: 'Queue + preload + pipeline next proposal while settling',
+        desc: 'Zero delay, unlimited in-flight — super-human fire rate',
     },
 } as const;
 
@@ -59,119 +59,83 @@ interface TradeSignal {
 }
 
 /**
- * TradeEngine — manages the buy queue with proposal pre-caching.
+ * TradeEngine — dispatches buys as fast as the selected mode allows.
+ * NORMAL serializes them; CRAZY/TURBO fire concurrently (fire-and-forget)
+ * so there is no artificial delay switching to the next contract.
  */
 class TradeEngine {
-    private mode = SPEED_MODES.normal;
-    private busy = false;
+    private mode: typeof SPEED_MODES[SpeedMode] = SPEED_MODES.normal;
     private queue: TradeSignal[] = [];
-    private cachedProposal: { id: string; price: number } | null = null;
+    private inFlight = 0;
     private active = false;
     fireCount = 0;
     onFire?: (n: number, ms: number) => void;
     onError?: (msg: string) => void;
 
     setMode(m: typeof SPEED_MODES[SpeedMode]) { this.mode = m; }
-    start() { this.active = true; this.fireCount = 0; }
-    stop() { this.active = false; this.queue = []; this.cachedProposal = null; this.busy = false; }
+    start() { this.active = true; this.fireCount = 0; this.inFlight = 0; this.queue = []; }
+    stop() { this.active = false; this.queue = []; this.inFlight = 0; }
+    get queueLength() { return this.queue.length; }
 
-    /** Preload a Deriv proposal so the buy step is instant. */
-    private async preloadProposal(sig: TradeSignal): Promise<{ id: string; price: number } | null> {
-        try {
-            const res = await api_base.api.send({
-                proposal: 1,
-                amount: sig.stake,
-                basis: 'stake',
-                contract_type: sig.contract_type,
-                currency: sig.currency,
-                duration: sig.duration,
-                duration_unit: 't',
-                symbol: sig.symbol,
-                ...(sig.barrier !== undefined ? { barrier: sig.barrier } : {}),
-            });
-            if (res?.proposal?.id) return { id: res.proposal.id, price: sig.stake };
-        } catch { /* fall through */ }
-        return null;
-    }
-
-    /** Execute one trade: use cached proposal or fall back to inline params. */
-    private async executeSingle(sig: TradeSignal): Promise<boolean> {
+    /** Fire one trade with a single direct buy call — no proposal round trip. */
+    private async executeSingle(sig: TradeSignal): Promise<void> {
         const t0 = performance.now();
-
-        // Preload if mode requires it and we don't have a cached one
-        if (this.mode.preload && !this.cachedProposal) {
-            this.cachedProposal = await this.preloadProposal(sig);
-        }
-
-        let result: any;
+        this.inFlight++;
         try {
-            if (this.cachedProposal) {
-                result = await api_base.api.send({ buy: this.cachedProposal.id, price: this.cachedProposal.price });
-                this.cachedProposal = null; // consumed
-            } else {
-                result = await api_base.api.send({
-                    buy: '1',
-                    price: sig.stake,
-                    parameters: {
-                        amount: sig.stake,
-                        basis: 'stake',
-                        contract_type: sig.contract_type,
-                        currency: sig.currency,
-                        duration: sig.duration,
-                        duration_unit: 't',
-                        symbol: sig.symbol,
-                        ...(sig.barrier !== undefined ? { barrier: sig.barrier } : {}),
-                    },
-                });
+            const result = await api_base.api.send({
+                buy: '1',
+                price: sig.stake,
+                parameters: {
+                    amount: sig.stake,
+                    basis: 'stake',
+                    contract_type: sig.contract_type,
+                    currency: sig.currency,
+                    duration: sig.duration,
+                    duration_unit: 't',
+                    symbol: sig.symbol,
+                    ...(sig.barrier !== undefined ? { barrier: sig.barrier } : {}),
+                },
+            });
+
+            if (result?.buy?.contract_id) {
+                const ms = Math.round(performance.now() - t0);
+                this.fireCount++;
+                this.onFire?.(this.fireCount, ms);
+            } else if (result?.error) {
+                this.onError?.(`API: ${result.error.message}`);
             }
         } catch (e: any) {
             const msg = e?.error?.message || e?.message || (typeof e === 'string' ? e : 'Unknown error');
             this.onError?.(`Buy error: ${msg}`);
-            return false;
+        } finally {
+            this.inFlight--;
+            if (this.active) this.drainQueue();
         }
-
-        if (result?.buy?.contract_id) {
-            const ms = Math.round(performance.now() - t0);
-            this.fireCount++;
-            this.onFire?.(this.fireCount, ms);
-            return true;
-        }
-        if (result?.error) {
-            this.onError?.(`API: ${result.error.message}`);
-        }
-        return false;
     }
 
-    /** Process the queue until empty or stopped. */
-    async processQueue(): Promise<void> {
-        while (this.queue.length > 0 && this.active) {
+    /** Drain the queue respecting the mode's max concurrent in-flight buys. */
+    private drainQueue(): void {
+        while (this.active && this.queue.length > 0 && this.inFlight < this.mode.maxInFlight) {
             const sig = this.queue.shift()!;
-            this.busy = true;
-
-            await this.executeSingle(sig);
-
-            // Pipeline: preload next while we (potentially) wait
-            if (this.mode.pipeline && this.queue.length > 0 && !this.cachedProposal) {
-                this.preloadProposal(this.queue[0]).then(p => {
-                    if (!this.cachedProposal && p) this.cachedProposal = p;
+            if (this.mode.name === 'NORMAL') {
+                // Sequential: fire, then wait for it (and cooldown) before the next drain.
+                this.executeSingle(sig).then(() => {
+                    if (this.mode.delay > 0 && this.active) {
+                        setTimeout(() => this.drainQueue(), this.mode.delay);
+                    }
                 });
+                break; // wait for this one to finish (maxInFlight = 1 enforces this too)
             }
-
-            if (this.mode.delay > 0) {
-                await new Promise(r => setTimeout(r, this.mode.delay));
-            }
-
-            this.busy = false;
+            // CRAZY / TURBO: fire-and-forget, immediately try to fire the next one too.
+            this.executeSingle(sig);
         }
     }
 
-    /** Add a trade to the queue and start processing if idle. */
+    /** Add a trade to the queue and dispatch immediately if capacity allows. */
     addTrade(sig: TradeSignal): void {
         if (!this.active) return;
         this.queue.push(sig);
-        if (!this.busy) {
-            this.processQueue();
-        }
+        this.drainQueue();
     }
 }
 
@@ -298,23 +262,26 @@ const SpeedLab = observer(() => {
     }, [speedMode, contractType, subscribeBalance, logEntry]);
 
     /**
-     * Main run loop — feeds the TradeEngine queue while running.
-     * Engine handles proposal preloading (CRAZY) + pipeline (TURBO).
+     * Main run loop — feeds the TradeEngine while running.
+     * NORMAL fires one at a time (sequential + cooldown). CRAZY/TURBO fire
+     * concurrently with no artificial pacing — the only throttle is the
+     * mode's maxInFlight cap (4 for CRAZY, unlimited for TURBO), so trades
+     * fire back-to-back at super-human speed with zero delay.
      */
     const runLoop = useCallback(async () => {
         const engine = engineRef.current;
 
-        // For CRAZY/TURBO, keep feeding the queue (engine processes sequentially)
-        // For NORMAL, the queue also handles one-at-a-time with a delay
         while (runRef.current && checkLimits()) {
             engine.addTrade(buildSignal());
 
-            // Pace the loop: for NORMAL wait for queue to drain before adding more
-            // For CRAZY/TURBO we can stay slightly ahead (max 3 queued)
-            const maxQueue = speedMode === 'normal' ? 1 : 3;
-            if ((engine as any).queue.length >= maxQueue) {
-                await new Promise(r => setTimeout(r, speedMode === 'normal' ? 200 : 50));
+            if (speedMode === 'normal') {
+                // Sequential mode: wait for the in-flight trade to drain before adding more.
+                while (runRef.current && engine.queueLength > 0) {
+                    await new Promise(r => setTimeout(r, 20));
+                }
             }
+            // CRAZY/TURBO: no delay — loop immediately re-fires the next signal.
+            await new Promise(r => setTimeout(r, 0));
         }
 
         runRef.current = false;
