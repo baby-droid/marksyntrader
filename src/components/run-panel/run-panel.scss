@@ -40,22 +40,27 @@
 
         flex-direction: column;
         height: auto;
-        min-height: 5.2rem;
-        padding: 0.6rem 0.2rem;
+        min-height: 7rem;
+        padding: 0.8rem 0.4rem;
 
         &-title {
-            min-height: 1.6rem;
-            margin-bottom: 2px;
-            font-size: 1.1rem;
+            min-height: 1.8rem;
+            margin-bottom: 4px;
+            font-size: 1.2rem;
+            text-align: center;
+            word-break: break-word;
 
             @include typeface(--small-center-bold-black, none);
         }
 
         &-content {
             height: auto;
-            min-height: 1.6rem;
-            margin-bottom: 2px;
-            font-size: 1.1rem;
+            min-height: 2rem;
+            margin-bottom: 4px;
+            font-size: 1.3rem;
+            font-weight: 700;
+            text-align: center;
+            word-break: break-all;
 
             @include typeface(--small-center-normal-black, none);
         }

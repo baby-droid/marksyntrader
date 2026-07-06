@@ -67,6 +67,124 @@ const NEEDS_BARRIER: Set<ContractType> = new Set(['over', 'under', 'matches', 'd
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 
+// The user's "AHMED SYN EVEN ODD MARKET KILLER 1.2" bot XML — used as the
+// template for all AI-driven trades loaded into Bot Builder for display.
+const KILLER_XML_TEMPLATE = `<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
+  <variables>
+    <variable id="nyrtB]!3ObqjLVHHuJ|5">stake</variable>
+    <variable id="rKwHUdT+nn0j5KEZX:TY">initial stake </variable>
+    <variable id="B\`@Q*C)!foy!~/E)8n%v">text</variable>
+    <variable id="}VK*]CMXvcC-5_Y\`dp6h">TEXT2</variable>
+    <variable id="_fr,aLuF-W2EJ2?_;-|K">totalprofit</variable>
+    <variable id="1lyZu%^sRY)L\`ABj60;#">totalloss</variable>
+    <variable id=",;WqBIU[7qCnbcVf.lZG">Martingale</variable>
+  </variables>
+  <block type="trade_definition" id="W/vIFq5Tjx;8,?(c_4_$" deletable="false" x="0" y="60">
+    <statement name="TRADE_OPTIONS">
+      <block type="trade_definition_market" id="ihzWeIz3sG*V/aOV*8x-" deletable="false" movable="false">
+        <field name="MARKET_LIST">synthetic_index</field>
+        <field name="SUBMARKET_LIST">random_index</field>
+        <field name="SYMBOL_LIST">1HZ25V</field>
+        <next>
+          <block type="trade_definition_tradetype" id="QPUTUl%YtMt2G,jl*8MR" deletable="false" movable="false">
+            <field name="TRADETYPECAT_LIST">digits</field>
+            <field name="TRADETYPE_LIST">evenodd</field>
+            <next>
+              <block type="trade_definition_contracttype" id="cjfQMi[k#(TGQOkfBUuw" deletable="false" movable="false">
+                <field name="TYPE_LIST">DIGITEVEN</field>
+                <next>
+                  <block type="trade_definition_candleinterval" id="V!zDYd|8KTbT3LVZlm=M" deletable="false" movable="false">
+                    <field name="CANDLEINTERVAL_LIST">60</field>
+                    <next>
+                      <block type="trade_definition_restartbuysell" id=",PfP7F=;f/=2-(E5xabO" deletable="false" movable="false">
+                        <field name="TIME_MACHINE_ENABLED">FALSE</field>
+                        <next>
+                          <block type="trade_definition_restartonerror" id="1bI(g?Os8NZ|p.R@e/;y" deletable="false" movable="false">
+                            <field name="RESTARTONERROR">TRUE</field>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="INITIALIZATION">
+      <block type="variables_set" id="M$F.mTtW#X2XN)80\`x~_">
+        <field name="VAR" id="nyrtB]!3ObqjLVHHuJ|5">stake</field>
+        <value name="VALUE">
+          <block type="math_number" id="~3z)tZ?L(v2Y5A*HguH8">
+            <field name="NUM">0.5</field>
+          </block>
+        </value>
+        <next>
+          <block type="variables_set" id="~+ip,J;!6xMB:7Bedl6i">
+            <field name="VAR" id="rKwHUdT+nn0j5KEZX:TY">initial stake </field>
+            <value name="VALUE">
+              <block type="math_number" id="TakR.Wu!Ep9Jx8+YV)DE">
+                <field name="NUM">0.5</field>
+              </block>
+            </value>
+            <next>
+              <block type="variables_set" id="NNYt)tQ9be_2bK!tyKGz">
+                <field name="VAR" id="_fr,aLuF-W2EJ2?_;-|K">totalprofit</field>
+                <value name="VALUE">
+                  <block type="math_number" id="fr,Wqt}|b$~Pf_32ST2@">
+                    <field name="NUM">2</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="variables_set" id="]RSW9QzCfx8SQIpk;uik">
+                    <field name="VAR" id="1lyZu%^sRY)L\`ABj60;#">totalloss</field>
+                    <value name="VALUE">
+                      <block type="math_number" id="u!7Iup%H],~Imh(7QVK3">
+                        <field name="NUM">1000</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="jRUznD=LhH_a?d1#l6kc">
+                        <field name="VAR" id=",;WqBIU[7qCnbcVf.lZG">Martingale</field>
+                        <value name="VALUE">
+                          <block type="math_number" id="7==qSBB)+Y3)({R(i0j_">
+                            <field name="NUM">2.2</field>
+                          </block>
+                        </value>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="SUBMARKET">
+      <block type="trade_definition_tradeoptions" id="~6pnSPeJb8_JccG+Bx)K">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="false"></mutation>
+        <field name="DURATIONTYPE_LIST">t</field>
+        <value name="DURATION">
+          <shadow type="math_number_positive" id="wIL=dY*+*#]%l:_da)C_">
+            <field name="NUM">1</field>
+          </shadow>
+        </value>
+        <value name="AMOUNT">
+          <shadow type="math_number_positive" id="r|i#Pcy1q.H,*G_![h3*">
+            <field name="NUM">0.35</field>
+          </shadow>
+          <block type="variables_get" id="qYGQ:=sT8L6DCO3=0BO+">
+            <field name="VAR" id="nyrtB]!3ObqjLVHHuJ|5">stake</field>
+          </block>
+        </value>
+      </block>
+    </statement>
+  </block>
+</xml>`;
+
 function momentumRun(prices: number[]): { dir: 1 | -1 | 0; run: number } {
     if (prices.length < 3) return { dir: 0, run: 0 };
     let dir: 1 | -1 | 0 = 0; let run = 0;
@@ -246,6 +364,18 @@ const AIAssistant: React.FC = () => {
     const autoRestartRef = useRef(false);
     useEffect(() => { autoRestartRef.current = autoRestart; }, [autoRestart]);
 
+    // AI-local speed mode (independent of global FloatingRunButton speed)
+    const [aiMode, setAiMode] = useState<'normal' | 'crazy' | 'turbo'>('normal');
+    const aiModeRef = useRef<'normal' | 'crazy' | 'turbo'>('normal');
+    useEffect(() => { aiModeRef.current = aiMode; }, [aiMode]);
+
+    // Live digit match — when ON and liveDigit === barrier, fires 1 trade automatically
+    const [liveDigitTrigger, setLiveDigitTrigger] = useState(false);
+
+    // Track consecutive profitable wins (for Fire Now = 3 wins)
+    const profitWinsRef = useRef(0);
+    const maxWinsRef = useRef<number | null>(null);
+
     // T007: antenna on/off toggle + live last-digit readout for the currently tracked market
     const [antennaOn, setAntennaOn] = useState(true);
     const [liveDigit, setLiveDigit] = useState<number | null>(null);
@@ -260,6 +390,17 @@ const AIAssistant: React.FC = () => {
     const sessionProfitRef = useRef(0);
 
     useEffect(() => { stakeRef.current = stake; }, [stake]);
+
+    // Live-digit auto-trigger: fires a single trade when the live digit matches the barrier
+    useEffect(() => {
+        if (!liveDigitTrigger || botRunning || !best || liveDigit === null) return;
+        const barrier = best.autoDigit !== undefined ? best.autoDigit : best.barrier;
+        if (barrier !== undefined && liveDigit === barrier) {
+            addLog(`⚡ Live digit ${liveDigit} matched barrier ${barrier} — auto-firing 1 trade`);
+            loadAndRunRef.current?.(best, 1);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [liveDigit]);
 
     // Antenna: live last-digit stream for whichever symbol the AI is currently tracking (best signal, or first scan target)
     useEffect(() => {
@@ -419,11 +560,28 @@ const AIAssistant: React.FC = () => {
     // of TP/SL. "Load & Run Bot" leaves this unset and runs until TP/SL/user-stop.
     const maxRunsRef = useRef<number | null>(null);
 
-    const loadAndRun = useCallback(async (sig?: Signal, maxRuns?: number) => {
+    /** Try silently loading the killer XML into the Blockly workspace (display only, does NOT start the engine). */
+    const tryLoadXmlToWorkspace = useCallback((xmlString: string) => {
+        try {
+            const B = (window as any).Blockly;
+            if (!B) return;
+            const ws = B.getMainWorkspace?.() ?? B.mainWorkspace;
+            if (!ws) return;
+            const dom = B.utils?.xml?.textToDom
+                ? B.utils.xml.textToDom(xmlString)
+                : B.Xml?.textToDom?.(xmlString);
+            if (!dom) return;
+            ws.clear();
+            B.Xml.domToWorkspace(dom, ws);
+        } catch { /* workspace not ready — silently skip */ }
+    }, []);
+
+    const loadAndRun = useCallback(async (sig?: Signal, maxWins?: number) => {
         // Use best scanned signal, or instant-fire with the default if none available
         const signal = sig ?? best ?? DEFAULT_SIGNAL;
         if (botRunning) { stopBot(); return; }
-        maxRunsRef.current = maxRuns ?? null;
+        maxRunsRef.current = maxWins != null ? maxWins * 10 : null; // safety cap on trade count
+        maxWinsRef.current = maxWins ?? null;
 
         // ─── Guard: refuse to fire without a live, authenticated trading connection ───
         // useDerivTrade now rides the SAME connection the user is already logged in
@@ -454,13 +612,30 @@ const AIAssistant: React.FC = () => {
         // Reset session state
         sessionProfitRef.current = 0;
         tradeCountRef.current = 0;
+        profitWinsRef.current = 0;
         stakeRef.current = stake;
         setSessionProfit(0);
         setTradeCount(0);
         setBotLog([]);
         setBotRunning(true);
         runRef.current = true;
-        setIsOpen(false);
+        // DO NOT close the panel — keep it open so the user can see logs and stop the bot
+
+        // Load the XML strategy to Bot Builder for display (trading still runs via direct-fire loop)
+        try {
+            const { buildKillerXml: bkx } = await import('@/utils/killer-bot');
+            const xmlStr = bkx(KILLER_XML_TEMPLATE, {
+                symbol: signal.symbol,
+                contract: signal.type,
+                barrier: signal.autoDigit !== undefined ? signal.autoDigit : (signal.barrier ?? predictionDigit),
+                ticks: signal.ticks,
+                stake,
+                martingale,
+                takeProfit,
+                stopLoss,
+            });
+            tryLoadXmlToWorkspace(xmlStr);
+        } catch { /* ignore build/load errors */ }
 
         // NOTE: We do NOT call run_panel?.setIsRunning?.(true) here because that
         // activates the Blockly bot engine which enforces its own buy limits and
@@ -508,10 +683,22 @@ const AIAssistant: React.FC = () => {
                 const tc = tradeCountRef.current;
                 setTradeCount(tc);
                 setSessionProfit(sp);
-                const won = profit >= 0;
+                const won = profit > 0;
                 addLog(`${won ? '✅' : '❌'} #${tc} ${won ? 'WIN' : 'LOSS'} ${fmtProfit(profit)} | Session: ${fmtProfit(sp)} | Stake: ${fmtVal(stakeRef.current)}`);
                 // Martingale: all in USD
                 stakeRef.current = won ? stake : Math.max(0.35, +(stakeRef.current * martingale).toFixed(2));
+
+                // Fire Now: stop after N profitable wins
+                if (won && maxWinsRef.current != null) {
+                    profitWinsRef.current++;
+                    if (profitWinsRef.current >= maxWinsRef.current) {
+                        addLog(`🏁 Fire Now: ${profitWinsRef.current} win${profitWinsRef.current > 1 ? 's' : ''} hit! Session P/L: ${fmtProfit(sp)}`);
+                        runRef.current = false;
+                        setBotRunning(false);
+                        return;
+                    }
+                }
+
                 if (sp >= takeProfit) {
                     addLog(`🏆 TAKE PROFIT hit! Session P/L: ${fmtProfit(sp)}`);
                     runRef.current = false;
@@ -530,19 +717,14 @@ const AIAssistant: React.FC = () => {
                         setTimeout(() => { if (autoRestartRef.current) loadAndRunRef.current?.(); }, 2000);
                     }
                 }
-                // Fire Now: exactly N trades then hard-stop, regardless of TP/SL.
-                if (maxRunsRef.current != null && tc >= maxRunsRef.current) {
-                    addLog(`🏁 Fire Now complete — ${tc} trade${tc === 1 ? '' : 's'} run. Session P/L: ${fmtProfit(sp)}`);
-                    runRef.current = false;
-                    setBotRunning(false);
-                }
             };
 
-            // In-flight counter used by Crazy mode to pipeline several purchases
-            // at once without waiting for each one to settle first.
-            // Raised to 12 for maximum speed-boost beyond 100%.
+            // Speed mode controls concurrency:
+            // Normal  = sequential (await settlement)
+            // Crazy   = 200 in-flight simultaneously (200% speed — pipeline across contracts)
+            // Turbo   = unlimited fire-and-forget (1000% — zero cap, zero delay)
             let inFlight = 0;
-            const CRAZY_MAX_IN_FLIGHT = 12;
+            const CRAZY_MAX_IN_FLIGHT = 200; // 200% speed — 200 simultaneous contracts
 
             const fireAndForget = (curStake: number) => {
                 inFlight++;
@@ -556,35 +738,25 @@ const AIAssistant: React.FC = () => {
                 });
             };
 
-            let firedCount = 0;
             while (runRef.current) {
-                // Fire Now + Crazy/Turbo: since these don't await settlement, guard
-                // against firing more trades than the requested cap before results
-                // come back.
-                if (maxRunsRef.current != null && firedCount >= maxRunsRef.current) break;
                 const curStake = stakeRef.current;
-                const speed = getExecutionSpeed();
+                // Read AI-local speed mode (not the global FloatingRunButton speed)
+                const speed = aiModeRef.current;
                 try {
                     if (speed === 'turbo') {
-                        // Turbo: super-human — fire the instant the loop re-enters,
-                        // zero waits, zero concurrency cap. Settlement is tracked
-                        // fully in the background.
-                        firedCount++;
+                        // Turbo = 1000% speed: zero-delay unlimited fire-and-forget
                         fireAndForget(curStake);
-                        // No await, no delay — immediately loop for the next fire.
+                        // No await, no delay — maximum API throughput
                     } else if (speed === 'crazy') {
-                        // Crazy: faster than Normal, no wait for settlement, but
-                        // pipelined with a small in-flight cap so it doesn't runaway
-                        // past Turbo or blow past Fire-Now caps before results land.
+                        // Crazy = 200% speed: pipeline 200 contracts simultaneously
                         if (inFlight >= CRAZY_MAX_IN_FLIGHT) {
                             await new Promise(r => setTimeout(r, 0));
                             continue;
                         }
-                        firedCount++;
                         fireAndForget(curStake);
+                        // No await — loop fires immediately for next contract
                     } else {
-                        // Normal: buy, wait for full settlement, then fire the next trade.
-                        firedCount++;
+                        // Normal: sequential — one contract at a time, full settlement
                         const profit = await buyAndSettle(curStake);
                         if (!runRef.current) break;
                         applyResult(profit);
@@ -599,7 +771,7 @@ const AIAssistant: React.FC = () => {
             runRef.current = false;
             setBotRunning(false);
         })();
-    }, [best, predictionDigit, stake, martingale, takeProfit, stopLoss, botRunning, addLog, stopBot]);
+    }, [best, predictionDigit, stake, martingale, takeProfit, stopLoss, botRunning, addLog, stopBot, tryLoadXmlToWorkspace]);
 
     // Keep ref in sync so auto-restart can call without stale closure
     useEffect(() => { loadAndRunRef.current = loadAndRun; }, [loadAndRun]);
@@ -782,42 +954,71 @@ const AIAssistant: React.FC = () => {
                             </div>
                         </div>
 
+                        {/* AI Speed Mode selector */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px', borderTop: '1px solid rgba(255,255,255,0.07)', background: 'rgba(0,0,0,0.04)' }}>
+                            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#888', marginRight: 4 }}>AI SPEED</span>
+                            {(['normal', 'crazy', 'turbo'] as const).map(m => (
+                                <button
+                                    key={m}
+                                    onClick={() => setAiMode(m)}
+                                    style={{
+                                        flex: 1, border: 'none', borderRadius: 8, padding: '4px 0', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer',
+                                        background: aiMode === m
+                                            ? (m === 'turbo' ? 'linear-gradient(135deg,#ff00c8,#8b00ff)' : m === 'crazy' ? 'linear-gradient(135deg,#f97316,#ef4444)' : 'linear-gradient(135deg,#22c55e,#16a34a)')
+                                            : 'rgba(0,0,0,0.08)',
+                                        color: aiMode === m ? '#fff' : '#888',
+                                    }}
+                                >
+                                    {m === 'normal' ? '🐢 Normal' : m === 'crazy' ? '🔥 Crazy 200%' : '⚡ Turbo 1000%'}
+                                </button>
+                            ))}
+                        </div>
+
                         <div className='ai-assistant__footer'>
                             {scanning ? (
                                 <button className='ai-assistant__btn ai-assistant__btn--cancel' onClick={stopScan}>⏹ Stop Scan</button>
                             ) : (
                                 <button className='ai-assistant__btn ai-assistant__btn--scan' onClick={startScan}>🔍 SCAN ALL MARKETS</button>
                             )}
-                            {/* FIRE NOW — starts immediately with best signal or default */}
+                            {/* FIRE NOW — stops after 3 profitable wins */}
                             {!botRunning && (
                                 <button
                                     className='ai-assistant__btn ai-assistant__btn--load'
                                     style={{ background: 'linear-gradient(135deg,#f97316,#ef4444)', fontSize: '0.8rem' }}
                                     onClick={() => loadAndRun(best ?? DEFAULT_SIGNAL, 3)}
                                     disabled={!derivTrade.connected}
-                                    title={!derivTrade.connected ? 'Waiting for account connection...' : 'Fires exactly 3 trades then auto-stops'}
+                                    title={!derivTrade.connected ? 'Waiting for account connection...' : 'Fires trades until 3 profitable wins, then auto-stops'}
                                 >
-                                    ⚡ FIRE NOW
+                                    ⚡ FIRE NOW (3 wins)
                                 </button>
                             )}
                             <button
                                 className={`ai-assistant__btn ${botRunning ? 'ai-assistant__btn--stop-bot' : 'ai-assistant__btn--load'}`}
-                                onClick={() => loadAndRun()}
+                                onClick={() => botRunning ? stopBot() : loadAndRun()}
                                 disabled={!botRunning && (!best || !derivTrade.connected)}
                                 title={!botRunning && !derivTrade.connected ? 'Waiting for account connection...' : undefined}
                             >
                                 {botRunning ? `⏹ Stop Bot (#${tradeCount})` : !derivTrade.connected ? '— connecting to account —' : !best ? '— scan first —' : '⚡ Load & Run Bot'}
                             </button>
                         </div>
-                        {/* Auto-restart toggle */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+                        {/* Live-digit trigger + Auto-restart toggles */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', borderTop: '1px solid rgba(255,255,255,0.07)', flexWrap: 'wrap' }}>
                             <button
                                 onClick={() => setAutoRestart(p => !p)}
                                 style={{ background: autoRestart ? '#00ff96' : 'rgba(255,255,255,0.1)', color: autoRestart ? '#000' : '#aaa', border: 'none', borderRadius: '12px', padding: '3px 10px', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 700 }}
                             >
                                 🔄 AUTO-RESTART {autoRestart ? 'ON' : 'OFF'}
                             </button>
-                            <span style={{ fontSize: '0.68rem', color: '#666' }}>Re-fires after TP/SL hit</span>
+                            <button
+                                onClick={() => setLiveDigitTrigger(p => !p)}
+                                style={{ background: liveDigitTrigger ? '#f97316' : 'rgba(255,255,255,0.1)', color: liveDigitTrigger ? '#fff' : '#aaa', border: 'none', borderRadius: '12px', padding: '3px 10px', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 700 }}
+                                title='When ON: auto-fires a trade the moment the live digit matches the barrier/entry digit'
+                            >
+                                🎯 DIGIT-MATCH TRIGGER {liveDigitTrigger ? 'ON' : 'OFF'}
+                            </button>
+                            <span style={{ fontSize: '0.66rem', color: '#666', width: '100%' }}>
+                                {liveDigitTrigger ? `⚡ Will auto-fire when live digit = ${best ? (best.autoDigit ?? best.barrier ?? '?') : '?'}` : 'Digit trigger fires 1 trade on match'}
+                            </span>
                         </div>
                     </div>
                 </div>
