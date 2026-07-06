@@ -99,10 +99,14 @@ export default defineConfig({
     compress: true,
     port: 5000,
     host: '0.0.0.0',
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+    },
   },
   dev: {
     hmr: false,
     writeToDisk: false,
+    assetPrefix: '/',
   },
   tools: {
     rspack: {
