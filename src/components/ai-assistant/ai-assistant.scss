@@ -1,8 +1,9 @@
 .ai-assistant {
   &__trigger {
     position: fixed;
-    bottom: 8rem;
-    right: 2rem;
+    left: 2rem;
+    top: 50%;
+    transform: translateY(-50%);
     z-index: 1000;
     background: none;
     border: none;
@@ -16,8 +17,8 @@
     }
 
     @media (max-width: 768px) {
-      bottom: 7rem;
-      right: 1.2rem;
+      left: 1rem;
+      top: 50%;
     }
   }
 
@@ -581,8 +582,9 @@
 .ai-assistant {
   &__fire-pill {
     position: fixed;
-    bottom: 8rem;
-    right: 2rem;
+    left: 7.5rem;
+    top: 50%;
+    transform: translateY(-50%);
     z-index: 10000;
     padding: 0.8rem 1.6rem;
     background: linear-gradient(135deg, #0d1a2e, #1a2a4a);

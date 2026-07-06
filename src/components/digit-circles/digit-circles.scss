@@ -101,13 +101,24 @@
     line-height: 1.4;
 
     &--current {
+      /* Positioned absolutely so it sits centred INSIDE the circle */
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
       background: transparent;
-      color: #ff2d2d;
-      font-size: 20px;
+      color: rgba(255,255,255,0.9);
+      font-size: 28px;
       font-weight: 900;
-      padding: 0 2px;
-      text-shadow: 0 0 12px rgba(255,45,45,0.95), 0 0 5px rgba(255,45,45,0.7);
+      padding: 0;
+      line-height: 1;
+      pointer-events: none;
+      text-shadow:
+        0 0 12px rgba(255,45,45,0.95),
+        0 0 5px rgba(255,45,45,0.7),
+        0 2px 8px rgba(0,0,0,0.8);
       animation: triangleBounce 0.6s ease-in-out infinite;
+      z-index: 6;
     }
     &--1st  { background: #42B883; color: #fff; }
     &--2nd  { background: #4E7CF5; color: #fff; }

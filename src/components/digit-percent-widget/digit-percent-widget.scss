@@ -26,47 +26,103 @@
         height: 100%;
     }
 
+    /* Panel pops to the LEFT of the trigger */
     &__panel {
-        position: absolute;
-        top: calc(100% + 0.6rem);
-        left: 0;
-        z-index: 20;
+        position: fixed;
+        left: 0.8rem;
+        top: 50%;
+        transform: translateY(-50%);
+        z-index: 9999;
         width: 34rem;
-        max-width: 90vw;
+        max-width: 96vw;
+        max-height: 92vh;
+        overflow-y: auto;
         background: var(--general-main-1, #fff);
         border: 1px solid var(--border-normal, #d6dadb);
-        border-radius: 10px;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+        border-radius: 12px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.22);
         padding: 1.2rem;
+
+        @media (max-width: 420px) {
+            left: 0.2rem;
+            width: calc(100vw - 0.4rem);
+        }
     }
 
     &__header {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        margin-bottom: 0.8rem;
+        margin-bottom: 0.6rem;
+        gap: 0.6rem;
     }
 
     &__select {
         flex: 1;
-        padding: 0.5rem 0.8rem;
+        padding: 0.4rem 0.7rem;
         border-radius: 6px;
         border: 1px solid var(--border-normal, #d6dadb);
         background: var(--general-main-1, #fff);
         color: var(--text-general, #1f2937);
-        font-size: 1.2rem;
+        font-size: 1.15rem;
     }
 
     &__loading {
-        margin-left: 0.8rem;
+        margin-left: 0.6rem;
         font-size: 1.1rem;
         color: #94a3b8;
+        white-space: nowrap;
     }
 
+    /* Ticks slider row */
+    &__ticks-row {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        margin-bottom: 0.8rem;
+        font-size: 1.1rem;
+        color: var(--text-general, #333);
+    }
+
+    &__ticks-label {
+        white-space: nowrap;
+        min-width: 7.5rem;
+        strong { color: #7b3fe4; }
+    }
+
+    &__ticks-slider {
+        flex: 1;
+        accent-color: #7b3fe4;
+        cursor: pointer;
+    }
+
+    &__ticks-range {
+        white-space: nowrap;
+        color: #94a3b8;
+        font-size: 1rem;
+    }
+
+    /* Row section wraps triangle-track + circles together */
+    &__row-section {
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* Triangle track sits directly above (or below) the row */
     &__triangle-track {
         position: relative;
-        height: 1.2rem;
-        margin-bottom: 0.2rem;
+        height: 1.4rem;
+        margin-bottom: 0.1rem;
+
+        &--placeholder {
+            /* empty space above top row when current digit is in bottom row */
+            visibility: hidden;
+        }
+
+        &--below {
+            margin-top: 0.1rem;
+            margin-bottom: 0;
+        }
     }
 
     &__triangle {
@@ -75,23 +131,39 @@
         width: 0;
         height: 0;
         transform: translateX(-50%);
-        border-left: 6px solid transparent;
-        border-right: 6px solid transparent;
-        border-top: 9px solid #7b3fe4;
-        transition: left 0.25s ease;
+        transition: left 0.22s ease;
+
+        &--down {
+            border-left: 7px solid transparent;
+            border-right: 7px solid transparent;
+            border-top: 10px solid #7b3fe4;
+            top: 0;
+        }
+
+        &--up {
+            border-left: 7px solid transparent;
+            border-right: 7px solid transparent;
+            border-bottom: 10px solid #7b3fe4;
+            top: 0;
+        }
+    }
+
+    /* Gap between the two rows of circles */
+    &__row-gap {
+        height: 0.8rem;
     }
 
     &__circles {
         display: grid;
         grid-template-columns: repeat(5, 1fr);
-        gap: 0.8rem;
+        gap: 0.6rem;
     }
 
     &__cell {
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 0.3rem;
+        gap: 0.25rem;
     }
 
     &__circle {
@@ -104,8 +176,8 @@
         transition: all 0.2s ease;
 
         &--current {
-            box-shadow: 0 0 0 3px rgba(123, 63, 228, 0.35);
-            transform: scale(1.08);
+            box-shadow: 0 0 0 3px rgba(123,63,228,0.4), 0 0 10px rgba(123,63,228,0.25);
+            transform: scale(1.1);
         }
     }
 
@@ -115,8 +187,85 @@
     }
 
     &__pct {
-        font-size: 1.05rem;
+        font-size: 1.0rem;
         font-weight: 600;
         color: var(--text-general, #1f2937);
+    }
+
+    /* Threshold row */
+    &__threshold-row {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        margin-top: 0.8rem;
+        font-size: 1.1rem;
+        color: var(--text-general, #444);
+    }
+
+    &__threshold-select {
+        padding: 0.3rem 0.5rem;
+        border-radius: 5px;
+        border: 1px solid var(--border-normal, #d6dadb);
+        font-size: 1.1rem;
+        background: var(--general-main-1, #fff);
+        cursor: pointer;
+    }
+
+    /* Stream section */
+    &__stream-section {
+        margin-top: 0.8rem;
+        border-top: 1px dashed #e2e8f0;
+        padding-top: 0.6rem;
+    }
+
+    &__stream-label {
+        font-size: 0.95rem;
+        color: #94a3b8;
+        margin-bottom: 0.3rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+
+    &__stream {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2px;
+        margin-bottom: 0.6rem;
+    }
+
+    &__stream-tag {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 2rem;
+        height: 2rem;
+        border-radius: 4px;
+        font-size: 0.85rem;
+        font-weight: 700;
+        border: 1px solid transparent;
+
+        &.stream-even    { background: #dbeafe; color: #1d4ed8; }
+        &.stream-odd     { background: #fce7f3; color: #9d174d; }
+        &.stream-over    { background: #dcfce7; color: #15803d; }
+        &.stream-under   { background: #fee2e2; color: #b91c1c; }
+        &.stream-eq      { background: #f3f4f6; color: #374151; }
+
+        &.current {
+            box-shadow: 0 0 0 2px #7b3fe4;
+            transform: scale(1.15);
+            z-index: 1;
+        }
+    }
+
+    /* Footer */
+    &__footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 0.6rem;
+        font-size: 1rem;
+        color: #94a3b8;
+        strong { color: #7b3fe4; }
     }
 }

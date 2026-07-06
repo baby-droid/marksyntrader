@@ -39,18 +39,23 @@
         @include flex-center;
 
         flex-direction: column;
-        height: 100%;
+        height: auto;
+        min-height: 5.2rem;
+        padding: 0.6rem 0.2rem;
 
         &-title {
-            min-height: 1.8rem;
-            margin-bottom: 4px;
+            min-height: 1.6rem;
+            margin-bottom: 2px;
+            font-size: 1.1rem;
 
             @include typeface(--small-center-bold-black, none);
         }
 
         &-content {
-            height: 18px;
-            margin-bottom: 4px;
+            height: auto;
+            min-height: 1.6rem;
+            margin-bottom: 2px;
+            font-size: 1.1rem;
 
             @include typeface(--small-center-normal-black, none);
         }
@@ -91,7 +96,8 @@
         &--tiles {
             width: 100%;
             display: grid;
-            grid-template: 64px 64px / 1fr 1fr 1fr;
+            grid-template: auto auto / 1fr 1fr 1fr;
+            row-gap: 0;
         }
 
         &-amount {

@@ -122,9 +122,6 @@ const DigitCircles: React.FC<DigitCirclesProps> = ({
                 data-digit={digit}
                 className={`digit-circles__wrapper${isLast ? ' digit-circles__wrapper--current' : ''}`}
               >
-                {/* triangle rendered FIRST so it appears ABOVE the circle */}
-                {isLast  && <span className='digit-circles__rank digit-circles__rank--current'>▼</span>}
-
                 <div
                   className='digit-circles__circle'
                   style={{
@@ -141,6 +138,10 @@ const DigitCircles: React.FC<DigitCirclesProps> = ({
                   <span className='digit-circles__number'>{digit}</span>
                   {showPercentage && (
                     <span className='digit-circles__percent'>{percentage.toFixed(1)}%</span>
+                  )}
+                  {/* Triangle sits in the MIDDLE of the circle, absolutely centred */}
+                  {isLast && (
+                    <span className='digit-circles__rank digit-circles__rank--current'>▼</span>
                   )}
                 </div>
 

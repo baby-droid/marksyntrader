@@ -147,11 +147,30 @@ const SpeedLab = observer(() => {
             ...(withBarrier ? { barrier: bar } : {}),
         });
 
+        // Crazy mode: fire-and-forget with high in-flight cap (12) for 100%+ speed boost
+        let inFlight = 0;
+        const CRAZY_MAX = 12;
+
+        const fireAndForget = (curStake: number) => {
+            inFlight++;
+            derivTradeRef.current.buyContract(
+                buildParams(curStake),
+                settled => {
+                    inFlight = Math.max(0, inFlight - 1);
+                    if (runRef.current || settled.profit !== 0) applyResult(settled.profit ?? 0, curStake, speed);
+                }
+            ).catch(err => {
+                inFlight = Math.max(0, inFlight - 1);
+                const msg = err?.message || err?.error?.message || 'Buy error';
+                logEntry(`❌ ${msg}`);
+            });
+        };
+
         while (runRef.current) {
             const curStake = currentStakeRef.current;
             try {
                 if (speed === 'turbo') {
-                    // Turbo: fire-and-forget, settlement in background
+                    // Turbo: zero-delay fire-and-forget — maximum throughput, no cap
                     derivTradeRef.current.buyContract(
                         buildParams(curStake),
                         settled => { if (runRef.current || settled.profit !== 0) applyResult(settled.profit ?? 0, curStake, speed); }
@@ -159,9 +178,17 @@ const SpeedLab = observer(() => {
                         const msg = err?.message || err?.error?.message || 'Buy error';
                         logEntry(`❌ ${msg}`);
                     });
-                    // No await — loop immediately
+                    // No await — loop fires immediately for next contract
+                } else if (speed === 'crazy') {
+                    // Crazy: pipelined fire-and-forget with high cap — over 100% speed
+                    if (inFlight >= CRAZY_MAX) {
+                        await new Promise(r => setTimeout(r, 0));
+                        continue;
+                    }
+                    fireAndForget(curStake);
+                    // No await — loop immediately for next fire
                 } else {
-                    // Normal / Crazy: wait for full settlement before next trade
+                    // Normal: sequential — buy then wait for full settlement
                     const profit = await new Promise<number>(resolve => {
                         const bail = setTimeout(() => { logEntry('⏱ Settlement timeout'); resolve(0); }, 15000);
                         derivTradeRef.current.buyContract(

@@ -410,9 +410,8 @@ const AIAssistant: React.FC = () => {
     const stopBot = useCallback(() => {
         runRef.current = false;
         setBotRunning(false);
-        run_panel?.setIsRunning?.(false);
         addLog('⏹ Bot stopped by user.');
-    }, [addLog, run_panel]);
+    }, [addLog]);
 
     // Keep a stable ref so auto-restart can call loadAndRun without stale closure
     const loadAndRunRef = useRef<(sig?: Signal) => void>(() => {});
@@ -463,35 +462,10 @@ const AIAssistant: React.FC = () => {
         runRef.current = true;
         setIsOpen(false);
 
-        // Signal the main run panel to show "running" state
-        run_panel?.setIsRunning?.(true);
-
-        // Load the user's EVEN/ODD XML into the workspace for display (fire-and-forget)
-        try {
-            const res = await fetch('/bots/ahmed-syn-even-odd-killer.xml');
-            if (res.ok) {
-                const raw = await res.text();
-                // Stake/TP/SL are always in USD — no conversion needed
-                const xml = buildKillerXml(raw, { symbol: signal.symbol, contract: signal.type, barrier, ticks: signal.ticks, stake, martingale, takeProfit, stopLoss });
-                (window as any).__pendingBotXml  = xml;
-                (window as any).__pendingBotName = `AI ${signal.type.toUpperCase()}${barrier !== undefined ? barrier : ''}`;
-                dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING);
-                const loadWs = async () => {
-                    const B = (window as any).Blockly;
-                    if (!B?.derivWorkspace) return false;
-                    try {
-                        if (load_modal?.loadStrategyToBuilder) {
-                            await load_modal.loadStrategyToBuilder({ id: `ai_${Date.now()}`, xml, name: (window as any).__pendingBotName, save_type: 'unsaved' }, false);
-                        } else {
-                            const dom = B.Xml.textToDom(xml);
-                            B.derivWorkspace.asyncClear?.(); B.Xml.domToWorkspace(dom, B.derivWorkspace);
-                        }
-                        return true;
-                    } catch { return false; }
-                };
-                loadWs().catch(() => {});
-            }
-        } catch { /* workspace load failed — direct fire still works */ }
+        // NOTE: We do NOT call run_panel?.setIsRunning?.(true) here because that
+        // activates the Blockly bot engine which enforces its own buy limits and
+        // would conflict with the direct-fire loop below. The AI assistant runs
+        // its own independent trading loop without any buy-count restrictions.
 
         addLog(`🚀 Starting ${signal.type.toUpperCase()}${barrier !== undefined ? barrier : ''} on ${signal.label} | Stake:${fmtVal(stake)} | Mart:${martingale}x | TP:${fmtVal(takeProfit)} | SL:${fmtVal(stopLoss)}`);
 
@@ -542,7 +516,6 @@ const AIAssistant: React.FC = () => {
                     addLog(`🏆 TAKE PROFIT hit! Session P/L: ${fmtProfit(sp)}`);
                     runRef.current = false;
                     setBotRunning(false);
-                    run_panel?.setIsRunning?.(false);
                     if (autoRestartRef.current) {
                         addLog('🔄 Auto-restarting in 2s...');
                         setTimeout(() => { if (autoRestartRef.current) loadAndRunRef.current?.(); }, 2000);
@@ -552,7 +525,6 @@ const AIAssistant: React.FC = () => {
                     addLog(`🛑 STOP LOSS hit! Session P/L: ${fmtProfit(sp)}`);
                     runRef.current = false;
                     setBotRunning(false);
-                    run_panel?.setIsRunning?.(false);
                     if (autoRestartRef.current) {
                         addLog('🔄 Auto-restarting in 2s...');
                         setTimeout(() => { if (autoRestartRef.current) loadAndRunRef.current?.(); }, 2000);
@@ -563,14 +535,14 @@ const AIAssistant: React.FC = () => {
                     addLog(`🏁 Fire Now complete — ${tc} trade${tc === 1 ? '' : 's'} run. Session P/L: ${fmtProfit(sp)}`);
                     runRef.current = false;
                     setBotRunning(false);
-                    run_panel?.setIsRunning?.(false);
                 }
             };
 
             // In-flight counter used by Crazy mode to pipeline several purchases
             // at once without waiting for each one to settle first.
+            // Raised to 12 for maximum speed-boost beyond 100%.
             let inFlight = 0;
-            const CRAZY_MAX_IN_FLIGHT = 4;
+            const CRAZY_MAX_IN_FLIGHT = 12;
 
             const fireAndForget = (curStake: number) => {
                 inFlight++;
@@ -626,9 +598,8 @@ const AIAssistant: React.FC = () => {
 
             runRef.current = false;
             setBotRunning(false);
-            run_panel?.setIsRunning?.(false);
         })();
-    }, [best, predictionDigit, stake, martingale, takeProfit, stopLoss, botRunning, dashboard, load_modal, run_panel, addLog, stopBot]);
+    }, [best, predictionDigit, stake, martingale, takeProfit, stopLoss, botRunning, addLog, stopBot]);
 
     // Keep ref in sync so auto-restart can call without stale closure
     useEffect(() => { loadAndRunRef.current = loadAndRun; }, [loadAndRun]);
