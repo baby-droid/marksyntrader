@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import './digit-percent-widget.scss';
 
 const MARKETS: { value: string; label: string }[] = [
@@ -203,7 +204,7 @@ const DigitPercentWidget: React.FC = () => {
                 <span className='digit-percent-widget__dot' />
             </button>
 
-            {open && (
+            {open && createPortal(
                 <div className='digit-percent-widget__panel' ref={panelRef} style={panelStyle}>
                     {/* Drag header with X close */}
                     <div
@@ -400,7 +401,8 @@ const DigitPercentWidget: React.FC = () => {
                         <span>{ticks.length} ticks loaded</span>
                         {currentDigit !== null && <span>Current: <strong>{currentDigit}</strong></span>}
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );

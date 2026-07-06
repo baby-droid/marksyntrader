@@ -67,8 +67,11 @@ const NEEDS_BARRIER: Set<ContractType> = new Set(['over', 'under', 'matches', 'd
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 
-// The user's "AHMED SYN EVEN ODD MARKET KILLER 1.2" bot XML — used as the
-// template for all AI-driven trades loaded into Bot Builder for display.
+// Full "AHMED SYN EVEN ODD MARKET KILLER 1.2" XML — complete with
+// trade_definition (market/init/options), after_purchase (TP/SL/martingale/trade_again),
+// and before_purchase (purchase with contract type) blocks.
+// buildKillerXml() will dynamically patch symbol, contract type, barrier,
+// stake, martingale, TP, SL before loading this into the Bot Builder workspace.
 const KILLER_XML_TEMPLATE = `<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
   <variables>
     <variable id="nyrtB]!3ObqjLVHHuJ|5">stake</variable>
@@ -114,7 +117,7 @@ const KILLER_XML_TEMPLATE = `<xml xmlns="https://developers.google.com/blockly/x
       </block>
     </statement>
     <statement name="INITIALIZATION">
-      <block type="variables_set" id="M$F.mTtW#X2XN)80\`x~_">
+      <block type="variables_set" id="M$F.mTtW#X2XN)80x~_">
         <field name="VAR" id="nyrtB]!3ObqjLVHHuJ|5">stake</field>
         <value name="VALUE">
           <block type="math_number" id="~3z)tZ?L(v2Y5A*HguH8">
@@ -178,6 +181,221 @@ const KILLER_XML_TEMPLATE = `<xml xmlns="https://developers.google.com/blockly/x
           </shadow>
           <block type="variables_get" id="qYGQ:=sT8L6DCO3=0BO+">
             <field name="VAR" id="nyrtB]!3ObqjLVHHuJ|5">stake</field>
+          </block>
+        </value>
+      </block>
+    </statement>
+  </block>
+  <block type="after_purchase" id="o2)4jFhq_R1O7.HJN" collapsed="true" x="714" y="60">
+    <statement name="AFTERPURCHASE_STACK">
+      <block type="controls_if" id="V*7Z7%uP?D:U/K~3G1%M">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="1" else="1"></mutation>
+        <value name="IF0">
+          <block type="logic_compare" id="_0o.E/oliw!(lRqXgn~U">
+            <field name="OP">GTE</field>
+            <value name="A">
+              <block type="total_profit" id="jVQV2DA]uxL?M-J-V[bZ"></block>
+            </value>
+            <value name="B">
+              <block type="variables_get" id="^}7a,LF8cZu/eN%9(pHl">
+                <field name="VAR" id="_fr,aLuF-W2EJ2?_;-|K">totalprofit</field>
+              </block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="text_join" id="UqnAy*/=QPy:Exy+AV:a">
+            <field name="VARIABLE" id="B\`@Q*C)!foy!~/E)8n%v">text</field>
+            <statement name="STACK">
+              <block type="text_statement" id="G,;gUmb-hsTrC+=+v*w9">
+                <value name="TEXT">
+                  <shadow type="text" id="X%RxW@#{t]k*o#$?f{O">
+                    <field name="TEXT">PROFIT TARGET HIT — STOPPING BOT</field>
+                  </shadow>
+                </value>
+              </block>
+            </statement>
+            <next>
+              <block type="text_print" id="59[6}c__:Tquu/Z@ZDoG">
+                <value name="TEXT">
+                  <shadow type="text" id=",gq~g]Y[+bVUxjE!BxPn">
+                    <field name="TEXT">abc</field>
+                  </shadow>
+                  <block type="variables_get" id="Ov\`V7,,v8]@pXMNP9EJ:">
+                    <field name="VAR" id="B\`@Q*C)!foy!~/E)8n%v">text</field>
+                  </block>
+                </value>
+              </block>
+            </next>
+          </block>
+        </statement>
+        <value name="IF1">
+          <block type="logic_compare" id="z?Iv/EG@J{@X+*FU:glc">
+            <field name="OP">LTE</field>
+            <value name="A">
+              <block type="total_profit" id="M4n4xoKb|{$Z^lUX3(sv"></block>
+            </value>
+            <value name="B">
+              <block type="math_single" id=";+6-$(!6}jxxD5GVamlo">
+                <field name="OP">NEG</field>
+                <value name="NUM">
+                  <shadow type="math_number" id="%F;UF2,F0X8ptKFiJP{5">
+                    <field name="NUM">9</field>
+                  </shadow>
+                  <block type="variables_get" id="ImmXc|o#DkVx/[DXdD4H">
+                    <field name="VAR" id="1lyZu%^sRY)L\`ABj60;#">totalloss</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO1">
+          <block type="text_join" id="R^E}O]hFEqp4p5)uJ=wK">
+            <field name="VARIABLE" id="}VK*]CMXvcC-5_Y\`dp6h">TEXT2</field>
+            <statement name="STACK">
+              <block type="text_statement" id="KvwyXyMYaH{qUZ{[/?|G">
+                <value name="TEXT">
+                  <shadow type="text" id="OAwSNl#Wgk;$O)G122Ol">
+                    <field name="TEXT">STOP LOSS HIT — WE TRY AGAIN</field>
+                  </shadow>
+                </value>
+              </block>
+            </statement>
+            <next>
+              <block type="text_print" id="3(?$)G%MV+?N%HsuF!Jw">
+                <value name="TEXT">
+                  <shadow type="text" id=",gq~g]Y[+bVUxjE!BxPn2">
+                    <field name="TEXT">abc</field>
+                  </shadow>
+                  <block type="variables_get" id="_Jlc0l}}1Kx%y@8xRLyh">
+                    <field name="VAR" id="}VK*]CMXvcC-5_Y\`dp6h">TEXT2</field>
+                  </block>
+                </value>
+              </block>
+            </next>
+          </block>
+        </statement>
+        <statement name="ELSE">
+          <block type="controls_if" id="+DnUleqx?MEa*^g.UvBP">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+            <value name="IF0">
+              <block type="contract_check_result" id="dNrpwAKB$j3(k-Sdaq_R">
+                <field name="CHECK_RESULT">win</field>
+              </block>
+            </value>
+            <statement name="DO0">
+              <block type="notify" id="awc=:Mwoy{$DkH=nd$iK">
+                <field name="NOTIFICATION_TYPE">info</field>
+                <field name="NOTIFICATION_SOUND">earned-money</field>
+                <value name="MESSAGE">
+                  <shadow type="text" id="8jr!bt?#P%OjvqXe9BJl">
+                    <field name="TEXT">abc</field>
+                  </shadow>
+                  <block type="contract_check_result" id="qxgD{P7K?N3*T|t|Ct,.">
+                    <field name="CHECK_RESULT">win</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="variables_set" id="kETGk%thOUuOo|Iy)z!S">
+                    <field name="VAR" id="nyrtB]!3ObqjLVHHuJ|5">stake</field>
+                    <value name="VALUE">
+                      <block type="variables_get" id="*n}G)oc{l*0=x(n/uKoe">
+                        <field name="VAR" id="rKwHUdT+nn0j5KEZX:TY">initial stake </field>
+                      </block>
+                    </value>
+                  </block>
+                </next>
+              </block>
+            </statement>
+            <statement name="ELSE">
+              <block type="controls_if" id="=|sOy|5lw6oLSPtMvrw|">
+                <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                <value name="IF0">
+                  <block type="contract_check_result" id="vGhFMI+ipo5V}r%m^(lD">
+                    <field name="CHECK_RESULT">loss</field>
+                  </block>
+                </value>
+                <statement name="DO0">
+                  <block type="notify" id="A6iz}@zc};3-WNN:$QZ0">
+                    <field name="NOTIFICATION_TYPE">error</field>
+                    <field name="NOTIFICATION_SOUND">error</field>
+                    <value name="MESSAGE">
+                      <shadow type="text" id="Kiaum.5wDuSp40s6fL:#">
+                        <field name="TEXT">abc</field>
+                      </shadow>
+                      <block type="contract_check_result" id="GlK2HPBra4W$dS1(o[-Z">
+                        <field name="CHECK_RESULT">loss</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="!A,O1{w?@7w8L5Cu(g0x">
+                        <field name="VAR" id="nyrtB]!3ObqjLVHHuJ|5">stake</field>
+                        <value name="VALUE">
+                          <block type="math_arithmetic" id=")jeg),}qG_02p4{Zr?^W">
+                            <field name="OP">MULTIPLY</field>
+                            <value name="A">
+                              <shadow type="math_number" id="pkI@|K4I2Cg#e6(R2cM#">
+                                <field name="NUM">1</field>
+                              </shadow>
+                              <block type="variables_get" id="+UY2GVSPGii,u*:+G?gz">
+                                <field name="VAR" id="nyrtB]!3ObqjLVHHuJ|5">stake</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <shadow type="math_number" id="62K8.#%qO^1}[(8vZp#8">
+                                <field name="NUM">1</field>
+                              </shadow>
+                              <block type="variables_get" id="vdLwMBJ;43TubIuIo">
+                                <field name="VAR" id=",;WqBIU[7qCnbcVf.lZG">Martingale</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+                <statement name="ELSE">
+                  <block type="timeout" id="5oT-C79?%I4pVR{F)0$a">
+                    <value name="SECONDS">
+                      <block type="math_number" id="DT4w-X{fz;,SNtR7W5!{">
+                        <field name="NUM">-0.00001</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="KzHetwK=!3C=9(7.xT(f">
+                        <field name="VAR" id="nyrtB]!3ObqjLVHHuJ|5">stake</field>
+                        <value name="VALUE">
+                          <block type="variables_get" id=")v0un0~i27K-VQ$A-v">
+                            <field name="VAR" id="rKwHUdT+nn0j5KEZX:TY">initial stake </field>
+                          </block>
+                        </value>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+              </block>
+            </statement>
+            <next>
+              <block type="trade_again" id="[(quINi:2%jdcT?Tzk@"></block>
+            </next>
+          </block>
+        </statement>
+      </block>
+    </statement>
+  </block>
+  <block type="before_purchase" id="xox5)H9wAHlZI1m/]+_3" collapsed="true" deletable="false" x="0" y="886">
+    <statement name="BEFOREPURCHASE_STACK">
+      <block type="timeout" id="vAjGqP]v+|dVaLJ{2}fM">
+        <statement name="TIMEOUTSTACK">
+          <block type="purchase" id="pO*:?hf0JXcnix_bHws8">
+            <field name="PURCHASE_LIST">DIGITEVEN</field>
+          </block>
+        </statement>
+        <value name="SECONDS">
+          <block type="math_number" id="b#TUID[3[uSy]MK3qp,U">
+            <field name="NUM">-0.00001</field>
           </block>
         </value>
       </block>
@@ -368,6 +586,11 @@ const AIAssistant: React.FC = () => {
     const [aiMode, setAiMode] = useState<'normal' | 'crazy' | 'turbo'>('normal');
     const aiModeRef = useRef<'normal' | 'crazy' | 'turbo'>('normal');
     useEffect(() => { aiModeRef.current = aiMode; }, [aiMode]);
+
+    // Pause / resume
+    const [botPaused, setBotPaused] = useState(false);
+    const pausedRef = useRef(false);
+    useEffect(() => { pausedRef.current = botPaused; }, [botPaused]);
 
     // Live digit match — when ON and liveDigit === barrier, fires 1 trade automatically
     const [liveDigitTrigger, setLiveDigitTrigger] = useState(false);
@@ -739,6 +962,11 @@ const AIAssistant: React.FC = () => {
             };
 
             while (runRef.current) {
+                // Pause: spin-wait until resumed
+                if (pausedRef.current) {
+                    await new Promise(r => setTimeout(r, 120));
+                    continue;
+                }
                 const curStake = stakeRef.current;
                 // Read AI-local speed mode (not the global FloatingRunButton speed)
                 const speed = aiModeRef.current;
@@ -770,6 +998,8 @@ const AIAssistant: React.FC = () => {
 
             runRef.current = false;
             setBotRunning(false);
+            setBotPaused(false);
+            pausedRef.current = false;
         })();
     }, [best, predictionDigit, stake, martingale, takeProfit, stopLoss, botRunning, addLog, stopBot, tryLoadXmlToWorkspace]);
 
@@ -992,9 +1222,26 @@ const AIAssistant: React.FC = () => {
                                     ⚡ FIRE NOW (3 wins)
                                 </button>
                             )}
+                            {/* Pause / Resume — only visible while bot is running */}
+                            {botRunning && (
+                                <button
+                                    className='ai-assistant__btn'
+                                    style={{
+                                        background: botPaused
+                                            ? 'linear-gradient(135deg,#22c55e,#16a34a)'
+                                            : 'linear-gradient(135deg,#eab308,#ca8a04)',
+                                        color: '#fff',
+                                        fontSize: '0.8rem',
+                                    }}
+                                    onClick={() => setBotPaused(p => !p)}
+                                    title={botPaused ? 'Resume the bot — it will continue trading' : 'Pause the bot after the current trade settles'}
+                                >
+                                    {botPaused ? '▶ RESUME' : '⏸ PAUSE'}
+                                </button>
+                            )}
                             <button
                                 className={`ai-assistant__btn ${botRunning ? 'ai-assistant__btn--stop-bot' : 'ai-assistant__btn--load'}`}
-                                onClick={() => botRunning ? stopBot() : loadAndRun()}
+                                onClick={() => { if (botRunning) { setBotPaused(false); stopBot(); } else loadAndRun(); }}
                                 disabled={!botRunning && (!best || !derivTrade.connected)}
                                 title={!botRunning && !derivTrade.connected ? 'Waiting for account connection...' : undefined}
                             >
