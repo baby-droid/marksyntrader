@@ -8,8 +8,10 @@ import './speed-lab.scss';
 
 /**
  * Speed Lab — three execution tiers with full P/L tracking and martingale.
- * Uses useDerivTrade which opens its own authenticated WebSocket — trades
- * actually execute on the live Deriv account.
+ * Uses useDerivTrade, which rides the SAME already-authenticated Deriv
+ * connection (api_base) the rest of the app is logged in with — no separate
+ * API token or second login. Trades execute on, and balance updates come
+ * from, the user's real logged-in account.
  *
  *  NORMAL — buy → await settlement → next trade (sequential)
  *  CRAZY  — same but no delay; fires the instant previous contract settles

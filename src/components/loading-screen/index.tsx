@@ -2,9 +2,18 @@
 import React, { useEffect, useRef, useState } from 'react';
 import './loading-screen.scss';
 
-const TOTAL_MS = 4500; // exactly 4.5 seconds 0 → 100%
-const TICK_MS  = 40;   // ~25fps updates, super smooth
-const INCREMENT = 100 / (TOTAL_MS / TICK_MS); // ~0.89% per tick
+// The bar ramps quickly to a "fake ceiling" (below 100%) so it never looks
+// frozen/stuck while the real app is still connecting/authorizing — it only
+// jumps to 100% once the parent tells us the real content is actually ready.
+const RAMP_MS   = 2200;  // 0 → FAKE_CEILING
+const FAKE_CEILING = 92; // never shown as "stuck at 100%" while still loading
+const FINISH_MS = 300;   // FAKE_CEILING → 100% once ready
+
+interface LoadingScreenProps {
+  /** True once the real app content is ready to be shown. When false, progress
+   * holds just under 100% instead of freezing at a false "100%". */
+  ready?: boolean;
+}
 
 const PHRASES = [
   'Initializing trading engines...',
@@ -29,27 +38,39 @@ const FEATURES_RIGHT = [
   { icon: '🏆', title: 'GROW TOGETHER', sub: 'WIN AS A TEAM' },
 ];
 
-const LoadingScreen: React.FC = () => {
+const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready = false }) => {
   const [progress, setProgress] = useState(0);
   const [phraseIdx, setPhraseIdx] = useState(0);
   const startRef = useRef<number>(performance.now());
   const rafRef = useRef<number>(0);
+  const readyRef = useRef(ready);
+  const readyAtRef = useRef<number | null>(null);
+
+  useEffect(() => { readyRef.current = ready; }, [ready]);
 
   useEffect(() => {
     startRef.current = performance.now();
 
-    // Smooth linear progress via requestAnimationFrame
+    // Ramp quickly to a fake ceiling below 100% — if the real app isn't ready
+    // yet we hold just under 100% (never freezing at a false "100%"), then once
+    // `ready` flips true we finish the last stretch to 100% quickly.
     const tick = (now: number) => {
-      const elapsed = now - startRef.current;
-      const pct = Math.min((elapsed / TOTAL_MS) * 100, 100);
-      setProgress(pct);
-      if (pct < 100) {
-        rafRef.current = requestAnimationFrame(tick);
+      if (readyRef.current) {
+        if (readyAtRef.current === null) readyAtRef.current = now;
+        const finishElapsed = now - readyAtRef.current;
+        const pct = FAKE_CEILING + Math.min(finishElapsed / FINISH_MS, 1) * (100 - FAKE_CEILING);
+        setProgress(pct);
+        if (pct < 100) rafRef.current = requestAnimationFrame(tick);
+        return;
       }
+      const elapsed = now - startRef.current;
+      const pct = Math.min((elapsed / RAMP_MS) * FAKE_CEILING, FAKE_CEILING);
+      setProgress(pct);
+      rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
 
-    // Cycle phrases every ~560ms (8 phrases over 4.5s)
+    // Cycle phrases every ~560ms
     const phraseInterval = setInterval(() => {
       setPhraseIdx(p => (p + 1) % PHRASES.length);
     }, 560);

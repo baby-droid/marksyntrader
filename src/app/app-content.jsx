@@ -207,7 +207,7 @@ const AppContent = observer(() => {
                 </Suspense>
             )}
             {(is_loading || !min_time_elapsed) ? (
-                <LoadingScreen />
+                <LoadingScreen ready={!is_loading && min_time_elapsed} />
             ) : (
                 <AuthLoadingWrapper>
                     <ThemeProvider theme={is_dark_mode_on ? 'dark' : 'light'}>
