@@ -13,6 +13,11 @@ interface LoadingScreenProps {
   /** True once the real app content is ready to be shown. When false, progress
    * holds just under 100% instead of freezing at a false "100%". */
   ready?: boolean;
+  /** Called once the finish animation actually reaches 100% (only fires when
+   * `ready` is true). The parent should wait for this before unmounting the
+   * loading screen and swapping in the real content — otherwise the screen
+   * gets replaced mid-ramp and the viewer never sees 100%. */
+  onDone?: () => void;
 }
 
 const PHRASES = [
@@ -38,15 +43,18 @@ const FEATURES_RIGHT = [
   { icon: '🏆', title: 'GROW TOGETHER', sub: 'WIN AS A TEAM' },
 ];
 
-const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready = false }) => {
+const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready = false, onDone }) => {
   const [progress, setProgress] = useState(0);
   const [phraseIdx, setPhraseIdx] = useState(0);
   const startRef = useRef<number>(performance.now());
   const rafRef = useRef<number>(0);
   const readyRef = useRef(ready);
   const readyAtRef = useRef<number | null>(null);
+  const doneRef = useRef(false);
+  const onDoneRef = useRef(onDone);
 
   useEffect(() => { readyRef.current = ready; }, [ready]);
+  useEffect(() => { onDoneRef.current = onDone; }, [onDone]);
 
   useEffect(() => {
     startRef.current = performance.now();
@@ -60,7 +68,12 @@ const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready = false }) => {
         const finishElapsed = now - readyAtRef.current;
         const pct = FAKE_CEILING + Math.min(finishElapsed / FINISH_MS, 1) * (100 - FAKE_CEILING);
         setProgress(pct);
-        if (pct < 100) rafRef.current = requestAnimationFrame(tick);
+        if (pct < 100) {
+          rafRef.current = requestAnimationFrame(tick);
+        } else if (!doneRef.current) {
+          doneRef.current = true;
+          onDoneRef.current?.();
+        }
         return;
       }
       const elapsed = now - startRef.current;

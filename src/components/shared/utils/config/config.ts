@@ -24,10 +24,16 @@ export const STAGING_DOMAINS = {
     COM: brandConfig.platform.hostname.staging.com,
 } as const;
 
-// WebSocket server URLs
+// WebSocket server URLs.
+// `WebSocket` requires a `ws:`/`wss:` scheme — passing an `https:`/`http:` URL
+// (as brand.config.json stores them, since they're shared with plain HTTP/REST
+// usages elsewhere) throws a SyntaxError in the browser. Normalize here so the
+// actual live-connection code always gets a valid WebSocket URL.
+const toWebSocketScheme = (url: string) => url.replace(/^https:/i, 'wss:').replace(/^http:/i, 'ws:');
+
 export const WS_SERVERS = {
-    STAGING: `${brandConfig.platform.derivws.url.staging}options/ws/public`,
-    PRODUCTION: `${brandConfig.platform.derivws.url.production}options/ws/public`,
+    STAGING: toWebSocketScheme(`${brandConfig.platform.derivws.url.staging}options/ws/public`),
+    PRODUCTION: toWebSocketScheme(`${brandConfig.platform.derivws.url.production}options/ws/public`),
 } as const;
 
 // =============================================================================
