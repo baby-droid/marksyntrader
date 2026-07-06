@@ -143,11 +143,13 @@ body {
     }
 
     &__run-strategy-wrapper {
+        position: fixed !important;
         inset-inline-end: 1.6rem;
-        top: 1.6rem;
-        z-index: 12;
+        top: 7rem;
+        z-index: 9995;
+        pointer-events: none;
 
-        @include desktop-screen { position: absolute; }
+        > * { pointer-events: auto; }
 
         .animation {
             &__button#db-animation {
@@ -156,6 +158,8 @@ body {
             }
             &__container { background-color: var(--general-main-1); }
         }
+
+        @include mobile-or-tablet-screen { top: 5.5rem; }
     }
 
     &__sidebar-wrapper {

@@ -163,12 +163,36 @@ export function useDerivTrade() {
                 amount: stake,
                 symbol,
             };
-            if (barrier !== undefined) buyParams.barrier = barrier;
+            if (barrier !== undefined) buyParams.barrier = String(barrier);
 
-            const res = await send({ buy: '1', price: stake, parameters: buyParams });
-            if (res.error) throw res;
+            // Direct buy — single round-trip, no proposal step needed.
+            let res = await send({ buy: '1', price: stake, parameters: buyParams });
+            let contract_id = res?.buy?.contract_id || 0;
 
-            const contract_id = res.buy?.contract_id || 0;
+            // Fallback: some contract/symbol combos reject the direct-buy shortcut
+            // (e.g. return an error instead of a buy result). In that case fall
+            // back to the standard proposal → buy two-step, same as the rest of
+            // the app's proven trading flow (useDerivTrading.buyContract).
+            if (!contract_id) {
+                const proposalReq: any = {
+                    proposal: 1,
+                    amount: stake,
+                    basis: 'stake',
+                    contract_type,
+                    currency: cur || currency || 'USD',
+                    duration,
+                    duration_unit,
+                    symbol,
+                };
+                if (barrier !== undefined) proposalReq.barrier = String(barrier);
+                const proposalRes = await send(proposalReq);
+                if (!proposalRes?.proposal?.id) {
+                    throw res?.error ? res : (proposalRes?.error ? proposalRes : new Error('Buy failed — no contract id returned'));
+                }
+                res = await send({ buy: proposalRes.proposal.id, price: proposalRes.proposal.ask_price });
+                if (res?.error) throw res;
+                contract_id = res?.buy?.contract_id || 0;
+            }
 
             if (contract_id && onSettled) {
                 pocCallbacksRef.current.set(Number(contract_id), onSettled);

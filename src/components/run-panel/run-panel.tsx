@@ -12,6 +12,7 @@ import Text from '@/components/shared_ui/text';
 import Summary from '@/components/summary';
 import TradeAnimation from '@/components/trade-animation';
 import Transactions from '@/components/transactions';
+import DigitPercentWidget from '@/components/digit-percent-widget/digit-percent-widget';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { popover_zindex } from '@/constants/z-indexes';
 import { useStore } from '@/hooks/useStore';
@@ -149,12 +150,15 @@ const DrawerContent = ({ active_index, is_drawer_open, active_tour, setActiveTab
         <>
             <Tabs active_index={active_index} onTabItemClick={setActiveTabIndex} top>
                 <div id='db-run-panel-tab__summary' label={<Localize i18n_default_text='Summary' />}>
+                    <DigitPercentWidget />
                     <Summary is_drawer_open={is_drawer_open} />
                 </div>
                 <div id='db-run-panel-tab__transactions' label={<Localize i18n_default_text='Transactions' />}>
+                    <DigitPercentWidget />
                     <Transactions is_drawer_open={is_drawer_open} />
                 </div>
                 <div id='db-run-panel-tab__journal' label={<Localize i18n_default_text='Journal' />}>
+                    <DigitPercentWidget />
                     <Journal />
                 </div>
             </Tabs>

@@ -209,28 +209,6 @@ function evaluate(freq: DigitFreq, type: ContractType, predictionDigit: number):
     return null;
 }
 
-/** Wait for a digit/short-duration contract to settle and return its profit. */
-async function waitForSettlement(contractId: string): Promise<number> {
-    return new Promise(resolve => {
-        let sub: any;
-        const bail = setTimeout(() => { try { sub?.unsubscribe(); } catch { } resolve(0); }, 15000);
-        try {
-            const obs = api_base.api.subscribe({ proposal_open_contract: 1, contract_id: contractId, subscribe: 1 });
-            sub = obs.subscribe({
-                next: (res: any) => {
-                    const poc = res?.proposal_open_contract;
-                    if (poc?.is_sold || poc?.is_expired) {
-                        clearTimeout(bail);
-                        try { sub?.unsubscribe(); } catch { }
-                        resolve(parseFloat(poc.profit ?? '0'));
-                    }
-                },
-                error: () => { clearTimeout(bail); resolve(0); },
-            });
-        } catch { clearTimeout(bail); resolve(0); }
-    });
-}
-
 /** Instant-fire default — fires immediately with no scan required. */
 const DEFAULT_SIGNAL: Signal = {
     symbol: '1HZ25V', label: 'Volatility 25 (1s)', group: 'Volatility 1s',
@@ -589,27 +567,52 @@ const AIAssistant: React.FC = () => {
                 }
             };
 
+            // In-flight counter used by Crazy mode to pipeline several purchases
+            // at once without waiting for each one to settle first.
+            let inFlight = 0;
+            const CRAZY_MAX_IN_FLIGHT = 4;
+
+            const fireAndForget = (curStake: number) => {
+                inFlight++;
+                derivTradeRef.current.buyContract(
+                    { ...tradeParams, stake: curStake },
+                    settled => { inFlight = Math.max(0, inFlight - 1); if (runRef.current || settled.profit !== 0) applyResult(settled.profit ?? 0); }
+                ).catch(err => {
+                    inFlight = Math.max(0, inFlight - 1);
+                    const msg = err?.message || err?.error?.message || 'Buy error';
+                    addLog(`⚠️ ${msg}`);
+                });
+            };
+
             let firedCount = 0;
             while (runRef.current) {
-                // Fire Now + Turbo: since Turbo doesn't await settlement, guard against
-                // firing more trades than the requested cap before results come back.
+                // Fire Now + Crazy/Turbo: since these don't await settlement, guard
+                // against firing more trades than the requested cap before results
+                // come back.
                 if (maxRunsRef.current != null && firedCount >= maxRunsRef.current) break;
-                firedCount++;
                 const curStake = stakeRef.current;
                 const speed = getExecutionSpeed();
                 try {
                     if (speed === 'turbo') {
-                        // Turbo: fire immediately, settlement tracked in background
-                        derivTradeRef.current.buyContract(
-                            { ...tradeParams, stake: curStake },
-                            settled => { if (runRef.current || settled.profit !== 0) applyResult(settled.profit ?? 0); }
-                        ).catch(err => {
-                            const msg = err?.message || err?.error?.message || 'Buy error';
-                            addLog(`⚠️ ${msg}`);
-                        });
-                        // No await — loop immediately
+                        // Turbo: super-human — fire the instant the loop re-enters,
+                        // zero waits, zero concurrency cap. Settlement is tracked
+                        // fully in the background.
+                        firedCount++;
+                        fireAndForget(curStake);
+                        // No await, no delay — immediately loop for the next fire.
+                    } else if (speed === 'crazy') {
+                        // Crazy: faster than Normal, no wait for settlement, but
+                        // pipelined with a small in-flight cap so it doesn't runaway
+                        // past Turbo or blow past Fire-Now caps before results land.
+                        if (inFlight >= CRAZY_MAX_IN_FLIGHT) {
+                            await new Promise(r => setTimeout(r, 0));
+                            continue;
+                        }
+                        firedCount++;
+                        fireAndForget(curStake);
                     } else {
-                        // Normal / Crazy: buy, wait for settlement, then next trade
+                        // Normal: buy, wait for full settlement, then fire the next trade.
+                        firedCount++;
                         const profit = await buyAndSettle(curStake);
                         if (!runRef.current) break;
                         applyResult(profit);

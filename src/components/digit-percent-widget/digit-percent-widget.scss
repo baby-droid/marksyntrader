@@ -1,0 +1,122 @@
+.digit-percent-widget {
+    position: relative;
+    display: inline-flex;
+    margin: 0.8rem 1.6rem 0.4rem;
+
+    &__trigger {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        grid-template-rows: repeat(2, 1fr);
+        gap: 3px;
+        width: 2rem;
+        height: 2rem;
+        padding: 3px;
+        border: 1px solid var(--border-normal, #d6dadb);
+        border-radius: 6px;
+        background: var(--general-main-1, #fff);
+        cursor: pointer;
+
+        &:hover { border-color: #7b3fe4; }
+    }
+
+    &__dot {
+        border-radius: 50%;
+        background: #7b3fe4;
+        width: 100%;
+        height: 100%;
+    }
+
+    &__panel {
+        position: absolute;
+        top: calc(100% + 0.6rem);
+        left: 0;
+        z-index: 20;
+        width: 34rem;
+        max-width: 90vw;
+        background: var(--general-main-1, #fff);
+        border: 1px solid var(--border-normal, #d6dadb);
+        border-radius: 10px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+        padding: 1.2rem;
+    }
+
+    &__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 0.8rem;
+    }
+
+    &__select {
+        flex: 1;
+        padding: 0.5rem 0.8rem;
+        border-radius: 6px;
+        border: 1px solid var(--border-normal, #d6dadb);
+        background: var(--general-main-1, #fff);
+        color: var(--text-general, #1f2937);
+        font-size: 1.2rem;
+    }
+
+    &__loading {
+        margin-left: 0.8rem;
+        font-size: 1.1rem;
+        color: #94a3b8;
+    }
+
+    &__triangle-track {
+        position: relative;
+        height: 1.2rem;
+        margin-bottom: 0.2rem;
+    }
+
+    &__triangle {
+        position: absolute;
+        top: 0;
+        width: 0;
+        height: 0;
+        transform: translateX(-50%);
+        border-left: 6px solid transparent;
+        border-right: 6px solid transparent;
+        border-top: 9px solid #7b3fe4;
+        transition: left 0.25s ease;
+    }
+
+    &__circles {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 0.8rem;
+    }
+
+    &__cell {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.3rem;
+    }
+
+    &__circle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 3.4rem;
+        height: 3.4rem;
+        border-radius: 50%;
+        transition: all 0.2s ease;
+
+        &--current {
+            box-shadow: 0 0 0 3px rgba(123, 63, 228, 0.35);
+            transform: scale(1.08);
+        }
+    }
+
+    &__digit {
+        font-weight: 700;
+        font-size: 1.3rem;
+    }
+
+    &__pct {
+        font-size: 1.05rem;
+        font-weight: 600;
+        color: var(--text-general, #1f2937);
+    }
+}
