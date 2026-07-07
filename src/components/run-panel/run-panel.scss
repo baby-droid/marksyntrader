@@ -87,10 +87,11 @@
         }
 
         &--info {
-            @include flex-center(center, flex-start);
+            @include flex-center(flex-end, flex-start);
 
-            width: 33%;
-            padding: 16px 0 2px;
+            width: 100%;
+            padding: 4px 8px 2px;
+            text-align: right;
             cursor: pointer;
             color: var(--text-general);
             -webkit-tap-highlight-color: transparent;

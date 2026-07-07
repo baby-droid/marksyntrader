@@ -1,7 +1,8 @@
 // @ts-nocheck
 import { useEffect, useRef, useState, useCallback } from 'react';
 
-const DERIV_WS_URL = 'wss://ws.binaryws.com/websockets/v3?app_id=1089';
+const APP_ID = (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_DERIV_APP_ID) || '36300';
+const DERIV_WS_URL = `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`;
 
 export interface DigitStat {
   digit: number;
@@ -36,11 +37,13 @@ export function useDigitStats(initialSymbol = 'R_10'): UseDigitStatsReturn {
   const symbolRef = useRef(symbol);
   symbolRef.current = symbol;
 
-  const computeDigits = useCallback((history: number[]) => {
+  const computeDigits = useCallback((history: Array<number | string>) => {
     const counts = Array(10).fill(0);
     history.forEach(price => {
-      const s = price.toFixed(2);
-      const d = parseInt(s[s.length - 1], 10);
+      const s = String(price);
+      const dotIdx = s.indexOf('.');
+      const lastChar = dotIdx !== -1 ? s[s.length - 1] : s[s.length - 1];
+      const d = parseInt(lastChar, 10);
       if (!isNaN(d)) counts[d]++;
     });
     const total = history.length || 1;
@@ -51,14 +54,16 @@ export function useDigitStats(initialSymbol = 'R_10'): UseDigitStatsReturn {
     }));
   }, []);
 
-  const ingestTick = useCallback((rawPrice: number, sym: string) => {
+  const ingestTick = useCallback((rawPrice: number | string, sym: string) => {
     if (sym !== symbolRef.current) return;
     const p = Number(rawPrice);
     if (!isFinite(p)) return;
     setCurrentPrice(p);
-    tickHistory.current = [...tickHistory.current, p].slice(-HISTORY_SIZE);
+    // Store as string to preserve exact decimal precision
+    const priceStr = String(rawPrice);
+    tickHistory.current = [...tickHistory.current, priceStr as any].slice(-HISTORY_SIZE);
     setLastTicks(prev => [...prev, p].slice(-50));
-    const s = p.toFixed(2);
+    const s = priceStr;
     const d = parseInt(s[s.length - 1], 10);
     if (!isNaN(d)) setLastDigit(d);
     setDigits(computeDigits(tickHistory.current));

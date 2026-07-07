@@ -108,6 +108,21 @@
         font-size: 1.15rem;
     }
 
+    /* Ticks number input (editable) */
+    &__ticks-input {
+        width: 6rem;
+        padding: 0.3rem 0.5rem;
+        border-radius: 5px;
+        border: 1px solid var(--border-normal, #d6dadb);
+        font-size: 1.1rem;
+        text-align: center;
+        background: var(--general-main-1, #fff);
+        color: var(--text-general, #1f2937);
+        flex-shrink: 0;
+
+        &:focus { outline: 2px solid #7b3fe4; }
+    }
+
     &__loading {
         margin-left: 0.6rem;
         font-size: 1.1rem;
@@ -325,6 +340,12 @@
         margin-bottom: 0.6rem;
     }
 
+    &__stream-section--dark {
+        margin: 0.8rem 1.2rem 0;
+        border-top: 1px dashed #334155;
+        padding-top: 0.6rem;
+    }
+
     &__stream-tag {
         display: inline-flex;
         align-items: center;
@@ -336,17 +357,42 @@
         font-weight: 700;
         border: 1px solid transparent;
 
+        /* Light mode */
         &.stream-even    { background: #dbeafe; color: #1d4ed8; }
         &.stream-odd     { background: #fce7f3; color: #9d174d; }
         &.stream-over    { background: #dcfce7; color: #15803d; }
         &.stream-under   { background: #fee2e2; color: #b91c1c; }
         &.stream-eq      { background: #f3f4f6; color: #374151; }
 
+        /* Dark mode variants */
+        &.stream-even--dark  { background: #1e3a5f; color: #60a5fa; }
+        &.stream-odd--dark   { background: #4a0d2e; color: #f9a8d4; }
+        &.stream-over--dark  { background: #14352a; color: #4ade80; }
+        &.stream-under--dark { background: #450a0a; color: #fca5a5; }
+        &.stream-eq--dark    { background: #1e293b; color: #94a3b8; }
+
         &.current {
             box-shadow: 0 0 0 2px #7b3fe4;
             transform: scale(1.15);
             z-index: 1;
         }
+    }
+
+    /* Dark mode pill variants */
+    &__stats100-pill {
+        &.stats100-even--dark  { background: #1e3a5f; color: #93c5fd; }
+        &.stats100-odd--dark   { background: #4a0d2e; color: #f9a8d4; }
+        &.stats100-over--dark  { background: #14352a; color: #86efac; }
+        &.stats100-under--dark { background: #450a0a; color: #fca5a5; }
+    }
+
+    /* Dark panel */
+    &__panel--dark {
+        .digit-percent-widget__drag-header  { background: #1e293b; border-color: #334155; }
+        .digit-percent-widget__drag-title   { color: #e2e8f0; }
+        .digit-percent-widget__pct          { color: #cbd5e1; }
+        .digit-percent-widget__stream-label { color: #94a3b8; }
+        .digit-percent-widget__footer       { color: #475569; }
     }
 
     /* Footer */

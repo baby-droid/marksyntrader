@@ -300,4 +300,76 @@
     &.won { background: rgba(66, 184, 131, 0.1); color: #42B883; }
     &.lost { background: rgba(226, 74, 67, 0.1); color: #E24A43; }
   }
+
+  /* ── Multi-market grid ────────────────────── */
+  &__multi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(22rem, 1fr));
+    gap: 1.2rem;
+    margin-top: 1rem;
+
+    @media (max-width: 600px) {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  &__mini-card {
+    background: var(--general-main-1, #fff);
+    border: 1px solid var(--border-normal, #e5e7eb);
+    border-radius: 1rem;
+    padding: 0.8rem 1rem;
+    transition: box-shadow 0.2s;
+
+    &:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
+  }
+
+  &__mini-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.3rem;
+  }
+
+  &__mini-label {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-general, #1f2937);
+  }
+
+  &__mini-status {
+    font-size: 0.9rem;
+    color: #9ca3af;
+    &.live { color: #22c55e; }
+  }
+
+  &__mini-price {
+    font-size: 1.3rem;
+    font-weight: 800;
+    color: #7b3fe4;
+    margin-bottom: 0.5rem;
+    letter-spacing: 0.02em;
+  }
+
+  &__mini-circles {
+    display: grid;
+    grid-template-columns: repeat(10, 1fr);
+    gap: 2px;
+  }
+
+  &__mini-circle {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    padding: 2px 0;
+    min-height: 3.2rem;
+    cursor: default;
+    transition: transform 0.15s;
+
+    &.current {
+      transform: scale(1.12);
+      z-index: 1;
+    }
+  }
 }

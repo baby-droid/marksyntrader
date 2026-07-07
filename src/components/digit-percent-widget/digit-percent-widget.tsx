@@ -2,40 +2,54 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import './digit-percent-widget.scss';
 
-const MARKETS: { value: string; label: string }[] = [
-    { value: 'R_10',      label: 'Volatility 10 Index' },
-    { value: 'R_25',      label: 'Volatility 25 Index' },
-    { value: 'R_50',      label: 'Volatility 50 Index' },
-    { value: 'R_75',      label: 'Volatility 75 Index' },
-    { value: 'R_100',     label: 'Volatility 100 Index' },
-    { value: '1HZ10V',    label: 'Volatility 10 (1s) Index' },
-    { value: '1HZ25V',    label: 'Volatility 25 (1s) Index' },
-    { value: '1HZ50V',    label: 'Volatility 50 (1s) Index' },
-    { value: '1HZ75V',    label: 'Volatility 75 (1s) Index' },
-    { value: '1HZ100V',   label: 'Volatility 100 (1s) Index' },
-    { value: 'JD10',      label: 'Jump 10 Index' },
-    { value: 'JD25',      label: 'Jump 25 Index' },
-    { value: 'JD50',      label: 'Jump 50 Index' },
-    { value: 'JD75',      label: 'Jump 75 Index' },
-    { value: 'JD100',     label: 'Jump 100 Index' },
-    { value: 'CRASH300N', label: 'Crash 300 Index' },
-    { value: 'CRASH500',  label: 'Crash 500 Index' },
-    { value: 'CRASH1000', label: 'Crash 1000 Index' },
-    { value: 'BOOM300N',  label: 'Boom 300 Index' },
-    { value: 'BOOM500',   label: 'Boom 500 Index' },
-    { value: 'BOOM1000',  label: 'Boom 1000 Index' },
-    { value: 'stpRNG',    label: 'Step Index' },
-    { value: 'RDBEAR',    label: 'Bear Market Index' },
-    { value: 'RDBULL',    label: 'Bull Market Index' },
-    { value: 'RBREAKOUT100N', label: 'Range Break 100 Index' },
-    { value: 'RBREAKOUT200N', label: 'Range Break 200 Index' },
+const APP_ID = (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_DERIV_APP_ID) || '36300';
+
+const MARKETS: { value: string; label: string; pipSize: number }[] = [
+    { value: 'R_10',      label: 'Volatility 10 Index',      pipSize: 3 },
+    { value: 'R_25',      label: 'Volatility 25 Index',      pipSize: 3 },
+    { value: 'R_50',      label: 'Volatility 50 Index',      pipSize: 4 },
+    { value: 'R_75',      label: 'Volatility 75 Index',      pipSize: 4 },
+    { value: 'R_100',     label: 'Volatility 100 Index',     pipSize: 2 },
+    { value: '1HZ10V',    label: 'Volatility 10 (1s) Index', pipSize: 3 },
+    { value: '1HZ25V',    label: 'Volatility 25 (1s) Index', pipSize: 3 },
+    { value: '1HZ50V',    label: 'Volatility 50 (1s) Index', pipSize: 4 },
+    { value: '1HZ75V',    label: 'Volatility 75 (1s) Index', pipSize: 4 },
+    { value: '1HZ100V',   label: 'Volatility 100 (1s) Index',pipSize: 2 },
+    { value: 'JD10',      label: 'Jump 10 Index',            pipSize: 3 },
+    { value: 'JD25',      label: 'Jump 25 Index',            pipSize: 3 },
+    { value: 'JD50',      label: 'Jump 50 Index',            pipSize: 4 },
+    { value: 'JD75',      label: 'Jump 75 Index',            pipSize: 4 },
+    { value: 'JD100',     label: 'Jump 100 Index',           pipSize: 2 },
+    { value: 'CRASH300N', label: 'Crash 300 Index',          pipSize: 2 },
+    { value: 'CRASH500',  label: 'Crash 500 Index',          pipSize: 2 },
+    { value: 'CRASH1000', label: 'Crash 1000 Index',         pipSize: 2 },
+    { value: 'BOOM300N',  label: 'Boom 300 Index',           pipSize: 2 },
+    { value: 'BOOM500',   label: 'Boom 500 Index',           pipSize: 2 },
+    { value: 'BOOM1000',  label: 'Boom 1000 Index',          pipSize: 2 },
+    { value: 'stpRNG',    label: 'Step Index',               pipSize: 2 },
+    { value: 'RDBEAR',    label: 'Bear Market Index',        pipSize: 4 },
+    { value: 'RDBULL',    label: 'Bull Market Index',        pipSize: 4 },
+    { value: 'RBREAKOUT100N', label: 'Range Break 100 Index',pipSize: 4 },
+    { value: 'RBREAKOUT200N', label: 'Range Break 200 Index',pipSize: 4 },
 ];
 
 type TDigitStat = { digit: number; count: number; pct: number };
 
-function getLastDigit(quote: number): number {
-    const s = quote.toFixed(2).replace('.', '');
-    return parseInt(s[s.length - 1], 10);
+/** Extract last digit from a raw quote string using pip_size if known */
+function getLastDigit(quoteRaw: string | number, pipSize?: number): number {
+    // Use string representation directly to avoid floating point rounding
+    const s = String(quoteRaw);
+    const dotIdx = s.indexOf('.');
+    if (dotIdx !== -1) {
+        // Last character after decimal point is the last digit
+        const decimals = s.slice(dotIdx + 1);
+        if (decimals.length > 0) {
+            return parseInt(decimals[decimals.length - 1], 10);
+        }
+    }
+    // No decimal — take last digit of integer part
+    const clean = s.replace('-', '');
+    return parseInt(clean[clean.length - 1], 10);
 }
 
 function computeRankColors(stats: TDigitStat[]): Record<number, { fill: string; ring: string }> {
@@ -55,7 +69,7 @@ function computeRankColors(stats: TDigitStat[]): Record<number, { fill: string; 
             else if (s.pct === lowest) color = '#ef4444';
             else if (secondLowest !== undefined && s.pct === secondLowest) color = '#eab308';
         }
-        result[s.digit] = color ? { fill: color, ring: color } : { fill: '#ffffff', ring: '#000000' };
+        result[s.digit] = color ? { fill: color, ring: color } : { fill: '', ring: '' };
     });
     return result;
 }
@@ -71,7 +85,6 @@ function getOverUnderTag(digit: number, threshold: number): { tag: string; cls: 
     return { tag: '=', cls: 'stream-eq' };
 }
 
-/** Compute even%, odd%, over%, under% for a given set of ticks */
 function computeStreamStats(ticks: number[], threshold: number) {
     if (ticks.length === 0) return null;
     const n = ticks.length;
@@ -94,9 +107,14 @@ const DigitPercentWidget: React.FC = () => {
     const [open, setOpen] = useState(false);
     const [symbol, setSymbol] = useState('R_100');
     const [tickCount, setTickCount] = useState(1000);
+    const [tickInput, setTickInput] = useState('1000');
     const [ticks, setTicks] = useState<number[]>([]);
     const [currentDigit, setCurrentDigit] = useState<number | null>(null);
+    const [currentPrice, setCurrentPrice] = useState<string | null>(null);
     const [threshold, setThreshold] = useState(5);
+    const [darkMode, setDarkMode] = useState(() => {
+        try { return localStorage.getItem('digit_widget_dark') === '1'; } catch { return false; }
+    });
     const wsRef = useRef<WebSocket | null>(null);
 
     // Panel drag state — persists position in localStorage
@@ -110,6 +128,10 @@ const DigitPercentWidget: React.FC = () => {
     useEffect(() => {
         if (panelPos) try { localStorage.setItem('digit_widget_pos', JSON.stringify(panelPos)); } catch {}
     }, [panelPos]);
+
+    useEffect(() => {
+        try { localStorage.setItem('digit_widget_dark', darkMode ? '1' : '0'); } catch {}
+    }, [darkMode]);
 
     const onDragDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
         const el = panelRef.current;
@@ -141,32 +163,62 @@ const DigitPercentWidget: React.FC = () => {
 
     const onDragUp = useCallback(() => { dragRef.current = null; }, []);
 
+    const currentMarket = MARKETS.find(m => m.value === symbol) ?? MARKETS[0];
+
     useEffect(() => {
         if (!open) return;
         wsRef.current?.close();
         setTicks([]);
         setCurrentDigit(null);
+        setCurrentPrice(null);
 
-        const ws = new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
+        const wsUrl = `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`;
+        const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
+
         ws.onopen = () => {
-            ws.send(JSON.stringify({ ticks_history: symbol, count: tickCount, end: 'latest', style: 'ticks', subscribe: 1 }));
+            ws.send(JSON.stringify({
+                ticks_history: symbol,
+                count: tickCount,
+                end: 'latest',
+                style: 'ticks',
+                subscribe: 1,
+            }));
         };
+
         ws.onmessage = e => {
-            const data = JSON.parse(e.data);
-            if (data.history?.prices) {
-                const digits = data.history.prices.map((p: number) => getLastDigit(Number(p)));
-                setTicks(digits);
-                setCurrentDigit(digits[digits.length - 1] ?? null);
-            } else if (data.tick) {
-                const digit = getLastDigit(Number(data.tick.quote));
-                setCurrentDigit(digit);
-                setTicks(prev => [...prev.slice(-(tickCount - 1)), digit]);
+            try {
+                const data = JSON.parse(e.data);
+                if (data.error) {
+                    console.warn('[DigitWidget] WS error:', data.error.message);
+                    return;
+                }
+                if (data.history?.prices && Array.isArray(data.history.prices)) {
+                    // History batch — prices come as strings from the API
+                    const digits = data.history.prices.map((p: any) =>
+                        getLastDigit(String(p), currentMarket.pipSize)
+                    );
+                    setTicks(digits);
+                    if (digits.length > 0) setCurrentDigit(digits[digits.length - 1]);
+                    if (data.history.prices.length > 0) {
+                        setCurrentPrice(String(data.history.prices[data.history.prices.length - 1]));
+                    }
+                } else if (data.tick) {
+                    const quoteStr = String(data.tick.quote);
+                    const digit = getLastDigit(quoteStr, data.tick.pip_size);
+                    setCurrentDigit(digit);
+                    setCurrentPrice(quoteStr);
+                    setTicks(prev => [...prev.slice(-(tickCount - 1)), digit]);
+                }
+            } catch (err) {
+                console.warn('[DigitWidget] parse error', err);
             }
         };
 
+        ws.onerror = err => console.warn('[DigitWidget] WS error', err);
+
         return () => { ws.close(); };
-    }, [open, symbol, tickCount]);
+    }, [open, symbol, tickCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
         return () => { wsRef.current?.close(); };
@@ -188,8 +240,13 @@ const DigitPercentWidget: React.FC = () => {
     const statsAll     = computeStreamStats(ticks, threshold);
 
     const panelStyle: React.CSSProperties = panelPos
-        ? { position: 'fixed', left: panelPos.x, top: panelPos.y, transform: 'none' }
-        : { position: 'fixed', left: '0.8rem', top: '50%', transform: 'translateY(-50%)' };
+        ? { position: 'fixed', left: panelPos.x, top: panelPos.y, transform: 'none', zIndex: 9999 }
+        : { position: 'fixed', left: '0.8rem', top: '50%', transform: 'translateY(-50%)', zIndex: 9999 };
+
+    const dmBg    = darkMode ? '#0f172a' : undefined;
+    const dmBd    = darkMode ? '#334155' : undefined;
+    const dmText  = darkMode ? '#e2e8f0' : undefined;
+    const dmSec   = darkMode ? '#1e293b' : undefined;
 
     return (
         <div className='digit-percent-widget'>
@@ -205,28 +262,46 @@ const DigitPercentWidget: React.FC = () => {
             </button>
 
             {open && createPortal(
-                <div className='digit-percent-widget__panel' ref={panelRef} style={panelStyle}>
-                    {/* Drag header with X close */}
+                <div
+                    className={`digit-percent-widget__panel ${darkMode ? 'digit-percent-widget__panel--dark' : ''}`}
+                    ref={panelRef}
+                    style={{ ...panelStyle, background: dmBg, borderColor: dmBd, color: dmText }}
+                >
+                    {/* Drag header with X close + dark/light mode */}
                     <div
                         className='digit-percent-widget__drag-header'
+                        style={darkMode ? { background: dmSec, borderColor: dmBd } : undefined}
                         onPointerDown={onDragDown}
                         onPointerMove={onDragMove}
                         onPointerUp={onDragUp}
                         onPointerCancel={onDragUp}
                     >
                         <span className='digit-percent-widget__drag-icon'>⠿</span>
-                        <span className='digit-percent-widget__drag-title'>Digit % Analyzer</span>
+                        <span className='digit-percent-widget__drag-title' style={darkMode ? { color: dmText } : undefined}>
+                            Digit % Analyzer
+                        </span>
+                        {/* Dark / Light toggle */}
                         <button
                             className='digit-percent-widget__close-btn'
+                            style={darkMode ? { borderColor: dmBd, color: '#94a3b8', background: dmSec } : undefined}
+                            onClick={e => { e.stopPropagation(); setDarkMode(d => !d); }}
+                            title={darkMode ? 'Switch to Light mode' : 'Switch to Dark mode'}
+                        >
+                            {darkMode ? '☀' : '🌙'}
+                        </button>
+                        <button
+                            className='digit-percent-widget__close-btn'
+                            style={darkMode ? { borderColor: dmBd, color: '#94a3b8', background: dmSec } : undefined}
                             onClick={() => setOpen(false)}
                             title='Close'
                         >✕</button>
                     </div>
 
-                    {/* Market dropdown */}
+                    {/* Market dropdown + live price */}
                     <div className='digit-percent-widget__header'>
                         <select
                             className='digit-percent-widget__select'
+                            style={darkMode ? { background: dmSec, borderColor: dmBd, color: dmText } : undefined}
                             value={symbol}
                             onChange={e => setSymbol(e.target.value)}
                         >
@@ -234,21 +309,53 @@ const DigitPercentWidget: React.FC = () => {
                                 <option key={m.value} value={m.value}>{m.label}</option>
                             ))}
                         </select>
+                        {currentPrice && (
+                            <span style={{
+                                marginLeft: '0.5rem',
+                                fontSize: '1.05rem',
+                                fontWeight: 700,
+                                color: darkMode ? '#22d3ee' : '#7b3fe4',
+                                whiteSpace: 'nowrap',
+                            }}>
+                                {currentPrice}
+                            </span>
+                        )}
                         {ticks.length === 0 && <span className='digit-percent-widget__loading'>Loading…</span>}
                     </div>
 
-                    {/* Ticks slider */}
-                    <div className='digit-percent-widget__ticks-row'>
-                        <label className='digit-percent-widget__ticks-label'>
-                            Ticks: <strong>{tickCount}</strong>
+                    {/* Ticks slider + editable input */}
+                    <div className='digit-percent-widget__ticks-row' style={darkMode ? { color: dmText } : undefined}>
+                        <label className='digit-percent-widget__ticks-label' style={darkMode ? { color: dmText } : undefined}>
+                            Ticks:
                         </label>
                         <input
-                            className='digit-percent-widget__ticks-slider'
-                            type='range' min={100} max={2000} step={100}
-                            value={tickCount}
-                            onChange={e => setTickCount(Number(e.target.value))}
+                            type='number'
+                            className='digit-percent-widget__ticks-input'
+                            style={darkMode ? { background: dmSec, borderColor: dmBd, color: dmText } : undefined}
+                            min={100}
+                            max={5000}
+                            step={100}
+                            value={tickInput}
+                            onChange={e => setTickInput(e.target.value)}
+                            onBlur={() => {
+                                const v = Math.max(100, Math.min(5000, parseInt(tickInput) || 1000));
+                                setTickInput(String(v));
+                                setTickCount(v);
+                            }}
+                            onKeyDown={e => {
+                                if (e.key === 'Enter') {
+                                    const v = Math.max(100, Math.min(5000, parseInt(tickInput) || 1000));
+                                    setTickInput(String(v));
+                                    setTickCount(v);
+                                }
+                            }}
                         />
-                        <span className='digit-percent-widget__ticks-range'>100–2000</span>
+                        <input
+                            className='digit-percent-widget__ticks-slider'
+                            type='range' min={100} max={5000} step={100}
+                            value={tickCount}
+                            onChange={e => { setTickCount(Number(e.target.value)); setTickInput(e.target.value); }}
+                        />
                     </div>
 
                     {/* TOP row: digits 0-4 */}
@@ -268,17 +375,21 @@ const DigitPercentWidget: React.FC = () => {
                             {topRow.map(s => {
                                 const isCurrent = currentDigit === s.digit;
                                 const c = colors[s.digit];
+                                const fillColor = c.fill || (darkMode ? '#374151' : '#f3f4f6');
+                                const textColor = c.fill ? '#fff' : (darkMode ? '#e2e8f0' : '#1f2937');
                                 return (
                                     <div key={s.digit} className='digit-percent-widget__cell'>
                                         <div
                                             className={`digit-percent-widget__circle ${isCurrent ? 'digit-percent-widget__circle--current' : ''}`}
-                                            style={{ background: c.fill, border: `2px solid ${c.ring}` }}
+                                            style={{ background: fillColor, border: `2px solid ${c.ring || (darkMode ? '#475569' : '#d1d5db')}` }}
                                         >
-                                            <span className='digit-percent-widget__digit' style={{ color: c.fill === '#ffffff' ? '#000' : '#fff' }}>
+                                            <span className='digit-percent-widget__digit' style={{ color: textColor }}>
                                                 {s.digit}
                                             </span>
                                         </div>
-                                        <span className='digit-percent-widget__pct'>{s.pct.toFixed(1)}%</span>
+                                        <span className='digit-percent-widget__pct' style={darkMode ? { color: '#cbd5e1' } : undefined}>
+                                            {s.pct.toFixed(1)}%
+                                        </span>
                                     </div>
                                 );
                             })}
@@ -293,17 +404,21 @@ const DigitPercentWidget: React.FC = () => {
                             {bottomRow.map(s => {
                                 const isCurrent = currentDigit === s.digit;
                                 const c = colors[s.digit];
+                                const fillColor = c.fill || (darkMode ? '#374151' : '#f3f4f6');
+                                const textColor = c.fill ? '#fff' : (darkMode ? '#e2e8f0' : '#1f2937');
                                 return (
                                     <div key={s.digit} className='digit-percent-widget__cell'>
                                         <div
                                             className={`digit-percent-widget__circle ${isCurrent ? 'digit-percent-widget__circle--current' : ''}`}
-                                            style={{ background: c.fill, border: `2px solid ${c.ring}` }}
+                                            style={{ background: fillColor, border: `2px solid ${c.ring || (darkMode ? '#475569' : '#d1d5db')}` }}
                                         >
-                                            <span className='digit-percent-widget__digit' style={{ color: c.fill === '#ffffff' ? '#000' : '#fff' }}>
+                                            <span className='digit-percent-widget__digit' style={{ color: textColor }}>
                                                 {s.digit}
                                             </span>
                                         </div>
-                                        <span className='digit-percent-widget__pct'>{s.pct.toFixed(1)}%</span>
+                                        <span className='digit-percent-widget__pct' style={darkMode ? { color: '#cbd5e1' } : undefined}>
+                                            {s.pct.toFixed(1)}%
+                                        </span>
                                     </div>
                                 );
                             })}
@@ -320,22 +435,22 @@ const DigitPercentWidget: React.FC = () => {
 
                     {/* 100-tick Even/Odd and Over/Under stats */}
                     {stats100 && (
-                        <div className='digit-percent-widget__stats100'>
-                            <div className='digit-percent-widget__stats100-title'>
+                        <div className='digit-percent-widget__stats100' style={darkMode ? { background: dmSec, borderColor: dmBd } : undefined}>
+                            <div className='digit-percent-widget__stats100-title' style={darkMode ? { color: '#94a3b8' } : undefined}>
                                 Last 100 ticks &nbsp;
                                 <span className='digit-percent-widget__stats100-sub'>({Math.min(last100Ticks.length, 100)} loaded)</span>
                             </div>
                             <div className='digit-percent-widget__stats100-row'>
-                                <div className='digit-percent-widget__stats100-pill stats100-even'>
+                                <div className={`digit-percent-widget__stats100-pill stats100-even${darkMode ? '--dark' : ''}`}>
                                     <span>Even</span><strong>{stats100.evenPct}%</strong>
                                 </div>
-                                <div className='digit-percent-widget__stats100-pill stats100-odd'>
+                                <div className={`digit-percent-widget__stats100-pill stats100-odd${darkMode ? '--dark' : ''}`}>
                                     <span>Odd</span><strong>{stats100.oddPct}%</strong>
                                 </div>
-                                <div className='digit-percent-widget__stats100-pill stats100-over'>
+                                <div className={`digit-percent-widget__stats100-pill stats100-over${darkMode ? '--dark' : ''}`}>
                                     <span>Over {threshold}</span><strong>{stats100.overPct}%</strong>
                                 </div>
-                                <div className='digit-percent-widget__stats100-pill stats100-under'>
+                                <div className={`digit-percent-widget__stats100-pill stats100-under${darkMode ? '--dark' : ''}`}>
                                     <span>Under {threshold}</span><strong>{stats100.underPct}%</strong>
                                 </div>
                                 {stats100.eqPct > 0 && (
@@ -345,8 +460,8 @@ const DigitPercentWidget: React.FC = () => {
                                 )}
                             </div>
                             {statsAll && statsAll.n > 100 && (
-                                <div className='digit-percent-widget__stats100-row' style={{ marginTop: '0.3rem', opacity: 0.65 }}>
-                                    <span style={{ fontSize: '0.85rem', color: '#94a3b8', marginRight: 6 }}>All {statsAll.n}:</span>
+                                <div className='digit-percent-widget__stats100-row' style={{ marginTop: '0.3rem', opacity: 0.75 }}>
+                                    <span style={{ fontSize: '0.85rem', color: darkMode ? '#64748b' : '#94a3b8', marginRight: 6 }}>All {statsAll.n}:</span>
                                     <span className='digit-percent-widget__stats100-pill stats100-even' style={{ padding: '1px 6px' }}>E {statsAll.evenPct}%</span>
                                     <span className='digit-percent-widget__stats100-pill stats100-odd' style={{ padding: '1px 6px' }}>O {statsAll.oddPct}%</span>
                                     <span className='digit-percent-widget__stats100-pill stats100-over' style={{ padding: '1px 6px' }}>Ov {statsAll.overPct}%</span>
@@ -357,10 +472,11 @@ const DigitPercentWidget: React.FC = () => {
                     )}
 
                     {/* Threshold control */}
-                    <div className='digit-percent-widget__threshold-row'>
+                    <div className='digit-percent-widget__threshold-row' style={darkMode ? { color: dmText } : undefined}>
                         <label>Threshold digit:</label>
                         <select
                             className='digit-percent-widget__threshold-select'
+                            style={darkMode ? { background: dmSec, borderColor: dmBd, color: dmText } : undefined}
                             value={threshold}
                             onChange={e => setThreshold(Number(e.target.value))}
                         >
@@ -370,24 +486,28 @@ const DigitPercentWidget: React.FC = () => {
 
                     {/* Stream display: E/O and Over/Under */}
                     {recentTicks.length > 0 && (
-                        <div className='digit-percent-widget__stream-section'>
-                            <div className='digit-percent-widget__stream-label'>Even / Odd stream (E=even, O=odd)</div>
+                        <div className={`digit-percent-widget__stream-section${darkMode ? '--dark' : ''}`} style={darkMode ? { borderColor: '#334155' } : undefined}>
+                            <div className='digit-percent-widget__stream-label' style={darkMode ? { color: '#94a3b8' } : undefined}>
+                                Even / Odd stream (E=even, O=odd)
+                            </div>
                             <div className='digit-percent-widget__stream'>
                                 {recentTicks.map((d, i) => {
                                     const { tag, cls } = getStreamTag(d);
                                     return (
-                                        <span key={i} className={`digit-percent-widget__stream-tag ${cls} ${i === recentTicks.length - 1 ? 'current' : ''}`}>
+                                        <span key={i} className={`digit-percent-widget__stream-tag ${cls}${darkMode ? '--dark' : ''} ${i === recentTicks.length - 1 ? 'current' : ''}`}>
                                             {tag}
                                         </span>
                                     );
                                 })}
                             </div>
-                            <div className='digit-percent-widget__stream-label'>Over / Under / Equal (threshold={threshold})</div>
+                            <div className='digit-percent-widget__stream-label' style={darkMode ? { color: '#94a3b8' } : undefined}>
+                                Over / Under / Equal (threshold={threshold})
+                            </div>
                             <div className='digit-percent-widget__stream'>
                                 {recentTicks.map((d, i) => {
                                     const { tag, cls } = getOverUnderTag(d, threshold);
                                     return (
-                                        <span key={i} className={`digit-percent-widget__stream-tag ${cls} ${i === recentTicks.length - 1 ? 'current' : ''}`}>
+                                        <span key={i} className={`digit-percent-widget__stream-tag ${cls}${darkMode ? '--dark' : ''} ${i === recentTicks.length - 1 ? 'current' : ''}`}>
                                             {tag}
                                         </span>
                                     );
@@ -397,9 +517,14 @@ const DigitPercentWidget: React.FC = () => {
                     )}
 
                     {/* Footer */}
-                    <div className='digit-percent-widget__footer'>
+                    <div className='digit-percent-widget__footer' style={darkMode ? { color: '#64748b' } : undefined}>
                         <span>{ticks.length} ticks loaded</span>
-                        {currentDigit !== null && <span>Current: <strong>{currentDigit}</strong></span>}
+                        {currentDigit !== null && (
+                            <span>
+                                Current: <strong style={{ color: darkMode ? '#22d3ee' : '#7b3fe4' }}>{currentDigit}</strong>
+                                {currentPrice && <span style={{ marginLeft: 8, color: darkMode ? '#94a3b8' : '#4b5563' }}>{currentPrice}</span>}
+                            </span>
+                        )}
                     </div>
                 </div>,
                 document.body
