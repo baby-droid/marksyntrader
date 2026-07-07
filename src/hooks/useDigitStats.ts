@@ -22,6 +22,16 @@ export interface UseDigitStatsReturn {
 
 const HISTORY_SIZE = 1000;
 
+/**
+ * CRITICAL: JavaScript strips trailing zeros from floats.
+ *   JSON  1234.10  →  JS Number  1234.1  →  String  "1234.1"  →  last char "1" (WRONG)
+ *   Fix: toFixed(pipSize) rebuilds proper string  "1234.10"  →  last char "0" (CORRECT)
+ */
+function extractLastDigit(price: number, pipSize: number): number {
+  const s = Number(price).toFixed(pipSize);
+  return parseInt(s[s.length - 1], 10);
+}
+
 export function useDigitStats(initialSymbol = 'R_10'): UseDigitStatsReturn {
   const [symbol, setSymbol] = useState(initialSymbol);
   const [digits, setDigits] = useState<DigitStat[]>(
@@ -33,18 +43,16 @@ export function useDigitStats(initialSymbol = 'R_10'): UseDigitStatsReturn {
   const [isConnected, setIsConnected] = useState(false);
 
   const tickHistory = useRef<number[]>([]);
+  const pipSizeRef = useRef<number>(2); // updated from first tick response
   const wsRef = useRef<WebSocket | null>(null);
   const symbolRef = useRef(symbol);
   symbolRef.current = symbol;
 
-  const computeDigits = useCallback((history: Array<number | string>) => {
+  const computeDigits = useCallback((history: number[], pipSize: number) => {
     const counts = Array(10).fill(0);
     history.forEach(price => {
-      const s = String(price);
-      const dotIdx = s.indexOf('.');
-      const lastChar = dotIdx !== -1 ? s[s.length - 1] : s[s.length - 1];
-      const d = parseInt(lastChar, 10);
-      if (!isNaN(d)) counts[d]++;
+      const d = extractLastDigit(price, pipSize);
+      if (!isNaN(d) && d >= 0 && d <= 9) counts[d]++;
     });
     const total = history.length || 1;
     return Array.from({ length: 10 }, (_, i) => ({
@@ -54,27 +62,13 @@ export function useDigitStats(initialSymbol = 'R_10'): UseDigitStatsReturn {
     }));
   }, []);
 
-  const ingestTick = useCallback((rawPrice: number | string, sym: string) => {
-    if (sym !== symbolRef.current) return;
-    const p = Number(rawPrice);
-    if (!isFinite(p)) return;
-    setCurrentPrice(p);
-    // Store as string to preserve exact decimal precision
-    const priceStr = String(rawPrice);
-    tickHistory.current = [...tickHistory.current, priceStr as any].slice(-HISTORY_SIZE);
-    setLastTicks(prev => [...prev, p].slice(-50));
-    const s = priceStr;
-    const d = parseInt(s[s.length - 1], 10);
-    if (!isNaN(d)) setLastDigit(d);
-    setDigits(computeDigits(tickHistory.current));
-  }, [computeDigits]);
-
   const subscribe = useCallback((sym: string) => {
     if (wsRef.current) {
       try { wsRef.current.close(); } catch (_) {}
       wsRef.current = null;
     }
     tickHistory.current = [];
+    pipSizeRef.current = 2;
     setIsConnected(false);
 
     const ws = new WebSocket(DERIV_WS_URL);
@@ -91,24 +85,40 @@ export function useDigitStats(initialSymbol = 'R_10'): UseDigitStatsReturn {
       try { data = JSON.parse(e.data); } catch (_) { return; }
 
       if (data.msg_type === 'history' && data.history?.prices) {
-        const prices = data.history.prices.map(Number);
+        const prices: number[] = data.history.prices.map(Number);
         tickHistory.current = prices.slice(-HISTORY_SIZE);
         setCurrentPrice(prices[prices.length - 1]);
         setLastTicks(prices.slice(-50));
-        setDigits(computeDigits(tickHistory.current));
+        // pipSize from history isn't given directly — use current ref (will be updated by first tick)
+        setDigits(computeDigits(tickHistory.current, pipSizeRef.current));
         const lastP = prices[prices.length - 1];
-        const s = lastP.toFixed(2);
-        setLastDigit(parseInt(s[s.length - 1], 10));
+        setLastDigit(extractLastDigit(lastP, pipSizeRef.current));
         setIsConnected(true);
       } else if (data.msg_type === 'tick' && data.tick?.quote != null) {
         setIsConnected(true);
-        ingestTick(data.tick.quote, sym);
+        const p = Number(data.tick.quote);
+        if (!isFinite(p)) return;
+        if (sym !== symbolRef.current) return;
+
+        // Capture pip_size from the live feed — this is the authoritative source
+        if (data.tick.pip_size != null) {
+          pipSizeRef.current = Number(data.tick.pip_size);
+        }
+
+        const pipSize = pipSizeRef.current;
+        const d = extractLastDigit(p, pipSize);
+
+        setCurrentPrice(p);
+        tickHistory.current = [...tickHistory.current, p].slice(-HISTORY_SIZE);
+        setLastTicks(prev => [...prev, p].slice(-50));
+        if (!isNaN(d)) setLastDigit(d);
+        setDigits(computeDigits(tickHistory.current, pipSize));
       }
     };
 
     ws.onerror = () => setIsConnected(false);
     ws.onclose = () => setIsConnected(false);
-  }, [computeDigits, ingestTick]);
+  }, [computeDigits]);
 
   useEffect(() => {
     subscribe(symbol);

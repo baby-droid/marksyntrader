@@ -113,7 +113,9 @@ const DigitPercentWidget: React.FC = () => {
     const [darkMode, setDarkMode] = useState(() => {
         try { return localStorage.getItem('digit_widget_dark') === '1'; } catch { return false; }
     });
-    const wsRef = useRef<WebSocket | null>(null);
+    const wsRef    = useRef<WebSocket | null>(null);
+    // pip_size is received from the live tick stream — authoritative source
+    const pipSizeRef = useRef<number>(currentMarket.pipSize);
 
     // Panel drag state — persists position in localStorage
     const [panelPos, setPanelPos] = useState<{ x: number; y: number } | null>(() => {
@@ -174,6 +176,9 @@ const DigitPercentWidget: React.FC = () => {
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
 
+        // Reset pipSize ref to the market default when switching markets
+        pipSizeRef.current = currentMarket.pipSize;
+
         ws.onopen = () => {
             ws.send(JSON.stringify({
                 ticks_history: symbol,
@@ -192,20 +197,27 @@ const DigitPercentWidget: React.FC = () => {
                     return;
                 }
                 if (data.history?.prices && Array.isArray(data.history.prices)) {
-                    // History batch — prices come as strings from the API
+                    // History batch — use known pipSize for this market
+                    const ps = pipSizeRef.current;
                     const digits = data.history.prices.map((p: any) =>
-                        getLastDigit(String(p), currentMarket.pipSize)
+                        getLastDigit(Number(p), ps)
                     );
                     setTicks(digits);
                     if (digits.length > 0) setCurrentDigit(digits[digits.length - 1]);
                     if (data.history.prices.length > 0) {
-                        setCurrentPrice(String(data.history.prices[data.history.prices.length - 1]));
+                        const last = Number(data.history.prices[data.history.prices.length - 1]);
+                        setCurrentPrice(last.toFixed(ps));
                     }
                 } else if (data.tick) {
-                    const quoteStr = String(data.tick.quote);
-                    const digit = getLastDigit(quoteStr, data.tick.pip_size);
+                    // Capture the authoritative pip_size from the live stream
+                    if (data.tick.pip_size != null) {
+                        pipSizeRef.current = Number(data.tick.pip_size);
+                    }
+                    const ps = pipSizeRef.current;
+                    const quote = Number(data.tick.quote);
+                    const digit = getLastDigit(quote, ps);
                     setCurrentDigit(digit);
-                    setCurrentPrice(quoteStr);
+                    setCurrentPrice(quote.toFixed(ps));
                     setTicks(prev => [...prev.slice(-(tickCount - 1)), digit]);
                 }
             } catch (err) {
