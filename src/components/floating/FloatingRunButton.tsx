@@ -26,9 +26,20 @@ const FloatingRunButton: React.FC = observer(() => {
     const { run_panel } = useStore();
     const { is_running, onRunButtonClick, onStopButtonClick } = run_panel as any;
     const [collapsed, setCollapsed] = useState(false);
+    const [paused, setPaused] = useState(false);
 
-    // Draggable position — load from localStorage, default to bottom-right
-    const [pos, setPos] = useState<{ x: number; y: number } | null>(() => loadPos());
+    // Reset paused state when bot is not running
+    useEffect(() => {
+        if (!is_running) setPaused(false);
+    }, [is_running]);
+
+    // Draggable position — load from localStorage, default to right side
+    const [pos, setPos] = useState<{ x: number; y: number } | null>(() => {
+        const saved = loadPos();
+        if (saved) return saved;
+        // Default: right side, vertically centered
+        return { x: window.innerWidth - 220, y: Math.floor(window.innerHeight * 0.45) };
+    });
     const dragRef = useRef<{
         startX: number; startY: number;
         origX: number; origY: number;
@@ -64,7 +75,7 @@ const FloatingRunButton: React.FC = observer(() => {
         if (!st.dragging && Math.hypot(dx, dy) < 4) return;
         st.dragging = true;
         const el = btnRef.current;
-        const w = el?.offsetWidth ?? 180;
+        const w = el?.offsetWidth ?? 200;
         const h = el?.offsetHeight ?? 60;
         const x = clamp(st.origX + dx, 4, window.innerWidth - w - 4);
         const y = clamp(st.origY + dy, 4, window.innerHeight - h - 4);
@@ -78,15 +89,26 @@ const FloatingRunButton: React.FC = observer(() => {
         if (st?.dragging && pos) savePos(pos);
     }, [pos]);
 
-    // Default position: bottom-right
+    const handlePause = useCallback(() => {
+        if (!paused) {
+            // Pause: stop after current trade settles
+            setPaused(true);
+            onStopButtonClick();
+        } else {
+            // Resume: restart bot
+            setPaused(false);
+            onRunButtonClick();
+        }
+    }, [paused, onStopButtonClick, onRunButtonClick]);
+
     const style: React.CSSProperties = pos
         ? { left: pos.x, top: pos.y, right: 'auto', bottom: 'auto' }
-        : {};
+        : { right: 24, bottom: 24 };
 
     return (
         <div
             ref={btnRef}
-            className={`floating-run-btn ${collapsed ? 'collapsed' : ''}`}
+            className={`floating-run-btn ${collapsed ? 'collapsed' : ''} ${paused ? 'paused' : ''}`}
             style={style}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
@@ -96,16 +118,34 @@ const FloatingRunButton: React.FC = observer(() => {
             <div className='floating-run-btn__drag-handle' title='Drag to move'>⠿</div>
             {!collapsed && (
                 <div className='floating-run-btn__info'>
-                    <span className={`floating-run-btn__status ${is_running ? 'running' : 'idle'}`}>
-                        {is_running ? '● BOT RUNNING' : '○ Bot Idle'}
+                    <span className={`floating-run-btn__status ${is_running ? 'running' : paused ? 'paused' : 'idle'}`}>
+                        {is_running ? '● BOT RUNNING' : paused ? '⏸ PAUSED' : '○ Bot Idle'}
                     </span>
                     <SpeedControl className='floating-run-btn__speed' compact />
                 </div>
             )}
             <div className='floating-run-btn__actions'>
+                {is_running && (
+                    <button
+                        className='floating-run-btn__btn pause'
+                        onClick={handlePause}
+                        title='Pause bot after current trade settles'
+                    >
+                        ⏸
+                    </button>
+                )}
+                {paused && !is_running && (
+                    <button
+                        className='floating-run-btn__btn resume'
+                        onClick={handlePause}
+                        title='Resume bot'
+                    >
+                        ▶
+                    </button>
+                )}
                 <button
                     className={`floating-run-btn__btn ${is_running ? 'stop' : 'run'}`}
-                    onClick={() => is_running ? onStopButtonClick() : onRunButtonClick()}
+                    onClick={() => { setPaused(false); is_running ? onStopButtonClick() : onRunButtonClick(); }}
                     title={is_running ? 'Stop bot' : 'Run bot'}
                 >
                     {is_running ? '⏹' : '▶'}

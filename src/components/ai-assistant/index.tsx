@@ -944,10 +944,10 @@ const AIAssistant: React.FC = () => {
 
             // Speed mode controls concurrency:
             // Normal  = sequential (await settlement)
-            // Crazy   = 200 in-flight simultaneously (200% speed — pipeline across contracts)
-            // Turbo   = unlimited fire-and-forget (1000% — zero cap, zero delay)
+            // Crazy   = 1000 in-flight simultaneously (500% speed boost — pipeline across contracts)
+            // Turbo   = burst 20 per tick + unlimited fire-and-forget (2000% boost)
             let inFlight = 0;
-            const CRAZY_MAX_IN_FLIGHT = 200; // 200% speed — 200 simultaneous contracts
+            const CRAZY_MAX_IN_FLIGHT = 1000; // 500% speed boost — 1000 simultaneous contracts
 
             const fireAndForget = (curStake: number) => {
                 inFlight++;
@@ -972,8 +972,8 @@ const AIAssistant: React.FC = () => {
                 const speed = aiModeRef.current;
                 try {
                     if (speed === 'turbo') {
-                        // Turbo = 1000% speed: zero-delay unlimited fire-and-forget
-                        fireAndForget(curStake);
+                        // Turbo = 2000% speed boost: burst-fire 20 contracts per tick, zero-delay unlimited
+                        for (let _i = 0; _i < 20; _i++) fireAndForget(curStake);
                         // No await, no delay — maximum API throughput
                     } else if (speed === 'crazy') {
                         // Crazy = 200% speed: pipeline 200 contracts simultaneously
@@ -1199,7 +1199,7 @@ const AIAssistant: React.FC = () => {
                                         color: aiMode === m ? '#fff' : '#888',
                                     }}
                                 >
-                                    {m === 'normal' ? '🐢 Normal' : m === 'crazy' ? '🔥 Crazy 200%' : '⚡ Turbo 1000%'}
+                                    {m === 'normal' ? '🐢 Normal' : m === 'crazy' ? '🔥 Crazy 500%' : '⚡ Turbo 2000%'}
                                 </button>
                             ))}
                         </div>

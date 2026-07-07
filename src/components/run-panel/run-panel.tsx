@@ -167,22 +167,78 @@ const DrawerContent = ({ active_index, is_drawer_open, active_tour, setActiveTab
     );
 };
 
-const DrawerFooter = ({ is_clear_stat_disabled, onClearStatClick }: TDrawerFooter) => (
-    <div className='run-panel__footer'>
-        <Button
-            id='db-run-panel__clear-button'
-            className='run-panel__footer-button'
-            disabled={is_clear_stat_disabled}
-            onClick={onClearStatClick}
-            has_effect
-            secondary
-        >
-            <span>
-                <Localize i18n_default_text='Reset' />
-            </span>
-        </Button>
-    </div>
-);
+const DrawerFooter = ({ is_clear_stat_disabled, onClearStatClick }: TDrawerFooter) => {
+    const [menuOpen, setMenuOpen] = React.useState(false);
+    const menuRef = React.useRef<HTMLDivElement>(null);
+
+    React.useEffect(() => {
+        const handleClick = (e: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+        };
+        document.addEventListener('mousedown', handleClick);
+        return () => document.removeEventListener('mousedown', handleClick);
+    }, []);
+
+    const handleDownload = () => {
+        const rows = [['Type', 'Spot', 'Buy Price', 'P/L']];
+        const csv = rows.map(r => r.join(',')).join('\n');
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'trades.csv'; a.click();
+        URL.revokeObjectURL(url);
+        setMenuOpen(false);
+    };
+
+    return (
+        <div className='run-panel__footer'>
+            <div ref={menuRef} style={{ position: 'relative' }}>
+                <button
+                    className='run-panel__footer-menu-btn'
+                    onClick={() => setMenuOpen(o => !o)}
+                    title='More options'
+                >
+                    ⋮
+                </button>
+                {menuOpen && (
+                    <div className='run-panel__footer-dropdown'>
+                        <button
+                            className='run-panel__footer-dropdown-item run-panel__footer-dropdown-item--danger'
+                            disabled={is_clear_stat_disabled}
+                            onClick={() => { onClearStatClick(); setMenuOpen(false); }}
+                        >
+                            🔄 Reset stats
+                        </button>
+                        <button
+                            className='run-panel__footer-dropdown-item'
+                            onClick={handleDownload}
+                        >
+                            ⬇ Download CSV
+                        </button>
+                        <button
+                            className='run-panel__footer-dropdown-item'
+                            onClick={() => setMenuOpen(false)}
+                        >
+                            📊 View Details
+                        </button>
+                    </div>
+                )}
+            </div>
+            <Button
+                id='db-run-panel__clear-button'
+                className='run-panel__footer-button'
+                disabled={is_clear_stat_disabled}
+                onClick={onClearStatClick}
+                has_effect
+                secondary
+            >
+                <span>
+                    <Localize i18n_default_text='Reset' />
+                </span>
+            </Button>
+        </div>
+    );
+};
 
 const MobileDrawerFooter = () => {
     return (
