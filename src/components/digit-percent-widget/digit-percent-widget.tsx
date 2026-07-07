@@ -114,6 +114,8 @@ const DigitPercentWidget: React.FC = () => {
         try { return localStorage.getItem('digit_widget_dark') === '1'; } catch { return false; }
     });
     const wsRef    = useRef<WebSocket | null>(null);
+    // Resolve current market first so pipSizeRef can use it for its initial value
+    const currentMarket = MARKETS.find(m => m.value === symbol) ?? MARKETS[0];
     // pip_size is received from the live tick stream — authoritative source
     const pipSizeRef = useRef<number>(currentMarket.pipSize);
 
@@ -162,8 +164,6 @@ const DigitPercentWidget: React.FC = () => {
     }, []);
 
     const onDragUp = useCallback(() => { dragRef.current = null; }, []);
-
-    const currentMarket = MARKETS.find(m => m.value === symbol) ?? MARKETS[0];
 
     useEffect(() => {
         if (!open) return;
