@@ -5,32 +5,32 @@ import './digit-percent-widget.scss';
 const APP_ID = (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_DERIV_APP_ID) || '36300';
 
 const MARKETS: { value: string; label: string; pipSize: number }[] = [
-    { value: 'R_10',      label: 'Volatility 10 Index',      pipSize: 3 },
-    { value: 'R_25',      label: 'Volatility 25 Index',      pipSize: 3 },
-    { value: 'R_50',      label: 'Volatility 50 Index',      pipSize: 4 },
-    { value: 'R_75',      label: 'Volatility 75 Index',      pipSize: 4 },
-    { value: 'R_100',     label: 'Volatility 100 Index',     pipSize: 2 },
-    { value: '1HZ10V',    label: 'Volatility 10 (1s) Index', pipSize: 3 },
-    { value: '1HZ25V',    label: 'Volatility 25 (1s) Index', pipSize: 3 },
-    { value: '1HZ50V',    label: 'Volatility 50 (1s) Index', pipSize: 4 },
-    { value: '1HZ75V',    label: 'Volatility 75 (1s) Index', pipSize: 4 },
-    { value: '1HZ100V',   label: 'Volatility 100 (1s) Index',pipSize: 2 },
-    { value: 'JD10',      label: 'Jump 10 Index',            pipSize: 3 },
-    { value: 'JD25',      label: 'Jump 25 Index',            pipSize: 3 },
-    { value: 'JD50',      label: 'Jump 50 Index',            pipSize: 4 },
-    { value: 'JD75',      label: 'Jump 75 Index',            pipSize: 4 },
-    { value: 'JD100',     label: 'Jump 100 Index',           pipSize: 2 },
-    { value: 'CRASH300N', label: 'Crash 300 Index',          pipSize: 2 },
-    { value: 'CRASH500',  label: 'Crash 500 Index',          pipSize: 2 },
-    { value: 'CRASH1000', label: 'Crash 1000 Index',         pipSize: 2 },
-    { value: 'BOOM300N',  label: 'Boom 300 Index',           pipSize: 2 },
-    { value: 'BOOM500',   label: 'Boom 500 Index',           pipSize: 2 },
-    { value: 'BOOM1000',  label: 'Boom 1000 Index',          pipSize: 2 },
-    { value: 'stpRNG',    label: 'Step Index',               pipSize: 2 },
-    { value: 'RDBEAR',    label: 'Bear Market Index',        pipSize: 4 },
-    { value: 'RDBULL',    label: 'Bull Market Index',        pipSize: 4 },
-    { value: 'RBREAKOUT100N', label: 'Range Break 100 Index',pipSize: 4 },
-    { value: 'RBREAKOUT200N', label: 'Range Break 200 Index',pipSize: 4 },
+    { value: 'R_10',      label: 'Volatility 10 Index',       pipSize: 3 },
+    { value: 'R_25',      label: 'Volatility 25 Index',       pipSize: 3 },
+    { value: 'R_50',      label: 'Volatility 50 Index',       pipSize: 4 },
+    { value: 'R_75',      label: 'Volatility 75 Index',       pipSize: 4 },
+    { value: 'R_100',     label: 'Volatility 100 Index',      pipSize: 2 },
+    { value: '1HZ10V',    label: 'Volatility 10 (1s) Index',  pipSize: 3 },
+    { value: '1HZ25V',    label: 'Volatility 25 (1s) Index',  pipSize: 2 },
+    { value: '1HZ50V',    label: 'Volatility 50 (1s) Index',  pipSize: 4 },
+    { value: '1HZ75V',    label: 'Volatility 75 (1s) Index',  pipSize: 4 },
+    { value: '1HZ100V',   label: 'Volatility 100 (1s) Index', pipSize: 2 },
+    { value: 'JD10',      label: 'Jump 10 Index',             pipSize: 3 },
+    { value: 'JD25',      label: 'Jump 25 Index',             pipSize: 2 },
+    { value: 'JD50',      label: 'Jump 50 Index',             pipSize: 4 },
+    { value: 'JD75',      label: 'Jump 75 Index',             pipSize: 4 },
+    { value: 'JD100',     label: 'Jump 100 Index',            pipSize: 2 },
+    { value: 'CRASH300N', label: 'Crash 300 Index',           pipSize: 2 },
+    { value: 'CRASH500',  label: 'Crash 500 Index',           pipSize: 2 },
+    { value: 'CRASH1000', label: 'Crash 1000 Index',          pipSize: 2 },
+    { value: 'BOOM300N',  label: 'Boom 300 Index',            pipSize: 2 },
+    { value: 'BOOM500',   label: 'Boom 500 Index',            pipSize: 2 },
+    { value: 'BOOM1000',  label: 'Boom 1000 Index',           pipSize: 2 },
+    { value: 'stpRNG',    label: 'Step Index',                pipSize: 2 },
+    { value: 'RDBEAR',    label: 'Bear Market Index',         pipSize: 4 },
+    { value: 'RDBULL',    label: 'Bull Market Index',         pipSize: 4 },
+    { value: 'RBREAKOUT100N', label: 'Range Break 100 Index', pipSize: 4 },
+    { value: 'RBREAKOUT200N', label: 'Range Break 200 Index', pipSize: 4 },
 ];
 
 type TDigitStat = { digit: number; count: number; pct: number };
@@ -116,8 +116,12 @@ const DigitPercentWidget: React.FC = () => {
     const wsRef    = useRef<WebSocket | null>(null);
     // Resolve current market first so pipSizeRef can use it for its initial value
     const currentMarket = MARKETS.find(m => m.value === symbol) ?? MARKETS[0];
-    // pip_size is received from the live tick stream — authoritative source
+    // pip_size starts from our static table; the live stream overrides it authoritatively
     const pipSizeRef = useRef<number>(currentMarket.pipSize);
+    // Raw history prices held until the live tick confirms the real pip_size
+    const rawHistoryRef = useRef<number[]>([]);
+    // Flag: have we received a pip_size from the API yet for this subscription?
+    const pipSizeConfirmedRef = useRef<boolean>(false);
 
     // Panel drag state — persists position in localStorage
     const [panelPos, setPanelPos] = useState<{ x: number; y: number } | null>(() => {
@@ -176,8 +180,10 @@ const DigitPercentWidget: React.FC = () => {
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
 
-        // Reset pipSize ref to the market default when switching markets
+        // Reset state for this new subscription
         pipSizeRef.current = currentMarket.pipSize;
+        rawHistoryRef.current = [];
+        pipSizeConfirmedRef.current = false;
 
         ws.onopen = () => {
             ws.send(JSON.stringify({
@@ -196,23 +202,54 @@ const DigitPercentWidget: React.FC = () => {
                     console.warn('[DigitWidget] WS error:', data.error.message);
                     return;
                 }
+
                 if (data.history?.prices && Array.isArray(data.history.prices)) {
-                    // History batch — use known pipSize for this market
-                    const ps = pipSizeRef.current;
-                    const digits = data.history.prices.map((p: any) =>
-                        getLastDigit(Number(p), ps)
-                    );
-                    setTicks(digits);
-                    if (digits.length > 0) setCurrentDigit(digits[digits.length - 1]);
-                    if (data.history.prices.length > 0) {
-                        const last = Number(data.history.prices[data.history.prices.length - 1]);
-                        setCurrentPrice(last.toFixed(ps));
+                    // History batch arrives first — store raw prices.
+                    // We do NOT compute digits yet because the API pip_size hasn't
+                    // been confirmed. Processing with the wrong pip_size is what
+                    // caused digit-0 to appear 99%+ of the time on markets like
+                    // Jump 25 and Volatility 25 (1s).
+                    const rawPrices: number[] = data.history.prices.map(Number);
+                    rawHistoryRef.current = rawPrices;
+
+                    // If we already got a confirmed pip_size (unlikely but safe), render now.
+                    if (pipSizeConfirmedRef.current) {
+                        const ps = pipSizeRef.current;
+                        const digits = rawPrices.map(p => getLastDigit(p, ps));
+                        setTicks(digits);
+                        if (digits.length > 0) setCurrentDigit(digits[digits.length - 1]);
+                        const last = rawPrices[rawPrices.length - 1];
+                        if (last != null) setCurrentPrice(last.toFixed(ps));
+                        rawHistoryRef.current = [];
                     }
+                    // else: wait for live tick pip_size below
+
                 } else if (data.tick) {
-                    // Capture the authoritative pip_size from the live stream
+                    // Live tick — this is the authoritative pip_size source.
                     if (data.tick.pip_size != null) {
-                        pipSizeRef.current = Number(data.tick.pip_size);
+                        const confirmedPs = Number(data.tick.pip_size);
+
+                        if (!pipSizeConfirmedRef.current) {
+                            // First live tick: confirm pip_size and retroactively
+                            // recompute any history that was stored with the wrong default.
+                            pipSizeRef.current = confirmedPs;
+                            pipSizeConfirmedRef.current = true;
+
+                            const stored = rawHistoryRef.current;
+                            if (stored.length > 0) {
+                                const digits = stored.map(p => getLastDigit(p, confirmedPs));
+                                setTicks(digits);
+                                if (digits.length > 0) setCurrentDigit(digits[digits.length - 1]);
+                                const last = stored[stored.length - 1];
+                                if (last != null) setCurrentPrice(last.toFixed(confirmedPs));
+                                rawHistoryRef.current = [];
+                            }
+                        } else {
+                            // Subsequent ticks — update pip_size in case API changes it
+                            pipSizeRef.current = confirmedPs;
+                        }
                     }
+
                     const ps = pipSizeRef.current;
                     const quote = Number(data.tick.quote);
                     const digit = getLastDigit(quote, ps);
