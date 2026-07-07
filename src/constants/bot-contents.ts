@@ -24,7 +24,8 @@ export const DBOT_TABS: TDashboardTabIndex = Object.freeze({
     COPY_TRADING: 9,
     REPORT: 10,
     BULK_TRADE: 11,
-    TUTORIAL: 12,
+    ANALYSIS: 12,
+    TUTORIAL: 13,
     BOT_BUILDER: 99,
 });
 

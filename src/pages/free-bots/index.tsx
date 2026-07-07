@@ -160,6 +160,20 @@ const FREE_BOTS = [
     icon: '💎',
     winRate: '77%',
   },
+  {
+    id: 'market-killer-prime-v1',
+    name: 'Market Killer Prime V1',
+    description: '👑 PRIME — V25 1s, DIGIT OVER 2. Martingale 2.2x. TP $3, SL $1000. Auto-recovers. The most aggressive recovery bot.',
+    category: 'Over/Under',
+    market: 'V25 1s (1HZ25V)',
+    type: 'DIGITOVER',
+    prediction: '2',
+    xmlFile: '/bots/market-killer-prime-v1.xml',
+    badge: 'PRIME ★',
+    badgeColor: '#ff0066',
+    icon: '👑',
+    winRate: '~75%',
+  },
 ];
 
 const CATEGORIES = ['All', 'Over/Under', 'Even/Odd'];

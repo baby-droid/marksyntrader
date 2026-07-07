@@ -10,11 +10,10 @@ let delayIndex = 0;
 let purchase_reference;
 
 // --- Rate-limit-aware buy queue ---
-// Deriv allows ~5 buy requests/second. In Crazy/Turbo mode we cap the sliding
-// window so we never trigger a rate-limit response in the first place.
-// Turbo: up to 5/s (max allowed); Crazy: up to 3/s (safe margin).
+// Deriv's actual hard cap is ~2-3 buy requests/second. Keep well within it.
+// Normal: 1/s (safe); Crazy: 2/s (moderate); Turbo: 3/s (max safe throughput).
 let _buyTimestamps = [];
-const _buyRateLimit = { normal: 1, crazy: 3, turbo: 5 }; // calls per second
+const _buyRateLimit = { normal: 1, crazy: 2, turbo: 3 }; // calls per second
 
 function _acquireBuySlot() {
     const speed = getExecutionSpeed();

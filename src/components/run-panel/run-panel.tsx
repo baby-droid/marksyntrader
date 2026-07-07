@@ -36,6 +36,8 @@ type TStatisticsSummary = {
     toggleStatisticsInfoModal: () => void;
     total_profit: number;
     won_contracts: number;
+    is_clear_stat_disabled?: boolean;
+    onClearStatClick?: () => void;
 };
 type TDrawerHeader = {
     is_clear_stat_disabled: boolean;
@@ -49,6 +51,8 @@ type TDrawerContent = {
     is_drawer_open: boolean;
     active_tour: string;
     setActiveTabIndex: () => void;
+    is_clear_stat_disabled?: boolean;
+    onClearStatClick?: () => void;
 };
 
 type TDrawerFooter = {
@@ -79,16 +83,42 @@ export const StatisticsSummary = ({
     toggleStatisticsInfoModal,
     total_profit,
     won_contracts,
+    is_clear_stat_disabled,
+    onClearStatClick,
 }: TStatisticsSummary) => (
     <div
         className={classNames('run-panel__stat', {
             'run-panel__stat--mobile': is_mobile,
         })}
     >
-        <div className='run-panel__stat--info' onClick={toggleStatisticsInfoModal}>
-            <div className='run-panel__stat--info-item'>
+        <div className='run-panel__stat--info' style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div className='run-panel__stat--info-item' onClick={toggleStatisticsInfoModal} style={{ cursor: 'pointer' }}>
                 <Localize i18n_default_text="What's this?" />
             </div>
+            {onClearStatClick && (
+                <button
+                    className='run-panel__reset-top-btn'
+                    disabled={!!is_clear_stat_disabled}
+                    onClick={onClearStatClick}
+                    title='Reset stats'
+                    style={{
+                        background: 'none',
+                        border: '1px solid var(--border-normal, #3d3d3d)',
+                        borderRadius: '4px',
+                        color: 'var(--text-less-prominent, #999)',
+                        cursor: is_clear_stat_disabled ? 'not-allowed' : 'pointer',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        padding: '2px 8px',
+                        opacity: is_clear_stat_disabled ? 0.4 : 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                    }}
+                >
+                    🔄 Reset
+                </button>
+            )}
         </div>
         {/* Row 1: 3 tiles */}
         <div className='run-panel__stat--tiles'>
@@ -239,18 +269,6 @@ const DrawerFooter = ({ is_clear_stat_disabled, onClearStatClick }: TDrawerFoote
                     </div>
                 )}
             </div>
-            <Button
-                id='db-run-panel__clear-button'
-                className='run-panel__footer-button'
-                disabled={is_clear_stat_disabled}
-                onClick={onClearStatClick}
-                has_effect
-                secondary
-            >
-                <span>
-                    <Localize i18n_default_text='Reset' />
-                </span>
-            </Button>
         </div>
     );
 };
@@ -363,6 +381,8 @@ const RunPanel = observer(() => {
             currency={currency}
             is_drawer_open={is_drawer_open}
             is_mobile={!isDesktop}
+            is_clear_stat_disabled={is_clear_stat_disabled}
+            onClearStatClick={onClearStatClick}
             lost_contracts={lost_contracts}
             number_of_runs={number_of_runs}
             setActiveTabIndex={setActiveTabIndex}

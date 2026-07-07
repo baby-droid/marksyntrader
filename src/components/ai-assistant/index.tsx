@@ -943,11 +943,11 @@ const AIAssistant: React.FC = () => {
             };
 
             // Speed mode controls concurrency:
-            // Normal  = sequential (await settlement)
-            // Crazy   = 1000 in-flight simultaneously (500% speed boost — pipeline across contracts)
-            // Turbo   = burst 20 per tick + unlimited fire-and-forget (2000% boost)
+            // Normal  = sequential (await settlement) — safest, no rate-limit risk
+            // Crazy   = up to 3 in-flight simultaneously — safe pipeline within Deriv's ~3/s limit
+            // Turbo   = burst 3 per tick then short pause — maximum safe throughput
             let inFlight = 0;
-            const CRAZY_MAX_IN_FLIGHT = 1000; // 500% speed boost — 1000 simultaneous contracts
+            const CRAZY_MAX_IN_FLIGHT = 3; // stay within Deriv's ~3 buy/s hard cap
 
             const fireAndForget = (curStake: number) => {
                 inFlight++;
@@ -972,17 +972,17 @@ const AIAssistant: React.FC = () => {
                 const speed = aiModeRef.current;
                 try {
                     if (speed === 'turbo') {
-                        // Turbo = 2000% speed boost: burst-fire 20 contracts per tick, zero-delay unlimited
-                        for (let _i = 0; _i < 20; _i++) fireAndForget(curStake);
-                        // No await, no delay — maximum API throughput
+                        // Turbo = max safe throughput: burst 3 contracts then 350ms pause (stays under Deriv's rate cap)
+                        for (let _i = 0; _i < 3; _i++) fireAndForget(curStake);
+                        await new Promise(r => setTimeout(r, 350)); // ~3 buy/s — Deriv's safe limit
                     } else if (speed === 'crazy') {
-                        // Crazy = 200% speed: pipeline 200 contracts simultaneously
+                        // Crazy = pipeline up to 3 simultaneous contracts (within Deriv's rate cap)
                         if (inFlight >= CRAZY_MAX_IN_FLIGHT) {
-                            await new Promise(r => setTimeout(r, 0));
+                            await new Promise(r => setTimeout(r, 150)); // wait 150ms before retrying
                             continue;
                         }
                         fireAndForget(curStake);
-                        // No await — loop fires immediately for next contract
+                        await new Promise(r => setTimeout(r, 350)); // ~3 buy/s pacing
                     } else {
                         // Normal: sequential — one contract at a time, full settlement
                         const profit = await buyAndSettle(curStake);
