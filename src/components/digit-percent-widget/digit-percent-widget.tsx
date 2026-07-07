@@ -35,21 +35,19 @@ const MARKETS: { value: string; label: string; pipSize: number }[] = [
 
 type TDigitStat = { digit: number; count: number; pct: number };
 
-/** Extract last digit from a raw quote string using pip_size if known */
-function getLastDigit(quoteRaw: string | number, pipSize?: number): number {
-    // Use string representation directly to avoid floating point rounding
-    const s = String(quoteRaw);
-    const dotIdx = s.indexOf('.');
-    if (dotIdx !== -1) {
-        // Last character after decimal point is the last digit
-        const decimals = s.slice(dotIdx + 1);
-        if (decimals.length > 0) {
-            return parseInt(decimals[decimals.length - 1], 10);
-        }
-    }
-    // No decimal — take last digit of integer part
-    const clean = s.replace('-', '');
-    return parseInt(clean[clean.length - 1], 10);
+/**
+ * Extract last digit from a price value.
+ *
+ * WHY toFixed() and not String():
+ *   JavaScript silently strips trailing zeros from floats.
+ *   e.g.  JSON 1234.10  →  JS Number 1234.1  →  String "1234.1"
+ *   The last character is "1", not "0" — so digit 0 would count ~0% of the time.
+ *   toFixed(pipSize) rebuilds the full decimal string: 1234.1.toFixed(2) = "1234.10"
+ *   and the last character is correctly "0".
+ */
+function getLastDigit(quoteRaw: string | number, pipSize: number): number {
+    const s = Number(quoteRaw).toFixed(pipSize);
+    return parseInt(s[s.length - 1], 10);
 }
 
 function computeRankColors(stats: TDigitStat[]): Record<number, { fill: string; ring: string }> {
