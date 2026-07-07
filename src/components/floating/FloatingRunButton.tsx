@@ -26,22 +26,27 @@ const FloatingRunButton: React.FC = observer(() => {
     const { run_panel } = useStore();
     const { is_running, onRunButtonClick, onStopButtonClick } = run_panel as any;
     const [collapsed, setCollapsed] = useState(false);
-    const [paused, setPaused] = useState(false);
-    // Track whether the bot has been started this session so we can show
-    // the pause button immediately after Run is pressed (before is_running
-    // becomes true in the store, which has a brief async delay).
-    const [hasStarted, setHasStarted] = useState(false);
 
-    // Reset paused + hasStarted when bot fully stops
+    // Use a ref to track paused so state-batching can never cause a flicker
+    const pausedRef = useRef(false);
+    const [paused, _setPaused] = useState(false);
+    const setPaused = useCallback((v: boolean) => {
+        pausedRef.current = v;
+        _setPaused(v);
+    }, []);
+
+    // Reset paused when bot fully stops (not via pause — check the ref)
     useEffect(() => {
-        if (!is_running && !paused) setHasStarted(false);
-    }, [is_running, paused]);
+        if (!is_running && !pausedRef.current) {
+            _setPaused(false);
+            pausedRef.current = false;
+        }
+    }, [is_running]);
 
     // Draggable position — load from localStorage, default to right side
     const [pos, setPos] = useState<{ x: number; y: number } | null>(() => {
         const saved = loadPos();
         if (saved) return saved;
-        // Default: right side, vertically centered
         return { x: window.innerWidth - 220, y: Math.floor(window.innerHeight * 0.45) };
     });
     const dragRef = useRef<{
@@ -51,7 +56,6 @@ const FloatingRunButton: React.FC = observer(() => {
     } | null>(null);
     const btnRef = useRef<HTMLDivElement | null>(null);
 
-    // Persist position whenever it changes
     useEffect(() => {
         if (pos) savePos(pos);
     }, [pos]);
@@ -93,20 +97,26 @@ const FloatingRunButton: React.FC = observer(() => {
         if (st?.dragging && pos) savePos(pos);
     }, [pos]);
 
+    // Pause: stop the bot but remember we're paused (not fully stopped)
     const handlePause = useCallback(() => {
-        if (!paused) {
-            setPaused(true);
-            onStopButtonClick();
-        } else {
-            setPaused(false);
-            setHasStarted(true);
-            onRunButtonClick();
-        }
-    }, [paused, onStopButtonClick, onRunButtonClick]);
+        setPaused(true);
+        onStopButtonClick();
+    }, [setPaused, onStopButtonClick]);
+
+    // Resume: clear paused state and restart
+    const handleResume = useCallback(() => {
+        setPaused(false);
+        onRunButtonClick();
+    }, [setPaused, onRunButtonClick]);
 
     const style: React.CSSProperties = pos
         ? { left: pos.x, top: pos.y, right: 'auto', bottom: 'auto' }
         : { right: 24, bottom: 24 };
+
+    // Derive display state cleanly
+    const showPause  = is_running && !paused;
+    const showResume = paused && !is_running;
+    const showStop   = is_running;
 
     return (
         <div
@@ -128,36 +138,36 @@ const FloatingRunButton: React.FC = observer(() => {
                 </div>
             )}
             <div className='floating-run-btn__actions'>
-                {/* Pause — visible the moment Run is pressed and while running */}
-                {(is_running || hasStarted) && !paused && (
+                {/* Pause — shown while bot is actively running */}
+                {showPause && (
                     <button
                         className='floating-run-btn__btn pause'
-                        onClick={handlePause}
-                        title='Pause bot after current trade settles'
+                        onClick={e => { e.stopPropagation(); handlePause(); }}
+                        title='Pause after current trade'
                     >
                         ⏸
                     </button>
                 )}
-                {/* Resume — visible while paused */}
-                {paused && !is_running && (
+                {/* Resume — shown while bot is paused and not running */}
+                {showResume && (
                     <button
                         className='floating-run-btn__btn resume'
-                        onClick={handlePause}
+                        onClick={e => { e.stopPropagation(); handleResume(); }}
                         title='Resume bot'
                     >
                         ▶
                     </button>
                 )}
+                {/* Run / Stop */}
                 <button
-                    className={`floating-run-btn__btn ${is_running ? 'stop' : 'run'}`}
-                    onClick={() => {
+                    className={`floating-run-btn__btn ${showStop ? 'stop' : 'run'}`}
+                    onClick={e => {
+                        e.stopPropagation();
                         if (is_running) {
                             setPaused(false);
-                            setHasStarted(false);
                             onStopButtonClick();
                         } else {
                             setPaused(false);
-                            setHasStarted(true);
                             onRunButtonClick();
                         }
                     }}
@@ -167,7 +177,7 @@ const FloatingRunButton: React.FC = observer(() => {
                 </button>
                 <button
                     className='floating-run-btn__collapse'
-                    onClick={() => setCollapsed(c => !c)}
+                    onClick={e => { e.stopPropagation(); setCollapsed(c => !c); }}
                     title={collapsed ? 'Expand' : 'Collapse'}
                 >
                     {collapsed ? '◀' : '▶'}

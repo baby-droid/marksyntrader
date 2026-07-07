@@ -1,6 +1,7 @@
 import { findValueByKeyRecursively, formatTime, getRoundedNumber, isEmptyObject } from '@/components/shared';
 import { getLocalizedErrorMessage } from '@/constants/backend-error-messages';
 import { config } from '@/external/bot-skeleton/constants';
+import { getExecutionSpeed } from '../../../../../utils/execution-speed';
 import { localize } from '@deriv-com/translations';
 import { observer as globalObserver } from '../../../utils/observer';
 import { error as logError } from './broadcast';
@@ -137,9 +138,44 @@ const getBackoffDelayInMs = (error_obj, delay_index) => {
     const { error = {}, msg_type = '', echo_req = {} } = error_obj;
     const { code = '', message = '' } = error;
 
-    // RateLimit errors need real backoff — zero delay causes a tight spam loop
-    // that immediately triggers more rate-limit responses.
     const isRateLimit = code === 'RateLimit' || code === 'RateLimitExceeded';
+
+    // In fast modes (crazy/turbo) retry rate-limit errors almost immediately —
+    // 100 ms for crazy, 50 ms for turbo — never let delay_index compound them.
+    const speed = getExecutionSpeed();
+    if (isRateLimit && speed === 'turbo') {
+        logError && (() => {})(); // suppress — we still need message_to_print below
+        // skip the normal block and return a tiny fixed delay
+        const fast_ms = 50;
+        // We still want to log once, so fall through but with near-zero delay.
+        const next_delay_in_seconds = 0.05;
+        const resolved_msg_type_fast = msg_type || echo_req?.msg_type || 'buy';
+        const error_details_fast = {
+            message_type: resolved_msg_type_fast,
+            delay: next_delay_in_seconds,
+            request: echo_req?.req_id ?? '',
+            message: message || localize('The market is closed'),
+            trade_type: '',
+        };
+        logError(getLocalizedErrorMessage('RateLimit', error_details_fast));
+        return fast_ms;
+    }
+    if (isRateLimit && speed === 'crazy') {
+        const fast_ms = 100;
+        const next_delay_in_seconds = 0.1;
+        const resolved_msg_type_fast = msg_type || echo_req?.msg_type || 'buy';
+        const error_details_fast = {
+            message_type: resolved_msg_type_fast,
+            delay: next_delay_in_seconds,
+            request: echo_req?.req_id ?? '',
+            message: message || localize('The market is closed'),
+            trade_type: '',
+        };
+        logError(getLocalizedErrorMessage('RateLimit', error_details_fast));
+        return fast_ms;
+    }
+
+    // Normal mode: standard 1-5 s exponential backoff for rate limits.
     const base_delay  = isRateLimit ? 1 : 0;
     const max_delay   = isRateLimit ? 5 : 0;
     const next_delay_in_seconds = Math.min(base_delay * Math.max(delay_index, 1), max_delay);
@@ -293,7 +329,13 @@ export const doUntilDone = (promiseFn, errors_to_ignore, api_base) => {
 
     return new Promise((resolve, reject) => {
         const recoverFn = (error_code, makeDelay) => {
-            delay_index++;
+            const speed = getExecutionSpeed();
+            const isRateLimit = error_code === 'RateLimit' || error_code === 'RateLimitExceeded';
+            // In fast modes, never compound the delay_index for rate limits —
+            // the fixed short backoff in getBackoffDelayInMs is already correct.
+            if (!isRateLimit || (speed !== 'crazy' && speed !== 'turbo')) {
+                delay_index++;
+            }
             makeDelay().then(repeatFn);
         };
 

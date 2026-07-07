@@ -10,14 +10,17 @@ let delayIndex = 0;
 let purchase_reference;
 
 // --- Rate-limit-aware buy queue ---
-// Deriv's actual hard cap is ~2-3 buy requests/second. Keep well within it.
-// Normal: 1/s (safe); Crazy: 2/s (moderate); Turbo: 3/s (max safe throughput).
+// Normal mode: capped at 1/s to stay safely within Deriv's hard limit.
+// Crazy / Turbo: no client-side cap — fire immediately and let the server
+// enforce its own limit (helper recovers with 100 ms / 50 ms backoff).
 let _buyTimestamps = [];
-const _buyRateLimit = { normal: 1, crazy: 2, turbo: 3 }; // calls per second
+const _buyRateLimit = { normal: 1, crazy: 0, turbo: 0 }; // 0 = unlimited
 
 function _acquireBuySlot() {
     const speed = getExecutionSpeed();
     const limit  = _buyRateLimit[speed] ?? 1;
+    // In crazy / turbo mode skip the throttle entirely — resolve immediately.
+    if (limit === 0) return Promise.resolve();
     const now    = Date.now();
     // Remove timestamps older than 1 second
     _buyTimestamps = _buyTimestamps.filter(t => now - t < 1000);

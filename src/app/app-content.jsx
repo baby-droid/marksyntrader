@@ -159,7 +159,19 @@ const AppContent = observer(() => {
         const retrieveActiveSymbols = () => {
             const { active_symbols } = ApiHelpers.instance;
 
+            // Hard fallback: if the API call hangs for > 8 s, force-clear the
+            // loading screen so the app is always usable even on slow connections.
+            const fallbackTimer = setTimeout(() => {
+                setIsLoading(false);
+                has_loaded_once_ref.current = true;
+            }, 8000);
+
             active_symbols.retrieveActiveSymbols(true).then(() => {
+                clearTimeout(fallbackTimer);
+                setIsLoading(false);
+                has_loaded_once_ref.current = true;
+            }).catch(() => {
+                clearTimeout(fallbackTimer);
                 setIsLoading(false);
                 has_loaded_once_ref.current = true;
             });
@@ -170,10 +182,17 @@ const AppContent = observer(() => {
         } else {
             // This is a workaround to fix the issue where the active symbols are not loaded immediately
             // when the API is initialized. Should be replaced with RxJS pubsub
+            let elapsed = 0;
             const intervalId = setInterval(() => {
+                elapsed += 1000;
                 if (ApiHelpers?.instance?.active_symbols) {
                     clearInterval(intervalId);
                     retrieveActiveSymbols();
+                } else if (elapsed >= 10000) {
+                    // API helpers never initialised — give up and show the app
+                    clearInterval(intervalId);
+                    setIsLoading(false);
+                    has_loaded_once_ref.current = true;
                 }
             }, 1000);
         }

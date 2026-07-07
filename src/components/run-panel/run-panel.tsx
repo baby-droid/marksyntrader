@@ -192,29 +192,37 @@ const DrawerContent = ({ active_index, is_drawer_open, active_tour, setActiveTab
     }, [is_drawer_open, isDesktop]);
 
     return (
-        <>
-            <Tabs active_index={active_index} onTabItemClick={setActiveTabIndex} top>
-                <div id='db-run-panel-tab__summary' label={<Localize i18n_default_text='Summary' />}>
-                    <DigitPercentWidget />
-                    <Summary is_drawer_open={is_drawer_open} />
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+            <div style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
+                <Tabs active_index={active_index} onTabItemClick={setActiveTabIndex} top>
+                    <div id='db-run-panel-tab__summary' label={<Localize i18n_default_text='Summary' />}>
+                        <DigitPercentWidget />
+                        <Summary is_drawer_open={is_drawer_open} />
+                    </div>
+                    <div id='db-run-panel-tab__transactions' label={<Localize i18n_default_text='Transactions' />}>
+                        <DigitPercentWidget />
+                        <Transactions is_drawer_open={is_drawer_open} />
+                    </div>
+                    <div id='db-run-panel-tab__journal' label={<Localize i18n_default_text='Journal' />}>
+                        <DigitPercentWidget />
+                        <Journal />
+                    </div>
+                </Tabs>
+            </div>
+            {(is_drawer_open || active_tour) && (
+                <div style={{ flexShrink: 0 }}>
+                    <StatisticsSummary {...props} />
                 </div>
-                <div id='db-run-panel-tab__transactions' label={<Localize i18n_default_text='Transactions' />}>
-                    <DigitPercentWidget />
-                    <Transactions is_drawer_open={is_drawer_open} />
-                </div>
-                <div id='db-run-panel-tab__journal' label={<Localize i18n_default_text='Journal' />}>
-                    <DigitPercentWidget />
-                    <Journal />
-                </div>
-            </Tabs>
-            {((is_drawer_open && active_index !== 2) || active_tour) && <StatisticsSummary {...props} />}
-        </>
+            )}
+        </div>
     );
 };
 
 const DrawerFooter = ({ is_clear_stat_disabled, onClearStatClick }: TDrawerFooter) => {
     const [menuOpen, setMenuOpen] = React.useState(false);
     const menuRef = React.useRef<HTMLDivElement>(null);
+    const { transactions: transactionsStore } = useStore();
+    const { toggleTransactionDetailsModal } = transactionsStore;
 
     React.useEffect(() => {
         const handleClick = (e: MouseEvent) => {
@@ -262,9 +270,9 @@ const DrawerFooter = ({ is_clear_stat_disabled, onClearStatClick }: TDrawerFoote
                         </button>
                         <button
                             className='run-panel__footer-dropdown-item'
-                            onClick={() => setMenuOpen(false)}
+                            onClick={() => { toggleTransactionDetailsModal(true); setMenuOpen(false); }}
                         >
-                            📊 View Details
+                            📊 View Detail
                         </button>
                     </div>
                 )}
