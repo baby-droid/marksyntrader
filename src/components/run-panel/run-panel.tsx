@@ -90,6 +90,7 @@ export const StatisticsSummary = ({
                 <Localize i18n_default_text="What's this?" />
             </div>
         </div>
+        {/* Row 1: 3 tiles */}
         <div className='run-panel__stat--tiles'>
             <StatisticsTile
                 title={localize('Total stake')}
@@ -102,10 +103,13 @@ export const StatisticsSummary = ({
                 content={<KshMoney amount={total_payout} contractCurrency={currency} showCurrency />}
             />
             <StatisticsTile title={localize('No. of runs')} alignment='top' content={number_of_runs} />
-            <StatisticsTile title={localize('Contracts lost')} alignment='bottom' content={lost_contracts} />
-            <StatisticsTile title={localize('Contracts won')} alignment='bottom' content={won_contracts} />
+        </div>
+        {/* Row 2: 2 narrow + 1 wide P/L */}
+        <div className='run-panel__stat--tiles run-panel__stat--tiles-bottom'>
+            <StatisticsTile title={localize('Lost')} alignment='bottom' content={lost_contracts} />
+            <StatisticsTile title={localize('Won')} alignment='bottom' content={won_contracts} />
             <StatisticsTile
-                title={localize('Total profit/loss')}
+                title={localize('Total P/L')}
                 content={<KshMoney amount={total_profit} contractCurrency={currency} hasSign showCurrency />}
                 alignment='bottom'
                 contentClassName={classNames('run-panel__stat-amount', {
@@ -113,6 +117,17 @@ export const StatisticsSummary = ({
                     'run-panel__stat-amount--negative': total_profit < 0,
                 })}
             />
+        </div>
+        {/* Prominent full-width Total P/L bar */}
+        <div className={classNames('run-panel__stat--pl-bar', {
+            'run-panel__stat--pl-bar--positive': total_profit > 0,
+            'run-panel__stat--pl-bar--negative': total_profit < 0,
+            'run-panel__stat--pl-bar--zero': total_profit === 0,
+        })}>
+            <span className='run-panel__stat--pl-bar-label'>{localize('Total Profit / Loss')}</span>
+            <span className='run-panel__stat--pl-bar-value'>
+                <KshMoney amount={total_profit} contractCurrency={currency} hasSign showCurrency />
+            </span>
         </div>
     </div>
 );

@@ -1,4 +1,4 @@
-import { getExecutionSpeedDelay } from '../../../../../utils/execution-speed';
+import { getExecutionSpeed, getExecutionSpeedDelay } from '../../../../../utils/execution-speed';
 import { LogTypes } from '../../../constants/messages';
 import { api_base } from '../../api/api-base';
 import { contractStatus, info, log } from '../utils/broadcast';
@@ -9,6 +9,28 @@ import { BEFORE_PURCHASE } from './state/constants';
 let delayIndex = 0;
 let purchase_reference;
 
+// --- Rate-limit-aware buy queue ---
+// Deriv allows ~5 buy requests/second. In Crazy/Turbo mode we cap the sliding
+// window so we never trigger a rate-limit response in the first place.
+// Turbo: up to 5/s (max allowed); Crazy: up to 3/s (safe margin).
+let _buyTimestamps = [];
+const _buyRateLimit = { normal: 1, crazy: 3, turbo: 5 }; // calls per second
+
+function _acquireBuySlot() {
+    const speed = getExecutionSpeed();
+    const limit  = _buyRateLimit[speed] ?? 1;
+    const now    = Date.now();
+    // Remove timestamps older than 1 second
+    _buyTimestamps = _buyTimestamps.filter(t => now - t < 1000);
+    if (_buyTimestamps.length < limit) {
+        _buyTimestamps.push(now);
+        return Promise.resolve();
+    }
+    // Wait until the oldest stamp falls out of the 1-second window
+    const wait = 1000 - (now - _buyTimestamps[0]) + 5;
+    return new Promise(resolve => setTimeout(resolve, wait)).then(_acquireBuySlot);
+}
+
 export default Engine =>
     class Purchase extends Engine {
         purchase(contract_type) {
@@ -18,7 +40,6 @@ export default Engine =>
             }
 
             // Execution-speed throttle (Normal/Crazy/Turbo selector beside Run).
-            // Turbo => 0ms (fastest the API allows); slower modes pace re-entry.
             const speed_delay = getExecutionSpeedDelay();
             if (speed_delay > 0) {
                 return new Promise(resolve => setTimeout(resolve, speed_delay)).then(() => {
@@ -33,7 +54,6 @@ export default Engine =>
 
         _executePurchase(contract_type) {
             const onSuccess = response => {
-                // Don't unnecessarily send a forget request for a purchased contract.
                 const { buy } = response;
 
                 contractStatus({
@@ -60,10 +80,21 @@ export default Engine =>
                 });
             };
 
-            if (this.is_proposal_subscription_required) {
+            const speed = getExecutionSpeed();
+            // In Crazy/Turbo mode bypass the proposal-wait round-trip: use direct
+            // buy parameters instead of a pre-fetched proposal ID. This eliminates
+            // the proposal→wait→buy latency that was the main throughput bottleneck.
+            const useDirectBuy =
+                (speed === 'crazy' || speed === 'turbo') &&
+                !this.options.timeMachineEnabled;
+
+            if (this.is_proposal_subscription_required && !useDirectBuy) {
+                // ── Original proposal-based path (Normal speed / timeMachine) ──
                 const { id, askPrice } = this.selectProposal(contract_type);
 
-                const action = () => api_base.api.send({ buy: id, price: askPrice });
+                const action = () => _acquireBuySlot().then(() =>
+                    api_base.api.send({ buy: id, price: askPrice })
+                );
 
                 this.isSold = false;
 
@@ -79,7 +110,6 @@ export default Engine =>
                 return recoverFromError(
                     action,
                     (errorCode, makeDelay) => {
-                        // if disconnected no need to resubscription (handled by live-api)
                         if (errorCode !== 'DisconnectError') {
                             this.renewProposalsOnPurchase();
                         } else {
@@ -98,8 +128,14 @@ export default Engine =>
                     delayIndex++
                 ).then(onSuccess);
             }
+
+            // ── Direct-buy path (Crazy/Turbo, or no payout block) ──
+            // Build the buy request from current trade options — no proposal ID
+            // needed. The rate-limiter slot ensures we stay within API limits.
             const trade_option = tradeOptionToBuy(contract_type, this.tradeOptions);
-            const action = () => api_base.api.send(trade_option);
+            const action = () => _acquireBuySlot().then(() =>
+                api_base.api.send(trade_option)
+            );
 
             this.isSold = false;
 

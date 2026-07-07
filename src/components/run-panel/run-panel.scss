@@ -105,8 +105,52 @@
         &--tiles {
             width: 100%;
             display: grid;
-            grid-template: auto auto / 1fr 1fr 1fr;
+            grid-template-columns: 1fr 1fr 1fr;
             row-gap: 0;
+
+            &-bottom {
+                border-top: 1px solid var(--general-section-1);
+            }
+        }
+
+        // Full-width prominent P/L bar — always visible below the tile rows
+        &--pl-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            padding: 6px 12px;
+            border-top: 2px solid var(--general-section-1);
+            background: var(--general-section-1);
+
+            &-label {
+                font-size: 1.15rem;
+                font-weight: 700;
+                color: var(--text-general);
+                letter-spacing: 0.02em;
+            }
+
+            &-value {
+                font-size: 1.4rem;
+                font-weight: 900;
+                letter-spacing: 0.02em;
+            }
+
+            &--positive {
+                background: rgba(0, 160, 80, 0.12);
+                border-top-color: var(--text-profit-success);
+                .run-panel__stat--pl-bar-value { color: var(--text-profit-success); }
+            }
+
+            &--negative {
+                background: rgba(220, 50, 50, 0.10);
+                border-top-color: var(--text-loss-danger);
+                .run-panel__stat--pl-bar-value { color: var(--text-loss-danger); }
+            }
+
+            &--zero {
+                .run-panel__stat--pl-bar-value { color: var(--text-general); }
+            }
         }
 
         &-amount {

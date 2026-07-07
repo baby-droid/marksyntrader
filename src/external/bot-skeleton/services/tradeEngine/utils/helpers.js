@@ -134,12 +134,16 @@ export const getLastDigitForList = (tick, pip_size = 0) => {
 };
 
 const getBackoffDelayInMs = (error_obj, delay_index) => {
-    const base_delay = 0;
-    const max_delay = 0;
-    const next_delay_in_seconds = Math.min(base_delay * delay_index, max_delay);
-
     const { error = {}, msg_type = '', echo_req = {} } = error_obj;
     const { code = '', message = '' } = error;
+
+    // RateLimit errors need real backoff — zero delay causes a tight spam loop
+    // that immediately triggers more rate-limit responses.
+    const isRateLimit = code === 'RateLimit' || code === 'RateLimitExceeded';
+    const base_delay  = isRateLimit ? 1 : 0;
+    const max_delay   = isRateLimit ? 5 : 0;
+    const next_delay_in_seconds = Math.min(base_delay * Math.max(delay_index, 1), max_delay);
+
     let message_to_print = '';
     const trade_type_block = Blockly.derivWorkspace
         .getAllBlocks(true)
@@ -147,17 +151,21 @@ const getBackoffDelayInMs = (error_obj, delay_index) => {
     const selected_trade_type = trade_type_block?.getFieldValue('TRADETYPECAT_LIST') || '';
     const { TRADE_TYPE_CATEGORY_NAMES } = config();
 
+    // Resolve the message_type label — fall back to the buy/sell msg_type or "buy"
+    const resolved_msg_type = msg_type || echo_req?.msg_type || 'buy';
+
     if (code) {
         const error_details = {
-            message_type: error.msg_type,
+            message_type: resolved_msg_type,
             delay: next_delay_in_seconds,
-            request: echo_req?.req_id,
+            request: echo_req?.req_id ?? '',
             message: message || localize('The market is closed'),
             trade_type: TRADE_TYPE_CATEGORY_NAMES?.[selected_trade_type] ?? '',
         };
 
         switch (code) {
             case 'RateLimit':
+            case 'RateLimitExceeded':
                 message_to_print = getLocalizedErrorMessage('RateLimit', error_details);
                 break;
             case 'DisconnectError':
@@ -166,17 +174,16 @@ const getBackoffDelayInMs = (error_obj, delay_index) => {
             case 'MarketIsClosed':
                 message_to_print = getLocalizedErrorMessage('MarketIsClosed', error_details);
                 break;
-
             default:
                 message_to_print = getLocalizedErrorMessage('RequestFailed', {
-                    message_type: msg_type || localize('unknown'),
+                    message_type: resolved_msg_type,
                     delay: next_delay_in_seconds,
                 });
                 break;
         }
     } else {
         message_to_print = getLocalizedErrorMessage('RequestFailed', {
-            message_type: msg_type || localize('unknown'),
+            message_type: resolved_msg_type,
             delay: next_delay_in_seconds,
         });
     }
