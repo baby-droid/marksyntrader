@@ -1,12 +1,17 @@
 <xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
   <variables>
-    <variable id="stake_var">stake</variable>
-    <variable id="init_stake_var">initial_stake</variable>
-    <variable id="total_profit_var">total_profit</variable>
-    <variable id="total_loss_var">total_loss</variable>
-    <variable id="martingale_var">martingale</variable>
-    <variable id="contract_switch_var">contract_type_index</variable>
+    <variable id="v_stake">stake</variable>
+    <variable id="v_init">initial_stake</variable>
+    <variable id="v_profit">total_profit</variable>
+    <variable id="v_mart">martingale</variable>
+    <variable id="v_phase">phase</variable>
+    <variable id="v_cidx">cycle_idx</variable>
+    <variable id="v_rcnt">recovery_cnt</variable>
+    <variable id="v_eflag">even_flag</variable>
+    <variable id="v_tp">take_profit</variable>
+    <variable id="v_sl">stop_loss</variable>
   </variables>
+
   <block type="trade_definition" id="mkp_main" deletable="false" x="0" y="60">
     <statement name="TRADE_OPTIONS">
       <block type="trade_definition_market" id="mkp_market" deletable="false" movable="false">
@@ -41,228 +46,500 @@
         </next>
       </block>
     </statement>
+
     <statement name="INITIALIZATION">
-      <block type="variables_set" id="mkp_init_stake">
-        <field name="VAR" id="stake_var">stake</field>
-        <value name="VALUE">
-          <block type="math_number" id="mkp_stake_val">
-            <field name="NUM">0.35</field>
+      <block type="variables_set" id="i1">
+        <field name="VAR" id="v_stake">stake</field>
+        <value name="VALUE"><block type="math_number" id="i1n"><field name="NUM">0.35</field></block></value>
+        <next><block type="variables_set" id="i2">
+          <field name="VAR" id="v_init">initial_stake</field>
+          <value name="VALUE"><block type="math_number" id="i2n"><field name="NUM">0.35</field></block></value>
+          <next><block type="variables_set" id="i3">
+            <field name="VAR" id="v_profit">total_profit</field>
+            <value name="VALUE"><block type="math_number" id="i3n"><field name="NUM">0</field></block></value>
+            <next><block type="variables_set" id="i4">
+              <field name="VAR" id="v_mart">martingale</field>
+              <value name="VALUE"><block type="math_number" id="i4n"><field name="NUM">2.2</field></block></value>
+              <next><block type="variables_set" id="i5">
+                <field name="VAR" id="v_phase">phase</field>
+                <value name="VALUE"><block type="math_number" id="i5n"><field name="NUM">0</field></block></value>
+                <next><block type="variables_set" id="i6">
+                  <field name="VAR" id="v_cidx">cycle_idx</field>
+                  <value name="VALUE"><block type="math_number" id="i6n"><field name="NUM">0</field></block></value>
+                  <next><block type="variables_set" id="i7">
+                    <field name="VAR" id="v_rcnt">recovery_cnt</field>
+                    <value name="VALUE"><block type="math_number" id="i7n"><field name="NUM">0</field></block></value>
+                    <next><block type="variables_set" id="i8">
+                      <field name="VAR" id="v_eflag">even_flag</field>
+                      <value name="VALUE"><block type="math_number" id="i8n"><field name="NUM">0</field></block></value>
+                      <next><block type="variables_set" id="i9">
+                        <field name="VAR" id="v_tp">take_profit</field>
+                        <value name="VALUE"><block type="math_number" id="i9n"><field name="NUM">5</field></block></value>
+                        <next><block type="variables_set" id="i10">
+                          <field name="VAR" id="v_sl">stop_loss</field>
+                          <value name="VALUE"><block type="math_number" id="i10n"><field name="NUM">50</field></block></value>
+                          <next><block type="bot_notification" id="i11">
+                            <field name="NOTIFICATION_TYPE">info</field>
+                            <value name="MESSAGE"><block type="text" id="i11t"><field name="TEXT">🤖 AHMED AI — Market Killer Prime V1 | DIFFERS→OVER2→OVER3→UNDER7→UNDER8 + EVEN/ODD Recovery</field></block></value>
+                          </block></next>
+                        </block></next>
+                      </block></next>
+                    </block></next>
+                  </block></next>
+                </block></next>
+              </block></next>
+            </block></next>
+          </block></next>
+        </block></next>
+      </block>
+    </statement>
+
+    <statement name="BEFORE_PURCHASE">
+      <block type="controls_if" id="bp_main">
+        <mutation elseif="0" else="1"/>
+        <value name="IF0">
+          <block type="logic_compare" id="bp_phase_cmp">
+            <field name="OP">EQ</field>
+            <value name="A"><block type="variables_get" id="bp_pg"><field name="VAR" id="v_phase">phase</field></block></value>
+            <value name="B"><block type="math_number" id="bp_p1"><field name="NUM">1</field></block></value>
           </block>
         </value>
-        <next>
-          <block type="variables_set" id="mkp_init_stake2">
-            <field name="VAR" id="init_stake_var">initial_stake</field>
-            <value name="VALUE">
-              <block type="math_number" id="mkp_init_stake_val">
-                <field name="NUM">0.35</field>
+        <statement name="DO0">
+          <block type="controls_if" id="bp_recov">
+            <mutation elseif="0" else="1"/>
+            <value name="IF0">
+              <block type="logic_compare" id="bp_efcmp">
+                <field name="OP">EQ</field>
+                <value name="A"><block type="variables_get" id="bp_efg"><field name="VAR" id="v_eflag">even_flag</field></block></value>
+                <value name="B"><block type="math_number" id="bp_ef0"><field name="NUM">0</field></block></value>
               </block>
             </value>
-            <next>
-              <block type="variables_set" id="mkp_init_tp">
-                <field name="VAR" id="total_profit_var">total_profit</field>
-                <value name="VALUE">
-                  <block type="math_number" id="mkp_tp_val">
-                    <field name="NUM">0</field>
-                  </block>
-                </value>
-                <next>
-                  <block type="variables_set" id="mkp_init_tl">
-                    <field name="VAR" id="total_loss_var">total_loss</field>
-                    <value name="VALUE">
-                      <block type="math_number" id="mkp_tl_val">
-                        <field name="NUM">0</field>
-                      </block>
-                    </value>
-                    <next>
-                      <block type="variables_set" id="mkp_init_mart">
-                        <field name="VAR" id="martingale_var">martingale</field>
+            <statement name="DO0">
+              <block type="purchase" id="bp_even">
+                <field name="PURCHASE_LIST">DIGITEVEN</field>
+                <value name="AMOUNT"><block type="variables_get" id="bp_es"><field name="VAR" id="v_stake">stake</field></block></value>
+                <value name="DURATION"><block type="math_number" id="bp_ed"><field name="NUM">1</field></block></value>
+                <value name="DURATION_UNIT"><block type="text" id="bp_edu"><field name="TEXT">t</field></block></value>
+              </block>
+            </statement>
+            <statement name="ELSE">
+              <block type="purchase" id="bp_odd">
+                <field name="PURCHASE_LIST">DIGITODD</field>
+                <value name="AMOUNT"><block type="variables_get" id="bp_os"><field name="VAR" id="v_stake">stake</field></block></value>
+                <value name="DURATION"><block type="math_number" id="bp_od"><field name="NUM">1</field></block></value>
+                <value name="DURATION_UNIT"><block type="text" id="bp_odu"><field name="TEXT">t</field></block></value>
+              </block>
+            </statement>
+          </block>
+        </statement>
+        <statement name="ELSE">
+          <block type="controls_if" id="bp_cycle">
+            <mutation elseif="3" else="1"/>
+            <value name="IF0">
+              <block type="logic_compare" id="bp_c0c">
+                <field name="OP">EQ</field>
+                <value name="A"><block type="variables_get" id="bp_c0g"><field name="VAR" id="v_cidx">cycle_idx</field></block></value>
+                <value name="B"><block type="math_number" id="bp_c0n"><field name="NUM">0</field></block></value>
+              </block>
+            </value>
+            <statement name="DO0">
+              <block type="purchase" id="bp_diff">
+                <field name="PURCHASE_LIST">DIGITDIFF</field>
+                <value name="AMOUNT"><block type="variables_get" id="bp_ds"><field name="VAR" id="v_stake">stake</field></block></value>
+                <value name="PREDICTION"><block type="math_number" id="bp_dp"><field name="NUM">5</field></block></value>
+                <value name="DURATION"><block type="math_number" id="bp_dd"><field name="NUM">1</field></block></value>
+                <value name="DURATION_UNIT"><block type="text" id="bp_ddu"><field name="TEXT">t</field></block></value>
+              </block>
+            </statement>
+            <value name="IF1">
+              <block type="logic_compare" id="bp_c1c">
+                <field name="OP">EQ</field>
+                <value name="A"><block type="variables_get" id="bp_c1g"><field name="VAR" id="v_cidx">cycle_idx</field></block></value>
+                <value name="B"><block type="math_number" id="bp_c1n"><field name="NUM">1</field></block></value>
+              </block>
+            </value>
+            <statement name="DO1">
+              <block type="purchase" id="bp_ov2">
+                <field name="PURCHASE_LIST">DIGITOVER</field>
+                <value name="AMOUNT"><block type="variables_get" id="bp_o2s"><field name="VAR" id="v_stake">stake</field></block></value>
+                <value name="PREDICTION"><block type="math_number" id="bp_o2p"><field name="NUM">2</field></block></value>
+                <value name="DURATION"><block type="math_number" id="bp_o2d"><field name="NUM">1</field></block></value>
+                <value name="DURATION_UNIT"><block type="text" id="bp_o2du"><field name="TEXT">t</field></block></value>
+              </block>
+            </statement>
+            <value name="IF2">
+              <block type="logic_compare" id="bp_c2c">
+                <field name="OP">EQ</field>
+                <value name="A"><block type="variables_get" id="bp_c2g"><field name="VAR" id="v_cidx">cycle_idx</field></block></value>
+                <value name="B"><block type="math_number" id="bp_c2n"><field name="NUM">2</field></block></value>
+              </block>
+            </value>
+            <statement name="DO2">
+              <block type="purchase" id="bp_ov3">
+                <field name="PURCHASE_LIST">DIGITOVER</field>
+                <value name="AMOUNT"><block type="variables_get" id="bp_o3s"><field name="VAR" id="v_stake">stake</field></block></value>
+                <value name="PREDICTION"><block type="math_number" id="bp_o3p"><field name="NUM">3</field></block></value>
+                <value name="DURATION"><block type="math_number" id="bp_o3d"><field name="NUM">1</field></block></value>
+                <value name="DURATION_UNIT"><block type="text" id="bp_o3du"><field name="TEXT">t</field></block></value>
+              </block>
+            </statement>
+            <value name="IF3">
+              <block type="logic_compare" id="bp_c3c">
+                <field name="OP">EQ</field>
+                <value name="A"><block type="variables_get" id="bp_c3g"><field name="VAR" id="v_cidx">cycle_idx</field></block></value>
+                <value name="B"><block type="math_number" id="bp_c3n"><field name="NUM">3</field></block></value>
+              </block>
+            </value>
+            <statement name="DO3">
+              <block type="purchase" id="bp_un7">
+                <field name="PURCHASE_LIST">DIGITUNDER</field>
+                <value name="AMOUNT"><block type="variables_get" id="bp_u7s"><field name="VAR" id="v_stake">stake</field></block></value>
+                <value name="PREDICTION"><block type="math_number" id="bp_u7p"><field name="NUM">7</field></block></value>
+                <value name="DURATION"><block type="math_number" id="bp_u7d"><field name="NUM">1</field></block></value>
+                <value name="DURATION_UNIT"><block type="text" id="bp_u7du"><field name="TEXT">t</field></block></value>
+              </block>
+            </statement>
+            <statement name="ELSE">
+              <block type="purchase" id="bp_un8">
+                <field name="PURCHASE_LIST">DIGITUNDER</field>
+                <value name="AMOUNT"><block type="variables_get" id="bp_u8s"><field name="VAR" id="v_stake">stake</field></block></value>
+                <value name="PREDICTION"><block type="math_number" id="bp_u8p"><field name="NUM">8</field></block></value>
+                <value name="DURATION"><block type="math_number" id="bp_u8d"><field name="NUM">1</field></block></value>
+                <value name="DURATION_UNIT"><block type="text" id="bp_u8du"><field name="TEXT">t</field></block></value>
+              </block>
+            </statement>
+          </block>
+        </statement>
+      </block>
+    </statement>
+
+    <statement name="AFTER_PURCHASE">
+      <block type="after_purchase_profit" id="ap_main">
+
+        <statement name="PROFIT_ACTIONS">
+          <block type="variables_set" id="ap_w_p">
+            <field name="VAR" id="v_profit">total_profit</field>
+            <value name="VALUE">
+              <block type="math_arithmetic" id="ap_w_pa">
+                <field name="OP">ADD</field>
+                <value name="A"><block type="variables_get" id="ap_w_pg"><field name="VAR" id="v_profit">total_profit</field></block></value>
+                <value name="B"><block type="contract_profit" id="ap_w_cp"/></value>
+              </block>
+            </value>
+            <next><block type="variables_set" id="ap_w_s">
+              <field name="VAR" id="v_stake">stake</field>
+              <value name="VALUE"><block type="variables_get" id="ap_w_ig"><field name="VAR" id="v_init">initial_stake</field></block></value>
+              <next>
+                <block type="controls_if" id="ap_w_ph">
+                  <mutation elseif="0" else="1"/>
+                  <value name="IF0">
+                    <block type="logic_compare" id="ap_w_phc">
+                      <field name="OP">EQ</field>
+                      <value name="A"><block type="variables_get" id="ap_w_phg"><field name="VAR" id="v_phase">phase</field></block></value>
+                      <value name="B"><block type="math_number" id="ap_w_ph1"><field name="NUM">1</field></block></value>
+                    </block>
+                  </value>
+                  <statement name="DO0">
+                    <block type="variables_set" id="ap_w_rc">
+                      <field name="VAR" id="v_rcnt">recovery_cnt</field>
+                      <value name="VALUE">
+                        <block type="math_arithmetic" id="ap_w_rca">
+                          <field name="OP">ADD</field>
+                          <value name="A"><block type="variables_get" id="ap_w_rcg"><field name="VAR" id="v_rcnt">recovery_cnt</field></block></value>
+                          <value name="B"><block type="math_number" id="ap_w_rc1"><field name="NUM">1</field></block></value>
+                        </block>
+                      </value>
+                      <next><block type="variables_set" id="ap_w_ef">
+                        <field name="VAR" id="v_eflag">even_flag</field>
                         <value name="VALUE">
-                          <block type="math_number" id="mkp_mart_val">
-                            <field name="NUM">2.2</field>
+                          <block type="math_arithmetic" id="ap_w_efa">
+                            <field name="OP">MINUS</field>
+                            <value name="A"><block type="math_number" id="ap_w_ef1"><field name="NUM">1</field></block></value>
+                            <value name="B"><block type="variables_get" id="ap_w_efg"><field name="VAR" id="v_eflag">even_flag</field></block></value>
                           </block>
                         </value>
                         <next>
-                          <block type="variables_set" id="mkp_init_switch">
-                            <field name="VAR" id="contract_switch_var">contract_type_index</field>
-                            <value name="VALUE">
-                              <block type="math_number" id="mkp_switch_val">
-                                <field name="NUM">0</field>
+                          <block type="controls_if" id="ap_w_rc3">
+                            <mutation elseif="0" else="0"/>
+                            <value name="IF0">
+                              <block type="logic_compare" id="ap_w_rc3c">
+                                <field name="OP">GTE</field>
+                                <value name="A"><block type="variables_get" id="ap_w_rc3g"><field name="VAR" id="v_rcnt">recovery_cnt</field></block></value>
+                                <value name="B"><block type="math_number" id="ap_w_rc3n"><field name="NUM">3</field></block></value>
                               </block>
                             </value>
+                            <statement name="DO0">
+                              <block type="variables_set" id="ap_w_pr">
+                                <field name="VAR" id="v_phase">phase</field>
+                                <value name="VALUE"><block type="math_number" id="ap_w_pr0"><field name="NUM">0</field></block></value>
+                                <next><block type="variables_set" id="ap_w_rcr">
+                                  <field name="VAR" id="v_rcnt">recovery_cnt</field>
+                                  <value name="VALUE"><block type="math_number" id="ap_w_rcr0"><field name="NUM">0</field></block></value>
+                                  <next><block type="variables_set" id="ap_w_efr">
+                                    <field name="VAR" id="v_eflag">even_flag</field>
+                                    <value name="VALUE"><block type="math_number" id="ap_w_efr0"><field name="NUM">0</field></block></value>
+                                    <next>
+                                      <block type="controls_if" id="ap_w_cadv">
+                                        <mutation elseif="0" else="1"/>
+                                        <value name="IF0">
+                                          <block type="logic_compare" id="ap_w_cadc">
+                                            <field name="OP">GTE</field>
+                                            <value name="A"><block type="variables_get" id="ap_w_cadg"><field name="VAR" id="v_cidx">cycle_idx</field></block></value>
+                                            <value name="B"><block type="math_number" id="ap_w_cad4"><field name="NUM">4</field></block></value>
+                                          </block>
+                                        </value>
+                                        <statement name="DO0">
+                                          <block type="variables_set" id="ap_w_c0">
+                                            <field name="VAR" id="v_cidx">cycle_idx</field>
+                                            <value name="VALUE"><block type="math_number" id="ap_w_c0n"><field name="NUM">0</field></block></value>
+                                          </block>
+                                        </statement>
+                                        <statement name="ELSE">
+                                          <block type="variables_set" id="ap_w_cnx">
+                                            <field name="VAR" id="v_cidx">cycle_idx</field>
+                                            <value name="VALUE">
+                                              <block type="math_arithmetic" id="ap_w_cnxa">
+                                                <field name="OP">ADD</field>
+                                                <value name="A"><block type="variables_get" id="ap_w_cnxg"><field name="VAR" id="v_cidx">cycle_idx</field></block></value>
+                                                <value name="B"><block type="math_number" id="ap_w_cnx1"><field name="NUM">1</field></block></value>
+                                              </block>
+                                            </value>
+                                          </block>
+                                        </statement>
+                                      </block>
+                                    </next>
+                                  </block></next>
+                                </block></next>
+                              </block>
+                            </statement>
                           </block>
                         </next>
-                      </block>
-                    </next>
-                  </block>
-                </next>
-              </block>
-            </next>
-          </block>
-        </next>
-      </block>
-    </statement>
-    <statement name="BEFORE_PURCHASE">
-      <block type="purchase" id="mkp_purchase">
-        <field name="PURCHASE_LIST">DIGITOVER</field>
-        <value name="AMOUNT">
-          <block type="variables_get" id="mkp_stake_get">
-            <field name="VAR" id="stake_var">stake</field>
-          </block>
-        </value>
-        <value name="PREDICTION">
-          <block type="math_number" id="mkp_pred_val">
-            <field name="NUM">2</field>
-          </block>
-        </value>
-        <value name="DURATION">
-          <block type="math_number" id="mkp_dur_val">
-            <field name="NUM">1</field>
-          </block>
-        </value>
-        <value name="DURATION_UNIT">
-          <block type="text" id="mkp_dur_unit">
-            <field name="TEXT">t</field>
-          </block>
-        </value>
-      </block>
-    </statement>
-    <statement name="AFTER_PURCHASE">
-      <block type="after_purchase_profit" id="mkp_profit_block">
-        <statement name="PROFIT_ACTIONS">
-          <block type="variables_set" id="mkp_profit_set">
-            <field name="VAR" id="total_profit_var">total_profit</field>
-            <value name="VALUE">
-              <block type="math_arithmetic" id="mkp_profit_add">
-                <field name="OP">ADD</field>
-                <value name="A">
-                  <block type="variables_get" id="mkp_profit_get">
-                    <field name="VAR" id="total_profit_var">total_profit</field>
-                  </block>
-                </value>
-                <value name="B">
-                  <block type="contract_profit" id="mkp_contract_profit" />
-                </value>
-              </block>
-            </value>
-            <next>
-              <block type="variables_set" id="mkp_reset_stake">
-                <field name="VAR" id="stake_var">stake</field>
-                <value name="VALUE">
-                  <block type="variables_get" id="mkp_init_stake_get">
-                    <field name="VAR" id="init_stake_var">initial_stake</field>
-                  </block>
-                </value>
+                      </block></next>
+                    </block>
+                  </statement>
+                  <statement name="ELSE">
+                    <block type="controls_if" id="ap_w_main_adv">
+                      <mutation elseif="0" else="1"/>
+                      <value name="IF0">
+                        <block type="logic_compare" id="ap_w_mac">
+                          <field name="OP">GTE</field>
+                          <value name="A"><block type="variables_get" id="ap_w_mag"><field name="VAR" id="v_cidx">cycle_idx</field></block></value>
+                          <value name="B"><block type="math_number" id="ap_w_ma4"><field name="NUM">4</field></block></value>
+                        </block>
+                      </value>
+                      <statement name="DO0">
+                        <block type="variables_set" id="ap_w_ma0">
+                          <field name="VAR" id="v_cidx">cycle_idx</field>
+                          <value name="VALUE"><block type="math_number" id="ap_w_ma0n"><field name="NUM">0</field></block></value>
+                        </block>
+                      </statement>
+                      <statement name="ELSE">
+                        <block type="variables_set" id="ap_w_manx">
+                          <field name="VAR" id="v_cidx">cycle_idx</field>
+                          <value name="VALUE">
+                            <block type="math_arithmetic" id="ap_w_manxa">
+                              <field name="OP">ADD</field>
+                              <value name="A"><block type="variables_get" id="ap_w_manxg"><field name="VAR" id="v_cidx">cycle_idx</field></block></value>
+                              <value name="B"><block type="math_number" id="ap_w_manx1"><field name="NUM">1</field></block></value>
+                            </block>
+                          </value>
+                        </block>
+                      </statement>
+                    </block>
+                  </statement>
+                </block>
                 <next>
-                  <block type="controls_if" id="mkp_tp_check">
+                  <block type="controls_if" id="ap_w_tp">
+                    <mutation elseif="0" else="0"/>
                     <value name="IF0">
-                      <block type="logic_compare" id="mkp_tp_compare">
+                      <block type="logic_compare" id="ap_w_tpc">
                         <field name="OP">GTE</field>
-                        <value name="A">
-                          <block type="variables_get" id="mkp_tp_get">
-                            <field name="VAR" id="total_profit_var">total_profit</field>
-                          </block>
-                        </value>
-                        <value name="B">
-                          <block type="math_number" id="mkp_tp_target">
-                            <field name="NUM">3</field>
-                          </block>
-                        </value>
+                        <value name="A"><block type="variables_get" id="ap_w_tpg"><field name="VAR" id="v_profit">total_profit</field></block></value>
+                        <value name="B"><block type="variables_get" id="ap_w_tpg2"><field name="VAR" id="v_tp">take_profit</field></block></value>
                       </block>
                     </value>
                     <statement name="DO0">
-                      <block type="bot_notification" id="mkp_tp_notify">
+                      <block type="bot_notification" id="ap_w_tpn">
                         <field name="NOTIFICATION_TYPE">success</field>
-                        <value name="MESSAGE">
-                          <block type="text" id="mkp_tp_msg">
-                            <field name="TEXT">🏆 TAKE PROFIT HIT — Market Killer Prime V1</field>
-                          </block>
-                        </value>
-                        <next>
-                          <block type="trade_again" id="mkp_tp_stop" />
-                        </next>
+                        <value name="MESSAGE"><block type="text" id="ap_w_tpt"><field name="TEXT">🏆 TAKE PROFIT HIT — AHMED AI Market Killer Prime V1 stopping</field></block></value>
+                        <next><block type="trade_again" id="ap_w_tps"/></next>
                       </block>
                     </statement>
                   </block>
                 </next>
-              </block>
-            </next>
+              </next>
+            </block></next>
           </block>
         </statement>
+
         <statement name="LOSS_ACTIONS">
-          <block type="variables_set" id="mkp_loss_set">
-            <field name="VAR" id="total_loss_var">total_loss</field>
+          <block type="variables_set" id="ap_l_p">
+            <field name="VAR" id="v_profit">total_profit</field>
             <value name="VALUE">
-              <block type="math_arithmetic" id="mkp_loss_add">
+              <block type="math_arithmetic" id="ap_l_pa">
                 <field name="OP">ADD</field>
-                <value name="A">
-                  <block type="variables_get" id="mkp_loss_get">
-                    <field name="VAR" id="total_loss_var">total_loss</field>
-                  </block>
-                </value>
-                <value name="B">
-                  <block type="contract_profit" id="mkp_contract_loss" />
-                </value>
+                <value name="A"><block type="variables_get" id="ap_l_pg"><field name="VAR" id="v_profit">total_profit</field></block></value>
+                <value name="B"><block type="contract_profit" id="ap_l_cp"/></value>
               </block>
             </value>
-            <next>
-              <block type="variables_set" id="mkp_mart_stake">
-                <field name="VAR" id="stake_var">stake</field>
-                <value name="VALUE">
-                  <block type="math_round" id="mkp_mart_round">
-                    <field name="OP">ROUND</field>
-                    <value name="NUM">
-                      <block type="math_arithmetic" id="mkp_mart_mult">
-                        <field name="OP">MULTIPLY</field>
-                        <value name="A">
-                          <block type="variables_get" id="mkp_stake_get2">
-                            <field name="VAR" id="stake_var">stake</field>
+            <next><block type="variables_set" id="ap_l_s">
+              <field name="VAR" id="v_stake">stake</field>
+              <value name="VALUE">
+                <block type="math_arithmetic" id="ap_l_sa">
+                  <field name="OP">MULTIPLY</field>
+                  <value name="A"><block type="variables_get" id="ap_l_sg"><field name="VAR" id="v_stake">stake</field></block></value>
+                  <value name="B"><block type="variables_get" id="ap_l_mg"><field name="VAR" id="v_mart">martingale</field></block></value>
+                </block>
+              </value>
+              <next>
+                <block type="controls_if" id="ap_l_ph">
+                  <mutation elseif="0" else="1"/>
+                  <value name="IF0">
+                    <block type="logic_compare" id="ap_l_phc">
+                      <field name="OP">EQ</field>
+                      <value name="A"><block type="variables_get" id="ap_l_phg"><field name="VAR" id="v_phase">phase</field></block></value>
+                      <value name="B"><block type="math_number" id="ap_l_ph0"><field name="NUM">0</field></block></value>
+                    </block>
+                  </value>
+                  <statement name="DO0">
+                    <block type="variables_set" id="ap_l_ph1">
+                      <field name="VAR" id="v_phase">phase</field>
+                      <value name="VALUE"><block type="math_number" id="ap_l_ph1n"><field name="NUM">1</field></block></value>
+                      <next><block type="variables_set" id="ap_l_rc0">
+                        <field name="VAR" id="v_rcnt">recovery_cnt</field>
+                        <value name="VALUE"><block type="math_number" id="ap_l_rc0n"><field name="NUM">0</field></block></value>
+                        <next><block type="variables_set" id="ap_l_ef0">
+                          <field name="VAR" id="v_eflag">even_flag</field>
+                          <value name="VALUE"><block type="math_number" id="ap_l_ef0n"><field name="NUM">0</field></block></value>
+                          <next>
+                            <block type="bot_notification" id="ap_l_n">
+                              <field name="NOTIFICATION_TYPE">warn</field>
+                              <value name="MESSAGE"><block type="text" id="ap_l_nt"><field name="TEXT">⚠ Loss! AHMED AI switching to EVEN/ODD recovery (3 trades)</field></block></value>
+                            </block>
+                          </next>
+                        </block></next>
+                      </block></next>
+                    </block>
+                  </statement>
+                  <statement name="ELSE">
+                    <block type="variables_set" id="ap_l_rc">
+                      <field name="VAR" id="v_rcnt">recovery_cnt</field>
+                      <value name="VALUE">
+                        <block type="math_arithmetic" id="ap_l_rca">
+                          <field name="OP">ADD</field>
+                          <value name="A"><block type="variables_get" id="ap_l_rcg"><field name="VAR" id="v_rcnt">recovery_cnt</field></block></value>
+                          <value name="B"><block type="math_number" id="ap_l_rc1"><field name="NUM">1</field></block></value>
+                        </block>
+                      </value>
+                      <next><block type="variables_set" id="ap_l_ef">
+                        <field name="VAR" id="v_eflag">even_flag</field>
+                        <value name="VALUE">
+                          <block type="math_arithmetic" id="ap_l_efa">
+                            <field name="OP">MINUS</field>
+                            <value name="A"><block type="math_number" id="ap_l_ef1"><field name="NUM">1</field></block></value>
+                            <value name="B"><block type="variables_get" id="ap_l_efg"><field name="VAR" id="v_eflag">even_flag</field></block></value>
                           </block>
                         </value>
-                        <value name="B">
-                          <block type="variables_get" id="mkp_mart_get">
-                            <field name="VAR" id="martingale_var">martingale</field>
+                        <next>
+                          <block type="controls_if" id="ap_l_rc3">
+                            <mutation elseif="0" else="0"/>
+                            <value name="IF0">
+                              <block type="logic_compare" id="ap_l_rc3c">
+                                <field name="OP">GTE</field>
+                                <value name="A"><block type="variables_get" id="ap_l_rc3g"><field name="VAR" id="v_rcnt">recovery_cnt</field></block></value>
+                                <value name="B"><block type="math_number" id="ap_l_rc3n"><field name="NUM">3</field></block></value>
+                              </block>
+                            </value>
+                            <statement name="DO0">
+                              <block type="variables_set" id="ap_l_pr">
+                                <field name="VAR" id="v_phase">phase</field>
+                                <value name="VALUE"><block type="math_number" id="ap_l_pr0"><field name="NUM">0</field></block></value>
+                                <next><block type="variables_set" id="ap_l_rcr">
+                                  <field name="VAR" id="v_rcnt">recovery_cnt</field>
+                                  <value name="VALUE"><block type="math_number" id="ap_l_rcr0"><field name="NUM">0</field></block></value>
+                                  <next><block type="variables_set" id="ap_l_efr">
+                                    <field name="VAR" id="v_eflag">even_flag</field>
+                                    <value name="VALUE"><block type="math_number" id="ap_l_efr0"><field name="NUM">0</field></block></value>
+                                    <next><block type="variables_set" id="ap_l_sr">
+                                      <field name="VAR" id="v_stake">stake</field>
+                                      <value name="VALUE"><block type="variables_get" id="ap_l_srg"><field name="VAR" id="v_init">initial_stake</field></block></value>
+                                      <next>
+                                        <block type="controls_if" id="ap_l_cadv">
+                                          <mutation elseif="0" else="1"/>
+                                          <value name="IF0">
+                                            <block type="logic_compare" id="ap_l_cadc">
+                                              <field name="OP">GTE</field>
+                                              <value name="A"><block type="variables_get" id="ap_l_cadg"><field name="VAR" id="v_cidx">cycle_idx</field></block></value>
+                                              <value name="B"><block type="math_number" id="ap_l_cad4"><field name="NUM">4</field></block></value>
+                                            </block>
+                                          </value>
+                                          <statement name="DO0">
+                                            <block type="variables_set" id="ap_l_c0">
+                                              <field name="VAR" id="v_cidx">cycle_idx</field>
+                                              <value name="VALUE"><block type="math_number" id="ap_l_c0n"><field name="NUM">0</field></block></value>
+                                            </block>
+                                          </statement>
+                                          <statement name="ELSE">
+                                            <block type="variables_set" id="ap_l_cnx">
+                                              <field name="VAR" id="v_cidx">cycle_idx</field>
+                                              <value name="VALUE">
+                                                <block type="math_arithmetic" id="ap_l_cnxa">
+                                                  <field name="OP">ADD</field>
+                                                  <value name="A"><block type="variables_get" id="ap_l_cnxg"><field name="VAR" id="v_cidx">cycle_idx</field></block></value>
+                                                  <value name="B"><block type="math_number" id="ap_l_cnx1"><field name="NUM">1</field></block></value>
+                                                </block>
+                                              </value>
+                                            </block>
+                                          </statement>
+                                        </block>
+                                        <next>
+                                          <block type="bot_notification" id="ap_l_back">
+                                            <field name="NOTIFICATION_TYPE">info</field>
+                                            <value name="MESSAGE"><block type="text" id="ap_l_backt"><field name="TEXT">🔄 Recovery done — AHMED AI back to main cycle: DIFFERS→OVERS→UNDERS</field></block></value>
+                                          </block>
+                                        </next>
+                                      </next>
+                                    </block></next>
+                                  </block></next>
+                                </block></next>
+                              </block>
+                            </statement>
                           </block>
-                        </value>
-                      </block>
-                    </value>
-                  </block>
-                </value>
+                        </next>
+                      </block></next>
+                    </block>
+                  </statement>
+                </block>
                 <next>
-                  <block type="controls_if" id="mkp_sl_check">
+                  <block type="controls_if" id="ap_l_sl">
+                    <mutation elseif="0" else="0"/>
                     <value name="IF0">
-                      <block type="logic_compare" id="mkp_sl_compare">
+                      <block type="logic_compare" id="ap_l_slc">
                         <field name="OP">LTE</field>
-                        <value name="A">
-                          <block type="variables_get" id="mkp_sl_get">
-                            <field name="VAR" id="total_loss_var">total_loss</field>
-                          </block>
-                        </value>
+                        <value name="A"><block type="variables_get" id="ap_l_slg"><field name="VAR" id="v_profit">total_profit</field></block></value>
                         <value name="B">
-                          <block type="math_number" id="mkp_sl_target">
-                            <field name="NUM">-1000</field>
+                          <block type="math_arithmetic" id="ap_l_slneg">
+                            <field name="OP">MULTIPLY</field>
+                            <value name="A"><block type="math_number" id="ap_l_slm1"><field name="NUM">-1</field></block></value>
+                            <value name="B"><block type="variables_get" id="ap_l_slg2"><field name="VAR" id="v_sl">stop_loss</field></block></value>
                           </block>
                         </value>
                       </block>
                     </value>
                     <statement name="DO0">
-                      <block type="bot_notification" id="mkp_sl_notify">
-                        <field name="NOTIFICATION_TYPE">danger</field>
-                        <value name="MESSAGE">
-                          <block type="text" id="mkp_sl_msg">
-                            <field name="TEXT">🛑 STOP LOSS HIT — Market Killer Prime V1</field>
-                          </block>
-                        </value>
-                        <next>
-                          <block type="trade_again" id="mkp_sl_stop" />
-                        </next>
+                      <block type="bot_notification" id="ap_l_sln">
+                        <field name="NOTIFICATION_TYPE">error</field>
+                        <value name="MESSAGE"><block type="text" id="ap_l_slnt"><field name="TEXT">🛑 STOP LOSS HIT — AHMED AI Market Killer Prime V1 stopping bot</field></block></value>
+                        <next><block type="trade_again" id="ap_l_sls"/></next>
                       </block>
                     </statement>
                   </block>
                 </next>
-              </block>
-            </next>
+              </next>
+            </block></next>
           </block>
         </statement>
+
       </block>
     </statement>
   </block>
