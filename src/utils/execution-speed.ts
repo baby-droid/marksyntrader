@@ -19,9 +19,17 @@ const STORAGE_KEY = 'execution_speed';
 // "no delay". Turbo additionally skips proposal pre-checks where possible
 // (see Purchase.js) so it re-enters purchase the instant the engine allows it.
 export const SPEED_DELAY_MS: Record<ExecutionSpeed, number> = {
-    normal: 1000,
-    crazy: 0, // no artificial delay — fires the instant the engine is ready
-    turbo: 0, // no artificial delay — fastest re-entry the API allows
+    normal: 200,  // reduced from 1000ms — fast like dBot.deriv.com
+    crazy: 0,     // no artificial delay — fires the instant the engine is ready
+    turbo: 0,     // no artificial delay — fastest re-entry the API allows
+};
+
+// Max concurrent in-flight contracts per speed tier.
+// Higher = more contracts processing simultaneously = higher throughput.
+export const SPEED_MAX_INFLIGHT: Record<ExecutionSpeed, number> = {
+    normal: 1,   // sequential
+    crazy: 50,   // high pipeline depth
+    turbo: 200,  // unlimited practical cap — saturate the API
 };
 
 const listeners = new Set<(speed: ExecutionSpeed) => void>();

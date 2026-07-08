@@ -147,9 +147,9 @@ const SpeedLab = observer(() => {
             ...(withBarrier ? { barrier: bar } : {}),
         });
 
-        // Crazy mode: fire-and-forget with high in-flight cap (12) for 100%+ speed boost
+        // Crazy mode: fire-and-forget with very high in-flight cap for maximum throughput
         let inFlight = 0;
-        const CRAZY_MAX = 12;
+        const CRAZY_MAX = 50; // increased from 12 — saturate the API pipeline
 
         const fireAndForget = (curStake: number) => {
             inFlight++;

@@ -174,6 +174,20 @@ const FREE_BOTS = [
     icon: '👑',
     winRate: '~75%',
   },
+  {
+    id: 'speed-bot-v2-2',
+    name: '⚡ Speed Bot With Entry v2.2',
+    description: '🚀 Ultra-fast DIGIT UNDER strategy on V100 1s — advanced entry logic, Martingale 1.3x. TP $15, SL $10. Precision entry confirmation built-in.',
+    category: 'Over/Under',
+    market: 'V100 1s (1HZ100V)',
+    type: 'DIGITUNDER',
+    prediction: '5',
+    xmlFile: '/bots/speed-bot-v2.2.xml',
+    badge: 'SPEED ⚡',
+    badgeColor: '#00ccff',
+    icon: '⚡',
+    winRate: '~71%',
+  },
 ];
 
 const CATEGORIES = ['All', 'Over/Under', 'Even/Odd'];

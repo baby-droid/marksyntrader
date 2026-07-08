@@ -103,7 +103,9 @@ function computeStreamStats(ticks: number[], threshold: number) {
 
 const DigitPercentWidget: React.FC = () => {
     const [open, setOpen] = useState(false);
-    const [symbol, setSymbol] = useState('R_100');
+    const [symbol, setSymbol] = useState(() => {
+        try { return localStorage.getItem('digit_widget_market') || 'R_100'; } catch { return 'R_100'; }
+    });
     const [tickCount, setTickCount] = useState(1000);
     const [tickInput, setTickInput] = useState('1000');
     const [ticks, setTicks] = useState<number[]>([]);
@@ -350,7 +352,10 @@ const DigitPercentWidget: React.FC = () => {
                             className='digit-percent-widget__select'
                             style={darkMode ? { background: dmSec, borderColor: dmBd, color: dmText } : undefined}
                             value={symbol}
-                            onChange={e => setSymbol(e.target.value)}
+                            onChange={e => {
+                                setSymbol(e.target.value);
+                                try { localStorage.setItem('digit_widget_market', e.target.value); } catch {}
+                            }}
                         >
                             {MARKETS.map(m => (
                                 <option key={m.value} value={m.value}>{m.label}</option>
@@ -562,6 +567,138 @@ const DigitPercentWidget: React.FC = () => {
                             </div>
                         </div>
                     )}
+
+                    {/* ── AI Contract Type Analyser ─────────────────────── */}
+                    {ticks.length >= 20 && (() => {
+                        const last50 = ticks.slice(-50);
+                        const n = last50.length;
+                        const evenCount  = last50.filter(d => d % 2 === 0).length;
+                        const oddCount   = n - evenCount;
+                        const evenPct    = (evenCount / n * 100);
+                        const oddPct     = (oddCount  / n * 100);
+                        const freq       = Array.from({ length: 10 }, (_, i) => last50.filter(d => d === i).length);
+                        const minDigit   = freq.indexOf(Math.min(...freq));
+                        const maxDigit   = freq.indexOf(Math.max(...freq));
+                        const overCount  = last50.filter(d => d > threshold).length;
+                        const underCount = last50.filter(d => d < threshold).length;
+                        const overPct    = (overCount  / n * 100);
+                        const underPct   = (underCount / n * 100);
+
+                        // Score each contract type
+                        const scores: { contract: string; score: number; reason: string; tag: string }[] = [
+                            {
+                                contract: 'Even',
+                                score: evenPct,
+                                reason: `Even dominates at ${evenPct.toFixed(0)}%`,
+                                tag: evenPct > oddPct ? '✅ BULLISH' : '⚠ WEAK',
+                            },
+                            {
+                                contract: 'Odd',
+                                score: oddPct,
+                                reason: `Odd dominates at ${oddPct.toFixed(0)}%`,
+                                tag: oddPct > evenPct ? '✅ BULLISH' : '⚠ WEAK',
+                            },
+                            {
+                                contract: `Over ${threshold}`,
+                                score: overPct,
+                                reason: `${overPct.toFixed(0)}% ticks above ${threshold}`,
+                                tag: overPct > 55 ? '✅ STRONG' : overPct < 40 ? '❌ AVOID' : '⚠ NEUTRAL',
+                            },
+                            {
+                                contract: `Under ${threshold}`,
+                                score: underPct,
+                                reason: `${underPct.toFixed(0)}% ticks below ${threshold}`,
+                                tag: underPct > 55 ? '✅ STRONG' : underPct < 40 ? '❌ AVOID' : '⚠ NEUTRAL',
+                            },
+                            {
+                                contract: `Differs (≠${minDigit})`,
+                                score: (1 - freq[minDigit] / n) * 100,
+                                reason: `Digit ${minDigit} appears least (${freq[minDigit]} times)`,
+                                tag: freq[minDigit] < n * 0.07 ? '✅ RARE' : '⚠ COMMON',
+                            },
+                            {
+                                contract: `Matches (=${maxDigit})`,
+                                score: freq[maxDigit] / n * 100,
+                                reason: `Digit ${maxDigit} appears most (${freq[maxDigit]} times)`,
+                                tag: freq[maxDigit] > n * 0.14 ? '✅ HOT' : '⚠ NORMAL',
+                            },
+                        ];
+                        scores.sort((a, b) => b.score - a.score);
+                        const best = scores[0];
+
+                        return (
+                            <div style={{
+                                marginTop: '10px',
+                                padding: '12px',
+                                borderRadius: '10px',
+                                background: darkMode ? 'rgba(15,23,42,0.9)' : 'rgba(124,63,228,0.06)',
+                                border: `1px solid ${darkMode ? '#334155' : 'rgba(124,63,228,0.18)'}`,
+                            }}>
+                                <div style={{
+                                    display: 'flex', alignItems: 'center', gap: '6px',
+                                    marginBottom: '10px', fontSize: '12px', fontWeight: 700,
+                                    color: darkMode ? '#a78bfa' : '#7b3fe4',
+                                }}>
+                                    🤖 AI Contract Type Analyser
+                                    <span style={{ marginLeft: 'auto', fontSize: '10px', color: darkMode ? '#64748b' : '#9ca3af' }}>
+                                        Last {n} ticks • {currentMarket.label}
+                                    </span>
+                                </div>
+                                {/* Best recommendation */}
+                                <div style={{
+                                    padding: '8px 10px',
+                                    borderRadius: '8px',
+                                    background: darkMode ? 'rgba(124,63,228,0.15)' : 'rgba(124,63,228,0.1)',
+                                    border: '1px solid rgba(124,63,228,0.3)',
+                                    marginBottom: '8px',
+                                    display: 'flex', alignItems: 'center', gap: '8px',
+                                }}>
+                                    <span style={{ fontSize: '18px' }}>🏆</span>
+                                    <div>
+                                        <div style={{ fontSize: '13px', fontWeight: 800, color: darkMode ? '#c4b5fd' : '#5b21b6' }}>
+                                            {best.contract}
+                                        </div>
+                                        <div style={{ fontSize: '11px', color: darkMode ? '#94a3b8' : '#6b7280' }}>
+                                            {best.reason} — {best.tag}
+                                        </div>
+                                    </div>
+                                    <span style={{ marginLeft: 'auto', fontSize: '15px', fontWeight: 800, color: '#22c55e' }}>
+                                        {best.score.toFixed(0)}%
+                                    </span>
+                                </div>
+                                {/* All scores */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    {scores.map(s => (
+                                        <div key={s.contract} style={{
+                                            display: 'flex', alignItems: 'center', gap: '6px',
+                                            fontSize: '11px',
+                                        }}>
+                                            <span style={{
+                                                minWidth: '90px', fontWeight: 600,
+                                                color: darkMode ? '#e2e8f0' : '#374151',
+                                            }}>{s.contract}</span>
+                                            <div style={{
+                                                flex: 1, height: '5px', borderRadius: '3px',
+                                                background: darkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
+                                                overflow: 'hidden',
+                                            }}>
+                                                <div style={{
+                                                    width: `${Math.min(100, s.score)}%`, height: '100%',
+                                                    borderRadius: '3px',
+                                                    background: s.score > 60 ? '#22c55e' : s.score > 45 ? '#3b82f6' : '#94a3b8',
+                                                    transition: 'width 0.5s ease',
+                                                }} />
+                                            </div>
+                                            <span style={{
+                                                minWidth: '30px', textAlign: 'right', fontWeight: 700,
+                                                color: s.score > 60 ? '#22c55e' : darkMode ? '#94a3b8' : '#6b7280',
+                                            }}>{s.score.toFixed(0)}%</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    })()}
 
                     {/* Footer */}
                     <div className='digit-percent-widget__footer' style={darkMode ? { color: '#64748b' } : undefined}>
