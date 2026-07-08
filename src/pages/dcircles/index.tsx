@@ -1,373 +1,460 @@
 // @ts-nocheck
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { observer } from 'mobx-react-lite';
-import DigitCircles from '@/components/digit-circles';
-import { useDigitStats } from '@/hooks/useDigitStats';
-import { useDerivTrading } from '@/hooks/useDerivTrading';
+import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import './dcircles.scss';
 
 const APP_ID = (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_DERIV_APP_ID) || '36300';
 
 const ALL_SYMBOLS = [
-  { label: 'V10',       value: 'R_10',      group: 'Volatility' },
-  { label: 'V25',       value: 'R_25',      group: 'Volatility' },
-  { label: 'V50',       value: 'R_50',      group: 'Volatility' },
-  { label: 'V75',       value: 'R_75',      group: 'Volatility' },
-  { label: 'V100',      value: 'R_100',     group: 'Volatility' },
-  { label: 'V10 1s',    value: '1HZ10V',    group: 'Volatility 1s' },
-  { label: 'V25 1s',    value: '1HZ25V',    group: 'Volatility 1s' },
-  { label: 'V50 1s',    value: '1HZ50V',    group: 'Volatility 1s' },
-  { label: 'V75 1s',    value: '1HZ75V',    group: 'Volatility 1s' },
-  { label: 'V100 1s',   value: '1HZ100V',   group: 'Volatility 1s' },
-  { label: 'Jump 10',   value: 'JD10',      group: 'Jump' },
-  { label: 'Jump 25',   value: 'JD25',      group: 'Jump' },
-  { label: 'Jump 50',   value: 'JD50',      group: 'Jump' },
-  { label: 'Jump 75',   value: 'JD75',      group: 'Jump' },
-  { label: 'Jump 100',  value: 'JD100',     group: 'Jump' },
-  { label: 'Crash 300', value: 'CRASH300N', group: 'Crash/Boom' },
-  { label: 'Crash 500', value: 'CRASH500',  group: 'Crash/Boom' },
-  { label: 'Crash 1000',value: 'CRASH1000', group: 'Crash/Boom' },
-  { label: 'Boom 300',  value: 'BOOM300N',  group: 'Crash/Boom' },
-  { label: 'Boom 500',  value: 'BOOM500',   group: 'Crash/Boom' },
-  { label: 'Boom 1000', value: 'BOOM1000',  group: 'Crash/Boom' },
+  { label: 'V10',        value: 'R_10'      },
+  { label: 'V25',        value: 'R_25'      },
+  { label: 'V50',        value: 'R_50'      },
+  { label: 'V75',        value: 'R_75'      },
+  { label: 'V100',       value: 'R_100'     },
+  { label: 'V10 1s',     value: '1HZ10V'   },
+  { label: 'V25 1s',     value: '1HZ25V'   },
+  { label: 'V50 1s',     value: '1HZ50V'   },
+  { label: 'V75 1s',     value: '1HZ75V'   },
+  { label: 'V100 1s',    value: '1HZ100V'  },
+  { label: 'Jump 10',    value: 'JD10'     },
+  { label: 'Jump 25',    value: 'JD25'     },
+  { label: 'Jump 50',    value: 'JD50'     },
+  { label: 'Jump 75',    value: 'JD75'     },
+  { label: 'Jump 100',   value: 'JD100'    },
+  { label: 'Crash 300',  value: 'CRASH300N'},
+  { label: 'Crash 500',  value: 'CRASH500' },
+  { label: 'Crash 1000', value: 'CRASH1000'},
+  { label: 'Boom 300',   value: 'BOOM300N' },
+  { label: 'Boom 500',   value: 'BOOM500'  },
+  { label: 'Boom 1000',  value: 'BOOM1000' },
 ];
 
-function getLastDigit(priceStr: string): number {
-  const s = String(priceStr);
-  return parseInt(s[s.length - 1], 10) || 0;
+interface TradeRecord {
+  id: string;
+  type: string;
+  stake: number;
+  profit: number;
+  won: boolean;
+  time: Date;
+  barrier?: string;
 }
 
-/** Compact single-market digit-circle mini panel — own WS, no shared state */
-const MiniMarketCircles: React.FC<{ sym: string; label: string }> = ({ sym, label }) => {
+// Colour ranks for digit circles
+function rankColors(pcts: number[]): string[] {
+  const sorted = [...pcts].sort((a, b) => a - b);
+  return pcts.map(p => {
+    if (p === sorted[sorted.length - 1]) return '#22c55e';
+    if (p === sorted[sorted.length - 2]) return '#3b82f6';
+    if (p === sorted[0]) return '#ef4444';
+    if (p === sorted[1]) return '#eab308';
+    return '#6b7280';
+  });
+}
+
+const CircleAnalyzer = observer(() => {
+  const [symbol, setSymbol] = useState('1HZ100V');
   const [counts, setCounts] = useState<number[]>(Array(10).fill(0));
   const [total, setTotal] = useState(0);
   const [lastDigit, setLastDigit] = useState<number | null>(null);
-  const [price, setPrice] = useState<string | null>(null);
+  const [currentPrice, setCurrentPrice] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
+  const [rawPrices, setRawPrices] = useState<number[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
+  const localCountsRef = useRef<number[]>(Array(10).fill(0));
+  const localTotalRef = useRef(0);
 
+  // Right-panel tabs
+  const [rightTab, setRightTab] = useState<'summary' | 'transactions' | 'journal'>('summary');
+  const [trades, setTrades] = useState<TradeRecord[]>([]);
+  const [totalProfit, setTotalProfit] = useState(0);
+  const [winCount, setWinCount] = useState(0);
+  const [lossCount, setLossCount] = useState(0);
+  const [totalStake, setTotalStake] = useState(0);
+  const [totalPayout, setTotalPayout] = useState(0);
+
+  // Trade controls
+  const [stake, setStake] = useState(1);
+  const [duration, setDuration] = useState(1);
+  const [barrier, setBarrier] = useState(5);
+  const [isTrading, setIsTrading] = useState(false);
+  const [displayCur, setDisplayCur] = useState(getDisplayCurrency());
+  useEffect(() => subscribeCurrency(() => setDisplayCur(getDisplayCurrency())), []);
+
+  // Connect WS
   useEffect(() => {
     wsRef.current?.close();
+    const lc = Array(10).fill(0);
+    localCountsRef.current = [...lc];
+    localTotalRef.current = 0;
+    setCounts([...lc]);
+    setTotal(0);
+    setLastDigit(null);
+    setCurrentPrice(null);
+    setRawPrices([]);
+
     const ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
     wsRef.current = ws;
-    const localCounts = Array(10).fill(0);
-    let localTotal = 0;
+    let pipSize = 2;
 
     ws.onopen = () => {
       setConnected(true);
-      ws.send(JSON.stringify({ ticks_history: sym, count: 500, end: 'latest', style: 'ticks', subscribe: 1 }));
+      ws.send(JSON.stringify({ ticks_history: symbol, count: 1000, end: 'latest', style: 'ticks', subscribe: 1 }));
     };
+
     ws.onmessage = e => {
       try {
         const data = JSON.parse(e.data);
+        if (data.tick?.pip_size) pipSize = data.tick.pip_size;
+
+        const getDigit = (p: number) => parseInt(Number(p).toFixed(pipSize).slice(-1), 10);
+
         if (data.history?.prices) {
           data.history.prices.forEach((p: any) => {
-            const d = getLastDigit(String(p));
-            if (!isNaN(d)) { localCounts[d]++; localTotal++; }
+            const d = getDigit(Number(p));
+            if (!isNaN(d) && d >= 0 && d <= 9) { localCountsRef.current[d]++; localTotalRef.current++; }
           });
-          setCounts([...localCounts]);
-          setTotal(localTotal);
-          const last = data.history.prices[data.history.prices.length - 1];
-          if (last) { setLastDigit(getLastDigit(String(last))); setPrice(String(last)); }
+          const rp = data.history.prices.map(Number);
+          setCounts([...localCountsRef.current]);
+          setTotal(localTotalRef.current);
+          setRawPrices(rp);
+          const last = rp[rp.length - 1];
+          if (last) {
+            setLastDigit(getDigit(last));
+            setCurrentPrice(Number(last).toFixed(pipSize));
+          }
         } else if (data.tick) {
-          const qs = String(data.tick.quote);
-          const d = getLastDigit(qs);
-          if (!isNaN(d)) { localCounts[d]++; localTotal++; }
-          setCounts([...localCounts]);
-          setTotal(localTotal);
+          const ps = data.tick.pip_size ?? pipSize;
+          const q = Number(data.tick.quote);
+          const d = parseInt(q.toFixed(ps).slice(-1), 10);
+          if (!isNaN(d) && d >= 0 && d <= 9) {
+            localCountsRef.current[d]++;
+            localTotalRef.current++;
+          }
+          setCounts([...localCountsRef.current]);
+          setTotal(localTotalRef.current);
           setLastDigit(d);
-          setPrice(qs);
+          setCurrentPrice(q.toFixed(ps));
+          setRawPrices(prev => [...prev.slice(-999), q]);
         }
       } catch {}
     };
     ws.onclose = () => setConnected(false);
     ws.onerror = () => setConnected(false);
-
     return () => { ws.close(); };
-  }, [sym]);
+  }, [symbol]);
 
-  // Rank colours: green=highest, red=lowest
-  const maxPct = counts.length > 0 ? Math.max(...counts.map(c => total > 0 ? c / total * 100 : 0)) : 0;
-  const minPct = counts.length > 0 ? Math.min(...counts.map(c => total > 0 ? c / total * 100 : 0)) : 0;
+  const pcts = counts.map(c => total > 0 ? (c / total) * 100 : 0);
+  const colors = rankColors(pcts);
 
-  return (
-    <div className='dcircles__mini-card'>
-      <div className='dcircles__mini-header'>
-        <span className='dcircles__mini-label'>{label}</span>
-        <span className={`dcircles__mini-status ${connected ? 'live' : ''}`}>{connected ? '●' : '○'}</span>
-      </div>
-      {price && <div className='dcircles__mini-price'>{price}</div>}
-      <div className='dcircles__mini-circles'>
-        {Array.from({ length: 10 }, (_, d) => {
-          const pct = total > 0 ? (counts[d] / total * 100) : 0;
-          const isCurrent = lastDigit === d;
-          let bg = '#e5e7eb';
-          if (total > 0) {
-            if (pct === maxPct) bg = '#22c55e';
-            else if (pct === minPct) bg = '#ef4444';
-            else if (pct > maxPct - 2) bg = '#3b82f6';
-            else if (pct < minPct + 2) bg = '#eab308';
-          }
-          return (
-            <div
-              key={d}
-              className={`dcircles__mini-circle ${isCurrent ? 'current' : ''}`}
-              style={{ background: bg, boxShadow: isCurrent ? '0 0 0 2px #7b3fe4, 0 0 6px rgba(123,63,228,0.3)' : undefined }}
-              title={`${d}: ${pct.toFixed(1)}%`}
-            >
-              <span style={{ color: bg === '#e5e7eb' ? '#374151' : '#fff', fontWeight: 700, fontSize: '1rem' }}>{d}</span>
-              <span style={{ color: bg === '#e5e7eb' ? '#6b7280' : 'rgba(255,255,255,0.85)', fontSize: '0.7rem', lineHeight: 1 }}>
-                {pct.toFixed(1)}%
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-};
+  const evenPct = pcts.filter((_, i) => i % 2 === 0).reduce((s, p) => s + p, 0);
+  const oddPct = pcts.filter((_, i) => i % 2 !== 0).reduce((s, p) => s + p, 0);
+  const overPct = pcts.filter((_, i) => i > barrier).reduce((s, p) => s + p, 0);
+  const underPct = pcts.filter((_, i) => i < barrier).reduce((s, p) => s + p, 0);
+  const eqPct = pcts[barrier] || 0;
 
-const PATTERN_VIEWS = ['EVEN/ODD', 'OVER/UNDER'];
-
-const DCircles = observer(() => {
-  const { digits, lastDigit, currentPrice, lastTicks, symbol, setSymbol, isConnected } = useDigitStats('R_10');
-  const { balance, currency, buyContract, isTrading, tradeResults, totalProfit, winCount, lossCount } = useDerivTrading();
-  const [patternView, setPatternView] = useState('EVEN/ODD');
-  const [stake, setStake] = useState(1);
-  const [duration, setDuration] = useState(1);
-  const [autoTrade, setAutoTrade] = useState(false);
-  const [autoType, setAutoType] = useState<'even' | 'odd' | 'over' | 'under'>('even');
-  const [autoBarrier, setAutoBarrier] = useState(5);
-  const [isCollapsed, setIsCollapsed] = useState(false);
-  const [activeView, setActiveView] = useState<'single' | 'multi'>('single');
-  const autoRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const evenPct = digits.filter(d => d.digit % 2 === 0).reduce((s, d) => s + d.percentage, 0);
-  const oddPct = 100 - evenPct;
-
-  const last50 = lastTicks.slice(-50);
-  const patternBadges = last50.map(p => {
-    const s = String(p);
-    const d = parseInt(s[s.length - 1], 10);
-    if (patternView === 'EVEN/ODD') return d % 2 === 0 ? { label: 'E', type: 'even' } : { label: 'O', type: 'odd' };
-    return d > autoBarrier ? { label: 'O', type: 'over' } : { label: 'U', type: 'under' };
+  const last50 = rawPrices.slice(-50).map(p => {
+    const ps = 2;
+    return parseInt(Number(p).toFixed(ps).slice(-1), 10);
   });
 
-  const handleBuy = useCallback(async (type: string, barrier?: number) => {
-    const contractType = type === 'CALL' || type === 'over' ? 'CALL' :
-      type === 'PUT' || type === 'under' ? 'PUT' :
-        type === 'even' || type === 'DIGITEVEN' ? 'DIGITEVEN' :
-          type === 'odd' || type === 'DIGITODD' ? 'DIGITODD' :
-            type.startsWith('Over') ? 'DIGITOVER' :
-              type.startsWith('Under') ? 'DIGITUNDER' : type;
+  const evenOddBadges = last50.map(d => d % 2 === 0 ? { lbl: 'E', cls: 'ca-badge--even' } : { lbl: 'O', cls: 'ca-badge--odd' });
+  const overUnderBadges = last50.map(d => d > barrier ? { lbl: 'Ov', cls: 'ca-badge--over' } : d < barrier ? { lbl: 'Un', cls: 'ca-badge--under' } : { lbl: '=', cls: 'ca-badge--eq' });
 
-    await buyContract({
-      symbol,
-      contract_type: contractType,
-      stake,
-      duration,
-      barrier: barrier !== undefined ? barrier : autoBarrier,
-    });
-  }, [symbol, stake, duration, autoBarrier, buyContract]);
+  // Buy a contract via api_base
+  const buyContract = useCallback(async (contractType: string, barrierVal?: number) => {
+    if (isTrading) return;
+    setIsTrading(true);
+    const id = `t${Date.now()}`;
+    const sym = ALL_SYMBOLS.find(s => s.value === symbol)?.label ?? symbol;
+    try {
+      const { api_base } = await import('@/external/bot-skeleton');
+      if (!api_base.api) throw new Error('Not connected');
+      const send = (msg: object): Promise<any> =>
+        (api_base.api.send as unknown as (d: unknown) => Promise<any>)(msg);
 
-  const toggleAutoTrade = useCallback(() => {
-    if (autoTrade) {
-      if (autoRef.current) clearInterval(autoRef.current);
-      setAutoTrade(false);
-    } else {
-      setAutoTrade(true);
-      const contractType = autoType === 'even' ? 'DIGITEVEN' : autoType === 'odd' ? 'DIGITODD' :
-        autoType === 'over' ? 'DIGITOVER' : 'DIGITUNDER';
-      autoRef.current = setInterval(() => {
-        buyContract({ symbol, contract_type: contractType, stake, duration, barrier: autoBarrier });
-      }, 1000);
+      // Get proposal
+      const propReq: any = {
+        proposal: 1, amount: stake, basis: 'stake',
+        contract_type: contractType, currency: 'USD',
+        duration, duration_unit: 't', symbol,
+      };
+      if (['DIGITOVER','DIGITUNDER','DIGITMATCH','DIGITDIFF'].includes(contractType) && barrierVal !== undefined) {
+        propReq.barrier = String(barrierVal);
+      }
+      const propRes = await send(propReq);
+      if (propRes?.error) throw new Error(propRes.error.message);
+      const proposalId = propRes?.proposal?.id;
+      if (!proposalId) throw new Error('No proposal ID');
+      const askPrice = propRes?.proposal?.ask_price ?? stake;
+
+      // Buy
+      const buyRes = await send({ buy: proposalId, price: Number(askPrice) });
+      if (buyRes?.error) throw new Error(buyRes.error.message);
+      const contract_id = buyRes?.buy?.contract_id;
+      if (!contract_id) throw new Error('No contract ID');
+
+      // Track settlement
+      const profit = await new Promise<number>(resolve => {
+        let sub: any;
+        const bail = setTimeout(() => { try { sub?.unsubscribe?.(); } catch {} resolve(0); }, 20000);
+        try {
+          sub = api_base.api?.onMessage?.()?.subscribe(({ data: d }: any) => {
+            if (!d?.proposal_open_contract) return;
+            const poc = d.proposal_open_contract;
+            if (Number(poc.contract_id) !== Number(contract_id)) return;
+            if (poc.is_sold === 1 || poc.status === 'won' || poc.status === 'lost') {
+              clearTimeout(bail); try { sub?.unsubscribe?.(); } catch {}
+              resolve(parseFloat(poc.profit ?? '0'));
+            }
+          });
+        } catch { clearTimeout(bail); resolve(0); return; }
+        send({ proposal_open_contract: 1, contract_id, subscribe: 1 }).catch(() => { clearTimeout(bail); try { sub?.unsubscribe?.(); } catch {} resolve(0); });
+      });
+
+      const won = profit > 0;
+      const rec: TradeRecord = {
+        id, type: contractType, stake, profit, won, time: new Date(),
+        barrier: barrierVal !== undefined ? String(barrierVal) : undefined,
+      };
+      setTrades(p => [rec, ...p].slice(0, 100));
+      setTotalProfit(p => +(p + profit).toFixed(2));
+      setTotalStake(p => +(p + stake).toFixed(2));
+      setTotalPayout(p => +(p + Math.max(0, stake + profit)).toFixed(2));
+      if (won) setWinCount(p => p + 1); else setLossCount(p => p + 1);
+    } catch (err: any) {
+      const rec: TradeRecord = { id, type: contractType, stake, profit: 0, won: false, time: new Date() };
+      setTrades(p => [rec, ...p].slice(0, 100));
+      setLossCount(p => p + 1);
+    } finally {
+      setIsTrading(false);
     }
-  }, [autoTrade, autoType, symbol, stake, duration, autoBarrier, buyContract]);
+  }, [isTrading, stake, duration, barrier, symbol]);
 
-  React.useEffect(() => {
-    return () => { if (autoRef.current) clearInterval(autoRef.current); };
-  }, []);
+  const fmt = (v: number) => `${fromUsd(v).toFixed(2)} ${displayCur}`;
+  const fmtP = (v: number) => `${v >= 0 ? '+' : ''}${fromUsd(v).toFixed(2)} ${displayCur}`;
 
-  const streak = (() => {
-    if (patternBadges.length === 0) return { type: '', count: 0 };
-    const last = patternBadges[patternBadges.length - 1];
-    let count = 0;
-    for (let i = patternBadges.length - 1; i >= 0; i--) {
-      if (patternBadges[i].type === last.type) count++;
-      else break;
-    }
-    return { type: last.label, count };
-  })();
+  const resetStats = () => {
+    setTrades([]); setTotalProfit(0); setWinCount(0); setLossCount(0);
+    setTotalStake(0); setTotalPayout(0);
+  };
 
   return (
-    <div className='dcircles'>
-      <div className='dcircles__header'>
-        <div className='dcircles__price'>
-          <h1>{currentPrice?.toFixed(3) ?? '---'}</h1>
-          <span>CURRENT PRICE</span>
+    <div className='ca'>
+      {/* Left panel: circle analysis */}
+      <div className='ca__left'>
+        {/* Header */}
+        <div className='ca__top-bar'>
+          <div className='ca__symbol-row'>
+            <select className='ca__select' value={symbol} onChange={e => setSymbol(e.target.value)}>
+              {ALL_SYMBOLS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
+            <span className={`ca__live-dot ${connected ? 'live' : ''}`}>{connected ? '● LIVE' : '○ OFF'}</span>
+          </div>
+          <div className='ca__price-row'>
+            <span className='ca__price'>{currentPrice ?? '---'}</span>
+            {lastDigit !== null && (
+              <span className='ca__last-digit' style={{ background: colors[lastDigit] }}>{lastDigit}</span>
+            )}
+            <span className='ca__tick-count'>{total} ticks</span>
+          </div>
         </div>
-        <div className='dcircles__controls'>
-          <select value={symbol} onChange={e => setSymbol(e.target.value)}>
-            {ALL_SYMBOLS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-          </select>
-          <span className={`dcircles__status ${isConnected ? 'dcircles__status--live' : ''}`}>
-            {isConnected ? '🟢 LIVE' : '🔴'}
-          </span>
+
+        {/* Digit circles */}
+        <div className='ca__circles'>
+          {Array.from({ length: 10 }, (_, d) => {
+            const pct = pcts[d];
+            const isCurrent = lastDigit === d;
+            return (
+              <div key={d} className={`ca__circle-wrap ${isCurrent ? 'current' : ''}`}>
+                {isCurrent && <div className='ca__circle-arrow'>▼</div>}
+                <div
+                  className='ca__circle'
+                  style={{ background: colors[d], opacity: pct === 0 ? 0.3 : 1 }}
+                >
+                  <span className='ca__circle-digit'>{d}</span>
+                </div>
+                <span className='ca__circle-pct'>{pct.toFixed(1)}%</span>
+              </div>
+            );
+          })}
         </div>
-        {balance !== null && (
-          <div className='dcircles__balance'>
-            {currency} {balance.toFixed(2)}
+
+        {/* Stat bars */}
+        <div className='ca__bars'>
+          <div className='ca__bar-row'>
+            <span>Even</span>
+            <div className='ca__bar-track'><div className='ca__bar ca__bar--even' style={{ width: `${evenPct}%` }} /></div>
+            <span className='ca__bar-val'>{evenPct.toFixed(1)}%</span>
+          </div>
+          <div className='ca__bar-row'>
+            <span>Odd</span>
+            <div className='ca__bar-track'><div className='ca__bar ca__bar--odd' style={{ width: `${oddPct}%` }} /></div>
+            <span className='ca__bar-val'>{oddPct.toFixed(1)}%</span>
+          </div>
+          <div className='ca__bar-row'>
+            <span>Over {barrier}</span>
+            <div className='ca__bar-track'><div className='ca__bar ca__bar--over' style={{ width: `${overPct}%` }} /></div>
+            <span className='ca__bar-val'>{overPct.toFixed(1)}%</span>
+          </div>
+          <div className='ca__bar-row'>
+            <span>Under {barrier}</span>
+            <div className='ca__bar-track'><div className='ca__bar ca__bar--under' style={{ width: `${underPct}%` }} /></div>
+            <span className='ca__bar-val'>{underPct.toFixed(1)}%</span>
+          </div>
+        </div>
+
+        {/* Pattern badges */}
+        {last50.length > 0 && (
+          <div className='ca__patterns'>
+            <div className='ca__pattern-section'>
+              <p className='ca__pattern-label'>EVEN / ODD STREAM</p>
+              <div className='ca__badges'>
+                {evenOddBadges.map((b, i) => (
+                  <span key={i} className={`ca__badge ${b.cls} ${i === evenOddBadges.length - 1 ? 'ca__badge--current' : ''}`}>{b.lbl}</span>
+                ))}
+              </div>
+            </div>
+            <div className='ca__pattern-section'>
+              <p className='ca__pattern-label'>OVER / UNDER (threshold={barrier})</p>
+              <div className='ca__badges'>
+                {overUnderBadges.map((b, i) => (
+                  <span key={i} className={`ca__badge ${b.cls} ${i === overUnderBadges.length - 1 ? 'ca__badge--current' : ''}`}>{b.lbl}</span>
+                ))}
+              </div>
+            </div>
           </div>
         )}
 
-        {/* View toggle: Single / Multi */}
-        <div className='dcircles__view-toggle'>
-          <button className={`dcircles__view-btn ${activeView === 'single' ? 'active' : ''}`} onClick={() => setActiveView('single')}>
-            Single Market
-          </button>
-          <button className={`dcircles__view-btn ${activeView === 'multi' ? 'active' : ''}`} onClick={() => setActiveView('multi')}>
-            All Markets
-          </button>
+        {/* Trade controls */}
+        <div className='ca__trade-panel'>
+          <h3>TRADE</h3>
+          <div className='ca__trade-fields'>
+            <div className='ca__trade-field'>
+              <label>Stake</label>
+              <input type='number' min={0.35} step={0.1} value={stake} onChange={e => setStake(+e.target.value)} />
+            </div>
+            <div className='ca__trade-field'>
+              <label>Ticks</label>
+              <input type='number' min={1} max={10} value={duration} onChange={e => setDuration(+e.target.value)} />
+            </div>
+            <div className='ca__trade-field'>
+              <label>Barrier</label>
+              <input type='number' min={0} max={9} value={barrier} onChange={e => setBarrier(+e.target.value)} />
+            </div>
+          </div>
+          <div className='ca__trade-btns'>
+            <button className='ca__btn ca__btn--even' onClick={() => buyContract('DIGITEVEN')} disabled={isTrading}>Even</button>
+            <button className='ca__btn ca__btn--odd' onClick={() => buyContract('DIGITODD')} disabled={isTrading}>Odd</button>
+            <button className='ca__btn ca__btn--over' onClick={() => buyContract('DIGITOVER', barrier)} disabled={isTrading}>Over {barrier}</button>
+            <button className='ca__btn ca__btn--under' onClick={() => buyContract('DIGITUNDER', barrier)} disabled={isTrading}>Under {barrier}</button>
+            <button className='ca__btn ca__btn--rise' onClick={() => buyContract('CALL')} disabled={isTrading}>Rise</button>
+            <button className='ca__btn ca__btn--fall' onClick={() => buyContract('PUT')} disabled={isTrading}>Fall</button>
+          </div>
         </div>
       </div>
 
-      {/* ── MULTI-MARKET DIGIT GRID ─────────────────── */}
-      {activeView === 'multi' && (
-        <div className='dcircles__multi-grid'>
-          {ALL_SYMBOLS.map(s => (
-            <MiniMarketCircles key={s.value} sym={s.value} label={s.label} />
-          ))}
+      {/* Right panel: Summary / Transactions / Journal */}
+      <div className='ca__right'>
+        <div className='ca__right-tabs'>
+          <button className={`ca__right-tab ${rightTab === 'summary' ? 'active' : ''}`} onClick={() => setRightTab('summary')}>Summary</button>
+          <button className={`ca__right-tab ${rightTab === 'transactions' ? 'active' : ''}`} onClick={() => setRightTab('transactions')}>Transactions</button>
+          <button className={`ca__right-tab ${rightTab === 'journal' ? 'active' : ''}`} onClick={() => setRightTab('journal')}>Journal</button>
         </div>
-      )}
 
-      {/* ── SINGLE MARKET VIEW ──────────────────────── */}
-      {activeView === 'single' && (
-        <>
-          <div className='dcircles__section'>
-            <div className='dcircles__section-header' onClick={() => setIsCollapsed(!isCollapsed)}>
-              <h2>DIGIT DISTRIBUTION</h2>
-              <button className='dcircles__collapse'>{isCollapsed ? '▼' : '▲'}</button>
-            </div>
-            {!isCollapsed && <DigitCircles digits={digits} lastDigit={lastDigit} />}
+        {rightTab === 'summary' && (
+          <div className='ca__summary'>
+            {trades.length === 0 ? (
+              <div className='ca__empty'>
+                <div className='ca__empty-icon'>📊</div>
+                <p>When you're ready to trade, hit Run.</p>
+                <p>You'll be able to track your bot's performance here.</p>
+              </div>
+            ) : (
+              <>
+                <div className='ca__summary-grid'>
+                  <div className='ca__summary-card'>
+                    <span className='ca__summary-label'>Total stake</span>
+                    <span className='ca__summary-val'>{fmt(totalStake)}</span>
+                  </div>
+                  <div className='ca__summary-card'>
+                    <span className='ca__summary-label'>Total payout</span>
+                    <span className='ca__summary-val'>{fmt(totalPayout)}</span>
+                  </div>
+                  <div className='ca__summary-card'>
+                    <span className='ca__summary-label'>No. of runs</span>
+                    <span className='ca__summary-val'>{trades.length}</span>
+                  </div>
+                  <div className='ca__summary-card'>
+                    <span className='ca__summary-label'>Contracts lost</span>
+                    <span className='ca__summary-val ca__summary-val--neg'>{lossCount}</span>
+                  </div>
+                  <div className='ca__summary-card'>
+                    <span className='ca__summary-label'>Contracts won</span>
+                    <span className='ca__summary-val ca__summary-val--pos'>{winCount}</span>
+                  </div>
+                  <div className='ca__summary-card ca__summary-card--profit'>
+                    <span className='ca__summary-label'>Total Profit/Loss</span>
+                    <span className={`ca__summary-val ca__summary-val--big ${totalProfit >= 0 ? 'ca__summary-val--pos' : 'ca__summary-val--neg'}`}>
+                      {fmtP(totalProfit)}
+                    </span>
+                  </div>
+                </div>
+                <button className='ca__reset-btn' onClick={resetStats}>Reset</button>
+              </>
+            )}
           </div>
+        )}
 
-          <div className='dcircles__section'>
-            <div className='dcircles__section-header'>
-              <h2>PATTERN ANALYSIS</h2>
-              <div className='dcircles__view-toggle'>
-                {PATTERN_VIEWS.map(v => (
-                  <button key={v} className={`dcircles__view-btn ${patternView === v ? 'active' : ''}`} onClick={() => setPatternView(v)}>{v}</button>
+        {rightTab === 'transactions' && (
+          <div className='ca__transactions'>
+            {trades.length === 0 ? (
+              <div className='ca__empty'><div className='ca__empty-icon'>💳</div><p>No transactions yet.</p></div>
+            ) : (
+              <div className='ca__tx-list'>
+                {trades.map(t => (
+                  <div key={t.id} className={`ca__tx-row ${t.won ? 'won' : 'lost'}`}>
+                    <div className='ca__tx-left'>
+                      <span className='ca__tx-icon'>{t.won ? '✅' : '❌'}</span>
+                      <div>
+                        <div className='ca__tx-type'>{t.type}{t.barrier ? ` @${t.barrier}` : ''}</div>
+                        <div className='ca__tx-time'>{t.time.toLocaleTimeString()}</div>
+                      </div>
+                    </div>
+                    <div className='ca__tx-right'>
+                      <div className='ca__tx-stake'>{fmt(t.stake)}</div>
+                      <div className={`ca__tx-profit ${t.profit >= 0 ? 'pos' : 'neg'}`}>{fmtP(t.profit)}</div>
+                    </div>
+                  </div>
                 ))}
               </div>
-            </div>
-
-            {patternView === 'EVEN/ODD' && (
-              <div className='dcircles__bars'>
-                <div className='dcircles__bar-row'>
-                  <span>Even</span>
-                  <div className='dcircles__bar-track'>
-                    <div className='dcircles__bar dcircles__bar--even' style={{ width: `${evenPct}%` }}>{evenPct.toFixed(1)}%</div>
-                  </div>
-                </div>
-                <div className='dcircles__bar-row'>
-                  <span>Odd</span>
-                  <div className='dcircles__bar-track'>
-                    <div className='dcircles__bar dcircles__bar--odd' style={{ width: `${oddPct}%` }}>{oddPct.toFixed(1)}%</div>
-                  </div>
-                </div>
-              </div>
             )}
+          </div>
+        )}
 
-            {patternView === 'OVER/UNDER' && (
-              <div className='dcircles__bars'>
-                <div className='dcircles__bar-row'>
-                  <span>Over {autoBarrier}</span>
-                  <div className='dcircles__bar-track'>
-                    <div className='dcircles__bar dcircles__bar--even' style={{ width: `${(digits.filter(d => d.digit > autoBarrier).reduce((s, d) => s + d.percentage, 0)).toFixed(0)}%` }}>
-                      {digits.filter(d => d.digit > autoBarrier).reduce((s, d) => s + d.percentage, 0).toFixed(1)}%
-                    </div>
+        {rightTab === 'journal' && (
+          <div className='ca__journal'>
+            {trades.length === 0 ? (
+              <div className='ca__empty'><div className='ca__empty-icon'>📓</div><p>Journal will appear here.</p></div>
+            ) : (
+              <div className='ca__journal-list'>
+                {trades.map((t, i) => (
+                  <div key={t.id} className='ca__journal-entry'>
+                    <span className='ca__journal-num'>#{trades.length - i}</span>
+                    <span className='ca__journal-icon'>{t.won ? '✅' : '❌'}</span>
+                    <span className='ca__journal-body'>
+                      {t.type}{t.barrier ? ` @${t.barrier}` : ''} — Stake: {fmt(t.stake)} → P/L: <strong className={t.profit >= 0 ? 'pos' : 'neg'}>{fmtP(t.profit)}</strong>
+                    </span>
+                    <span className='ca__journal-time'>{t.time.toLocaleTimeString()}</span>
                   </div>
-                </div>
-                <div className='dcircles__bar-row'>
-                  <span>Under {autoBarrier}</span>
-                  <div className='dcircles__bar-track'>
-                    <div className='dcircles__bar dcircles__bar--odd' style={{ width: `${(digits.filter(d => d.digit <= autoBarrier).reduce((s, d) => s + d.percentage, 0)).toFixed(0)}%` }}>
-                      {digits.filter(d => d.digit <= autoBarrier).reduce((s, d) => s + d.percentage, 0).toFixed(1)}%
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className='dcircles__last-digits'>
-              <p>LAST {last50.length} DIGITS PATTERN</p>
-              <div className='dcircles__badges'>
-                {patternBadges.map((b, i) => (
-                  <span key={i} className={`dcircles__badge dcircles__badge--${b.type}`}>{b.label}</span>
                 ))}
               </div>
-              <p className='dcircles__streak'>
-                Current streak: <strong>{streak.count} {streak.type === 'E' ? 'Even' : streak.type === 'O' && patternView === 'EVEN/ODD' ? 'Odd' : streak.type === 'O' ? 'Over' : 'Under'}</strong>
-              </p>
-            </div>
-          </div>
-
-          <div className='dcircles__section dcircles__trade-panel'>
-            <h2>TRADE</h2>
-            <div className='dcircles__trade-row'>
-              <div className='dcircles__trade-field'>
-                <label>Stake ({currency})</label>
-                <input type='number' value={stake} min={0.35} step={0.1} onChange={e => setStake(Number(e.target.value))} />
-              </div>
-              <div className='dcircles__trade-field'>
-                <label>Ticks</label>
-                <input type='number' value={duration} min={1} max={10} onChange={e => setDuration(Number(e.target.value))} />
-              </div>
-              <div className='dcircles__trade-field'>
-                <label>Barrier</label>
-                <input type='number' value={autoBarrier} min={0} max={9} onChange={e => setAutoBarrier(Number(e.target.value))} />
-              </div>
-            </div>
-            <div className='dcircles__trade-btns'>
-              <button className='dcircles__btn dcircles__btn--even' onClick={() => handleBuy('DIGITEVEN')} disabled={isTrading}>Buy Even</button>
-              <button className='dcircles__btn dcircles__btn--odd' onClick={() => handleBuy('DIGITODD')} disabled={isTrading}>Buy Odd</button>
-              <button className='dcircles__btn dcircles__btn--over' onClick={() => handleBuy('DIGITOVER', autoBarrier)} disabled={isTrading}>Over {autoBarrier}</button>
-              <button className='dcircles__btn dcircles__btn--under' onClick={() => handleBuy('DIGITUNDER', autoBarrier)} disabled={isTrading}>Under {autoBarrier}</button>
-            </div>
-
-            <div className='dcircles__auto'>
-              <select value={autoType} onChange={e => setAutoType(e.target.value as any)}>
-                <option value='even'>Auto Even</option>
-                <option value='odd'>Auto Odd</option>
-                <option value='over'>Auto Over</option>
-                <option value='under'>Auto Under</option>
-              </select>
-              <button className={`dcircles__btn dcircles__btn--auto ${autoTrade ? 'dcircles__btn--stop' : ''}`} onClick={toggleAutoTrade}>
-                {autoTrade ? '⏹ Stop Auto' : '▶ Start Auto Trade'}
-              </button>
-            </div>
-
-            {tradeResults.length > 0 && (
-              <div className='dcircles__results'>
-                <div className='dcircles__results-summary'>
-                  <span>Total P/L: <strong className={totalProfit >= 0 ? 'pos' : 'neg'}>{totalProfit >= 0 ? '+' : ''}{totalProfit.toFixed(2)}</strong></span>
-                  <span>W: <strong className='pos'>{winCount}</strong> L: <strong className='neg'>{lossCount}</strong></span>
-                </div>
-                <div className='dcircles__trade-history'>
-                  {tradeResults.slice(0, 10).map(r => (
-                    <div key={r.id} className={`dcircles__trade-result ${r.won ? 'won' : 'lost'}`}>
-                      <span>{r.type}</span>
-                      <span>{r.won ? '+' : ''}{r.profit.toFixed(2)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
             )}
           </div>
-        </>
-      )}
+        )}
+      </div>
     </div>
   );
 });
 
-export default DCircles;
+export default CircleAnalyzer;

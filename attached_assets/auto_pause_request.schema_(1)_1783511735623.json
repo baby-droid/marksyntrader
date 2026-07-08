@@ -1,0 +1,37 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "title": "Auto Pause (request)",
+  "description": "Pause an automated trading run. No further contracts will be purchased until the run is resumed.",
+  "type": "object",
+  "auth_required": 1,
+  "auth_scopes": [
+    "trade"
+  ],
+  "additionalProperties": false,
+  "required": [
+    "auto_pause",
+    "run_id"
+  ],
+  "properties": {
+    "auto_pause": {
+      "description": "Must be `1`",
+      "type": "integer",
+      "enum": [
+        1
+      ]
+    },
+    "run_id": {
+      "description": "The run ID to pause.",
+      "type": "string",
+      "pattern": "^[\\w-]{1,128}$"
+    },
+    "passthrough": {
+      "description": "[Optional] Used to pass data through the websocket, which may be retrieved via the `echo_req` output field.",
+      "type": "object"
+    },
+    "req_id": {
+      "description": "[Optional] Used to map request to response.",
+      "type": "integer"
+    }
+  }
+}

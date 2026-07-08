@@ -6,12 +6,140 @@ import { DBOT_TABS } from '@/constants/bot-contents';
 import './free-bots.scss';
 
 const FREE_BOTS = [
+  // ── New bots from uploads ──────────────────────────────────────────────────
+  {
+    id: 'ahmed-killer-any-market',
+    name: 'Ahmed Killer Any Market',
+    description: '🏆 Universal market killer — works on any Volatility index. Smart entry with Over/Under strategy. Martingale 2x. Grace of God recovery.',
+    category: 'Over/Under',
+    market: 'Any Market',
+    type: 'DIGITOVER/DIGITUNDER',
+    prediction: 'AI',
+    xmlFile: '/bots/ahmed-killer-any-market.xml',
+    badge: '🏆 KILLER',
+    badgeColor: '#ff0066',
+    icon: '🏆',
+    winRate: '~74%',
+  },
+  {
+    id: 'ahmed-over4-hunter',
+    name: 'Ahmed AI Over 4 Deriv Hunter',
+    description: '🎯 AI-powered Over 4 strategy — hunts the best entry on Deriv volatility markets. Martingale 2x, precision entry detection.',
+    category: 'Over/Under',
+    market: 'V50 1s',
+    type: 'DIGITOVER',
+    prediction: '4',
+    xmlFile: '/bots/ahmed-over4-hunter.xml',
+    badge: 'HUNTER',
+    badgeColor: '#ff6b00',
+    icon: '🎯',
+    winRate: '~72%',
+  },
+  {
+    id: 'syn-over7',
+    name: 'AI Auto SYN Over 7 — Best Market Killer',
+    description: '⚡ Best market killer — DIGIT OVER 7 on V100 1s. Advanced AI entry analysis. Martingale x2, aggressive recovery mode.',
+    category: 'Over/Under',
+    market: 'V100 1s',
+    type: 'DIGITOVER',
+    prediction: '7',
+    xmlFile: '/bots/syn-over7.xml',
+    badge: 'BEST ⚡',
+    badgeColor: '#00c8ff',
+    icon: '⚡',
+    winRate: '~75%',
+  },
+  {
+    id: 'syn-under7',
+    name: 'AI Auto SYN Under 7 — Best Killer',
+    description: '💎 Best killer — DIGIT UNDER 7 on V100 1s. Full AI pattern analysis. Martingale x2. Dual prediction switching on extended loss.',
+    category: 'Over/Under',
+    market: 'V100 1s',
+    type: 'DIGITUNDER',
+    prediction: '7',
+    xmlFile: '/bots/syn-under7.xml',
+    badge: 'BEST 💎',
+    badgeColor: '#7b3fe4',
+    icon: '💎',
+    winRate: '~73%',
+  },
+  {
+    id: 'ahmed-over3-hunter',
+    name: 'Ahmed AI Over 3 Deriv Hunter',
+    description: '🔥 Deriv Hunter v3 — Over 3 strategy on V50 1s. AI-driven entry confirmation, 2x martingale, TP/SL built in.',
+    category: 'Over/Under',
+    market: 'V50 1s',
+    type: 'DIGITOVER',
+    prediction: '3',
+    xmlFile: '/bots/ahmed-over3-hunter.xml',
+    badge: 'HUNTER 🔥',
+    badgeColor: '#ff3366',
+    icon: '🔥',
+    winRate: '~70%',
+  },
+  {
+    id: 'ahmed-over2-killer',
+    name: 'Ahmed AI Over 2 Version Killer',
+    description: '💪 AI Over 2 Killer — aggressive DIGIT OVER 2 on V50 1s. 2x martingale with smart recovery. High payout potential.',
+    category: 'Over/Under',
+    market: 'V50 1s',
+    type: 'DIGITOVER',
+    prediction: '2',
+    xmlFile: '/bots/ahmed-over2-killer.xml',
+    badge: 'KILLER',
+    badgeColor: '#e63946',
+    icon: '💪',
+    winRate: '~71%',
+  },
+  {
+    id: 'london-over1-killer',
+    name: 'London Over 1 Killer',
+    description: '🇬🇧 London session bot — DIGIT OVER 1 on V75 1s. Optimized for London market hours. Martingale 2x, TP $5, SL $10.',
+    category: 'Over/Under',
+    market: 'V75 1s',
+    type: 'DIGITOVER',
+    prediction: '1',
+    xmlFile: '/bots/london-over1-killer.xml',
+    badge: 'LONDON',
+    badgeColor: '#4361ee',
+    icon: '🇬🇧',
+    winRate: '~76%',
+  },
+  {
+    id: 'london-over2-killer',
+    name: 'London Over 2 Killer',
+    description: '🌍 London Over 2 — premium DIGIT OVER 2 strategy on V75 1s. Grace of God mode on loss. Martingale 2x, high win-rate.',
+    category: 'Over/Under',
+    market: 'V75 1s',
+    type: 'DIGITOVER',
+    prediction: '2',
+    xmlFile: '/bots/london-over2-killer.xml',
+    badge: 'LONDON',
+    badgeColor: '#3a0ca3',
+    icon: '🌍',
+    winRate: '~74%',
+  },
+  {
+    id: 'syn-under6',
+    name: 'AI Auto SYN Under 6 — Best Market Killer',
+    description: '🎖 Best market killer — DIGIT UNDER 6 on V50 1s. AI analysis confirms entry. Martingale x2, TP $3, SL $10.',
+    category: 'Over/Under',
+    market: 'V50 1s',
+    type: 'DIGITUNDER',
+    prediction: '6',
+    xmlFile: '/bots/syn-under6.xml',
+    badge: 'BEST 🎖',
+    badgeColor: '#06d6a0',
+    icon: '🎖',
+    winRate: '~71%',
+  },
+  // ── Original bots ──────────────────────────────────────────────────────────
   {
     id: 'ahmed-syn-even-odd',
     name: 'Ahmed SYN Even/Odd Market Killer v1.2',
-    description: '🔥 FEATURED — Ahmed\'s flagship bot. V25 1s market, Even/Odd, 1 tick, Martingale 2.2x, TP $2, SL $1000. Auto-recovers on loss.',
+    description: '🔥 FEATURED — Ahmed\'s flagship bot. V25 1s, Even/Odd, 1 tick, Martingale 2.2x, TP $2, SL $1000.',
     category: 'Even/Odd',
-    market: 'V25 1s (1HZ25V)',
+    market: 'V25 1s',
     type: 'DIGITEVEN/DIGITODD',
     prediction: null,
     xmlFile: '/bots/ahmed-syn-even-odd.xml',
@@ -23,163 +151,23 @@ const FREE_BOTS = [
   {
     id: 'ahmed-over-dt-oppo-killer',
     name: 'Ahmed OVER DT Oppo Killer',
-    description: '🎯 Dual-prediction OVER strategy — V75 1s, switches prediction on loss (2→5). Martingale 2x, TP $5, SL $1000. Grace of God mode.',
+    description: '🎯 Dual-prediction OVER — V75 1s, switches prediction on loss (2→5). Martingale 2x, TP $5, SL $1000.',
     category: 'Over/Under',
-    market: 'V75 1s (1HZ75V)',
+    market: 'V75 1s',
     type: 'DIGITOVER',
     prediction: '2 / 5',
     xmlFile: '/bots/ahmed-over-dt-oppo-killer.xml',
-    badge: 'NEW ★',
+    badge: 'OPPO ★',
     badgeColor: '#ff6600',
     icon: '🔥',
     winRate: '73%',
   },
   {
-    id: 'ahmed-under-dt-oppo-killer',
-    name: 'Ahmed UNDER DT Oppo Killer',
-    description: '⚔ Dual-prediction UNDER strategy — V75 1s, switches prediction on loss (7→5). Martingale 2x, TP $5, SL $1000. Grace of God mode.',
-    category: 'Over/Under',
-    market: 'V75 1s (1HZ75V)',
-    type: 'DIGITUNDER',
-    prediction: '7 / 5',
-    xmlFile: '/bots/ahmed-under-dt-oppo-killer.xml',
-    badge: 'NEW ★',
-    badgeColor: '#4488ff',
-    icon: '⚡',
-    winRate: '72%',
-  },
-  {
-    id: 'over1',
-    name: 'AI Auto SYN Over 1',
-    description: 'Best market killer — DIGIT OVER prediction 1 on V50 1s. Martingale x2, TP $3, SL $10.',
-    category: 'Over/Under',
-    market: 'V50 1s',
-    type: 'DIGITOVER',
-    prediction: 1,
-    xmlFile: '/bots/over1.xml',
-    badge: 'HOT',
-    badgeColor: '#f44',
-    icon: '⚡',
-    winRate: '73%',
-  },
-  {
-    id: 'over2',
-    name: 'AI Auto SYN Over 2',
-    description: 'Best market killer — DIGIT OVER prediction 2 on V50 1s. Martingale x2, TP $3, SL $10.',
-    category: 'Over/Under',
-    market: 'V50 1s',
-    type: 'DIGITOVER',
-    prediction: 2,
-    xmlFile: '/bots/over2.xml',
-    badge: 'HOT',
-    badgeColor: '#f44',
-    icon: '🎯',
-    winRate: '71%',
-  },
-  {
-    id: 'over3',
-    name: 'AI Auto SYN Over 3',
-    description: 'Best market killer — DIGIT OVER prediction 3 on V50 1s. Martingale x2, TP $3, SL $10.',
-    category: 'Over/Under',
-    market: 'V50 1s',
-    type: 'DIGITOVER',
-    prediction: 3,
-    xmlFile: '/bots/over3.xml',
-    badge: 'STRONG',
-    badgeColor: '#2a9',
-    icon: '💪',
-    winRate: '69%',
-  },
-  {
-    id: 'under8',
-    name: 'AI Auto SYN Under 8',
-    description: 'Best killer — DIGIT UNDER 8 on V100 1s. Martingale x3, TP $3, SL $10.',
-    category: 'Over/Under',
-    market: 'V100 1s',
-    type: 'DIGITUNDER',
-    prediction: 8,
-    xmlFile: '/bots/under8.xml',
-    badge: 'NEW',
-    badgeColor: '#4e7cf5',
-    icon: '🎰',
-    winRate: '75%',
-  },
-  {
-    id: 'under7',
-    name: 'AI Auto SYN Under 7',
-    description: 'Best killer — DIGIT UNDER 7 on V100 1s. Martingale x3, TP $3, SL $10.',
-    category: 'Over/Under',
-    market: 'V100 1s',
-    type: 'DIGITUNDER',
-    prediction: 7,
-    xmlFile: '/bots/under7.xml',
-    badge: 'NEW',
-    badgeColor: '#4e7cf5',
-    icon: '🔥',
-    winRate: '72%',
-  },
-  {
-    id: 'under6',
-    name: 'AI Auto SYN Under 6',
-    description: 'Best market killer — DIGIT UNDER 6 on V50 1s. Martingale x2, TP $3, SL $10.',
-    category: 'Over/Under',
-    market: 'V50 1s',
-    type: 'DIGITUNDER',
-    prediction: 6,
-    xmlFile: '/bots/under6.xml',
-    badge: 'SOLID',
-    badgeColor: '#f5c842',
-    icon: '⚔',
-    winRate: '70%',
-  },
-  {
-    id: 'evenodd',
-    name: 'Ahmed SpeedBot Even/Odd v3',
-    description: 'AI Even/Odd bot v3 — analyses streak of 100 ticks, trades Even or Odd based on dominance. TP $3 / SL $3.',
-    category: 'Even/Odd',
-    market: 'V10 1s',
-    type: 'DIGITEVEN/DIGITODD',
-    prediction: null,
-    xmlFile: '/bots/evenodd.xml',
-    badge: 'AI',
-    badgeColor: '#a855f7',
-    icon: '🤖',
-    winRate: '68%',
-  },
-  {
-    id: 'mrvunja',
-    name: 'Mr Vunja Deriv V2026',
-    description: 'Sniper digit strategy — Over on V75 1s. Dual prediction switching on loss. No stop loss.',
-    category: 'Over/Under',
-    market: 'V75 1s',
-    type: 'DIGITOVER',
-    prediction: '2 / 4',
-    xmlFile: '/bots/mrvunja.xml',
-    badge: '2026',
-    badgeColor: '#ff6b00',
-    icon: '💎',
-    winRate: '77%',
-  },
-  {
-    id: 'market-killer-prime-v1',
-    name: 'Market Killer Prime V1',
-    description: '👑 PRIME — V25 1s, DIGIT OVER 2. Martingale 2.2x. TP $3, SL $1000. Auto-recovers. The most aggressive recovery bot.',
-    category: 'Over/Under',
-    market: 'V25 1s (1HZ25V)',
-    type: 'DIGITOVER',
-    prediction: '2',
-    xmlFile: '/bots/market-killer-prime-v1.xml',
-    badge: 'PRIME ★',
-    badgeColor: '#ff0066',
-    icon: '👑',
-    winRate: '~75%',
-  },
-  {
     id: 'speed-bot-v2-2',
     name: '⚡ Speed Bot With Entry v2.2',
-    description: '🚀 Ultra-fast DIGIT UNDER strategy on V100 1s — advanced entry logic, Martingale 1.3x. TP $15, SL $10. Precision entry confirmation built-in.',
+    description: '🚀 Ultra-fast DIGIT UNDER on V100 1s — advanced entry logic, Martingale 1.3x. TP $15, SL $10.',
     category: 'Over/Under',
-    market: 'V100 1s (1HZ100V)',
+    market: 'V100 1s',
     type: 'DIGITUNDER',
     prediction: '5',
     xmlFile: '/bots/speed-bot-v2.2.xml',
@@ -187,6 +175,20 @@ const FREE_BOTS = [
     badgeColor: '#00ccff',
     icon: '⚡',
     winRate: '~71%',
+  },
+  {
+    id: 'market-killer-prime-v1',
+    name: 'Market Killer Prime V1',
+    description: '👑 PRIME — V25 1s, DIGIT OVER 2. Martingale 2.2x. TP $3, SL $1000. The most aggressive recovery bot.',
+    category: 'Over/Under',
+    market: 'V25 1s',
+    type: 'DIGITOVER',
+    prediction: '2',
+    xmlFile: '/bots/market-killer-prime-v1.xml',
+    badge: 'PRIME ★',
+    badgeColor: '#ff0066',
+    icon: '👑',
+    winRate: '~75%',
   },
 ];
 
@@ -217,9 +219,7 @@ const FreeBots = observer(() => {
           false
         );
         return true;
-      } catch (err) {
-        /* fall through */
-      }
+      } catch {}
     }
     try {
       const B = (window as any).Blockly;
@@ -236,19 +236,15 @@ const FreeBots = observer(() => {
     }
   }, [store]);
 
-  /** Auto-press the main Run button once the bot's XML is loaded into the workspace. */
   const autoRun = useCallback(async () => {
     const run_panel: any = store?.run_panel;
     if (!run_panel?.onRunButtonClick) return;
-    if (run_panel.is_running) return; // already running — don't double-fire
-    try {
-      await run_panel.onRunButtonClick();
-    } catch (err) {
-      console.error('Auto-run bot error', err);
-    }
+    if (run_panel.is_running) return;
+    try { await run_panel.onRunButtonClick(); } catch {}
   }, [store]);
 
-  const handleLoad = useCallback(async (bot: typeof FREE_BOTS[0]) => {
+  // Load bot into builder and navigate there WITHOUT running
+  const handleLoadOnly = useCallback(async (bot: typeof FREE_BOTS[0]) => {
     setLoadingId(bot.id);
     try {
       const response = await fetch(bot.xmlFile);
@@ -268,34 +264,54 @@ const FreeBots = observer(() => {
           const poll = setInterval(async () => {
             attempts++;
             const ok = await loadXmlIntoWorkspace(bot, xml);
-            if (ok || attempts >= 50) {
-              clearInterval(poll);
-              resolve(ok);
-            }
+            if (ok || attempts >= 50) { clearInterval(poll); resolve(ok); }
           }, 100);
         });
       }
-
       setLoadedId(bot.id);
-      setTimeout(() => setLoadedId(null), 4000);
-
-      // Auto-enable & press the main Run button — the bot then trades
-      // continuously (with its own martingale/TP/SL logic) until the user
-      // hits Stop, exactly like manually clicking Run after loading a bot.
-      if (loaded) {
-        setTimeout(() => autoRun(), 400);
-      }
+      setTimeout(() => setLoadedId(null), 3000);
     } catch (e) {
       console.error('Load bot error', e);
       store?.dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING);
     } finally {
       setLoadingId(null);
     }
-  }, [store, loadXmlIntoWorkspace, autoRun]);
+  }, [store, loadXmlIntoWorkspace]);
 
-  const handleViewCircles = useCallback(() => {
-    store?.dashboard?.setActiveTab?.(DBOT_TABS.DCIRCLES);
-  }, [store]);
+  // Load bot AND auto-run it
+  const handleLoadAndRun = useCallback(async (bot: typeof FREE_BOTS[0]) => {
+    setLoadingId(bot.id);
+    try {
+      const response = await fetch(bot.xmlFile);
+      if (!response.ok) throw new Error(`Failed to fetch ${bot.xmlFile}`);
+      const xml = await response.text();
+
+      (window as any).__pendingBotXml = xml;
+      (window as any).__pendingBotName = bot.name;
+      store?.dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING);
+      store?.run_panel?.toggleDrawer?.(true);
+
+      let loaded = await loadXmlIntoWorkspace(bot, xml);
+      if (!loaded) {
+        loaded = await new Promise<boolean>(resolve => {
+          let attempts = 0;
+          const poll = setInterval(async () => {
+            attempts++;
+            const ok = await loadXmlIntoWorkspace(bot, xml);
+            if (ok || attempts >= 50) { clearInterval(poll); resolve(ok); }
+          }, 100);
+        });
+      }
+      setLoadedId(bot.id);
+      setTimeout(() => setLoadedId(null), 4000);
+      if (loaded) setTimeout(() => autoRun(), 400);
+    } catch (e) {
+      console.error('Load & Run error', e);
+      store?.dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING);
+    } finally {
+      setLoadingId(null);
+    }
+  }, [store, loadXmlIntoWorkspace, autoRun]);
 
   return (
     <div className='free-bots'>
@@ -312,12 +328,9 @@ const FreeBots = observer(() => {
       <div className='free-bots__header'>
         <div className='free-bots__header-left'>
           <h1>🤖 <span>AHMED SYN TRADER</span> — Free Bots</h1>
-          <p>{FREE_BOTS.length} professional bots • Load any bot directly into Bot Builder</p>
+          <p>{FREE_BOTS.length} professional bots • 4 per row • Click "Load Bot" to open in Bot Builder</p>
         </div>
         <div className='free-bots__header-actions'>
-          <button className='free-bots__circles-btn' onClick={handleViewCircles}>
-            ⭕ View DCircles
-          </button>
           <div className='free-bots__search-box'>
             <span>🔍</span>
             <input type='text' placeholder='Search bots...' value={search} onChange={e => setSearch(e.target.value)} />
@@ -358,7 +371,7 @@ const FreeBots = observer(() => {
               </div>
               <div className='free-bots__meta-item'>
                 <span className='free-bots__meta-label'>TYPE</span>
-                <span className='free-bots__meta-val' style={{ fontSize: '1rem' }}>{bot.type}</span>
+                <span className='free-bots__meta-val' style={{ fontSize: '0.9rem' }}>{bot.type}</span>
               </div>
               {bot.prediction !== null && (
                 <div className='free-bots__meta-item'>
@@ -371,19 +384,31 @@ const FreeBots = observer(() => {
                 <span className='free-bots__meta-val free-bots__meta-val--green'>{bot.winRate}</span>
               </div>
             </div>
-            <button
-              className={`free-bots__load-btn ${loadedId === bot.id ? 'loaded' : ''}`}
-              onClick={() => handleLoad(bot)}
-              disabled={loadingId === bot.id}
-            >
-              {loadingId === bot.id ? (
-                <span className='free-bots__load-spinner'>⏳ Loading...</span>
-              ) : loadedId === bot.id ? (
-                <span>🚀 Loaded — Running...</span>
-              ) : (
-                <>▶ Load &amp; Run Bot</>
-              )}
-            </button>
+            {/* Two buttons: Load Bot (builder only) + Load & Run */}
+            <div className='free-bots__btn-row'>
+              <button
+                className='free-bots__load-btn free-bots__load-btn--secondary'
+                onClick={() => handleLoadOnly(bot)}
+                disabled={loadingId === bot.id}
+                title='Load into Bot Builder (without running)'
+              >
+                {loadingId === bot.id ? '⏳' : '📂 Load Bot'}
+              </button>
+              <button
+                className={`free-bots__load-btn ${loadedId === bot.id ? 'loaded' : ''}`}
+                onClick={() => handleLoadAndRun(bot)}
+                disabled={loadingId === bot.id}
+                title='Load & Auto-Run'
+              >
+                {loadingId === bot.id ? (
+                  <span>⏳ Loading...</span>
+                ) : loadedId === bot.id ? (
+                  <span>🚀 Running!</span>
+                ) : (
+                  <>▶ Load &amp; Run</>
+                )}
+              </button>
+            </div>
           </div>
         ))}
       </div>

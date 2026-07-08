@@ -15,10 +15,6 @@ function extractDigit(quote: any, pipSize: number): number {
 }
 
 // ── Per-symbol live digit hook ────────────────────────────────────────────────
-/**
- * Returns a ref (not state) so it is always current inside async loops
- * without triggering re-renders on every tick.
- */
 function useLiveDigitsRef(symbol: string): React.MutableRefObject<number[]> {
     const digitsRef = useRef<number[]>([]);
     const wsRef = useRef<WebSocket | null>(null);
@@ -31,23 +27,18 @@ function useLiveDigitsRef(symbol: string): React.MutableRefObject<number[]> {
         let pipSize = 2;
 
         ws.onopen = () => ws.send(JSON.stringify({
-            ticks_history: symbol,
-            count: 200,
-            end: 'latest',
-            style: 'ticks',
-            subscribe: 1,
+            ticks_history: symbol, count: 200, end: 'latest', style: 'ticks', subscribe: 1,
         }));
-
         ws.onmessage = e => {
             try {
                 const d = JSON.parse(e.data);
-                if (d.pip_size) pipSize = d.pip_size;
+                if (d.tick?.pip_size) pipSize = d.tick.pip_size;
                 if (d.history?.prices) {
                     const ps = d.pip_size ?? pipSize;
                     digitsRef.current = d.history.prices.map((p: any) => extractDigit(p, ps));
                 }
                 if (d.tick?.quote) {
-                    const ps = d.pip_size ?? pipSize;
+                    const ps = d.tick.pip_size ?? pipSize;
                     const digit = extractDigit(d.tick.quote, ps);
                     digitsRef.current = [...digitsRef.current.slice(-499), digit];
                 }
@@ -60,6 +51,7 @@ function useLiveDigitsRef(symbol: string): React.MutableRefObject<number[]> {
 }
 
 // ── Shared buy-and-wait via app's API connection ──────────────────────────────
+// Uses proposal→buy flow for reliable contract execution.
 function useBuyAndWait() {
     const send = useCallback((msg: object): Promise<any> => {
         if (!api_base.api) return Promise.reject(new Error('Not connected'));
@@ -73,39 +65,59 @@ function useBuyAndWait() {
         stake: number,
     ): Promise<number> => {
         const needsBarrier = ['DIGITOVER','DIGITUNDER','DIGITMATCH','DIGITDIFF'].includes(contractType);
-        const params: any = {
-            buy: '1',
-            price: stake,
-            parameters: {
-                amount: stake,
-                basis: 'stake',
-                contract_type: contractType,
-                currency: 'USD',
-                duration: 1,
-                duration_unit: 't',
-                symbol,
-            },
+
+        // Step 1: Get a proposal to obtain a valid proposal_id
+        const proposalReq: any = {
+            proposal: 1,
+            amount: stake,
+            basis: 'stake',
+            contract_type: contractType,
+            currency: 'USD',
+            duration: 1,
+            duration_unit: 't',
+            symbol,
         };
-        if (needsBarrier && barrier !== null) params.parameters.barrier = String(barrier);
+        if (needsBarrier && barrier !== null) proposalReq.barrier = String(barrier);
 
-        const res = await send(params);
-        const contract_id = res?.buy?.contract_id;
-        if (!contract_id) throw new Error(res?.error?.message || 'Buy failed');
+        const propRes = await send(proposalReq);
+        if (propRes?.error) throw new Error(propRes.error.message || 'Proposal failed');
+        const proposalId = propRes?.proposal?.id;
+        if (!proposalId) throw new Error('No proposal ID — API not ready');
+        const askPrice = propRes?.proposal?.ask_price ?? stake;
 
+        // Step 2: Buy using the proposal ID
+        const buyRes = await send({ buy: proposalId, price: Number(askPrice) });
+        if (buyRes?.error) throw new Error(buyRes.error.message || 'Buy failed');
+        const contract_id = buyRes?.buy?.contract_id;
+        if (!contract_id) throw new Error('Buy failed — no contract ID');
+
+        // Step 3: Subscribe to proposal_open_contract to track settlement
         return new Promise<number>(resolve => {
-            const bail = setTimeout(() => resolve(0), 15000);
-            const sub = (api_base.api as any)?.onMessage?.()?.subscribe(({ data: d }: any) => {
-                if (!d?.proposal_open_contract) return;
-                const poc = d.proposal_open_contract;
-                if (Number(poc.contract_id) !== Number(contract_id)) return;
-                if (poc.is_sold || poc.status === 'won' || poc.status === 'lost') {
-                    clearTimeout(bail);
-                    sub?.unsubscribe?.();
-                    resolve(parseFloat(poc.profit ?? '0'));
-                }
-            });
+            let sub: any;
+            const bail = setTimeout(() => {
+                try { sub?.unsubscribe?.(); } catch {}
+                resolve(0);
+            }, 20_000);
+
+            try {
+                sub = (api_base.api as any)?.onMessage?.()?.subscribe(({ data: d }: any) => {
+                    if (!d?.proposal_open_contract) return;
+                    const poc = d.proposal_open_contract;
+                    if (Number(poc.contract_id) !== Number(contract_id)) return;
+                    if (poc.is_sold === 1 || poc.status === 'won' || poc.status === 'lost') {
+                        clearTimeout(bail);
+                        try { sub?.unsubscribe?.(); } catch {}
+                        resolve(parseFloat(poc.profit ?? '0'));
+                    }
+                });
+            } catch {
+                clearTimeout(bail);
+                resolve(0);
+                return;
+            }
+
             send({ proposal_open_contract: 1, contract_id, subscribe: 1 })
-                .catch(() => { clearTimeout(bail); sub?.unsubscribe?.(); resolve(0); });
+                .catch(() => { clearTimeout(bail); try { sub?.unsubscribe?.(); } catch {} resolve(0); });
         });
     }, [send]);
 }
@@ -122,16 +134,16 @@ interface AiBotDef {
     defaultMartingale: number;
     defaultTakeProfit: number;
     defaultStopLoss: number;
-    pickTrade: (digits: number[]) => { contract: string; barrier: number | null; recoveryMode?: boolean };
+    pickTrade: (digits: number[], recoveryMode?: boolean) => { contract: string; barrier: number | null };
 }
 
 const AI_BOTS: AiBotDef[] = [
     {
         id: 'autodiffer',
         name: 'AutoDiffer',
-        subtitle: 'Random Digit Analysis',
+        subtitle: 'Least-Frequent Digit Analysis',
         icon: '🎲',
-        desc: 'Automatically analyzes random barriers and symbols for optimal digit differ trades.',
+        desc: 'Analyzes last 50 digits, picks DIGITDIFF on the least frequent digit for maximum win probability.',
         symbol: '1HZ100V',
         defaultStake: 1.0,
         defaultMartingale: 2.2,
@@ -150,7 +162,7 @@ const AI_BOTS: AiBotDef[] = [
         name: 'Auto Over/Under',
         subtitle: 'AI Pattern Recognition',
         icon: '🧠',
-        desc: 'Uses advanced AI to identify patterns and recommend optimal over/under positions.',
+        desc: 'Analyzes last 20 digits to identify over/under bias. Trades DIGITOVER 2 when over-bias, DIGITUNDER 7 otherwise.',
         symbol: '1HZ25V',
         defaultStake: 1.0,
         defaultMartingale: 2.0,
@@ -170,7 +182,7 @@ const AI_BOTS: AiBotDef[] = [
         name: 'Auto O5 U4',
         subtitle: 'Dual Digit Strategy',
         icon: '⚡',
-        desc: 'Simultaneously trades Over 5 and Under 4 based on digit frequency analysis across all volatility indices.',
+        desc: 'Compares Over 5 vs Under 4 frequency in last 20 digits and trades whichever has higher probability.',
         symbol: '1HZ50V',
         defaultStake: 1.0,
         defaultMartingale: 2.0,
@@ -189,9 +201,9 @@ const AI_BOTS: AiBotDef[] = [
     {
         id: 'auto-o2u7',
         name: 'Auto O2U7',
-        subtitle: 'Over 2 · Under 7 · Recovery US',
+        subtitle: 'Over 2 · Under 7 · Recovery Mode',
         icon: '🔄',
-        desc: 'Simultaneously trades Over 2 and Under 7. On a net loss, recovers with Under 5 until a win, then resets.',
+        desc: 'Trades Over 2 / Under 7 based on last 5 digit average. On loss, switches to recovery mode with Under 5.',
         symbol: '1HZ75V',
         defaultStake: 1.0,
         defaultMartingale: 2.2,
@@ -230,7 +242,7 @@ function computeSmartAnalysis(digits: number[], analysisDepth: number) {
     return { last10: last.slice(-10), prediction, ticks: n, digitFreq: freq };
 }
 
-// ── Smart bot live digit state (for display in panel) ─────────────────────────
+// ── Smart bot live digit state (for display) ──────────────────────────────────
 function useLiveDigitsState(symbol: string): number[] {
     const [digits, setDigits] = useState<number[]>([]);
     const wsRef = useRef<WebSocket | null>(null);
@@ -248,13 +260,13 @@ function useLiveDigitsState(symbol: string): number[] {
         ws.onmessage = e => {
             try {
                 const d = JSON.parse(e.data);
-                if (d.pip_size) pipSize = d.pip_size;
+                if (d.tick?.pip_size) pipSize = d.tick.pip_size;
                 if (d.history?.prices) {
                     const ps = d.pip_size ?? pipSize;
                     setDigits(d.history.prices.map((p: any) => extractDigit(p, ps)));
                 }
                 if (d.tick?.quote) {
-                    const ps = d.pip_size ?? pipSize;
+                    const ps = d.tick.pip_size ?? pipSize;
                     const digit = extractDigit(d.tick.quote, ps);
                     setDigits(prev => [...prev.slice(-499), digit]);
                 }
@@ -266,7 +278,7 @@ function useLiveDigitsState(symbol: string): number[] {
     return digits;
 }
 
-// ── Individual AI bot runner (own symbol, own stop token) ──────────────────────
+// ── Individual AI bot runner ──────────────────────────────────────────────────
 interface AiBotRunnerProps {
     bot: AiBotDef;
     globalStake: number;
@@ -277,14 +289,13 @@ interface AiBotRunnerProps {
 }
 
 function AiBotCard({ bot, globalStake, globalMartingale, session, onSessionUpdate, onLog }: AiBotRunnerProps) {
-    // Each bot card has its own live digit feed for its own symbol
     const digitsRef = useLiveDigitsRef(bot.symbol);
     const stopRef = useRef(false);
+    const pausedStakeRef = useRef<number | null>(null); // for resume-with-martingale
     const buyAndWait = useBuyAndWait();
 
-    const start = useCallback(async () => {
+    const start = useCallback(async (resumeStake?: number) => {
         stopRef.current = false;
-        // Use local counters — avoids stale-closure accumulation bugs
         let localWins = 0;
         let localLosses = 0;
         let localProfit = 0;
@@ -292,9 +303,9 @@ function AiBotCard({ bot, globalStake, globalMartingale, session, onSessionUpdat
 
         const tp = bot.defaultTakeProfit * Math.max(1, globalStake);
         const sl = bot.defaultStopLoss * Math.max(1, globalStake);
-        let stk = globalStake;
+        let stk = resumeStake ?? globalStake; // resume with saved stake (martingale preserved)
         let recoveryMode = false;
-        onLog(`🚀 ${bot.name} started on ${bot.symbol} | TP:${tp.toFixed(2)} SL:${sl.toFixed(2)}`);
+        onLog(`🚀 ${bot.name} started | Stake: $${stk.toFixed(2)} | TP:${tp.toFixed(2)} SL:${sl.toFixed(2)}`);
 
         while (!stopRef.current) {
             try {
@@ -304,32 +315,41 @@ function AiBotCard({ bot, globalStake, globalMartingale, session, onSessionUpdat
                 localProfit = +(localProfit + profit).toFixed(2);
                 if (won) localWins++; else localLosses++;
 
-                // Write fresh absolute values — no stale closure needed
                 onSessionUpdate({ wins: localWins, losses: localLosses, profit: localProfit });
-                onLog(`${won ? '✅' : '❌'} ${contract}${barrier !== null ? '@'+barrier : ''} ${fmtProfit(profit)} | Total: ${fmtProfit(localProfit)}`);
+                onLog(`${won ? '✅' : '❌'} ${contract}${barrier !== null ? '@' + barrier : ''} ${fmtProfit(profit)} | Total: ${fmtProfit(localProfit)}`);
 
                 if (bot.id === 'auto-o2u7') recoveryMode = !won;
-                stk = won ? globalStake : Math.max(0.35, +(stk * globalMartingale).toFixed(2));
+                if (won) {
+                    stk = globalStake;
+                    pausedStakeRef.current = null;
+                } else {
+                    stk = Math.max(0.35, +(stk * globalMartingale).toFixed(2));
+                    pausedStakeRef.current = stk; // save for resume
+                }
+
                 if (localProfit >= tp) { onLog('🎯 Take profit hit'); break; }
                 if (localProfit <= -sl) { onLog('🛑 Stop loss hit'); break; }
             } catch (err: any) {
                 onLog(`⚠️ ${err?.message || 'Error'}`);
-                await new Promise(r => setTimeout(r, 1000));
+                await new Promise(r => setTimeout(r, 1500));
             }
         }
 
         stopRef.current = false;
         onSessionUpdate({ active: false });
-        onLog(`⏹ Stopped. Session: ${fmtProfit(localProfit)}`);
+        onLog(`⏹ Stopped. Session P/L: ${fmtProfit(localProfit)}`);
     }, [bot, globalStake, globalMartingale, digitsRef, buyAndWait, onLog, onSessionUpdate]);
 
     const toggle = useCallback(() => {
         if (session.active) {
             stopRef.current = true;
         } else {
-            start();
+            const resumeStake = pausedStakeRef.current;
+            start(resumeStake ?? undefined);
         }
     }, [session.active, start]);
+
+    const canResume = !session.active && pausedStakeRef.current !== null;
 
     return (
         <div className={`autotrades__botcard ${session.active ? 'active' : ''}`}>
@@ -340,23 +360,31 @@ function AiBotCard({ bot, globalStake, globalMartingale, session, onSessionUpdat
                     <span>{bot.subtitle}</span>
                 </div>
                 <span className={`autotrades__botcard-status ${session.active ? 'on' : 'off'}`}>
-                    {session.active ? 'ON' : 'OFF'}
+                    {session.active ? 'ON' : canResume ? '⏸' : 'OFF'}
                 </span>
             </div>
             <p className='autotrades__botcard-desc'>{bot.desc}</p>
+            <div className='autotrades__botcard-market'>
+                <span>📍 {bot.symbol}</span>
+            </div>
             <div className='autotrades__botcard-stats'>
                 <span className='wins'>✓ {session.wins}</span>
                 <span className='losses'>✗ {session.losses}</span>
                 <span className={`profit ${session.profit >= 0 ? 'pos' : 'neg'}`}>{fmtProfit(session.profit)}</span>
             </div>
+            {canResume && pausedStakeRef.current && (
+                <div className='autotrades__botcard-resume-info'>
+                    ⏸ Will resume at stake: <strong>${pausedStakeRef.current.toFixed(2)}</strong>
+                </div>
+            )}
             {session.logs[0] && (
                 <div className='autotrades__botcard-lastlog'>{session.logs[0]}</div>
             )}
             <button
-                className={`autotrades__botcard-btn ${session.active ? 'deactivate' : 'activate'}`}
+                className={`autotrades__botcard-btn ${session.active ? 'deactivate' : canResume ? 'resume' : 'activate'}`}
                 onClick={toggle}
             >
-                {session.active ? 'Deactivate' : 'Activate'}
+                {session.active ? '⏸ Pause' : canResume ? `▶ Resume ($${pausedStakeRef.current?.toFixed(2)})` : '▶ Activate'}
             </button>
         </div>
     );
@@ -374,30 +402,35 @@ const AutoTrades: React.FC = () => {
     const [smartStopLoss, setSmartStopLoss] = useState(30);
     const [smartDepth, setSmartDepth] = useState(100);
     const [smartRunning, setSmartRunning] = useState(false);
+    const [smartPaused, setSmartPaused] = useState(false);
     const [smartStats, setSmartStats] = useState({ profit: 0, trades: 0, wins: 0 });
     const smartStopRef = useRef(false);
+    const smartPausedStakeRef = useRef<number | null>(null);
     const smartDigits = useLiveDigitsState(smartSymbol);
-    // Always-fresh ref for smart bot loop
     const smartDigitsRef = useRef(smartDigits);
     useEffect(() => { smartDigitsRef.current = smartDigits; }, [smartDigits]);
     const smartAnalysis = computeSmartAnalysis(smartDigits, smartDepth);
     const buyAndWait = useBuyAndWait();
 
-    const runSmartBot = useCallback(async () => {
+    const runSmartBot = useCallback(async (resumeStake?: number) => {
         if (smartRunning) {
             smartStopRef.current = true;
             setSmartRunning(false);
+            setSmartPaused(true);
             return;
         }
         smartStopRef.current = false;
         setSmartRunning(true);
-        setSmartStats({ profit: 0, trades: 0, wins: 0 });
-        let stk = smartStake;
+        setSmartPaused(false);
+        if (!resumeStake) {
+            setSmartStats({ profit: 0, trades: 0, wins: 0 });
+            smartPausedStakeRef.current = null;
+        }
+        let stk = resumeStake ?? smartStake;
         let sessionProfit = 0;
 
         while (!smartStopRef.current) {
             try {
-                // Use freshest digits every iteration
                 const live = smartDigitsRef.current;
                 const n = Math.min(smartDepth, live.length);
                 const last = live.slice(-n);
@@ -412,11 +445,17 @@ const AutoTrades: React.FC = () => {
                     trades: p.trades + 1,
                     wins: p.wins + (won ? 1 : 0),
                 }));
-                stk = won ? smartStake : Math.max(0.35, +(stk * smartMartingale).toFixed(2));
+                if (won) {
+                    stk = smartStake;
+                    smartPausedStakeRef.current = null;
+                } else {
+                    stk = Math.max(0.35, +(stk * smartMartingale).toFixed(2));
+                    smartPausedStakeRef.current = stk;
+                }
                 if (sessionProfit >= smartTakeProfit) break;
                 if (sessionProfit <= -smartStopLoss) break;
-            } catch (err: any) {
-                await new Promise(r => setTimeout(r, 1000));
+            } catch {
+                await new Promise(r => setTimeout(r, 1500));
             }
         }
         smartStopRef.current = false;
@@ -455,7 +494,6 @@ const AutoTrades: React.FC = () => {
 
     return (
         <div className='autotrades'>
-            {/* Tab bar */}
             <div className='autotrades__tabs'>
                 <button className={`autotrades__tab ${activeTab === 'smart' ? 'active' : ''}`}
                     onClick={() => setActiveTab('smart')}>Smart Trading</button>
@@ -466,26 +504,29 @@ const AutoTrades: React.FC = () => {
             {/* ── Smart Trading Tab ── */}
             {activeTab === 'smart' && (
                 <div className='autotrades__smart'>
-                    <div className='autotrades__smart-header'><h2>Money Laundering</h2></div>
+                    <div className='autotrades__smart-header'>
+                        <h2>💡 Money Laundering Bot</h2>
+                        <p>AI-picks the least frequent digit for DIGITDIFF with martingale recovery</p>
+                    </div>
 
                     <div className='autotrades__smart-settings'>
                         <div className='autotrades__smart-field'>
-                            <label>Initial Stake</label>
+                            <label>Initial Stake ($)</label>
                             <input type='number' min='0.35' step='0.01' value={smartStake}
                                 onChange={e => setSmartStake(+e.target.value)} disabled={smartRunning} />
                         </div>
                         <div className='autotrades__smart-field'>
-                            <label>Martingale Multiplier</label>
+                            <label>Martingale ×</label>
                             <input type='number' min='1' max='5' step='0.1' value={smartMartingale}
                                 onChange={e => setSmartMartingale(+e.target.value)} disabled={smartRunning} />
                         </div>
                         <div className='autotrades__smart-field'>
-                            <label>Take Profit</label>
+                            <label>Take Profit ($)</label>
                             <input type='number' min='0.1' step='0.5' value={smartTakeProfit}
                                 onChange={e => setSmartTakeProfit(+e.target.value)} disabled={smartRunning} />
                         </div>
                         <div className='autotrades__smart-field'>
-                            <label>Stop Loss</label>
+                            <label>Stop Loss ($)</label>
                             <input type='number' min='0.1' step='0.5' value={smartStopLoss}
                                 onChange={e => setSmartStopLoss(+e.target.value)} disabled={smartRunning} />
                         </div>
@@ -507,10 +548,24 @@ const AutoTrades: React.FC = () => {
                     </div>
 
                     <div className='autotrades__smart-actions'>
-                        <button className={`autotrades__smart-run ${smartRunning ? 'running' : ''}`}
-                            onClick={runSmartBot}>
-                            {smartRunning ? '⏹ Stop Trading' : '▶ Start Trading'}
-                        </button>
+                        {smartRunning ? (
+                            <button className='autotrades__smart-run running' onClick={() => runSmartBot()}>
+                                ⏸ Pause Trading
+                            </button>
+                        ) : smartPaused && smartPausedStakeRef.current ? (
+                            <button className='autotrades__smart-run resume' onClick={() => runSmartBot(smartPausedStakeRef.current!)}>
+                                ▶ Resume (stake: ${smartPausedStakeRef.current.toFixed(2)})
+                            </button>
+                        ) : (
+                            <button className='autotrades__smart-run' onClick={() => runSmartBot()}>
+                                ▶ Start Trading
+                            </button>
+                        )}
+                        {smartPaused && (
+                            <button className='autotrades__smart-reset' onClick={() => { setSmartPaused(false); smartPausedStakeRef.current = null; setSmartStats({ profit: 0, trades: 0, wins: 0 }); }}>
+                                ↺ Reset Session
+                            </button>
+                        )}
                     </div>
 
                     <div className='autotrades__smart-panels'>
@@ -519,9 +574,9 @@ const AutoTrades: React.FC = () => {
                             <div className='autotrades__status-grid'>
                                 <div><span className='lbl'>Symbol</span><span className='val'>{smartSymbol}</span></div>
                                 <div><span className='lbl'>Contract</span><span className='val'>DIGITDIFF</span></div>
-                                <div><span className='lbl'>Stake</span><span className='val'>${smartStake.toFixed(2)}</span></div>
-                                <div><span className='lbl'>Market Count</span><span className='val'>{smartStats.trades}/10</span></div>
-                                <div><span className='lbl'>Speed</span><span className='val'>{smartRunning ? '● Normal' : 'Normal'}</span></div>
+                                <div><span className='lbl'>Base Stake</span><span className='val'>${smartStake.toFixed(2)}</span></div>
+                                <div><span className='lbl'>Status</span><span className='val'>{smartRunning ? '🟢 Running' : smartPaused ? '⏸ Paused' : '○ Idle'}</span></div>
+                                <div><span className='lbl'>Trades</span><span className='val'>{smartStats.trades}</span></div>
                             </div>
                         </div>
 
@@ -529,14 +584,14 @@ const AutoTrades: React.FC = () => {
                             <h3>Smart Analysis</h3>
                             <div className='autotrades__analysis-status'>
                                 <span className={`autotrades__status-dot ${smartDigits.length > 0 ? 'live' : 'loading'}`} />
-                                {smartDigits.length > 0 ? '✓ Ready (Live)' : 'Loading...'}
+                                {smartDigits.length > 0 ? `✓ Ready — ${smartDigits.length} ticks` : 'Loading...'}
                             </div>
                             <div className='autotrades__analysis-row'>
-                                <span className='lbl'>Prediction</span>
+                                <span className='lbl'>Prediction (Differ)</span>
                                 <span className='val pred'>{smartAnalysis.prediction}</span>
                             </div>
                             <div className='autotrades__analysis-row'>
-                                <span className='lbl'>Ticks Analyzed</span>
+                                <span className='lbl'>Analyzed</span>
                                 <span className='val'>{smartAnalysis.ticks}/{smartDepth}</span>
                             </div>
                             <div className='autotrades__analysis-row'>
@@ -547,12 +602,9 @@ const AutoTrades: React.FC = () => {
                                     ))}
                                 </span>
                             </div>
-                            <div className='autotrades__analysis-row'>
-                                <span className='lbl'>Digit Frequency</span>
-                            </div>
                             <div className='autotrades__freq-row'>
                                 {smartAnalysis.digitFreq.map((cnt, d) => (
-                                    <span key={d} className='autotrades__freq-item'>
+                                    <span key={d} className={`autotrades__freq-item ${d === smartAnalysis.prediction ? 'pred' : ''}`}>
                                         <span className='d-label'>{d}</span>
                                         <span className='d-count'>{cnt}</span>
                                     </span>
@@ -566,27 +618,19 @@ const AutoTrades: React.FC = () => {
                                 <div>
                                     <span className='lbl'>Total Profit</span>
                                     <span className={`val big ${smartStats.profit >= 0 ? 'pos' : 'neg'}`}>
-                                        ${smartStats.profit.toFixed(2)}
+                                        {fmtProfit(smartStats.profit)}
                                     </span>
                                 </div>
-                                <div>
-                                    <span className='lbl'>Trades</span>
-                                    <span className='val big'>{smartStats.trades}</span>
-                                </div>
-                                <div>
-                                    <span className='lbl'>Win/Loss</span>
-                                    <span className='val'>{smartStats.wins}/{smartStats.trades - smartStats.wins}</span>
-                                </div>
+                                <div><span className='lbl'>Trades</span><span className='val big'>{smartStats.trades}</span></div>
+                                <div><span className='lbl'>Wins</span><span className='val pos'>{smartStats.wins}</span></div>
+                                <div><span className='lbl'>Losses</span><span className='val neg'>{smartStats.trades - smartStats.wins}</span></div>
                                 <div>
                                     <span className='lbl'>Win Rate</span>
                                     <span className='val'>
-                                        {smartStats.trades > 0
-                                            ? ((smartStats.wins / smartStats.trades) * 100).toFixed(1)
-                                            : '0.0'}%
+                                        {smartStats.trades > 0 ? ((smartStats.wins / smartStats.trades) * 100).toFixed(1) : '0.0'}%
                                     </span>
                                 </div>
                             </div>
-                            <p className='autotrades__bg-note'>✓ Background data collection active. Prediction updates in real-time.</p>
                         </div>
                     </div>
                 </div>
@@ -599,25 +643,24 @@ const AutoTrades: React.FC = () => {
                         <div className='autotrades__autobots-info'>
                             <div className='autotrades__autobots-icon'>🤖</div>
                             <div>
-                                <h2>Automated Bots</h2>
-                                <p>AI-Powered Strategies</p>
+                                <h2>Automated AI Bots</h2>
+                                <p>Each bot uses its own live digit feed and independent stop control</p>
                             </div>
                         </div>
                         <div className='autotrades__autobots-status'>
                             <span className={`autotrades__market-dot ${anyActive ? 'live' : ''}`} />
-                            Market Connected
+                            {anyActive ? 'Bots Active' : 'Market Connected'}
                         </div>
-                        <span className='autotrades__stake-label'>Stake: ${globalStake.toFixed(2)}</span>
                     </div>
 
                     <div className='autotrades__global-settings'>
                         <div className='autotrades__global-field'>
-                            <label>STAKE ($)</label>
+                            <label>BASE STAKE ($)</label>
                             <input type='number' min='0.35' step='0.01' value={globalStake}
                                 onChange={e => setGlobalStake(+e.target.value)} />
                         </div>
                         <div className='autotrades__global-field'>
-                            <label>MARTINGALE</label>
+                            <label>MARTINGALE ×</label>
                             <input type='number' min='1' max='5' step='0.1' value={globalMartingale}
                                 onChange={e => setGlobalMartingale(+e.target.value)} />
                         </div>
@@ -637,8 +680,22 @@ const AutoTrades: React.FC = () => {
                         ))}
                     </div>
 
-                    <div className='autotrades__start-all'>
-                        <button className='autotrades__disclaimer-btn'>⚠ Risk Disclaimer</button>
+                    {/* Aggregated logs */}
+                    <div className='autotrades__logs-section'>
+                        <h3>📋 Recent Activity</h3>
+                        <div className='autotrades__logs'>
+                            {Object.entries(sessions)
+                                .flatMap(([id, s]) => s.logs.slice(0, 3).map(l => ({ id, log: l })))
+                                .sort((a, b) => b.log.localeCompare(a.log))
+                                .slice(0, 20)
+                                .map((item, i) => (
+                                    <div key={i} className='autotrades__log-entry'>
+                                        <span className='autotrades__log-bot'>{AI_BOTS.find(b => b.id === item.id)?.icon}</span>
+                                        {item.log}
+                                    </div>
+                                ))
+                            }
+                        </div>
                     </div>
                 </div>
             )}
