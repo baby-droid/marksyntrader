@@ -107,6 +107,9 @@ export default defineConfig({
     hmr: false,
     writeToDisk: false,
     assetPrefix: '/',
+    // Disable lazy compilation — it generates per-file proxy chunks whose URLs
+    // become stale on server restart, causing ChunkLoadError for icon packages.
+    lazyCompilation: false,
   },
   tools: {
     rspack: {
@@ -118,6 +121,10 @@ export default defineConfig({
             use: 'raw-loader',
           },
         ],
+      },
+      // Ensure lazy compilation is also off at the rspack level
+      experiments: {
+        lazyCompilation: false,
       },
     },
   },
