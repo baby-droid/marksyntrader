@@ -3,6 +3,7 @@
 // Controls language settings and theme toggle via brand.config.json
 import { useState } from 'react';
 import brandConfig from '@/../brand.config.json';
+import SettingsModal from '@/components/settings-modal/settings-modal';
 import useModalManager from '@/hooks/useModalManager';
 // [AI] Import useStore to check if menu has items
 import { useStore } from '@/hooks/useStore';
@@ -42,7 +43,11 @@ const MobileMenu = ({ onLogout }: TMobileMenuProps) => {
     const enableThemeToggle = brandConfig.platform.footer?.enable_theme_toggle ?? true;
 
     // Check if menu has any items to determine if mobile menu should be shown
-    const { hasMenuItems } = useMobileMenuConfig(client, onLogout, enableThemeToggle);
+    const { hasMenuItems, isSettingsOpen, setIsSettingsOpen } = useMobileMenuConfig(
+        client,
+        onLogout,
+        enableThemeToggle
+    );
 
     const openDrawer = () => setIsDrawerOpen(true);
     const closeDrawer = () => {
@@ -133,6 +138,7 @@ const MobileMenu = ({ onLogout }: TMobileMenuProps) => {
                     <NetworkStatus />
                 </Drawer.Footer>
             </Drawer>
+            <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
         </div>
     );
 };
