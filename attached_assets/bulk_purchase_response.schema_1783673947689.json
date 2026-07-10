@@ -1,0 +1,117 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Bulk Purchase Response",
+  "description": "The trading backend processed the request. The transactions array contains one entry per processed account with either the purchased contract details or a per-account error (including accounts that failed gateway validation).",
+  "type": "object",
+  "properties": {
+    "data": {
+      "type": "object",
+      "properties": {
+        "transactions": {
+          "type": "array",
+          "description": "Per-account purchase results. Each entry reports success (contract/transaction details) or an error for that account.",
+          "items": {
+            "type": "object",
+            "oneOf": [
+              {
+                "title": "Success",
+                "properties": {
+                  "account_id": {
+                    "type": "string",
+                    "description": "The account the contract was bought for."
+                  },
+                  "contract_id": {
+                    "type": "integer",
+                    "description": "Identifier of the purchased contract."
+                  },
+                  "buy_price": {
+                    "type": "number",
+                    "description": "Price paid for the contract."
+                  },
+                  "transaction_id": {
+                    "type": "integer",
+                    "description": "Identifier of the buy transaction."
+                  }
+                },
+                "required": [
+                  "account_id",
+                  "contract_id",
+                  "buy_price",
+                  "transaction_id"
+                ]
+              },
+              {
+                "title": "Per-account error",
+                "properties": {
+                  "account_id": {
+                    "type": "string",
+                    "description": "The account that failed."
+                  },
+                  "error": {
+                    "type": "object",
+                    "properties": {
+                      "code": {
+                        "type": "string",
+                        "description": "Machine-readable error code for this account."
+                      },
+                      "message": {
+                        "type": "string",
+                        "description": "Human-readable explanation of the failure."
+                      }
+                    },
+                    "required": [
+                      "code",
+                      "message"
+                    ]
+                  }
+                },
+                "required": [
+                  "account_id",
+                  "error"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "required": [
+        "transactions"
+      ]
+    },
+    "meta": {
+      "type": "object",
+      "properties": {
+        "endpoint": {
+          "type": "string",
+          "description": "The current endpoint",
+          "example": "/contracts/bulk-purchase"
+        },
+        "method": {
+          "type": "string",
+          "enum": [
+            "GET",
+            "POST",
+            "PUT",
+            "DELETE"
+          ],
+          "description": "The current HTTP request method",
+          "example": "POST"
+        },
+        "timing": {
+          "type": "integer",
+          "description": "Time for the API to serve the request",
+          "example": 512
+        }
+      },
+      "required": [
+        "endpoint",
+        "method",
+        "timing"
+      ]
+    }
+  },
+  "required": [
+    "data",
+    "meta"
+  ]
+}

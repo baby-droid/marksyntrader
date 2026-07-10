@@ -1,0 +1,142 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "title": "Auto Pause (response)",
+  "description": "Confirmation that the automated trading run has been paused, including the updated run details",
+  "type": "object",
+  "required": [
+    "echo_req",
+    "msg_type"
+  ],
+  "properties": {
+    "auto_pause": {
+      "title": "auto_pause",
+      "description": "Updated details of the paused automated trading run",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_template",
+        "run_id",
+        "start_time",
+        "status",
+        "strategy_id",
+        "strategy_parameters"
+      ],
+      "properties": {
+        "contract_template": {
+          "description": "Contract template used for each purchase in this run",
+          "type": "object"
+        },
+        "contracts": {
+          "description": "List of contracts purchased during this run",
+          "type": "array",
+          "items": {
+            "description": "A contract purchased by this run",
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "buy_price",
+              "contract_id",
+              "purchase_time"
+            ],
+            "properties": {
+              "buy_price": {
+                "description": "Price paid to purchase the contract",
+                "type": "number"
+              },
+              "contract_id": {
+                "description": "Internal contract identifier",
+                "type": "integer"
+              },
+              "contract_status": {
+                "description": "Current status of the contract",
+                "type": "string",
+                "enum": [
+                  "open",
+                  "won",
+                  "lost"
+                ]
+              },
+              "purchase_time": {
+                "description": "Epoch of the contract purchase time",
+                "type": "integer"
+              },
+              "sell_price": {
+                "description": "Price received when the contract was sold or settled (absent if contract is still open)",
+                "type": "number"
+              },
+              "sell_time": {
+                "description": "Epoch of the contract sell or settlement time (absent if contract is still open)",
+                "type": "integer"
+              }
+            }
+          }
+        },
+        "run_id": {
+          "description": "Unique identifier for the automated trading run",
+          "type": "string"
+        },
+        "start_time": {
+          "description": "Epoch of when the run was started",
+          "type": "integer"
+        },
+        "status": {
+          "description": "Current status of the run",
+          "type": "string",
+          "enum": [
+            "running",
+            "paused",
+            "stopped"
+          ]
+        },
+        "stop_reason": {
+          "description": "Reason the run was stopped (absent if still running or paused)",
+          "type": "string",
+          "enum": [
+            "error",
+            "user_stopped",
+            "condition_triggered"
+          ]
+        },
+        "stop_reason_code": {
+          "description": "Code associated with the stop reason (absent if still running or paused)",
+          "type": "string"
+        },
+        "stop_time": {
+          "description": "Epoch of when the run was stopped (absent if still running or paused)",
+          "type": "integer"
+        },
+        "strategy_id": {
+          "description": "Identifier of the strategy used for this run",
+          "type": "string"
+        },
+        "strategy_parameters": {
+          "description": "Parameters the strategy was started with",
+          "type": "object"
+        },
+        "total_payout": {
+          "description": "Total amount received from settled contracts in this run",
+          "type": "number"
+        },
+        "total_stake": {
+          "description": "Total amount spent on contract purchases in this run",
+          "type": "number"
+        }
+      }
+    },
+    "echo_req": {
+      "description": "Echo of the request made.",
+      "type": "object"
+    },
+    "msg_type": {
+      "description": "Action name of the request made.",
+      "type": "string",
+      "enum": [
+        "auto_pause"
+      ]
+    },
+    "req_id": {
+      "description": "Optional field sent in request to map to response, present only when request contains `req_id`.",
+      "type": "integer"
+    }
+  }
+}
