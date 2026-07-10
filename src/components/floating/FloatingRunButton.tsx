@@ -24,24 +24,15 @@ function savePos(pos: { x: number; y: number }) {
 
 const FloatingRunButton: React.FC = observer(() => {
     const { run_panel } = useStore();
-    const { is_running, onRunButtonClick, onStopButtonClick } = run_panel as any;
+    const {
+        is_running,
+        is_paused: paused,
+        onRunButtonClick,
+        onStopButtonClick,
+        onPauseButtonClick,
+        onResumeButtonClick,
+    } = run_panel as any;
     const [collapsed, setCollapsed] = useState(false);
-
-    // Use a ref to track paused so state-batching can never cause a flicker
-    const pausedRef = useRef(false);
-    const [paused, _setPaused] = useState(false);
-    const setPaused = useCallback((v: boolean) => {
-        pausedRef.current = v;
-        _setPaused(v);
-    }, []);
-
-    // Reset paused when bot fully stops (not via pause — check the ref)
-    useEffect(() => {
-        if (!is_running && !pausedRef.current) {
-            _setPaused(false);
-            pausedRef.current = false;
-        }
-    }, [is_running]);
 
     // Draggable position — load from localStorage, default to right side
     const [pos, setPos] = useState<{ x: number; y: number } | null>(() => {
@@ -97,25 +88,27 @@ const FloatingRunButton: React.FC = observer(() => {
         if (st?.dragging && pos) savePos(pos);
     }, [pos]);
 
-    // Pause: stop the bot but remember we're paused (not fully stopped)
+    // Pause: halt the bot engine in place — it stays active (loaded, holding
+    // its current stake/martingale state) but stops entering new trades.
     const handlePause = useCallback(() => {
-        setPaused(true);
-        onStopButtonClick();
-    }, [setPaused, onStopButtonClick]);
+        onPauseButtonClick();
+    }, [onPauseButtonClick]);
 
-    // Resume: clear paused state and restart
+    // Resume: continue execution exactly where it paused (no restart, no
+    // reset of stake/martingale progression).
     const handleResume = useCallback(() => {
-        setPaused(false);
-        onRunButtonClick();
-    }, [setPaused, onRunButtonClick]);
+        onResumeButtonClick();
+    }, [onResumeButtonClick]);
 
     const style: React.CSSProperties = pos
         ? { left: pos.x, top: pos.y, right: 'auto', bottom: 'auto' }
         : { right: 24, bottom: 24 };
 
-    // Derive display state cleanly
+    // Derive display state cleanly. The bot stays "running" (loaded, active)
+    // while paused — only the interpreter's tick loop is halted, so Stop is
+    // always available to fully terminate it.
     const showPause  = is_running && !paused;
-    const showResume = paused && !is_running;
+    const showResume = is_running && paused;
     const showStop   = is_running;
 
     return (
@@ -164,10 +157,8 @@ const FloatingRunButton: React.FC = observer(() => {
                     onClick={e => {
                         e.stopPropagation();
                         if (is_running) {
-                            setPaused(false);
                             onStopButtonClick();
                         } else {
-                            setPaused(false);
                             onRunButtonClick();
                         }
                     }}

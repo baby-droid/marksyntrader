@@ -2,6 +2,7 @@ import { save_types } from '../constants';
 import { config } from '../constants/config';
 import { api_base } from '../services/api/api-base';
 import ApiHelpers from '../services/api/api-helpers';
+import { sellAllSideContracts } from '../services/tradeEngine/trade/Purchase';
 import Interpreter from '../services/tradeEngine/utils/interpreter';
 import { compareXml, observer as globalObserver } from '../utils';
 import { getSavedWorkspaces, saveWorkspaceToRecent } from '../utils/local-storage';
@@ -382,6 +383,30 @@ class DBot {
     }
 
     /**
+     * Halts the running strategy in place without tearing down the interpreter.
+     * Unlike stopBot(), this keeps all workspace variables (stake, martingale
+     * progression, run counters, etc.) exactly as they are — resumeBot() then
+     * continues execution from that exact point instead of restarting the
+     * strategy from "Run once at start".
+     */
+    pauseBot() {
+        if (this.interpreter) this.interpreter.pause();
+    }
+
+    /**
+     * Resumes a strategy halted via pauseBot(). Continues mid-flight with
+     * whatever stake/variable state was live at the moment of pause (e.g. a
+     * martingale-adjusted stake after a loss), it does not restart the bot.
+     */
+    resumeBot() {
+        if (this.interpreter) this.interpreter.resume();
+    }
+
+    isBotPaused() {
+        return !!(this.interpreter && this.interpreter.isPaused());
+    }
+
+    /**
      * Instructs the interpreter to stop the bot. If there is an active trade
      * that trade will be completed first to reflect correct contract status in UI.
      */
@@ -389,6 +414,7 @@ class DBot {
         if (api_base.is_stopping) return;
 
         api_base.setIsRunning(false);
+        sellAllSideContracts();
 
         await this.interpreter.stop();
         this.is_bot_running = false;
@@ -402,6 +428,7 @@ class DBot {
      * Immediately instructs the interpreter to terminate the WS connection and bot.
      */
     async terminateBot() {
+        sellAllSideContracts();
         if (this.interpreter) {
             await this.interpreter.terminateSession();
             this.interpreter = null;

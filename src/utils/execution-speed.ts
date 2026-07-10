@@ -32,6 +32,17 @@ export const SPEED_MAX_INFLIGHT: Record<ExecutionSpeed, number> = {
     turbo: 200,  // unlimited practical cap — saturate the API
 };
 
+// Purchases fired per tick for each speed tier. Normal fires a single
+// purchase per tick (one contract at a time, as before). Crazy and Turbo
+// fire several purchases in parallel on the SAME tick, each an independent
+// contract — this is what actually multiplies throughput per tick rather
+// than just relaxing the inter-trade delay.
+export const SPEED_PURCHASES_PER_TICK: Record<ExecutionSpeed, number> = {
+    normal: 1,
+    crazy: 5,
+    turbo: 10,
+};
+
 const listeners = new Set<(speed: ExecutionSpeed) => void>();
 
 const read = (): ExecutionSpeed => {

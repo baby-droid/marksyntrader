@@ -35,36 +35,24 @@ const TradeAnimation = observer(({ className, should_show_overlay }: TTradeAnima
         is_stop_button_disabled,
         onRunButtonClick,
         onStopBotClick,
-        onStopButtonClick,
         is_running,
-    } = run_panel;
+        is_paused,
+        onPauseButtonClick,
+        onResumeButtonClick,
+    } = run_panel as any;
     const [shouldDisable, setShouldDisable] = React.useState(false);
     const is_unavailable_for_payment_agent = false;
 
-    // Pause/Resume: pause keeps the bot loaded but halts further purchases;
-    // resume restarts the run from the same workspace.
-    const pausedRef = React.useRef(false);
-    const [is_paused, _setIsPaused] = React.useState(false);
-    const setIsPaused = React.useCallback((v: boolean) => {
-        pausedRef.current = v;
-        _setIsPaused(v);
-    }, []);
-
-    React.useEffect(() => {
-        if (!is_running && !pausedRef.current) {
-            _setIsPaused(false);
-        }
-    }, [is_running]);
-
+    // Pause/Resume: pause halts the bot engine in place (it stays loaded and
+    // holds its current stake/martingale state); resume continues exactly
+    // where it left off instead of restarting the run.
     const handlePause = React.useCallback(() => {
-        setIsPaused(true);
-        onStopButtonClick();
-    }, [setIsPaused, onStopButtonClick]);
+        onPauseButtonClick();
+    }, [onPauseButtonClick]);
 
     const handleResume = React.useCallback(() => {
-        setIsPaused(false);
-        onRunButtonClick();
-    }, [setIsPaused, onRunButtonClick]);
+        onResumeButtonClick();
+    }, [onResumeButtonClick]);
 
     // Get the load_modal store to monitor strategy deletions
     const { load_modal } = useStore();
@@ -228,7 +216,7 @@ const TradeAnimation = observer(({ className, should_show_overlay }: TTradeAnima
                 </div>
             ) : (
                 <>
-                    {is_stop_button_visible && !is_paused && (
+                    {is_running && !is_paused && (
                         <Button
                             className='animation__pause-button'
                             id='db-animation__pause-button'
@@ -236,12 +224,12 @@ const TradeAnimation = observer(({ className, should_show_overlay }: TTradeAnima
                             onClick={() => handlePause()}
                             has_effect
                             secondary
-                            title={localize('Pause after current trade')}
+                            title={localize('Halt the bot in place — it stays loaded, resume continues from here')}
                         >
                             <Localize i18n_default_text='Pause' />
                         </Button>
                     )}
-                    {is_paused && !is_stop_button_visible && (
+                    {is_running && is_paused && (
                         <Button
                             className='animation__resume-button'
                             id='db-animation__resume-button'
@@ -249,7 +237,7 @@ const TradeAnimation = observer(({ className, should_show_overlay }: TTradeAnima
                             onClick={() => handleResume()}
                             has_effect
                             green
-                            title={localize('Resume bot')}
+                            title={localize('Resume bot — continues from where it paused')}
                         >
                             <Localize i18n_default_text='Resume' />
                         </Button>
@@ -261,7 +249,6 @@ const TradeAnimation = observer(({ className, should_show_overlay }: TTradeAnima
                         icon={button_props.icon}
                         onClick={() => {
                             setShouldDisable(true);
-                            setIsPaused(false);
                             if (is_stop_button_visible) {
                                 onStopBotClick();
                                 return;
@@ -275,7 +262,7 @@ const TradeAnimation = observer(({ className, should_show_overlay }: TTradeAnima
                             ? { primary: true }
                             : { green: true })}
                     >
-                        {is_paused && !is_stop_button_visible ? <Localize i18n_default_text='Run' /> : button_props.text}
+                        {button_props.text}
                     </Button>
                 </>
             )}

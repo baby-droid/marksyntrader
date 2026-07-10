@@ -277,7 +277,27 @@ const Interpreter = () => {
         });
     }
 
-    return { stop, run, terminateSession, bot, unsubscribeFromTicksService };
+    // True pause/resume — leverages JS-Interpreter's native paused_ flag so the
+    // interpreter's call stack (and all Blockly workspace variables, e.g. the
+    // running `stake`/`martingale` values) stay exactly as they were. This is
+    // NOT a stop/restart: no state is discarded, so resuming continues the
+    // strategy mid-flight instead of re-running "Run once at start".
+    function pause() {
+        if (interpreter) interpreter.paused_ = true;
+    }
+
+    function resume() {
+        if (interpreter) {
+            interpreter.paused_ = false;
+            loop();
+        }
+    }
+
+    function isPaused() {
+        return !!(interpreter && interpreter.paused_);
+    }
+
+    return { stop, run, pause, resume, isPaused, terminateSession, bot, unsubscribeFromTicksService };
 };
 export default Interpreter;
 

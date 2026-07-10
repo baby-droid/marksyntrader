@@ -1,4 +1,4 @@
-import { getExecutionSpeed, getExecutionSpeedDelay } from '../../../../../utils/execution-speed';
+import { getExecutionSpeed, getExecutionSpeedDelay, SPEED_PURCHASES_PER_TICK } from '../../../../../utils/execution-speed';
 import { LogTypes } from '../../../constants/messages';
 import { api_base } from '../../api/api-base';
 import { contractStatus, info, log } from '../utils/broadcast';
@@ -10,11 +10,29 @@ let delayIndex = 0;
 let purchase_reference;
 
 // --- Rate-limit-aware buy queue ---
-// Normal mode: capped at 1/s to stay safely within Deriv's hard limit.
-// Crazy / Turbo: no client-side cap — fire immediately and let the server
-// enforce its own limit (helper recovers with 100 ms / 50 ms backoff).
+// Every tier has a finite client-side cap — real money is on the line, so we
+// never fire an unbounded burst of buys and rely on the server to reject the
+// overflow. Normal=1/s (unchanged), Crazy/Turbo are higher but still capped.
 let _buyTimestamps = [];
-const _buyRateLimit = { normal: 1, crazy: 0, turbo: 0 }; // 0 = unlimited
+const _buyRateLimit = { normal: 1, crazy: 8, turbo: 15 };
+
+// Side purchases (Crazy/Turbo's extra per-tick contracts) are NOT tracked by
+// the main single-contract state machine, so Stop/Terminate cannot see them
+// through the normal contractId/isSold path. We keep our own registry here
+// and force-sell everything in it whenever the bot is stopped, so pressing
+// Stop always closes every open position — not just the one the engine was
+// actively tracking.
+const _sideContractIds = new Set();
+
+export function sellAllSideContracts() {
+    const ids = Array.from(_sideContractIds);
+    _sideContractIds.clear();
+    ids.forEach(contract_id => {
+        api_base.api.send({ sell: contract_id, price: 0 }).catch(() => {
+            /* already sold/expired — nothing to do */
+        });
+    });
+}
 
 function _acquireBuySlot() {
     const speed = getExecutionSpeed();
@@ -33,12 +51,53 @@ function _acquireBuySlot() {
     return new Promise(resolve => setTimeout(resolve, wait)).then(_acquireBuySlot);
 }
 
+// Fires an extra, independent contract purchase alongside the engine's main
+// tracked contract. Used by Crazy/Turbo to place several purchases within the
+// same tick. These side purchases deliberately do NOT touch the shared
+// Purchase engine state (this.contractId / this.isSold / store scope) — that
+// state machine drives afterPurchase/trade-again/martingale for ONE contract
+// at a time, and is not safe to share across concurrent contracts. Side
+// purchases still go through the real API, settle independently, and show up
+// normally in transactions/reports/balance.
+function fireSidePurchase(tradeOptions, contract_type) {
+    try {
+        const trade_option = tradeOptionToBuy(contract_type, tradeOptions);
+        _acquireBuySlot()
+            .then(() => api_base.api.send(trade_option))
+            .then(response => {
+                const { buy } = response;
+                if (!buy) return;
+                if (buy.contract_id) _sideContractIds.add(buy.contract_id);
+                contractStatus({ id: 'contract.purchase_received', data: buy.transaction_id, buy });
+                log(LogTypes.PURCHASE, { transaction_id: buy.transaction_id });
+            })
+            .catch(() => {
+                /* side purchase failures are non-fatal — main contract is unaffected */
+            });
+    } catch (e) {
+        /* ignore — never let a side purchase break the main strategy flow */
+    }
+}
+
 export default Engine =>
     class Purchase extends Engine {
         purchase(contract_type) {
             // Prevent calling purchase twice
             if (this.store.getState().scope !== BEFORE_PURCHASE) {
                 return Promise.resolve();
+            }
+
+            // Speed-tier fan-out: Normal fires 1 purchase per tick (unchanged).
+            // Crazy fires 5 purchases in parallel per tick, Turbo fires 10 — the
+            // first drives the bot's normal single-contract flow (afterPurchase,
+            // trade-again, martingale), the rest are independent side purchases
+            // fired at the same instant for extra throughput.
+            const speed = getExecutionSpeed();
+            const purchases_per_tick = SPEED_PURCHASES_PER_TICK[speed] ?? 1;
+            if (purchases_per_tick > 1 && this.tradeOptions) {
+                for (let i = 0; i < purchases_per_tick - 1; i++) {
+                    fireSidePurchase(this.tradeOptions, contract_type);
+                }
             }
 
             // Execution-speed throttle (Normal/Crazy/Turbo selector beside Run).
