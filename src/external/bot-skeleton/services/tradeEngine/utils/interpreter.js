@@ -78,7 +78,11 @@ const Interpreter = () => {
             func(...function_args.map(arg => js_interpreter.pseudoToNative(arg)))
                 .then(rv => {
                     callback(js_interpreter.nativeToPseudo(rv));
-                    loop();
+                    // Do NOT continue the interpreter loop while paused — the
+                    // resume() function will call loop() once the user resumes.
+                    if (!interpreter.paused_) {
+                        loop();
+                    }
                 })
                 .catch(e => {
                     // e.error for errors get from API, e for code errors

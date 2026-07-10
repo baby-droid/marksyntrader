@@ -125,6 +125,14 @@
     color: #ffc107 !important;
 }
 
+// When the bot is paused the Stop button is relabelled "Paused" and
+// rendered with an amber tint so the user can tell execution is halted.
+.animation__stop-button--paused {
+    background: rgba(255, 152, 0, 0.2) !important;
+    border: 1px solid rgba(255, 152, 0, 0.6) !important;
+    color: #ff9800 !important;
+}
+
 .animation__resume-button {
     background: #4caf50 !important;
     border-color: #4caf50 !important;

@@ -135,7 +135,17 @@ const TradeAnimation = observer(({ className, should_show_overlay }: TTradeAnima
     const should_show_tooltip = !is_stop_button_visible && !is_bot_builder_tab && has_no_bots;
 
     const button_props = React.useMemo(() => {
-        if (is_stop_button_visible && !is_stop_button_disabled) {
+        // While the bot is still active (stop visible) show stop/paused semantics —
+        // never fall through to "Run" while the bot is running or paused.
+        if (is_stop_button_visible) {
+            if (is_paused) {
+                return {
+                    id: 'db-animation__stop-button',
+                    class: 'animation__stop-button animation__stop-button--paused',
+                    text: <Localize i18n_default_text='Paused' />,
+                    icon: <LabelPairedSquareLgFillIcon fill='#fff' />,
+                };
+            }
             return {
                 id: 'db-animation__stop-button',
                 class: 'animation__stop-button',
@@ -149,7 +159,7 @@ const TradeAnimation = observer(({ className, should_show_overlay }: TTradeAnima
             text: <Localize i18n_default_text='Run' />,
             icon: <LabelPairedPlayLgFillIcon fill='#fff' />,
         };
-    }, [is_stop_button_visible, is_stop_button_disabled]);
+    }, [is_stop_button_visible, is_paused]);
     const show_overlay = should_show_overlay && is_contract_completed;
 
     // Fix TypeScript error by ensuring active_tab is a number

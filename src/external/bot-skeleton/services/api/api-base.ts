@@ -12,6 +12,8 @@ import { observer as globalObserver } from '../../utils/observer';
 import { doUntilDone, socket_state } from '../tradeEngine/utils/helpers';
 import {
     CONNECTION_STATUS,
+    account_list$,
+    authData$,
     setAccountList,
     setAuthData,
     setConnectionStatus,
@@ -65,6 +67,9 @@ class APIBase {
     active_symbols_promise: Promise<any[] | undefined> | null = null;
     common_store: CommonStore | undefined;
     reconnection_attempts: number = 0;
+    // Separate handle for the live-balance message listener so it is always
+    // torn down in init()/reinit paths before the old API instance is replaced.
+    private balance_listener: { unsubscribe: () => void } | null = null;
 
     // Constants for timeouts - extracted magic numbers for better maintainability
     private readonly ACTIVE_SYMBOLS_TIMEOUT_MS = 10000; // 10 seconds
@@ -164,6 +169,10 @@ class APIBase {
         }
 
         if (!this.api || this.api?.connection.readyState !== 1 || force_create_connection) {
+            // Tear down the live-balance listener before replacing the API instance
+            // to prevent duplicate listeners from accumulating across reconnects.
+            this.teardownBalanceListener();
+
             if (this.api?.connection) {
                 ApiHelpers.disposeInstance();
                 setConnectionStatus(CONNECTION_STATUS.CLOSED);
@@ -389,6 +398,51 @@ class APIBase {
         const streamsToSubscribe = ['balance', 'transaction', 'proposal_open_contract'];
 
         await Promise.all(streamsToSubscribe.map(subscribeToStream));
+
+        // Listen for live balance updates and push them to the account_list$ observable
+        // so the header always reflects the real-time Deriv account balance.
+        // Stored separately from bot-trade subscriptions so it is always torn down
+        // in reinit/reconnect paths (see teardownBalanceListener).
+        this.teardownBalanceListener();
+        if (this.api) {
+            this.balance_listener = this.api.onMessage().subscribe(({ data }: any) => {
+                if (data?.msg_type === 'balance' && data?.balance) {
+                    const { loginid, balance: newBalance, currency } = data.balance;
+                    if (!loginid) return;
+
+                    const currentList = account_list$.getValue();
+                    const updatedList = currentList.map((acc: any) =>
+                        acc.loginid === loginid
+                            ? { ...acc, balance: newBalance, currency: currency || acc.currency }
+                            : acc
+                    );
+                    setAccountList(updatedList);
+
+                    // Also update authData if this is the active account
+                    const currentAuthData = authData$.getValue();
+                    if (currentAuthData?.loginid === loginid) {
+                        setAuthData({ ...currentAuthData, balance: newBalance, currency: currency || currentAuthData.currency });
+                    }
+
+                    // Sync to client store so the trade engine getBalance() sees the live value
+                    const currentClientStore = globalObserver.getState('client.store');
+                    if (currentClientStore?.loginid === loginid || !currentClientStore?.loginid) {
+                        currentClientStore?.setBalance?.(newBalance?.toString());
+                    }
+                }
+            }) as any;
+        }
+    }
+
+    /** Tear down the live-balance onMessage listener. Called before every API
+     *  reinit so listeners cannot accumulate across reconnection cycles. */
+    private teardownBalanceListener() {
+        if (this.balance_listener) {
+            try {
+                this.balance_listener.unsubscribe();
+            } catch (_) { /* already unsubscribed */ }
+            this.balance_listener = null;
+        }
     }
 
     getActiveSymbols = async () => {
