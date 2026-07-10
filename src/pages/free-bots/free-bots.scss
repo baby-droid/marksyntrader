@@ -3,10 +3,14 @@
 .free-bots {
   padding: 1.6rem 2rem;
   width: 100%;
+  max-width: 100%;
   min-height: 100%;
   overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
   font-family: 'Rajdhani', 'Inter', sans-serif;
   background: linear-gradient(135deg, #060d20 0%, #0a1628 50%, #06101e 100%);
+  * { box-sizing: border-box; }
 
   /* ─── Disclaimer ─── */
   &__disclaimer {
@@ -107,11 +111,12 @@
   &__filters {
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     gap: 0.8rem;
     flex-wrap: wrap;
     margin-bottom: 2rem;
     position: relative;
+    padding-left: 8%;
   }
 
   &__filter-btn {

@@ -29,10 +29,42 @@ const TradeAnimation = observer(({ className, should_show_overlay }: TTradeAnima
     const { isMobile } = useDevice();
 
     const { is_contract_completed, profit } = summary_card;
-    const { contract_stage, is_stop_button_visible, is_stop_button_disabled, onRunButtonClick, onStopBotClick } =
-        run_panel;
+    const {
+        contract_stage,
+        is_stop_button_visible,
+        is_stop_button_disabled,
+        onRunButtonClick,
+        onStopBotClick,
+        onStopButtonClick,
+        is_running,
+    } = run_panel;
     const [shouldDisable, setShouldDisable] = React.useState(false);
     const is_unavailable_for_payment_agent = false;
+
+    // Pause/Resume: pause keeps the bot loaded but halts further purchases;
+    // resume restarts the run from the same workspace.
+    const pausedRef = React.useRef(false);
+    const [is_paused, _setIsPaused] = React.useState(false);
+    const setIsPaused = React.useCallback((v: boolean) => {
+        pausedRef.current = v;
+        _setIsPaused(v);
+    }, []);
+
+    React.useEffect(() => {
+        if (!is_running && !pausedRef.current) {
+            _setIsPaused(false);
+        }
+    }, [is_running]);
+
+    const handlePause = React.useCallback(() => {
+        setIsPaused(true);
+        onStopButtonClick();
+    }, [setIsPaused, onStopButtonClick]);
+
+    const handleResume = React.useCallback(() => {
+        setIsPaused(false);
+        onRunButtonClick();
+    }, [setIsPaused, onRunButtonClick]);
 
     // Get the load_modal store to monitor strategy deletions
     const { load_modal } = useStore();
@@ -195,28 +227,57 @@ const TradeAnimation = observer(({ className, should_show_overlay }: TTradeAnima
                     </div>
                 </div>
             ) : (
-                <Button
-                    is_disabled={(is_disabled && !is_unavailable_for_payment_agent) || contract_stage === 3}
-                    className={button_props.class}
-                    id={button_props.id}
-                    icon={button_props.icon}
-                    onClick={() => {
-                        setShouldDisable(true);
-                        if (is_stop_button_visible) {
-                            onStopBotClick();
-                            return;
-                        }
-                        onRunButtonClick();
-                        /* [AI] - Analytics event tracking removed - see migrate-docs/MONITORING_PACKAGES.md for re-implementation guide */
-                        /* [/AI] */
-                    }}
-                    has_effect
-                    {...(is_stop_button_visible || !is_unavailable_for_payment_agent
-                        ? { primary: true }
-                        : { green: true })}
-                >
-                    {button_props.text}
-                </Button>
+                <>
+                    {is_stop_button_visible && !is_paused && (
+                        <Button
+                            className='animation__pause-button'
+                            id='db-animation__pause-button'
+                            icon={<span style={{ fontSize: '1.6rem' }}>⏸</span>}
+                            onClick={() => handlePause()}
+                            has_effect
+                            secondary
+                            title={localize('Pause after current trade')}
+                        >
+                            <Localize i18n_default_text='Pause' />
+                        </Button>
+                    )}
+                    {is_paused && !is_stop_button_visible && (
+                        <Button
+                            className='animation__resume-button'
+                            id='db-animation__resume-button'
+                            icon={<LabelPairedPlayLgFillIcon fill='#fff' />}
+                            onClick={() => handleResume()}
+                            has_effect
+                            green
+                            title={localize('Resume bot')}
+                        >
+                            <Localize i18n_default_text='Resume' />
+                        </Button>
+                    )}
+                    <Button
+                        is_disabled={(is_disabled && !is_unavailable_for_payment_agent) || contract_stage === 3}
+                        className={button_props.class}
+                        id={button_props.id}
+                        icon={button_props.icon}
+                        onClick={() => {
+                            setShouldDisable(true);
+                            setIsPaused(false);
+                            if (is_stop_button_visible) {
+                                onStopBotClick();
+                                return;
+                            }
+                            onRunButtonClick();
+                            /* [AI] - Analytics event tracking removed - see migrate-docs/MONITORING_PACKAGES.md for re-implementation guide */
+                            /* [/AI] */
+                        }}
+                        has_effect
+                        {...(is_stop_button_visible || !is_unavailable_for_payment_agent
+                            ? { primary: true }
+                            : { green: true })}
+                    >
+                        {is_paused && !is_stop_button_visible ? <Localize i18n_default_text='Run' /> : button_props.text}
+                    </Button>
+                </>
             )}
             <div
                 className={classNames('animation__container', className, {

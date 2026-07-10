@@ -111,6 +111,26 @@
     }
 }
 
+.animation__pause-button,
+.animation__resume-button {
+    height: 40px !important;
+    padding: 8px 16px !important;
+    line-height: 24px !important;
+    margin-right: 8px !important;
+}
+
+.animation__pause-button {
+    background: rgba(255, 193, 7, 0.15) !important;
+    border: 1px solid rgba(255, 193, 7, 0.5) !important;
+    color: #ffc107 !important;
+}
+
+.animation__resume-button {
+    background: #4caf50 !important;
+    border-color: #4caf50 !important;
+    color: #fff !important;
+}
+
 // Mobile-specific adjustments
 @media screen and (width <= 1300px) {
     .run__button_wrapper .qs__tooltip.dc-tooltip {
