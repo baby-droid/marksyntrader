@@ -1,5 +1,5 @@
 // @ts-nocheck — vendored bot code with known upstream type gaps; see AGENTS.md
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import classNames from 'classnames';
 import { observer } from 'mobx-react-lite';
 import { load, save_types } from '@/external/bot-skeleton';
@@ -298,6 +298,64 @@ const BotBuilder = observer(() => {
     // When true, fire onRunButtonClick as soon as the panel finishes unmounting
     const pendingAutoRun = React.useRef(false);
 
+    // ── Draggable Free Bots button ──
+    const FREE_BOTS_POS_KEY = 'free_bots_btn_pos';
+    const getInitialFreeBotPos = () => {
+        try {
+            const saved = localStorage.getItem(FREE_BOTS_POS_KEY);
+            if (saved) {
+                const p = JSON.parse(saved);
+                if (typeof p.x === 'number' && typeof p.y === 'number') return p;
+            }
+        } catch { /* ignore */ }
+        // Default: middle-left
+        return { x: 12, y: Math.max(60, window.innerHeight / 2 - 20) };
+    };
+    const [freeBotPos, setFreeBotPos] = useState(getInitialFreeBotPos);
+    const freeBotDragging = useRef(false);
+    const freeBotWasDragged = useRef(false);
+    const freeBotOffset = useRef({ x: 0, y: 0 });
+    const freeBotBtnRef = useRef<HTMLButtonElement | null>(null);
+
+    const onFreeBotPointerDown = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
+        freeBotDragging.current = true;
+        freeBotWasDragged.current = false;
+        freeBotOffset.current = { x: e.clientX - freeBotPos.x, y: e.clientY - freeBotPos.y };
+        // Use currentTarget (the button) not target (could be icon/text inside)
+        e.currentTarget.setPointerCapture?.(e.pointerId);
+    }, [freeBotPos]);
+
+    const onFreeBotPointerMove = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
+        if (!freeBotDragging.current) return;
+        const dx = e.clientX - freeBotOffset.current.x - freeBotPos.x;
+        const dy = e.clientY - freeBotOffset.current.y - freeBotPos.y;
+        if (!freeBotWasDragged.current && Math.hypot(dx, dy) < 4) return;
+        freeBotWasDragged.current = true;
+        const btn = freeBotBtnRef.current;
+        const w = btn?.offsetWidth ?? 110;
+        const h = btn?.offsetHeight ?? 34;
+        const x = Math.max(4, Math.min(window.innerWidth - w - 4, e.clientX - freeBotOffset.current.x));
+        const y = Math.max(4, Math.min(window.innerHeight - h - 4, e.clientY - freeBotOffset.current.y));
+        setFreeBotPos({ x, y });
+    }, [freeBotPos]);
+
+    const onFreeBotPointerUp = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
+        e.currentTarget.releasePointerCapture?.(e.pointerId);
+        freeBotDragging.current = false;
+        if (freeBotWasDragged.current) {
+            setFreeBotPos(p => {
+                try { localStorage.setItem(FREE_BOTS_POS_KEY, JSON.stringify(p)); } catch { /* ignore */ }
+                return p;
+            });
+            // Suppress the click that follows drag
+            const btn = freeBotBtnRef.current;
+            if (btn) {
+                const suppress = (ev: MouseEvent) => { ev.stopPropagation(); ev.preventDefault(); };
+                btn.addEventListener('click', suppress, { capture: true, once: true });
+            }
+        }
+    }, []);
+
     // After the panel fully unmounts (showFreeBots flips to false), trigger the run.
     // Using double requestAnimationFrame so Blockly has had its own paint cycle to
     // finalise block layout before shouldRunBot / generateCode execute.
@@ -336,18 +394,29 @@ const BotBuilder = observer(() => {
                     <WorkspaceWrapper />
                 </div>
 
-                {/* Free Bots toggle button — hidden while panel is open to avoid overlap with run drawer */}
+                {/* Free Bots toggle button — draggable, position persisted, hidden while panel is open */}
                 {active_tab === 1 && !showFreeBots && (
                     <button
+                        ref={freeBotBtnRef}
                         onClick={() => setShowFreeBots(true)}
-                        title='Free Bots Library'
+                        onPointerDown={onFreeBotPointerDown}
+                        onPointerMove={onFreeBotPointerMove}
+                        onPointerUp={onFreeBotPointerUp}
+                        onPointerCancel={onFreeBotPointerUp}
+                        title='Free Bots Library (drag to move)'
                         style={{
-                            position: 'absolute', top: '8px', right: '8px',
-                            zIndex: 25, background: 'rgba(99,102,241,0.88)',
-                            border: '1.5px solid rgba(129,140,248,0.5)', borderRadius: '8px',
+                            position: 'fixed',
+                            left: freeBotPos.x,
+                            top: freeBotPos.y,
+                            zIndex: 120,
+                            background: 'rgba(99,102,241,0.92)',
+                            border: '1.5px solid rgba(129,140,248,0.5)',
+                            borderRadius: '8px',
                             color: '#fff', fontSize: '12px', fontWeight: 700, padding: '7px 13px',
-                            cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 10px rgba(0,0,0,0.4)',
+                            cursor: 'grab', touchAction: 'none',
+                            boxShadow: '0 2px 10px rgba(0,0,0,0.4)',
                             display: 'flex', alignItems: 'center', gap: '6px',
+                            userSelect: 'none',
                         }}
                     >
                         📥 <span>Free Bots</span>

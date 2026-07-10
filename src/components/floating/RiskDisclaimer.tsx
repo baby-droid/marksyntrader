@@ -1,10 +1,26 @@
 import React, { useEffect, useRef, useState } from 'react';
 import './risk-disclaimer.scss';
 
+const STORAGE_KEY_DISMISSED = 'risk_disclaimer_dismissed';
+const STORAGE_KEY_POS = 'risk_disclaimer_pos';
+
+function getDefaultPos() {
+    if (typeof window === 'undefined') return { x: 20, y: 480 };
+    try {
+        const saved = localStorage.getItem(STORAGE_KEY_POS);
+        if (saved) {
+            const p = JSON.parse(saved);
+            if (typeof p.x === 'number' && typeof p.y === 'number') return p;
+        }
+    } catch { /* ignore */ }
+    // Default: bottom-left, 20px from left, 90px from bottom
+    return { x: 20, y: Math.max(20, window.innerHeight - 310) };
+}
+
 const RiskDisclaimer: React.FC = () => {
-    const [dismissed, setDismissed] = useState(() => !!localStorage.getItem('risk_disclaimer_dismissed'));
+    const [dismissed, setDismissed] = useState(() => !!localStorage.getItem(STORAGE_KEY_DISMISSED));
     const [minimized, setMinimized] = useState(false);
-    const [pos, setPos] = useState({ x: 20, y: 480 });
+    const [pos, setPos] = useState(getDefaultPos);
     const dragging = useRef(false);
     const offset = useRef({ x: 0, y: 0 });
 
@@ -16,9 +32,20 @@ const RiskDisclaimer: React.FC = () => {
     useEffect(() => {
         const onMove = (e: MouseEvent) => {
             if (!dragging.current) return;
-            setPos({ x: e.clientX - offset.current.x, y: e.clientY - offset.current.y });
+            const x = Math.max(0, Math.min(window.innerWidth - 20, e.clientX - offset.current.x));
+            const y = Math.max(0, Math.min(window.innerHeight - 20, e.clientY - offset.current.y));
+            setPos({ x, y });
         };
-        const onUp = () => { dragging.current = false; };
+        const onUp = () => {
+            if (dragging.current) {
+                dragging.current = false;
+                // Persist final position
+                setPos(p => {
+                    try { localStorage.setItem(STORAGE_KEY_POS, JSON.stringify(p)); } catch { /* ignore */ }
+                    return p;
+                });
+            }
+        };
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);
         return () => {
@@ -28,7 +55,7 @@ const RiskDisclaimer: React.FC = () => {
     }, []);
 
     const dismiss = () => {
-        localStorage.setItem('risk_disclaimer_dismissed', '1');
+        localStorage.setItem(STORAGE_KEY_DISMISSED, '1');
         setDismissed(true);
     };
 

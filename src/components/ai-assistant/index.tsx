@@ -911,15 +911,12 @@ const AIAssistant: React.FC = () => {
                 // Martingale: all in USD
                 stakeRef.current = won ? stake : Math.max(0.35, +(stakeRef.current * martingale).toFixed(2));
 
-                // Fire Now: stop after N profitable wins
-                if (won && maxWinsRef.current != null) {
-                    profitWinsRef.current++;
-                    if (profitWinsRef.current >= maxWinsRef.current) {
-                        addLog(`🏁 Fire Now: ${profitWinsRef.current} win${profitWinsRef.current > 1 ? 's' : ''} hit! Session P/L: ${fmtProfit(sp)}`);
-                        runRef.current = false;
-                        setBotRunning(false);
-                        return;
-                    }
+                // Fire Now: stop after N total trades (runs), regardless of win/loss
+                if (maxWinsRef.current != null && tc >= maxWinsRef.current) {
+                    addLog(`🏁 Fire Now: ${tc} run${tc > 1 ? 's' : ''} completed! Session P/L: ${fmtProfit(sp)}`);
+                    runRef.current = false;
+                    setBotRunning(false);
+                    return;
                 }
 
                 if (sp >= takeProfit) {
@@ -951,7 +948,9 @@ const AIAssistant: React.FC = () => {
             const fireAndForget = (curStake: number) => {
                 derivTradeRef.current.buyContract(
                     { ...tradeParams, stake: curStake },
-                    settled => { if (runRef.current || settled.profit !== 0) applyResult(settled.profit ?? 0); }
+                    // Only apply settlement if the bot is still running — once stopped
+                    // (e.g. Fire Now cap hit) in-flight contracts should not count further.
+                    settled => { if (runRef.current) applyResult(settled.profit ?? 0); }
                 ).catch(err => {
                     const msg = err?.message || err?.error?.message || 'Buy error';
                     addLog(`⚠️ ${msg}`);
@@ -1200,16 +1199,16 @@ const AIAssistant: React.FC = () => {
                             ) : (
                                 <button className='ai-assistant__btn ai-assistant__btn--scan' onClick={startScan}>🔍 SCAN ALL MARKETS</button>
                             )}
-                            {/* FIRE NOW — stops after 3 profitable wins */}
+                            {/* FIRE NOW — fires exactly 3 trades then auto-stops */}
                             {!botRunning && (
                                 <button
                                     className='ai-assistant__btn ai-assistant__btn--load'
                                     style={{ background: 'linear-gradient(135deg,#f97316,#ef4444)', fontSize: '0.8rem' }}
                                     onClick={() => loadAndRun(best ?? DEFAULT_SIGNAL, 3)}
                                     disabled={!derivTrade.connected}
-                                    title={!derivTrade.connected ? 'Waiting for account connection...' : 'Fires trades until 3 profitable wins, then auto-stops'}
+                                    title={!derivTrade.connected ? 'Waiting for account connection...' : 'Fires exactly 3 trades then auto-stops'}
                                 >
-                                    ⚡ FIRE NOW (3 wins)
+                                    ⚡ FIRE NOW (3 runs)
                                 </button>
                             )}
                             {/* Pause / Resume — only visible while bot is running */}
