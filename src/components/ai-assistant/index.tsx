@@ -942,20 +942,17 @@ const AIAssistant: React.FC = () => {
                 }
             };
 
-            // Speed mode controls concurrency:
-            // Normal  = sequential (await settlement) — safest, no rate-limit risk
-            // Crazy   = up to 3 in-flight simultaneously — safe pipeline within Deriv's ~3/s limit
-            // Turbo   = burst 3 per tick then short pause — maximum safe throughput
-            let inFlight = 0;
-            const CRAZY_MAX_IN_FLIGHT = 3; // stay within Deriv's ~3 buy/s hard cap
+            // Speed mode controls how many purchases fire within a single tick:
+            // Normal = 1 purchase per tick (sequential, await settlement)
+            // Crazy  = 5 parallel purchases fired together in under 1 second, on 1 tick
+            // Turbo  = 10 parallel purchases fired together in under 1 second, on 1 tick
+            const PURCHASES_PER_TICK = { normal: 1, crazy: 5, turbo: 10 } as const;
 
             const fireAndForget = (curStake: number) => {
-                inFlight++;
                 derivTradeRef.current.buyContract(
                     { ...tradeParams, stake: curStake },
-                    settled => { inFlight = Math.max(0, inFlight - 1); if (runRef.current || settled.profit !== 0) applyResult(settled.profit ?? 0); }
+                    settled => { if (runRef.current || settled.profit !== 0) applyResult(settled.profit ?? 0); }
                 ).catch(err => {
-                    inFlight = Math.max(0, inFlight - 1);
                     const msg = err?.message || err?.error?.message || 'Buy error';
                     addLog(`⚠️ ${msg}`);
                 });
@@ -971,20 +968,13 @@ const AIAssistant: React.FC = () => {
                 // Read AI-local speed mode (not the global FloatingRunButton speed)
                 const speed = aiModeRef.current;
                 try {
-                    if (speed === 'turbo') {
-                        // Turbo = max safe throughput: burst 3 contracts then 350ms pause (stays under Deriv's rate cap)
-                        for (let _i = 0; _i < 3; _i++) fireAndForget(curStake);
-                        await new Promise(r => setTimeout(r, 350)); // ~3 buy/s — Deriv's safe limit
-                    } else if (speed === 'crazy') {
-                        // Crazy = pipeline up to 3 simultaneous contracts (within Deriv's rate cap)
-                        if (inFlight >= CRAZY_MAX_IN_FLIGHT) {
-                            await new Promise(r => setTimeout(r, 150)); // wait 150ms before retrying
-                            continue;
-                        }
-                        fireAndForget(curStake);
-                        await new Promise(r => setTimeout(r, 350)); // ~3 buy/s pacing
+                    if (speed === 'turbo' || speed === 'crazy') {
+                        // Fire all purchases for this tick in parallel, in under 1 second
+                        const count = PURCHASES_PER_TICK[speed];
+                        for (let _i = 0; _i < count; _i++) fireAndForget(curStake);
+                        await new Promise(r => setTimeout(r, 900)); // wait for the tick to elapse before next batch
                     } else {
-                        // Normal: sequential — one contract at a time, full settlement
+                        // Normal: sequential — one contract per tick, full settlement
                         const profit = await buyAndSettle(curStake);
                         if (!runRef.current) break;
                         applyResult(profit);

@@ -330,15 +330,13 @@ const FreeBots = observer(() => {
           <h1>🤖 <span>AHMED SYN TRADER</span> — Free Bots</h1>
           <p>{FREE_BOTS.length} professional bots • 4 per row • Click "Load Bot" to open in Bot Builder</p>
         </div>
-        <div className='free-bots__header-actions'>
-          <div className='free-bots__search-box'>
-            <span>🔍</span>
-            <input type='text' placeholder='Search bots...' value={search} onChange={e => setSearch(e.target.value)} />
-          </div>
-        </div>
       </div>
 
       <div className='free-bots__filters'>
+        <div className='free-bots__search-box'>
+          <span>🔍</span>
+          <input type='text' placeholder='Search bots...' value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
         {CATEGORIES.map(cat => (
           <button key={cat} className={`free-bots__filter-btn ${category === cat ? 'active' : ''}`} onClick={() => setCategory(cat)}>
             {cat}
