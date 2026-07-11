@@ -968,10 +968,11 @@ const AIAssistant: React.FC = () => {
                 const speed = aiModeRef.current;
                 try {
                     if (speed === 'turbo' || speed === 'crazy') {
-                        // Fire all purchases for this tick in parallel, in under 1 second
+                        // Fire all purchases instantly, then yield just enough to
+                        // keep the event loop responsive (no artificial 900ms stall).
                         const count = PURCHASES_PER_TICK[speed];
                         for (let _i = 0; _i < count; _i++) fireAndForget(curStake);
-                        await new Promise(r => setTimeout(r, 900)); // wait for the tick to elapse before next batch
+                        await Promise.resolve(); // zero-delay yield — no tick-throttle
                     } else {
                         // Normal: sequential — one contract per tick, full settlement
                         const profit = await buyAndSettle(curStake);
