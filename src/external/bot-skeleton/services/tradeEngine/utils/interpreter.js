@@ -1,5 +1,6 @@
 import { isMultiplierContract } from '@/components/shared';
 import cloneThorough from '@/utils/clone';
+import { setBotPaused as _pauseFlagSet } from '@/utils/bot-pause-flag';
 import JSInterpreter from '@deriv/js-interpreter';
 import { unrecoverable_errors } from '../../../constants/messages';
 import { observer as globalObserver } from '../../../utils/observer';
@@ -287,12 +288,18 @@ const Interpreter = () => {
     // NOT a stop/restart: no state is discarded, so resuming continues the
     // strategy mid-flight instead of re-running "Run once at start".
     function pause() {
-        if (interpreter) interpreter.paused_ = true;
+        if (interpreter) {
+            interpreter.paused_ = true;
+            // Mirror into the module-level flag so Purchase.js can gate side
+            // purchases without importing the MobX store (which would circular).
+            _pauseFlagSet(true);
+        }
     }
 
     function resume() {
         if (interpreter) {
             interpreter.paused_ = false;
+            _pauseFlagSet(false);
             loop();
         }
     }

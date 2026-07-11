@@ -1,4 +1,5 @@
 import { getExecutionSpeed, getExecutionSpeedDelay, SPEED_PURCHASES_PER_TICK } from '../../../../../utils/execution-speed';
+import { isBotPaused } from '../../../../../utils/bot-pause-flag';
 import { LogTypes } from '../../../constants/messages';
 import { api_base } from '../../api/api-base';
 import { contractStatus, info, log } from '../utils/broadcast';
@@ -10,11 +11,10 @@ let delayIndex = 0;
 let purchase_reference;
 
 // --- Rate-limit-aware buy queue ---
-// Every tier has a finite client-side cap — real money is on the line, so we
-// never fire an unbounded burst of buys and rely on the server to reject the
-// overflow. Normal=1/s (unchanged), Crazy/Turbo are higher but still capped.
+// Normal=1/s sequential. Crazy/Turbo set to 0 = bypass throttle entirely
+// for true zero-delay fire-and-forget (the API server enforces its own limits).
 let _buyTimestamps = [];
-const _buyRateLimit = { normal: 1, crazy: 8, turbo: 15 };
+const _buyRateLimit = { normal: 1, crazy: 0, turbo: 0 };
 
 // Side purchases (Crazy/Turbo's extra per-tick contracts) are NOT tracked by
 // the main single-contract state machine, so Stop/Terminate cannot see them
@@ -60,6 +60,8 @@ function _acquireBuySlot() {
 // purchases still go through the real API, settle independently, and show up
 // normally in transactions/reports/balance.
 function fireSidePurchase(tradeOptions, contract_type) {
+    // Do NOT fire side purchases while the bot is paused.
+    if (isBotPaused()) return;
     try {
         const trade_option = tradeOptionToBuy(contract_type, tradeOptions);
         _acquireBuySlot()
@@ -86,6 +88,11 @@ export default Engine =>
             if (this.store.getState().scope !== BEFORE_PURCHASE) {
                 return Promise.resolve();
             }
+
+            // Do NOT buy while paused — the interpreter's async callback already
+            // skips loop() when paused_, but purchase() is called synchronously
+            // before that check, so we guard here as well.
+            if (isBotPaused()) return Promise.resolve();
 
             // Speed-tier fan-out: Normal fires 1 purchase per tick (unchanged).
             // Crazy fires 5 purchases in parallel per tick, Turbo fires 10 — the

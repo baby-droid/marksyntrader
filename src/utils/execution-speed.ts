@@ -27,9 +27,9 @@ export const SPEED_DELAY_MS: Record<ExecutionSpeed, number> = {
 // Max concurrent in-flight contracts per speed tier.
 // Higher = more contracts processing simultaneously = higher throughput.
 export const SPEED_MAX_INFLIGHT: Record<ExecutionSpeed, number> = {
-    normal: 1,   // sequential
-    crazy: 50,   // high pipeline depth
-    turbo: 200,  // unlimited practical cap — saturate the API
+    normal: 1,    // sequential
+    crazy: 100,   // high pipeline depth
+    turbo: 500,   // unlimited practical cap — saturate the API
 };
 
 // Purchases fired per tick for each speed tier. Normal fires a single

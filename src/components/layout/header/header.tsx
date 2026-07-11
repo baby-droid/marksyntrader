@@ -165,7 +165,7 @@ const AppHeader = observer(() => {
                                 </div>
                             )}
                             {isDemo ? (
-                                // Demo account: Transfer button (opens Deriv transfer page)
+                                // Demo account: Transfer button only
                                 <Button
                                     primary
                                     disabled={client?.is_logging_out || !authData?.currency}
@@ -174,24 +174,33 @@ const AppHeader = observer(() => {
                                     <Localize i18n_default_text='Transfer' />
                                 </Button>
                             ) : (
-                                // Real account: Deposit button (opens Deriv cashier)
-                                <button
-                                    className='header__deposit-btn'
-                                    disabled={client?.is_logging_out || depositState === 'loading'}
-                                    onClick={openDeposit}
-                                    title='Deposit funds to your real account'
-                                >
-                                    {depositState === 'loading' ? (
-                                        <span className='header__deposit-btn__spinner' />
-                                    ) : (
-                                        <>
-                                            <svg width='14' height='14' viewBox='0 0 24 24' fill='none' style={{ marginRight: 5 }}>
-                                                <path d='M12 5v14M5 12l7 7 7-7' stroke='currentColor' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'/>
-                                            </svg>
-                                            Deposit
-                                        </>
-                                    )}
-                                </button>
+                                // Real account: Transfer + Deposit buttons
+                                <div className='header__real-actions'>
+                                    <Button
+                                        primary
+                                        disabled={client?.is_logging_out || !authData?.currency}
+                                        onClick={handleTransfer}
+                                    >
+                                        <Localize i18n_default_text='Transfer' />
+                                    </Button>
+                                    <button
+                                        className='header__deposit-btn'
+                                        disabled={client?.is_logging_out || depositState === 'loading'}
+                                        onClick={openDeposit}
+                                        title='Deposit funds to your real account'
+                                    >
+                                        {depositState === 'loading' ? (
+                                            <span className='header__deposit-btn__spinner' />
+                                        ) : (
+                                            <>
+                                                <svg width='14' height='14' viewBox='0 0 24 24' fill='none' style={{ marginRight: 5 }}>
+                                                    <path d='M12 5v14M5 12l7 7 7-7' stroke='currentColor' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'/>
+                                                </svg>
+                                                Deposit
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
                             )}
                         </div>
                     );

@@ -356,6 +356,13 @@
     }
 }
 
+// ─── Real account: Transfer + Deposit wrapper ────────────────────────────────
+.header__real-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
 // ─── Real account: Deposit button (right side) ───────────────────────────────
 .header__deposit-btn {
     display: inline-flex;

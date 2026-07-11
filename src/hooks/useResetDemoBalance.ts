@@ -21,16 +21,22 @@ export const useResetDemoBalance = () => {
         try {
             const response = await (api_base.api as any).send({ topup_virtual: 1 });
             if (response?.error) {
-                setResetError(response.error.message || 'Reset failed');
+                setResetError(response.error.message || response.error.code || 'Reset failed');
             } else {
                 setResetSuccess(true);
-                // Trigger a fresh balance fetch so the header updates immediately
-                (api_base.api as any).send({ balance: 1 }).catch(() => {});
+                // Restart the live balance subscription so every component that
+                // reads the balance (header, account-switcher, etc.) gets the new
+                // amount pushed through without needing a page reload.
+                (api_base.api as any).send({ balance: 1, subscribe: 1 }).catch(() => {});
+                // Also ask for an account-status refresh so the store is current.
+                (api_base.api as any).send({ get_account_status: 1 }).catch(() => {});
                 // Clear success flash after 2 s
                 setTimeout(() => setResetSuccess(false), 2000);
             }
         } catch (e: any) {
-            setResetError(e?.message || 'Reset failed');
+            // DerivAPIBasic rejects with { error: { message, code } } on failure
+            const msg = e?.error?.message || e?.message || 'Reset failed';
+            setResetError(msg);
         } finally {
             setIsResetting(false);
         }

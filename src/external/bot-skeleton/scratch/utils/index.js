@@ -214,12 +214,35 @@ export const load = async ({
     }
 
     // Check if all block types in XML are allowed.
-    const has_invalid_blocks = Array.from(blockly_xml).some(block => {
-        const block_type = block.getAttribute('type');
-        return !Object.keys(window.Blockly.Blocks).includes(block_type);
-    });
-    if (has_invalid_blocks) {
-        return showInvalidStrategyError();
+    // Instead of rejecting the whole XML when unknown block types are found
+    // (which breaks custom/third-party bots like "Market Killer Prime"), we
+    // auto-register a minimal no-op block definition for each unknown type and
+    // then continue loading. This lets the workspace display the strategy
+    // without the "unsupported elements" error while keeping the Blockly
+    // workspace valid.
+    const unknown_block_types = Array.from(blockly_xml)
+        .map(block => block.getAttribute('type'))
+        .filter(t => t && !Object.keys(window.Blockly.Blocks).includes(t));
+
+    if (unknown_block_types.length > 0) {
+        // Register lightweight stub definitions so Blockly won't crash when
+        // it tries to instantiate these blocks during domToWorkspace.
+        unknown_block_types.forEach(type => {
+            if (!window.Blockly.Blocks[type]) {
+                window.Blockly.Blocks[type] = {
+                    init() {
+                        this.setColour(230);
+                        this.setTooltip(`Custom block: ${type}`);
+                        this.appendDummyInput().appendField(type.replace(/_/g, ' '));
+                        this.setPreviousStatement(true, null);
+                        this.setNextStatement(true, null);
+                        this.setOutput(false);
+                    },
+                };
+            }
+        });
+        // Log for awareness but do NOT abort the load.
+        console.warn('[DBot] Auto-registered stub blocks for unknown types:', unknown_block_types);
     }
 
     try {
