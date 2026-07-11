@@ -293,3 +293,114 @@
     from { transform: rotate(0deg); }
     to   { transform: rotate(360deg); }
 }
+
+// ─── Demo account: left-side Reset Demo button ───────────────────────────────
+.header__demo-reset-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 14px;
+    margin-inline-start: 1.2rem;
+    border: 1.5px solid rgba(255, 185, 0, 0.45);
+    border-radius: 16px;
+    background: transparent;
+    color: #ffb900;
+    font-size: 1.25rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+
+    svg path {
+        stroke: currentColor;
+    }
+
+    &:hover:not(:disabled) {
+        background: rgba(255, 185, 0, 0.1);
+        border-color: #ffb900;
+    }
+
+    &:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+    }
+
+    &--success {
+        color: #00c389;
+        border-color: rgba(0, 195, 137, 0.55);
+
+        &:hover:not(:disabled) {
+            background: rgba(0, 195, 137, 0.1);
+            border-color: #00c389;
+        }
+    }
+
+    &--error {
+        color: #e74c3c;
+        border-color: rgba(231, 76, 60, 0.45);
+
+        &:hover:not(:disabled) {
+            background: rgba(231, 76, 60, 0.1);
+            border-color: #e74c3c;
+        }
+    }
+
+    &__spinner {
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        border: 2px solid rgba(255, 185, 0, 0.3);
+        border-top-color: #ffb900;
+        border-radius: 50%;
+        animation: auth-spinner-rotate 0.7s linear infinite;
+    }
+}
+
+// ─── Real account: Deposit button (right side) ───────────────────────────────
+.header__deposit-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 7px 18px;
+    border: none;
+    border-radius: 16px;
+    background: linear-gradient(135deg, #00c389 0%, #007a56 100%);
+    color: #fff;
+    font-size: 1.3rem;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: opacity 0.15s, transform 0.1s;
+    box-shadow: 0 2px 8px rgba(0, 195, 137, 0.3);
+    margin-inline-end: 0.4rem;
+
+    svg path {
+        stroke: currentColor;
+    }
+
+    &:hover:not(:disabled) {
+        opacity: 0.9;
+        transform: translateY(-1px);
+    }
+
+    &:active:not(:disabled) {
+        transform: translateY(0);
+        opacity: 1;
+    }
+
+    &:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+        transform: none;
+    }
+
+    &__spinner {
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        border: 2px solid rgba(255, 255, 255, 0.35);
+        border-top-color: #fff;
+        border-radius: 50%;
+        animation: auth-spinner-rotate 0.7s linear infinite;
+    }
+}

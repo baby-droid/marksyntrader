@@ -6,39 +6,13 @@ import Text from '@/components/shared_ui/text';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { useApiBase } from '@/hooks/useApiBase';
 import { useCurrencyDisplay } from '@/hooks/useCurrencyDisplay';
+import { useResetDemoBalance } from '@/hooks/useResetDemoBalance';
 import { useStore } from '@/hooks/useStore';
 import { isDemoAccount } from '@/utils/account-helpers';
 import { Localize } from '@deriv-com/translations';
 import { TAccountSwitcher } from './common/types';
 import AccountInfoWrapper from './account-info-wrapper';
 import './account-switcher.scss';
-
-// Resets demo account balance back to 10,000 USD via the Deriv topup_virtual API.
-const useResetDemoBalance = () => {
-    const [isResetting, setIsResetting] = useState(false);
-    const [resetError, setResetError] = useState<string | null>(null);
-
-    const resetBalance = useCallback(async () => {
-        if (isResetting || !api_base.api) return;
-        setIsResetting(true);
-        setResetError(null);
-        try {
-            const response = await (api_base.api as any).send({ topup_virtual: 1 });
-            if (response?.error) {
-                setResetError(response.error.message || 'Reset failed');
-            } else {
-                // Trigger a fresh balance fetch so the header updates immediately
-                (api_base.api as any).send({ balance: 1 }).catch(() => {});
-            }
-        } catch (e: any) {
-            setResetError(e?.message || 'Reset failed');
-        } finally {
-            setIsResetting(false);
-        }
-    }, [isResetting]);
-
-    return { isResetting, resetError, resetBalance };
-};
 
 const AccountSwitcher = observer(({ activeAccount }: TAccountSwitcher) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -47,7 +21,7 @@ const AccountSwitcher = observer(({ activeAccount }: TAccountSwitcher) => {
     const curRef = useRef<HTMLDivElement>(null);
     const { accountList, activeLoginid } = useApiBase();
     const { client, run_panel } = useStore() ?? {};
-    const { isResetting, resetBalance } = useResetDemoBalance();
+    const { isResetting, resetError, resetBalance } = useResetDemoBalance();
 
     const is_bot_running = run_panel?.is_running || api_base.is_running;
     const isSingleAccount = !accountList || accountList.length <= 1;
