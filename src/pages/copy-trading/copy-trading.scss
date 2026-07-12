@@ -95,17 +95,101 @@
     gap: 0.8rem;
     margin-bottom: 1.2rem;
     flex-wrap: wrap;
+  }
+
+  &__token-input-wrap {
+    flex: 1;
+    display: flex;
+    min-width: 16rem;
+    border: 1px solid #ddd;
+    border-radius: 0.8rem;
+    overflow: hidden;
+    &:focus-within { border-color: #4C7DFF; }
 
     input {
       flex: 1;
       padding: 1rem 1.2rem;
-      border: 1px solid #ddd;
-      border-radius: 0.8rem;
+      border: none;
       font-size: 1.3rem;
       outline: none;
-      min-width: 16rem;
-      &:focus { border-color: #4C7DFF; }
     }
+  }
+
+  &__paste-btn {
+    background: #f4f4f4;
+    border: none;
+    border-left: 1px solid #ddd;
+    padding: 0 1rem;
+    font-size: 1.4rem;
+    cursor: pointer;
+    transition: background 0.15s;
+    &:hover { background: #e8e8e8; }
+  }
+
+  &__verifying {
+    display: block;
+    font-size: 1.1rem;
+    color: #f59e0b;
+    margin-top: 2px;
+    animation: copyBlink 1.2s infinite;
+  }
+
+  &__account-list {
+    padding: 0.8rem 1rem;
+    background: rgba(76, 125, 255, 0.05);
+    border-top: 1px solid rgba(76, 125, 255, 0.1);
+    border-bottom: 1px solid rgba(76, 125, 255, 0.1);
+  }
+
+  &__account-list-label {
+    display: block;
+    font-size: 1.1rem;
+    color: #888;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+
+  &__account-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  &__account-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0.3rem 0.8rem;
+    border-radius: 2rem;
+    font-size: 1.1rem;
+    font-weight: 600;
+    border: 1px solid #ddd;
+    background: #f8f8f8;
+    color: #555;
+    cursor: default;
+
+    &.active {
+      background: rgba(34, 197, 94, 0.1);
+      border-color: rgba(34, 197, 94, 0.4);
+      color: #16a34a;
+    }
+    &.virtual { border-style: dashed; }
+  }
+
+  &__badge-active-mark {
+    font-size: 1rem;
+    font-weight: 800;
+    color: #16a34a;
+  }
+
+  &__account-list-note {
+    display: block;
+    font-size: 1.05rem;
+    color: #aaa;
+    margin-top: 0.5rem;
+    font-style: italic;
   }
 
   &__btn {
@@ -313,6 +397,11 @@
 @keyframes blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
+}
+
+@keyframes copyBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
 
 .copy-trading {

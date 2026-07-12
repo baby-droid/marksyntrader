@@ -26,6 +26,13 @@ export type CopyMode = 'real_real' | 'demo_real';
 
 export type FollowerStatus = 'pending' | 'active' | 'error' | 'removed';
 
+export interface FollowerAccount {
+    loginid: string;
+    currency: string;
+    is_virtual: boolean;
+    balance?: string;
+}
+
 export interface Follower {
     id: string;
     token: string;
@@ -38,6 +45,8 @@ export interface Follower {
     ratio: number;
     replicated: number;
     lastError?: string;
+    /** All accounts linked to this token (from authorize account_list) */
+    account_list?: FollowerAccount[];
 }
 
 interface FollowerConn {
@@ -148,13 +157,25 @@ class CopyEngine {
 
             const auth = await this.send(conn, { authorize: trimmed });
             if (!auth.authorize) throw new Error('Invalid token');
-            const { loginid, currency, balance, is_virtual } = auth.authorize;
+            const { loginid, currency, balance, is_virtual, account_list } = auth.authorize;
+            // Build structured account_list with clear real/demo labels
+            const parsedAccountList: FollowerAccount[] = Array.isArray(account_list)
+                ? account_list.map((a: any) => ({
+                    loginid: a.loginid,
+                    currency: a.currency,
+                    is_virtual: !!a.is_virtual,
+                }))
+                : [];
             this.update(id, {
                 loginid, currency, balance: parseFloat(balance || '0'),
                 is_virtual: !!is_virtual, status: 'active',
+                account_list: parsedAccountList,
             });
             this.send(conn, { balance: 1, subscribe: 1 }).catch(() => {});
-            this.log(`✅ Linked ${loginid} (${currency}${is_virtual ? ' · virtual' : ''})`);
+            const accountSummary = parsedAccountList.length > 1
+                ? ` | ${parsedAccountList.length} accounts linked`
+                : '';
+            this.log(`✅ Linked ${loginid} (${currency}${is_virtual ? ' · virtual' : ''}${accountSummary})`);
         } catch (err: any) {
             this.update(id, { status: 'error', lastError: err?.message || 'Auth failed' });
             this.log(`❌ Failed to link token: ${err?.message || err}`);

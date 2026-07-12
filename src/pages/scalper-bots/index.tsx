@@ -86,10 +86,16 @@ const ScalperBots = observer(() => {
         const run_panel: any = store?.run_panel;
         if (!run_panel?.onRunButtonClick) return;
         if (run_panel.is_running) return;
-        try {
-            await run_panel.onRunButtonClick();
-        } catch {
-            /* ignore */
+        // Retry up to 6 times with 500ms gaps — the workspace may still be
+        // initialising right after XML is injected
+        for (let attempt = 0; attempt < 6; attempt++) {
+            try {
+                if (run_panel.is_running) return; // already started
+                await run_panel.onRunButtonClick();
+                return; // success
+            } catch {
+                if (attempt < 5) await new Promise(r => setTimeout(r, 500));
+            }
         }
     }, [store]);
 
@@ -120,7 +126,7 @@ const ScalperBots = observer(() => {
                 }
                 setLoadedId(bot.key);
                 setTimeout(() => setLoadedId(null), andRun ? 4000 : 3000);
-                if (andRun && loaded) setTimeout(() => autoRun(), 400);
+                if (andRun && loaded) setTimeout(() => autoRun(), 900);
             } catch (e) {
                 console.error('Scalper bot load error', e);
                 store?.dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING);

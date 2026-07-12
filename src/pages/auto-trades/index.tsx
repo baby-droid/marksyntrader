@@ -405,6 +405,9 @@ const AutoTrades: React.FC = () => {
     const [smartPaused, setSmartPaused] = useState(false);
     const [smartStats, setSmartStats] = useState({ profit: 0, trades: 0, wins: 0 });
     const smartStopRef = useRef(false);
+    // Mirror of smartRunning as a ref — avoids stale closure when useCallback deps change
+    const smartRunningRef = useRef(false);
+    const smartPausedRef = useRef(false);
     const smartPausedStakeRef = useRef<number | null>(null);
     const smartDigits = useLiveDigitsState(smartSymbol);
     const smartDigitsRef = useRef(smartDigits);
@@ -412,21 +415,40 @@ const AutoTrades: React.FC = () => {
     const smartAnalysis = computeSmartAnalysis(smartDigits, smartDepth);
     const buyAndWait = useBuyAndWait();
 
+    // Stable refs for params so the async loop always sees current values
+    const smartStakeRef = useRef(smartStake);
+    const smartMartingaleRef = useRef(smartMartingale);
+    const smartTakeProfitRef = useRef(smartTakeProfit);
+    const smartStopLossRef = useRef(smartStopLoss);
+    const smartSymbolRef = useRef(smartSymbol);
+    useEffect(() => { smartStakeRef.current = smartStake; }, [smartStake]);
+    useEffect(() => { smartMartingaleRef.current = smartMartingale; }, [smartMartingale]);
+    useEffect(() => { smartTakeProfitRef.current = smartTakeProfit; }, [smartTakeProfit]);
+    useEffect(() => { smartStopLossRef.current = smartStopLoss; }, [smartStopLoss]);
+    useEffect(() => { smartSymbolRef.current = smartSymbol; }, [smartSymbol]);
+
+
     const runSmartBot = useCallback(async (resumeStake?: number) => {
-        if (smartRunning) {
+        // Use ref (not state) to avoid stale closure — state may lag one render
+        if (smartRunningRef.current) {
+            // Pause: set stop flag, bot exits after current contract settles
             smartStopRef.current = true;
+            smartPausedRef.current = true;
+            smartRunningRef.current = false;
             setSmartRunning(false);
             setSmartPaused(true);
             return;
         }
         smartStopRef.current = false;
+        smartPausedRef.current = false;
+        smartRunningRef.current = true;
         setSmartRunning(true);
         setSmartPaused(false);
         if (!resumeStake) {
             setSmartStats({ profit: 0, trades: 0, wins: 0 });
             smartPausedStakeRef.current = null;
         }
-        let stk = resumeStake ?? smartStake;
+        let stk = resumeStake ?? smartStakeRef.current;
         let sessionProfit = 0;
 
         while (!smartStopRef.current) {
@@ -437,7 +459,9 @@ const AutoTrades: React.FC = () => {
                 const freq = Array.from({ length: 10 }, (_, i) => last.filter(d => d === i).length);
                 const minDigit = freq.indexOf(Math.min(...freq));
 
-                const profit = await buyAndWait(smartSymbol, 'DIGITDIFF', minDigit, stk);
+                const profit = await buyAndWait(smartSymbolRef.current, 'DIGITDIFF', minDigit, stk);
+                if (smartStopRef.current) break;
+
                 const won = profit > 0;
                 sessionProfit += profit;
                 setSmartStats(p => ({
@@ -446,21 +470,24 @@ const AutoTrades: React.FC = () => {
                     wins: p.wins + (won ? 1 : 0),
                 }));
                 if (won) {
-                    stk = smartStake;
+                    stk = smartStakeRef.current;
                     smartPausedStakeRef.current = null;
                 } else {
-                    stk = Math.max(0.35, +(stk * smartMartingale).toFixed(2));
+                    stk = Math.max(0.35, +(stk * smartMartingaleRef.current).toFixed(2));
                     smartPausedStakeRef.current = stk;
                 }
-                if (sessionProfit >= smartTakeProfit) break;
-                if (sessionProfit <= -smartStopLoss) break;
+                if (sessionProfit >= smartTakeProfitRef.current) break;
+                if (sessionProfit <= -smartStopLossRef.current) break;
             } catch {
                 await new Promise(r => setTimeout(r, 1500));
             }
         }
         smartStopRef.current = false;
+        smartRunningRef.current = false;
         setSmartRunning(false);
-    }, [smartRunning, smartStake, smartMartingale, smartTakeProfit, smartStopLoss, smartSymbol, buyAndWait]);
+        // If the stop was triggered by Pause (not manual stop), keep smartPaused=true
+        // so the Resume button stays visible
+    }, [smartDepth, buyAndWait]);
 
     // ── AI Bots state
     const [globalStake, setGlobalStake] = useState(1.0);
@@ -548,13 +575,22 @@ const AutoTrades: React.FC = () => {
                     </div>
 
                     <div className='autotrades__smart-actions'>
+                        {smartPaused && (
+                            <div className='autotrades__pause-banner'>
+                                ⏸ PAUSED — Waiting to resume. Martingale stake saved.
+                            </div>
+                        )}
                         {smartRunning ? (
                             <button className='autotrades__smart-run running' onClick={() => runSmartBot()}>
                                 ⏸ Pause Trading
                             </button>
-                        ) : smartPaused && smartPausedStakeRef.current ? (
-                            <button className='autotrades__smart-run resume' onClick={() => runSmartBot(smartPausedStakeRef.current!)}>
-                                ▶ Resume (stake: ${smartPausedStakeRef.current.toFixed(2)})
+                        ) : smartPaused ? (
+                            <button className='autotrades__smart-run resume' onClick={() => {
+                                setSmartPaused(false);
+                                smartPausedRef.current = false;
+                                runSmartBot(smartPausedStakeRef.current ?? undefined);
+                            }}>
+                                ▶ Resume{smartPausedStakeRef.current ? ` (stake: ${smartPausedStakeRef.current.toFixed(2)})` : ''}
                             </button>
                         ) : (
                             <button className='autotrades__smart-run' onClick={() => runSmartBot()}>

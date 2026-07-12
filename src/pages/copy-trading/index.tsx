@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useDerivTrading } from '@/hooks/useDerivTrading';
-import { copyEngine, CopyMode, Follower } from '@/utils/copy-trading';
+import { copyEngine, CopyMode, Follower, FollowerAccount } from '@/utils/copy-trading';
 import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import './copy-trading.scss';
 
@@ -75,6 +75,15 @@ const CopyTrading = observer(() => {
     setTokenInput('');
   }, [tokenInput, ratioInput]);
 
+  const pasteToken = useCallback(async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text.trim()) setTokenInput(text.trim());
+    } catch {
+      // Clipboard API not available or permission denied
+    }
+  }, []);
+
   const toggleCopy = useCallback(() => {
     if (isCopying) {
       copyEngine.stop();
@@ -141,13 +150,22 @@ const CopyTrading = observer(() => {
               after the token is verified. You can also start/stop it manually below.
             </p>
             <div className='copy-trading__token-row'>
-              <input
-                type='text'
-                placeholder='Paste follower API token…'
-                value={tokenInput}
-                onChange={e => setTokenInput(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && addToken()}
-              />
+              <div className='copy-trading__token-input-wrap'>
+                <input
+                  type='text'
+                  placeholder='Paste follower API token (Read + Trade scopes)…'
+                  value={tokenInput}
+                  onChange={e => setTokenInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && addToken()}
+                />
+                <button
+                  className='copy-trading__paste-btn'
+                  onClick={pasteToken}
+                  title='Paste from clipboard'
+                >
+                  📋
+                </button>
+              </div>
               <div className='copy-trading__ratio'>
                 <label>{ratioLabel}</label>
                 <input
@@ -163,7 +181,7 @@ const CopyTrading = observer(() => {
                 onClick={addToken}
                 disabled={followers.length >= 10 || !tokenInput.trim()}
               >
-                Add &amp; Join
+                🔗 Add &amp; Join
               </button>
             </div>
 
@@ -210,10 +228,32 @@ const CopyTrading = observer(() => {
                     <div className='copy-trading__account-info'>
                       <div className={`copy-trading__account-dot copy-trading__account-dot--${acc.status}`} />
                       <div>
-                        <strong>{acc.loginid}{acc.is_virtual ? ' (demo)' : ''}</strong>
+                        <strong>{acc.loginid || '…'}{acc.is_virtual ? ' (demo)' : ' (real)'}</strong>
                         <span>{acc.currency} {acc.balance?.toFixed(2) ?? '---'}</span>
+                        {acc.status === 'pending' && <span className='copy-trading__verifying'>⏳ Connecting…</span>}
                       </div>
                     </div>
+                    {/* Show all accounts linked to this token */}
+                    {acc.account_list && acc.account_list.length > 1 && (
+                      <div className='copy-trading__account-list'>
+                        <span className='copy-trading__account-list-label'>All accounts on this token:</span>
+                        <div className='copy-trading__account-badges'>
+                          {acc.account_list.map((a: FollowerAccount) => (
+                            <span
+                              key={a.loginid}
+                              className={`copy-trading__account-badge ${a.loginid === acc.loginid ? 'active' : ''} ${a.is_virtual ? 'virtual' : 'real'}`}
+                              title={a.loginid === acc.loginid ? 'Currently trading on this account' : 'To trade on this account, provide its own API token'}
+                            >
+                              {a.is_virtual ? '🔵' : '🟢'} {a.loginid} · {a.currency}
+                              {a.loginid === acc.loginid && <span className='copy-trading__badge-active-mark'> ✓</span>}
+                            </span>
+                          ))}
+                        </div>
+                        <span className='copy-trading__account-list-note'>
+                          ✓ = Active trading account. To use a different account, add its own API token.
+                        </span>
+                      </div>
+                    )}
                     <div className='copy-trading__account-meta'>
                       <div className='copy-trading__account-ratio'>
                         <label>{ratioLabel === 'Stake ratio' ? '×' : 'risk×'}</label>

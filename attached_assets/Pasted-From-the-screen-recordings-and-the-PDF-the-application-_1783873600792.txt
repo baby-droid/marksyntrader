@@ -1,0 +1,272 @@
+From the screen recordings and the PDF, the application appears to be a **professional trading bot dashboard** with a modern admin-panel interface focused on speed, clarity, and minimal distractions. The PDF confirms features such as bot configuration, trade parameters, risk controls, and transaction monitoring. 
+
+## UI Breakdown
+
+### 1. Top Navigation Bar
+
+* Fixed (sticky) navigation
+* Dark green primary theme (#2E6B3D approximately)
+* Logo centered or left
+* Navigation items with icons:
+
+  * Dashboard
+  * Bot Builder
+  * Free Bots
+  * Advanced Analysis
+  * Charts
+  * Tutorials
+* Large **Run** button
+* Trading status indicator ("Bot is not running")
+
+### 2. Search Area
+
+Large rounded search bar
+
+* Height around 52px
+* Light gray background
+* Search icon inside
+* Placeholder:
+
+  > Search for bots or category...
+
+### 3. Folder/Card Layout
+
+Main content uses large folder cards.
+
+Each card contains
+
+* Folder illustration/icon
+* Large bold title
+* White card
+* Rounded corners (16-20px)
+* Soft shadow
+* Hover animation
+* Plenty of whitespace
+
+Example folders
+
+* Virtual Hook
+* Even Odd Autos
+* Hedge
+* Normal Bots
+* Over Under Autos
+* Scalper
+* Switcher
+
+The layout resembles Windows Explorer but redesigned with Material Design aesthetics.
+
+---
+
+### 4. Right Sidebar
+
+Persistent trading panel
+
+Contains
+
+Tabs
+
+* Summary
+* Transactions
+* Journal
+
+Statistics
+
+* Total Stake
+* Total Payout
+* Number of Runs
+* Contracts Won
+* Contracts Lost
+* Total Profit/Loss
+
+Buttons
+
+* Download
+* View Detail
+* Reset
+
+State
+
+> There are no transactions to display.
+
+---
+
+### 5. Trading Configuration
+
+Inside each bot
+
+Cards with sections
+
+Trade Parameters
+
+Purchase Conditions
+
+Strategy
+
+Market Selection
+
+Duration
+
+Stake
+
+Risk Controls
+
+Toggle switches
+
+Dropdown menus
+
+Large action buttons
+
+---
+
+### 6. Modal Design
+
+The popup ("MARKET PROMPT") is very clean.
+
+Characteristics
+
+* Frosted/blurred background
+* White modal
+* Large border radius
+* Drop shadow
+* Center aligned
+* Two equally sized action buttons
+* Close icon
+* Minimal text
+
+---
+
+### 7. Color Palette
+
+Primary
+
+```
+#2F6D3A
+```
+
+Secondary
+
+```
+#34C759
+```
+
+Background
+
+```
+#F6F8FA
+```
+
+Cards
+
+```
+#FFFFFF
+```
+
+Text
+
+```
+#222222
+```
+
+Muted
+
+```
+#7A7A7A
+```
+
+Border
+
+```
+#E5E7EB
+```
+
+Success
+
+```
+#22C55E
+```
+
+Danger
+
+```
+#EF4444
+```
+
+Info
+
+```
+#06B6D4
+```
+
+---
+
+## UX Characteristics
+
+The UX emphasizes:
+
+* Minimal clicks to start a bot
+* Large clickable cards
+* Persistent trade monitoring
+* Real-time status feedback
+* Clean information hierarchy
+* Sticky navigation
+* Fast access to settings
+* Responsive layout
+* Consistent spacing (8px grid)
+* Large touch-friendly controls
+* Smooth animations (200–300 ms)
+
+---
+
+## Typography
+
+Use
+
+```
+Inter
+```
+
+or
+
+```
+SF Pro Display
+```
+
+Weights
+
+* 400
+* 500
+* 600
+* 700
+
+Large headings
+
+18–22px
+
+Body
+
+14–16px
+
+Buttons
+
+15–16px
+
+---
+
+## Animations
+
+* Hover lift
+* Shadow increase
+* Fade-in dialogs
+* Smooth sidebar transitions
+* Ripple button effects
+* Loading skeletons
+* Progress indicators
+* Toast notifications
+
+---
+
+# Prompt to recreate the same UI/UX
+
+> Design a premium fintech trading bot dashboard with a modern SaaS aesthetic. Use a dark forest-green navigation bar, white rounded cards with soft shadows, and a light gray background. The layout should feature a sticky top navigation, a large rounded search bar, a responsive grid of folder-style bot categories, and a fixed right-hand trading statistics sidebar containing Summary, Transactions, and Journal tabs. Include professional trading controls such as toggle switches, dropdowns, trade parameters, TP/SL settings, risk management cards, and prominent Run/Stop buttons. Use Inter typography, an 8-point spacing system, 18–20px border radii, subtle hover animations, glassmorphism modal dialogs with blurred backdrops, responsive design, and smooth micro-interactions. The overall style should resemble a high-end Bloomberg Terminal, TradingView, and Linear-inspired SaaS dashboard with Material Design 3 principles, emphasizing speed, clarity, accessibility, and professional financial software aesthetics.
+
+If you're building this in **React + Next.js + Tailwind CSS**, this prompt will closely reproduce the UI and UX shown in your recordings while remaining modern, scalable, and production-ready.

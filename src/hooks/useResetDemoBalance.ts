@@ -6,6 +6,7 @@
  * header's left-side reset button share exactly the same logic.
  */
 import { useCallback, useState } from 'react';
+import { toast } from 'react-toastify';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 
 export const useResetDemoBalance = () => {
@@ -14,16 +15,23 @@ export const useResetDemoBalance = () => {
     const [resetSuccess, setResetSuccess] = useState(false);
 
     const resetBalance = useCallback(async () => {
-        if (isResetting || !api_base.api) return;
+        if (isResetting) return;
+        if (!api_base.api) {
+            toast.error('Not connected to Deriv API. Please log in first.', { autoClose: 3500 });
+            return;
+        }
         setIsResetting(true);
         setResetError(null);
         setResetSuccess(false);
         try {
             const response = await (api_base.api as any).send({ topup_virtual: 1 });
             if (response?.error) {
-                setResetError(response.error.message || response.error.code || 'Reset failed');
+                const msg = response.error.message || response.error.code || 'Reset failed';
+                setResetError(msg);
+                toast.error(`Reset failed: ${msg}`, { autoClose: 4000 });
             } else {
                 setResetSuccess(true);
+                toast.success('✅ Demo balance reset to 10,000 USD!', { autoClose: 3000 });
                 // Restart the live balance subscription so every component that
                 // reads the balance (header, account-switcher, etc.) gets the new
                 // amount pushed through without needing a page reload.
@@ -37,6 +45,7 @@ export const useResetDemoBalance = () => {
             // DerivAPIBasic rejects with { error: { message, code } } on failure
             const msg = e?.error?.message || e?.message || 'Reset failed';
             setResetError(msg);
+            toast.error(`Reset failed: ${msg}`, { autoClose: 4000 });
         } finally {
             setIsResetting(false);
         }

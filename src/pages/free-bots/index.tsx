@@ -240,7 +240,16 @@ const FreeBots = observer(() => {
     const run_panel: any = store?.run_panel;
     if (!run_panel?.onRunButtonClick) return;
     if (run_panel.is_running) return;
-    try { await run_panel.onRunButtonClick(); } catch {}
+    // Retry up to 6 times — workspace may still be initialising after XML injection
+    for (let attempt = 0; attempt < 6; attempt++) {
+      try {
+        if (run_panel.is_running) return;
+        await run_panel.onRunButtonClick();
+        return;
+      } catch {
+        if (attempt < 5) await new Promise(r => setTimeout(r, 500));
+      }
+    }
   }, [store]);
 
   // Load bot into builder and navigate there WITHOUT running
@@ -304,7 +313,7 @@ const FreeBots = observer(() => {
       }
       setLoadedId(bot.id);
       setTimeout(() => setLoadedId(null), 4000);
-      if (loaded) setTimeout(() => autoRun(), 400);
+      if (loaded) setTimeout(() => autoRun(), 900);
     } catch (e) {
       console.error('Load & Run error', e);
       store?.dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING);

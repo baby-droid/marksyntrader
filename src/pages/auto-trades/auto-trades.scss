@@ -86,8 +86,22 @@
 
     &__smart-actions {
         display: flex;
+        flex-direction: column;
         gap: 12px;
-        justify-content: center;
+        align-items: stretch;
+    }
+
+    &__pause-banner {
+        padding: 10px 16px;
+        border-radius: 8px;
+        background: rgba(234, 179, 8, 0.15);
+        border: 1px solid rgba(234, 179, 8, 0.4);
+        color: #eab308;
+        font-size: 13px;
+        font-weight: 700;
+        text-align: center;
+        letter-spacing: 0.3px;
+        animation: pausePulse 2s infinite;
     }
 
     &__smart-run {
@@ -104,6 +118,9 @@
         &:hover { filter: brightness(1.15); }
         &.running {
             background: linear-gradient(135deg, #f44336, #b71c1c);
+        }
+        &.resume {
+            background: linear-gradient(135deg, #22c55e, #16a34a);
         }
     }
 
@@ -453,4 +470,9 @@
 @keyframes pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.4; }
+}
+
+@keyframes pausePulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
 }
