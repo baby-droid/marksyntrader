@@ -498,6 +498,44 @@
   }
 
   /* ─── Buttons ─── */
+  /* XML / Bot Builder buttons */
+  &__xml-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  &__load-builder-btn {
+    padding: 0.55rem 0.5rem;
+    border-radius: 0.6rem;
+    border: 1px solid rgba(99,102,241,0.4);
+    background: rgba(99,102,241,0.1);
+    color: #a5b4fc;
+    font-size: 0.85rem;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: 'Rajdhani', sans-serif;
+    transition: all 0.15s;
+    &:hover:not(:disabled) { background: rgba(99,102,241,0.2); border-color: rgba(99,102,241,0.6); }
+    &:disabled { opacity: 0.4; cursor: not-allowed; }
+  }
+
+  &__load-run-btn {
+    padding: 0.55rem 0.5rem;
+    border-radius: 0.6rem;
+    border: 1px solid rgba(0,212,255,0.4);
+    background: rgba(0,212,255,0.1);
+    color: #00d4ff;
+    font-size: 0.85rem;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: 'Rajdhani', sans-serif;
+    transition: all 0.15s;
+    &:hover:not(:disabled) { background: rgba(0,212,255,0.2); border-color: rgba(0,212,255,0.6); box-shadow: 0 0 12px rgba(0,212,255,0.2); }
+    &:disabled { opacity: 0.4; cursor: not-allowed; }
+  }
+
   &__btn-row {
     display: flex;
     gap: 0.8rem;

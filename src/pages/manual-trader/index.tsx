@@ -5,226 +5,115 @@ import { applyCommission } from '@/utils/commission';
 import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import './manual-trader.scss';
 
-/* ─── Constants ─── */
-const SYMBOLS = [
-    { group: 'Volatility', subs: [
-        {label:'V10',value:'R_10'},{label:'V25',value:'R_25'},{label:'V50',value:'R_50'},
-        {label:'V75',value:'R_75'},{label:'V100',value:'R_100'},
+/* ─── Markets ─── */
+const ALL_MARKETS = [
+    { group: 'Volatility 1s', options: [
+        { label: 'Volatility 10 (1s) Index',  value: '1HZ10V'   },
+        { label: 'Volatility 25 (1s) Index',  value: '1HZ25V'   },
+        { label: 'Volatility 50 (1s) Index',  value: '1HZ50V'   },
+        { label: 'Volatility 75 (1s) Index',  value: '1HZ75V'   },
+        { label: 'Volatility 100 (1s) Index', value: '1HZ100V'  },
     ]},
-    { group: 'Volatility 1s', subs: [
-        {label:'V10 1s',value:'1HZ10V'},{label:'V25 1s',value:'1HZ25V'},
-        {label:'V50 1s',value:'1HZ50V'},{label:'V75 1s',value:'1HZ75V'},{label:'V100 1s',value:'1HZ100V'},
+    { group: 'Volatility', options: [
+        { label: 'Volatility 10 Index',  value: 'R_10'  },
+        { label: 'Volatility 25 Index',  value: 'R_25'  },
+        { label: 'Volatility 50 Index',  value: 'R_50'  },
+        { label: 'Volatility 75 Index',  value: 'R_75'  },
+        { label: 'Volatility 100 Index', value: 'R_100' },
     ]},
-    { group: 'Jump', subs: [
-        {label:'Jump 10',value:'JD10'},{label:'Jump 25',value:'JD25'},
-        {label:'Jump 50',value:'JD50'},{label:'Jump 75',value:'JD75'},{label:'Jump 100',value:'JD100'},
+    { group: 'Jump', options: [
+        { label: 'Jump 10 Index',  value: 'JD10'  },
+        { label: 'Jump 25 Index',  value: 'JD25'  },
+        { label: 'Jump 50 Index',  value: 'JD50'  },
+        { label: 'Jump 75 Index',  value: 'JD75'  },
+        { label: 'Jump 100 Index', value: 'JD100' },
+    ]},
+    { group: 'Boom', options: [
+        { label: 'Boom 300 Index',  value: 'BOOM300N' },
+        { label: 'Boom 500 Index',  value: 'BOOM500'  },
+        { label: 'Boom 1000 Index', value: 'BOOM1000' },
+    ]},
+    { group: 'Crash', options: [
+        { label: 'Crash 300 Index',  value: 'CRASH300N' },
+        { label: 'Crash 500 Index',  value: 'CRASH500'  },
+        { label: 'Crash 1000 Index', value: 'CRASH1000' },
+    ]},
+    { group: 'Step', options: [
+        { label: 'Step Index', value: 'STPX' },
+    ]},
+    { group: 'Range Break', options: [
+        { label: 'Range Break 100 Index', value: 'RDBULL' },
+        { label: 'Range Break 200 Index', value: 'RDBEAR' },
     ]},
 ];
 
-const ALL_SYMBOLS = SYMBOLS.flatMap(g => g.subs);
+const ALL_SYMBOLS_FLAT = ALL_MARKETS.flatMap(g => g.options);
 
-const CONTRACT_TABS = [
+/* ─── Contract Types ─── */
+const CONTRACT_TYPES = [
     {
-        id: 'rise_fall', label: 'Rise/Fall', icon: '📈',
+        id: 'over_under', label: 'Over/Under', icon: '🎯', hasBarrier: true,
         types: [
-            { label: '↑ RISE', type: 'CALL', color: '#22c55e', desc: 'Win if price rises after entry' },
-            { label: '↓ FALL', type: 'PUT',  color: '#ef4444', desc: 'Win if price falls after entry' },
+            { label: 'Over',  type: 'DIGITOVER',  color: '#22c55e', icon: '▲' },
+            { label: 'Under', type: 'DIGITUNDER', color: '#ef4444', icon: '▼' },
         ],
-        durationUnit: 't', hasDuration: true, hasBarrier: false,
     },
     {
-        id: 'even_odd', label: 'Even/Odd', icon: '⚖️',
+        id: 'even_odd', label: 'Even/Odd', icon: '⚖️', hasBarrier: false,
         types: [
-            { label: 'EVEN', type: 'DIGITEVEN', color: '#3b82f6', desc: 'Win if last digit is even (0,2,4,6,8)' },
-            { label: 'ODD',  type: 'DIGITODD',  color: '#8b5cf6', desc: 'Win if last digit is odd (1,3,5,7,9)' },
+            { label: 'Even', type: 'DIGITEVEN', color: '#3b82f6', icon: '2' },
+            { label: 'Odd',  type: 'DIGITODD',  color: '#8b5cf6', icon: '1' },
         ],
-        durationUnit: 't', hasDuration: true, hasBarrier: false,
     },
     {
-        id: 'over_under', label: 'Over/Under', icon: '🎯',
+        id: 'match_differ', label: 'Match/Differ', icon: '🔢', hasBarrier: true,
         types: [
-            { label: '▲ OVER',  type: 'DIGITOVER',  color: '#22c55e', desc: 'Win if last digit is over the barrier' },
-            { label: '▼ UNDER', type: 'DIGITUNDER', color: '#ef4444', desc: 'Win if last digit is under the barrier' },
+            { label: 'Matches', type: 'DIGITMATCH', color: '#f59e0b', icon: '=' },
+            { label: 'Differs', type: 'DIGITDIFF',  color: '#06b6d4', icon: '≠' },
         ],
-        durationUnit: 't', hasDuration: true, hasBarrier: true,
     },
     {
-        id: 'match_diff', label: 'Match/Differ', icon: '🔢',
+        id: 'rise_fall', label: 'Rise/Fall', icon: '📈', hasBarrier: false,
         types: [
-            { label: '= MATCH',  type: 'DIGITMATCH', color: '#f59e0b', desc: 'Win if last digit matches exactly' },
-            { label: '≠ DIFFER', type: 'DIGITDIFF',  color: '#06b6d4', desc: 'Win if last digit differs from prediction' },
+            { label: 'Rise', type: 'CALL', color: '#22c55e', icon: '↑' },
+            { label: 'Fall', type: 'PUT',  color: '#ef4444', icon: '↓' },
         ],
-        durationUnit: 't', hasDuration: true, hasBarrier: true,
+    },
+    {
+        id: 'touch', label: 'Touch/No Touch', icon: '👆', hasBarrier: true,
+        types: [
+            { label: 'Touch',    type: 'ONETOUCH', color: '#22c55e', icon: '⟳' },
+            { label: 'No Touch', type: 'NOTOUCH',  color: '#ef4444', icon: '⊘' },
+        ],
+    },
+    {
+        id: 'higher_lower', label: 'Higher/Lower', icon: '⬆', hasBarrier: false,
+        types: [
+            { label: 'Higher', type: 'CALL_SPREAD', color: '#22c55e', icon: '⬆' },
+            { label: 'Lower',  type: 'PUT_SPREAD',  color: '#ef4444', icon: '⬇' },
+        ],
     },
 ];
 
 const TICK_DURATIONS = [1, 2, 3, 5, 10];
-const STAKE_PRESETS  = [0.35, 0.5, 1, 2, 5, 10];
-
-const HISTORY_SIZE = 1000; // ticks to track for stats
+const HISTORY_SIZE   = 1000;
 
 function getLastDigit(q: number) {
     const s = q.toFixed(2).replace('.', '');
     return parseInt(s[s.length - 1], 10);
 }
 
-/** Compute circle colors based on rank in 1000 ticks.
- *  green=highest, blue=2nd-highest, red=lowest, yellow=2nd-lowest
- *  Same % → same color. Others → white.
- */
 function getDigitCircleColors(pcts: number[]): string[] {
     const nonZero = pcts.filter(p => p > 0);
-    if (nonZero.length === 0) return new Array(10).fill('white');
-
+    if (nonZero.length === 0) return new Array(10).fill('#94a3b8');
     const uniqueSorted = [...new Set(pcts)].filter(p => p > 0).sort((a, b) => b - a);
-    const colorMap: Record<string, string> = {};
-
-    // Assign from lowest priority → highest (higher priority overwrites)
-    if (uniqueSorted.length >= 2) colorMap[String(uniqueSorted[uniqueSorted.length - 2])] = '#eab308'; // yellow 2nd lowest
-    if (uniqueSorted.length >= 1) colorMap[String(uniqueSorted[uniqueSorted.length - 1])] = '#ef4444'; // red lowest
-    if (uniqueSorted.length >= 2) colorMap[String(uniqueSorted[1])] = '#3b82f6'; // blue 2nd highest
-    if (uniqueSorted.length >= 1) colorMap[String(uniqueSorted[0])] = '#22c55e'; // green highest
-
-    return pcts.map(p => (p > 0 ? (colorMap[String(p)] ?? 'white') : 'white'));
+    const cm: Record<string, string> = {};
+    if (uniqueSorted.length >= 2) cm[String(uniqueSorted[uniqueSorted.length - 2])] = '#eab308';
+    if (uniqueSorted.length >= 1) cm[String(uniqueSorted[uniqueSorted.length - 1])] = '#ef4444';
+    if (uniqueSorted.length >= 2) cm[String(uniqueSorted[1])] = '#3b82f6';
+    if (uniqueSorted.length >= 1) cm[String(uniqueSorted[0])] = '#22c55e';
+    return pcts.map(p => (p > 0 ? (cm[String(p)] ?? '#94a3b8') : '#94a3b8'));
 }
-
-interface Position {
-    id: number; symbol: string; type: string; contractType: string;
-    stake: number; status: 'open'|'won'|'lost'; profit: number;
-    tick: number; duration: number; entry?: number; exit?: number; time: number;
-}
-
-/* ─── SVG Sparkline ─── */
-const PriceChart: React.FC<{ prices: number[]; currentDigit: number | null }> = ({ prices, currentDigit }) => {
-    if (prices.length < 2) {
-        return (
-            <div className='mt-spark__empty'>
-                <span>Waiting for price data…</span>
-            </div>
-        );
-    }
-    const W = 600, H = 120, PAD = 8;
-    const min = Math.min(...prices);
-    const max = Math.max(...prices);
-    const range = max - min || 1;
-    const pts = prices.map((p, i) => {
-        const x = PAD + (i / (prices.length - 1)) * (W - PAD * 2);
-        const y = H - PAD - ((p - min) / range) * (H - PAD * 2);
-        return `${x},${y}`;
-    });
-    const lastX = PAD + ((prices.length - 1) / (prices.length - 1)) * (W - PAD * 2);
-    const lastY = H - PAD - ((prices[prices.length - 1] - min) / range) * (H - PAD * 2);
-    const lastPrice = prices[prices.length - 1];
-
-    return (
-        <div className='mt-spark'>
-            <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio='none' className='mt-spark__svg'>
-                <defs>
-                    <linearGradient id='sparkGrad' x1='0' y1='0' x2='0' y2='1'>
-                        <stop offset='0%' stopColor='#3b82f6' stopOpacity='0.35' />
-                        <stop offset='100%' stopColor='#3b82f6' stopOpacity='0.02' />
-                    </linearGradient>
-                </defs>
-                {/* Fill area */}
-                <path
-                    d={`M${PAD},${H} L${pts.join(' L')} L${lastX},${H} Z`}
-                    fill='url(#sparkGrad)'
-                />
-                {/* Line */}
-                <polyline
-                    points={pts.join(' ')}
-                    fill='none'
-                    stroke='#3b82f6'
-                    strokeWidth='1.5'
-                    strokeLinejoin='round'
-                />
-                {/* Last point dot */}
-                <circle cx={lastX} cy={lastY} r='3.5' fill='#22c55e' stroke='#fff' strokeWidth='1.5' />
-            </svg>
-            <div className='mt-spark__info'>
-                <span className='mt-spark__price'>{lastPrice.toFixed(5)}</span>
-                {currentDigit !== null && (
-                    <span className='mt-spark__digit-badge'>
-                        Last digit: <strong>{currentDigit}</strong>
-                    </span>
-                )}
-                <span className='mt-spark__range'>
-                    Range: {min.toFixed(3)} – {max.toFixed(3)}
-                </span>
-            </div>
-        </div>
-    );
-};
-
-/* ─── Digit Circles with Triangle Indicator ─── */
-const DigitCirclesPanel: React.FC<{
-    pcts: number[];
-    counts: number[];
-    totalTicks: number;
-    currentDigit: number | null;
-    historyReady: boolean;
-}> = ({ pcts, counts, totalTicks, currentDigit, historyReady }) => {
-    const colors = useMemo(() => getDigitCircleColors(pcts), [pcts]);
-
-    return (
-        <div className='mt-dcircles'>
-            <div className='mt-dcircles__header'>
-                <span className='mt-dcircles__title'>Digit Frequency</span>
-                <span className='mt-dcircles__ticks'>{totalTicks >= HISTORY_SIZE ? `${HISTORY_SIZE} ticks` : `${totalTicks} / ${HISTORY_SIZE} ticks`}</span>
-                {!historyReady && <span className='mt-dcircles__loading'>Loading…</span>}
-            </div>
-            <div className='mt-dcircles__grid'>
-                {Array.from({ length: 10 }, (_, d) => {
-                    const isCurrent = d === currentDigit;
-                    const color = colors[d];
-                    const pct = pcts[d];
-                    const isHighlighted = color !== 'white' && color !== undefined;
-
-                    return (
-                        <div key={d} className={`mt-dc__cell ${isCurrent ? 'mt-dc__cell--current' : ''}`}>
-                            {/* Triangle indicator */}
-                            <div className={`mt-dc__triangle ${isCurrent ? 'mt-dc__triangle--visible' : ''}`}>▼</div>
-                            {/* Circle */}
-                            <div
-                                className={`mt-dc__circle ${isCurrent ? 'mt-dc__circle--current' : ''}`}
-                                style={{
-                                    borderColor: isCurrent ? color : (isHighlighted ? color : 'rgba(100,120,150,0.3)'),
-                                    background: isCurrent
-                                        ? (color === 'white' ? 'rgba(255,255,255,0.12)' : `${color}22`)
-                                        : (isHighlighted ? `${color}18` : 'rgba(30,40,60,0.4)'),
-                                    boxShadow: isCurrent ? `0 0 0 2px ${color === 'white' ? '#ef4444' : color}88, 0 0 14px ${color === 'white' ? '#ef4444' : color}44` : 'none',
-                                }}
-                            >
-                                <span
-                                    className='mt-dc__num'
-                                    style={{ color: isHighlighted ? color : isCurrent ? '#fff' : 'rgba(200,210,230,0.7)' }}
-                                >
-                                    {d}
-                                </span>
-                                <span
-                                    className='mt-dc__pct'
-                                    style={{ color: isHighlighted ? `${color}cc` : 'rgba(150,165,190,0.7)' }}
-                                >
-                                    {pct.toFixed(1)}%
-                                </span>
-                                <span className='mt-dc__count'>{counts[d]}</span>
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
-            {/* Color legend */}
-            <div className='mt-dcircles__legend'>
-                <span className='mt-dcircles__legend-item' style={{ color: '#22c55e' }}>● Highest</span>
-                <span className='mt-dcircles__legend-item' style={{ color: '#3b82f6' }}>● 2nd High</span>
-                <span className='mt-dcircles__legend-item' style={{ color: '#ef4444' }}>● Lowest</span>
-                <span className='mt-dcircles__legend-item' style={{ color: '#eab308' }}>● 2nd Low</span>
-                <span className='mt-dcircles__legend-item' style={{ color: '#e2e8f0' }}>● Others</span>
-                <span className='mt-dcircles__legend-item' style={{ color: '#ef4444' }}>▼ Current</span>
-            </div>
-        </div>
-    );
-};
 
 /* ─── Account Badge ─── */
 const AccountBadge: React.FC = () => {
@@ -245,284 +134,593 @@ const AccountBadge: React.FC = () => {
     );
 };
 
-/* ─── Component ─── */
+/* ─── Rich SVG Price Chart ─── */
+const PriceChart: React.FC<{ prices: number[]; currentPrice: number | null }> = ({ prices, currentPrice }) => {
+    const W = 800, H = 210, PAD_L = 6, PAD_R = 72, PAD_T = 12, PAD_B = 24;
+    const innerW = W - PAD_L - PAD_R;
+    const innerH = H - PAD_T - PAD_B;
+
+    if (prices.length < 2) {
+        return (
+            <div className='mt-chart-empty'>
+                <span>📡 Waiting for price data…</span>
+            </div>
+        );
+    }
+
+    const pMin = Math.min(...prices), pMax = Math.max(...prices);
+    const range = pMax - pMin || 0.001;
+    const padV  = range * 0.12;
+    const yMin  = pMin - padV, yMax = pMax + padV;
+    const yRange = yMax - yMin;
+
+    const px = (i: number) => PAD_L + (i / (prices.length - 1)) * innerW;
+    const py = (p: number)  => PAD_T + (1 - (p - yMin) / yRange) * innerH;
+
+    const pts = prices.map((p, i) => ({ x: px(i), y: py(p) }));
+    const polyPts = pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+    const areaD = `M${pts[0].x.toFixed(1)},${(PAD_T + innerH).toFixed(1)} ` +
+        pts.map(p => `L${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ') +
+        ` L${pts[pts.length - 1].x.toFixed(1)},${(PAD_T + innerH).toFixed(1)} Z`;
+
+    const lastX = pts[pts.length - 1].x;
+    const lastY = pts[pts.length - 1].y;
+    const curY  = currentPrice != null ? py(currentPrice) : lastY;
+
+    // Y-axis grid (5 levels)
+    const gridN = 5;
+    const gridLevels = Array.from({ length: gridN }, (_, i) => {
+        const frac  = i / (gridN - 1);
+        const price = yMax - frac * yRange;
+        const y     = PAD_T + frac * innerH;
+        return { y, price };
+    });
+
+    // Time axis labels (5 points)
+    const timeLabels = [0, 0.25, 0.5, 0.75, 1].map(frac => ({
+        x: PAD_L + frac * innerW,
+        label: `-${Math.round((1 - frac) * (prices.length - 1))}`,
+    }));
+
+    return (
+        <svg viewBox={`0 0 ${W} ${H}`} className='mt-chart__svg' preserveAspectRatio='none'>
+            <defs>
+                <linearGradient id='mtChartGrad' x1='0' y1='0' x2='0' y2='1'>
+                    <stop offset='0%'   stopColor='#3b82f6' stopOpacity='0.32' />
+                    <stop offset='100%' stopColor='#3b82f6' stopOpacity='0.02' />
+                </linearGradient>
+                <clipPath id='mtChartClip'>
+                    <rect x={PAD_L} y={PAD_T} width={innerW} height={innerH} />
+                </clipPath>
+            </defs>
+
+            {/* Horizontal gridlines + Y labels */}
+            {gridLevels.map(({ y, price }, i) => (
+                <g key={i}>
+                    <line x1={PAD_L} y1={y.toFixed(1)} x2={(PAD_L + innerW).toFixed(1)} y2={y.toFixed(1)}
+                        stroke='rgba(255,255,255,0.06)' strokeWidth='1' />
+                    <text x={(PAD_L + innerW + 5).toFixed(1)} y={(y + 3.5).toFixed(1)}
+                        fill='rgba(148,163,184,0.65)' fontSize='9' textAnchor='start' fontFamily='monospace'>
+                        {price.toFixed(2)}
+                    </text>
+                </g>
+            ))}
+
+            {/* Chart content clipped */}
+            <g clipPath='url(#mtChartClip)'>
+                <path d={areaD} fill='url(#mtChartGrad)' />
+                <polyline points={polyPts} fill='none' stroke='#3b82f6' strokeWidth='1.8' strokeLinejoin='round' />
+                <circle cx={lastX.toFixed(1)} cy={lastY.toFixed(1)} r='3.5' fill='#60a5fa' stroke='#fff' strokeWidth='1.5' />
+            </g>
+
+            {/* Current price dotted line */}
+            <line x1={PAD_L} y1={curY.toFixed(1)} x2={(PAD_L + innerW).toFixed(1)} y2={curY.toFixed(1)}
+                stroke='#60a5fa' strokeWidth='1' strokeDasharray='4 3' opacity='0.8' />
+            <rect x={(PAD_L + innerW + 1).toFixed(1)} y={(curY - 9).toFixed(1)}
+                width={(PAD_R - 4).toFixed(1)} height='18' rx='3' fill='#2563eb' opacity='0.95' />
+            <text x={(PAD_L + innerW + PAD_R / 2 - 1).toFixed(1)} y={(curY + 4.5).toFixed(1)}
+                fill='#fff' fontSize='10' textAnchor='middle' fontFamily='monospace' fontWeight='700'>
+                {(currentPrice ?? prices[prices.length - 1]).toFixed(2)}
+            </text>
+
+            {/* Time axis */}
+            {timeLabels.map(({ x, label }, i) => (
+                <text key={i} x={x.toFixed(1)} y={(H - 5).toFixed(1)}
+                    fill='rgba(100,116,139,0.55)' fontSize='8' textAnchor='middle' fontFamily='monospace'>
+                    {label}
+                </text>
+            ))}
+        </svg>
+    );
+};
+
+/* ─── Digit Circles Row ─── */
+interface TradeState {
+    ticks: { digit: number; order: number }[];
+    duration: number;
+    settled: boolean;
+    result: 'won' | 'lost' | null;
+    profit: number;
+    exitDigit: number | null;
+}
+
+const DigitRow: React.FC<{
+    pcts: number[];
+    counts: number[];
+    currentDigit: number | null;
+    tradeState: TradeState | null;
+    totalTicks: number;
+    historyReady: boolean;
+}> = ({ pcts, counts, currentDigit, tradeState, totalTicks, historyReady }) => {
+    const colors = useMemo(() => getDigitCircleColors(pcts), [pcts]);
+
+    return (
+        <div className='mt-circles'>
+            <div className='mt-circles__hdr'>
+                <span className='mt-circles__label'>Last Digit Stats</span>
+                <span className='mt-circles__ticks'>
+                    {historyReady
+                        ? `${Math.min(totalTicks, HISTORY_SIZE).toLocaleString()} / ${HISTORY_SIZE.toLocaleString()} ticks`
+                        : 'Loading history…'}
+                </span>
+                {tradeState && !tradeState.settled && (
+                    <span className='mt-circles__trade-ind'>
+                        ● Tick {tradeState.ticks.length}/{tradeState.duration}
+                    </span>
+                )}
+            </div>
+
+            <div className='mt-circles__row'>
+                {Array.from({ length: 10 }, (_, d) => {
+                    const isCurrent   = d === currentDigit;
+                    const color       = colors[d];
+                    const pct         = pcts[d];
+                    const tradeCount  = tradeState?.ticks.filter(t => t.digit === d).length ?? 0;
+                    const isExit      = tradeState?.exitDigit === d && tradeState?.settled;
+                    const tradeResult = tradeState?.result;
+
+                    let borderColor = color;
+                    let glow        = 'none';
+                    if (isExit && tradeResult === 'won') {
+                        borderColor = '#22c55e';
+                        glow = '0 0 0 3px #22c55e88, 0 0 18px #22c55e55';
+                    } else if (isExit && tradeResult === 'lost') {
+                        borderColor = '#ef4444';
+                        glow = '0 0 0 3px #ef444488, 0 0 18px #ef444455';
+                    } else if (isCurrent) {
+                        glow = `0 0 0 2px ${color}66`;
+                    }
+
+                    return (
+                        <div key={d} className={`mt-circle-cell ${isCurrent ? 'is-current' : ''}`}>
+                            {/* Moving triangle */}
+                            <div className={`mt-tri ${isCurrent ? 'mt-tri--on' : ''}`}>▼</div>
+
+                            {/* White circle */}
+                            <div
+                                className={`mt-circle ${isExit ? `mt-circle--${tradeResult}` : ''}`}
+                                style={{
+                                    borderColor,
+                                    boxShadow: glow !== 'none' ? glow : undefined,
+                                    transform: isCurrent ? 'scale(1.1)' : 'scale(1)',
+                                }}
+                            >
+                                <span className='mt-circle__num'>{d}</span>
+                                <span className='mt-circle__pct'>{pct.toFixed(1)}%</span>
+                                <span className='mt-circle__cnt'>{counts[d]}</span>
+                                {tradeCount > 0 && (
+                                    <span className='mt-circle__trade-dot'
+                                        style={{
+                                            background: isExit && tradeResult === 'won' ? '#22c55e'
+                                                : isExit && tradeResult === 'lost' ? '#ef4444'
+                                                : '#3b82f6',
+                                        }}>
+                                        {tradeCount}
+                                    </span>
+                                )}
+                            </div>
+
+                            {/* Win/loss amount beneath exit digit */}
+                            {isExit && tradeResult && (
+                                <div className={`mt-circle__result mt-circle__result--${tradeResult}`}>
+                                    {tradeResult === 'won'
+                                        ? `+${(tradeState?.profit ?? 0).toFixed(2)}`
+                                        : `${(tradeState?.profit ?? 0).toFixed(2)}`}
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+
+            {/* Legend */}
+            <div className='mt-circles__legend'>
+                <span style={{ color: '#22c55e' }}>● Highest</span>
+                <span style={{ color: '#3b82f6' }}>● 2nd High</span>
+                <span style={{ color: '#ef4444' }}>● Lowest</span>
+                <span style={{ color: '#eab308' }}>● 2nd Low</span>
+                <span style={{ color: '#94a3b8' }}>● Others</span>
+                <span style={{ color: '#ef4444' }}>▼ Current</span>
+            </div>
+        </div>
+    );
+};
+
+/* ─── ManualTrader Component ─── */
 const ManualTrader: React.FC = () => {
     const { buyContract, subscribeTicks, connected, authorized, balance, currency, send } = useDerivTrade();
     const [displayCur, setDisplayCur] = useState(getDisplayCurrency());
     useEffect(() => subscribeCurrency(() => setDisplayCur(getDisplayCurrency())), []);
 
-    // --- Market state ---
-    const [symbolValue, setSymbolValue] = useState('R_100');
-    const [tabId,  setTabId]   = useState('rise_fall');
-    const [typeIdx, setTypeIdx] = useState(0);
-    const [stake,  setStake]   = useState('1.00');
-    const [duration, setDuration] = useState(5);
-    const [barrier, setBarrier]   = useState(4);
-    const [positions, setPositions] = useState<Position[]>([]);
-    const [pnl, setPnl] = useState(0);
-    const [payout, setPayout] = useState<number | null>(null);
+    const [symbolValue, setSymbolValue]   = useState('1HZ100V');
+    const [ctIdx, setCtIdx]               = useState(0); // contract type index
+    const [duration, setDuration]         = useState(5);
+    const [barrier, setBarrier]           = useState(4);
+    const [stake, setStake]               = useState('1.00');
+    const [pnl, setPnl]                   = useState(0);
+    const [positions, setPositions]       = useState<any[]>([]);
+    const [payouts, setPayouts]           = useState<Record<string, number | null>>({});
     const [payoutLoading, setPayoutLoading] = useState(false);
 
-    // --- Live tick state ---
-    const [currentDigit, setCurrentDigit] = useState<number|null>(null);
-    const [currentPrice, setCurrentPrice] = useState<number|null>(null);
-    const [priceHistory, setPriceHistory] = useState<number[]>([]); // for sparkline (last 60)
-
-    // --- 1000-tick digit stats ---
-    const [digitCounts, setDigitCounts] = useState<number[]>(new Array(10).fill(0));
-    const [totalTicks, setTotalTicks]   = useState(0);
-    const [historyReady, setHistoryReady] = useState(false);
+    const [currentDigit, setCurrentDigit] = useState<number | null>(null);
+    const [currentPrice, setCurrentPrice] = useState<number | null>(null);
+    const [priceHistory, setPriceHistory] = useState<number[]>([]);
     const [digitHistory, setDigitHistory] = useState<number[]>([]);
+    const [historyReady, setHistoryReady] = useState(false);
 
+    const [tradeState, setTradeState] = useState<TradeState | null>(null);
+    const tradeActiveRef = useRef(false);
+    const tradeDurRef    = useRef(0);
+    const tradeTicksRef  = useRef<{ digit: number; order: number }[]>([]);
+
+    const proposalTimer = useRef<any>(null);
     const idRef = useRef(0);
-    const proposalTimerRef = useRef<ReturnType<typeof setTimeout>|null>(null);
 
-    const tab = CONTRACT_TABS.find(t => t.id === tabId) ?? CONTRACT_TABS[0];
-    const contractDef = tab.types[Math.min(typeIdx, tab.types.length - 1)];
+    const ctDef  = CONTRACT_TYPES[ctIdx];
+    const symbol = useMemo(() => ALL_SYMBOLS_FLAT.find(s => s.value === symbolValue) ?? ALL_SYMBOLS_FLAT[0], [symbolValue]);
 
-    const symbol = useMemo(() => ALL_SYMBOLS.find(s => s.value === symbolValue) ?? ALL_SYMBOLS[0], [symbolValue]);
-
-    // Fetch initial 1000 ticks for history
+    /* Load 1000-tick history when symbol changes */
     useEffect(() => {
         setHistoryReady(false);
-        setDigitCounts(new Array(10).fill(0));
-        setTotalTicks(0);
+        setDigitHistory([]);
+        setPriceHistory([]);
         setCurrentDigit(null);
         setCurrentPrice(null);
-        setPriceHistory([]);
-        setDigitHistory([]);
-
         if (!authorized || !send) return;
         let cancelled = false;
         (async () => {
             try {
-                const res = await send({ ticks_history: symbolValue, count: HISTORY_SIZE, end: 'latest', style: 'ticks' });
+                const res = await send({ ticks_history: symbolValue, count: 1000, end: 'latest', style: 'ticks' });
                 if (cancelled) return;
                 const prices: number[] = res?.history?.prices || [];
-                const counts = new Array(10).fill(0);
-                prices.forEach((p: number) => { counts[getLastDigit(p)]++; });
-                const digits = prices.map((p: number) => getLastDigit(p));
-                setDigitCounts(counts);
-                setTotalTicks(prices.length);
-                setDigitHistory(digits);
-                setPriceHistory(prices.slice(-60));
+                setDigitHistory(prices.map(getLastDigit));
+                setPriceHistory(prices.slice(-120));
                 setHistoryReady(true);
-            } catch {
-                setHistoryReady(true); // allow live ticks to accumulate
-            }
+            } catch { setHistoryReady(true); }
         })();
         return () => { cancelled = true; };
     }, [symbolValue, authorized, send]);
 
-    // Subscribe to live ticks — accumulate into rolling 1000
+    /* Live tick subscription */
     useEffect(() => {
         const unsub = subscribeTicks(symbolValue, tick => {
             setCurrentDigit(tick.digit);
             setCurrentPrice(tick.quote);
-            setPriceHistory(prev => [...prev.slice(-59), tick.quote]);
-            setDigitHistory(prev => {
-                const next = [...prev, tick.digit];
-                return next.slice(-HISTORY_SIZE);
-            });
-            setDigitCounts(prev => {
-                const next = [...prev];
-                next[tick.digit]++;
-                return next;
-            });
-            setTotalTicks(p => Math.min(p + 1, HISTORY_SIZE));
+            setPriceHistory(prev => [...prev.slice(-119), tick.quote]);
+            setDigitHistory(prev => [...prev, tick.digit].slice(-HISTORY_SIZE));
+
+            if (tradeActiveRef.current && tradeTicksRef.current.length < tradeDurRef.current) {
+                const entry = { digit: tick.digit, order: tradeTicksRef.current.length + 1 };
+                tradeTicksRef.current = [...tradeTicksRef.current, entry];
+                setTradeState(prev => prev ? { ...prev, ticks: [...tradeTicksRef.current] } : prev);
+            }
         });
         return unsub;
     }, [symbolValue, subscribeTicks]);
 
-    // Recompute counts when digitHistory changes (rolling 1000)
+    /* Computed stats */
     const pcts = useMemo(() => {
         const total = digitHistory.length;
         if (total === 0) return new Array(10).fill(0);
-        const counts = new Array(10).fill(0);
-        digitHistory.forEach(d => { counts[d]++; });
-        return counts.map(c => (c / total) * 100);
+        const c = new Array(10).fill(0);
+        digitHistory.forEach(d => c[d]++);
+        return c.map(v => (v / total) * 100);
     }, [digitHistory]);
 
-    const digitCountsFromHistory = useMemo(() => {
-        const counts = new Array(10).fill(0);
-        digitHistory.forEach(d => { counts[d]++; });
-        return counts;
+    const digitCounts = useMemo(() => {
+        const c = new Array(10).fill(0);
+        digitHistory.forEach(d => c[d]++);
+        return c;
     }, [digitHistory]);
 
-    // Fetch proposal (payout estimate)
+    /* Fetch proposals */
     useEffect(() => {
-        if (proposalTimerRef.current) clearTimeout(proposalTimerRef.current);
-        proposalTimerRef.current = setTimeout(async () => {
-            if (!authorized || !send) { setPayout(null); return; }
-            const stakeNum = parseFloat(stake);
-            if (isNaN(stakeNum) || stakeNum < 0.35) { setPayout(null); return; }
+        if (proposalTimer.current) clearTimeout(proposalTimer.current);
+        proposalTimer.current = setTimeout(async () => {
+            if (!authorized || !send) { setPayouts({}); return; }
+            const s = parseFloat(stake);
+            if (isNaN(s) || s < 0.35) { setPayouts({}); return; }
+            setPayoutLoading(true);
             try {
-                setPayoutLoading(true);
-                const req: any = {
-                    proposal: 1, amount: stakeNum, basis: 'stake',
-                    contract_type: contractDef.type, currency: currency || 'USD',
-                    duration, duration_unit: 't', symbol: symbolValue,
-                };
-                if (tab.hasBarrier) req.barrier = String(barrier);
-                const res = await send(req);
-                if (res?.proposal?.payout != null) {
-                    setPayout(parseFloat(res.proposal.payout));
-                } else { setPayout(null); }
-            } catch { setPayout(null); }
+                const results: Record<string, number | null> = {};
+                await Promise.all(ctDef.types.map(async def => {
+                    try {
+                        const req: any = {
+                            proposal: 1, amount: s, basis: 'stake',
+                            contract_type: def.type, currency: currency || 'USD',
+                            duration, duration_unit: 't', symbol: symbolValue,
+                        };
+                        if (ctDef.hasBarrier) req.barrier = String(barrier);
+                        const res = await send(req);
+                        results[def.type] = res?.proposal?.payout ? parseFloat(res.proposal.payout) : null;
+                    } catch { results[def.type] = null; }
+                }));
+                setPayouts(results);
+            } catch { setPayouts({}); }
             finally { setPayoutLoading(false); }
-        }, 400);
-        return () => { if (proposalTimerRef.current) clearTimeout(proposalTimerRef.current); };
-    }, [stake, duration, symbolValue, contractDef.type, barrier, tab.hasBarrier, authorized, currency, send]);
+        }, 500);
+        return () => { if (proposalTimer.current) clearTimeout(proposalTimer.current); };
+    }, [stake, duration, symbolValue, ctDef, barrier, authorized, currency, send]);
 
-    const buy = useCallback(async (def: typeof contractDef) => {
-        const s = parseFloat(stake);
+    /* Execute trade */
+    const buy = useCallback(async (def: typeof ctDef.types[0]) => {
         if (!authorized) return;
-        const pos: Position = {
-            id: idRef.current++, symbol: symbol.label, type: def.label,
+        const s = parseFloat(stake);
+        if (isNaN(s) || s < 0.35) return;
+
+        const tradeId = idRef.current++;
+        tradeTicksRef.current = [];
+        tradeActiveRef.current = true;
+        tradeDurRef.current = duration;
+        setTradeState({ ticks: [], duration, settled: false, result: null, profit: 0, exitDigit: null });
+
+        const pos = {
+            id: tradeId, symbol: symbol.label, type: def.label,
             contractType: def.type, stake: s, status: 'open',
             profit: 0, tick: 0, duration, time: Date.now(),
         };
         setPositions(p => [pos, ...p.slice(0, 49)]);
+
+        let t = 0;
+        const iv = setInterval(() => {
+            t++;
+            setPositions(p => p.map(x => x.id === tradeId && x.status === 'open' ? { ...x, tick: Math.min(t, duration) } : x));
+            if (t >= duration) clearInterval(iv);
+        }, 1000);
+
         try {
-            let t = 0;
-            const iv = setInterval(() => {
-                t++;
-                setPositions(p => p.map(x => x.id === pos.id && x.status === 'open'
-                    ? { ...x, tick: Math.min(t, duration) } : x));
-                if (t >= duration) clearInterval(iv);
-            }, 1000);
             await buyContract(
                 {
                     symbol: symbolValue, contract_type: def.type as any,
                     duration, duration_unit: 't', stake: s,
-                    ...(tab.hasBarrier ? { barrier } : {}),
+                    ...(ctDef.hasBarrier ? { barrier } : {}),
                 },
                 c => {
                     clearInterval(iv);
-                    const profit = applyCommission(c.profit);
-                    setPositions(p => p.map(x => x.id === pos.id
-                        ? { ...x, status: c.status, profit, entry: c.entry_spot, exit: c.exit_spot } : x));
+                    const profit    = applyCommission(c.profit);
+                    const exitSpot  = c.exit_spot;
+                    const exitDigit = exitSpot ? getLastDigit(Number(exitSpot)) : null;
+                    tradeActiveRef.current = false;
+                    setTradeState(prev => prev ? {
+                        ...prev, settled: true,
+                        result: c.status === 'won' ? 'won' : 'lost',
+                        profit, exitDigit,
+                    } : null);
+                    setPositions(p => p.map(x => x.id === tradeId
+                        ? { ...x, status: c.status, profit, entry: c.entry_spot, exit: c.exit_spot }
+                        : x));
                     setPnl(prev => prev + profit);
+                    setTimeout(() => setTradeState(null), 6000);
                 }
             );
         } catch {
-            setPositions(p => p.filter(x => x.id !== pos.id));
+            clearInterval(iv);
+            tradeActiveRef.current = false;
+            setTradeState(null);
+            setPositions(p => p.filter(x => x.id !== tradeId));
         }
-    }, [authorized, stake, symbolValue, duration, barrier, tab, contractDef, symbol, buyContract]);
+    }, [authorized, stake, symbolValue, duration, barrier, ctDef, symbol, buyContract]);
 
-    const fmt = (usd: number) => `${fromUsd(usd).toFixed(2)} ${displayCur}`;
-    const fmtProfit = (usd: number) => `${usd >= 0 ? '+' : ''}${fromUsd(usd).toFixed(2)} ${displayCur}`;
-
-    const openPositions   = positions.filter(p => p.status === 'open');
-    const closedPositions = positions.filter(p => p.status !== 'open');
+    const fmt       = (usd: number) => `${fromUsd(usd).toFixed(2)} ${displayCur}`;
+    const stakeNum  = parseFloat(stake) || 0;
+    const openPos   = positions.filter(p => p.status === 'open');
+    const closedPos = positions.filter(p => p.status !== 'open');
 
     return (
-        <div className='manual-trader'>
-            {/* ─── Top bar ─── */}
-            <div className='manual-trader__topbar'>
-                <div className='manual-trader__topbar-left'>
-                    <span className={`manual-trader__conn ${connected ? 'on' : 'off'}`}>
-                        {connected ? '● LIVE' : '○ Offline'}
+        <div className='mt-page'>
+            {/* ─── Topbar ─── */}
+            <div className='mt-topbar'>
+                <div className='mt-topbar__left'>
+                    <span className={`mt-conn ${connected ? 'on' : 'off'}`}>
+                        {connected ? '● LIVE' : '○ OFF'}
                     </span>
-                    <h2 className='manual-trader__title'>Manual Trader</h2>
+
+                    {/* Market dropdown */}
+                    <select className='mt-market-sel' value={symbolValue}
+                        onChange={e => setSymbolValue(e.target.value)}>
+                        {ALL_MARKETS.map(g => (
+                            <optgroup key={g.group} label={g.group}>
+                                {g.options.map(o => (
+                                    <option key={o.value} value={o.value}>{o.label}</option>
+                                ))}
+                            </optgroup>
+                        ))}
+                    </select>
+
+                    {currentPrice != null && (
+                        <span className='mt-topbar__price'>{currentPrice.toFixed(5)}</span>
+                    )}
                     <AccountBadge />
                 </div>
-                <div className='manual-trader__topbar-right'>
+                <div className='mt-topbar__right'>
                     {balance !== null && (
-                        <div className='manual-trader__balance'>
+                        <div className='mt-topbar__stat'>
                             <span>Balance</span>
                             <strong>{fmt(balance)}</strong>
                         </div>
                     )}
-                    <div className={`manual-trader__pnl ${pnl >= 0 ? 'pos' : 'neg'}`}>
+                    <div className={`mt-topbar__stat ${pnl >= 0 ? 'pos' : 'neg'}`}>
                         <span>Session P/L</span>
-                        <strong>{fmtProfit(pnl)}</strong>
+                        <strong>{pnl >= 0 ? '+' : ''}{fmt(pnl)}</strong>
                     </div>
                 </div>
             </div>
 
-            <div className='manual-trader__layout'>
-                {/* ─── LEFT — Trade Form ─── */}
-                <div className='manual-trader__form-col'>
-                    {/* Symbol selector */}
-                    <div className='manual-trader__section-card'>
-                        <label className='manual-trader__sec-label'>Market</label>
-                        <div className='manual-trader__symbol-groups'>
-                            {SYMBOLS.map(g => (
-                                <div key={g.group} className='manual-trader__symbol-group'>
-                                    <span className='manual-trader__symbol-group-name'>{g.group}</span>
-                                    <div className='manual-trader__symbol-pills'>
-                                        {g.subs.map(s => (
-                                            <button key={s.value}
-                                                className={`manual-trader__symbol-pill ${symbolValue === s.value ? 'active' : ''}`}
-                                                onClick={() => { setSymbolValue(s.value); }}>
-                                                {s.label}
-                                            </button>
-                                        ))}
+            {/* ─── Body ─── */}
+            <div className='mt-body'>
+                {/* ── Chart + circles column ── */}
+                <div className='mt-chart-col'>
+                    {/* Chart card */}
+                    <div className='mt-chart-card'>
+                        <div className='mt-chart-card__hdr'>
+                            <span className='mt-chart-card__sym'>{symbol.label}</span>
+                            {currentPrice != null && (
+                                <span className='mt-chart-card__px'>{currentPrice.toFixed(5)}</span>
+                            )}
+                            {currentDigit != null && (
+                                <span className='mt-chart-card__dg'>Last digit: <b>{currentDigit}</b></span>
+                            )}
+                        </div>
+                        <PriceChart prices={priceHistory} currentPrice={currentPrice} />
+                    </div>
+
+                    {/* Digit circles */}
+                    <DigitRow
+                        pcts={pcts}
+                        counts={digitCounts}
+                        currentDigit={currentDigit}
+                        tradeState={tradeState}
+                        totalTicks={digitHistory.length}
+                        historyReady={historyReady}
+                    />
+
+                    {/* Recent digit stream */}
+                    <div className='mt-stream-card'>
+                        <div className='mt-stream-card__label'>Recent Digits</div>
+                        <div className='mt-stream'>
+                            {digitHistory.slice(-40).reverse().map((d, i) => {
+                                const c = getDigitCircleColors(pcts)[d];
+                                return (
+                                    <span key={i}
+                                        className={`mt-chip ${i === 0 ? 'latest' : ''}`}
+                                        style={{
+                                            background: c === '#94a3b8' ? 'rgba(148,163,184,0.15)' : `${c}22`,
+                                            color: c,
+                                            border: `1px solid ${c}44`,
+                                        }}>
+                                        {d}
+                                    </span>
+                                );
+                            })}
+                            {digitHistory.length === 0 && (
+                                <span className='mt-stream__empty'>Waiting for ticks…</span>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Positions */}
+                    {(openPos.length > 0 || closedPos.length > 0) && (
+                        <div className='mt-positions'>
+                            <div className='mt-positions__hdr'>
+                                Contracts
+                                {closedPos.length > 0 && (
+                                    <button className='mt-clear-btn'
+                                        onClick={() => setPositions(p => p.filter(x => x.status === 'open'))}>
+                                        Clear
+                                    </button>
+                                )}
+                            </div>
+                            {openPos.map(p => (
+                                <div key={p.id} className='mt-pos-row open'>
+                                    <span className='mt-pos-sym'>{p.symbol}</span>
+                                    <span className='mt-pos-type'>{p.type}</span>
+                                    <span className='mt-pos-stake'>{fmt(p.stake)}</span>
+                                    <div className='mt-pos-prog'>
+                                        <div style={{ width: `${(p.tick / p.duration) * 100}%` }} />
                                     </div>
+                                    <span className='mt-pos-tick'>{p.tick}/{p.duration}T</span>
+                                </div>
+                            ))}
+                            {closedPos.slice(0, 15).map(p => (
+                                <div key={p.id} className={`mt-pos-row ${p.status}`}>
+                                    <span className='mt-pos-sym'>{p.symbol}</span>
+                                    <span className='mt-pos-type'>{p.type}</span>
+                                    <span className='mt-pos-stake'>{fmt(p.stake)}</span>
+                                    {p.entry && <span className='mt-pos-price'>In: {p.entry}</span>}
+                                    {p.exit  && <span className='mt-pos-price'>Out: {p.exit}</span>}
+                                    <span className={`mt-pos-badge ${p.status}`}>
+                                        {p.status === 'won' ? '✓ WIN' : '✗ LOSS'}
+                                    </span>
+                                    <span className={`mt-pos-profit ${p.profit >= 0 ? 'pos' : 'neg'}`}>
+                                        {p.profit >= 0 ? '+' : ''}{fmt(p.profit)}
+                                    </span>
                                 </div>
                             ))}
                         </div>
+                    )}
+                </div>
+
+                {/* ── Right Trade Panel ── */}
+                <div className='mt-trade-panel'>
+                    {/* Contract type navigator */}
+                    <div className='mtp-type-nav'>
+                        <button className='mtp-type-nav__arr'
+                            onClick={() => setCtIdx(i => (i - 1 + CONTRACT_TYPES.length) % CONTRACT_TYPES.length)}>
+                            ‹
+                        </button>
+                        <div className='mtp-type-nav__center'>
+                            <span className='mtp-type-nav__icon'>{ctDef.icon}</span>
+                            <span className='mtp-type-nav__name'>{ctDef.label}</span>
+                        </div>
+                        <button className='mtp-type-nav__arr'
+                            onClick={() => setCtIdx(i => (i + 1) % CONTRACT_TYPES.length)}>
+                            ›
+                        </button>
                     </div>
 
-                    {/* Contract type tabs */}
-                    <div className='manual-trader__section-card'>
-                        <label className='manual-trader__sec-label'>Trade Type</label>
-                        <div className='manual-trader__contract-tabs'>
-                            {CONTRACT_TABS.map(t => (
-                                <button key={t.id}
-                                    className={`manual-trader__contract-tab ${tabId === t.id ? 'active' : ''}`}
-                                    onClick={() => { setTabId(t.id); setTypeIdx(0); }}>
-                                    <span>{t.icon}</span> {t.label}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
+                    {/* All contract types dropdown */}
+                    <select className='mtp-ct-select' value={ctIdx}
+                        onChange={e => setCtIdx(Number(e.target.value))}>
+                        {CONTRACT_TYPES.map((ct, i) => (
+                            <option key={ct.id} value={i}>{ct.icon} {ct.label}</option>
+                        ))}
+                    </select>
 
                     {/* Duration */}
-                    <div className='manual-trader__section-card'>
-                        <label className='manual-trader__sec-label'>Duration (ticks)</label>
-                        <div className='manual-trader__dur-row'>
+                    <div className='mtp-section'>
+                        <div className='mtp-section__label'>Ticks</div>
+                        <div className='mtp-dur-row'>
                             {TICK_DURATIONS.map(v => (
                                 <button key={v}
-                                    className={`manual-trader__dur-btn ${duration === v ? 'active' : ''}`}
+                                    className={`mtp-dur-btn ${duration === v ? 'active' : ''}`}
                                     onClick={() => setDuration(v)}>
-                                    {v}T
+                                    {v}
                                 </button>
                             ))}
-                            <input className='manual-trader__dur-input' type='number' min='1' max='10'
-                                value={duration} onChange={e => setDuration(Math.max(1, Math.min(10, +e.target.value)))} />
+                            <input className='mtp-dur-inp' type='number' min='1' max='10'
+                                value={duration}
+                                onChange={e => setDuration(Math.max(1, Math.min(10, +e.target.value)))} />
                         </div>
+                        <div className='mtp-dur-label'>{duration} Ticks</div>
                     </div>
 
-                    {/* Stake */}
-                    <div className='manual-trader__section-card'>
-                        <label className='manual-trader__sec-label'>Stake</label>
-                        <div className='manual-trader__stake-presets'>
-                            {STAKE_PRESETS.map(v => (
-                                <button key={v}
-                                    className={`manual-trader__stake-preset ${parseFloat(stake) === v ? 'active' : ''}`}
-                                    onClick={() => setStake(v.toFixed(2))}>
-                                    {displayCur === 'USD' ? '$' : ''}{v}
-                                </button>
-                            ))}
-                        </div>
-                        <div className='manual-trader__stake-input-row'>
-                            <span className='manual-trader__stake-cur'>{currency || 'USD'}</span>
-                            <input className='manual-trader__stake-input' type='number' min='0.35' step='0.01'
-                                value={stake} onChange={e => setStake(e.target.value)} />
-                        </div>
-                    </div>
-
-                    {/* Barrier/digit */}
-                    {tab.hasBarrier && (
-                        <div className='manual-trader__section-card'>
-                            <label className='manual-trader__sec-label'>Barrier Digit</label>
-                            <div className='manual-trader__barrier-row'>
-                                {[0,1,2,3,4,5,6,7,8,9].map(d => (
+                    {/* Digit prediction */}
+                    {ctDef.hasBarrier && (
+                        <div className='mtp-section'>
+                            <div className='mtp-section__label'>Last Digit Prediction</div>
+                            <div className='mtp-digit-grid'>
+                                {[0, 1, 2, 3, 4].map(d => (
                                     <button key={d}
-                                        className={`manual-trader__barrier-btn ${barrier === d ? 'active' : ''}`}
-                                        style={barrier === d ? { background: '#3b82f6', color: '#fff', borderColor: '#3b82f6' } : {}}
+                                        className={`mtp-dg-btn ${barrier === d ? 'active' : ''}`}
+                                        onClick={() => setBarrier(d)}>
+                                        {d}
+                                    </button>
+                                ))}
+                            </div>
+                            <div className='mtp-digit-grid'>
+                                {[5, 6, 7, 8, 9].map(d => (
+                                    <button key={d}
+                                        className={`mtp-dg-btn ${barrier === d ? 'active' : ''}`}
                                         onClick={() => setBarrier(d)}>
                                         {d}
                                     </button>
@@ -531,138 +729,60 @@ const ManualTrader: React.FC = () => {
                         </div>
                     )}
 
-                    {/* Payout */}
-                    <div className='manual-trader__payout-card'>
-                        <div className='manual-trader__payout-row'>
-                            <span className='manual-trader__payout-label'>Payout estimate</span>
-                            <span className='manual-trader__payout-val'>
-                                {payoutLoading ? '…' : payout != null ? fmt(payout) : '—'}
-                            </span>
-                        </div>
-                        <div className='manual-trader__payout-row'>
-                            <span className='manual-trader__payout-label'>Profit if win</span>
-                            <span className={`manual-trader__payout-profit ${payout != null ? 'has' : ''}`}>
-                                {payout != null ? `+${fmt(payout - parseFloat(stake))}` : '—'}
-                            </span>
-                        </div>
-                    </div>
-
-                    {/* Buy buttons */}
-                    <div className='manual-trader__buy-btns'>
-                        {tab.types.map((def, i) => (
-                            <button key={def.type}
-                                className={`manual-trader__buy-btn ${i === 1 ? 'second' : ''}`}
-                                style={{ '--btn-color': def.color } as React.CSSProperties}
-                                onClick={() => buy(def)}
-                                disabled={!authorized}>
-                                <span className='manual-trader__buy-label'>{def.label}</span>
-                                <span className='manual-trader__buy-desc'>{def.desc}</span>
+                    {/* Stake */}
+                    <div className='mtp-section'>
+                        <div className='mtp-section__label'>Stake</div>
+                        <div className='mtp-stake-row'>
+                            <button className='mtp-stake-adj'
+                                onClick={() => setStake(s => Math.max(0.35, parseFloat(s) - 0.5).toFixed(2))}>
+                                −
                             </button>
-                        ))}
+                            <div className='mtp-stake-mid'>
+                                <input className='mtp-stake-inp' type='number' min='0.35' step='0.01'
+                                    value={stake}
+                                    onChange={e => setStake(e.target.value)} />
+                                <span className='mtp-stake-cur'>{currency || 'USD'}</span>
+                            </div>
+                            <button className='mtp-stake-adj'
+                                onClick={() => setStake(s => (parseFloat(s) + 0.5).toFixed(2))}>
+                                +
+                            </button>
+                        </div>
                     </div>
 
                     {!authorized && (
-                        <div className='manual-trader__auth-notice'>
-                            ⚠ Connecting to Deriv account…
-                        </div>
+                        <div className='mtp-auth-warn'>⚠ Connecting to account…</div>
                     )}
-                </div>
 
-                {/* ─── RIGHT — Chart + Digit Analysis ─── */}
-                <div className='manual-trader__analysis-col'>
-
-                    {/* Price Chart */}
-                    <div className='manual-trader__chart-card'>
-                        <div className='manual-trader__chart-header'>
-                            <span className='manual-trader__chart-title'>{symbol.label} — Live Price Chart</span>
-                            {currentPrice && <span className='manual-trader__chart-price'>{currentPrice.toFixed(5)}</span>}
-                        </div>
-                        <PriceChart prices={priceHistory} currentDigit={currentDigit} />
-                    </div>
-
-                    {/* Digit Circles */}
-                    <DigitCirclesPanel
-                        pcts={pcts}
-                        counts={digitCountsFromHistory}
-                        totalTicks={digitHistory.length}
-                        currentDigit={currentDigit}
-                        historyReady={historyReady}
-                    />
-
-                    {/* Recent digit stream */}
-                    <div className='manual-trader__history-card'>
-                        <div className='manual-trader__freq-title'>Recent Digits</div>
-                        <div className='manual-trader__digit-stream'>
-                            {digitHistory.slice(-30).reverse().map((d, i) => {
-                                const colors = getDigitCircleColors(pcts);
-                                const col = colors[d];
-                                return (
-                                    <span key={i}
-                                        className={`manual-trader__digit-chip ${i === 0 ? 'latest' : ''}`}
-                                        style={{
-                                            background: col === 'white' ? 'rgba(200,210,230,0.15)' : `${col}33`,
-                                            color: col === 'white' ? '#e2e8f0' : col,
-                                            border: `1px solid ${col === 'white' ? 'rgba(200,210,230,0.2)' : `${col}55`}`,
-                                        }}>
-                                        {d}
+                    {/* Buy buttons — one block per type */}
+                    {ctDef.types.map((def, i) => {
+                        const po  = payouts[def.type];
+                        const pct = po != null && stakeNum > 0
+                            ? ((po / stakeNum) * 100).toFixed(1)
+                            : null;
+                        return (
+                            <div key={def.type} className='mtp-buy-block'>
+                                <div className='mtp-payout-row'>
+                                    <span className='mtp-payout-lbl'>Payout</span>
+                                    <span className='mtp-payout-val'>
+                                        {payoutLoading ? '…' : po != null ? fmt(po) : '—'}
+                                        <span className='mtp-payout-info'> ℹ</span>
                                     </span>
-                                );
-                            })}
-                            {digitHistory.length === 0 && (
-                                <span className='manual-trader__stream-empty'>Waiting for ticks…</span>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Open Positions */}
-                    {openPositions.length > 0 && (
-                        <div className='manual-trader__positions-card'>
-                            <div className='manual-trader__pos-header'>
-                                <span>Open Contracts</span>
-                                <span className='manual-trader__pos-count'>{openPositions.length}</span>
-                            </div>
-                            {openPositions.map(p => (
-                                <div key={p.id} className='manual-trader__pos-row open'>
-                                    <span className='manual-trader__pos-sym'>{p.symbol}</span>
-                                    <span className='manual-trader__pos-type'>{p.type}</span>
-                                    <span>{fmt(p.stake)}</span>
-                                    <div className='manual-trader__pos-progress'>
-                                        <div style={{ width: `${(p.tick / p.duration) * 100}%` }} />
-                                    </div>
-                                    <span className='manual-trader__pos-tick'>{p.tick}/{p.duration}T</span>
                                 </div>
-                            ))}
-                        </div>
-                    )}
-
-                    {/* Closed Positions */}
-                    {closedPositions.length > 0 && (
-                        <div className='manual-trader__positions-card'>
-                            <div className='manual-trader__pos-header'>
-                                <span>Closed Contracts</span>
-                                <span className='manual-trader__pos-count'>{closedPositions.length}</span>
-                                <button className='manual-trader__clear-btn'
-                                    onClick={() => setPositions(p => p.filter(x => x.status === 'open'))}>
-                                    Clear
+                                <button
+                                    className={`mtp-buy-btn ${i === 0 ? 'mtp-buy-btn--a' : 'mtp-buy-btn--b'}`}
+                                    style={{ '--bc': def.color } as React.CSSProperties}
+                                    onClick={() => buy(def)}
+                                    disabled={!authorized}>
+                                    <span className='mtp-buy-btn__icon'>{def.icon}</span>
+                                    <span className='mtp-buy-btn__label'>{def.label}</span>
+                                    {pct != null && (
+                                        <span className='mtp-buy-btn__pct'>{pct}%</span>
+                                    )}
                                 </button>
                             </div>
-                            {closedPositions.slice(0, 15).map(p => (
-                                <div key={p.id} className={`manual-trader__pos-row ${p.status}`}>
-                                    <span className='manual-trader__pos-sym'>{p.symbol}</span>
-                                    <span className='manual-trader__pos-type'>{p.type}</span>
-                                    <span>{fmt(p.stake)}</span>
-                                    {p.entry && <span className='manual-trader__pos-entry'>In: {p.entry}</span>}
-                                    {p.exit  && <span className='manual-trader__pos-exit'>Out: {p.exit}</span>}
-                                    <span className={`manual-trader__pos-badge ${p.status}`}>
-                                        {p.status === 'won' ? '✓ WON' : '✗ LOST'}
-                                    </span>
-                                    <span className={`manual-trader__pos-profit ${p.profit >= 0 ? 'pos' : 'neg'}`}>
-                                        {fmtProfit(p.profit)}
-                                    </span>
-                                </div>
-                            ))}
-                        </div>
-                    )}
+                        );
+                    })}
                 </div>
             </div>
         </div>

@@ -1,5 +1,8 @@
 // @ts-nocheck
 import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { observer } from 'mobx-react-lite';
+import { useStore } from '@/hooks/useStore';
+import { DBOT_TABS } from '@/constants/bot-contents';
 import { useDerivTrade } from '@/hooks/useDerivTrade';
 import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import manifest from '../../../public/bots/scalpers/manifest.json';
@@ -75,10 +78,13 @@ const BotCard: React.FC<{
     bot: TScalperBot;
     symbol: string;
     derivTrade: ReturnType<typeof useDerivTrade>;
-}> = ({ bot, symbol, derivTrade }) => {
+    onLoadBot: (bot: TScalperBot) => Promise<void>;
+    onLoadAndRun: (bot: TScalperBot) => Promise<void>;
+}> = ({ bot, symbol, derivTrade, onLoadBot, onLoadAndRun }) => {
     const [stake, setStake]           = useState(0.35);
     const [martingale, setMartingale] = useState(2);
     const [running, setRunning]       = useState(false);
+    const [loadingXml, setLoadingXml] = useState(false);
     const [stats, setStats]           = useState<BotStats>({ trades: 0, wins: 0, losses: 0, profit: 0, currentStake: 0.35 });
     const [log, setLog]               = useState<{ text: string; kind: string }[]>([]);
 
@@ -271,13 +277,29 @@ const BotCard: React.FC<{
                 </div>
             </div>
 
-            {/* Action buttons */}
+            {/* XML Bot Builder buttons */}
+            <div className='scalper-bots__xml-row'>
+                <button
+                    className='scalper-bots__load-builder-btn'
+                    onClick={() => { setLoadingXml(true); onLoadBot(bot).finally(() => setLoadingXml(false)); }}
+                    disabled={loadingXml || running}>
+                    {loadingXml ? '⏳' : '📂'} Load in Builder
+                </button>
+                <button
+                    className='scalper-bots__load-run-btn'
+                    onClick={() => { setLoadingXml(true); onLoadAndRun(bot).finally(() => setLoadingXml(false)); }}
+                    disabled={loadingXml || running}>
+                    {loadingXml ? '⏳' : '▶'} Load &amp; Run
+                </button>
+            </div>
+
+            {/* Action buttons (direct API execution) */}
             <div className='scalper-bots__btn-row'>
                 {!running ? (
                     <button className='scalper-bots__start-btn'
                         onClick={startBot}
                         disabled={!derivTrade.authorized}>
-                        {!derivTrade.authorized ? '○ Connecting...' : '▶ START BOT'}
+                        {!derivTrade.authorized ? '○ Connecting...' : '⚡ QUICK RUN'}
                     </button>
                 ) : (
                     <button className='scalper-bots__stop-btn' onClick={stopBot}>
@@ -291,7 +313,8 @@ const BotCard: React.FC<{
 };
 
 /* ────────────────── Main Page ────────────────── */
-const ScalperBots: React.FC = () => {
+const ScalperBots: React.FC = observer(() => {
+    const store       = useStore();
     const derivTrade  = useDerivTrade();
     const [category, setCategory]   = useState('All');
     const [search, setSearch]       = useState('');
@@ -300,6 +323,69 @@ const ScalperBots: React.FC = () => {
     const [displayCur, setDisplayCur] = useState(getDisplayCurrency());
 
     useEffect(() => subscribeCurrency(() => setDisplayCur(getDisplayCurrency())), []);
+
+    /* ── XML loading helpers (same pattern as Free Bots) ── */
+    const loadXmlIntoWorkspace = useCallback(async (xml: string, name: string) => {
+        const workspace = (window as any).Blockly?.derivWorkspace;
+        if (!workspace) return false;
+        const lm: any = store?.load_modal;
+        if (lm?.loadStrategyToBuilder) {
+            try {
+                await lm.loadStrategyToBuilder({ id: name, xml, name, save_type: 'unsaved' }, false);
+                return true;
+            } catch {}
+        }
+        try {
+            const B = (window as any).Blockly;
+            const dom = B.Xml.textToDom(xml);
+            B.derivWorkspace.asyncClear?.();
+            B.Xml.domToWorkspace(dom, B.derivWorkspace);
+            B.derivWorkspace.strategy_to_load = xml;
+            B.svgResize?.(B.derivWorkspace);
+            try { B.derivWorkspace.scrollCenter?.(); } catch (_) {}
+            return true;
+        } catch { return false; }
+    }, [store]);
+
+    const autoRun = useCallback(async () => {
+        const rp: any = store?.run_panel;
+        if (!rp?.onRunButtonClick) return;
+        for (let i = 0; i < 6; i++) {
+            try { if (!rp.is_running) await rp.onRunButtonClick(); return; }
+            catch { if (i < 5) await new Promise(r => setTimeout(r, 500)); }
+        }
+    }, [store]);
+
+    const handleLoadBot = useCallback(async (bot: TScalperBot) => {
+        try {
+            const res = await fetch(bot.xmlFile);
+            if (!res.ok) throw new Error();
+            const xml = await res.text();
+            (window as any).__pendingBotXml  = xml;
+            (window as any).__pendingBotName = bot.name;
+            store?.dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING);
+            store?.run_panel?.toggleDrawer?.(true);
+            let ok = await loadXmlIntoWorkspace(xml, bot.name);
+            if (!ok) {
+                ok = await new Promise<boolean>(resolve => {
+                    let attempts = 0;
+                    const poll = setInterval(async () => {
+                        attempts++;
+                        const r = await loadXmlIntoWorkspace(xml, bot.name);
+                        if (r || attempts >= 50) { clearInterval(poll); resolve(r); }
+                    }, 100);
+                });
+            }
+        } catch (e) {
+            console.error('Load bot error', e);
+            store?.dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING);
+        }
+    }, [store, loadXmlIntoWorkspace]);
+
+    const handleLoadAndRun = useCallback(async (bot: TScalperBot) => {
+        await handleLoadBot(bot);
+        setTimeout(() => autoRun(), 900);
+    }, [handleLoadBot, autoRun]);
 
     const filtered = SCALPER_BOTS.filter(b => {
         const matchCat  = category === 'All' || b.category === category;
@@ -381,11 +467,13 @@ const ScalperBots: React.FC = () => {
                         bot={bot}
                         symbol={symbol}
                         derivTrade={derivTrade}
+                        onLoadBot={handleLoadBot}
+                        onLoadAndRun={handleLoadAndRun}
                     />
                 ))}
             </div>
         </div>
     );
-};
+});
 
 export default ScalperBots;
