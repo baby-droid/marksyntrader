@@ -59,6 +59,7 @@ const BulkTrade      = lazy(() => import('../bulk-trade'));
 const Analysis       = lazy(() => import('../analysis'));
 const AhmedLearning  = lazy(() => import('../ahmed-learning'));
 const AutoTrades     = lazy(() => import('../auto-trades'));
+const ScalperBots    = lazy(() => import('../scalper-bots'));
 
 const AppWrapper = observer(() => {
     const { connectionStatus } = useApiBase();
@@ -94,17 +95,18 @@ const AppWrapper = observer(() => {
         'dashboard',        // 0
         'ahmed_learning',   // 1
         'free_bots',        // 2
-        'dcircles',         // 3
-        'speed_lab',        // 4
-        'pro_hedge',        // 5
-        'chart',            // 6
-        'manual_trader',    // 7
-        'auto_trades',      // 8
-        'copy_trading',     // 9
-        'reports',          // 10
-        'bulk_trade',       // 11
-        'analysis',         // 12
-        'tutorial',         // 13
+        'ahmed_scalper_bots', // 3
+        'dcircles',         // 4
+        'speed_lab',        // 5
+        'pro_hedge',        // 6
+        'chart',            // 7
+        'manual_trader',    // 8
+        'auto_trades',      // 9
+        'copy_trading',     // 10
+        'reports',          // 11
+        'bulk_trade',       // 12
+        'analysis',         // 13
+        'tutorial',         // 14
     ];
 
     const { isDesktop } = useDevice();
@@ -276,7 +278,20 @@ const AppWrapper = observer(() => {
                                 </Suspense>
                             </div>
 
-                            {/* 3 — D-Circles */}
+                            {/* 3 — Ahmed Scalper Bots */}
+                            <div
+                                label={mkIcon(
+                                    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M13 2L3 14h7l-1 8 10-12h-7l1-8z'/></svg>,
+                                    'Scalper Bots'
+                                )}
+                                id='id-scalper-bots'
+                            >
+                                <Suspense fallback={tabLoader('Loading Scalper Bots...')}>
+                                    <ScalperBots />
+                                </Suspense>
+                            </div>
+
+                            {/* 4 — D-Circles */}
                             <div
                                 label={mkIcon(
                                     <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='7' cy='12' r='4'/><circle cx='17' cy='12' r='4'/></svg>,

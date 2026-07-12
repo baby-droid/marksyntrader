@@ -4,6 +4,7 @@ import { observer } from 'mobx-react-lite';
 import { useStore } from '@/hooks/useStore';
 import useThemeSwitcher from '@/hooks/useThemeSwitcher';
 import { DBOT_TABS } from '@/constants/bot-contents';
+import { getDisplayCurrency, setDisplayCurrency } from '@/utils/currency-display';
 import './settings-panel.scss';
 
 interface SettingsPanelProps {
@@ -27,10 +28,18 @@ const NAV_ITEMS = [
 ];
 
 const SettingsPanel = observer(({ onTabChange, currentTab }: SettingsPanelProps) => {
-  const [isOpen, setIsOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<'nav' | 'settings'>('settings');
+  const [displayCur, setDisplayCur] = useState<'USD' | 'KSH'>(() => getDisplayCurrency());
   const { is_dark_mode_on, toggleTheme } = useThemeSwitcher();
   const store = useStore();
+  const { ui, client } = store ?? {};
+  const isOpen = !!ui?.is_settings_panel_open;
+  const close = () => ui?.setSettingsPanelOpen?.(false);
+
+  const handleCurrencyChange = (currency: 'USD' | 'KSH') => {
+    setDisplayCur(currency);
+    setDisplayCurrency(currency);
+  };
 
   const handleTabNavigate = (tab: number) => {
     if (onTabChange) {
@@ -38,7 +47,7 @@ const SettingsPanel = observer(({ onTabChange, currentTab }: SettingsPanelProps)
     } else if (store?.dashboard?.setActiveTab) {
       store.dashboard.setActiveTab(tab);
     }
-    setIsOpen(false);
+    close();
   };
 
   return (
@@ -46,7 +55,7 @@ const SettingsPanel = observer(({ onTabChange, currentTab }: SettingsPanelProps)
       {/* Gear button */}
       <button
         className='settings-panel__trigger'
-        onClick={() => setIsOpen(true)}
+        onClick={() => ui?.setSettingsPanelOpen?.(true)}
         title='Settings & Navigation'
         aria-label='Settings'
       >
@@ -55,7 +64,7 @@ const SettingsPanel = observer(({ onTabChange, currentTab }: SettingsPanelProps)
 
       {/* Overlay + Drawer */}
       {isOpen && (
-        <div className='settings-panel__overlay' onClick={() => setIsOpen(false)}>
+        <div className='settings-panel__overlay' onClick={close}>
           <div className='settings-panel__drawer' onClick={e => e.stopPropagation()}>
             {/* Header */}
             <div className='settings-panel__header'>
@@ -73,7 +82,7 @@ const SettingsPanel = observer(({ onTabChange, currentTab }: SettingsPanelProps)
                   Navigate
                 </button>
               </div>
-              <button className='settings-panel__close' onClick={() => setIsOpen(false)}>✕</button>
+              <button className='settings-panel__close' onClick={close}>✕</button>
             </div>
 
             {/* Settings section */}
@@ -101,56 +110,40 @@ const SettingsPanel = observer(({ onTabChange, currentTab }: SettingsPanelProps)
                 </div>
 
                 <div className='settings-panel__group'>
-                  <h4>TRADING</h4>
+                  <h4>DISPLAY CURRENCY</h4>
                   <div className='settings-panel__row'>
-                    <div className='settings-panel__row-icon'>⚡</div>
+                    <div className='settings-panel__row-icon'>💱</div>
                     <div className='settings-panel__row-text'>
-                      <strong>Fast execution</strong>
-                      <span>Ultra-fast contract placement</span>
+                      <strong>Currency</strong>
+                      <span>Applies to stake, profit & balance across the app</span>
                     </div>
-                    <label className='settings-panel__toggle'>
-                      <input type='checkbox' defaultChecked />
-                      <span className='settings-panel__toggle-slider' />
-                    </label>
-                  </div>
-                  <div className='settings-panel__row'>
-                    <div className='settings-panel__row-icon'>🔔</div>
-                    <div className='settings-panel__row-text'>
-                      <strong>Trade alerts</strong>
-                      <span>Notify on win/loss</span>
+                    <div className='settings-panel__currency-options'>
+                      {(['USD', 'KSH'] as const).map(cur => (
+                        <button
+                          key={cur}
+                          type='button'
+                          className={`settings-panel__currency-btn ${displayCur === cur ? 'active' : ''}`}
+                          onClick={() => handleCurrencyChange(cur)}
+                        >
+                          {cur}
+                        </button>
+                      ))}
                     </div>
-                    <label className='settings-panel__toggle'>
-                      <input type='checkbox' defaultChecked />
-                      <span className='settings-panel__toggle-slider' />
-                    </label>
                   </div>
                 </div>
 
-                <div className='settings-panel__group'>
-                  <h4>DISPLAY</h4>
-                  <div className='settings-panel__row'>
-                    <div className='settings-panel__row-icon'>📊</div>
-                    <div className='settings-panel__row-text'>
-                      <strong>Show digit % on circles</strong>
-                      <span>Display percentage inside circles</span>
+                {client?.loginid && (
+                  <div className='settings-panel__group'>
+                    <h4>ACCOUNT</h4>
+                    <div className='settings-panel__row'>
+                      <div className='settings-panel__row-icon'>👤</div>
+                      <div className='settings-panel__row-text'>
+                        <strong>Login ID</strong>
+                        <span>{client.loginid}</span>
+                      </div>
                     </div>
-                    <label className='settings-panel__toggle'>
-                      <input type='checkbox' defaultChecked />
-                      <span className='settings-panel__toggle-slider' />
-                    </label>
                   </div>
-                  <div className='settings-panel__row'>
-                    <div className='settings-panel__row-icon'>🎯</div>
-                    <div className='settings-panel__row-text'>
-                      <strong>Cursor tracker</strong>
-                      <span>Animated ring on current digit</span>
-                    </div>
-                    <label className='settings-panel__toggle'>
-                      <input type='checkbox' defaultChecked />
-                      <span className='settings-panel__toggle-slider' />
-                    </label>
-                  </div>
-                </div>
+                )}
 
                 <div className='settings-panel__version'>
                   Marksyntrader v2.0 · Built on Deriv Bot

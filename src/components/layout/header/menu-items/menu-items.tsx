@@ -36,16 +36,15 @@
 // For mobile menu items, see:
 // src/components/layout/header/mobile-menu/use-mobile-menu-config.tsx
 
-import { useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import SettingsModal from '@/components/settings-modal/settings-modal';
+import { useStore } from '@/hooks/useStore';
 import { LegacySettings1pxIcon } from '@deriv/quill-icons/Legacy';
 import { useTranslations } from '@deriv-com/translations';
 import { MenuItem, Text } from '@deriv-com/ui';
 
 export const MenuItems = observer(() => {
     const { localize } = useTranslations();
-    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const { ui } = useStore() ?? {};
 
     return (
         <>
@@ -54,11 +53,10 @@ export const MenuItems = observer(() => {
                 className='app-header__menu'
                 disableHover
                 leftComponent={<LegacySettings1pxIcon iconSize='xs' />}
-                onClick={() => setIsSettingsOpen(true)}
+                onClick={() => ui?.setSettingsPanelOpen?.(true)}
             >
                 <Text size='sm'>{localize('Settings')}</Text>
             </MenuItem>
-            <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
         </>
     );
 });

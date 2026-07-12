@@ -1,4 +1,29 @@
 .settings-panel {
+  &__currency-options {
+    display: flex;
+    gap: 0.6rem;
+    flex-shrink: 0;
+  }
+
+  &__currency-btn {
+    padding: 0.5rem 1.2rem;
+    border-radius: 0.6rem;
+    border: 1px solid var(--border-normal, #ddd);
+    background: none;
+    color: var(--text-general, #555);
+    font-size: 1.2rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+
+    &.active {
+      background: var(--brand-red-coral, #ff444f);
+      border-color: var(--brand-red-coral, #ff444f);
+      color: #fff;
+    }
+    &:hover:not(.active) { background: var(--general-section-1, #f0f0f0); }
+  }
+
   &__trigger {
     background: none;
     border: none;

@@ -16,6 +16,11 @@ export default class UiStore {
     // TODO: fix - need to implement this feature
     is_onscreen_keyboard_active = false;
 
+    // Single shared toggle so every entry point (header menu, mobile menu,
+    // floating gear button) opens the one unified Settings panel instead of
+    // each maintaining its own separate settings surface/modal.
+    is_settings_panel_open = false;
+
     constructor() {
         makeObservable(this, {
             account_switcher_disabled_message: observable,
@@ -26,6 +31,7 @@ export default class UiStore {
             is_mobile: observable,
             is_tablet: observable,
             is_trading_assessment_for_new_user_enabled: observable,
+            is_settings_panel_open: observable,
             show_prompt: observable,
             setAccountSwitcherDisabledMessage: action.bound,
             setCurrentFocus: action.bound,
@@ -35,8 +41,13 @@ export default class UiStore {
             setIsTradingAssessmentForNewUserEnabled: action.bound,
             toggleAccountsDialog: action.bound,
             toggleOnScreenKeyboard: action.bound,
+            setSettingsPanelOpen: action.bound,
         });
     }
+
+    setSettingsPanelOpen = (value: boolean) => {
+        this.is_settings_panel_open = value;
+    };
 
     setPromptHandler = (should_show: boolean) => {
         this.show_prompt = should_show;

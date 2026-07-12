@@ -1,0 +1,344 @@
+[
+  {
+    "key": "even-scalper",
+    "name": "Even Scalper",
+    "contractType": "DIGITEVEN",
+    "prediction": null,
+    "multiple": false,
+    "category": "Even/Odd",
+    "xmlFile": "/bots/scalpers/even-scalper.xml"
+  },
+  {
+    "key": "even-multiple-scalper",
+    "name": "Even Multiple Scalper",
+    "contractType": "DIGITEVEN",
+    "prediction": null,
+    "multiple": true,
+    "category": "Even/Odd",
+    "xmlFile": "/bots/scalpers/even-multiple-scalper.xml"
+  },
+  {
+    "key": "odd-scalper",
+    "name": "Odd Scalper",
+    "contractType": "DIGITODD",
+    "prediction": null,
+    "multiple": false,
+    "category": "Even/Odd",
+    "xmlFile": "/bots/scalpers/odd-scalper.xml"
+  },
+  {
+    "key": "odd-multiple-scalper",
+    "name": "Odd Multiple Scalper",
+    "contractType": "DIGITODD",
+    "prediction": null,
+    "multiple": true,
+    "category": "Even/Odd",
+    "xmlFile": "/bots/scalpers/odd-multiple-scalper.xml"
+  },
+  {
+    "key": "over-1-scalper",
+    "name": "Over 1 Scalper",
+    "contractType": "DIGITOVER",
+    "prediction": 1,
+    "multiple": false,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/over-1-scalper.xml"
+  },
+  {
+    "key": "over-1-multiple-scalper",
+    "name": "Over 1 Multiple Scalper",
+    "contractType": "DIGITOVER",
+    "prediction": 1,
+    "multiple": true,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/over-1-multiple-scalper.xml"
+  },
+  {
+    "key": "over-2-scalper",
+    "name": "Over 2 Scalper",
+    "contractType": "DIGITOVER",
+    "prediction": 2,
+    "multiple": false,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/over-2-scalper.xml"
+  },
+  {
+    "key": "over-2-multiple-scalper",
+    "name": "Over 2 Multiple Scalper",
+    "contractType": "DIGITOVER",
+    "prediction": 2,
+    "multiple": true,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/over-2-multiple-scalper.xml"
+  },
+  {
+    "key": "over-3-scalper",
+    "name": "Over 3 Scalper",
+    "contractType": "DIGITOVER",
+    "prediction": 3,
+    "multiple": false,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/over-3-scalper.xml"
+  },
+  {
+    "key": "over-3-multiple-scalper",
+    "name": "Over 3 Multiple Scalper",
+    "contractType": "DIGITOVER",
+    "prediction": 3,
+    "multiple": true,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/over-3-multiple-scalper.xml"
+  },
+  {
+    "key": "over-4-scalper",
+    "name": "Over 4 Scalper",
+    "contractType": "DIGITOVER",
+    "prediction": 4,
+    "multiple": false,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/over-4-scalper.xml"
+  },
+  {
+    "key": "over-4-multiple-scalper",
+    "name": "Over 4 Multiple Scalper",
+    "contractType": "DIGITOVER",
+    "prediction": 4,
+    "multiple": true,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/over-4-multiple-scalper.xml"
+  },
+  {
+    "key": "over-5-scalper",
+    "name": "Over 5 Scalper",
+    "contractType": "DIGITOVER",
+    "prediction": 5,
+    "multiple": false,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/over-5-scalper.xml"
+  },
+  {
+    "key": "over-5-multiple-scalper",
+    "name": "Over 5 Multiple Scalper",
+    "contractType": "DIGITOVER",
+    "prediction": 5,
+    "multiple": true,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/over-5-multiple-scalper.xml"
+  },
+  {
+    "key": "over-6-scalper",
+    "name": "Over 6 Scalper",
+    "contractType": "DIGITOVER",
+    "prediction": 6,
+    "multiple": false,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/over-6-scalper.xml"
+  },
+  {
+    "key": "over-6-multiple-scalper",
+    "name": "Over 6 Multiple Scalper",
+    "contractType": "DIGITOVER",
+    "prediction": 6,
+    "multiple": true,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/over-6-multiple-scalper.xml"
+  },
+  {
+    "key": "over-7-scalper",
+    "name": "Over 7 Scalper",
+    "contractType": "DIGITOVER",
+    "prediction": 7,
+    "multiple": false,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/over-7-scalper.xml"
+  },
+  {
+    "key": "over-7-multiple-scalper",
+    "name": "Over 7 Multiple Scalper",
+    "contractType": "DIGITOVER",
+    "prediction": 7,
+    "multiple": true,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/over-7-multiple-scalper.xml"
+  },
+  {
+    "key": "over-8-scalper",
+    "name": "Over 8 Scalper",
+    "contractType": "DIGITOVER",
+    "prediction": 8,
+    "multiple": false,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/over-8-scalper.xml"
+  },
+  {
+    "key": "over-8-multiple-scalper",
+    "name": "Over 8 Multiple Scalper",
+    "contractType": "DIGITOVER",
+    "prediction": 8,
+    "multiple": true,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/over-8-multiple-scalper.xml"
+  },
+  {
+    "key": "over-9-scalper",
+    "name": "Over 9 Scalper",
+    "contractType": "DIGITOVER",
+    "prediction": 9,
+    "multiple": false,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/over-9-scalper.xml"
+  },
+  {
+    "key": "over-9-multiple-scalper",
+    "name": "Over 9 Multiple Scalper",
+    "contractType": "DIGITOVER",
+    "prediction": 9,
+    "multiple": true,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/over-9-multiple-scalper.xml"
+  },
+  {
+    "key": "under-1-scalper",
+    "name": "Under 1 Scalper",
+    "contractType": "DIGITUNDER",
+    "prediction": 1,
+    "multiple": false,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/under-1-scalper.xml"
+  },
+  {
+    "key": "under-1-multiple-scalper",
+    "name": "Under 1 Multiple Scalper",
+    "contractType": "DIGITUNDER",
+    "prediction": 1,
+    "multiple": true,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/under-1-multiple-scalper.xml"
+  },
+  {
+    "key": "under-2-scalper",
+    "name": "Under 2 Scalper",
+    "contractType": "DIGITUNDER",
+    "prediction": 2,
+    "multiple": false,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/under-2-scalper.xml"
+  },
+  {
+    "key": "under-2-multiple-scalper",
+    "name": "Under 2 Multiple Scalper",
+    "contractType": "DIGITUNDER",
+    "prediction": 2,
+    "multiple": true,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/under-2-multiple-scalper.xml"
+  },
+  {
+    "key": "under-3-scalper",
+    "name": "Under 3 Scalper",
+    "contractType": "DIGITUNDER",
+    "prediction": 3,
+    "multiple": false,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/under-3-scalper.xml"
+  },
+  {
+    "key": "under-3-multiple-scalper",
+    "name": "Under 3 Multiple Scalper",
+    "contractType": "DIGITUNDER",
+    "prediction": 3,
+    "multiple": true,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/under-3-multiple-scalper.xml"
+  },
+  {
+    "key": "under-4-scalper",
+    "name": "Under 4 Scalper",
+    "contractType": "DIGITUNDER",
+    "prediction": 4,
+    "multiple": false,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/under-4-scalper.xml"
+  },
+  {
+    "key": "under-4-multiple-scalper",
+    "name": "Under 4 Multiple Scalper",
+    "contractType": "DIGITUNDER",
+    "prediction": 4,
+    "multiple": true,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/under-4-multiple-scalper.xml"
+  },
+  {
+    "key": "under-5-scalper",
+    "name": "Under 5 Scalper",
+    "contractType": "DIGITUNDER",
+    "prediction": 5,
+    "multiple": false,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/under-5-scalper.xml"
+  },
+  {
+    "key": "under-5-multiple-scalper",
+    "name": "Under 5 Multiple Scalper",
+    "contractType": "DIGITUNDER",
+    "prediction": 5,
+    "multiple": true,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/under-5-multiple-scalper.xml"
+  },
+  {
+    "key": "under-6-scalper",
+    "name": "Under 6 Scalper",
+    "contractType": "DIGITUNDER",
+    "prediction": 6,
+    "multiple": false,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/under-6-scalper.xml"
+  },
+  {
+    "key": "under-6-multiple-scalper",
+    "name": "Under 6 Multiple Scalper",
+    "contractType": "DIGITUNDER",
+    "prediction": 6,
+    "multiple": true,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/under-6-multiple-scalper.xml"
+  },
+  {
+    "key": "under-7-scalper",
+    "name": "Under 7 Scalper",
+    "contractType": "DIGITUNDER",
+    "prediction": 7,
+    "multiple": false,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/under-7-scalper.xml"
+  },
+  {
+    "key": "under-7-multiple-scalper",
+    "name": "Under 7 Multiple Scalper",
+    "contractType": "DIGITUNDER",
+    "prediction": 7,
+    "multiple": true,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/under-7-multiple-scalper.xml"
+  },
+  {
+    "key": "under-8-scalper",
+    "name": "Under 8 Scalper",
+    "contractType": "DIGITUNDER",
+    "prediction": 8,
+    "multiple": false,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/under-8-scalper.xml"
+  },
+  {
+    "key": "under-8-multiple-scalper",
+    "name": "Under 8 Multiple Scalper",
+    "contractType": "DIGITUNDER",
+    "prediction": 8,
+    "multiple": true,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/under-8-multiple-scalper.xml"
+  }
+]

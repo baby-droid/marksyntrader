@@ -1,5 +1,5 @@
-import { ComponentProps, ReactNode, useMemo, useState } from 'react';
-import SettingsModal from '@/components/settings-modal/settings-modal';
+import { ComponentProps, ReactNode, useMemo } from 'react';
+import { useStore } from '@/hooks/useStore';
 import useThemeSwitcher from '@/hooks/useThemeSwitcher';
 import RootStore from '@/stores/root-store';
 import { LegacyLogout1pxIcon, LegacySettings1pxIcon, LegacyTheme1pxIcon } from '@deriv/quill-icons/Legacy';
@@ -29,7 +29,7 @@ const useMobileMenuConfig = (
 ) => {
     const { localize } = useTranslations();
     const { is_dark_mode_on, toggleTheme } = useThemeSwitcher();
-    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const { ui } = useStore() ?? {};
 
     const menuConfig = useMemo((): TMenuConfig[] => {
 
@@ -56,7 +56,7 @@ const useMobileMenuConfig = (
                     as: 'button',
                     label: localize('Settings'),
                     LeftComponent: LegacySettings1pxIcon,
-                    onClick: () => setIsSettingsOpen(true),
+                    onClick: () => ui?.setSettingsPanelOpen?.(true),
                 },
 
                 // Conditionally include theme toggle based on brand config
@@ -96,8 +96,6 @@ const useMobileMenuConfig = (
         // [AI] Return flag indicating if menu has any items
         hasMenuItems,
         // [/AI]
-        isSettingsOpen,
-        setIsSettingsOpen,
     };
 };
 
