@@ -74,17 +74,27 @@ const BulkTrade = observer(() => {
 
   const needsPrediction = ['DIGITOVER', 'DIGITUNDER', 'DIGITMATCH', 'DIGITDIFF'].includes(tradeType);
 
+  // Track martingale-adjusted stake across batches
+  const [activeStake, setActiveStake] = useState(stake);
+  const prevResultLenRef = useRef(0);
+
+  // Sync activeStake when user manually changes stake (resets martingale)
+  useEffect(() => { setActiveStake(stake); }, [stake]);
+
   const runBulk = useCallback(async () => {
     if (isRunning) return;
     setIsRunning(true);
+    const batchStake = activeStake;
+    prevResultLenRef.current = tradeResults.length;
     try {
-      // Single click → open `count` identical contracts at the same entry.
+      // Open `count` identical contracts simultaneously at the same entry tick.
       const promises = Array.from({ length: count }, () =>
         buyContract({
           symbol: market,
           contract_type: tradeType,
-          stake,
+          stake: batchStake,
           duration: ticks,
+          duration_unit: 't',
           barrier: needsPrediction ? String(prediction) : undefined,
         })
       );
@@ -94,7 +104,23 @@ const BulkTrade = observer(() => {
     } finally {
       setIsRunning(false);
     }
-  }, [isRunning, count, stake, market, tradeType, ticks, prediction, buyContract, needsPrediction]);
+  }, [isRunning, count, activeStake, market, tradeType, ticks, prediction, buyContract, needsPrediction, tradeResults.length]);
+
+  // Apply martingale: after results settle, adjust stake for next batch
+  useEffect(() => {
+    if (!martingale || tradeResults.length === 0) return;
+    const newResults = tradeResults.slice(0, tradeResults.length - prevResultLenRef.current);
+    if (newResults.length === 0) return;
+    const batchWins   = newResults.filter(r => r.won).length;
+    const batchLosses = newResults.filter(r => !r.won).length;
+    if (batchLosses > batchWins) {
+      // More losses — multiply stake for next batch
+      setActiveStake(prev => Math.max(0.35, +(prev * martMult).toFixed(2)));
+    } else if (batchWins >= batchLosses) {
+      // Net-positive or even — reset stake
+      setActiveStake(stake);
+    }
+  }, [tradeResults.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const wins = winCount;
   const losses = lossCount;
@@ -263,7 +289,15 @@ const BulkTrade = observer(() => {
           <span>Contracts</span><strong>{count}</strong>
         </div>
         <div className='bulk-trade__summary-item'>
-          <span>Total Stake</span><strong>{fmt(stake * count)}</strong>
+          <span>Total Stake</span>
+          <strong>
+            {fmt(activeStake * count)}
+            {martingale && activeStake !== stake && (
+              <span style={{ fontSize: '0.9rem', color: '#f59e0b', marginLeft: '0.4rem' }}>
+                (×{(activeStake / stake).toFixed(1)})
+              </span>
+            )}
+          </strong>
         </div>
         <div className='bulk-trade__summary-item'>
           <span>Market</span><strong>{market}</strong>
@@ -290,7 +324,7 @@ const BulkTrade = observer(() => {
       >
         {isRunning
           ? `⏳ Sending ${count} contracts...`
-          : `⚡ Execute ${count} ${tradeType} Contracts — ${fmt(stake * count)} total`
+          : `⚡ Execute ${count} ${tradeType} Contracts — ${fmt(activeStake * count)} total`
         }
       </button>
 
