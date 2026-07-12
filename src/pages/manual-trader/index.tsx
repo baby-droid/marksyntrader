@@ -291,23 +291,31 @@ const DigitRow: React.FC<{
                         glow = `0 0 0 2px ${color}66`;
                     }
 
+                    const isColored = color !== '#94a3b8';
+
                     return (
                         <div key={d} className={`mt-circle-cell ${isCurrent ? 'is-current' : ''}`}>
-                            {/* Moving triangle */}
+                            {/* Downward triangle — shows on current digit */}
                             <div className={`mt-tri ${isCurrent ? 'mt-tri--on' : ''}`}>▼</div>
 
-                            {/* White circle */}
+                            {/* Circle — solid fill when colored */}
                             <div
-                                className={`mt-circle ${isExit ? `mt-circle--${tradeResult}` : ''}`}
+                                className={`mt-circle ${isColored ? 'mt-circle--filled' : ''} ${isExit ? `mt-circle--${tradeResult}` : ''}`}
                                 style={{
-                                    borderColor,
-                                    boxShadow: glow !== 'none' ? glow : undefined,
-                                    transform: isCurrent ? 'scale(1.1)' : 'scale(1)',
-                                }}
+                                    '--cc': isColored ? color : '#ffffff',
+                                    boxShadow: isExit && tradeResult === 'won'
+                                        ? '0 0 0 3px #22c55e88, 0 0 18px #22c55e55'
+                                        : isExit && tradeResult === 'lost'
+                                        ? '0 0 0 3px #ef444488, 0 0 18px #ef444455'
+                                        : isCurrent
+                                        ? '0 0 0 2.5px #7c3aed, 0 0 10px #7c3aed55'
+                                        : undefined,
+                                    transform: isCurrent ? 'scale(1.12)' : 'scale(1)',
+                                } as React.CSSProperties}
                             >
-                                <span className='mt-circle__num'>{d}</span>
-                                <span className='mt-circle__pct'>{pct.toFixed(1)}%</span>
-                                <span className='mt-circle__cnt'>{counts[d]}</span>
+                                <span className={`mt-circle__num ${isColored ? 'mt-circle__num--light' : ''}`}>
+                                    {d}
+                                </span>
                                 {tradeCount > 0 && (
                                     <span className='mt-circle__trade-dot'
                                         style={{
@@ -320,7 +328,10 @@ const DigitRow: React.FC<{
                                 )}
                             </div>
 
-                            {/* Win/loss amount beneath exit digit */}
+                            {/* Percentage — outside below circle */}
+                            <div className='mt-circle__pct-ext'>{pct.toFixed(1)}%</div>
+
+                            {/* Win/loss amount */}
                             {isExit && tradeResult && (
                                 <div className={`mt-circle__result mt-circle__result--${tradeResult}`}>
                                     {tradeResult === 'won'
