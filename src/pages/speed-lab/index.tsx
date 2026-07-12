@@ -6,6 +6,24 @@ import { useDigitStats } from '@/hooks/useDigitStats';
 import { useDerivTrade } from '@/hooks/useDerivTrade';
 import './speed-lab.scss';
 
+const AccountBadge: React.FC = () => {
+    const [isDemo, setIsDemo] = React.useState(false);
+    React.useEffect(() => {
+        const check = () => {
+            const id = localStorage.getItem('active_loginid') || '';
+            setIsDemo(id.startsWith('VRTC') || id.startsWith('VR'));
+        };
+        check();
+        window.addEventListener('storage', check);
+        return () => window.removeEventListener('storage', check);
+    }, []);
+    return (
+        <span className={`speed-lab__acct-badge ${isDemo ? 'demo' : 'real'}`}>
+            {isDemo ? '🔵 DEMO' : '🟢 REAL'}
+        </span>
+    );
+};
+
 /**
  * Speed Lab — three execution tiers with full P/L tracking and martingale.
  * Uses useDerivTrade, which rides the SAME already-authenticated Deriv
@@ -252,9 +270,12 @@ const SpeedLab = observer(() => {
                     <h1>⚡ Speed Lab</h1>
                     <p>Ultra-fast execution trading</p>
                 </div>
-                {derivTrade.balance !== null && (
-                    <div className='speed-lab__balance'>{derivTrade.balance?.toFixed(2)} {derivTrade.currency || 'USD'}</div>
-                )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <AccountBadge />
+                    {derivTrade.balance !== null && (
+                        <div className='speed-lab__balance'>{derivTrade.balance?.toFixed(2)} {derivTrade.currency || 'USD'}</div>
+                    )}
+                </div>
             </div>
 
             <div className='speed-lab__mode-row'>

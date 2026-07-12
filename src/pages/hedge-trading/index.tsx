@@ -4,6 +4,24 @@ import { applyCommission } from '@/utils/commission';
 import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import './hedge-trading.scss';
 
+const AccountBadge: React.FC = () => {
+    const [isDemo, setIsDemo] = useState(false);
+    useEffect(() => {
+        const check = () => {
+            const id = localStorage.getItem('active_loginid') || '';
+            setIsDemo(id.startsWith('VRTC') || id.startsWith('VR'));
+        };
+        check();
+        window.addEventListener('storage', check);
+        return () => window.removeEventListener('storage', check);
+    }, []);
+    return (
+        <span className={`hedge-acct-badge ${isDemo ? 'demo' : 'real'}`}>
+            {isDemo ? '🔵 DEMO' : '🟢 REAL'}
+        </span>
+    );
+};
+
 function getLastDigitFromQuote(q: number): number {
     const s = q.toFixed(2).replace('.', '');
     return parseInt(s[s.length - 1], 10);
@@ -235,6 +253,7 @@ const HedgeTrading: React.FC = () => {
                     ))}
                 </div>
                 <div className='hedge-pro__topbar-right'>
+                    <AccountBadge />
                     <span className={`hedge-pro__conn ${connected ? 'on' : 'off'}`}>{connected ? '● LIVE' : '○ Offline'}</span>
                     {balance !== null && <span className='hedge-pro__balance'>{currency} {balance.toFixed(2)}</span>}
                     <button className='hedge-pro__multiscan-btn'>⊞ Multi Scan</button>

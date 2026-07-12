@@ -61,12 +61,31 @@ const CONTRACT_TABS = [
 const TICK_DURATIONS = [1, 2, 3, 5, 10];
 const STAKE_PRESETS  = [0.35, 0.5, 1, 2, 5, 10];
 
-// Digit coloring (matches official dTrader palette)
-const DIGIT_COLORS = ['#ef4444','#f97316','#eab308','#84cc16','#22c55e','#14b8a6','#06b6d4','#3b82f6','#8b5cf6','#ec4899'];
+const HISTORY_SIZE = 1000; // ticks to track for stats
 
 function getLastDigit(q: number) {
     const s = q.toFixed(2).replace('.', '');
     return parseInt(s[s.length - 1], 10);
+}
+
+/** Compute circle colors based on rank in 1000 ticks.
+ *  green=highest, blue=2nd-highest, red=lowest, yellow=2nd-lowest
+ *  Same % → same color. Others → white.
+ */
+function getDigitCircleColors(pcts: number[]): string[] {
+    const nonZero = pcts.filter(p => p > 0);
+    if (nonZero.length === 0) return new Array(10).fill('white');
+
+    const uniqueSorted = [...new Set(pcts)].filter(p => p > 0).sort((a, b) => b - a);
+    const colorMap: Record<string, string> = {};
+
+    // Assign from lowest priority → highest (higher priority overwrites)
+    if (uniqueSorted.length >= 2) colorMap[String(uniqueSorted[uniqueSorted.length - 2])] = '#eab308'; // yellow 2nd lowest
+    if (uniqueSorted.length >= 1) colorMap[String(uniqueSorted[uniqueSorted.length - 1])] = '#ef4444'; // red lowest
+    if (uniqueSorted.length >= 2) colorMap[String(uniqueSorted[1])] = '#3b82f6'; // blue 2nd highest
+    if (uniqueSorted.length >= 1) colorMap[String(uniqueSorted[0])] = '#22c55e'; // green highest
+
+    return pcts.map(p => (p > 0 ? (colorMap[String(p)] ?? 'white') : 'white'));
 }
 
 interface Position {
@@ -74,6 +93,157 @@ interface Position {
     stake: number; status: 'open'|'won'|'lost'; profit: number;
     tick: number; duration: number; entry?: number; exit?: number; time: number;
 }
+
+/* ─── SVG Sparkline ─── */
+const PriceChart: React.FC<{ prices: number[]; currentDigit: number | null }> = ({ prices, currentDigit }) => {
+    if (prices.length < 2) {
+        return (
+            <div className='mt-spark__empty'>
+                <span>Waiting for price data…</span>
+            </div>
+        );
+    }
+    const W = 600, H = 120, PAD = 8;
+    const min = Math.min(...prices);
+    const max = Math.max(...prices);
+    const range = max - min || 1;
+    const pts = prices.map((p, i) => {
+        const x = PAD + (i / (prices.length - 1)) * (W - PAD * 2);
+        const y = H - PAD - ((p - min) / range) * (H - PAD * 2);
+        return `${x},${y}`;
+    });
+    const lastX = PAD + ((prices.length - 1) / (prices.length - 1)) * (W - PAD * 2);
+    const lastY = H - PAD - ((prices[prices.length - 1] - min) / range) * (H - PAD * 2);
+    const lastPrice = prices[prices.length - 1];
+
+    return (
+        <div className='mt-spark'>
+            <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio='none' className='mt-spark__svg'>
+                <defs>
+                    <linearGradient id='sparkGrad' x1='0' y1='0' x2='0' y2='1'>
+                        <stop offset='0%' stopColor='#3b82f6' stopOpacity='0.35' />
+                        <stop offset='100%' stopColor='#3b82f6' stopOpacity='0.02' />
+                    </linearGradient>
+                </defs>
+                {/* Fill area */}
+                <path
+                    d={`M${PAD},${H} L${pts.join(' L')} L${lastX},${H} Z`}
+                    fill='url(#sparkGrad)'
+                />
+                {/* Line */}
+                <polyline
+                    points={pts.join(' ')}
+                    fill='none'
+                    stroke='#3b82f6'
+                    strokeWidth='1.5'
+                    strokeLinejoin='round'
+                />
+                {/* Last point dot */}
+                <circle cx={lastX} cy={lastY} r='3.5' fill='#22c55e' stroke='#fff' strokeWidth='1.5' />
+            </svg>
+            <div className='mt-spark__info'>
+                <span className='mt-spark__price'>{lastPrice.toFixed(5)}</span>
+                {currentDigit !== null && (
+                    <span className='mt-spark__digit-badge'>
+                        Last digit: <strong>{currentDigit}</strong>
+                    </span>
+                )}
+                <span className='mt-spark__range'>
+                    Range: {min.toFixed(3)} – {max.toFixed(3)}
+                </span>
+            </div>
+        </div>
+    );
+};
+
+/* ─── Digit Circles with Triangle Indicator ─── */
+const DigitCirclesPanel: React.FC<{
+    pcts: number[];
+    counts: number[];
+    totalTicks: number;
+    currentDigit: number | null;
+    historyReady: boolean;
+}> = ({ pcts, counts, totalTicks, currentDigit, historyReady }) => {
+    const colors = useMemo(() => getDigitCircleColors(pcts), [pcts]);
+
+    return (
+        <div className='mt-dcircles'>
+            <div className='mt-dcircles__header'>
+                <span className='mt-dcircles__title'>Digit Frequency</span>
+                <span className='mt-dcircles__ticks'>{totalTicks >= HISTORY_SIZE ? `${HISTORY_SIZE} ticks` : `${totalTicks} / ${HISTORY_SIZE} ticks`}</span>
+                {!historyReady && <span className='mt-dcircles__loading'>Loading…</span>}
+            </div>
+            <div className='mt-dcircles__grid'>
+                {Array.from({ length: 10 }, (_, d) => {
+                    const isCurrent = d === currentDigit;
+                    const color = colors[d];
+                    const pct = pcts[d];
+                    const isHighlighted = color !== 'white' && color !== undefined;
+
+                    return (
+                        <div key={d} className={`mt-dc__cell ${isCurrent ? 'mt-dc__cell--current' : ''}`}>
+                            {/* Triangle indicator */}
+                            <div className={`mt-dc__triangle ${isCurrent ? 'mt-dc__triangle--visible' : ''}`}>▼</div>
+                            {/* Circle */}
+                            <div
+                                className={`mt-dc__circle ${isCurrent ? 'mt-dc__circle--current' : ''}`}
+                                style={{
+                                    borderColor: isCurrent ? color : (isHighlighted ? color : 'rgba(100,120,150,0.3)'),
+                                    background: isCurrent
+                                        ? (color === 'white' ? 'rgba(255,255,255,0.12)' : `${color}22`)
+                                        : (isHighlighted ? `${color}18` : 'rgba(30,40,60,0.4)'),
+                                    boxShadow: isCurrent ? `0 0 0 2px ${color === 'white' ? '#ef4444' : color}88, 0 0 14px ${color === 'white' ? '#ef4444' : color}44` : 'none',
+                                }}
+                            >
+                                <span
+                                    className='mt-dc__num'
+                                    style={{ color: isHighlighted ? color : isCurrent ? '#fff' : 'rgba(200,210,230,0.7)' }}
+                                >
+                                    {d}
+                                </span>
+                                <span
+                                    className='mt-dc__pct'
+                                    style={{ color: isHighlighted ? `${color}cc` : 'rgba(150,165,190,0.7)' }}
+                                >
+                                    {pct.toFixed(1)}%
+                                </span>
+                                <span className='mt-dc__count'>{counts[d]}</span>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+            {/* Color legend */}
+            <div className='mt-dcircles__legend'>
+                <span className='mt-dcircles__legend-item' style={{ color: '#22c55e' }}>● Highest</span>
+                <span className='mt-dcircles__legend-item' style={{ color: '#3b82f6' }}>● 2nd High</span>
+                <span className='mt-dcircles__legend-item' style={{ color: '#ef4444' }}>● Lowest</span>
+                <span className='mt-dcircles__legend-item' style={{ color: '#eab308' }}>● 2nd Low</span>
+                <span className='mt-dcircles__legend-item' style={{ color: '#e2e8f0' }}>● Others</span>
+                <span className='mt-dcircles__legend-item' style={{ color: '#ef4444' }}>▼ Current</span>
+            </div>
+        </div>
+    );
+};
+
+/* ─── Account Badge ─── */
+const AccountBadge: React.FC = () => {
+    const [isDemo, setIsDemo] = useState(false);
+    useEffect(() => {
+        const check = () => {
+            const id = localStorage.getItem('active_loginid') || '';
+            setIsDemo(id.startsWith('VRTC') || id.startsWith('VR'));
+        };
+        check();
+        window.addEventListener('storage', check);
+        return () => window.removeEventListener('storage', check);
+    }, []);
+    return (
+        <span className={`mt-acct-badge ${isDemo ? 'demo' : 'real'}`}>
+            {isDemo ? '🔵 DEMO' : '🟢 REAL'}
+        </span>
+    );
+};
 
 /* ─── Component ─── */
 const ManualTrader: React.FC = () => {
@@ -84,7 +254,7 @@ const ManualTrader: React.FC = () => {
     // --- Market state ---
     const [symbolValue, setSymbolValue] = useState('R_100');
     const [tabId,  setTabId]   = useState('rise_fall');
-    const [typeIdx, setTypeIdx] = useState(0);  // 0 or 1 within the tab
+    const [typeIdx, setTypeIdx] = useState(0);
     const [stake,  setStake]   = useState('1.00');
     const [duration, setDuration] = useState(5);
     const [barrier, setBarrier]   = useState(4);
@@ -96,9 +266,13 @@ const ManualTrader: React.FC = () => {
     // --- Live tick state ---
     const [currentDigit, setCurrentDigit] = useState<number|null>(null);
     const [currentPrice, setCurrentPrice] = useState<number|null>(null);
+    const [priceHistory, setPriceHistory] = useState<number[]>([]); // for sparkline (last 60)
+
+    // --- 1000-tick digit stats ---
+    const [digitCounts, setDigitCounts] = useState<number[]>(new Array(10).fill(0));
+    const [totalTicks, setTotalTicks]   = useState(0);
+    const [historyReady, setHistoryReady] = useState(false);
     const [digitHistory, setDigitHistory] = useState<number[]>([]);
-    const [digitStats,   setDigitStats]   = useState<number[]>(new Array(10).fill(0));
-    const [totalTicks,   setTotalTicks]   = useState(0);
 
     const idRef = useRef(0);
     const proposalTimerRef = useRef<ReturnType<typeof setTimeout>|null>(null);
@@ -108,22 +282,72 @@ const ManualTrader: React.FC = () => {
 
     const symbol = useMemo(() => ALL_SYMBOLS.find(s => s.value === symbolValue) ?? ALL_SYMBOLS[0], [symbolValue]);
 
-    // Subscribe to ticks
+    // Fetch initial 1000 ticks for history
+    useEffect(() => {
+        setHistoryReady(false);
+        setDigitCounts(new Array(10).fill(0));
+        setTotalTicks(0);
+        setCurrentDigit(null);
+        setCurrentPrice(null);
+        setPriceHistory([]);
+        setDigitHistory([]);
+
+        if (!authorized || !send) return;
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await send({ ticks_history: symbolValue, count: HISTORY_SIZE, end: 'latest', style: 'ticks' });
+                if (cancelled) return;
+                const prices: number[] = res?.history?.prices || [];
+                const counts = new Array(10).fill(0);
+                prices.forEach((p: number) => { counts[getLastDigit(p)]++; });
+                const digits = prices.map((p: number) => getLastDigit(p));
+                setDigitCounts(counts);
+                setTotalTicks(prices.length);
+                setDigitHistory(digits);
+                setPriceHistory(prices.slice(-60));
+                setHistoryReady(true);
+            } catch {
+                setHistoryReady(true); // allow live ticks to accumulate
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [symbolValue, authorized, send]);
+
+    // Subscribe to live ticks — accumulate into rolling 1000
     useEffect(() => {
         const unsub = subscribeTicks(symbolValue, tick => {
             setCurrentDigit(tick.digit);
             setCurrentPrice(tick.quote);
-            setDigitHistory(prev => [tick.digit, ...prev].slice(0, 50));
-            setDigitStats(prev => {
-                const next = [...prev]; next[tick.digit]++; return next;
+            setPriceHistory(prev => [...prev.slice(-59), tick.quote]);
+            setDigitHistory(prev => {
+                const next = [...prev, tick.digit];
+                return next.slice(-HISTORY_SIZE);
             });
-            setTotalTicks(p => p + 1);
+            setDigitCounts(prev => {
+                const next = [...prev];
+                next[tick.digit]++;
+                return next;
+            });
+            setTotalTicks(p => Math.min(p + 1, HISTORY_SIZE));
         });
-        setDigitStats(new Array(10).fill(0));
-        setTotalTicks(0);
-        setCurrentDigit(null); setCurrentPrice(null); setDigitHistory([]);
         return unsub;
-    }, [symbolValue]);
+    }, [symbolValue, subscribeTicks]);
+
+    // Recompute counts when digitHistory changes (rolling 1000)
+    const pcts = useMemo(() => {
+        const total = digitHistory.length;
+        if (total === 0) return new Array(10).fill(0);
+        const counts = new Array(10).fill(0);
+        digitHistory.forEach(d => { counts[d]++; });
+        return counts.map(c => (c / total) * 100);
+    }, [digitHistory]);
+
+    const digitCountsFromHistory = useMemo(() => {
+        const counts = new Array(10).fill(0);
+        digitHistory.forEach(d => { counts[d]++; });
+        return counts;
+    }, [digitHistory]);
 
     // Fetch proposal (payout estimate)
     useEffect(() => {
@@ -143,23 +367,12 @@ const ManualTrader: React.FC = () => {
                 const res = await send(req);
                 if (res?.proposal?.payout != null) {
                     setPayout(parseFloat(res.proposal.payout));
-                } else {
-                    setPayout(null);
-                }
+                } else { setPayout(null); }
             } catch { setPayout(null); }
             finally { setPayoutLoading(false); }
         }, 400);
         return () => { if (proposalTimerRef.current) clearTimeout(proposalTimerRef.current); };
     }, [stake, duration, symbolValue, contractDef.type, barrier, tab.hasBarrier, authorized, currency, send]);
-
-    const pcts = useMemo(() =>
-        digitStats.map(c => totalTicks > 0 ? (c / totalTicks) * 100 : 0),
-    [digitStats, totalTicks]);
-
-    const maxPct = Math.max(...pcts);
-    const minPct = Math.min(...pcts.filter((_, i) => digitStats[i] > 0));
-    const maxDigit = pcts.indexOf(maxPct);
-    const minDigit = pcts.findIndex((p, i) => p === minPct && digitStats[i] > 0);
 
     const buy = useCallback(async (def: typeof contractDef) => {
         const s = parseFloat(stake);
@@ -170,7 +383,6 @@ const ManualTrader: React.FC = () => {
             profit: 0, tick: 0, duration, time: Date.now(),
         };
         setPositions(p => [pos, ...p.slice(0, 49)]);
-
         try {
             let t = 0;
             const iv = setInterval(() => {
@@ -179,7 +391,6 @@ const ManualTrader: React.FC = () => {
                     ? { ...x, tick: Math.min(t, duration) } : x));
                 if (t >= duration) clearInterval(iv);
             }, 1000);
-
             await buyContract(
                 {
                     symbol: symbolValue, contract_type: def.type as any,
@@ -214,9 +425,7 @@ const ManualTrader: React.FC = () => {
                         {connected ? '● LIVE' : '○ Offline'}
                     </span>
                     <h2 className='manual-trader__title'>Manual Trader</h2>
-                    {currentPrice && (
-                        <span className='manual-trader__live-price'>{currentPrice.toFixed(5)}</span>
-                    )}
+                    <AccountBadge />
                 </div>
                 <div className='manual-trader__topbar-right'>
                     {balance !== null && (
@@ -235,7 +444,6 @@ const ManualTrader: React.FC = () => {
             <div className='manual-trader__layout'>
                 {/* ─── LEFT — Trade Form ─── */}
                 <div className='manual-trader__form-col'>
-
                     {/* Symbol selector */}
                     <div className='manual-trader__section-card'>
                         <label className='manual-trader__sec-label'>Market</label>
@@ -306,7 +514,7 @@ const ManualTrader: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Barrier/digit (only for Over/Under and Match/Differ) */}
+                    {/* Barrier/digit */}
                     {tab.hasBarrier && (
                         <div className='manual-trader__section-card'>
                             <label className='manual-trader__sec-label'>Barrier Digit</label>
@@ -314,7 +522,7 @@ const ManualTrader: React.FC = () => {
                                 {[0,1,2,3,4,5,6,7,8,9].map(d => (
                                     <button key={d}
                                         className={`manual-trader__barrier-btn ${barrier === d ? 'active' : ''}`}
-                                        style={barrier === d ? { background: DIGIT_COLORS[d] } : {}}
+                                        style={barrier === d ? { background: '#3b82f6', color: '#fff', borderColor: '#3b82f6' } : {}}
                                         onClick={() => setBarrier(d)}>
                                         {d}
                                     </button>
@@ -323,7 +531,7 @@ const ManualTrader: React.FC = () => {
                         </div>
                     )}
 
-                    {/* Payout display */}
+                    {/* Payout */}
                     <div className='manual-trader__payout-card'>
                         <div className='manual-trader__payout-row'>
                             <span className='manual-trader__payout-label'>Payout estimate</span>
@@ -334,9 +542,7 @@ const ManualTrader: React.FC = () => {
                         <div className='manual-trader__payout-row'>
                             <span className='manual-trader__payout-label'>Profit if win</span>
                             <span className={`manual-trader__payout-profit ${payout != null ? 'has' : ''}`}>
-                                {payout != null
-                                    ? `+${fmt(payout - parseFloat(stake))}`
-                                    : '—'}
+                                {payout != null ? `+${fmt(payout - parseFloat(stake))}` : '—'}
                             </span>
                         </div>
                     </div>
@@ -362,66 +568,46 @@ const ManualTrader: React.FC = () => {
                     )}
                 </div>
 
-                {/* ─── RIGHT — Digit Analysis ─── */}
+                {/* ─── RIGHT — Chart + Digit Analysis ─── */}
                 <div className='manual-trader__analysis-col'>
-                    {/* Current price + digit */}
-                    <div className='manual-trader__price-display'>
-                        <div className='manual-trader__symbol-badge'>{symbol.label}</div>
-                        <div className='manual-trader__price-num'>
-                            {currentPrice != null ? currentPrice.toFixed(5) : '———'}
+
+                    {/* Price Chart */}
+                    <div className='manual-trader__chart-card'>
+                        <div className='manual-trader__chart-header'>
+                            <span className='manual-trader__chart-title'>{symbol.label} — Live Price Chart</span>
+                            {currentPrice && <span className='manual-trader__chart-price'>{currentPrice.toFixed(5)}</span>}
                         </div>
-                        <div className='manual-trader__digit-hero'
-                            style={{ background: currentDigit != null ? DIGIT_COLORS[currentDigit] : '#374151' }}>
-                            {currentDigit ?? '—'}
-                        </div>
-                        <span className='manual-trader__digit-caption'>LAST DIGIT</span>
+                        <PriceChart prices={priceHistory} currentDigit={currentDigit} />
                     </div>
 
-                    {/* Digit frequency bars */}
-                    <div className='manual-trader__freq-card'>
-                        <div className='manual-trader__freq-title'>
-                            Digit Frequency <span>{totalTicks} ticks</span>
-                        </div>
-                        <div className='manual-trader__freq-grid'>
-                            {Array.from({length:10}, (_,d) => {
-                                const pct = pcts[d];
-                                const isMax = d === maxDigit && totalTicks > 10;
-                                const isMin = d === minDigit && totalTicks > 10;
-                                const isCur = d === currentDigit;
-                                return (
-                                    <div key={d} className={`manual-trader__freq-item ${isCur ? 'current' : ''} ${isMax ? 'max' : ''} ${isMin ? 'min' : ''}`}>
-                                        <div className='manual-trader__freq-bar-wrap'>
-                                            <div className='manual-trader__freq-bar'
-                                                style={{
-                                                    height: `${Math.max(4, pct * 1.8)}px`,
-                                                    background: DIGIT_COLORS[d],
-                                                    opacity: isCur ? 1 : 0.7,
-                                                }} />
-                                        </div>
-                                        <div className='manual-trader__freq-digit'
-                                            style={{ color: DIGIT_COLORS[d] }}>
-                                            {d}
-                                        </div>
-                                        <div className='manual-trader__freq-pct'>{pct.toFixed(1)}%</div>
-                                        {isMax && <div className='manual-trader__freq-badge max'>▲ HOT</div>}
-                                        {isMin && <div className='manual-trader__freq-badge min'>▼ COLD</div>}
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
+                    {/* Digit Circles */}
+                    <DigitCirclesPanel
+                        pcts={pcts}
+                        counts={digitCountsFromHistory}
+                        totalTicks={digitHistory.length}
+                        currentDigit={currentDigit}
+                        historyReady={historyReady}
+                    />
 
-                    {/* Recent digit history */}
+                    {/* Recent digit stream */}
                     <div className='manual-trader__history-card'>
                         <div className='manual-trader__freq-title'>Recent Digits</div>
                         <div className='manual-trader__digit-stream'>
-                            {digitHistory.slice(0, 30).map((d, i) => (
-                                <span key={i}
-                                    className={`manual-trader__digit-chip ${i === 0 ? 'latest' : ''}`}
-                                    style={{ background: DIGIT_COLORS[d] }}>
-                                    {d}
-                                </span>
-                            ))}
+                            {digitHistory.slice(-30).reverse().map((d, i) => {
+                                const colors = getDigitCircleColors(pcts);
+                                const col = colors[d];
+                                return (
+                                    <span key={i}
+                                        className={`manual-trader__digit-chip ${i === 0 ? 'latest' : ''}`}
+                                        style={{
+                                            background: col === 'white' ? 'rgba(200,210,230,0.15)' : `${col}33`,
+                                            color: col === 'white' ? '#e2e8f0' : col,
+                                            border: `1px solid ${col === 'white' ? 'rgba(200,210,230,0.2)' : `${col}55`}`,
+                                        }}>
+                                        {d}
+                                    </span>
+                                );
+                            })}
                             {digitHistory.length === 0 && (
                                 <span className='manual-trader__stream-empty'>Waiting for ticks…</span>
                             )}

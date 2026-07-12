@@ -7,6 +7,24 @@ import DigitCircles from '@/components/digit-circles';
 import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import './bulk-trade.scss';
 
+const AccountBadge: React.FC = () => {
+    const [isDemo, setIsDemo] = React.useState(false);
+    React.useEffect(() => {
+        const check = () => {
+            const id = localStorage.getItem('active_loginid') || '';
+            setIsDemo(id.startsWith('VRTC') || id.startsWith('VR'));
+        };
+        check();
+        window.addEventListener('storage', check);
+        return () => window.removeEventListener('storage', check);
+    }, []);
+    return (
+        <span className={`bulk-trade__acct-badge ${isDemo ? 'demo' : 'real'}`}>
+            {isDemo ? '🔵 DEMO' : '🟢 REAL'}
+        </span>
+    );
+};
+
 const MARKETS = [
   { label: 'V10',     value: 'R_10'      },
   { label: 'V25',     value: 'R_25'      },
@@ -144,6 +162,7 @@ const BulkTrade = observer(() => {
           <p className='bulk-trade__sub'>AHMED SYN TRADER — Execute {count} contracts simultaneously at the same entry spot</p>
         </div>
         <div className='bulk-trade__header-right'>
+          <AccountBadge />
           <div className='bulk-trade__balance'>
             <span>Balance</span>
             <strong>{fmt(Number(balance))}</strong>

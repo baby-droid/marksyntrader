@@ -5,6 +5,25 @@ import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency
 import manifest from '../../../public/bots/scalpers/manifest.json';
 import './scalper-bots.scss';
 
+/* ─── Account Type Badge ─── */
+const AccountBadge: React.FC = () => {
+    const [isDemo, setIsDemo] = useState(false);
+    useEffect(() => {
+        const check = () => {
+            const id = localStorage.getItem('active_loginid') || '';
+            setIsDemo(id.startsWith('VRTC') || id.startsWith('VR'));
+        };
+        check();
+        window.addEventListener('storage', check);
+        return () => window.removeEventListener('storage', check);
+    }, []);
+    return (
+        <span className={`scalper-bots__acct-badge ${isDemo ? 'demo' : 'real'}`}>
+            {isDemo ? '🔵 DEMO ACCOUNT' : '🟢 REAL ACCOUNT'}
+        </span>
+    );
+};
+
 type TScalperBot = {
     key: string;
     name: string;
@@ -309,6 +328,7 @@ const ScalperBots: React.FC = () => {
                     <p>{SCALPER_BOTS.length} embedded scalper strategies · Direct API execution · No Bot Builder needed</p>
                 </div>
                 <div className='scalper-bots__header-right'>
+                    <AccountBadge />
                     <div className={`scalper-bots__conn ${derivTrade.authorized ? 'on' : 'off'}`}>
                         <span>{derivTrade.authorized ? '● LIVE' : '○ Offline'}</span>
                     </div>
