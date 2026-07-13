@@ -229,7 +229,7 @@
 .sb-field {
   display: flex; flex-direction: column; gap: 0.18rem;
   label { font-size: 0.72rem; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; }
-  input[type='number'] {
+  input[type='number'], input.sb-num-input {
     width: 100%; padding: 0.35rem 0.6rem;
     border: 1px solid #d1d5db; border-radius: 0.4rem;
     background: #f9fafb; color: #111827; font-size: 0.88rem; font-weight: 700;
@@ -539,6 +539,68 @@
   font-size: 0.78rem; font-weight: 800; cursor: pointer;
   font-family: inherit; white-space: nowrap;
   &:hover { background: rgba(6,182,212,0.18); }
+}
+
+/* ════════════════════════════════════════════════════
+   Strategy Logic — OR Group condition cards
+   ════════════════════════════════════════════════════ */
+.sb-or-group {
+  border: 1px dashed #cbd5e1; border-radius: 0.55rem;
+  padding: 0.6rem 0.7rem; background: #f8fafc;
+  display: flex; flex-direction: column; gap: 0.5rem;
+
+  &__header { display: flex; }
+  &__badge {
+    background: #111827; color: #fff; font-size: 0.62rem; font-weight: 900;
+    letter-spacing: 0.08em; padding: 0.15rem 0.5rem; border-radius: 0.3rem;
+  }
+  &__body { display: flex; flex-direction: column; gap: 0.5rem; }
+}
+
+.sb-condition-label {
+  font-size: 0.72rem; font-weight: 800; color: #0ea5e9;
+  text-transform: uppercase; letter-spacing: 0.06em; flex: 1;
+}
+
+.sb-condition-delete {
+  background: rgba(220,38,38,0.08); border: 1px solid rgba(220,38,38,0.25);
+  color: #dc2626; border-radius: 0.35rem; padding: 0.1rem 0.45rem;
+  cursor: pointer; font-size: 0.78rem;
+  &:hover { background: rgba(220,38,38,0.18); }
+}
+
+.sb-add-condition-btn {
+  padding: 0.4rem 0.7rem; border-radius: 0.4rem; border: 1px dashed #94a3b8;
+  background: transparent; color: #475569; font-size: 0.78rem; font-weight: 800;
+  cursor: pointer; font-family: inherit;
+  &:hover { background: #f1f5f9; border-color: #64748b; }
+}
+
+/* ════════════════════════════════════════════════════
+   Tick-win popup overlay
+   ════════════════════════════════════════════════════ */
+.sb-win-popup {
+  display: flex; align-items: center; gap: 0.6rem;
+  background: rgba(22,163,74,0.14); border: 1px solid rgba(22,163,74,0.4);
+  color: #16a34a; border-radius: 0.6rem; padding: 0.55rem 0.8rem;
+  margin-bottom: 0.5rem; flex-shrink: 0;
+  animation: sb-win-pop-in 0.25s ease-out;
+
+  &.stopped { background: rgba(245,158,11,0.14); border-color: rgba(245,158,11,0.4); color: #b45309; }
+
+  &__icon { font-size: 1.3rem; }
+  strong { font-size: 0.85rem; display: block; }
+  p { margin: 0.1rem 0 0; font-size: 0.74rem; opacity: 0.85; }
+  button {
+    margin-left: auto; background: none; border: none; cursor: pointer;
+    color: inherit; font-size: 1rem; opacity: 0.6;
+    &:hover { opacity: 1; }
+  }
+}
+
+@keyframes sb-win-pop-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 /* ════════════════════════════════════════════════════

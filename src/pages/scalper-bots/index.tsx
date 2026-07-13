@@ -36,6 +36,22 @@ type RiskManagerConfig = {
     overrideStake: number;
 };
 
+/* Strategy Logic — condition-based entry engine (mirrors the reference "OR Group" UI) */
+type StrategyCondition = {
+    id: string;
+    algorithm: 'LDP'; // Last-Digit-Pattern
+    strict: boolean;
+    ifLast: number;
+    digitsIs: 'ODD' | 'EVEN';
+    recoveryLimit: number;
+};
+
+type StrategyLogicConfig = {
+    globalShared: boolean;
+    active: boolean;
+    groups: StrategyCondition[];
+};
+
 type BotConfig = {
     market: string;
     markets: string[];
@@ -50,6 +66,7 @@ type BotConfig = {
     takeProfit: number;
     stopLoss: number;
     riskManager: RiskManagerConfig;
+    strategyLogic: StrategyLogicConfig;
 };
 
 const DEFAULT_RM: RiskManagerConfig = {
@@ -57,6 +74,16 @@ const DEFAULT_RM: RiskManagerConfig = {
     activateLimit: 1, deactivateLimit: 100,
     multiplier: 2, overrideStake: 20,
 };
+
+let sbCondSeq = 0;
+const newCondition = (bot: TScalperBot): StrategyCondition => ({
+    id: `cond_${++sbCondSeq}`,
+    algorithm: 'LDP',
+    strict: true,
+    ifLast: 3,
+    digitsIs: bot.contractType === 'DIGITEVEN' ? 'ODD' : bot.contractType === 'DIGITODD' ? 'EVEN' : 'ODD',
+    recoveryLimit: 1,
+});
 
 const DEFAULT_CONFIG = (bot: TScalperBot): BotConfig => ({
     market: '1HZ10V',
@@ -72,6 +99,11 @@ const DEFAULT_CONFIG = (bot: TScalperBot): BotConfig => ({
     takeProfit: 100,
     stopLoss: bot.contractType === 'DIGITODD' ? 500 : 300,
     riskManager: { ...DEFAULT_RM },
+    strategyLogic: {
+        globalShared: false,
+        active: bot.category === 'Even/Odd',
+        groups: bot.category === 'Even/Odd' ? [newCondition(bot)] : [],
+    },
 });
 
 const ALL_MARKETS = [
@@ -151,6 +183,23 @@ function checkEntry(digits: number[], contractType: string, barrier: number | nu
     }
 }
 
+/* ─── Strategy Logic evaluation (OR-grouped conditions) ─── */
+function evaluateStrategyLogic(digits: number[], groups: StrategyCondition[]): { hit: boolean; group?: StrategyCondition } {
+    for (const g of groups) {
+        if (digits.length < g.ifLast) continue;
+        const recent = digits.slice(0, g.ifLast);
+        const isOdd = (d: number) => d % 2 !== 0;
+        const matches = g.digitsIs === 'ODD' ? isOdd : (d: number) => !isOdd(d);
+        if (g.strict) {
+            if (recent.every(matches)) return { hit: true, group: g };
+        } else {
+            const count = recent.filter(matches).length;
+            if (count > recent.length / 2) return { hit: true, group: g };
+        }
+    }
+    return { hit: false };
+}
+
 function getLastDigit(q: number): number {
     const s = q.toFixed(2).replace('.', '');
     return parseInt(s[s.length - 1], 10);
@@ -179,6 +228,53 @@ const AccountBadge: React.FC = () => {
     return <span className={`sb-acct-badge ${isDemo ? 'demo' : 'real'}`}>{isDemo ? '🔵 DEMO' : '🟢 REAL'}</span>;
 };
 
+/* ─── Number Field ───
+   Keeps its own text buffer so the user can freely clear/retype a value —
+   only clamps/commits the numeric value on blur or Enter, never mid-keystroke. */
+const NumberField: React.FC<{
+    value: number;
+    onCommit: (n: number) => void;
+    min?: number;
+    max?: number;
+    step?: number;
+    disabled?: boolean;
+    className?: string;
+}> = ({ value, onCommit, min, max, step, disabled, className }) => {
+    const [text, setText] = useState(String(value));
+    const focusedRef = useRef(false);
+
+    useEffect(() => {
+        if (!focusedRef.current) setText(String(value));
+    }, [value]);
+
+    const commit = () => {
+        focusedRef.current = false;
+        let n = parseFloat(text);
+        if (Number.isNaN(n)) n = value;
+        if (min != null) n = Math.max(min, n);
+        if (max != null) n = Math.min(max, n);
+        setText(String(n));
+        if (n !== value) onCommit(n);
+    };
+
+    return (
+        <input
+            type='text'
+            inputMode='decimal'
+            className={`sb-num-input ${className || ''}`}
+            disabled={disabled}
+            value={text}
+            onFocus={() => { focusedRef.current = true; }}
+            onChange={e => {
+                const v = e.target.value;
+                if (v === '' || /^-?\d*\.?\d*$/.test(v)) setText(v);
+            }}
+            onBlur={commit}
+            onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+        />
+    );
+};
+
 /* ─── Accordion Section ─── */
 const SbAccordion: React.FC<{ title: string; badge?: string; badgeColor?: string; defaultOpen?: boolean; children: React.ReactNode }> = ({
     title, badge, badgeColor = '#22c55e', defaultOpen = false, children,
@@ -205,7 +301,8 @@ const BotDetail: React.FC<{
     onBack: () => void;
     onLoadXml: (bot: TScalperBot) => Promise<void>;
     onLoadAndRun: (bot: TScalperBot) => Promise<void>;
-}> = ({ bot, derivTrade, onBack, onLoadXml, onLoadAndRun }) => {
+    onPreloadXml: (bot: TScalperBot) => Promise<void>;
+}> = ({ bot, derivTrade, onBack, onLoadXml, onLoadAndRun, onPreloadXml }) => {
     const [cfg, setCfg]         = useState<BotConfig>(() => DEFAULT_CONFIG(bot));
     const [running, setRunning] = useState(false);
     const [scanning, setScanning] = useState(false); // terminal scanning without trading
@@ -218,6 +315,7 @@ const BotDetail: React.FC<{
     const [activeMarket, setActiveMarket] = useState(cfg.market);
     const [addMarketSel, setAddMarketSel] = useState('1HZ50V');
     const [digitDisplay, setDigitDisplay] = useState<number[]>([]); // reactive copy for rendering
+    const [winPopup, setWinPopup] = useState<{ profit: number; stopped: boolean } | null>(null);
 
     const stopRef         = useRef(false);
     const consLossRef     = useRef(0);
@@ -227,6 +325,10 @@ const BotDetail: React.FC<{
     const digitWindowRef  = useRef<number[]>([]);
     const tickUnsubRef    = useRef<(() => void) | null>(null);
     const marketIdxRef    = useRef(0);
+    const lastFiredGroupRef = useRef<StrategyCondition | null>(null);
+    const multiWindowsRef = useRef<Map<string, number[]>>(new Map());
+    const multiUnsubsRef  = useRef<Map<string, () => void>>(new Map());
+    const readyMarketRef  = useRef<string | null>(null);
 
     useEffect(() => subscribeCurrency(() => setDisplayCur(getDisplayCurrency())), []);
     useEffect(() => { setActiveMarket(cfg.market); }, [cfg.market]);
@@ -251,6 +353,24 @@ const BotDetail: React.FC<{
     const cfgSet = (patch: Partial<BotConfig>) => setCfg(prev => ({ ...prev, ...patch }));
     const rmSet  = (patch: Partial<RiskManagerConfig>) =>
         setCfg(prev => ({ ...prev, riskManager: { ...prev.riskManager, ...patch } }));
+    const slSet  = (patch: Partial<StrategyLogicConfig>) =>
+        setCfg(prev => ({ ...prev, strategyLogic: { ...prev.strategyLogic, ...patch } }));
+    const groupSet = (id: string, patch: Partial<StrategyCondition>) =>
+        setCfg(prev => ({
+            ...prev,
+            strategyLogic: {
+                ...prev.strategyLogic,
+                groups: prev.strategyLogic.groups.map(g => g.id === id ? { ...g, ...patch } : g),
+            },
+        }));
+    const addGroup = () => setCfg(prev => ({
+        ...prev,
+        strategyLogic: { ...prev.strategyLogic, groups: [...prev.strategyLogic.groups, newCondition(bot)] },
+    }));
+    const removeGroup = (id: string) => setCfg(prev => ({
+        ...prev,
+        strategyLogic: { ...prev.strategyLogic, groups: prev.strategyLogic.groups.filter(g => g.id !== id) },
+    }));
 
     /* ── Subscribe to ticks for the active market ── */
     const subscribeMarket = useCallback((market: string) => {
@@ -267,7 +387,40 @@ const BotDetail: React.FC<{
     }, [derivTrade]);
 
     /* Cleanup on unmount */
-    useEffect(() => () => { if (tickUnsubRef.current) tickUnsubRef.current(); }, []);
+    useEffect(() => () => {
+        if (tickUnsubRef.current) tickUnsubRef.current();
+        multiUnsubsRef.current.forEach(u => u());
+        multiUnsubsRef.current.clear();
+    }, []);
+
+    /* ── Parallel multi-market scanning: subscribe every configured market at once and
+         flag the first one whose Strategy Logic condition fires ── */
+    const subscribeAllMarkets = useCallback((markets: string[]) => {
+        markets.forEach(market => {
+            if (multiUnsubsRef.current.has(market)) return;
+            multiWindowsRef.current.set(market, []);
+            const unsub = derivTrade.subscribeTicks(market, tick => {
+                const d = tick.digit != null ? tick.digit : getLastDigit(tick.quote);
+                const win = [d, ...(multiWindowsRef.current.get(market) || [])].slice(0, 50);
+                multiWindowsRef.current.set(market, win);
+                if (!readyMarketRef.current) {
+                    const r = evaluateStrategyLogic(win, cfg.strategyLogic.groups);
+                    if (r.hit) {
+                        readyMarketRef.current = market;
+                        lastFiredGroupRef.current = r.group ?? null;
+                    }
+                }
+            });
+            multiUnsubsRef.current.set(market, unsub);
+        });
+    }, [derivTrade, cfg.strategyLogic.groups]);
+
+    const unsubscribeAllMarkets = useCallback(() => {
+        multiUnsubsRef.current.forEach(u => u());
+        multiUnsubsRef.current.clear();
+        multiWindowsRef.current.clear();
+        readyMarketRef.current = null;
+    }, []);
 
     /* ── Hacker startup sequence ── */
     const runHackerStartup = async (market: string, multiMarket: boolean) => {
@@ -298,18 +451,31 @@ const BotDetail: React.FC<{
         consLossRef.current = 0;
         sessionPnlRef.current = 0;
         marketIdxRef.current  = 0;
+        lastFiredGroupRef.current = null;
         setRunning(true);
         setEntryReady(false);
         setTerminal([]);
+        setWinPopup(null);
 
         /* Determine market list */
         const marketList = cfg.useMarketSwitch && cfg.markets.length > 0
             ? [...cfg.markets] : [cfg.market];
+        const multiScan = bot.category === 'Even/Odd' && cfg.strategyLogic.active
+            && cfg.useMarketSwitch && marketList.length > 1;
         let curMarketIdx = 0;
         let curMarket    = marketList[curMarketIdx];
 
-        /* Subscribe to first market */
-        subscribeMarket(curMarket);
+        /* Silently load this bot's default XML into the Bot Builder workspace so the
+           real Blockly bot is always in sync with the terminal-driven engine, without
+           navigating the user away from this page. */
+        onPreloadXml(bot).then(() => addLog('📂 XML_TRADING_ACTIVATOR: DEFAULT STRATEGY LOADED', 'hack')).catch(() => {});
+
+        /* Subscribe to first market (or all markets at once for parallel multi-market scan) */
+        if (multiScan) {
+            subscribeAllMarkets(marketList);
+        } else {
+            subscribeMarket(curMarket);
+        }
         addLog(`▶ BOT ENGINE STARTED — ${contractLabel(bot)}`, 'start');
         await runHackerStartup(curMarket, cfg.useMarketSwitch);
 
@@ -319,13 +485,34 @@ const BotDetail: React.FC<{
         while (!stopRef.current) {
             try {
                 /* ── Scan for entry signal ── */
-                addLog(`📡 SCANNING → ${curMarket} | ${contractLabel(bot)}`, 'scan');
+                addLog(`📡 SCANNING → ${multiScan ? marketList.join(', ') : curMarket} | ${contractLabel(bot)}`, 'scan');
                 setEntryReady(false);
 
                 let scanTick = 0;
                 let entry = false;
                 while (!entry && !stopRef.current) {
-                    entry = checkEntry(digitWindowRef.current, bot.contractType, bot.prediction);
+                    if (multiScan) {
+                        if (readyMarketRef.current) {
+                            curMarket = readyMarketRef.current;
+                            readyMarketRef.current = null;
+                            digitWindowRef.current = multiWindowsRef.current.get(curMarket) || [];
+                            setActiveMarket(curMarket);
+                            setDigitDisplay(digitWindowRef.current.slice(0, 20));
+                            addLog(`🧬 STRATEGY_LOGIC: CONDITION MET ON ${curMarket} — XML_TRADING_ACTIVATOR ENGAGED`, 'switch');
+                            entry = true;
+                            break;
+                        }
+                    } else if (bot.category === 'Even/Odd' && cfg.strategyLogic.active && cfg.strategyLogic.groups.length > 0) {
+                        const r = evaluateStrategyLogic(digitWindowRef.current, cfg.strategyLogic.groups);
+                        if (r.hit) {
+                            lastFiredGroupRef.current = r.group ?? null;
+                            addLog('🧬 STRATEGY_LOGIC: CONDITION MET — XML_TRADING_ACTIVATOR ENGAGED', 'switch');
+                            entry = true;
+                            break;
+                        }
+                    } else {
+                        entry = checkEntry(digitWindowRef.current, bot.contractType, bot.prediction);
+                    }
                     scanTick++;
 
                     if (!entry) {
@@ -340,7 +527,7 @@ const BotDetail: React.FC<{
                         if (scanTick % 10 === 5) {
                             addLog(`CONNECTION_SPEED: ${105 + Math.floor(Math.random() * 40)} Mbps`, 'hack');
                         }
-                        await new Promise(r => setTimeout(r, 600));
+                        await new Promise(r => setTimeout(r, multiScan ? 250 : 600));
                     }
                 }
 
@@ -390,23 +577,30 @@ const BotDetail: React.FC<{
 
                 if (won) {
                     consLossRef.current = 0;
+                    const wasRecovering = martCount > 0;
                     martCount = 0;
+                    lastFiredGroupRef.current = null;
                     /* Reset stake after win */
                     curStake = cfg.riskManager.inject ? cfg.riskManager.overrideStake : cfg.stake;
                     addLog(`✅ WIN  +${profit.toFixed(2)} USD  |  P/L: ${pnlStr}`, 'win');
 
                     if (!bot.multiple) {
-                        addLog('🏁 Single-run complete — bot stopped on win.', 'info');
+                        addLog('🎉 TICK WIN — Bot stopped.', 'win');
+                        setWinPopup({ profit, stopped: true });
                         break;
                     }
 
                     /* TP check */
                     if (cfg.tpGuard && sessionPnlRef.current >= cfg.takeProfit) {
-                        addLog(`🎯 Take profit $${cfg.takeProfit} reached.`, 'stop');
+                        addLog(`🎯 Take profit ${cfg.takeProfit} reached.`, 'stop');
+                        setWinPopup({ profit, stopped: true });
                         break;
                     }
 
-                    addLog('🔄 Returning to market scan...', 'scan');
+                    setWinPopup({ profit, stopped: false });
+                    addLog(wasRecovering
+                        ? '🔄 Recovery successful — returning to market scan...'
+                        : '🔄 Returning to market scan...', 'scan');
                 } else {
                     consLossRef.current++;
                     martCount++;
@@ -422,33 +616,40 @@ const BotDetail: React.FC<{
                         ? +(curStake * multiplier).toFixed(2)
                         : curStake;
 
-                    addLog(`❌ LOSS  ${profit.toFixed(2)} USD  |  consec: ${consLossRef.current}  |  next: $${nextStake.toFixed(2)}`, 'loss');
+                    /* A fired Strategy Logic condition can cap recovery attempts tighter
+                       than the general consecutive-loss limit. */
+                    const effectiveLossLimit = lastFiredGroupRef.current
+                        ? Math.min(cfg.consecutiveLossLimit || Infinity, lastFiredGroupRef.current.recoveryLimit)
+                        : cfg.consecutiveLossLimit;
 
-                    /* Stop on consecutive losses */
-                    if (cfg.stopOnLoss && consLossRef.current >= cfg.consecutiveLossLimit) {
+                    addLog(`❌ LOSS  ${profit.toFixed(2)} USD  |  recovery: ${martCount}/${effectiveLossLimit === Infinity ? '∞' : effectiveLossLimit}  |  next: ${nextStake.toFixed(2)}`, 'loss');
+                    addLog('🛡 RECOVERY_MODE: ENGAGED — awaiting next entry signal', 'switch');
+
+                    /* Stop on consecutive losses (bounded by Strategy Logic recovery limit) */
+                    if ((cfg.stopOnLoss || lastFiredGroupRef.current) && consLossRef.current >= effectiveLossLimit) {
                         /* Market switch? */
-                        if (cfg.useMarketSwitch && cfg.markets.length > 1) {
+                        if (cfg.useMarketSwitch && cfg.markets.length > 1 && !multiScan) {
                             curMarketIdx = (curMarketIdx + 1) % marketList.length;
                             curMarket    = marketList[curMarketIdx];
                             consLossRef.current = 0;
                             martCount = 0;
                             curStake  = cfg.riskManager.inject ? cfg.riskManager.overrideStake : cfg.stake;
                             subscribeMarket(curMarket);
-                            addLog(`🔀 MARKET_SWITCH → ${curMarket} (reset after ${cfg.consecutiveLossLimit} losses)`, 'switch');
+                            addLog(`🔀 MARKET_SWITCH → ${curMarket} (reset after ${effectiveLossLimit} losses)`, 'switch');
                             continue;
                         }
-                        addLog(`🛑 Stopped after ${cfg.consecutiveLossLimit} consecutive losses.`, 'stop');
+                        addLog(`🛑 Stop loss hit — stopped after ${consLossRef.current} consecutive losses.`, 'stop');
                         break;
                     }
 
                     /* SL/TP check */
                     if (cfg.tpGuard) {
                         if (sessionPnlRef.current >= cfg.takeProfit) {
-                            addLog(`🎯 Take profit $${cfg.takeProfit} reached.`, 'stop');
+                            addLog(`🎯 Take profit ${cfg.takeProfit} reached.`, 'stop');
                             break;
                         }
                         if (sessionPnlRef.current <= -Math.abs(cfg.stopLoss)) {
-                            addLog(`🛡 Stop loss -$${cfg.stopLoss} triggered.`, 'stop');
+                            addLog(`🛡 Stop loss -${cfg.stopLoss} triggered.`, 'stop');
                             break;
                         }
                     }
@@ -462,10 +663,11 @@ const BotDetail: React.FC<{
         }
 
         if (tickUnsubRef.current) { tickUnsubRef.current(); tickUnsubRef.current = null; }
+        if (multiScan) unsubscribeAllMarkets();
         addLog('⏹ Bot stopped.', 'info');
         setRunning(false);
         setEntryReady(false);
-    }, [running, derivTrade, bot, cfg, addLog, subscribeMarket]);
+    }, [running, derivTrade, bot, cfg, addLog, subscribeMarket, subscribeAllMarkets, unsubscribeAllMarkets, onPreloadXml]);
 
     const stopBot = useCallback(() => {
         stopRef.current = true;
@@ -556,14 +758,14 @@ const BotDetail: React.FC<{
                         <div className='sb-field-row'>
                             <div className='sb-field'>
                                 <label>Duration</label>
-                                <input type='number' min={1} max={10} value={cfg.duration}
-                                    onChange={e => cfgSet({ duration: Math.max(1, +e.target.value) })} disabled={running} />
+                                <NumberField value={cfg.duration} min={1} max={10}
+                                    onCommit={n => cfgSet({ duration: n })} disabled={running} />
                                 <span className='sb-unit'>Ticks</span>
                             </div>
                             <div className='sb-field'>
                                 <label>Stake (USD)</label>
-                                <input type='number' min={0.35} step={0.01} value={cfg.stake}
-                                    onChange={e => cfgSet({ stake: Math.max(0.35, +e.target.value) })} disabled={running} />
+                                <NumberField value={cfg.stake} min={0.35} step={0.01}
+                                    onCommit={n => cfgSet({ stake: n })} disabled={running} />
                             </div>
                         </div>
                         <div className='sb-field'>
@@ -585,8 +787,8 @@ const BotDetail: React.FC<{
                             <>
                                 <div className='sb-field'>
                                     <label>Consecutive Losses</label>
-                                    <input type='number' min={1} max={20} value={cfg.consecutiveLossLimit}
-                                        onChange={e => cfgSet({ consecutiveLossLimit: Math.max(1, +e.target.value) })} disabled={running} />
+                                    <NumberField value={cfg.consecutiveLossLimit} min={1} max={20}
+                                        onCommit={n => cfgSet({ consecutiveLossLimit: n })} disabled={running} />
                                 </div>
                                 <p className='sb-hint'>Bot stops after {cfg.consecutiveLossLimit} consecutive losses.</p>
                             </>
@@ -607,19 +809,96 @@ const BotDetail: React.FC<{
                                 <div className='sb-field-row'>
                                     <div className='sb-field'>
                                         <label>Take Profit ($)</label>
-                                        <input type='number' min={1} value={cfg.takeProfit}
-                                            onChange={e => cfgSet({ takeProfit: Math.max(1, +e.target.value) })} disabled={running} />
+                                        <NumberField value={cfg.takeProfit} min={1}
+                                            onCommit={n => cfgSet({ takeProfit: n })} disabled={running} />
                                     </div>
                                     <div className='sb-field'>
                                         <label>Stop Loss ($)</label>
-                                        <input type='number' min={1} value={cfg.stopLoss}
-                                            onChange={e => cfgSet({ stopLoss: Math.max(1, +e.target.value) })} disabled={running} />
+                                        <NumberField value={cfg.stopLoss} min={1}
+                                            onCommit={n => cfgSet({ stopLoss: n })} disabled={running} />
                                     </div>
                                 </div>
                                 <div className='sb-tpsl-bar'>
                                     <span className='sb-tpsl-tp'>TP +{cfg.takeProfit}</span>
                                     <span className='sb-tpsl-sl'>SL -{cfg.stopLoss}</span>
                                 </div>
+                            </>
+                        )}
+                    </SbAccordion>
+
+                    {/* Strategy Logic */}
+                    <SbAccordion title='💡 Strategy Logic' badge={cfg.strategyLogic.active ? 'ACTIVE' : 'DISABLED'} badgeColor={cfg.strategyLogic.active ? '#22c55e' : '#64748b'} defaultOpen>
+                        <div className='sb-field-row sb-field-row--center'>
+                            <label>Global Shared</label>
+                            <button className={`sb-toggle ${cfg.strategyLogic.globalShared ? 'on' : 'off'}`}
+                                onClick={() => slSet({ globalShared: !cfg.strategyLogic.globalShared })} disabled={running}>
+                                {cfg.strategyLogic.globalShared ? 'ENABLED' : 'DISABLED'}
+                            </button>
+                        </div>
+                        <div className='sb-field-row sb-field-row--center'>
+                            <label>Strategy</label>
+                            <button className={`sb-toggle ${cfg.strategyLogic.active ? 'on' : 'off'}`}
+                                onClick={() => slSet({ active: !cfg.strategyLogic.active })} disabled={running || bot.category !== 'Even/Odd'}>
+                                {cfg.strategyLogic.active ? 'ACTIVE' : 'INACTIVE'}
+                            </button>
+                        </div>
+                        {bot.category !== 'Even/Odd' ? (
+                            <p className='sb-hint'>This bot trades on barrier-reversal logic (OVER/UNDER) — the condition builder applies to Even/Odd scalpers.</p>
+                        ) : cfg.strategyLogic.active && (
+                            <>
+                                {cfg.strategyLogic.groups.map((g, idx) => (
+                                    <div key={g.id} className='sb-or-group'>
+                                        <div className='sb-or-group__header'>
+                                            <span className='sb-or-group__badge'>OR GROUP #{idx + 1}</span>
+                                        </div>
+                                        <div className='sb-or-group__body'>
+                                            <div className='sb-field-row sb-field-row--center'>
+                                                <span className='sb-condition-label'>CONDITION</span>
+                                                {cfg.strategyLogic.groups.length > 1 && !running && (
+                                                    <button className='sb-condition-delete' onClick={() => removeGroup(g.id)} title='Delete condition'>🗑</button>
+                                                )}
+                                            </div>
+                                            <div className='sb-field'>
+                                                <label>Algorithm</label>
+                                                <select value={g.algorithm} onChange={() => {}} disabled={running}>
+                                                    <option value='LDP'>LDP — Last Digit Pattern</option>
+                                                </select>
+                                            </div>
+                                            <div className='sb-field-row'>
+                                                <div className='sb-field-row sb-field-row--center'>
+                                                    <label>Strict</label>
+                                                    <button className={`sb-toggle ${g.strict ? 'on' : 'off'}`}
+                                                        onClick={() => groupSet(g.id, { strict: !g.strict })} disabled={running}>
+                                                        {g.strict ? 'ACTIVE' : 'OFF'}
+                                                    </button>
+                                                </div>
+                                                <div className='sb-field'>
+                                                    <label>If Last</label>
+                                                    <NumberField value={g.ifLast} min={1} max={20}
+                                                        onCommit={n => groupSet(g.id, { ifLast: n })} disabled={running} />
+                                                </div>
+                                            </div>
+                                            <div className='sb-field-row'>
+                                                <div className='sb-field'>
+                                                    <label>Digits Is</label>
+                                                    <select value={g.digitsIs} onChange={e => groupSet(g.id, { digitsIs: e.target.value as 'ODD' | 'EVEN' })} disabled={running}>
+                                                        <option value='ODD'>ODD</option>
+                                                        <option value='EVEN'>EVEN</option>
+                                                    </select>
+                                                </div>
+                                                <div className='sb-field'>
+                                                    <label>Recovery Limit</label>
+                                                    <NumberField value={g.recoveryLimit} min={1} max={20}
+                                                        onCommit={n => groupSet(g.id, { recoveryLimit: n })} disabled={running} />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                                {!running && (
+                                    <button className='sb-add-condition-btn' onClick={addGroup}>+ ADD OR GROUP</button>
+                                )}
+                                <p className='sb-hint'>When the condition is true, the terminal fires the XML trading activator and executes the trade automatically.</p>
                             </>
                         )}
                     </SbAccordion>
@@ -653,25 +932,25 @@ const BotDetail: React.FC<{
                                 <div className='sb-field-row'>
                                     <div className='sb-field'>
                                         <label>Activate Limit</label>
-                                        <input type='number' min={1} max={50} value={cfg.riskManager.activateLimit}
-                                            onChange={e => rmSet({ activateLimit: Math.max(1, +e.target.value) })} disabled={running} />
+                                        <NumberField value={cfg.riskManager.activateLimit} min={1} max={50}
+                                            onCommit={n => rmSet({ activateLimit: n })} disabled={running} />
                                     </div>
                                     <div className='sb-field'>
                                         <label>Deactivate Limit</label>
-                                        <input type='number' min={1} max={500} value={cfg.riskManager.deactivateLimit}
-                                            onChange={e => rmSet({ deactivateLimit: Math.max(1, +e.target.value) })} disabled={running} />
+                                        <NumberField value={cfg.riskManager.deactivateLimit} min={1} max={500}
+                                            onCommit={n => rmSet({ deactivateLimit: n })} disabled={running} />
                                     </div>
                                 </div>
                                 <div className='sb-field-row'>
                                     <div className='sb-field'>
                                         <label>Multiplier</label>
-                                        <input type='number' min={1} max={10} step={0.5} value={cfg.riskManager.multiplier}
-                                            onChange={e => rmSet({ multiplier: Math.max(1, +e.target.value) })} disabled={running} />
+                                        <NumberField value={cfg.riskManager.multiplier} min={1} max={10} step={0.5}
+                                            onCommit={n => rmSet({ multiplier: n })} disabled={running} />
                                     </div>
                                     <div className='sb-field'>
                                         <label>Stake (override)</label>
-                                        <input type='number' min={0.35} step={0.01} value={cfg.riskManager.overrideStake}
-                                            onChange={e => rmSet({ overrideStake: Math.max(0.35, +e.target.value) })} disabled={running} />
+                                        <NumberField value={cfg.riskManager.overrideStake} min={0.35} step={0.01}
+                                            onCommit={n => rmSet({ overrideStake: n })} disabled={running} />
                                     </div>
                                 </div>
                             </>
@@ -679,8 +958,8 @@ const BotDetail: React.FC<{
                             <>
                                 <div className='sb-field'>
                                     <label>Martingale ×</label>
-                                    <input type='number' min={1} max={10} step={0.5} value={cfg.martingale}
-                                        onChange={e => cfgSet({ martingale: Math.max(1, +e.target.value) })} disabled={running} />
+                                    <NumberField value={cfg.martingale} min={1} max={10} step={0.5}
+                                        onCommit={n => cfgSet({ martingale: n })} disabled={running} />
                                 </div>
                                 <p className='sb-hint'>Standard martingale — stake × {cfg.martingale} on each loss.</p>
                             </>
@@ -700,8 +979,8 @@ const BotDetail: React.FC<{
                             <>
                                 <div className='sb-field'>
                                     <label>Switch After Losses</label>
-                                    <input type='number' min={1} max={10} value={cfg.switchOnLosses}
-                                        onChange={e => cfgSet({ switchOnLosses: Math.max(1, +e.target.value) })} disabled={running} />
+                                    <NumberField value={cfg.switchOnLosses} min={1} max={10}
+                                        onCommit={n => cfgSet({ switchOnLosses: n })} disabled={running} />
                                     <span className='sb-unit'>losses</span>
                                 </div>
                                 <p className='sb-hint'>Switches to the next market after {cfg.switchOnLosses} consecutive losses.</p>
@@ -760,6 +1039,16 @@ const BotDetail: React.FC<{
 
                 {/* ── Right — Terminal ── */}
                 <div className='sb-detail__terminal-col'>
+                    {winPopup && (
+                        <div className={`sb-win-popup ${winPopup.stopped ? 'stopped' : ''}`}>
+                            <span className='sb-win-popup__icon'>🎉</span>
+                            <div>
+                                <strong>TICK WIN +{winPopup.profit.toFixed(2)} USD</strong>
+                                <p>{winPopup.stopped ? 'Bot stopped.' : 'Recovery cleared — resuming scan.'}</p>
+                            </div>
+                            <button onClick={() => setWinPopup(null)}>×</button>
+                        </div>
+                    )}
                     {/* Active market indicator */}
                     <div className='sb-terminal-market-bar'>
                         <span className='sb-terminal-market-label'>ACTIVE MARKET:</span>
@@ -962,6 +1251,18 @@ const ScalperBots: React.FC = observer(() => {
         setTimeout(() => autoRun(), 900);
     }, [handleLoadXml, autoRun]);
 
+    /* Silently sync the Bot Builder workspace with this bot's default XML — no tab
+       switch, no UI disruption — used automatically whenever the terminal Run button
+       is pressed so "Run" always has the matching XML strategy loaded. */
+    const handlePreloadXml = useCallback(async (bot: TScalperBot) => {
+        try {
+            const res = await fetch(bot.xmlFile);
+            if (!res.ok) return;
+            const xml = await res.text();
+            await loadXmlIntoWorkspace(xml, bot.name);
+        } catch { /* non-fatal — terminal engine trades independently of the workspace */ }
+    }, [loadXmlIntoWorkspace]);
+
     if (selectedBot) {
         return (
             <BotDetail
@@ -970,6 +1271,7 @@ const ScalperBots: React.FC = observer(() => {
                 onBack={() => setSelectedBot(null)}
                 onLoadXml={handleLoadXml}
                 onLoadAndRun={handleLoadAndRun}
+                onPreloadXml={handlePreloadXml}
             />
         );
     }
