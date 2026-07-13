@@ -394,7 +394,8 @@ const BotDetail: React.FC<{
     const digitWindowRef  = useRef<number[]>([]);
     const tickUnsubRef    = useRef<(() => void) | null>(null);
     const marketIdxRef    = useRef(0);
-    const lastFiredGroupRef = useRef<StrategyCondition | null>(null);
+    const lastFiredGroupRef = useRef<StrategyOrGroup | null>(null);
+    const [ldpInfoOpen, setLdpInfoOpen] = useState<string | null>(null); // which group's info popup is open
     const multiWindowsRef = useRef<Map<string, number[]>>(new Map());
     const multiUnsubsRef  = useRef<Map<string, () => void>>(new Map());
     const readyMarketRef  = useRef<string | null>(null);
