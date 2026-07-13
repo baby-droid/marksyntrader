@@ -425,17 +425,44 @@ const BotDetail: React.FC<{
         setCfg(prev => ({ ...prev, riskManager: { ...prev.riskManager, ...patch } }));
     const slSet  = (patch: Partial<StrategyLogicConfig>) =>
         setCfg(prev => ({ ...prev, strategyLogic: { ...prev.strategyLogic, ...patch } }));
-    const groupSet = (id: string, patch: Partial<StrategyCondition>) =>
+    /* Patch a specific condition within an OR group */
+    const conditionSet = (groupId: string, condId: string, patch: Partial<StrategyCondition>) =>
         setCfg(prev => ({
             ...prev,
             strategyLogic: {
                 ...prev.strategyLogic,
-                groups: prev.strategyLogic.groups.map(g => g.id === id ? { ...g, ...patch } : g),
+                groups: prev.strategyLogic.groups.map(g =>
+                    g.id === groupId
+                        ? { ...g, conditions: g.conditions.map(c => c.id === condId ? { ...c, ...patch } : c) }
+                        : g
+                ),
+            },
+        }));
+    /* Add an AND condition to an OR group */
+    const addCondition = (groupId: string) =>
+        setCfg(prev => ({
+            ...prev,
+            strategyLogic: {
+                ...prev.strategyLogic,
+                groups: prev.strategyLogic.groups.map(g =>
+                    g.id === groupId ? { ...g, conditions: [...g.conditions, newCondition(bot)] } : g
+                ),
+            },
+        }));
+    /* Remove an AND condition from an OR group */
+    const removeCondition = (groupId: string, condId: string) =>
+        setCfg(prev => ({
+            ...prev,
+            strategyLogic: {
+                ...prev.strategyLogic,
+                groups: prev.strategyLogic.groups.map(g =>
+                    g.id === groupId ? { ...g, conditions: g.conditions.filter(c => c.id !== condId) } : g
+                ),
             },
         }));
     const addGroup = () => setCfg(prev => ({
         ...prev,
-        strategyLogic: { ...prev.strategyLogic, groups: [...prev.strategyLogic.groups, newCondition(bot)] },
+        strategyLogic: { ...prev.strategyLogic, groups: [...prev.strategyLogic.groups, newOrGroup(bot)] },
     }));
     const removeGroup = (id: string) => setCfg(prev => ({
         ...prev,
@@ -686,10 +713,10 @@ const BotDetail: React.FC<{
                         ? +(curStake * multiplier).toFixed(2)
                         : curStake;
 
-                    /* A fired Strategy Logic condition can cap recovery attempts tighter
+                    /* A fired Strategy Logic group can cap recovery attempts tighter
                        than the general consecutive-loss limit. */
                     const effectiveLossLimit = lastFiredGroupRef.current
-                        ? Math.min(cfg.consecutiveLossLimit || Infinity, lastFiredGroupRef.current.recoveryLimit)
+                        ? Math.min(cfg.consecutiveLossLimit || Infinity, groupRecoveryLimit(lastFiredGroupRef.current))
                         : cfg.consecutiveLossLimit;
 
                     addLog(`❌ LOSS  ${profit.toFixed(2)} USD  |  recovery: ${martCount}/${effectiveLossLimit === Infinity ? '∞' : effectiveLossLimit}  |  next: ${nextStake.toFixed(2)}`, 'loss');
