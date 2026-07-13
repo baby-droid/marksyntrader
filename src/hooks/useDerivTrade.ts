@@ -35,6 +35,7 @@ export interface SettledContract {
     status: 'won' | 'lost';
     entry_spot?: number;
     exit_spot?: number;
+    buy_price?: number;
 }
 
 export type ContractType =
@@ -43,13 +44,15 @@ export type ContractType =
 
 export interface BuyParams {
     symbol: string;
-    contract_type: ContractType;
+    contract_type: ContractType | string;
     duration: number;
     duration_unit?: 't' | 's' | 'm' | 'h';
     stake: number;
-    barrier?: number;
+    barrier?: number | string;
     currency?: string;
 }
+
+const NEEDS_BARRIER = new Set(['DIGITOVER','DIGITUNDER','DIGITMATCH','DIGITDIFF']);
 
 function getLastDigit(quote: number): number {
     const s = quote.toFixed(2).replace('.', '');
@@ -66,8 +69,6 @@ export function useDerivTrade() {
     const balanceSubscribedRef = useRef(false);
     const mountedRef = useRef(true);
 
-    // Track connection + auth off the shared observables — same ones the rest
-    // of the app (header, trade panel, etc.) already relies on.
     useEffect(() => {
         mountedRef.current = true;
         const connSub = connectionStatus$.subscribe(status => {
@@ -89,8 +90,6 @@ export function useDerivTrade() {
         };
     }, []);
 
-    // Single shared message listener — reads balance/tick/contract pushes
-    // from the same message stream every other part of the app listens on.
     useEffect(() => {
         const sub = api_base.api?.onMessage()?.subscribe(({ data: d }: { data: any }) => {
             if (!d || typeof d !== 'object') return;
@@ -124,6 +123,7 @@ export function useDerivTrade() {
                             status: poc.status === 'won' || profit > 0 ? 'won' : 'lost',
                             entry_spot: poc.entry_spot,
                             exit_spot: poc.exit_spot,
+                            buy_price: poc.buy_price,
                         });
                         pocCallbacksRef.current.delete(cid);
                     }
@@ -133,10 +133,6 @@ export function useDerivTrade() {
         return () => sub?.unsubscribe?.();
     }, []);
 
-    // NOTE: api_base's TApiBaseApi type declares send() as returning void, but the
-    // underlying DerivAPIBasic implementation actually returns a Promise at runtime
-    // (see e.g. contracts-for.js `await api_base.api.send(...)`, network_monitor.js
-    // `.send(...).then(...)`). Cast to reflect real behavior.
     const send = useCallback((msg: object): Promise<any> => {
         if (!api_base.api) return Promise.reject(new Error('Not connected'));
         return (api_base.api.send as unknown as (data: unknown) => Promise<any>)(msg);
@@ -151,56 +147,82 @@ export function useDerivTrade() {
         };
     }, [send]);
 
+    /**
+     * buyContract — always uses the proven proposal→buy two-step flow.
+     * The direct-buy shortcut (buy: 1, parameters: {...}) causes
+     * "Input validation failed: parameters" on the DerivAPIBasic client
+     * for digit contract types. The proposal→buy path works for ALL types.
+     */
     const buyContract = useCallback(
         async (params: BuyParams, onSettled?: (c: SettledContract) => void): Promise<ContractResult> => {
-            const { symbol, contract_type, duration, duration_unit = 't', stake, barrier, currency: cur } = params;
-            const buyParams: any = {
+            const {
+                symbol,
                 contract_type,
-                currency: cur || currency || 'USD',
+                duration,
+                duration_unit = 't',
+                stake,
+                barrier,
+                currency: cur,
+            } = params;
+
+            const cur_ = cur || currency || 'USD';
+            const needsBarrier = NEEDS_BARRIER.has(String(contract_type).toUpperCase());
+
+            // Step 1 — proposal (get an ask_price and a proposal ID)
+            const proposalReq: any = {
+                proposal: 1,
+                amount: stake,
+                basis: 'stake',
+                contract_type,
+                currency: cur_,
                 duration,
                 duration_unit,
-                basis: 'stake',
-                amount: stake,
                 symbol,
             };
-            if (barrier !== undefined) buyParams.barrier = String(barrier);
-
-            // Direct buy — single round-trip, no proposal step needed.
-            let res = await send({ buy: '1', price: stake, parameters: buyParams });
-            let contract_id = res?.buy?.contract_id || 0;
-
-            // Fallback: some contract/symbol combos reject the direct-buy shortcut
-            // (e.g. return an error instead of a buy result). In that case fall
-            // back to the standard proposal → buy two-step, same as the rest of
-            // the app's proven trading flow (useDerivTrading.buyContract).
-            if (!contract_id) {
-                const proposalReq: any = {
-                    proposal: 1,
-                    amount: stake,
-                    basis: 'stake',
-                    contract_type,
-                    currency: cur || currency || 'USD',
-                    duration,
-                    duration_unit,
-                    symbol,
-                };
-                if (barrier !== undefined) proposalReq.barrier = String(barrier);
-                const proposalRes = await send(proposalReq);
-                if (!proposalRes?.proposal?.id) {
-                    throw res?.error ? res : (proposalRes?.error ? proposalRes : new Error('Buy failed — no contract id returned'));
-                }
-                res = await send({ buy: proposalRes.proposal.id, price: proposalRes.proposal.ask_price });
-                if (res?.error) throw res;
-                contract_id = res?.buy?.contract_id || 0;
+            if (needsBarrier && barrier !== undefined && barrier !== null) {
+                proposalReq.barrier = String(barrier);
             }
 
-            if (contract_id && onSettled) {
-                pocCallbacksRef.current.set(Number(contract_id), onSettled);
+            let proposalRes: any;
+            try {
+                proposalRes = await send(proposalReq);
+            } catch (e: any) {
+                throw e?.error ?? e;
+            }
+            if (proposalRes?.error) {
+                throw proposalRes.error;
+            }
+            const proposalId = proposalRes?.proposal?.id;
+            const askPrice   = Number(proposalRes?.proposal?.ask_price ?? stake);
+            if (!proposalId) {
+                throw new Error('Proposal failed — no proposal ID returned');
+            }
+
+            // Step 2 — buy using the proposal ID
+            let buyRes: any;
+            try {
+                buyRes = await send({ buy: proposalId, price: askPrice });
+            } catch (e: any) {
+                throw e?.error ?? e;
+            }
+            if (buyRes?.error) {
+                throw buyRes.error;
+            }
+
+            const contract_id = Number(buyRes?.buy?.contract_id ?? 0);
+            if (!contract_id) {
+                throw new Error('Buy failed — no contract ID returned');
+            }
+
+            // Step 3 — subscribe to settlement notifications
+            if (onSettled) {
+                pocCallbacksRef.current.set(contract_id, onSettled);
                 send({ proposal_open_contract: 1, contract_id, subscribe: 1 }).catch(() => {});
             }
+
             return {
                 contract_id,
-                buy_price: res.buy?.buy_price || stake,
+                buy_price: buyRes?.buy?.buy_price ?? stake,
                 status: 'open',
             };
         },

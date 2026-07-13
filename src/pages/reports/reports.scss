@@ -146,37 +146,60 @@
 
   &__trade-row {
     display: grid;
-    grid-template-columns: 8rem 1fr 14rem 8rem 8rem;
-    gap: 1rem;
+    grid-template-columns: 5.5rem 9rem 9rem 7rem 7rem 6rem 7rem;
+    gap: 0.6rem;
     align-items: center;
-    padding: 1rem 1.6rem;
-    font-size: 1.2rem;
+    padding: 0.85rem 1.4rem;
+    font-size: 1.1rem;
     border-bottom: 1px solid var(--general-section-1, #f0f0f0);
 
     &:last-child { border-bottom: none; }
-    &.won { background: rgba(66, 184, 131, 0.03); }
-    &.lost { background: rgba(226, 74, 67, 0.03); }
+    &.won  { background: rgba(66, 184, 131, 0.04); }
+    &.lost { background: rgba(226, 74, 67, 0.04); }
 
-    @media (max-width: 768px) {
-      grid-template-columns: 1fr 1fr;
-      gap: 0.6rem;
+    &--head {
+      background: var(--general-section-1, #f8f8f8) !important;
+      font-size: 1rem;
+      font-weight: 700;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      border-bottom: 1px solid #eee;
+    }
+
+    @media (max-width: 900px) {
+      grid-template-columns: 5rem 1fr 1fr;
+      gap: 0.5rem;
     }
   }
 
   &__trade-type {
-    font-weight: 700;
+    font-weight: 800;
     color: var(--text-general, #333);
-    font-size: 1.1rem;
+    font-size: 1rem;
     background: var(--general-section-1, #f0f0f0);
-    padding: 0.2rem 0.6rem;
-    border-radius: 0.4rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 0.35rem;
     text-align: center;
   }
 
-  &__trade-desc { color: #888; font-size: 1.1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  &__trade-time { color: #aaa; font-size: 1.1rem; }
-  &__trade-pnl { font-weight: 700; &.pos { color: #42B883; } &.neg { color: #E24A43; } }
-  &__trade-balance { color: #666; }
+  &__trade-time-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    .ts  { font-size: 1rem; color: #555; font-variant-numeric: tabular-nums; }
+    .sub { font-size: 0.9rem; color: #aaa; }
+  }
+
+  &__trade-spot {
+    font-size: 1rem;
+    color: #666;
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__trade-time  { color: #aaa; font-size: 1.1rem; }
+  &__trade-pnl   { font-weight: 700; &.pos { color: #42B883; } &.neg { color: #E24A43; } }
+  &__trade-balance { color: #666; font-variant-numeric: tabular-nums; }
 
   &__open { display: flex; flex-direction: column; gap: 1.2rem; }
 

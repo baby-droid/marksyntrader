@@ -1,4 +1,8 @@
 .speed-lab {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
   padding: 1.6rem;
   max-width: 1400px;
   margin: 0 auto;

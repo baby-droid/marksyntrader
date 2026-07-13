@@ -373,14 +373,45 @@ const BotDetail: React.FC<{
     onPreloadXml: (bot: TScalperBot) => Promise<void>;
 }> = ({ bot, derivTrade, onBack, onLoadXml, onLoadAndRun, onPreloadXml }) => {
     const store = useStore();
-    const autoRun = useCallback(async () => {
+
+    /* Set the Blockly workspace market symbol without reloading the whole XML */
+    const setWorkspaceMarket = useCallback((market: string): boolean => {
+        try {
+            const B = (window as any).Blockly;
+            if (!B?.derivWorkspace) return false;
+            const blocks = B.derivWorkspace.getAllBlocks(false);
+            let changed = false;
+            for (const block of blocks) {
+                if (block.type === 'trade_definition_market') {
+                    const field = block.getField('SYMBOL_LIST');
+                    if (field) { field.setValue(market); changed = true; }
+                }
+            }
+            return changed;
+        } catch { return false; }
+    }, []);
+
+    /* autoRun — sets the market in the workspace, then clicks the run button.
+       Retries until Blockly workspace exists (up to 4 s). */
+    const autoRun = useCallback(async (market?: string) => {
+        // 1. Set market in workspace if provided
+        if (market) {
+            let ok = setWorkspaceMarket(market);
+            for (let n = 0; n < 40 && !ok; n++) {
+                await new Promise(r => setTimeout(r, 100));
+                ok = setWorkspaceMarket(market);
+            }
+        }
+        // 2. Click the run button
         const rp: any = store?.run_panel;
         if (!rp?.onRunButtonClick) return;
         for (let i = 0; i < 8; i++) {
-            try { if (!rp.is_running) { await rp.onRunButtonClick(); return; } else { return; } }
-            catch { if (i < 7) await new Promise(r => setTimeout(r, 400)); }
+            try {
+                if (!rp.is_running) { await rp.onRunButtonClick(); return; }
+                else { return; } // already running
+            } catch { if (i < 7) await new Promise(r => setTimeout(r, 400)); }
         }
-    }, [store]);
+    }, [store, setWorkspaceMarket]);
 
     const [cfg, setCfg]         = useState<BotConfig>(() => DEFAULT_CONFIG(bot));
     const [running, setRunning] = useState(false);
@@ -606,8 +637,8 @@ const BotDetail: React.FC<{
                             setActiveMarket(curMarket);
                             setDigitDisplay(digitWindowRef.current.slice(0, 20));
                             addLog(`🧬 STRATEGY_LOGIC: CONDITION MET ON ${curMarket} — XML_TRADING_ACTIVATOR ENGAGED`, 'switch');
-                            /* Fire the XML bot in the builder as well */
-                            autoRun().catch(() => {});
+                            /* Fire the XML bot with the winning market */
+                            autoRun(curMarket).catch(() => {});
                             entry = true;
                             break;
                         }
@@ -616,8 +647,8 @@ const BotDetail: React.FC<{
                         if (r.hit) {
                             lastFiredGroupRef.current = r.group ?? null;
                             addLog('🧬 STRATEGY_LOGIC: CONDITION MET — XML_TRADING_ACTIVATOR ENGAGED', 'switch');
-                            /* Fire the XML bot in the builder as well */
-                            autoRun().catch(() => {});
+                            /* Fire the XML bot with the current single market */
+                            autoRun(curMarket).catch(() => {});
                             entry = true;
                             break;
                         }
@@ -664,7 +695,8 @@ const BotDetail: React.FC<{
                     duration_unit: 't',
                     stake: curStake,
                 };
-                if (bot.prediction !== null) params.barrier = String(bot.prediction);
+                // Pass barrier as a number — buyContract handles the String() conversion
+                if (bot.prediction !== null) params.barrier = Number(bot.prediction);
 
                 const profit = await new Promise<number>((resolve, reject) => {
                     derivTrade.buyContract(params, settled => {
