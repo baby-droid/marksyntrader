@@ -1099,6 +1099,10 @@ const BotDetail: React.FC<{
                 addLog(`📡 SCANNING → ${multiScan ? marketList.join(', ') : curMarket} | ${contractLabel(bot)}`, 'scan');
                 setEntryReady(false);
 
+                /* Track when we started scanning on the current market.
+                   After 2 min with no entry, rotate to the next market and reload XML. */
+                const scanStartedAt = Date.now();
+                let marketSwitched = false;
                 let scanTick = 0;
                 let entry = false;
                 while (!entry && !stopRef.current) {
@@ -1121,6 +1125,23 @@ const BotDetail: React.FC<{
                             addLog('🔌 FEED_RESTORED — reconnected to live market feed', 'hack');
                         } catch { /* retry on next iteration */ }
                         await new Promise(r => setTimeout(r, 800));
+                    }
+
+                    /* ── 2-min scan timeout: no entry found on this market ──
+                       Rotate to the next market in the list, reload the XML bot
+                       with the new market, and restart the scan. Martingale stake
+                       is NOT reset — recovery carries across market rotations. */
+                    if (!multiScan && cfg.useMarketSwitch && cfg.markets.length > 1
+                        && Date.now() - scanStartedAt > 120_000) {
+                        curMarketIdx = (curMarketIdx + 1) % marketList.length;
+                        curMarket    = marketList[curMarketIdx];
+                        curMarketRef.current = curMarket;
+                        lastFiredGroupRef.current = null;
+                        subscribeMarket(curMarket);
+                        addLog(`⏱ SCAN_TIMEOUT — no entry in 2 min | rotating → ${curMarket} | reloading XML...`, 'switch');
+                        try { await onPreloadXml(bot); } catch { /* non-fatal */ }
+                        marketSwitched = true;
+                        break;
                     }
 
                     if (multiScan) {
@@ -1183,6 +1204,8 @@ const BotDetail: React.FC<{
                 }
 
                 if (stopRef.current) break;
+                /* If we rotated market on 2-min timeout, restart the scan on the new market */
+                if (marketSwitched) continue;
 
                 setEntryReady(true);
                 addLog('⚡ ENTRY_SIGNAL: DETECTED — EXECUTING TRADE', 'entry');
@@ -1278,7 +1301,8 @@ const BotDetail: React.FC<{
                         curStake  = computeNextStake(totalConsLoss, lastBuyPrice);
                         subscribeMarket(curMarket);
                         curMarketRef.current = curMarket;
-                        addLog(`🔀 MARKET_2_SWITCH → ${curMarket} | stake ${curStake.toFixed(2)} | barrier ${slotBarrier()} (${totalConsLoss} losses so far)`, 'switch');
+                        addLog(`🔀 MARKET_2_SWITCH → ${curMarket} | stake ${curStake.toFixed(2)} | barrier ${slotBarrier()} | martingale ×${slotMartingale()} (${totalConsLoss} losses)`, 'switch');
+                        try { await onPreloadXml(bot); } catch { /* non-fatal */ }
                         continue;
                     }
 
@@ -1288,10 +1312,11 @@ const BotDetail: React.FC<{
                         curMarketIdx = (curMarketIdx + 1) % marketList.length;
                         curMarket    = marketList[curMarketIdx];
                         lastFiredGroupRef.current = null;
-                        /* Carry the martingale stake forward — don't reset on switch */
+                        /* Carry the accumulated martingale stake forward — don't reset on switch */
                         subscribeMarket(curMarket);
                         curMarketRef.current = curMarket;
-                        addLog(`🔀 MARKET_SWITCH → ${curMarket} | stake ${curStake.toFixed(2)} (${totalConsLoss} losses, switch threshold: ${cfg.switchOnLosses})`, 'switch');
+                        addLog(`🔀 MARKET_SWITCH → ${curMarket} | stake ${curStake.toFixed(2)} | martingale ×${slotMartingale()} (${totalConsLoss} losses, threshold: ${cfg.switchOnLosses})`, 'switch');
+                        try { await onPreloadXml(bot); } catch { /* non-fatal */ }
                         continue;
                     }
 
@@ -2302,11 +2327,9 @@ const ScalperBots: React.FC = observer(() => {
                     {GROUP_DEFS.map(g => (
                         <div key={g.key} className='sb-folder' onClick={() => setOpenGroup(g.key)}>
                             <div className='sb-folder__icon'>
-                                {/* Dark-green SVG folder icon matching reference */}
-                                <svg width='88' height='70' viewBox='0 0 88 70' fill='none' xmlns='http://www.w3.org/2000/svg'>
-                                    {/* folder back / tab */}
+                                {/* Dark-green SVG folder icon — scaled up for PC */}
+                                <svg width='130' height='104' viewBox='0 0 88 70' fill='none' xmlns='http://www.w3.org/2000/svg'>
                                     <path d='M4 16C4 12.686 6.686 10 10 10H32L40 19H80C83.314 19 86 21.686 86 25V60C86 63.314 83.314 66 80 66H10C6.686 66 4 63.314 4 60V16Z' fill='#1e4d37'/>
-                                    {/* folder face */}
                                     <path d='M4 29H86V60C86 63.314 83.314 66 80 66H10C6.686 66 4 63.314 4 60V29Z' fill='#2d6a4f'/>
                                 </svg>
                             </div>
