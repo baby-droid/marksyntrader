@@ -855,7 +855,8 @@ const BotDetail: React.FC<{
        firstTradeRef: the very first trade of a fresh run waits for full
        workspace/feed readiness (normal speed) — every trade after that stays
        supersonic (tick-driven, zero artificial delay). */
-    const lastTickAtRef   = useRef(Date.now());
+    const lastTickAtRef       = useRef(Date.now());
+    const lastReconnectAtRef  = useRef(0); // cooldown: don't reconnect more than once per 30 s
     const curMarketRef    = useRef(cfg.market);
     const marketListRef   = useRef<string[]>([cfg.market]);
     const multiScanRef    = useRef(false);
@@ -944,6 +945,8 @@ const BotDetail: React.FC<{
             const d = tick.digit != null ? tick.digit : getLastDigit(tick.quote);
             digitWindowRef.current = [d, ...digitWindowRef.current].slice(0, 50);
             setDigitDisplay(prev => [d, ...prev].slice(0, 20));
+            // ✅ Reset stall timer on every real tick — prevents false-fire watchdog
+            lastTickAtRef.current = Date.now();
             // ⚡ Wake the scan loop instantly on every new tick
             if (tickSignalRef.current) { tickSignalRef.current(); tickSignalRef.current = null; }
         });
@@ -1099,16 +1102,25 @@ const BotDetail: React.FC<{
                 let scanTick = 0;
                 let entry = false;
                 while (!entry && !stopRef.current) {
-                    /* ── Network/feed watchdog: no ticks for 8 s → force reconnect ── */
-                    if (!multiScan && Date.now() - lastTickAtRef.current > 8000) {
+                    /* ── Network/feed watchdog: no real ticks for 30 s → force reconnect ──
+                       lastTickAtRef is updated by every live tick in subscribeMarket, so this
+                       only fires on a genuine feed freeze, not between normal tick intervals.
+                       A 30 s cooldown prevents rapid-reconnect loops. */
+                    const now = Date.now();
+                    if (
+                        !multiScan &&
+                        now - lastTickAtRef.current > 30_000 &&
+                        now - lastReconnectAtRef.current > 30_000
+                    ) {
                         addLog('⚠ FEED_STALL DETECTED — forcing reconnection...', 'error');
+                        lastReconnectAtRef.current = now;
                         try {
                             if (tickUnsubRef.current) { tickUnsubRef.current(); tickUnsubRef.current = null; }
                             subscribeMarket(curMarket);
                             lastTickAtRef.current = Date.now();
                             addLog('🔌 FEED_RESTORED — reconnected to live market feed', 'hack');
                         } catch { /* retry on next iteration */ }
-                        await new Promise(r => setTimeout(r, 500));
+                        await new Promise(r => setTimeout(r, 800));
                     }
 
                     if (multiScan) {
