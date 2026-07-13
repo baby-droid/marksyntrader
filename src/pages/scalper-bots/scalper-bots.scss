@@ -684,3 +684,134 @@
   &.entry  { color: #00c8ff; font-weight: 700; }
   &.switch { color: #8b5cf6; }
 }
+
+/* ════════════════════════════════════════════════════
+   Strategy Logic — OR Group / AND Condition UI
+   ════════════════════════════════════════════════════ */
+
+/* Condition block within an OR group */
+.sb-cond-block {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  margin-bottom: 0.4rem;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.45rem;
+  }
+  &__actions {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+}
+
+/* AND / CONDITION label */
+.sb-condition-label {
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: #2563eb;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+
+  &.and { color: #7c3aed; }
+}
+
+/* Delete button */
+.sb-condition-delete {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0.1rem 0.25rem;
+  color: #dc2626;
+  opacity: 0.6;
+  &:hover { opacity: 1; }
+}
+
+/* LDP info button */
+.sb-ldp-info-btn {
+  background: none;
+  border: 1px solid #d1d5db;
+  border-radius: 50%;
+  width: 20px; height: 20px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 0.7rem; color: #6b7280; cursor: pointer;
+  &:hover { background: #f3f4f6; color: #111827; }
+}
+
+/* ADD AND LOGIC button */
+.sb-add-and-btn {
+  width: 100%; margin-top: 0.35rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: 0.4rem;
+  border: 1px dashed #d1d5db;
+  background: rgba(124,58,237,0.04);
+  color: #7c3aed;
+  font-size: 0.75rem; font-weight: 700;
+  cursor: pointer; font-family: inherit;
+  &:hover { background: rgba(124,58,237,0.1); border-color: #7c3aed; }
+}
+
+/* LDP info popup overlay */
+.sb-ldp-overlay {
+  position: fixed; inset: 0; z-index: 9000;
+  background: rgba(0,0,0,0.45);
+  display: flex; align-items: center; justify-content: center;
+}
+.sb-ldp-popup {
+  background: #fff;
+  border-radius: 0.8rem;
+  padding: 1.4rem 1.6rem;
+  width: min(420px, 90vw);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+
+  &__title {
+    font-size: 1rem; font-weight: 800; color: #111827;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    margin-bottom: 0.5rem;
+  }
+  &__sub {
+    font-size: 0.7rem; font-weight: 700;
+    color: #2563eb; text-transform: uppercase; letter-spacing: 0.08em;
+    margin-bottom: 0.4rem;
+  }
+  &__desc {
+    font-size: 0.82rem; color: #374151; margin: 0 0 0.9rem;
+    line-height: 1.5;
+  }
+  &__items {
+    background: #1e293b;
+    border-radius: 0.5rem;
+    padding: 0.7rem 0.85rem;
+    display: flex; flex-direction: column; gap: 0.6rem;
+    margin-bottom: 1rem;
+  }
+  &__close {
+    width: 100%; padding: 0.45rem;
+    border-radius: 0.4rem; border: 1px solid #d1d5db;
+    background: #f9fafb; color: #374151;
+    font-size: 0.85rem; font-weight: 700;
+    cursor: pointer; font-family: inherit;
+    &:hover { background: #f3f4f6; }
+  }
+}
+.sb-ldp-item {
+  display: flex; align-items: flex-start; gap: 0.5rem;
+  color: #e2e8f0;
+
+  &__num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: #2563eb; color: #fff;
+    font-size: 0.65rem; font-weight: 800; flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  strong { font-size: 0.8rem; font-weight: 700; color: #00c8ff; display: block; }
+  p { font-size: 0.74rem; color: #94a3b8; margin: 0.1rem 0 0; line-height: 1.4; }
+}
