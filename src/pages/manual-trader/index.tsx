@@ -482,19 +482,31 @@ const ManualTrader: React.FC = () => {
         return () => { if (proposalTimer.current) clearTimeout(proposalTimer.current); };
     }, [stake, duration, symbolValue, ctDef, barrier, authorized, currency, send]);
 
+    /* ── API request / response log ── */
+    const [apiLog, setApiLog] = useState<{ type: 'request'|'response'|'error'; label: string; payload: any; ts: string }[]>([]);
+    const [apiLogOpen, setApiLogOpen] = useState(false);
+    const pushLog = (type: 'request'|'response'|'error', label: string, payload: any) =>
+        setApiLog(prev => [{ type, label, payload, ts: new Date().toLocaleTimeString('en', { hour12: false }) }, ...prev].slice(0, 30));
+
     /* Execute trade — single or bulk */
     const buy = useCallback(async (def: typeof ctDef.types[0]) => {
         if (!authorized) return;
         const s = parseFloat(stake);
         if (isNaN(s) || s < 0.35) return;
 
+        /* ── Build contract params ── */
+        const contractParams: any = {
+            symbol: symbolValue, contract_type: def.type as any,
+            duration, duration_unit: 't', stake: s,
+            ...(ctDef.hasBarrier ? { barrier: String(barrier) } : {}),
+        };
+
         /* ── Bulk mode: fire N simultaneous contracts ── */
         if (bulkMode && bulkCount > 1) {
-            const contractParams: any = {
-                symbol: symbolValue, contract_type: def.type as any,
-                duration, duration_unit: 't', stake: s,
-                ...(ctDef.hasBarrier ? { barrier: String(barrier) } : {}),
-            };
+            pushLog('request', `BUY ×${bulkCount} ${def.label}`, {
+                buy: '1', price: s,
+                parameters: contractParams,
+            });
             const results = await Promise.allSettled(
                 Array.from({ length: bulkCount }, () =>
                     new Promise<number>(resolve =>
@@ -504,6 +516,11 @@ const ManualTrader: React.FC = () => {
                 )
             );
             const totalProfit = results.reduce((acc, r) => acc + (r.status === 'fulfilled' ? r.value : 0), 0);
+            pushLog(totalProfit >= 0 ? 'response' : 'error', `RESULT ×${bulkCount}`, {
+                total_profit: totalProfit.toFixed(2),
+                won: results.filter(r => r.status === 'fulfilled' && (r as any).value > 0).length,
+                lost: results.filter(r => r.status === 'fulfilled' && (r as any).value <= 0).length,
+            });
             setPnl(prev => prev + totalProfit);
             const tradeId = idRef.current++;
             const bulk: any = {
@@ -529,6 +546,22 @@ const ManualTrader: React.FC = () => {
         };
         setPositions(p => [pos, ...p.slice(0, 49)]);
 
+        /* Log the buy request (Deriv API format) */
+        pushLog('request', `BUY ${def.label}`, {
+            buy: '1',
+            price: s,
+            parameters: {
+                contract_type: def.type,
+                currency: 'USD',
+                duration,
+                duration_unit: 't',
+                basis: 'stake',
+                amount: s,
+                symbol: symbolValue,
+                ...(ctDef.hasBarrier ? { barrier: String(barrier) } : {}),
+            },
+        });
+
         let t = 0;
         const iv = setInterval(() => {
             t++;
@@ -548,6 +581,15 @@ const ManualTrader: React.FC = () => {
                     const profit    = applyCommission(c.profit);
                     const exitSpot  = c.exit_spot;
                     const exitDigit = exitSpot ? getLastDigit(Number(exitSpot)) : null;
+                    /* Log the settled contract response */
+                    pushLog(c.status === 'won' ? 'response' : 'error', `CONTRACT ${c.contract_id}`, {
+                        contract_id: c.contract_id,
+                        status: c.status,
+                        profit: profit.toFixed(2),
+                        entry_spot: c.entry_spot,
+                        exit_spot: c.exit_spot,
+                        exit_digit: exitDigit,
+                    });
                     tradeActiveRef.current = false;
                     setTradeState(prev => prev ? {
                         ...prev, settled: true,
@@ -561,9 +603,10 @@ const ManualTrader: React.FC = () => {
                     setTimeout(() => setTradeState(null), 6000);
                 }
             );
-        } catch {
+        } catch (err: any) {
             clearInterval(iv);
             tradeActiveRef.current = false;
+            pushLog('error', 'BUY FAILED', { message: err?.message || 'Unknown error' });
             setTradeState(null);
             setPositions(p => p.filter(x => x.id !== tradeId));
         }
@@ -859,6 +902,37 @@ const ManualTrader: React.FC = () => {
                             </div>
                         );
                     })}
+
+                    {/* ── API Request / Response Log ── */}
+                    <div className='mtp-api-log'>
+                        <button className='mtp-api-log__toggle' onClick={() => setApiLogOpen(v => !v)}>
+                            <span>{'</>'} API Log</span>
+                            <span className='mtp-api-log__count'>{apiLog.length}</span>
+                            <span className='mtp-api-log__arrow'>{apiLogOpen ? '▲' : '▼'}</span>
+                        </button>
+                        {apiLogOpen && (
+                            <div className='mtp-api-log__body'>
+                                {apiLog.length === 0 && (
+                                    <div className='mtp-api-log__empty'>No API calls yet. Place a trade to see request/response.</div>
+                                )}
+                                {apiLog.map((entry, i) => (
+                                    <div key={i} className={`mtp-api-entry mtp-api-entry--${entry.type}`}>
+                                        <div className='mtp-api-entry__hdr'>
+                                            <span className={`mtp-api-entry__badge mtp-api-entry__badge--${entry.type}`}>
+                                                {entry.type === 'request' ? '↑ REQ' : entry.type === 'response' ? '↓ RES' : '✗ ERR'}
+                                            </span>
+                                            <span className='mtp-api-entry__label'>{entry.label}</span>
+                                            <span className='mtp-api-entry__ts'>{entry.ts}</span>
+                                        </div>
+                                        <pre className='mtp-api-entry__json'>{JSON.stringify(entry.payload, null, 2)}</pre>
+                                    </div>
+                                ))}
+                                {apiLog.length > 0 && (
+                                    <button className='mtp-api-log__clear' onClick={() => setApiLog([])}>Clear log</button>
+                                )}
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>

@@ -372,6 +372,16 @@ const BotDetail: React.FC<{
     onLoadAndRun: (bot: TScalperBot) => Promise<void>;
     onPreloadXml: (bot: TScalperBot) => Promise<void>;
 }> = ({ bot, derivTrade, onBack, onLoadXml, onLoadAndRun, onPreloadXml }) => {
+    const store = useStore();
+    const autoRun = useCallback(async () => {
+        const rp: any = store?.run_panel;
+        if (!rp?.onRunButtonClick) return;
+        for (let i = 0; i < 8; i++) {
+            try { if (!rp.is_running) { await rp.onRunButtonClick(); return; } else { return; } }
+            catch { if (i < 7) await new Promise(r => setTimeout(r, 400)); }
+        }
+    }, [store]);
+
     const [cfg, setCfg]         = useState<BotConfig>(() => DEFAULT_CONFIG(bot));
     const [running, setRunning] = useState(false);
     const [scanning, setScanning] = useState(false); // terminal scanning without trading

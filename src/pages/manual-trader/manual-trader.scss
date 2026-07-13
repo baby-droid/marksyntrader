@@ -1,9 +1,11 @@
 .mt-page {
   display: flex;
   flex-direction: column;
-  /* Fill the full available tab height */
-  min-height: 100%;
-  height: 100%;
+  /* Fill the full viewport — override any parent height constraints */
+  height: 100vh;
+  max-height: 100vh;
+  min-height: 0;
+  overflow: hidden;
   background: #0d1117;
   font-family: 'IBM Plex Sans', 'Inter', -apple-system, sans-serif;
   color: #e2e8f0;
@@ -739,6 +741,142 @@
   &__icon  { font-size: 1.05rem; }
   &__label { font-size: 1rem; font-weight: 800; }
   &__pct   { margin-left: auto; font-size: 0.88rem; font-weight: 700; opacity: 0.9; }
+}
+
+/* ─── API Request / Response Log ─── */
+.mtp-api-log {
+  margin-top: 0.75rem;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  flex-shrink: 0;
+
+  &__toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.45rem 0.75rem;
+    background: #161b27;
+    border: none;
+    cursor: pointer;
+    color: #64748b;
+    font-size: 0.8rem;
+    font-weight: 700;
+    font-family: 'Share Tech Mono', monospace;
+    text-align: left;
+    &:hover { background: #1e2535; color: #94a3b8; }
+  }
+
+  &__count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 9px;
+    background: rgba(37,99,235,0.3);
+    color: #60a5fa;
+    font-size: 0.7rem;
+    font-weight: 800;
+  }
+
+  &__arrow { margin-left: auto; font-size: 0.65rem; }
+
+  &__body {
+    background: #0a0f1a;
+    max-height: 340px;
+    overflow-y: auto;
+    padding: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    &::-webkit-scrollbar { width: 3px; }
+    &::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+  }
+
+  &__empty {
+    color: #334155;
+    font-size: 0.75rem;
+    font-style: italic;
+    padding: 0.4rem 0.2rem;
+  }
+
+  &__clear {
+    width: 100%;
+    padding: 0.3rem;
+    border-radius: 0.3rem;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: none;
+    color: #64748b;
+    font-size: 0.72rem;
+    cursor: pointer;
+    font-family: inherit;
+    margin-top: 0.2rem;
+    &:hover { background: rgba(255,255,255,0.04); color: #94a3b8; }
+  }
+}
+
+.mtp-api-entry {
+  border-radius: 0.35rem;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.06);
+
+  &__hdr {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.28rem 0.5rem;
+    background: rgba(255,255,255,0.03);
+  }
+
+  &__badge {
+    font-size: 0.62rem;
+    font-weight: 800;
+    padding: 0.1rem 0.35rem;
+    border-radius: 0.2rem;
+    font-family: 'Share Tech Mono', monospace;
+    &--request  { background: rgba(37,99,235,0.25); color: #60a5fa; }
+    &--response { background: rgba(34,197,94,0.2); color: #22c55e; }
+    &--error    { background: rgba(239,68,68,0.2); color: #ef4444; }
+  }
+
+  &__label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #94a3b8;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: 'Share Tech Mono', monospace;
+  }
+
+  &__ts {
+    font-size: 0.65rem;
+    color: #475569;
+    font-family: 'Share Tech Mono', monospace;
+    flex-shrink: 0;
+  }
+
+  &__json {
+    margin: 0;
+    padding: 0.4rem 0.6rem;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.67rem;
+    line-height: 1.5;
+    color: #94a3b8;
+    white-space: pre-wrap;
+    word-break: break-all;
+    background: transparent;
+    overflow-x: auto;
+  }
+
+  &--request  .mtp-api-entry__json { color: #93c5fd; }
+  &--response .mtp-api-entry__json { color: #86efac; }
+  &--error    .mtp-api-entry__json { color: #fca5a5; }
 }
 
 /* ─── Responsive ─── */
