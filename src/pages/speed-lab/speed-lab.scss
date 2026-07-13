@@ -330,6 +330,35 @@
     .pos { color: #42B883; font-weight: 700; }
     .neg { color: #E24A43; font-weight: 700; }
   }
+
+  /* ── Last trade / API response panel ── */
+  &__last-trade {
+    border-left: 3px solid #4C7DFF;
+  }
+
+  &__last-trade-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.8rem 1.2rem;
+
+    @media (max-width: 600px) { grid-template-columns: 1fr 1fr; }
+  }
+
+  &__lti {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+
+    span   { font-size: 1rem; color: #999; text-transform: uppercase; letter-spacing: 0.04em; }
+    strong { font-size: 1.3rem; font-weight: 700; color: var(--text-general, #333); font-variant-numeric: tabular-nums; }
+    strong.pos { color: #42B883; }
+    strong.neg { color: #E24A43; }
+  }
+
+  &__mode-badge {
+    &--won  { background: rgba(66,184,131,0.15); color: #42B883; }
+    &--lost { background: rgba(226,74,67,0.12);  color: #E24A43; }
+  }
 }
 
 @keyframes turboGlow {

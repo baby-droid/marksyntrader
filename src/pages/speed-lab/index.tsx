@@ -100,6 +100,10 @@ const SpeedLab = observer(() => {
     const [sessionProfit, setSessionProfit] = useState(0);
     const [winCount, setWinCount]         = useState(0);
     const [lossCount, setLossCount]       = useState(0);
+    const [lastTrade, setLastTrade]       = useState<{
+        entry?: number; exit?: number; buy_price?: number;
+        profit?: number; balance?: number; contract_id?: number;
+    } | null>(null);
 
     const runRef            = useRef(false);
     const sessionProfitRef  = useRef(0);
@@ -127,7 +131,10 @@ const SpeedLab = observer(() => {
         logEntry(`⏹ ${reason} | Total: ${fmtProfit(sessionProfitRef.current)}`);
     }, [logEntry]);
 
-    const applyResult = useCallback((profit: number, boughtStake: number, speed: SpeedMode) => {
+    const applyResult = useCallback((
+        profit: number, boughtStake: number, speed: SpeedMode,
+        extra?: { entry_spot?: number; exit_spot?: number; buy_price?: number; contract_id?: number; }
+    ) => {
         const won = profit >= 0;
         sessionProfitRef.current += profit;
         fireCountRef.current++;
@@ -136,7 +143,21 @@ const SpeedLab = observer(() => {
         if (won) setWinCount(p => p + 1);
         else     setLossCount(p => p + 1);
 
-        logEntry(`${won ? '✅' : '❌'} [${SPEED_MODES[speed].name}] #${fireCountRef.current} ${contractType} ${fmtProfit(profit)} @ ${fmtVal(boughtStake)} | Session: ${fmtProfit(sessionProfitRef.current)}`);
+        // Update last-trade panel
+        const bal = derivTradeRef.current.balance;
+        setLastTrade({
+            entry: extra?.entry_spot,
+            exit: extra?.exit_spot,
+            buy_price: extra?.buy_price ?? boughtStake,
+            profit,
+            balance: bal ?? undefined,
+            contract_id: extra?.contract_id,
+        });
+
+        const spotPart = extra?.entry_spot != null
+            ? ` | Entry:${extra.entry_spot} Exit:${extra.exit_spot ?? '?'}`
+            : '';
+        logEntry(`${won ? '✅' : '❌'} [${SPEED_MODES[speed].name}] #${fireCountRef.current} ${contractType} ${fmtProfit(profit)} @ ${fmtVal(boughtStake)}${spotPart} | Session: ${fmtProfit(sessionProfitRef.current)}`);
 
         // Martingale
         if (won) {
@@ -175,7 +196,8 @@ const SpeedLab = observer(() => {
                 buildParams(curStake),
                 settled => {
                     inFlight = Math.max(0, inFlight - 1);
-                    if (runRef.current || settled.profit !== 0) applyResult(settled.profit ?? 0, curStake, speed);
+                    if (runRef.current || settled.profit !== 0)
+                        applyResult(settled.profit ?? 0, curStake, speed, settled);
                 }
             ).catch(err => {
                 inFlight = Math.max(0, inFlight - 1);
@@ -191,7 +213,10 @@ const SpeedLab = observer(() => {
                     // Turbo: zero-delay fire-and-forget — maximum throughput, no cap
                     derivTradeRef.current.buyContract(
                         buildParams(curStake),
-                        settled => { if (runRef.current || settled.profit !== 0) applyResult(settled.profit ?? 0, curStake, speed); }
+                        settled => {
+                            if (runRef.current || settled.profit !== 0)
+                                applyResult(settled.profit ?? 0, curStake, speed, settled);
+                        }
                     ).catch(err => {
                         const msg = err?.message || err?.error?.message || 'Buy error';
                         logEntry(`❌ ${msg}`);
@@ -207,22 +232,22 @@ const SpeedLab = observer(() => {
                     // No await — loop immediately for next fire
                 } else {
                     // Normal: sequential — buy then wait for full settlement
-                    const profit = await new Promise<number>(resolve => {
-                        const bail = setTimeout(() => { logEntry('⏱ Settlement timeout'); resolve(0); }, 15000);
+                    const { profit, extra } = await new Promise<{ profit: number; extra?: any }>(resolve => {
+                        const bail = setTimeout(() => { logEntry('⏱ Settlement timeout'); resolve({ profit: 0 }); }, 15000);
                         derivTradeRef.current.buyContract(
                             buildParams(curStake),
-                            settled => { clearTimeout(bail); resolve(settled.profit ?? 0); }
+                            settled => { clearTimeout(bail); resolve({ profit: settled.profit ?? 0, extra: settled }); }
                         ).then(result => {
-                            if (!result?.contract_id) { clearTimeout(bail); resolve(0); }
+                            if (!result?.contract_id) { clearTimeout(bail); resolve({ profit: 0 }); }
                         }).catch(err => {
                             clearTimeout(bail);
                             const msg = err?.message || err?.error?.message || 'Buy failed';
                             logEntry(`❌ ${msg}`);
-                            resolve(0);
+                            resolve({ profit: 0 });
                         });
                     });
                     if (!runRef.current) break;
-                    applyResult(profit, curStake, speed);
+                    applyResult(profit, curStake, speed, extra);
                 }
             } catch (e: any) {
                 logEntry(`❌ ${e?.message || 'Unknown error'}`);
@@ -360,6 +385,60 @@ const SpeedLab = observer(() => {
                 </div>
 
                 <div className='speed-lab__right'>
+                    {/* ── Last trade / API response panel ── */}
+                    {lastTrade && (
+                        <div className='speed-lab__card speed-lab__last-trade'>
+                            <h3>
+                                Last Trade
+                                <span className={`speed-lab__mode-badge ${lastTrade.profit != null && lastTrade.profit >= 0 ? 'speed-lab__mode-badge--won' : 'speed-lab__mode-badge--lost'}`}>
+                                    {lastTrade.profit != null ? (lastTrade.profit >= 0 ? '✅ WIN' : '❌ LOSS') : ''}
+                                </span>
+                            </h3>
+                            <div className='speed-lab__last-trade-grid'>
+                                {lastTrade.contract_id && (
+                                    <div className='speed-lab__lti'>
+                                        <span>Contract ID</span>
+                                        <strong>{lastTrade.contract_id}</strong>
+                                    </div>
+                                )}
+                                {lastTrade.buy_price != null && (
+                                    <div className='speed-lab__lti'>
+                                        <span>Buy price</span>
+                                        <strong>{Number(lastTrade.buy_price).toFixed(2)} {derivTrade.currency}</strong>
+                                    </div>
+                                )}
+                                {lastTrade.profit != null && (
+                                    <div className='speed-lab__lti'>
+                                        <span>P / L</span>
+                                        <strong className={lastTrade.profit >= 0 ? 'pos' : 'neg'}>
+                                            {lastTrade.profit >= 0 ? '+' : ''}{lastTrade.profit.toFixed(2)} {derivTrade.currency}
+                                        </strong>
+                                    </div>
+                                )}
+                                {lastTrade.entry != null && (
+                                    <div className='speed-lab__lti'>
+                                        <span>Entry spot</span>
+                                        <strong>{lastTrade.entry}</strong>
+                                    </div>
+                                )}
+                                {lastTrade.exit != null && (
+                                    <div className='speed-lab__lti'>
+                                        <span>Exit spot</span>
+                                        <strong>{lastTrade.exit}</strong>
+                                    </div>
+                                )}
+                                {lastTrade.balance != null && (
+                                    <div className='speed-lab__lti'>
+                                        <span>Balance after</span>
+                                        <strong style={{ color: '#4C7DFF' }}>
+                                            {lastTrade.balance.toFixed(2)} {derivTrade.currency}
+                                        </strong>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
                     <div className='speed-lab__card speed-lab__log-card'>
                         <h3>
                             Execution Log
