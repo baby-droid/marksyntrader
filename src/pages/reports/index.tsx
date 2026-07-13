@@ -43,7 +43,8 @@ const TABS = ['P&L History', 'Open Positions', 'Statement'];
 const Reports = observer(() => {
     const { balance, currency } = useDerivTrading();
     const [activeTab, setActiveTab]     = useState(0);
-    const [statements, setStatements]   = useState<any[]>([]);
+    const [statements, setStatements]   = useState<any[]>([]); // profit_table rows (P&L History tab)
+    const [statementRows, setStatementRows] = useState<any[]>([]); // statement rows (Statement tab)
     const [openContracts, setOpenContracts] = useState<any[]>([]);
     const [isLoading, setIsLoading]     = useState(false);
     const [dateFrom, setDateFrom]       = useState('');
@@ -55,29 +56,34 @@ const Reports = observer(() => {
     const infoCache = useRef<Record<number, any>>({});
     const [infoMap, setInfoMap]         = useState<Record<number, any>>({});
 
-    const fetchStatement = useCallback(async (lim = limit) => {
+    /* P&L History uses `profit_table` — the exact call Deriv.com's own Reports >
+       Profit Table page uses (unlike `statement`, which is a raw ledger of every
+       money movement including deposits/withdrawals/adjustments, not just trade
+       P/L). `profit_loss` here is already the settled profit/loss for the
+       contract, matching what deriv.com displays. */
+    const fetchProfitTable = useCallback(async (lim = limit) => {
         setIsLoading(true);
         try {
-            const params: any = { statement: 1, description: 1, limit: lim };
+            const params: any = { profit_table: 1, description: 1, limit: lim, sort: 'DESC' };
             if (dateFrom) params.date_from = Math.floor(new Date(dateFrom).getTime() / 1000);
-            if (dateTo)   params.date_to   = Math.floor(new Date(dateTo).getTime() / 1000);
+            if (dateTo)   params.date_to   = Math.floor(new Date(dateTo).getTime() / 1000) + 86399; // include the whole "to" day
 
             const res = await (api_base.api.send as any)(params);
-            if (res?.statement?.transactions) {
-                const txns = res.statement.transactions;
-                const sells = txns.filter((t: any) => t.action_type === 'sell');
-                const rows = sells.map((t: any) => ({
+            if (res?.profit_table?.transactions) {
+                const txns = res.profit_table.transactions;
+                const rows = txns.map((t: any) => ({
                     transaction_id: t.transaction_id,
                     contract_id:    t.contract_id,
-                    action_type:    t.action_type,
-                    amount:         parseFloat(t.amount  || '0'),
-                    balance_after:  parseFloat(t.balance_after || '0'),
+                    balance_after:  0, // profit_table has no running balance — statement tab covers that
                     longcode:       t.longcode  || '',
                     shortcode:      t.shortcode || '',
                     purchase_time:  t.purchase_time,
                     sell_time:      t.sell_time,
-                    pnl:            parseFloat(t.amount  || '0'),
+                    buy_price:      parseFloat(t.buy_price  || '0'),
+                    sell_price:     parseFloat(t.sell_price || '0'),
+                    pnl:            parseFloat(t.profit_loss ?? (parseFloat(t.sell_price || '0') - parseFloat(t.buy_price || '0'))),
                     contract_type:  extractType(t.shortcode || ''),
+                    underlying:     t.underlying_symbol || '',
                 }));
                 setStatements(rows);
                 const pnl = rows.reduce((s: number, t: any) => s + t.pnl, 0);
@@ -99,30 +105,108 @@ const Reports = observer(() => {
                 }
             }
         } catch (e) {
+            console.error('Profit table error', e);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [dateFrom, dateTo, limit]);
+
+    /* Statement tab keeps using the real `statement` ledger (deposits, sells,
+       adjustments, etc.) — this is what deriv.com's own Statement tab shows,
+       distinct from the Profit Table. */
+    const fetchStatement = useCallback(async (lim = limit) => {
+        setIsLoading(true);
+        try {
+            const params: any = { statement: 1, description: 1, limit: lim };
+            if (dateFrom) params.date_from = Math.floor(new Date(dateFrom).getTime() / 1000);
+            if (dateTo)   params.date_to   = Math.floor(new Date(dateTo).getTime() / 1000) + 86399;
+
+            const res = await (api_base.api.send as any)(params);
+            if (res?.statement?.transactions) {
+                const txns = res.statement.transactions;
+                const sells = txns.filter((t: any) => t.action_type === 'sell');
+                const rows = sells.map((t: any) => ({
+                    transaction_id: t.transaction_id,
+                    contract_id:    t.contract_id,
+                    action_type:    t.action_type,
+                    amount:         parseFloat(t.amount  || '0'),
+                    balance_after:  parseFloat(t.balance_after || '0'),
+                    longcode:       t.longcode  || '',
+                    shortcode:      t.shortcode || '',
+                    purchase_time:  t.purchase_time,
+                    sell_time:      t.sell_time,
+                    pnl:            parseFloat(t.amount  || '0'),
+                    contract_type:  extractType(t.shortcode || ''),
+                }));
+                setStatementRows(rows);
+
+                const ids = rows.slice(0, 30).map((t: any) => t.contract_id).filter(Boolean);
+                const missing = ids.filter((id: number) => !infoCache.current[id]);
+                if (missing.length > 0) {
+                    const infos = await Promise.allSettled(missing.map(fetchContractInfo));
+                    infos.forEach((r, i) => {
+                        if (r.status === 'fulfilled' && r.value) {
+                            infoCache.current[missing[i]] = r.value;
+                        }
+                    });
+                    setInfoMap({ ...infoCache.current });
+                }
+            }
+        } catch (e) {
             console.error('Statement error', e);
         } finally {
             setIsLoading(false);
         }
     }, [dateFrom, dateTo, limit]);
 
-    const fetchOpenContracts = useCallback(async () => {
+    /* Open Positions — mirrors deriv.com's live-updating Open Positions tab:
+       one persistent `proposal_open_contract` stream (no contract_id) that
+       pushes every update for every currently open contract, rather than a
+       single-shot poll. Contracts drop off the list ~1.2s after they settle
+       (is_sold) so the user still sees the final tick before it disappears. */
+    const openMapRef = useRef<Record<number, any>>({});
+    const openSubRef  = useRef<any>(null);
+
+    const syncOpenContracts = useCallback(() => {
+        setOpenContracts(Object.values(openMapRef.current).sort((a: any, b: any) => (b.date_start || 0) - (a.date_start || 0)));
+    }, []);
+
+    const subscribeOpenContracts = useCallback(() => {
         setIsLoading(true);
         try {
-            const res = await (api_base.api.send as any)({ proposal_open_contract: 1 });
-            if (res?.proposal_open_contract) {
-                const c = res.proposal_open_contract;
-                setOpenContracts(Array.isArray(c) ? c : [c]);
-            }
+            openSubRef.current = api_base.api.subscribe({ proposal_open_contract: 1, subscribe: 1 });
+            openSubRef.current.subscribe((res: any) => {
+                setIsLoading(false);
+                const poc = res?.proposal_open_contract;
+                if (!poc || !poc.contract_id) return;
+                openMapRef.current[poc.contract_id] = poc;
+                syncOpenContracts();
+                if (poc.is_sold) {
+                    setTimeout(() => {
+                        delete openMapRef.current[poc.contract_id];
+                        syncOpenContracts();
+                    }, 1200);
+                }
+            }, (err: any) => { console.error('Open positions stream error', err); setIsLoading(false); });
         } catch (e) {
-            console.error('Open contracts error', e);
-        } finally {
+            console.error('Open positions subscribe error', e);
             setIsLoading(false);
         }
+    }, [syncOpenContracts]);
+
+    const unsubscribeOpenContracts = useCallback(() => {
+        try { openSubRef.current?.unsubscribe?.(); } catch {}
+        openSubRef.current = null;
+        openMapRef.current = {};
     }, []);
 
     useEffect(() => {
-        if (activeTab === 0 || activeTab === 2) fetchStatement();
-        else if (activeTab === 1) fetchOpenContracts();
+        if (activeTab === 0) fetchProfitTable();
+        else if (activeTab === 2) fetchStatement();
+        else if (activeTab === 1) {
+            subscribeOpenContracts();
+            return () => unsubscribeOpenContracts();
+        }
     }, [activeTab]); // eslint-disable-line
 
     const groupByDay = (stmts: any[]) => {
@@ -168,7 +252,7 @@ const Reports = observer(() => {
                         </select>
                     </label>
                     <button className='reports__refresh-btn'
-                        onClick={() => fetchStatement(limit)} disabled={isLoading}>
+                        onClick={() => (activeTab === 0 ? fetchProfitTable(limit) : fetchStatement(limit))} disabled={isLoading}>
                         {isLoading ? '⏳' : '🔄'} Refresh
                     </button>
                 </div>
@@ -260,28 +344,25 @@ const Reports = observer(() => {
                 </div>
             )}
 
-            {/* ── Open Positions ── */}
+            {/* ── Open Positions — live stream, like deriv.com's Reports > Open Positions ── */}
             {activeTab === 1 && (
                 <div className='reports__open'>
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem' }}>
-                        <button className='reports__refresh-btn' onClick={fetchOpenContracts} disabled={isLoading}>
-                            {isLoading ? '⏳' : '🔄'} Refresh
-                        </button>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '0.6rem', marginBottom: '1rem' }}>
+                        <span className='reports__live-badge'>{isLoading ? '⏳ Connecting…' : '● LIVE'}</span>
                     </div>
-                    {isLoading && <div className='reports__loading'>Loading positions…</div>}
                     {!isLoading && openContracts.length === 0 && (
                         <div className='reports__empty'>No open positions.</div>
                     )}
-                    {!isLoading && openContracts.map((c, i) => (
-                        <div key={i} className='reports__open-contract'>
+                    {openContracts.map((c: any) => (
+                        <div key={c.contract_id} className={`reports__open-contract ${c.is_sold ? (parseFloat(c.profit || '0') >= 0 ? 'settled-won' : 'settled-lost') : ''}`}>
                             <div className='reports__open-header'>
-                                <strong>{c.contract_type || 'N/A'}</strong>
-                                <span className={`reports__open-status ${c.status === 'won' ? 'won' : ''}`}>
-                                    {c.status || 'open'}
+                                <strong>{c.contract_type || extractType(c.shortcode || '')}</strong>
+                                <span className={`reports__open-status ${c.is_sold ? (parseFloat(c.profit || '0') >= 0 ? 'won' : 'lost') : ''}`}>
+                                    {c.is_sold ? (parseFloat(c.profit || '0') >= 0 ? 'won' : 'lost') : 'open'}
                                 </span>
                             </div>
                             <div className='reports__open-details'>
-                                <span>Symbol: <b>{c.underlying_symbol || c.symbol || '—'}</b></span>
+                                <span>Symbol: <b>{c.underlying || c.underlying_symbol || c.symbol || '—'}</b></span>
                                 <span>Stake: <b>{Number(c.buy_price ?? 0).toFixed(2)} {cur}</b></span>
                                 <span>Entry: <b>{c.entry_spot ?? c.entry_tick ?? '—'}</b></span>
                                 <span>Current: <b>{c.current_spot ?? '—'}</b></span>
@@ -315,7 +396,7 @@ const Reports = observer(() => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {statements.map(s => {
+                                {statementRows.map(s => {
                                     const info = infoMap[s.contract_id];
                                     return (
                                         <tr key={s.transaction_id} className={s.pnl > 0 ? 'won' : 'lost'}>
@@ -329,7 +410,7 @@ const Reports = observer(() => {
                                         </tr>
                                     );
                                 })}
-                                {statements.length === 0 && (
+                                {statementRows.length === 0 && (
                                     <tr>
                                         <td colSpan={7} style={{ textAlign: 'center', color: '#aaa', padding: '2rem' }}>
                                             No data

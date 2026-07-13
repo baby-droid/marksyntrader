@@ -61,6 +61,7 @@
     &.active { background: rgba(0,200,255,0.18); border-color: rgba(0,200,255,0.4); color: #00c8ff; }
   }
   &__count { font-size: 0.82rem; color: #475569; margin-left: auto; }
+  &__breadcrumb { font-size: 0.9rem; font-weight: 700; color: #00c8ff; }
 
   /* Bot card grid */
   &__grid {
@@ -69,6 +70,42 @@
     gap: 0.9rem;
     flex: 1;
   }
+
+  /* Folder-icon group picker */
+  &__folders {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 1rem;
+    flex: 1;
+  }
+}
+
+.sb-folder {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 1rem;
+  padding: 1.4rem 1rem 1.1rem;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.2s;
+  display: flex; flex-direction: column; align-items: center; gap: 0.35rem;
+
+  &:hover {
+    background: rgba(0,200,255,0.08);
+    border-color: rgba(0,200,255,0.35);
+    transform: translateY(-3px);
+    box-shadow: 0 8px 22px rgba(0,200,255,0.15);
+  }
+
+  &__icon {
+    position: relative; font-size: 3rem; line-height: 1;
+    filter: drop-shadow(0 4px 10px rgba(0,200,255,0.25));
+  }
+  &__emoji {
+    position: absolute; bottom: -0.1rem; right: -0.35rem; font-size: 1.15rem;
+  }
+  &__label { font-weight: 700; font-size: 0.98rem; color: #e0e8f0; }
+  &__count { font-size: 0.8rem; color: #64748b; }
 }
 
 /* Account badge (list view) */

@@ -208,6 +208,20 @@
     border: 1px solid var(--general-section-1, #eee);
     border-radius: 1rem;
     padding: 1.4rem 1.6rem;
+    transition: background 0.4s, border-color 0.4s;
+
+    &.settled-won  { border-color: rgba(66,184,131,0.5); background: rgba(66,184,131,0.06); }
+    &.settled-lost { border-color: rgba(226,74,67,0.5);  background: rgba(226,74,67,0.06); }
+  }
+
+  &__live-badge {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #42B883;
+    background: rgba(66,184,131,0.12);
+    border: 1px solid rgba(66,184,131,0.3);
+    border-radius: 2rem;
+    padding: 0.25rem 0.9rem;
   }
 
   &__open-header {

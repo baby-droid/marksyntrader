@@ -6,6 +6,8 @@ import { DBOT_TABS } from '@/constants/bot-contents';
 import { useDerivTrade } from '@/hooks/useDerivTrade';
 import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import { applyCommission } from '@/utils/commission';
+import { observer as globalObserver } from '@/external/bot-skeleton';
+import { isEnded } from '@/components/shared';
 import manifest from '../../../public/bots/scalpers/manifest.json';
 import './scalper-bots.scss';
 
@@ -201,7 +203,34 @@ const ALL_MARKETS = [
 ];
 
 const SCALPER_BOTS: TScalperBot[] = manifest as TScalperBot[];
-const CATEGORIES = ['All', 'Even/Odd', 'Over/Under'];
+
+/* Individual folder groups — Over and Under (and Matches/Differs, Rise/Fall,
+   Even/Odd) are split into their OWN folder icon rather than sharing a
+   combined category, so pressing "Over" shows only Over scalpers, etc. */
+type SbGroup = 'Over' | 'Under' | 'Rise' | 'Fall' | 'Matches' | 'Differs' | 'Even' | 'Odd';
+const GROUP_DEFS: { key: SbGroup; label: string; icon: string }[] = [
+    { key: 'Over',    label: 'Over',    icon: '⬆️' },
+    { key: 'Under',   label: 'Under',   icon: '⬇️' },
+    { key: 'Rise',    label: 'Rise',    icon: '📈' },
+    { key: 'Fall',    label: 'Fall',    icon: '📉' },
+    { key: 'Matches', label: 'Matches', icon: '🎯' },
+    { key: 'Differs', label: 'Differs', icon: '🚫' },
+    { key: 'Even',    label: 'Even',    icon: '2️⃣' },
+    { key: 'Odd',     label: 'Odd',     icon: '1️⃣' },
+];
+function botGroup(bot: TScalperBot): SbGroup | null {
+    switch (bot.contractType) {
+        case 'DIGITOVER':  return 'Over';
+        case 'DIGITUNDER': return 'Under';
+        case 'CALL':        return 'Rise';
+        case 'PUT':         return 'Fall';
+        case 'DIGITMATCH':  return 'Matches';
+        case 'DIGITDIFF':   return 'Differs';
+        case 'DIGITEVEN':   return 'Even';
+        case 'DIGITODD':    return 'Odd';
+        default: return null;
+    }
+}
 
 /* ─── Hacker scan messages (shown during market analysis) ─── */
 const HACK_SCAN_MSGS = [
@@ -436,27 +465,53 @@ const BotDetail: React.FC<{
 }> = ({ bot, derivTrade, onBack, onLoadXml, onLoadAndRun, onPreloadXml }) => {
     const store = useStore();
 
-    /* Set the Blockly workspace market symbol without reloading the whole XML */
-    const setWorkspaceMarket = useCallback((market: string): boolean => {
+    /* Patch the already-loaded Blockly workspace's market/stake/martingale-size/
+       prediction fields WITHOUT reloading the XML from disk — this keeps the
+       real Bot Builder bot in lock-step with the terminal's current run
+       parameters right before it is triggered to buy. Contract type itself is
+       never touched here — it stays locked to this bot's own strategy. */
+    const patchWorkspaceParams = useCallback((patch: {
+        market?: string; stake?: number; martingale?: number; prediction?: number | null;
+    }): boolean => {
         try {
             const B = (window as any).Blockly;
             if (!B?.derivWorkspace) return false;
             const blocks = B.derivWorkspace.getAllBlocks(false);
             let changed = false;
             for (const block of blocks) {
-                if (block.type === 'trade_definition_market') {
-                    const field = block.getField('SYMBOL_LIST');
-                    if (field) { field.setValue(market); changed = true; }
+                if (patch.market && block.type === 'trade_definition_market') {
+                    try {
+                        block.getField('SUBMARKET_LIST')?.setValue(patch.market.startsWith('JD') ? 'jump_index' : 'random_index');
+                        block.getField('SYMBOL_LIST')?.setValue(patch.market);
+                        changed = true;
+                    } catch { /* noop */ }
+                }
+                if (block.type === 'variables_set') {
+                    const varName = block.getField('VAR')?.getText?.();
+                    if (patch.stake != null && varName === 'stake') {
+                        const child = block.getInputTargetBlock?.('VALUE');
+                        if (child?.type === 'math_number') { child.getField('NUM')?.setValue(String(patch.stake)); changed = true; }
+                    }
+                    if (patch.martingale != null && varName === 'martingale size') {
+                        const child = block.getInputTargetBlock?.('VALUE');
+                        if (child?.type === 'math_number') { child.getField('NUM')?.setValue(String(patch.martingale)); changed = true; }
+                    }
+                }
+                if (patch.prediction != null && block.type === 'trade_definition_tradeoptions') {
+                    const child = block.getInputTargetBlock?.('PREDICTION');
+                    if (child) { child.getField('NUM')?.setValue(String(patch.prediction)); changed = true; }
                 }
             }
             return changed;
         } catch { return false; }
     }, []);
 
-    /* autoRun — sets the market in the workspace, then clicks the run button.
-       Retries until Blockly workspace exists (up to 4 s). */
+    /* Backwards-compatible alias used by the "📂 Builder" load-and-run button. */
+    const setWorkspaceMarket = useCallback((market: string): boolean => patchWorkspaceParams({ market }), [patchWorkspaceParams]);
+
+    /* autoRun — patches the market in the workspace, then clicks the real Run
+       button. Retries until the Blockly workspace exists (up to 4 s). */
     const autoRun = useCallback(async (market?: string) => {
-        // 1. Set market in workspace if provided
         if (market) {
             let ok = setWorkspaceMarket(market);
             for (let n = 0; n < 40 && !ok; n++) {
@@ -464,7 +519,6 @@ const BotDetail: React.FC<{
                 ok = setWorkspaceMarket(market);
             }
         }
-        // 2. Click the run button
         const rp: any = store?.run_panel;
         if (!rp?.onRunButtonClick) return;
         for (let i = 0; i < 8; i++) {
@@ -474,6 +528,91 @@ const BotDetail: React.FC<{
             } catch { if (i < 7) await new Promise(r => setTimeout(r, 400)); }
         }
     }, [store, setWorkspaceMarket]);
+
+    /* Trigger the real Bot Builder Run button with zero artificial delay and
+       await this run cycle's outcome. The XML bot's own before_purchase /
+       after_purchase / trade_again blocks own the actual buy + martingale —
+       this only (a) syncs market/stake/martingale/prediction into the
+       workspace right before firing, (b) listens to every settled contract
+       via globalObserver('bot.contract') so the terminal log stays accurate,
+       and (c) force-stops the XML bot the moment a terminal-level guard
+       (take profit / stop loss / consecutive-loss limit) is breached — those
+       guards do not exist inside the XML itself. Resolves once the bot cycle
+       ends (naturally on a win, or via our forced stop). */
+    const runXmlBotCycle = useCallback((params: {
+        market: string; stake: number; martingale: number; prediction: number | null;
+        consecutiveLossLimit: number; stopOnLoss: boolean; tpGuard: boolean;
+        takeProfit: number; stopLoss: number; sessionPnlRef: { current: number };
+        onSettled: (info: { profit: number; won: boolean; market: string; buyPrice: number; exitDigit: number | null; consLoss: number }) => void;
+        onLog: (msg: string, kind?: string) => void;
+    }): Promise<{ forceStopped: boolean; reason: 'tp' | 'sl' | 'loss_limit' | null; cycleProfit: number; consLoss: number }> => {
+        return new Promise(resolve => {
+            const rp: any = store?.run_panel;
+            if (!rp?.onRunButtonClick) { resolve({ forceStopped: false, reason: null, cycleProfit: 0, consLoss: 0 }); return; }
+
+            patchWorkspaceParams({
+                market: params.market, stake: params.stake,
+                martingale: params.martingale, prediction: params.prediction,
+            });
+
+            const seen = new Set<number | string>();
+            let cycleProfit = 0;
+            let consLoss = 0;
+            let forceStopped = false;
+            let reason: 'tp' | 'sl' | 'loss_limit' | null = null;
+            let settled = false;
+
+            const cleanup = () => {
+                try { globalObserver.unregister('bot.contract', onContract); } catch {}
+                try { globalObserver.unregister('bot.stop', onStop); } catch {}
+                try { globalObserver.unregister('Error', onError); } catch {}
+            };
+            const finish = () => {
+                if (settled) return;
+                settled = true;
+                cleanup();
+                resolve({ forceStopped, reason, cycleProfit, consLoss });
+            };
+            const onContract = (contract: any) => {
+                if (!contract || !isEnded(contract)) return;
+                const cid = contract.contract_id ?? contract.transaction_ids?.buy ?? contract.transaction_id;
+                if (cid != null) { if (seen.has(cid)) return; seen.add(cid); }
+                const profit = applyCommission(Number(contract.profit) || 0);
+                const won = profit > 0;
+                const exitDigit = contract.exit_tick != null ? getLastDigit(Number(contract.exit_tick)) : null;
+                cycleProfit = +(cycleProfit + profit).toFixed(2);
+                params.sessionPnlRef.current = +(params.sessionPnlRef.current + profit).toFixed(2);
+                consLoss = won ? 0 : consLoss + 1;
+                params.onSettled({ profit, won, market: params.market, buyPrice: Number(contract.buy_price) || params.stake, exitDigit, consLoss });
+
+                const tpHit = params.tpGuard && params.sessionPnlRef.current >= params.takeProfit;
+                const slHit = params.tpGuard && params.sessionPnlRef.current <= -Math.abs(params.stopLoss);
+                const lossLimitHit = params.stopOnLoss && consLoss >= params.consecutiveLossLimit;
+                if (!won && (tpHit || slHit || lossLimitHit)) {
+                    forceStopped = true;
+                    reason = tpHit ? 'tp' : slHit ? 'sl' : 'loss_limit';
+                    try { rp.onStopButtonClick?.(); } catch {}
+                } else if (won && (tpHit || slHit)) {
+                    // A win pushed us over the TP/SL boundary too — stop even though the
+                    // XML would otherwise also stop naturally on a win (defence-in-depth).
+                    forceStopped = true;
+                    reason = tpHit ? 'tp' : 'sl';
+                    try { rp.onStopButtonClick?.(); } catch {}
+                }
+            };
+            const onStop = () => finish();
+            const onError = (err: any) => {
+                params.onLog(`⚠ ${err?.message || err?.error?.message || 'Bot engine error — stopping cycle.'}`, 'error');
+                finish();
+            };
+
+            globalObserver.register('bot.contract', onContract);
+            globalObserver.register('bot.stop', onStop);
+            globalObserver.register('Error', onError);
+
+            Promise.resolve(rp.onRunButtonClick()).catch(err => onError(err));
+        });
+    }, [store, patchWorkspaceParams]);
 
     const [cfg, setCfg]         = useState<BotConfig>(() => DEFAULT_CONFIG(bot));
     const [running, setRunning] = useState(false);
@@ -692,7 +831,6 @@ const BotDetail: React.FC<{
         const slotBaseStake = () => (activeSlot === 'm2' ? cfg.market2.stake : (cfg.riskManager.inject ? cfg.riskManager.overrideStake : cfg.stake));
 
         let curStake = slotBaseStake();
-        let martCount = 0; // consecutive losses for martingale
 
         while (!stopRef.current) {
             try {
@@ -711,17 +849,10 @@ const BotDetail: React.FC<{
                             setActiveMarket(curMarket);
                             setDigitDisplay(digitWindowRef.current.slice(0, 20));
                             addLog(`🧬 STRATEGY_LOGIC: CONDITION MET ON ${curMarket} — ${contractLabel(bot)} LOCKED, EXECUTING`, 'switch');
-                            /* NOTE: the real Bot Builder XML bot is intentionally NOT
-                               fired here. Firing it would start a second, independent
-                               trading engine (the interpreter keeps trading on its own
-                               loop) that runs in parallel with this terminal's own
-                               buyContract() calls below — causing duplicate purchases
-                               and, once a different scalper is later opened, contract-type
-                               drift as a stale background run keeps trading the OLD
-                               bot's contract type. The terminal log is the single
-                               source of truth for trading; the XML stays loaded/visible
-                               in Bot Builder (via onPreloadXml) purely so the user sees
-                               which bot is "locked" without it executing twice. */
+                            /* The real Bot Builder XML bot IS fired for this signal (see
+                               runXmlBotCycle below) — it is the single, sole buyer. This
+                               terminal only detected the entry condition; it never places
+                               a trade of its own. */
                             entry = true;
                             break;
                         }
@@ -759,154 +890,123 @@ const BotDetail: React.FC<{
 
                 setEntryReady(true);
                 addLog('⚡ ENTRY_SIGNAL: DETECTED — EXECUTING TRADE', 'entry');
-                await new Promise(r => setTimeout(r, 120));
 
-                /* ── Execute trade ── */
-                const txId = ++txIdRef.current;
+                /* ── Fire the REAL Bot Builder XML bot — zero artificial delay ──
+                   The loaded XML owns the actual buy plus its own martingale /
+                   trade_again recovery loop; this call only (a) syncs market,
+                   stake, martingale size and barrier into the workspace right
+                   before triggering, (b) mirrors every settled contract into this
+                   terminal log/summary, and (c) force-stops the XML bot the
+                   instant a terminal-level guard (take profit / stop loss /
+                   consecutive-loss limit) is breached — guards the XML itself
+                   has no knowledge of. There is exactly ONE buyer now: the XML
+                   bot via its own Run button. */
                 const activeBarrier = slotBarrier();
-                const openTx: TxRecord = {
-                    id: txId, time: ts(), market: curMarket,
-                    type: contractLabel(bot), stake: curStake,
-                    barrier: activeBarrier, result: 'open', profit: 0, exitDigit: null,
-                };
-                setTxList(prev => [openTx, ...prev]);
+                addLog(`📂 XML_RUN_TRIGGER: ${contractLabel(bot)} @ ${curMarket} | stake ${curStake} | mart x${slotMartingale()}`, 'hack');
 
-                const params: any = {
-                    symbol: curMarket,
-                    // Contract type is always locked to this bot's own type —
-                    // Market 2 changes market/stake/martingale/TP/barrier only.
-                    contract_type: bot.contractType,
-                    duration: cfg.duration,
-                    duration_unit: 't',
-                    stake: curStake,
-                };
-                // Pass barrier as a number — buyContract handles the String() conversion
-                if (activeBarrier !== null) params.barrier = Number(activeBarrier);
+                const effectiveLossLimit = lastFiredGroupRef.current
+                    ? Math.min(cfg.consecutiveLossLimit || Infinity, groupRecoveryLimit(lastFiredGroupRef.current))
+                    : cfg.consecutiveLossLimit;
 
-                const profit = await new Promise<number>((resolve, reject) => {
-                    derivTrade.buyContract(params, settled => {
-                        const p = applyCommission(settled.profit ?? 0);
-                        const exitDigit = settled.exit_spot != null
-                            ? getLastDigit(Number(settled.exit_spot)) : null;
-                        const result: TxRecord['result'] = p > 0 ? 'won' : 'lost';
-                        setTxList(prev => prev.map(t =>
-                            t.id === txId ? { ...t, result, profit: p, exitDigit } : t
-                        ));
-                        resolve(p);
-                    }).catch(reject);
+                const cycle = await runXmlBotCycle({
+                    market: curMarket, stake: curStake, martingale: slotMartingale(),
+                    prediction: activeBarrier,
+                    consecutiveLossLimit: effectiveLossLimit === Infinity ? Number.MAX_SAFE_INTEGER : effectiveLossLimit,
+                    stopOnLoss: cfg.stopOnLoss || !!lastFiredGroupRef.current,
+                    tpGuard: cfg.tpGuard, takeProfit: slotTakeProfit(), stopLoss: cfg.stopLoss,
+                    sessionPnlRef,
+                    onLog: addLog,
+                    onSettled: ({ profit, won, market, buyPrice, exitDigit, consLoss }) => {
+                        const txId = ++txIdRef.current;
+                        setTxList(prev => [{
+                            id: txId, time: ts(), market, type: contractLabel(bot),
+                            stake: buyPrice, barrier: activeBarrier, result: won ? 'won' : 'lost',
+                            profit, exitDigit,
+                        }, ...prev]);
+                        const pnlStr = `${sessionPnlRef.current >= 0 ? '+' : ''}${sessionPnlRef.current.toFixed(2)} USD`;
+                        if (won) {
+                            addLog(`✅ WIN  +${profit.toFixed(2)} USD  |  P/L: ${pnlStr}`, 'win');
+                        } else {
+                            consLossRef.current = consLoss;
+                            addLog(`❌ LOSS  ${profit.toFixed(2)} USD  |  recovery: ${consLoss}/${effectiveLossLimit === Infinity ? '∞' : effectiveLossLimit}  |  P/L: ${pnlStr}`, 'loss');
+                            addLog('🛡 RECOVERY_MODE: ENGAGED — XML bot re-entering with martingale stake', 'switch');
+                        }
+                    },
                 });
 
                 if (stopRef.current) break;
                 setEntryReady(false);
 
-                const won = profit > 0;
-                sessionPnlRef.current = +(sessionPnlRef.current + profit).toFixed(2);
-                const pnlStr = `${sessionPnlRef.current >= 0 ? '+' : ''}${sessionPnlRef.current.toFixed(2)} USD`;
+                if (cycle.forceStopped) {
+                    consLossRef.current = cycle.consLoss;
 
-                if (won) {
-                    consLossRef.current = 0;
-                    const wasRecovering = martCount > 0;
-                    martCount = 0;
-                    lastFiredGroupRef.current = null;
-                    /* A win on Market 2 clears the recovery — hand control back to Market 1 */
-                    if (activeSlot === 'm2') {
-                        activeSlot = 'm1';
-                        curMarket  = marketList[curMarketIdx] ?? cfg.market;
-                        subscribeMarket(curMarket);
-                        addLog(`↩ MARKET_1_RESTORE → ${curMarket} (Market 2 recovered)`, 'switch');
-                    }
-                    /* Reset stake after win (using whichever slot is currently active) */
-                    curStake = slotBaseStake();
-                    addLog(`✅ WIN  +${profit.toFixed(2)} USD  |  P/L: ${pnlStr}`, 'win');
-
-                    if (!bot.multiple) {
-                        addLog('🎉 TICK WIN — Bot stopped.', 'win');
-                        setWinPopup({ profit, stopped: true });
-                        break;
-                    }
-
-                    /* TP check (slot-specific take-profit) */
-                    if (cfg.tpGuard && sessionPnlRef.current >= slotTakeProfit()) {
+                    if (cycle.reason === 'tp') {
                         addLog(`🎯 Take profit ${slotTakeProfit()} reached.`, 'stop');
-                        setWinPopup({ profit, stopped: true });
+                        setWinPopup({ profit: cycle.cycleProfit, stopped: true });
+                        break;
+                    }
+                    if (cycle.reason === 'sl') {
+                        addLog(`🛡 Stop loss -${cfg.stopLoss} triggered.`, 'stop');
+                        setWinPopup({ profit: cycle.cycleProfit, stopped: true });
                         break;
                     }
 
-                    setWinPopup({ profit, stopped: false });
-                    addLog(wasRecovering
-                        ? '🔄 Recovery successful — returning to market scan...'
-                        : '🔄 Returning to market scan...', 'scan');
-                } else {
-                    consLossRef.current++;
-                    martCount++;
-
-                    /* Martingale: only if RM activate limit reached (Risk Manager
-                       injection is Market-1-only; Market 2 always uses its own
-                       configured martingale multiplier). */
-                    const rm = cfg.riskManager;
-                    const rmApplies = activeSlot === 'm1' && rm.inject;
-                    const useMartingale = rmApplies && rm.active && rm.onLose
-                        ? martCount >= rm.activateLimit && martCount <= rm.deactivateLimit
-                        : !rmApplies; // when not injected, always use the slot's martingale
-
-                    const multiplier = rmApplies && rm.active ? rm.multiplier : slotMartingale();
-                    const nextStake  = useMartingale
-                        ? +(curStake * multiplier).toFixed(2)
-                        : curStake;
-
-                    /* A fired Strategy Logic group can cap recovery attempts tighter
-                       than the general consecutive-loss limit. */
-                    const effectiveLossLimit = lastFiredGroupRef.current
-                        ? Math.min(cfg.consecutiveLossLimit || Infinity, groupRecoveryLimit(lastFiredGroupRef.current))
-                        : cfg.consecutiveLossLimit;
-
-                    addLog(`❌ LOSS  ${profit.toFixed(2)} USD  |  recovery: ${martCount}/${effectiveLossLimit === Infinity ? '∞' : effectiveLossLimit}  |  next: ${nextStake.toFixed(2)}`, 'loss');
-                    addLog('🛡 RECOVERY_MODE: ENGAGED — awaiting next entry signal', 'switch');
-
-                    /* Stop on consecutive losses (bounded by Strategy Logic recovery limit) */
-                    if ((cfg.stopOnLoss || lastFiredGroupRef.current) && consLossRef.current >= effectiveLossLimit) {
-                        /* Switch to the dedicated Market 2 slot (own stake/martingale/TP/barrier),
-                           if configured — takes priority over the plain market-list cycle. */
-                        if (cfg.market2.enabled && activeSlot === 'm1') {
-                            activeSlot = 'm2';
-                            curMarket  = cfg.market2.market;
-                            curMarketIdx = 0;
-                            consLossRef.current = 0;
-                            martCount = 0;
-                            curStake  = slotBaseStake();
-                            subscribeMarket(curMarket);
-                            addLog(`🔀 MARKET_2_SWITCH → ${curMarket} | stake ${curStake} | barrier ${slotBarrier()} (reset after ${effectiveLossLimit} losses)`, 'switch');
-                            continue;
-                        }
-                        /* Market switch (plain market list)? */
-                        if (cfg.useMarketSwitch && cfg.markets.length > 1 && !multiScan) {
-                            curMarketIdx = (curMarketIdx + 1) % marketList.length;
-                            curMarket    = marketList[curMarketIdx];
-                            consLossRef.current = 0;
-                            martCount = 0;
-                            curStake  = slotBaseStake();
-                            subscribeMarket(curMarket);
-                            addLog(`🔀 MARKET_SWITCH → ${curMarket} (reset after ${effectiveLossLimit} losses)`, 'switch');
-                            continue;
-                        }
-                        addLog(`🛑 Stop loss hit — stopped after ${consLossRef.current} consecutive losses.`, 'stop');
-                        break;
+                    /* loss_limit — redirect the XML bot to Market 2 (own stake/
+                       martingale/TP/barrier) or rotate the plain market list,
+                       then re-enter the scanning loop on the new market. */
+                    if (cfg.market2.enabled && activeSlot === 'm1') {
+                        activeSlot = 'm2';
+                        curMarket  = cfg.market2.market;
+                        curMarketIdx = 0;
+                        consLossRef.current = 0;
+                        lastFiredGroupRef.current = null;
+                        curStake  = slotBaseStake();
+                        subscribeMarket(curMarket);
+                        addLog(`🔀 MARKET_2_SWITCH → ${curMarket} | stake ${curStake} | barrier ${slotBarrier()} (reset after ${effectiveLossLimit === Infinity ? '∞' : effectiveLossLimit} losses)`, 'switch');
+                        continue;
                     }
-
-                    /* SL/TP check (slot-specific take-profit) */
-                    if (cfg.tpGuard) {
-                        if (sessionPnlRef.current >= slotTakeProfit()) {
-                            addLog(`🎯 Take profit ${slotTakeProfit()} reached.`, 'stop');
-                            break;
-                        }
-                        if (sessionPnlRef.current <= -Math.abs(cfg.stopLoss)) {
-                            addLog(`🛡 Stop loss -${cfg.stopLoss} triggered.`, 'stop');
-                            break;
-                        }
+                    if (cfg.useMarketSwitch && cfg.markets.length > 1 && !multiScan) {
+                        curMarketIdx = (curMarketIdx + 1) % marketList.length;
+                        curMarket    = marketList[curMarketIdx];
+                        consLossRef.current = 0;
+                        lastFiredGroupRef.current = null;
+                        curStake  = slotBaseStake();
+                        subscribeMarket(curMarket);
+                        addLog(`🔀 MARKET_SWITCH → ${curMarket} (reset after ${effectiveLossLimit === Infinity ? '∞' : effectiveLossLimit} losses)`, 'switch');
+                        continue;
                     }
-
-                    curStake = Math.max(0.35, nextStake);
+                    addLog(`🛑 Stop loss hit — stopped after ${cycle.consLoss} consecutive losses.`, 'stop');
+                    setWinPopup({ profit: cycle.cycleProfit, stopped: true });
+                    break;
                 }
+
+                /* Natural completion — the XML bot only stops without calling
+                   trade_again after a WIN, so getting here un-forced always
+                   means this cycle closed in profit. */
+                consLossRef.current = 0;
+                lastFiredGroupRef.current = null;
+                if (activeSlot === 'm2') {
+                    activeSlot = 'm1';
+                    curMarket  = marketList[curMarketIdx] ?? cfg.market;
+                    subscribeMarket(curMarket);
+                    addLog(`↩ MARKET_1_RESTORE → ${curMarket} (Market 2 recovered)`, 'switch');
+                }
+                curStake = slotBaseStake();
+
+                if (!bot.multiple) {
+                    addLog('🎉 TICK WIN — Bot stopped.', 'win');
+                    setWinPopup({ profit: cycle.cycleProfit, stopped: true });
+                    break;
+                }
+
+                if (cfg.tpGuard && sessionPnlRef.current >= slotTakeProfit()) {
+                    addLog(`🎯 Take profit ${slotTakeProfit()} reached.`, 'stop');
+                    setWinPopup({ profit: cycle.cycleProfit, stopped: true });
+                    break;
+                }
+
+                setWinPopup({ profit: cycle.cycleProfit, stopped: false });
+                addLog('🔄 Returning to market scan...', 'scan');
             } catch (err: any) {
                 addLog(`⚠ ${err?.error?.message || err?.message || 'Trade error — retrying...'}`, 'error');
                 await new Promise(r => setTimeout(r, 1500));
@@ -918,7 +1018,7 @@ const BotDetail: React.FC<{
         addLog('⏹ Bot stopped.', 'info');
         setRunning(false);
         setEntryReady(false);
-    }, [running, derivTrade, bot, cfg, addLog, subscribeMarket, subscribeAllMarkets, unsubscribeAllMarkets, onPreloadXml, autoRun]);
+    }, [running, derivTrade, bot, cfg, addLog, subscribeMarket, subscribeAllMarkets, unsubscribeAllMarkets, onPreloadXml, runXmlBotCycle]);
 
     const stopBot = useCallback(() => {
         stopRef.current = true;
@@ -1565,14 +1665,23 @@ const BotDetail: React.FC<{
 const ScalperBots: React.FC = observer(() => {
     const store      = useStore();
     const derivTrade = useDerivTrade();
-    const [category, setCategory]   = useState('All');
+    /* null = showing the folder picker (group icons); once a folder is opened
+       we show only that group's bots. Search bypasses folders entirely. */
+    const [openGroup, setOpenGroup] = useState<SbGroup | null>(null);
     const [search, setSearch]       = useState('');
     const [selectedBot, setSelectedBot] = useState<TScalperBot | null>(null);
 
+    const groupCounts = useMemo(() => {
+        const counts: Record<string, number> = {};
+        SCALPER_BOTS.forEach(b => { const g = botGroup(b); if (g) counts[g] = (counts[g] || 0) + 1; });
+        return counts;
+    }, []);
+
+    const searching = search.trim().length > 0;
     const filtered = SCALPER_BOTS.filter(b => {
-        const matchCat  = category === 'All' || b.category === category;
-        const matchSrch = !search || b.name.toLowerCase().includes(search.toLowerCase());
-        return matchCat && matchSrch;
+        const matchGroup = searching || !openGroup || botGroup(b) === openGroup;
+        const matchSrch  = !searching || b.name.toLowerCase().includes(search.toLowerCase());
+        return matchGroup && matchSrch;
     });
 
     /* Robust XML loader — tries the store API first, falls back to direct Blockly DOM inject.
@@ -1686,37 +1795,52 @@ const ScalperBots: React.FC = observer(() => {
             <div className='scalper-bots__filters'>
                 <div className='scalper-bots__search-box'>
                     <span>🔍</span>
-                    <input type='text' placeholder='Search scalpers...' value={search}
+                    <input type='text' placeholder='Search all scalpers...' value={search}
                         onChange={e => setSearch(e.target.value)} />
                 </div>
-                {CATEGORIES.map(cat => (
-                    <button key={cat}
-                        className={`scalper-bots__filter-btn ${category === cat ? 'active' : ''}`}
-                        onClick={() => setCategory(cat)}>
-                        {cat}
+                {(openGroup || searching) && (
+                    <button className='scalper-bots__filter-btn' onClick={() => { setOpenGroup(null); setSearch(''); }}>
+                        ‹ Folders
                     </button>
-                ))}
+                )}
+                {openGroup && !searching && (
+                    <span className='scalper-bots__breadcrumb'>
+                        {GROUP_DEFS.find(g => g.key === openGroup)?.icon} {openGroup} Scalpers
+                    </span>
+                )}
                 <span className='scalper-bots__count'>{filtered.length} bots</span>
             </div>
 
-            <div className='scalper-bots__grid'>
-                {filtered.map(bot => (
-                    <div key={bot.key} className='sb-card' onClick={() => setSelectedBot(bot)}>
-                        <div className='sb-card__icon'>
-                            {bot.contractType.includes('EVEN') ? '2️⃣' : bot.contractType.includes('ODD') ? '1️⃣' : bot.contractType.includes('OVER') ? '⬆️' : '⬇️'}
+            {!openGroup && !searching ? (
+                <div className='scalper-bots__folders'>
+                    {GROUP_DEFS.map(g => (
+                        <div key={g.key} className='sb-folder' onClick={() => setOpenGroup(g.key)}>
+                            <div className='sb-folder__icon'>📁<span className='sb-folder__emoji'>{g.icon}</span></div>
+                            <div className='sb-folder__label'>{g.label} Scalpers</div>
+                            <div className='sb-folder__count'>{groupCounts[g.key] || 0} bots</div>
                         </div>
-                        <div className='sb-card__name'>{bot.name}</div>
-                        <div className='sb-card__tags'>
-                            <span className='sb-card__tag'>{bot.contractType}</span>
-                            {bot.prediction !== null && <span className='sb-card__tag'>▸{bot.prediction}</span>}
-                            <span className={`sb-card__tag ${bot.multiple ? 'multi' : 'single'}`}>
-                                {bot.multiple ? 'MULTI' : 'SINGLE'}
-                            </span>
+                    ))}
+                </div>
+            ) : (
+                <div className='scalper-bots__grid'>
+                    {filtered.map(bot => (
+                        <div key={bot.key} className='sb-card' onClick={() => setSelectedBot(bot)}>
+                            <div className='sb-card__icon'>
+                                {bot.contractType.includes('EVEN') ? '2️⃣' : bot.contractType.includes('ODD') ? '1️⃣' : bot.contractType.includes('OVER') ? '⬆️' : '⬇️'}
+                            </div>
+                            <div className='sb-card__name'>{bot.name}</div>
+                            <div className='sb-card__tags'>
+                                <span className='sb-card__tag'>{bot.contractType}</span>
+                                {bot.prediction !== null && <span className='sb-card__tag'>▸{bot.prediction}</span>}
+                                <span className={`sb-card__tag ${bot.multiple ? 'multi' : 'single'}`}>
+                                    {bot.multiple ? 'MULTI' : 'SINGLE'}
+                                </span>
+                            </div>
+                            <button className='sb-card__open'>Configure &amp; Run →</button>
                         </div>
-                        <button className='sb-card__open'>Configure &amp; Run →</button>
-                    </div>
-                ))}
-            </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
 });
