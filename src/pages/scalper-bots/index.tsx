@@ -37,19 +37,39 @@ type RiskManagerConfig = {
 };
 
 /* Strategy Logic — condition-based entry engine (mirrors the reference "OR Group" UI) */
+
+const DIGITS_IS_OPTIONS = [
+    'MATCHES', 'DIFFERS', 'OVER', 'UNDER', 'EVEN', 'ODD',
+    'HIGH TICK', 'LOW TICK', 'RISE EQUAL', 'FALL EQUAL',
+    'RISE', 'FALL', 'RISE RESET', 'FALL RESET',
+    'ASIAN UP', 'ASIAN DOWN', 'ONLY UPS', 'ONLY DOWNS',
+    'HIGHER', 'LOWER',
+] as const;
+type DigitsIsType = typeof DIGITS_IS_OPTIONS[number];
+
+const IF_LAST_OPTIONS = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20];
+
+/** A single LDP sub-condition (one row in the UI). */
 type StrategyCondition = {
     id: string;
     algorithm: 'LDP'; // Last-Digit-Pattern
     strict: boolean;
     ifLast: number;
-    digitsIs: 'ODD' | 'EVEN';
+    digitsIs: DigitsIsType;
+    digitValue: number; // barrier for OVER/UNDER/MATCHES/DIFFERS (0-9)
     recoveryLimit: number;
+};
+
+/** One OR group — all its conditions must pass (AND within the group). */
+type StrategyOrGroup = {
+    id: string;
+    conditions: StrategyCondition[]; // [0]=CONDITION, [1+]=AND CONDITIONS
 };
 
 type StrategyLogicConfig = {
     globalShared: boolean;
     active: boolean;
-    groups: StrategyCondition[];
+    groups: StrategyOrGroup[]; // any group passing triggers entry (OR across groups)
 };
 
 type BotConfig = {
@@ -82,7 +102,14 @@ const newCondition = (bot: TScalperBot): StrategyCondition => ({
     strict: true,
     ifLast: 3,
     digitsIs: bot.contractType === 'DIGITEVEN' ? 'ODD' : bot.contractType === 'DIGITODD' ? 'EVEN' : 'ODD',
+    digitValue: 5,
     recoveryLimit: 1,
+});
+
+let sbGroupSeq = 0;
+const newOrGroup = (bot: TScalperBot): StrategyOrGroup => ({
+    id: `grp_${++sbGroupSeq}`,
+    conditions: [newCondition(bot)],
 });
 
 const DEFAULT_CONFIG = (bot: TScalperBot): BotConfig => ({
@@ -102,7 +129,7 @@ const DEFAULT_CONFIG = (bot: TScalperBot): BotConfig => ({
     strategyLogic: {
         globalShared: false,
         active: bot.category === 'Even/Odd',
-        groups: bot.category === 'Even/Odd' ? [newCondition(bot)] : [],
+        groups: bot.category === 'Even/Odd' ? [newOrGroup(bot)] : [],
     },
 });
 
@@ -183,21 +210,63 @@ function checkEntry(digits: number[], contractType: string, barrier: number | nu
     }
 }
 
-/* ─── Strategy Logic evaluation (OR-grouped conditions) ─── */
-function evaluateStrategyLogic(digits: number[], groups: StrategyCondition[]): { hit: boolean; group?: StrategyCondition } {
-    for (const g of groups) {
-        if (digits.length < g.ifLast) continue;
-        const recent = digits.slice(0, g.ifLast);
-        const isOdd = (d: number) => d % 2 !== 0;
-        const matches = g.digitsIs === 'ODD' ? isOdd : (d: number) => !isOdd(d);
-        if (g.strict) {
-            if (recent.every(matches)) return { hit: true, group: g };
-        } else {
-            const count = recent.filter(matches).length;
-            if (count > recent.length / 2) return { hit: true, group: g };
+/* ─── Single-condition evaluation (LDP pattern engine) ─── */
+function evaluateSingleCondition(digits: number[], cond: StrategyCondition): boolean {
+    if (digits.length < cond.ifLast) return false;
+    const recent = digits.slice(0, cond.ifLast);
+    const v = cond.digitValue ?? 5;
+
+    // Build a per-digit predicate based on digitsIs
+    const matchFn = (d: number, prev: number | null): boolean => {
+        switch (cond.digitsIs) {
+            case 'ODD':        return d % 2 !== 0;
+            case 'EVEN':       return d % 2 === 0;
+            case 'OVER':       return d > v;
+            case 'UNDER':      return d < v;
+            case 'MATCHES':    return d === v;
+            case 'DIFFERS':    return d !== v;
+            case 'HIGH TICK':  return d >= 8;
+            case 'LOW TICK':   return d <= 1;
+            case 'RISE':
+            case 'RISE EQUAL':
+            case 'HIGHER':
+            case 'ONLY UPS':   return prev === null || d >= prev;
+            case 'FALL':
+            case 'FALL EQUAL':
+            case 'LOWER':
+            case 'ONLY DOWNS': return prev === null || d <= prev;
+            case 'RISE RESET': return d >= 5;
+            case 'FALL RESET': return d <= 4;
+            case 'ASIAN UP':   return d > 4;
+            case 'ASIAN DOWN': return d <= 4;
+            default:           return true;
         }
+    };
+
+    if (cond.strict) {
+        let prev: number | null = null;
+        for (const d of recent) { if (!matchFn(d, prev)) return false; prev = d; }
+        return true;
+    } else {
+        let count = 0, prev: number | null = null;
+        for (const d of recent) { if (matchFn(d, prev)) count++; prev = d; }
+        return count > recent.length / 2;
+    }
+}
+
+/* ─── Strategy Logic evaluation (OR-grouped AND-conditions) ─── */
+function evaluateStrategyLogic(digits: number[], groups: StrategyOrGroup[]): { hit: boolean; group?: StrategyOrGroup } {
+    for (const g of groups) {
+        // All conditions in the group must pass (AND logic)
+        const allPass = g.conditions.every(cond => evaluateSingleCondition(digits, cond));
+        if (allPass) return { hit: true, group: g };
     }
     return { hit: false };
+}
+
+/* Helper: recovery limit = minimum across all conditions in the fired group */
+function groupRecoveryLimit(g: StrategyOrGroup): number {
+    return Math.min(...g.conditions.map(c => c.recoveryLimit));
 }
 
 function getLastDigit(q: number): number {
