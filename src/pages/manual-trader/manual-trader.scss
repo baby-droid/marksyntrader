@@ -2,13 +2,11 @@
   display: flex;
   flex-direction: column;
   /* Fill the full available tab height */
+  min-height: 100%;
   height: 100%;
-  min-height: 0;
-  max-height: 100%;
   background: #0d1117;
   font-family: 'IBM Plex Sans', 'Inter', -apple-system, sans-serif;
   color: #e2e8f0;
-  overflow: hidden;
   * { box-sizing: border-box; }
 
   /* ─── Topbar ─── */
@@ -98,7 +96,7 @@
 .mt-body {
   display: flex;
   flex: 1;
-  overflow: hidden;
+  min-height: 0;
   gap: 0;
 }
 

@@ -384,12 +384,241 @@
 
   &__line {
     display: flex; gap: 0.5rem; color: #6b7280; line-height: 1.4;
-    &.win   { color: #16a34a; }
-    &.loss  { color: #dc2626; }
-    &.start { color: #1d4ed8; }
-    &.stop  { color: #f59e0b; }
+    &.win    { color: #16a34a; }
+    &.loss   { color: #dc2626; }
+    &.start  { color: #1d4ed8; }
+    &.stop   { color: #f59e0b; }
     &.config { color: #7c3aed; }
-    &.error { color: #ea580c; }
+    &.error  { color: #ea580c; }
+    &.hack   { color: #4b5563; }
+    &.scan   { color: #374151; }
+    &.entry  { color: #0ea5e9; }
+    &.switch { color: #8b5cf6; }
   }
   &__ts { color: #9ca3af; flex-shrink: 0; }
+}
+
+/* ════════════════════════════════════════════════════
+   NEW — Accordion sections for sidebar
+   ════════════════════════════════════════════════════ */
+.sb-accordion {
+  border-bottom: 1px solid #e5e7eb;
+
+  &__header {
+    display: flex; align-items: center; gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: #f9fafb; cursor: pointer;
+    border: none; width: 100%; text-align: left;
+    font-family: inherit; transition: background 0.12s;
+    &:hover { background: #f3f4f6; }
+  }
+
+  &__title {
+    font-size: 0.75rem; font-weight: 800; color: #374151;
+    text-transform: uppercase; letter-spacing: 0.06em; flex: 1;
+  }
+
+  &__badge {
+    font-size: 0.64rem; font-weight: 800; padding: 0.1rem 0.45rem;
+    border-radius: 0.3rem; letter-spacing: 0.04em;
+  }
+
+  &__arrow {
+    font-size: 0.62rem; color: #9ca3af; margin-left: 0.2rem;
+  }
+
+  &__body {
+    padding: 0.65rem 1rem;
+    display: flex; flex-direction: column; gap: 0.55rem;
+    background: #fff;
+  }
+
+  &.open &__header { background: #f0f4ff; }
+}
+
+/* Bot action buttons row (DEFAULT BOT / SELECT BOT / ...) */
+.sb-bot-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fff;
+}
+
+.sb-bot-action-btn {
+  padding: 0.38rem 0.4rem;
+  border-radius: 0.4rem;
+  border: 1px solid #d1d5db;
+  background: #f9fafb;
+  color: #374151;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: center;
+  transition: all 0.14s;
+  white-space: nowrap;
+
+  &:hover:not(:disabled) { background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8; }
+  &:disabled { opacity: 0.4; cursor: not-allowed; }
+}
+
+/* GLOBAL SHARED label */
+.sb-global-label {
+  padding: 0.35rem 1rem 0.2rem;
+  font-size: 0.64rem;
+  font-weight: 900;
+  color: #9ca3af;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+/* Risk Manager specific styles */
+.sb-rm-type {
+  display: flex; align-items: center; gap: 0.4rem;
+  font-size: 0.78rem; font-weight: 700; color: #374151;
+  padding: 0.2rem 0;
+}
+.sb-rm-info {
+  font-size: 0.72rem; color: #6366f1; cursor: pointer;
+}
+
+/* Sidebar field row with center-aligned label+toggle */
+.sb-field-row--center {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  justify-content: space-between;
+  grid-template-columns: unset;
+
+  label {
+    font-size: 0.72rem; font-weight: 700;
+    color: #6b7280; text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+}
+
+/* Market Switcher list */
+.sb-markets-list {
+  display: flex; flex-wrap: wrap; gap: 0.35rem;
+  padding: 0.2rem 0;
+}
+
+.sb-market-pill {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  background: rgba(6,182,212,0.1); border: 1px solid rgba(6,182,212,0.3);
+  border-radius: 2rem; padding: 0.15rem 0.55rem 0.15rem 0.75rem;
+  font-size: 0.72rem; font-weight: 700; color: #0891b2;
+}
+
+.sb-market-remove {
+  background: none; border: none; cursor: pointer;
+  color: #64748b; font-size: 0.85rem; line-height: 1;
+  padding: 0; font-weight: 700;
+  &:hover { color: #dc2626; }
+}
+
+.sb-add-market {
+  display: flex; gap: 0.4rem; align-items: center;
+  select {
+    flex: 1; padding: 0.3rem 0.5rem;
+    border: 1px solid #d1d5db; border-radius: 0.4rem;
+    background: #f9fafb; color: #111827; font-size: 0.82rem;
+    font-family: inherit;
+    &:focus { outline: none; border-color: #6366f1; }
+  }
+}
+
+.sb-add-market-btn {
+  padding: 0.3rem 0.7rem; border-radius: 0.4rem;
+  border: 1px solid rgba(6,182,212,0.4);
+  background: rgba(6,182,212,0.08); color: #0891b2;
+  font-size: 0.78rem; font-weight: 800; cursor: pointer;
+  font-family: inherit; white-space: nowrap;
+  &:hover { background: rgba(6,182,212,0.18); }
+}
+
+/* ════════════════════════════════════════════════════
+   Terminal column enhancements
+   ════════════════════════════════════════════════════ */
+
+/* Active market bar */
+.sb-terminal-market-bar {
+  display: flex; align-items: center; gap: 0.7rem;
+  padding: 0.4rem 0.75rem;
+  background: #161b27; border-radius: 0.5rem 0.5rem 0 0;
+  border: 1px solid rgba(255,255,255,0.08); border-bottom: none;
+  flex-shrink: 0; flex-wrap: wrap;
+}
+
+.sb-terminal-market-label {
+  font-size: 0.68rem; font-weight: 800; color: #475569;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  font-family: 'Share Tech Mono', monospace;
+}
+
+.sb-terminal-market-value {
+  font-size: 0.82rem; font-weight: 800; color: #00c8ff;
+  font-family: 'Share Tech Mono', monospace;
+}
+
+/* Entry signal indicator */
+.sb-entry-ready {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  padding: 0.18rem 0.65rem; border-radius: 2rem;
+  background: rgba(0,200,255,0.15); color: #00c8ff;
+  border: 1px solid rgba(0,200,255,0.4);
+  font-size: 0.72rem; font-weight: 800; letter-spacing: 0.06em;
+  font-family: 'Share Tech Mono', monospace;
+  animation: sb-entry-flash 0.6s ease-in-out infinite;
+  margin-left: auto;
+}
+
+@keyframes sb-entry-flash {
+  0%, 100% { opacity: 1; box-shadow: 0 0 10px rgba(0,200,255,0.4); }
+  50%       { opacity: 0.7; box-shadow: 0 0 4px rgba(0,200,255,0.15); }
+}
+
+/* Live digit window strip */
+.sb-digit-window {
+  display: flex; align-items: center; gap: 0.25rem;
+  padding: 0.35rem 0.75rem;
+  background: #0a0f1a; border: 1px solid rgba(255,255,255,0.06);
+  border-top: none; flex-shrink: 0;
+  overflow-x: auto; min-height: 34px;
+
+  &__empty {
+    font-size: 0.72rem; color: #334155;
+    font-family: 'Share Tech Mono', monospace; font-style: italic;
+  }
+
+  &::-webkit-scrollbar { height: 2px; }
+  &::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); }
+}
+
+.sb-digit-chip {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 50%;
+  font-size: 0.72rem; font-weight: 800;
+  background: rgba(255,255,255,0.05); color: #475569;
+  border: 1px solid rgba(255,255,255,0.08);
+  flex-shrink: 0; font-family: 'Share Tech Mono', monospace;
+  transition: all 0.12s;
+
+  &.latest {
+    background: rgba(0,200,255,0.2); color: #00c8ff;
+    border-color: rgba(0,200,255,0.5);
+    box-shadow: 0 0 8px rgba(0,200,255,0.3);
+    transform: scale(1.15);
+  }
+}
+
+/* Terminal line kinds (extend existing) */
+.sb-terminal__line {
+  &.hack   { color: #334155; }
+  &.entry  { color: #00c8ff; font-weight: 700; }
+  &.switch { color: #8b5cf6; }
 }

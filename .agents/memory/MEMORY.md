@@ -14,3 +14,5 @@
 - [Scalper Bots architecture](marksyntrader-scalper-bots.md) — built-in scalper strategies are Blockly XML files loaded into the real Bot Builder (like Free Bots), not a custom trading engine.
 - [BOT_BUILDER tab constant bug](marksyntrader-bot-builder-tab-bug.md) — DBOT_TABS.BOT_BUILDER must equal AHMED_LEARNING's index or every caller (dashboard cards, tours, announcements) blanks the screen.
 - [Unified Settings panel](marksyntrader-settings-unified.md) — one settings surface (SettingsPanel) opened via ui_store.is_settings_panel_open from every entry point; SettingsModal was removed as a duplicate.
+- [Scalper bots terminal entry logic](scalper-terminal-entry.md) — tick-based entry detection; `checkEntry()` uses contrarian streaks; `subscribeMarket()` updates both ref (for loop) and state (for display).
+- [Loading screen two-phase](loading-screen-phases.md) — phase 1 (0-50%) = landing page; phase 2 (50-100%) = AHMED TRADE centered screen; switch via `useEffect` on progress >= 50.

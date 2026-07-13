@@ -11,7 +11,7 @@ interface LoadingScreenProps {
     onDone?: () => void;
 }
 
-/* Live-ish ticker items (mock data shown during loading before WS connects) */
+/* Phase-1 ticker */
 const TICKER_ITEMS = [
     { name: 'Volatility 25',     change: '+0.88%', up: true  },
     { name: 'Bear Market Index', change: '+2.09%', up: true  },
@@ -28,21 +28,9 @@ const TICKER_ITEMS = [
 ];
 
 const TESTIMONIALS = [
-    {
-        name: 'Grace Njeri', role: 'Part-time Trader — Kenya',
-        avatar: 'GN', color: '#4f46e5', rating: 5,
-        text: 'The free course + bot builder tutorial changed how I trade completely.',
-    },
-    {
-        name: 'Emmanuel Owusu', role: 'Full-time Trader — Ghana',
-        avatar: 'EO', color: '#ea7c2c', rating: 5,
-        text: 'The Apex Bot 2026 is seriously on another level. It adapts, it learns.',
-    },
-    {
-        name: 'Mercy Wanjiku', role: 'Step Index Trader — Kenya',
-        avatar: 'MW', color: '#22c55e', rating: 5,
-        text: 'The live charts with full technical indicators make me feel like a pro.',
-    },
+    { name: 'Grace Njeri', role: 'Part-time Trader — Kenya', avatar: 'GN', color: '#4f46e5', rating: 5, text: 'The free course + bot builder tutorial changed how I trade completely.' },
+    { name: 'Emmanuel Owusu', role: 'Full-time Trader — Ghana', avatar: 'EO', color: '#ea7c2c', rating: 5, text: 'The Apex Bot 2026 is seriously on another level. It adapts, it learns.' },
+    { name: 'Mercy Wanjiku', role: 'Step Index Trader — Kenya', avatar: 'MW', color: '#22c55e', rating: 5, text: 'The live charts with full technical indicators make me feel like a pro.' },
 ];
 
 const FEATURES = [
@@ -63,9 +51,90 @@ const PHRASES = [
     'Almost ready — stand by...',
 ];
 
+/* Phase-2 feature cards (6 cards matching the screenshot) */
+const P2_LEFT = [
+    { icon: '📊', title: 'Market Analysis', sub: 'Real-time data' },
+    { icon: '🔒', title: 'Secure Platform', sub: 'Encrypted & safe' },
+    { icon: '⚡', title: 'Fast Execution', sub: 'Speed matters' },
+];
+const P2_RIGHT = [
+    { icon: '🎯', title: 'Precise Strategy', sub: 'Accurate signals' },
+    { icon: '👥', title: 'Copy Trading', sub: 'Follow experts' },
+    { icon: '🏆', title: 'Grow Together', sub: 'Win as a team' },
+];
+
+/* ─── Phase 2 loading screen ─── */
+const Phase2Screen: React.FC<{ progress: number; phraseIdx: number }> = ({ progress, phraseIdx }) => (
+    <div className='ls2-page'>
+        {/* Top-right tagline */}
+        <div className='ls2-tagline'>
+            TRUST THE PLAN<br />TRADE THE FUTURE
+        </div>
+
+        {/* Left feature cards */}
+        <div className='ls2-left-cards'>
+            {P2_LEFT.map((c, i) => (
+                <div key={i} className='ls2-feat-card'>
+                    <span className='ls2-feat-icon'>{c.icon}</span>
+                    <div>
+                        <div className='ls2-feat-title'>{c.title}</div>
+                        <div className='ls2-feat-sub'>{c.sub}</div>
+                    </div>
+                </div>
+            ))}
+        </div>
+
+        {/* Center content */}
+        <div className='ls2-center'>
+            {/* AT Logo ring */}
+            <div className='ls2-logo-ring'>
+                <div className='ls2-logo-inner'>AT</div>
+                <div className='ls2-logo-tick'>›</div>
+            </div>
+
+            <h1 className='ls2-brand'>
+                AHMED <span>TRADE</span>
+            </h1>
+            <p className='ls2-brand-sub'>— SMART TRADING. BETTER FUTURE. —</p>
+
+            <div className='ls2-loading-text'>L O A D I N G  <span>|||</span></div>
+
+            <div className='ls2-bar-wrap'>
+                <div className='ls2-bar-track'>
+                    <div className='ls2-bar-fill' style={{ width: `${progress}%`, transition: 'width 40ms linear' }} />
+                </div>
+                <span className='ls2-bar-pct'>{Math.floor(progress)}%</span>
+            </div>
+
+            <div className='ls2-phrase'>{PHRASES[phraseIdx]}</div>
+        </div>
+
+        {/* Right feature cards */}
+        <div className='ls2-right-cards'>
+            {P2_RIGHT.map((c, i) => (
+                <div key={i} className='ls2-feat-card right'>
+                    <div>
+                        <div className='ls2-feat-title'>{c.title}</div>
+                        <div className='ls2-feat-sub'>{c.sub}</div>
+                    </div>
+                    <span className='ls2-feat-icon'>{c.icon}</span>
+                </div>
+            ))}
+        </div>
+
+        {/* Bottom bar */}
+        <div className='ls2-bottom'>
+            <span>📍 RELIABLE | TRANSPARENT | SECURE</span>
+            <span>BUILT FOR TRADERS, BY TRADERS</span>
+            <span>⊕ AHMEDTRADE.COM</span>
+        </div>
+    </div>
+);
+
 const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready = false, onDone }) => {
     const [progress, setProgress]   = useState(0);
     const [phraseIdx, setPhraseIdx] = useState(0);
+    const [phase, setPhase]         = useState<1 | 2>(1);
 
     const startRef   = useRef<number>(performance.now());
     const rafRef     = useRef<number>(0);
@@ -111,65 +180,54 @@ const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready = false, onDone }) 
         };
     }, []);
 
+    /* Switch to phase 2 at 50% */
+    useEffect(() => {
+        if (progress >= 50 && phase === 1) {
+            setPhase(2);
+        }
+    }, [progress, phase]);
+
     const pct = Math.floor(progress);
 
+    /* ── Phase 2 ── */
+    if (phase === 2) {
+        return <Phase2Screen progress={pct} phraseIdx={phraseIdx} />;
+    }
+
+    /* ── Phase 1 (landing) ── */
     return (
         <div className='ls-page'>
-            {/* Background */}
             <div className='ls-bg' />
             <div className='ls-bg-text'>GEO WIN</div>
 
-            {/* ── Ticker ── */}
             <div className='ls-ticker'>
                 <div className='ls-ticker__track'>
                     {[...TICKER_ITEMS, ...TICKER_ITEMS, ...TICKER_ITEMS].map((item, i) => (
                         <span key={i} className='ls-ticker__item'>
-                            <span className={`ls-ticker__arrow ${item.up ? 'up' : 'down'}`}>
-                                {item.up ? '↑' : '↓'}
-                            </span>
+                            <span className={`ls-ticker__arrow ${item.up ? 'up' : 'down'}`}>{item.up ? '↑' : '↓'}</span>
                             <span className='ls-ticker__name'>{item.name}</span>
-                            <span className={`ls-ticker__chg ${item.up ? 'up' : 'down'}`}>
-                                {item.change}
-                            </span>
+                            <span className={`ls-ticker__chg ${item.up ? 'up' : 'down'}`}>{item.change}</span>
                         </span>
                     ))}
                 </div>
             </div>
 
-            {/* ── Hero ── */}
             <div className='ls-hero'>
-                <div className='ls-hero__badge'>
-                    FREE DERIV BOTS, AUTOMATION, AND TRADING TOOLS IN ONE WORKSPACE
-                </div>
-
-                <h1 className='ls-hero__title'>
-                    Trade with <span className='ls-hero__title-hl'>better structure</span>
-                </h1>
-
-                <p className='ls-hero__sub'>
-                    Use manual trading, charts, copy tools, automation, and market analysis
-                    without jumping between separate apps.
-                </p>
-
+                <div className='ls-hero__badge'>FREE DERIV BOTS, AUTOMATION, AND TRADING TOOLS IN ONE WORKSPACE</div>
+                <h1 className='ls-hero__title'>Trade with <span className='ls-hero__title-hl'>better structure</span></h1>
+                <p className='ls-hero__sub'>Use manual trading, charts, copy tools, automation, and market analysis without jumping between separate apps.</p>
                 <div className='ls-hero__cta'>
-                    <button className='ls-btn-primary'>
-                        ↗ Log In and Trade &nbsp;→
-                    </button>
-                    <button className='ls-btn-secondary'>
-                        ⚡ Create Free Account
-                    </button>
+                    <button className='ls-btn-primary'>↗ Log In and Trade &nbsp;→</button>
+                    <button className='ls-btn-secondary'>⚡ Create Free Account</button>
                     <a href='#' className='ls-hero__explore'>Explore the course ↓</a>
                 </div>
             </div>
 
-            {/* ── Testimonials ── */}
             <div className='ls-testimonials'>
                 {TESTIMONIALS.map((t, i) => (
                     <div key={i} className='ls-tc'>
                         <div className='ls-tc__stars'>{'★'.repeat(t.rating)}</div>
-                        <div className='ls-tc__avatar' style={{ background: t.color }}>
-                            {t.avatar}
-                        </div>
+                        <div className='ls-tc__avatar' style={{ background: t.color }}>{t.avatar}</div>
                         <div className='ls-tc__name'>{t.name}</div>
                         <div className='ls-tc__role'>{t.role}</div>
                         <p className='ls-tc__text'>{t.text}</p>
@@ -177,7 +235,6 @@ const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready = false, onDone }) 
                 ))}
             </div>
 
-            {/* ── Feature cards ── */}
             <div className='ls-features'>
                 {FEATURES.map((f, i) => (
                     <div key={i} className='ls-feat'>
@@ -188,14 +245,10 @@ const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready = false, onDone }) 
                 ))}
             </div>
 
-            {/* ── Loading progress bar (bottom strip) ── */}
             <div className='ls-loading-bar'>
                 <div className='ls-loading-bar__phrase'>{PHRASES[phraseIdx]}</div>
                 <div className='ls-loading-bar__track'>
-                    <div
-                        className='ls-loading-bar__fill'
-                        style={{ width: `${progress}%`, transition: 'width 40ms linear' }}
-                    />
+                    <div className='ls-loading-bar__fill' style={{ width: `${progress}%`, transition: 'width 40ms linear' }} />
                 </div>
                 <div className='ls-loading-bar__pct'>{pct}%</div>
             </div>
