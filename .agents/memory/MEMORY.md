@@ -20,3 +20,4 @@
 - [Scalper XML single-engine design](scalper-xml-single-engine.md) — terminal only detects entry signals now; the real Bot Builder XML is the sole buyer via onRunButtonClick, guarded by globalObserver('bot.contract'/'bot.stop').
 - [Scalper algorithm system](scalper-algorithms.md) — 5 algorithms (LDP, Market%, Sequence Radar, Complex Patterns, Entry Point Pattern) all share StrategyCondition type; use COND_DEFAULTS spread + algorithm-specific fields with optional chaining (?? default).
 - [Scalper tick-driven scan](scalper-tick-scan.md) — tickSignalRef wakes the scan loop on every live tick (subscribeMarket fires it); 2s fallback timeout keeps it from hanging on slow ticks; never use fixed setInterval/setTimeout polling in the entry scan loop.
+- [Scalper startBot logic](scalper-startbot-logic.md) — martingale carries across cycles via computeNextStake; stop after every win; await XML reload; force-resub feed on Run; switchOnLosses drives market switch.

@@ -1018,6 +1018,7 @@ const BotDetail: React.FC<{
         marketIdxRef.current  = 0;
         winsRef.current   = 0;
         lossesRef.current = 0;
+        firstTradeRef.current = true;
         lastFiredGroupRef.current = null;
         tickSignalRef.current = null;
         setRunning(true);
@@ -1032,20 +1033,8 @@ const BotDetail: React.FC<{
             && cfg.useMarketSwitch && marketList.length > 1;
         let curMarketIdx = 0;
         let curMarket    = marketList[curMarketIdx];
-
-        /* Silently load this bot's default XML into the Bot Builder workspace so the
-           real Blockly bot is always in sync with the terminal-driven engine, without
-           navigating the user away from this page. */
-        onPreloadXml(bot).then(() => addLog('📂 XML_TRADING_ACTIVATOR: DEFAULT STRATEGY LOADED', 'hack')).catch(() => {});
-
-        /* Subscribe to first market (or all markets at once for parallel multi-market scan) */
-        if (multiScan) {
-            subscribeAllMarkets(marketList);
-        } else {
-            subscribeMarket(curMarket);
-        }
-        addLog(`▶ BOT ENGINE STARTED — ${contractLabel(bot)}`, 'start');
-        await runHackerStartup(curMarket, cfg.useMarketSwitch);
+        /* Remember the default/first market so we can restore it after a win */
+        const defaultMarket = marketList[0];
 
         /* Market 2 support — 'm1' uses cfg.stake/martingale/takeProfit/bot.prediction;
            'm2' swaps in cfg.market2's own stake/martingale/takeProfit/barrier while
@@ -1057,7 +1046,49 @@ const BotDetail: React.FC<{
         const slotMartingale = () => (activeSlot === 'm2' ? cfg.market2.martingale : cfg.martingale);
         const slotBaseStake = () => (activeSlot === 'm2' ? cfg.market2.stake : (cfg.riskManager.inject ? cfg.riskManager.overrideStake : cfg.stake));
 
+        /* Compute the correct stake for the next trade given accumulated consecutive losses.
+           Risk Manager multiplier takes priority when inject+active+onLose are on.
+           Falls back to the bot's own martingale multiplier (applied to last actual buy price). */
+        const computeNextStake = (totalConsLoss: number, lastBuyPrice: number): number => {
+            if (totalConsLoss === 0) return slotBaseStake();
+            const rm = cfg.riskManager;
+            if (rm.inject && rm.active && rm.onLose && totalConsLoss >= rm.activateLimit) {
+                /* Deactivate limit: reset back to base after too many losses */
+                if (rm.deactivateLimit > 0 && totalConsLoss >= rm.deactivateLimit) return slotBaseStake();
+                return +(rm.overrideStake * Math.pow(rm.multiplier, totalConsLoss - rm.activateLimit + 1)).toFixed(2);
+            }
+            /* Standard martingale: multiply the last actual buy price by the martingale factor */
+            return +(lastBuyPrice * slotMartingale()).toFixed(2);
+        };
+
         let curStake = slotBaseStake();
+        /* Tracks the last actual buy price from a settled contract so the next
+           cycle's martingale is computed on the real paid amount, not the base. */
+        let lastBuyPrice = curStake;
+        /* Total consecutive losses across all cycles — drives market-switch and martingale. */
+        let totalConsLoss = 0;
+
+        /* ── FRESH XML RELOAD every time Run is pressed ──
+           Await the load so the workspace is ready before the first trade fires. */
+        addLog('📂 LOADING BOT STRATEGY...', 'hack');
+        try { await onPreloadXml(bot); } catch { /* non-fatal */ }
+        addLog('📂 XML_TRADING_ACTIVATOR: FRESH STRATEGY LOADED ✓', 'hack');
+
+        /* Force-fresh market feed subscription — always reconnect on every Run */
+        if (tickUnsubRef.current) { tickUnsubRef.current(); tickUnsubRef.current = null; }
+        lastTickAtRef.current = Date.now();
+        curMarketRef.current = curMarket;
+        marketListRef.current = marketList;
+        multiScanRef.current = multiScan;
+
+        /* Subscribe to first market (or all markets at once for parallel multi-market scan) */
+        if (multiScan) {
+            subscribeAllMarkets(marketList);
+        } else {
+            subscribeMarket(curMarket);
+        }
+        addLog(`▶ BOT ENGINE STARTED — ${contractLabel(bot)}`, 'start');
+        await runHackerStartup(curMarket, cfg.useMarketSwitch);
 
         while (!stopRef.current) {
             try {
@@ -1068,6 +1099,18 @@ const BotDetail: React.FC<{
                 let scanTick = 0;
                 let entry = false;
                 while (!entry && !stopRef.current) {
+                    /* ── Network/feed watchdog: no ticks for 8 s → force reconnect ── */
+                    if (!multiScan && Date.now() - lastTickAtRef.current > 8000) {
+                        addLog('⚠ FEED_STALL DETECTED — forcing reconnection...', 'error');
+                        try {
+                            if (tickUnsubRef.current) { tickUnsubRef.current(); tickUnsubRef.current = null; }
+                            subscribeMarket(curMarket);
+                            lastTickAtRef.current = Date.now();
+                            addLog('🔌 FEED_RESTORED — reconnected to live market feed', 'hack');
+                        } catch { /* retry on next iteration */ }
+                        await new Promise(r => setTimeout(r, 500));
+                    }
+
                     if (multiScan) {
                         if (readyMarketRef.current) {
                             curMarket = readyMarketRef.current;
@@ -1080,7 +1123,7 @@ const BotDetail: React.FC<{
                             break;
                         }
                     } else if (cfg.strategyLogic.active && cfg.strategyLogic.groups.length > 0) {
-                        const inRecovery = consLossRef.current > 0;
+                        const inRecovery = totalConsLoss > 0;
                         const r = evaluateStrategyLogic(digitWindowRef.current, cfg.strategyLogic.groups, inRecovery);
                         if (r.hit) {
                             lastFiredGroupRef.current = r.group ?? null;
@@ -1132,7 +1175,15 @@ const BotDetail: React.FC<{
                 setEntryReady(true);
                 addLog('⚡ ENTRY_SIGNAL: DETECTED — EXECUTING TRADE', 'entry');
 
-                /* ── Fire the REAL Bot Builder XML bot — zero artificial delay ──
+                /* ── First trade: wait for workspace + feed to fully initialise ──
+                   Subsequent trades are tick-driven (zero artificial delay). */
+                if (firstTradeRef.current) {
+                    firstTradeRef.current = false;
+                    addLog('🔧 INITIALISING_TRADE_ENGINE (first trade — normal speed)...', 'hack');
+                    await new Promise(r => setTimeout(r, 800));
+                }
+
+                /* ── Fire the REAL Bot Builder XML bot ──
                    The loaded XML owns the actual buy plus its own martingale /
                    trade_again recovery loop; this call only (a) syncs market,
                    stake, martingale size and barrier into the workspace right
@@ -1140,10 +1191,9 @@ const BotDetail: React.FC<{
                    terminal log/summary, and (c) force-stops the XML bot the
                    instant a terminal-level guard (take profit / stop loss /
                    consecutive-loss limit) is breached — guards the XML itself
-                   has no knowledge of. There is exactly ONE buyer now: the XML
-                   bot via its own Run button. */
+                   has no knowledge of. There is exactly ONE buyer: the XML bot. */
                 const activeBarrier = slotBarrier();
-                addLog(`📂 XML_RUN_TRIGGER: ${contractLabel(bot)} @ ${curMarket} | stake ${curStake} | mart x${slotMartingale()}`, 'hack');
+                addLog(`📂 XML_RUN_TRIGGER: ${contractLabel(bot)} @ ${curMarket} | stake ${curStake.toFixed(2)} | mart x${slotMartingale()} | barrier ${activeBarrier ?? 'auto'}`, 'hack');
 
                 const effectiveLossLimit = lastFiredGroupRef.current
                     ? Math.min(cfg.consecutiveLossLimit || Infinity, groupRecoveryLimit(lastFiredGroupRef.current))
@@ -1158,6 +1208,9 @@ const BotDetail: React.FC<{
                     sessionPnlRef,
                     onLog: addLog,
                     onSettled: ({ profit, won, market, buyPrice, exitDigit, consLoss }) => {
+                        /* Track the last actual buy price — used to compute martingale stake
+                           for the next cycle if this cycle ends in a loss. */
+                        lastBuyPrice = buyPrice;
                         const txId = ++txIdRef.current;
                         setTxList(prev => [{
                             id: txId, time: ts(), market, type: contractLabel(bot),
@@ -1171,8 +1224,10 @@ const BotDetail: React.FC<{
                         } else {
                             lossesRef.current++;
                             consLossRef.current = consLoss;
+                            totalConsLoss = consLoss;
+                            const nextStake = computeNextStake(consLoss, buyPrice);
                             addLog(`❌ LOSS  ${profit.toFixed(2)} USD  |  recovery: ${consLoss}/${effectiveLossLimit === Infinity ? '∞' : effectiveLossLimit}  |  P/L: ${pnlStr}`, 'loss');
-                            addLog('🛡 RECOVERY_MODE: ENGAGED — XML bot re-entering with martingale stake', 'switch');
+                            addLog(`🛡 RECOVERY_MODE: ENGAGED — next stake: ${nextStake.toFixed(2)} (×${slotMartingale()} martingale)`, 'switch');
                         }
                     },
                 });
@@ -1182,6 +1237,7 @@ const BotDetail: React.FC<{
 
                 if (cycle.forceStopped) {
                     consLossRef.current = cycle.consLoss;
+                    totalConsLoss = cycle.consLoss;
 
                     if (cycle.reason === 'tp') {
                         addLog(`🎯 Take profit ${slotTakeProfit()} reached.`, 'stop');
@@ -1194,64 +1250,92 @@ const BotDetail: React.FC<{
                         break;
                     }
 
-                    /* loss_limit — redirect the XML bot to Market 2 (own stake/
-                       martingale/TP/barrier) or rotate the plain market list,
-                       then re-enter the scanning loop on the new market. */
+                    /* loss_limit — compute martingale-accumulated stake for recovery.
+                       The stake PERSISTS across market switches so recovery carries
+                       through until a win resets it to base. */
+                    curStake = computeNextStake(totalConsLoss, lastBuyPrice);
+                    addLog(`📈 MARTINGALE_STAKE: ${curStake.toFixed(2)} (after ${totalConsLoss} losses, barrier: ${activeBarrier ?? 'auto'})`, 'hack');
+
+                    /* Market 2 switch — own stake/martingale/TP/barrier */
                     if (cfg.market2.enabled && activeSlot === 'm1') {
                         activeSlot = 'm2';
                         curMarket  = cfg.market2.market;
                         curMarketIdx = 0;
-                        consLossRef.current = 0;
                         lastFiredGroupRef.current = null;
-                        curStake  = slotBaseStake();
+                        /* Keep the accumulated martingale stake for Market 2 recovery */
+                        curStake  = computeNextStake(totalConsLoss, lastBuyPrice);
                         subscribeMarket(curMarket);
-                        addLog(`🔀 MARKET_2_SWITCH → ${curMarket} | stake ${curStake} | barrier ${slotBarrier()} (reset after ${effectiveLossLimit === Infinity ? '∞' : effectiveLossLimit} losses)`, 'switch');
+                        curMarketRef.current = curMarket;
+                        addLog(`🔀 MARKET_2_SWITCH → ${curMarket} | stake ${curStake.toFixed(2)} | barrier ${slotBarrier()} (${totalConsLoss} losses so far)`, 'switch');
                         continue;
                     }
-                    if (cfg.useMarketSwitch && cfg.markets.length > 1 && !multiScan) {
+
+                    /* Market switcher: rotate to next market after switchOnLosses consecutive losses */
+                    if (cfg.useMarketSwitch && cfg.markets.length > 1 && !multiScan
+                        && totalConsLoss >= cfg.switchOnLosses) {
                         curMarketIdx = (curMarketIdx + 1) % marketList.length;
                         curMarket    = marketList[curMarketIdx];
-                        consLossRef.current = 0;
                         lastFiredGroupRef.current = null;
-                        curStake  = slotBaseStake();
+                        /* Carry the martingale stake forward — don't reset on switch */
                         subscribeMarket(curMarket);
-                        addLog(`🔀 MARKET_SWITCH → ${curMarket} (reset after ${effectiveLossLimit === Infinity ? '∞' : effectiveLossLimit} losses)`, 'switch');
+                        curMarketRef.current = curMarket;
+                        addLog(`🔀 MARKET_SWITCH → ${curMarket} | stake ${curStake.toFixed(2)} (${totalConsLoss} losses, switch threshold: ${cfg.switchOnLosses})`, 'switch');
                         continue;
                     }
-                    addLog(`🛑 Stop loss hit — stopped after ${cycle.consLoss} consecutive losses.`, 'stop');
-                    setWinPopup({ profit: cycle.cycleProfit, stopped: true, sessionPnl: sessionPnlRef.current, wins: winsRef.current, losses: lossesRef.current, reason: 'loss-limit' });
-                    break;
+
+                    /* No switch configured — continue on same market with martingale stake
+                       until a win is made (loss at zero). */
+                    addLog(`🔄 RECOVERY: same market ${curMarket} | stake ${curStake.toFixed(2)} | barrier: ${activeBarrier ?? 'auto'}`, 'switch');
+                    continue;
                 }
 
-                /* Natural completion — the XML bot only stops without calling
-                   trade_again after a WIN, so getting here un-forced always
-                   means this cycle closed in profit. */
+                /* ── Natural completion = WIN ──
+                   The XML bot only stops naturally after a WIN (trade_again block exits).
+                   Reset everything and STOP — user presses Run to start a fresh scalp. */
+                totalConsLoss = 0;
                 consLossRef.current = 0;
                 lastFiredGroupRef.current = null;
-                if (activeSlot === 'm2') {
+
+                /* Restore default market after a win if we had switched */
+                if (activeSlot === 'm2' || curMarketIdx !== 0) {
                     activeSlot = 'm1';
-                    curMarket  = marketList[curMarketIdx] ?? cfg.market;
+                    curMarketIdx = 0;
+                    curMarket  = defaultMarket;
                     subscribeMarket(curMarket);
-                    addLog(`↩ MARKET_1_RESTORE → ${curMarket} (Market 2 recovered)`, 'switch');
+                    curMarketRef.current = curMarket;
+                    addLog(`↩ DEFAULT_MARKET_RESTORED → ${curMarket} (win — market reset)`, 'switch');
                 }
+                /* Reset stake to base after a win */
                 curStake = slotBaseStake();
+                lastBuyPrice = curStake;
 
-                if (!bot.multiple) {
-                    addLog('🎉 TICK WIN — Bot stopped.', 'win');
-                    setWinPopup({ profit: cycle.cycleProfit, stopped: true, sessionPnl: sessionPnlRef.current, wins: winsRef.current, losses: lossesRef.current, reason: 'win' });
-                    break;
-                }
-
+                /* Check TP guard before stopping */
                 if (cfg.tpGuard && sessionPnlRef.current >= slotTakeProfit()) {
                     addLog(`🎯 Take profit ${slotTakeProfit()} reached.`, 'stop');
                     setWinPopup({ profit: cycle.cycleProfit, stopped: true, sessionPnl: sessionPnlRef.current, wins: winsRef.current, losses: lossesRef.current, reason: 'take-profit' });
                     break;
                 }
 
-                setWinPopup({ profit: cycle.cycleProfit, stopped: false, sessionPnl: sessionPnlRef.current, wins: winsRef.current, losses: lossesRef.current, reason: 'win' });
-                addLog('🔄 Returning to market scan...', 'scan');
+                /* ── Stop after every successful trade ──
+                   Press RUN again to start a fresh scalp cycle. */
+                addLog('🎉 TRADE WIN — Bot stopped. Press ▶ RUN to start a fresh scalp.', 'win');
+                setWinPopup({ profit: cycle.cycleProfit, stopped: true, sessionPnl: sessionPnlRef.current, wins: winsRef.current, losses: lossesRef.current, reason: 'win' });
+                break;
+
             } catch (err: any) {
-                addLog(`⚠ ${err?.error?.message || err?.message || 'Trade error — retrying...'}`, 'error');
+                const errMsg = err?.error?.message || err?.message || 'Trade error — retrying...';
+                addLog(`⚠ ${errMsg}`, 'error');
+                /* Network/connection errors: force-resubscribe the market feed */
+                const isNetworkErr = /network|disconnect|timeout|websocket|connection/i.test(errMsg);
+                if (isNetworkErr) {
+                    addLog('🔌 NETWORK_ERROR — forcing feed reconnect...', 'error');
+                    try {
+                        if (tickUnsubRef.current) { tickUnsubRef.current(); tickUnsubRef.current = null; }
+                        subscribeMarket(curMarket);
+                        lastTickAtRef.current = Date.now();
+                        addLog('🔌 FEED_RECONNECTED — resuming scan...', 'hack');
+                    } catch { /* will retry next iteration */ }
+                }
                 await new Promise(r => setTimeout(r, 1500));
             }
         }
