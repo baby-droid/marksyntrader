@@ -72,6 +72,17 @@ type StrategyLogicConfig = {
     groups: StrategyOrGroup[]; // any group passing triggers entry (OR across groups)
 };
 
+/** Alternate market slot — its own stake/martingale/take-profit/barrier,
+    switched to when Market 1 hits its consecutive-loss switch limit. */
+type Market2Config = {
+    enabled: boolean;
+    market: string;
+    stake: number;
+    martingale: number;
+    takeProfit: number;
+    barrier: number;
+};
+
 type BotConfig = {
     market: string;
     markets: string[];
@@ -87,6 +98,7 @@ type BotConfig = {
     stopLoss: number;
     riskManager: RiskManagerConfig;
     strategyLogic: StrategyLogicConfig;
+    market2: Market2Config;
 };
 
 const DEFAULT_RM: RiskManagerConfig = {
@@ -95,16 +107,28 @@ const DEFAULT_RM: RiskManagerConfig = {
     multiplier: 2, overrideStake: 20,
 };
 
+/* The default condition mirrors checkEntry()'s contrarian logic exactly, so
+   turning Strategy Logic on doesn't change default behaviour — it just makes
+   the recovery-limit-aware re-entry configurable. Contract type is always
+   locked to the bot's own contractType/prediction (never edited here). */
 let sbCondSeq = 0;
-const newCondition = (bot: TScalperBot): StrategyCondition => ({
-    id: `cond_${++sbCondSeq}`,
-    algorithm: 'LDP',
-    strict: true,
-    ifLast: 3,
-    digitsIs: bot.contractType === 'DIGITEVEN' ? 'ODD' : bot.contractType === 'DIGITODD' ? 'EVEN' : 'ODD',
-    digitValue: 5,
-    recoveryLimit: 1,
-});
+const newCondition = (bot: TScalperBot): StrategyCondition => {
+    if (bot.contractType === 'DIGITOVER') {
+        return { id: `cond_${++sbCondSeq}`, algorithm: 'LDP', strict: true, ifLast: 2, digitsIs: 'UNDER', digitValue: bot.prediction ?? 5, recoveryLimit: 1 };
+    }
+    if (bot.contractType === 'DIGITUNDER') {
+        return { id: `cond_${++sbCondSeq}`, algorithm: 'LDP', strict: true, ifLast: 2, digitsIs: 'OVER', digitValue: bot.prediction ?? 5, recoveryLimit: 1 };
+    }
+    return {
+        id: `cond_${++sbCondSeq}`,
+        algorithm: 'LDP',
+        strict: true,
+        ifLast: 3,
+        digitsIs: bot.contractType === 'DIGITEVEN' ? 'ODD' : 'EVEN',
+        digitValue: 5,
+        recoveryLimit: 1,
+    };
+};
 
 let sbGroupSeq = 0;
 const newOrGroup = (bot: TScalperBot): StrategyOrGroup => ({
@@ -126,10 +150,21 @@ const DEFAULT_CONFIG = (bot: TScalperBot): BotConfig => ({
     takeProfit: 100,
     stopLoss: bot.contractType === 'DIGITODD' ? 500 : 300,
     riskManager: { ...DEFAULT_RM },
+    // Strategy Logic (LDP engine) drives entry for every category by default —
+    // it mirrors checkEntry()'s built-in contrarian logic but adds a
+    // configurable, recovery-limit-aware re-entry (see evaluateStrategyLogic).
     strategyLogic: {
         globalShared: false,
-        active: bot.category === 'Even/Odd',
-        groups: bot.category === 'Even/Odd' ? [newOrGroup(bot)] : [],
+        active: true,
+        groups: [newOrGroup(bot)],
+    },
+    market2: {
+        enabled: false,
+        market: '1HZ25V',
+        stake: 0.35,
+        martingale: 2,
+        takeProfit: 100,
+        barrier: bot.prediction ?? 5,
     },
 });
 
@@ -210,10 +245,16 @@ function checkEntry(digits: number[], contractType: string, barrier: number | nu
     }
 }
 
-/* ─── Single-condition evaluation (LDP pattern engine) ─── */
-function evaluateSingleCondition(digits: number[], cond: StrategyCondition): boolean {
-    if (digits.length < cond.ifLast) return false;
-    const recent = digits.slice(0, cond.ifLast);
+/* ─── Single-condition evaluation (LDP pattern engine) ───
+   requiredCount: how many recent digits must match — normally cond.ifLast,
+   but during recovery (after a loss) the caller passes cond.recoveryLimit
+   instead so the bot re-enters faster while staying locked to the SAME
+   contract type/digitsIs/digitValue (the locked strategy never changes —
+   only how many confirming digits are required before re-entering). */
+function evaluateSingleCondition(digits: number[], cond: StrategyCondition, requiredCount?: number): boolean {
+    const n = Math.max(1, requiredCount ?? cond.ifLast);
+    if (digits.length < n) return false;
+    const recent = digits.slice(0, n);
     const v = cond.digitValue ?? 5;
 
     // Build a per-digit predicate based on digitsIs
@@ -254,11 +295,18 @@ function evaluateSingleCondition(digits: number[], cond: StrategyCondition): boo
     }
 }
 
-/* ─── Strategy Logic evaluation (OR-grouped AND-conditions) ─── */
-function evaluateStrategyLogic(digits: number[], groups: StrategyOrGroup[]): { hit: boolean; group?: StrategyOrGroup } {
+/* ─── Strategy Logic evaluation (OR-grouped AND-conditions) ───
+   inRecovery: when true (bot is coming back from a loss), each condition's
+   required streak length is relaxed from ifLast down to its own
+   recoveryLimit — e.g. Over 2 normally needs 2 consecutive Under-2 digits
+   to enter, but after a loss it only needs `recoveryLimit` (e.g. 1) so it
+   recovers faster, while the contract type/barrier stay exactly the same. */
+function evaluateStrategyLogic(digits: number[], groups: StrategyOrGroup[], inRecovery = false): { hit: boolean; group?: StrategyOrGroup } {
     for (const g of groups) {
         // All conditions in the group must pass (AND logic)
-        const allPass = g.conditions.every(cond => evaluateSingleCondition(digits, cond));
+        const allPass = g.conditions.every(cond =>
+            evaluateSingleCondition(digits, cond, inRecovery ? cond.recoveryLimit : cond.ifLast)
+        );
         if (allPass) return { hit: true, group: g };
     }
     return { hit: false };
@@ -509,6 +557,8 @@ const BotDetail: React.FC<{
         ...prev,
         strategyLogic: { ...prev.strategyLogic, groups: prev.strategyLogic.groups.filter(g => g.id !== id) },
     }));
+    const m2Set = (patch: Partial<Market2Config>) =>
+        setCfg(prev => ({ ...prev, market2: { ...prev.market2, ...patch } }));
 
     /* ── Subscribe to ticks for the active market ── */
     const subscribeMarket = useCallback((market: string) => {
@@ -617,7 +667,17 @@ const BotDetail: React.FC<{
         addLog(`▶ BOT ENGINE STARTED — ${contractLabel(bot)}`, 'start');
         await runHackerStartup(curMarket, cfg.useMarketSwitch);
 
-        let curStake = cfg.riskManager.inject ? cfg.riskManager.overrideStake : cfg.stake;
+        /* Market 2 support — 'm1' uses cfg.stake/martingale/takeProfit/bot.prediction;
+           'm2' swaps in cfg.market2's own stake/martingale/takeProfit/barrier while
+           keeping the SAME locked contract type. Only engages when cfg.market2.enabled
+           and the market-switch loss limit is hit (see loss branch below). */
+        let activeSlot: 'm1' | 'm2' = 'm1';
+        const slotBarrier = () => (activeSlot === 'm2' ? cfg.market2.barrier : bot.prediction);
+        const slotTakeProfit = () => (activeSlot === 'm2' ? cfg.market2.takeProfit : cfg.takeProfit);
+        const slotMartingale = () => (activeSlot === 'm2' ? cfg.market2.martingale : cfg.martingale);
+        const slotBaseStake = () => (activeSlot === 'm2' ? cfg.market2.stake : (cfg.riskManager.inject ? cfg.riskManager.overrideStake : cfg.stake));
+
+        let curStake = slotBaseStake();
         let martCount = 0; // consecutive losses for martingale
 
         while (!stopRef.current) {
@@ -636,19 +696,27 @@ const BotDetail: React.FC<{
                             digitWindowRef.current = multiWindowsRef.current.get(curMarket) || [];
                             setActiveMarket(curMarket);
                             setDigitDisplay(digitWindowRef.current.slice(0, 20));
-                            addLog(`🧬 STRATEGY_LOGIC: CONDITION MET ON ${curMarket} — XML_TRADING_ACTIVATOR ENGAGED`, 'switch');
-                            /* Fire the XML bot with the winning market */
-                            autoRun(curMarket).catch(() => {});
+                            addLog(`🧬 STRATEGY_LOGIC: CONDITION MET ON ${curMarket} — ${contractLabel(bot)} LOCKED, EXECUTING`, 'switch');
+                            /* NOTE: the real Bot Builder XML bot is intentionally NOT
+                               fired here. Firing it would start a second, independent
+                               trading engine (the interpreter keeps trading on its own
+                               loop) that runs in parallel with this terminal's own
+                               buyContract() calls below — causing duplicate purchases
+                               and, once a different scalper is later opened, contract-type
+                               drift as a stale background run keeps trading the OLD
+                               bot's contract type. The terminal log is the single
+                               source of truth for trading; the XML stays loaded/visible
+                               in Bot Builder (via onPreloadXml) purely so the user sees
+                               which bot is "locked" without it executing twice. */
                             entry = true;
                             break;
                         }
                     } else if (cfg.strategyLogic.active && cfg.strategyLogic.groups.length > 0) {
-                        const r = evaluateStrategyLogic(digitWindowRef.current, cfg.strategyLogic.groups);
+                        const inRecovery = consLossRef.current > 0;
+                        const r = evaluateStrategyLogic(digitWindowRef.current, cfg.strategyLogic.groups, inRecovery);
                         if (r.hit) {
                             lastFiredGroupRef.current = r.group ?? null;
-                            addLog('🧬 STRATEGY_LOGIC: CONDITION MET — XML_TRADING_ACTIVATOR ENGAGED', 'switch');
-                            /* Fire the XML bot with the current single market */
-                            autoRun(curMarket).catch(() => {});
+                            addLog(`🧬 STRATEGY_LOGIC: CONDITION MET${inRecovery ? ' (RECOVERY MODE)' : ''} — ${contractLabel(bot)} LOCKED, EXECUTING`, 'switch');
                             entry = true;
                             break;
                         }
@@ -681,22 +749,25 @@ const BotDetail: React.FC<{
 
                 /* ── Execute trade ── */
                 const txId = ++txIdRef.current;
+                const activeBarrier = slotBarrier();
                 const openTx: TxRecord = {
                     id: txId, time: ts(), market: curMarket,
                     type: contractLabel(bot), stake: curStake,
-                    barrier: bot.prediction, result: 'open', profit: 0, exitDigit: null,
+                    barrier: activeBarrier, result: 'open', profit: 0, exitDigit: null,
                 };
                 setTxList(prev => [openTx, ...prev]);
 
                 const params: any = {
                     symbol: curMarket,
+                    // Contract type is always locked to this bot's own type —
+                    // Market 2 changes market/stake/martingale/TP/barrier only.
                     contract_type: bot.contractType,
                     duration: cfg.duration,
                     duration_unit: 't',
                     stake: curStake,
                 };
                 // Pass barrier as a number — buyContract handles the String() conversion
-                if (bot.prediction !== null) params.barrier = Number(bot.prediction);
+                if (activeBarrier !== null) params.barrier = Number(activeBarrier);
 
                 const profit = await new Promise<number>((resolve, reject) => {
                     derivTrade.buyContract(params, settled => {
@@ -723,8 +794,15 @@ const BotDetail: React.FC<{
                     const wasRecovering = martCount > 0;
                     martCount = 0;
                     lastFiredGroupRef.current = null;
-                    /* Reset stake after win */
-                    curStake = cfg.riskManager.inject ? cfg.riskManager.overrideStake : cfg.stake;
+                    /* A win on Market 2 clears the recovery — hand control back to Market 1 */
+                    if (activeSlot === 'm2') {
+                        activeSlot = 'm1';
+                        curMarket  = marketList[curMarketIdx] ?? cfg.market;
+                        subscribeMarket(curMarket);
+                        addLog(`↩ MARKET_1_RESTORE → ${curMarket} (Market 2 recovered)`, 'switch');
+                    }
+                    /* Reset stake after win (using whichever slot is currently active) */
+                    curStake = slotBaseStake();
                     addLog(`✅ WIN  +${profit.toFixed(2)} USD  |  P/L: ${pnlStr}`, 'win');
 
                     if (!bot.multiple) {
@@ -733,9 +811,9 @@ const BotDetail: React.FC<{
                         break;
                     }
 
-                    /* TP check */
-                    if (cfg.tpGuard && sessionPnlRef.current >= cfg.takeProfit) {
-                        addLog(`🎯 Take profit ${cfg.takeProfit} reached.`, 'stop');
+                    /* TP check (slot-specific take-profit) */
+                    if (cfg.tpGuard && sessionPnlRef.current >= slotTakeProfit()) {
+                        addLog(`🎯 Take profit ${slotTakeProfit()} reached.`, 'stop');
                         setWinPopup({ profit, stopped: true });
                         break;
                     }
@@ -748,13 +826,16 @@ const BotDetail: React.FC<{
                     consLossRef.current++;
                     martCount++;
 
-                    /* Martingale: only if RM activate limit reached */
+                    /* Martingale: only if RM activate limit reached (Risk Manager
+                       injection is Market-1-only; Market 2 always uses its own
+                       configured martingale multiplier). */
                     const rm = cfg.riskManager;
-                    const useMartingale = rm.inject && rm.active && rm.onLose
+                    const rmApplies = activeSlot === 'm1' && rm.inject;
+                    const useMartingale = rmApplies && rm.active && rm.onLose
                         ? martCount >= rm.activateLimit && martCount <= rm.deactivateLimit
-                        : !rm.inject; // when not injected, always use cfg.martingale
+                        : !rmApplies; // when not injected, always use the slot's martingale
 
-                    const multiplier = rm.inject && rm.active ? rm.multiplier : cfg.martingale;
+                    const multiplier = rmApplies && rm.active ? rm.multiplier : slotMartingale();
                     const nextStake  = useMartingale
                         ? +(curStake * multiplier).toFixed(2)
                         : curStake;
@@ -770,13 +851,26 @@ const BotDetail: React.FC<{
 
                     /* Stop on consecutive losses (bounded by Strategy Logic recovery limit) */
                     if ((cfg.stopOnLoss || lastFiredGroupRef.current) && consLossRef.current >= effectiveLossLimit) {
-                        /* Market switch? */
+                        /* Switch to the dedicated Market 2 slot (own stake/martingale/TP/barrier),
+                           if configured — takes priority over the plain market-list cycle. */
+                        if (cfg.market2.enabled && activeSlot === 'm1') {
+                            activeSlot = 'm2';
+                            curMarket  = cfg.market2.market;
+                            curMarketIdx = 0;
+                            consLossRef.current = 0;
+                            martCount = 0;
+                            curStake  = slotBaseStake();
+                            subscribeMarket(curMarket);
+                            addLog(`🔀 MARKET_2_SWITCH → ${curMarket} | stake ${curStake} | barrier ${slotBarrier()} (reset after ${effectiveLossLimit} losses)`, 'switch');
+                            continue;
+                        }
+                        /* Market switch (plain market list)? */
                         if (cfg.useMarketSwitch && cfg.markets.length > 1 && !multiScan) {
                             curMarketIdx = (curMarketIdx + 1) % marketList.length;
                             curMarket    = marketList[curMarketIdx];
                             consLossRef.current = 0;
                             martCount = 0;
-                            curStake  = cfg.riskManager.inject ? cfg.riskManager.overrideStake : cfg.stake;
+                            curStake  = slotBaseStake();
                             subscribeMarket(curMarket);
                             addLog(`🔀 MARKET_SWITCH → ${curMarket} (reset after ${effectiveLossLimit} losses)`, 'switch');
                             continue;
@@ -785,10 +879,10 @@ const BotDetail: React.FC<{
                         break;
                     }
 
-                    /* SL/TP check */
+                    /* SL/TP check (slot-specific take-profit) */
                     if (cfg.tpGuard) {
-                        if (sessionPnlRef.current >= cfg.takeProfit) {
-                            addLog(`🎯 Take profit ${cfg.takeProfit} reached.`, 'stop');
+                        if (sessionPnlRef.current >= slotTakeProfit()) {
+                            addLog(`🎯 Take profit ${slotTakeProfit()} reached.`, 'stop');
                             break;
                         }
                         if (sessionPnlRef.current <= -Math.abs(cfg.stopLoss)) {
@@ -1222,6 +1316,58 @@ const BotDetail: React.FC<{
                                         <button className='sb-add-market-btn' onClick={addMarket}>+ ADD</button>
                                     </div>
                                 )}
+                            </>
+                        )}
+                    </SbAccordion>
+
+                    {/* MARKET 2 — alternate slot with its own stake/martingale/TP/barrier */}
+                    <SbAccordion title='MARKET 2 (Switch Target)' badge={cfg.market2.enabled ? 'ENABLED' : 'DISABLED'} badgeColor={cfg.market2.enabled ? '#a855f7' : '#64748b'}>
+                        <div className='sb-field-row sb-field-row--center'>
+                            <label>Enable Market 2</label>
+                            <button className={`sb-toggle ${cfg.market2.enabled ? 'on' : 'off'}`}
+                                onClick={() => m2Set({ enabled: !cfg.market2.enabled })} disabled={running}>
+                                {cfg.market2.enabled ? 'ON' : 'OFF'}
+                            </button>
+                        </div>
+                        {cfg.market2.enabled && (
+                            <>
+                                <div className='sb-field'>
+                                    <label>Market</label>
+                                    <select value={cfg.market2.market} onChange={e => m2Set({ market: e.target.value })} disabled={running}>
+                                        {ALL_MARKETS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                                    </select>
+                                </div>
+                                <div className='sb-field-row'>
+                                    <div className='sb-field'>
+                                        <label>Stake</label>
+                                        <NumberField value={cfg.market2.stake} min={0.35} step={0.01}
+                                            onCommit={n => m2Set({ stake: n })} disabled={running} />
+                                    </div>
+                                    <div className='sb-field'>
+                                        <label>Martingale ×</label>
+                                        <NumberField value={cfg.market2.martingale} min={1} max={10} step={0.5}
+                                            onCommit={n => m2Set({ martingale: n })} disabled={running} />
+                                    </div>
+                                </div>
+                                <div className='sb-field-row'>
+                                    <div className='sb-field'>
+                                        <label>Take Profit</label>
+                                        <NumberField value={cfg.market2.takeProfit} min={1} step={1}
+                                            onCommit={n => m2Set({ takeProfit: n })} disabled={running} />
+                                    </div>
+                                    {bot.prediction !== null && (
+                                        <div className='sb-field'>
+                                            <label>Barrier / Digit</label>
+                                            <NumberField value={cfg.market2.barrier} min={0} max={9} step={1}
+                                                onCommit={n => m2Set({ barrier: n })} disabled={running} />
+                                        </div>
+                                    )}
+                                </div>
+                                <p className='sb-hint'>
+                                    Contract type stays locked to {contractLabel(bot)}. When the market-switch loss
+                                    limit is hit on Market 1, the terminal switches here — using this market, stake,
+                                    martingale and take profit — until it wins, then returns to Market 1.
+                                </p>
                             </>
                         )}
                     </SbAccordion>

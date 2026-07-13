@@ -15,7 +15,7 @@
     "prediction": null,
     "multiple": true,
     "category": "Even/Odd",
-    "xmlFile": "/bots/scalpers/even-multiple-scalper.xml"
+    "xmlFile": "/bots/scalpers/even-scalper.xml"
   },
   {
     "key": "odd-scalper",
@@ -33,7 +33,7 @@
     "prediction": null,
     "multiple": true,
     "category": "Even/Odd",
-    "xmlFile": "/bots/scalpers/odd-multiple-scalper.xml"
+    "xmlFile": "/bots/scalpers/odd-scalper.xml"
   },
   {
     "key": "over-1-scalper",
@@ -51,7 +51,7 @@
     "prediction": 1,
     "multiple": true,
     "category": "Over/Under",
-    "xmlFile": "/bots/scalpers/over-1-multiple-scalper.xml"
+    "xmlFile": "/bots/scalpers/over-1-scalper.xml"
   },
   {
     "key": "over-2-scalper",
@@ -69,7 +69,7 @@
     "prediction": 2,
     "multiple": true,
     "category": "Over/Under",
-    "xmlFile": "/bots/scalpers/over-2-multiple-scalper.xml"
+    "xmlFile": "/bots/scalpers/over-2-scalper.xml"
   },
   {
     "key": "over-3-scalper",
@@ -87,7 +87,7 @@
     "prediction": 3,
     "multiple": true,
     "category": "Over/Under",
-    "xmlFile": "/bots/scalpers/over-3-multiple-scalper.xml"
+    "xmlFile": "/bots/scalpers/over-3-scalper.xml"
   },
   {
     "key": "over-4-scalper",
@@ -105,7 +105,7 @@
     "prediction": 4,
     "multiple": true,
     "category": "Over/Under",
-    "xmlFile": "/bots/scalpers/over-4-multiple-scalper.xml"
+    "xmlFile": "/bots/scalpers/over-4-scalper.xml"
   },
   {
     "key": "over-5-scalper",
@@ -123,7 +123,7 @@
     "prediction": 5,
     "multiple": true,
     "category": "Over/Under",
-    "xmlFile": "/bots/scalpers/over-5-multiple-scalper.xml"
+    "xmlFile": "/bots/scalpers/over-5-scalper.xml"
   },
   {
     "key": "over-6-scalper",
@@ -141,7 +141,7 @@
     "prediction": 6,
     "multiple": true,
     "category": "Over/Under",
-    "xmlFile": "/bots/scalpers/over-6-multiple-scalper.xml"
+    "xmlFile": "/bots/scalpers/over-6-scalper.xml"
   },
   {
     "key": "over-7-scalper",
@@ -159,7 +159,7 @@
     "prediction": 7,
     "multiple": true,
     "category": "Over/Under",
-    "xmlFile": "/bots/scalpers/over-7-multiple-scalper.xml"
+    "xmlFile": "/bots/scalpers/over-7-scalper.xml"
   },
   {
     "key": "over-8-scalper",
@@ -177,7 +177,7 @@
     "prediction": 8,
     "multiple": true,
     "category": "Over/Under",
-    "xmlFile": "/bots/scalpers/over-8-multiple-scalper.xml"
+    "xmlFile": "/bots/scalpers/over-8-scalper.xml"
   },
   {
     "key": "over-9-scalper",
@@ -195,7 +195,7 @@
     "prediction": 9,
     "multiple": true,
     "category": "Over/Under",
-    "xmlFile": "/bots/scalpers/over-9-multiple-scalper.xml"
+    "xmlFile": "/bots/scalpers/over-9-scalper.xml"
   },
   {
     "key": "under-1-scalper",
@@ -213,7 +213,7 @@
     "prediction": 1,
     "multiple": true,
     "category": "Over/Under",
-    "xmlFile": "/bots/scalpers/under-1-multiple-scalper.xml"
+    "xmlFile": "/bots/scalpers/under-1-scalper.xml"
   },
   {
     "key": "under-2-scalper",
@@ -231,7 +231,7 @@
     "prediction": 2,
     "multiple": true,
     "category": "Over/Under",
-    "xmlFile": "/bots/scalpers/under-2-multiple-scalper.xml"
+    "xmlFile": "/bots/scalpers/under-2-scalper.xml"
   },
   {
     "key": "under-3-scalper",
@@ -249,7 +249,7 @@
     "prediction": 3,
     "multiple": true,
     "category": "Over/Under",
-    "xmlFile": "/bots/scalpers/under-3-multiple-scalper.xml"
+    "xmlFile": "/bots/scalpers/under-3-scalper.xml"
   },
   {
     "key": "under-4-scalper",
@@ -267,7 +267,7 @@
     "prediction": 4,
     "multiple": true,
     "category": "Over/Under",
-    "xmlFile": "/bots/scalpers/under-4-multiple-scalper.xml"
+    "xmlFile": "/bots/scalpers/under-4-scalper.xml"
   },
   {
     "key": "under-5-scalper",
@@ -285,7 +285,7 @@
     "prediction": 5,
     "multiple": true,
     "category": "Over/Under",
-    "xmlFile": "/bots/scalpers/under-5-multiple-scalper.xml"
+    "xmlFile": "/bots/scalpers/under-5-scalper.xml"
   },
   {
     "key": "under-6-scalper",
@@ -303,7 +303,7 @@
     "prediction": 6,
     "multiple": true,
     "category": "Over/Under",
-    "xmlFile": "/bots/scalpers/under-6-multiple-scalper.xml"
+    "xmlFile": "/bots/scalpers/under-6-scalper.xml"
   },
   {
     "key": "under-7-scalper",
@@ -321,7 +321,7 @@
     "prediction": 7,
     "multiple": true,
     "category": "Over/Under",
-    "xmlFile": "/bots/scalpers/under-7-multiple-scalper.xml"
+    "xmlFile": "/bots/scalpers/under-7-scalper.xml"
   },
   {
     "key": "under-8-scalper",
@@ -339,6 +339,6 @@
     "prediction": 8,
     "multiple": true,
     "category": "Over/Under",
-    "xmlFile": "/bots/scalpers/under-8-multiple-scalper.xml"
+    "xmlFile": "/bots/scalpers/under-8-scalper.xml"
   }
 ]
