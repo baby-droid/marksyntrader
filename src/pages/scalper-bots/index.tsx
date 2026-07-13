@@ -95,6 +95,8 @@ type Market2Config = {
     market: string;
     stake: number;
     martingale: number;
+    useStakeOverride: boolean;
+    stakeOverride: number;
     takeProfit: number;
     barrier: number;
 };
@@ -107,6 +109,8 @@ type BotConfig = {
     duration: number;
     stake: number;
     martingale: number;
+    useStakeOverride: boolean;
+    stakeOverride: number;
     stopOnLoss: boolean;
     consecutiveLossLimit: number;
     tpGuard: boolean;
@@ -181,6 +185,8 @@ const DEFAULT_CONFIG = (bot: TScalperBot): BotConfig => ({
     duration: 1,
     stake: 0.35,
     martingale: 2,
+    useStakeOverride: false,
+    stakeOverride: 20,
     stopOnLoss: bot.multiple,
     consecutiveLossLimit: 4,
     tpGuard: bot.multiple,
@@ -200,6 +206,8 @@ const DEFAULT_CONFIG = (bot: TScalperBot): BotConfig => ({
         market: '1HZ25V',
         stake: 0.35,
         martingale: 2,
+        useStakeOverride: false,
+        stakeOverride: 20,
         takeProfit: 100,
         barrier: bot.prediction ?? 5,
     },
@@ -1068,6 +1076,8 @@ const BotDetail: React.FC<{
         const slotTakeProfit = () => (activeSlot === 'm2' ? cfg.market2.takeProfit : cfg.takeProfit);
         const slotMartingale = () => (activeSlot === 'm2' ? cfg.market2.martingale : cfg.martingale);
         const slotBaseStake = () => (activeSlot === 'm2' ? cfg.market2.stake : (cfg.riskManager.inject ? cfg.riskManager.overrideStake : cfg.stake));
+        const slotUseStakeOverride = () => (activeSlot === 'm2' ? cfg.market2.useStakeOverride : cfg.useStakeOverride);
+        const slotStakeOverride = () => (activeSlot === 'm2' ? cfg.market2.stakeOverride : cfg.stakeOverride);
 
         /* Compute the correct stake for the next trade given accumulated consecutive losses.
            Risk Manager multiplier takes priority when inject+active+onLose are on.
@@ -1323,6 +1333,19 @@ const BotDetail: React.FC<{
 
                     /* Compute next stake with full martingale multiplication */
                     curStake = computeNextStake(totalConsLoss, lastBuyPrice);
+
+                    /* Stake Override ceiling — when martingale stake reaches or exceeds the
+                       override threshold, deactivate martingale immediately: reset the loss
+                       counter to 0 and revert to the base stake for the next cycle.
+                       This prevents runaway stake growth while keeping the scan loop alive. */
+                    if (slotUseStakeOverride() && curStake >= slotStakeOverride()) {
+                        addLog(`🔄 STAKE_OVERRIDE: martingale stake ${curStake.toFixed(2)} ≥ ceiling ${slotStakeOverride().toFixed(2)} — martingale deactivated, resetting to base ${slotBaseStake().toFixed(2)}`, 'hack');
+                        totalConsLoss = 0;
+                        consLossRef.current = 0;
+                        curStake = slotBaseStake();
+                        lastBuyPrice = curStake;
+                    }
+
                     addLog(`📈 MARTINGALE_STAKE: ${curStake.toFixed(2)} (after ${totalConsLoss} losses, barrier: ${activeBarrier ?? 'auto'})`, 'hack');
 
                     /* Market 2 switch — own stake / martingale / TP / barrier */
@@ -1521,6 +1544,22 @@ const BotDetail: React.FC<{
                                     onCommit={n => cfgSet({ stake: n })} disabled={running} />
                             </div>
                         </div>
+                        <div className='sb-field-row sb-field-row--center'>
+                            <label>Stake Override</label>
+                            <button className={`sb-toggle ${cfg.useStakeOverride ? 'on' : 'off'}`}
+                                onClick={() => cfgSet({ useStakeOverride: !cfg.useStakeOverride })} disabled={running}>
+                                {cfg.useStakeOverride ? 'ON' : 'OFF'}
+                            </button>
+                        </div>
+                        {cfg.useStakeOverride && (
+                            <div className='sb-field'>
+                                <label>Override Ceiling (USD)</label>
+                                <NumberField value={cfg.stakeOverride} min={cfg.stake} step={0.01}
+                                    onCommit={n => cfgSet({ stakeOverride: n })} disabled={running} />
+                                <span className='sb-unit'>USD</span>
+                                <p className='sb-hint'>When martingale stake reaches {cfg.stakeOverride.toFixed(2)}, reset back to base {cfg.stake.toFixed(2)} and deactivate martingale.</p>
+                            </div>
+                        )}
                         <div className='sb-field'>
                             <label>Mode</label>
                             <span className='sb-badge'>{bot.multiple ? 'Multiple runs' : 'Single run (stop on win)'}</span>
@@ -1937,6 +1976,22 @@ const BotDetail: React.FC<{
                                             onCommit={n => m2Set({ martingale: n })} disabled={running} />
                                     </div>
                                 </div>
+                                <div className='sb-field-row sb-field-row--center'>
+                                    <label>Stake Override</label>
+                                    <button className={`sb-toggle ${cfg.market2.useStakeOverride ? 'on' : 'off'}`}
+                                        onClick={() => m2Set({ useStakeOverride: !cfg.market2.useStakeOverride })} disabled={running}>
+                                        {cfg.market2.useStakeOverride ? 'ON' : 'OFF'}
+                                    </button>
+                                </div>
+                                {cfg.market2.useStakeOverride && (
+                                    <div className='sb-field'>
+                                        <label>Override Ceiling (USD)</label>
+                                        <NumberField value={cfg.market2.stakeOverride} min={cfg.market2.stake} step={0.01}
+                                            onCommit={n => m2Set({ stakeOverride: n })} disabled={running} />
+                                        <span className='sb-unit'>USD</span>
+                                        <p className='sb-hint'>When Market 2 martingale stake reaches {cfg.market2.stakeOverride.toFixed(2)}, reset back to base {cfg.market2.stake.toFixed(2)}.</p>
+                                    </div>
+                                )}
                                 <div className='sb-field-row'>
                                     <div className='sb-field'>
                                         <label>Take Profit</label>
