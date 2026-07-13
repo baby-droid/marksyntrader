@@ -16,3 +16,4 @@
 - [Unified Settings panel](marksyntrader-settings-unified.md) — one settings surface (SettingsPanel) opened via ui_store.is_settings_panel_open from every entry point; SettingsModal was removed as a duplicate.
 - [Scalper bots terminal entry logic](scalper-terminal-entry.md) — tick-based entry detection; `checkEntry()` uses contrarian streaks; `subscribeMarket()` updates both ref (for loop) and state (for display).
 - [Loading screen two-phase](loading-screen-phases.md) — phase 1 (0-50%) = landing page; phase 2 (50-100%) = AHMED TRADE centered screen; switch via `useEffect` on progress >= 50.
+- [Numeric input clamp-on-keystroke bug](marksyntrader-number-clamp-bug.md) — recurring bug pattern; shared fix is `src/components/number-field`; check every page's numeric inputs for it, not just the one reported.

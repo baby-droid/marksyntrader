@@ -239,7 +239,7 @@ const NumberField: React.FC<{
     step?: number;
     disabled?: boolean;
     className?: string;
-}> = ({ value, onCommit, min, max, step, disabled, className }) => {
+}> = ({ value, onCommit, min, max, disabled, className }) => {
     const [text, setText] = useState(String(value));
     const focusedRef = useRef(false);
 

@@ -1,5 +1,6 @@
 // @ts-nocheck
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import NumberField from '@/components/number-field';
 import { useDerivTrade } from '@/hooks/useDerivTrade';
 import { applyCommission } from '@/utils/commission';
 import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
@@ -744,9 +745,9 @@ const ManualTrader: React.FC = () => {
                                     {v}
                                 </button>
                             ))}
-                            <input className='mtp-dur-inp' type='number' min='1' max='10'
+                            <NumberField className='mtp-dur-inp' min={1} max={10}
                                 value={duration}
-                                onChange={e => setDuration(Math.max(1, Math.min(10, +e.target.value)))} />
+                                onCommit={n => setDuration(n)} />
                         </div>
                         <div className='mtp-dur-label'>{duration} Ticks</div>
                     </div>

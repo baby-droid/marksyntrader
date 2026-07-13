@@ -4,6 +4,7 @@ import { observer } from 'mobx-react-lite';
 import { useDerivTrading } from '@/hooks/useDerivTrading';
 import { useDigitStats } from '@/hooks/useDigitStats';
 import DigitCircles from '@/components/digit-circles';
+import NumberField from '@/components/number-field';
 import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import './bulk-trade.scss';
 
@@ -256,12 +257,11 @@ const BulkTrade = observer(() => {
                   {c}
                 </button>
               ))}
-              <input
-                type='number' min={1} max={100}
+              <NumberField
+                min={1} max={100}
                 value={count}
-                onChange={e => setCount(Math.max(1, Number(e.target.value)))}
+                onCommit={n => setCount(n)}
                 className='bulk-trade__num-input'
-                title='Custom count'
               />
             </div>
           </div>
