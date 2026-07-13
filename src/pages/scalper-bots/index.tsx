@@ -12,7 +12,7 @@ import './scalper-bots.scss';
 /* ─── Types ─── */
 type TScalperBot = {
     key: string; name: string;
-    category: 'Even/Odd' | 'Over/Under';
+    category: 'Even/Odd' | 'Over/Under' | 'Rise/Fall' | 'Matches/Differs';
     contractType: string;
     prediction: number | null;
     multiple: boolean;
@@ -118,6 +118,20 @@ const newCondition = (bot: TScalperBot): StrategyCondition => {
     }
     if (bot.contractType === 'DIGITUNDER') {
         return { id: `cond_${++sbCondSeq}`, algorithm: 'LDP', strict: true, ifLast: 2, digitsIs: 'OVER', digitValue: bot.prediction ?? 5, recoveryLimit: 1 };
+    }
+    if (bot.contractType === 'DIGITMATCH') {
+        return { id: `cond_${++sbCondSeq}`, algorithm: 'LDP', strict: true, ifLast: 2, digitsIs: 'DIFFERS', digitValue: bot.prediction ?? 5, recoveryLimit: 1 };
+    }
+    if (bot.contractType === 'DIGITDIFF') {
+        return { id: `cond_${++sbCondSeq}`, algorithm: 'LDP', strict: true, ifLast: 2, digitsIs: 'MATCHES', digitValue: bot.prediction ?? 5, recoveryLimit: 1 };
+    }
+    if (bot.contractType === 'CALL') {
+        // contrarian: consecutive falling ticks → bet Rise
+        return { id: `cond_${++sbCondSeq}`, algorithm: 'LDP', strict: true, ifLast: 3, digitsIs: 'ONLY DOWNS', digitValue: 5, recoveryLimit: 1 };
+    }
+    if (bot.contractType === 'PUT') {
+        // contrarian: consecutive rising ticks → bet Fall
+        return { id: `cond_${++sbCondSeq}`, algorithm: 'LDP', strict: true, ifLast: 3, digitsIs: 'ONLY UPS', digitValue: 5, recoveryLimit: 1 };
     }
     return {
         id: `cond_${++sbCondSeq}`,
