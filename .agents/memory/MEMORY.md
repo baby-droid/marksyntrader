@@ -18,3 +18,5 @@
 - [Loading screen two-phase](loading-screen-phases.md) — phase 1 (0-50%) = landing page; phase 2 (50-100%) = AHMED TRADE centered screen; switch via `useEffect` on progress >= 50.
 - [Numeric input clamp-on-keystroke bug](marksyntrader-number-clamp-bug.md) — recurring bug pattern; shared fix is `src/components/number-field`; check every page's numeric inputs for it, not just the one reported.
 - [Scalper XML single-engine design](scalper-xml-single-engine.md) — terminal only detects entry signals now; the real Bot Builder XML is the sole buyer via onRunButtonClick, guarded by globalObserver('bot.contract'/'bot.stop').
+- [Scalper algorithm system](scalper-algorithms.md) — 5 algorithms (LDP, Market%, Sequence Radar, Complex Patterns, Entry Point Pattern) all share StrategyCondition type; use COND_DEFAULTS spread + algorithm-specific fields with optional chaining (?? default).
+- [Scalper tick-driven scan](scalper-tick-scan.md) — tickSignalRef wakes the scan loop on every live tick (subscribeMarket fires it); 2s fallback timeout keeps it from hanging on slow ticks; never use fixed setInterval/setTimeout polling in the entry scan loop.

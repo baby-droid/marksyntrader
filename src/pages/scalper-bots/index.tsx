@@ -51,15 +51,29 @@ type DigitsIsType = typeof DIGITS_IS_OPTIONS[number];
 
 const IF_LAST_OPTIONS = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20];
 
-/** A single LDP sub-condition (one row in the UI). */
+/* ── The 5 analysis algorithms available in the OR Group conditions ── */
+const ALGORITHM_OPTIONS = ['LDP', 'Market Percentage', 'Sequence Radar', 'Complex Patterns', 'Entry Point Pattern'] as const;
+type AlgorithmType = typeof ALGORITHM_OPTIONS[number];
+
+/** A single strategy sub-condition (one row in the UI).
+ *  Algorithm-specific fields are all optional with sensible defaults so old
+ *  conditions created before new algorithms were added continue to work. */
 type StrategyCondition = {
     id: string;
-    algorithm: 'LDP'; // Last-Digit-Pattern
-    strict: boolean;
-    ifLast: number;
-    digitsIs: DigitsIsType;
-    digitValue: number; // barrier for OVER/UNDER/MATCHES/DIFFERS (0-9)
-    recoveryLimit: number;
+    algorithm: AlgorithmType;
+    strict: boolean;           // LDP: all in window must match; others: simple majority
+    ifLast: number;            // analysis window size (all algorithms)
+    digitsIs: DigitsIsType;    // predicate used by LDP, Market Percentage, Entry Point Pattern
+    digitValue: number;        // barrier digit for OVER/UNDER/MATCHES/DIFFERS (0-9)
+    recoveryLimit: number;     // relaxed window size after a loss (all algorithms)
+    // ── Market Percentage extras ──
+    percentageThreshold: number; // 50-100; default 60 — minimum % of window digits that must match
+    // ── Sequence Radar extras ──
+    sequenceType: 'alternating' | 'increasing' | 'decreasing' | 'zigzag' | 'flat';
+    // ── Complex Patterns extras ──
+    complexPattern: 'high-low' | 'low-high' | 'ramp-up' | 'ramp-down' | 'spike';
+    // ── Entry Point Pattern extras ──
+    sensitivity: 'low' | 'medium' | 'high';
 };
 
 /** One OR group — all its conditions must pass (AND within the group). */
@@ -113,29 +127,36 @@ const DEFAULT_RM: RiskManagerConfig = {
    turning Strategy Logic on doesn't change default behaviour — it just makes
    the recovery-limit-aware re-entry configurable. Contract type is always
    locked to the bot's own contractType/prediction (never edited here). */
+/* Default extra fields shared across all new algorithms */
+const COND_DEFAULTS = {
+    percentageThreshold: 60,
+    sequenceType: 'alternating' as const,
+    complexPattern: 'high-low' as const,
+    sensitivity: 'medium' as const,
+};
+
 let sbCondSeq = 0;
 const newCondition = (bot: TScalperBot): StrategyCondition => {
     if (bot.contractType === 'DIGITOVER') {
-        return { id: `cond_${++sbCondSeq}`, algorithm: 'LDP', strict: true, ifLast: 2, digitsIs: 'UNDER', digitValue: bot.prediction ?? 5, recoveryLimit: 1 };
+        return { ...COND_DEFAULTS, id: `cond_${++sbCondSeq}`, algorithm: 'LDP', strict: true, ifLast: 2, digitsIs: 'UNDER', digitValue: bot.prediction ?? 5, recoveryLimit: 1 };
     }
     if (bot.contractType === 'DIGITUNDER') {
-        return { id: `cond_${++sbCondSeq}`, algorithm: 'LDP', strict: true, ifLast: 2, digitsIs: 'OVER', digitValue: bot.prediction ?? 5, recoveryLimit: 1 };
+        return { ...COND_DEFAULTS, id: `cond_${++sbCondSeq}`, algorithm: 'LDP', strict: true, ifLast: 2, digitsIs: 'OVER', digitValue: bot.prediction ?? 5, recoveryLimit: 1 };
     }
     if (bot.contractType === 'DIGITMATCH') {
-        return { id: `cond_${++sbCondSeq}`, algorithm: 'LDP', strict: true, ifLast: 2, digitsIs: 'DIFFERS', digitValue: bot.prediction ?? 5, recoveryLimit: 1 };
+        return { ...COND_DEFAULTS, id: `cond_${++sbCondSeq}`, algorithm: 'LDP', strict: true, ifLast: 2, digitsIs: 'DIFFERS', digitValue: bot.prediction ?? 5, recoveryLimit: 1 };
     }
     if (bot.contractType === 'DIGITDIFF') {
-        return { id: `cond_${++sbCondSeq}`, algorithm: 'LDP', strict: true, ifLast: 2, digitsIs: 'MATCHES', digitValue: bot.prediction ?? 5, recoveryLimit: 1 };
+        return { ...COND_DEFAULTS, id: `cond_${++sbCondSeq}`, algorithm: 'LDP', strict: true, ifLast: 2, digitsIs: 'MATCHES', digitValue: bot.prediction ?? 5, recoveryLimit: 1 };
     }
     if (bot.contractType === 'CALL') {
-        // contrarian: consecutive falling ticks → bet Rise
-        return { id: `cond_${++sbCondSeq}`, algorithm: 'LDP', strict: true, ifLast: 3, digitsIs: 'ONLY DOWNS', digitValue: 5, recoveryLimit: 1 };
+        return { ...COND_DEFAULTS, id: `cond_${++sbCondSeq}`, algorithm: 'LDP', strict: true, ifLast: 3, digitsIs: 'ONLY DOWNS', digitValue: 5, recoveryLimit: 1 };
     }
     if (bot.contractType === 'PUT') {
-        // contrarian: consecutive rising ticks → bet Fall
-        return { id: `cond_${++sbCondSeq}`, algorithm: 'LDP', strict: true, ifLast: 3, digitsIs: 'ONLY UPS', digitValue: 5, recoveryLimit: 1 };
+        return { ...COND_DEFAULTS, id: `cond_${++sbCondSeq}`, algorithm: 'LDP', strict: true, ifLast: 3, digitsIs: 'ONLY UPS', digitValue: 5, recoveryLimit: 1 };
     }
     return {
+        ...COND_DEFAULTS,
         id: `cond_${++sbCondSeq}`,
         algorithm: 'LDP',
         strict: true,
@@ -288,20 +309,10 @@ function checkEntry(digits: number[], contractType: string, barrier: number | nu
     }
 }
 
-/* ─── Single-condition evaluation (LDP pattern engine) ───
-   requiredCount: how many recent digits must match — normally cond.ifLast,
-   but during recovery (after a loss) the caller passes cond.recoveryLimit
-   instead so the bot re-enters faster while staying locked to the SAME
-   contract type/digitsIs/digitValue (the locked strategy never changes —
-   only how many confirming digits are required before re-entering). */
-function evaluateSingleCondition(digits: number[], cond: StrategyCondition, requiredCount?: number): boolean {
-    const n = Math.max(1, requiredCount ?? cond.ifLast);
-    if (digits.length < n) return false;
-    const recent = digits.slice(0, n);
+/* ─── Per-digit predicate shared by LDP, Market Percentage, Entry Point Pattern ─── */
+function buildMatchFn(cond: StrategyCondition): (d: number, prev: number | null) => boolean {
     const v = cond.digitValue ?? 5;
-
-    // Build a per-digit predicate based on digitsIs
-    const matchFn = (d: number, prev: number | null): boolean => {
+    return (d: number, prev: number | null): boolean => {
         switch (cond.digitsIs) {
             case 'ODD':        return d % 2 !== 0;
             case 'EVEN':       return d % 2 === 0;
@@ -326,15 +337,200 @@ function evaluateSingleCondition(digits: number[], cond: StrategyCondition, requ
             default:           return true;
         }
     };
+}
 
-    if (cond.strict) {
-        let prev: number | null = null;
-        for (const d of recent) { if (!matchFn(d, prev)) return false; prev = d; }
-        return true;
-    } else {
-        let count = 0, prev: number | null = null;
-        for (const d of recent) { if (matchFn(d, prev)) count++; prev = d; }
-        return count > recent.length / 2;
+/* ─── Single-condition evaluation — all 5 algorithms ───
+   requiredCount: normally cond.ifLast; during recovery the caller passes
+   cond.recoveryLimit so re-entry is faster while contract type stays locked. */
+function evaluateSingleCondition(digits: number[], cond: StrategyCondition, requiredCount?: number): boolean {
+    const n = Math.max(1, requiredCount ?? cond.ifLast);
+    if (digits.length < n) return false;
+    const recent = digits.slice(0, n);
+    const matchFn = buildMatchFn(cond);
+
+    switch (cond.algorithm) {
+        /* ── LDP (Last Digit Pattern) ──────────────────────────────────────────
+           Strict=ON: every digit in the window must match.
+           Strict=OFF: more than half must match (majority). */
+        case 'LDP':
+        default: {
+            if (cond.strict) {
+                let prev: number | null = null;
+                for (const d of recent) { if (!matchFn(d, prev)) return false; prev = d; }
+                return true;
+            } else {
+                let count = 0, prev: number | null = null;
+                for (const d of recent) { if (matchFn(d, prev)) count++; prev = d; }
+                return count > recent.length / 2;
+            }
+        }
+
+        /* ── Market Percentage ─────────────────────────────────────────────────
+           Fires when ≥ percentageThreshold % of the last N digits satisfy the
+           digitsIs predicate — gives a statistical view rather than streak-only. */
+        case 'Market Percentage': {
+            if (recent.length < 2) return false;
+            let matchCount = 0;
+            let prev: number | null = null;
+            for (const d of recent) { if (matchFn(d, prev)) matchCount++; prev = d; }
+            const pct = (matchCount / recent.length) * 100;
+            return pct >= (cond.percentageThreshold ?? 60);
+        }
+
+        /* ── Sequence Radar ────────────────────────────────────────────────────
+           Detects structural patterns in recent digits regardless of digit value:
+           alternating parity, monotonic trend, zigzag, or low-range flat market. */
+        case 'Sequence Radar': {
+            if (recent.length < 2) return false;
+            switch (cond.sequenceType ?? 'alternating') {
+                case 'alternating': {
+                    // Consecutive digits alternate ODD ↔ EVEN
+                    for (let i = 1; i < recent.length; i++) {
+                        if ((recent[i] % 2) === (recent[i-1] % 2)) return false;
+                    }
+                    return true;
+                }
+                case 'increasing': {
+                    for (let i = 1; i < recent.length; i++) {
+                        if (recent[i] < recent[i-1]) return false;
+                    }
+                    return true;
+                }
+                case 'decreasing': {
+                    for (let i = 1; i < recent.length; i++) {
+                        if (recent[i] > recent[i-1]) return false;
+                    }
+                    return true;
+                }
+                case 'zigzag': {
+                    // Direction must reverse on every step (up-down-up / down-up-down)
+                    if (recent.length < 3) return true;
+                    let prevDir = 0;
+                    for (let i = 1; i < recent.length; i++) {
+                        const dir = recent[i] > recent[i-1] ? 1 : recent[i] < recent[i-1] ? -1 : 0;
+                        if (dir !== 0) {
+                            if (prevDir !== 0 && dir === prevDir) return false;
+                            prevDir = dir;
+                        }
+                    }
+                    return true;
+                }
+                case 'flat': {
+                    // All digits within a tight range (≤2) — low-volatility market
+                    const mn = Math.min(...recent);
+                    const mx = Math.max(...recent);
+                    return mx - mn <= 2;
+                }
+                default: return true;
+            }
+        }
+
+        /* ── Complex Patterns ──────────────────────────────────────────────────
+           Multi-phase pattern: compares the first half of the window against the
+           second half to detect regime shifts or sustained trends. */
+        case 'Complex Patterns': {
+            if (recent.length < 4) return false;
+            const half = Math.floor(recent.length / 2);
+            const first  = recent.slice(0, half);
+            const second = recent.slice(half);
+            const avg1 = first.reduce((a, b) => a + b, 0) / first.length;
+            const avg2 = second.reduce((a, b) => a + b, 0) / second.length;
+            switch (cond.complexPattern ?? 'high-low') {
+                case 'high-low':  return avg1 > 5.5 && avg2 < 4.5;
+                case 'low-high':  return avg1 < 4.5 && avg2 > 5.5;
+                case 'ramp-up': {
+                    const slope = (recent[recent.length-1] - recent[0]) / (recent.length - 1);
+                    return slope >= 0.5;
+                }
+                case 'ramp-down': {
+                    const slope = (recent[recent.length-1] - recent[0]) / (recent.length - 1);
+                    return slope <= -0.5;
+                }
+                case 'spike': {
+                    const mean = recent.reduce((a, b) => a + b, 0) / recent.length;
+                    return recent.some(d => Math.abs(d - mean) > 3);
+                }
+                default: return true;
+            }
+        }
+
+        /* ── Entry Point Pattern ───────────────────────────────────────────────
+           Reversal-pressure signal: counts consecutive opposing digits with a
+           sensitivity-controlled minimum streak. Sensitivity controls how many
+           confirming ticks are needed before calling a reversal:
+             high   = 2 confirming ticks (very fast / aggressive)
+             medium = 3 confirming ticks (balanced default)
+             low    = 5 confirming ticks (conservative)
+           The "opposing" side is determined by digitsIs (e.g. if digitsIs=ODD,
+           we look for consecutive ODD ticks then signal an EVEN reversal). */
+        case 'Entry Point Pattern': {
+            const sensitivityN: Record<string, number> = { high: 2, medium: 3, low: 5 };
+            const needed = Math.min(
+                sensitivityN[cond.sensitivity ?? 'medium'] ?? 3,
+                requiredCount ?? cond.ifLast,
+            );
+            if (digits.length < needed) return false;
+            const window = digits.slice(0, needed);
+            // Build the "opposing" predicate: we want the STREAK before the reversal
+            const opposeFn = buildMatchFn(cond);
+            return window.every((d, i) => opposeFn(d, i > 0 ? window[i-1] : null));
+        }
+    }
+}
+
+/* ── Plain-English description of a fired condition (for terminal log) ── */
+function describeConditionFired(
+    cond: StrategyCondition,
+    digits: number[],
+    inRecovery: boolean,
+    isAnd: boolean,
+): string {
+    const reqCount = inRecovery ? (cond.recoveryLimit ?? 1) : cond.ifLast;
+    const window = digits.slice(0, reqCount);
+    const tag = isAnd ? 'AND' : 'IF';
+
+    switch (cond.algorithm) {
+        case 'LDP': {
+            const digitStr = window.length ? `[${window.join(',')}]` : '[…]';
+            const modeNote = inRecovery
+                ? ` ← recovery limit (${cond.recoveryLimit} digit${cond.recoveryLimit > 1 ? 's' : ''})`
+                : ` (${cond.ifLast} digits)`;
+            return `${tag} last ${reqCount} digit${reqCount > 1 ? 's' : ''} are ${cond.digitsIs}${modeNote}: ${digitStr}`;
+        }
+        case 'Market Percentage': {
+            const recent = digits.slice(0, cond.ifLast);
+            const mfn = buildMatchFn(cond);
+            const matching = recent.filter((d, i) => mfn(d, i > 0 ? recent[i-1] : null)).length;
+            const pct = recent.length ? ((matching / recent.length) * 100).toFixed(0) : '?';
+            return `${tag} Market%: ${pct}% of last ${cond.ifLast} digits are ${cond.digitsIs} (need ≥${cond.percentageThreshold ?? 60}%)`;
+        }
+        case 'Sequence Radar': {
+            return `${tag} Sequence Radar: ${(cond.sequenceType ?? 'alternating').toUpperCase()} pattern in last ${cond.ifLast} digits [${window.join(',')}]`;
+        }
+        case 'Complex Patterns': {
+            return `${tag} Complex: ${(cond.complexPattern ?? 'high-low').toUpperCase()} detected over ${cond.ifLast} ticks [${window.join(',')}]`;
+        }
+        case 'Entry Point Pattern': {
+            const sn: Record<string, number> = { high: 2, medium: 3, low: 5 };
+            const n = sn[cond.sensitivity ?? 'medium'] ?? 3;
+            return `${tag} Entry Point (${cond.sensitivity ?? 'medium'} sensitivity): ${n}-tick reversal pressure from ${cond.digitsIs} [${window.join(',')}]`;
+        }
+        default: return `${tag} condition matched`;
+    }
+}
+
+/* ── What the bot will BUY when the condition fires ── */
+function describeBuyAction(contractType: string, prediction: number | null): string {
+    switch (contractType) {
+        case 'DIGITEVEN':  return 'BUY EVEN';
+        case 'DIGITODD':   return 'BUY ODD';
+        case 'DIGITOVER':  return `BUY OVER ${prediction}`;
+        case 'DIGITUNDER': return `BUY UNDER ${prediction}`;
+        case 'CALL':       return 'BUY RISE ↑';
+        case 'PUT':        return 'BUY FALL ↓';
+        case 'DIGITMATCH': return `BUY MATCHES ${prediction}`;
+        case 'DIGITDIFF':  return `BUY DIFFERS ${prediction}`;
+        default:           return 'EXECUTE TRADE';
     }
 }
 
@@ -626,7 +822,10 @@ const BotDetail: React.FC<{
     const [activeMarket, setActiveMarket] = useState(cfg.market);
     const [addMarketSel, setAddMarketSel] = useState('1HZ50V');
     const [digitDisplay, setDigitDisplay] = useState<number[]>([]); // reactive copy for rendering
-    const [winPopup, setWinPopup] = useState<{ profit: number; stopped: boolean } | null>(null);
+    const [winPopup, setWinPopup] = useState<{
+        profit: number; stopped: boolean;
+        sessionPnl: number; wins: number; losses: number; reason?: string;
+    } | null>(null);
 
     const stopRef         = useRef(false);
     const consLossRef     = useRef(0);
@@ -641,6 +840,12 @@ const BotDetail: React.FC<{
     const multiWindowsRef = useRef<Map<string, number[]>>(new Map());
     const multiUnsubsRef  = useRef<Map<string, () => void>>(new Map());
     const readyMarketRef  = useRef<string | null>(null);
+    /* Supersonic scanning — the tick subscriber calls this to wake the scan
+       loop immediately on every new tick instead of polling on a fixed timer. */
+    const tickSignalRef   = useRef<(() => void) | null>(null);
+    /* Per-session counters (refs so they stay accurate inside async callbacks) */
+    const winsRef         = useRef(0);
+    const lossesRef       = useRef(0);
 
     useEffect(() => subscribeCurrency(() => setDisplayCur(getDisplayCurrency())), []);
     useEffect(() => { setActiveMarket(cfg.market); }, [cfg.market]);
@@ -713,7 +918,9 @@ const BotDetail: React.FC<{
     const m2Set = (patch: Partial<Market2Config>) =>
         setCfg(prev => ({ ...prev, market2: { ...prev.market2, ...patch } }));
 
-    /* ── Subscribe to ticks for the active market ── */
+    /* ── Subscribe to ticks for the active market ──
+       Each new tick immediately wakes the scan loop (tickSignalRef) so the
+       condition check runs at true tick-rate with no poll delay. */
     const subscribeMarket = useCallback((market: string) => {
         if (tickUnsubRef.current) { tickUnsubRef.current(); tickUnsubRef.current = null; }
         digitWindowRef.current = [];
@@ -722,6 +929,8 @@ const BotDetail: React.FC<{
             const d = tick.digit != null ? tick.digit : getLastDigit(tick.quote);
             digitWindowRef.current = [d, ...digitWindowRef.current].slice(0, 50);
             setDigitDisplay(prev => [d, ...prev].slice(0, 20));
+            // ⚡ Wake the scan loop instantly on every new tick
+            if (tickSignalRef.current) { tickSignalRef.current(); tickSignalRef.current = null; }
         });
         tickUnsubRef.current = unsub;
         setActiveMarket(market);
@@ -792,7 +1001,10 @@ const BotDetail: React.FC<{
         consLossRef.current = 0;
         sessionPnlRef.current = 0;
         marketIdxRef.current  = 0;
+        winsRef.current   = 0;
+        lossesRef.current = 0;
         lastFiredGroupRef.current = null;
+        tickSignalRef.current = null;
         setRunning(true);
         setEntryReady(false);
         setTerminal([]);
@@ -849,10 +1061,6 @@ const BotDetail: React.FC<{
                             setActiveMarket(curMarket);
                             setDigitDisplay(digitWindowRef.current.slice(0, 20));
                             addLog(`🧬 STRATEGY_LOGIC: CONDITION MET ON ${curMarket} — ${contractLabel(bot)} LOCKED, EXECUTING`, 'switch');
-                            /* The real Bot Builder XML bot IS fired for this signal (see
-                               runXmlBotCycle below) — it is the single, sole buyer. This
-                               terminal only detected the entry condition; it never places
-                               a trade of its own. */
                             entry = true;
                             break;
                         }
@@ -861,7 +1069,18 @@ const BotDetail: React.FC<{
                         const r = evaluateStrategyLogic(digitWindowRef.current, cfg.strategyLogic.groups, inRecovery);
                         if (r.hit) {
                             lastFiredGroupRef.current = r.group ?? null;
-                            addLog(`🧬 STRATEGY_LOGIC: CONDITION MET${inRecovery ? ' (RECOVERY MODE)' : ''} — ${contractLabel(bot)} LOCKED, EXECUTING`, 'switch');
+                            /* ── Plain-English condition interpretation in terminal ── */
+                            if (r.group) {
+                                if (inRecovery) {
+                                    addLog(`🔄 RECOVERY MODE — relaxed entry (recovery limit used instead of ifLast)`, 'switch');
+                                }
+                                r.group.conditions.forEach((cond, idx) => {
+                                    const desc = describeConditionFired(cond, digitWindowRef.current, inRecovery, idx > 0);
+                                    addLog(`  ${idx === 0 ? '📋' : '     ↳'} ${desc}`, 'scan');
+                                });
+                                addLog(`  ⟹ ${describeBuyAction(bot.contractType, bot.prediction)}`, 'entry');
+                            }
+                            addLog(`🧬 STRATEGY_LOGIC: CONDITION MET${inRecovery ? ' (RECOVERY)' : ''} — ${contractLabel(bot)} LOCKED, EXECUTING`, 'switch');
                             entry = true;
                             break;
                         }
@@ -871,18 +1090,25 @@ const BotDetail: React.FC<{
                     scanTick++;
 
                     if (!entry) {
-                        /* Periodic hacker/analysis messages */
-                        if (scanTick % 4 === 1) {
+                        /* Periodic status messages — kept light so they don't flood the log */
+                        if (scanTick % 6 === 1) {
                             const recent = digitWindowRef.current.slice(0, 10).join(' ');
                             addLog(`ANALYZING_DIGIT_PATTERN: [${recent || '...'}]`, 'scan');
                         }
-                        if (scanTick % 8 === 3) {
+                        if (scanTick % 12 === 5) {
                             addLog(HACK_SCAN_MSGS[Math.floor(Math.random() * HACK_SCAN_MSGS.length)], 'hack');
                         }
-                        if (scanTick % 10 === 5) {
+                        if (scanTick % 15 === 9) {
                             addLog(`CONNECTION_SPEED: ${105 + Math.floor(Math.random() * 40)} Mbps`, 'hack');
                         }
-                        await new Promise(r => setTimeout(r, multiScan ? 250 : 600));
+                        /* ⚡ Supersonic: wait for the next live tick instead of polling on a timer.
+                           Falls back to 2 s max in case ticks stall (e.g. weekend / network). */
+                        await new Promise<void>(resolve => {
+                            let done = false;
+                            const finish = () => { if (!done) { done = true; resolve(); } };
+                            tickSignalRef.current = finish;
+                            setTimeout(finish, 2000); // fallback
+                        });
                     }
                 }
 
@@ -925,8 +1151,10 @@ const BotDetail: React.FC<{
                         }, ...prev]);
                         const pnlStr = `${sessionPnlRef.current >= 0 ? '+' : ''}${sessionPnlRef.current.toFixed(2)} USD`;
                         if (won) {
+                            winsRef.current++;
                             addLog(`✅ WIN  +${profit.toFixed(2)} USD  |  P/L: ${pnlStr}`, 'win');
                         } else {
+                            lossesRef.current++;
                             consLossRef.current = consLoss;
                             addLog(`❌ LOSS  ${profit.toFixed(2)} USD  |  recovery: ${consLoss}/${effectiveLossLimit === Infinity ? '∞' : effectiveLossLimit}  |  P/L: ${pnlStr}`, 'loss');
                             addLog('🛡 RECOVERY_MODE: ENGAGED — XML bot re-entering with martingale stake', 'switch');
@@ -942,12 +1170,12 @@ const BotDetail: React.FC<{
 
                     if (cycle.reason === 'tp') {
                         addLog(`🎯 Take profit ${slotTakeProfit()} reached.`, 'stop');
-                        setWinPopup({ profit: cycle.cycleProfit, stopped: true });
+                        setWinPopup({ profit: cycle.cycleProfit, stopped: true, sessionPnl: sessionPnlRef.current, wins: winsRef.current, losses: lossesRef.current, reason: 'take-profit' });
                         break;
                     }
                     if (cycle.reason === 'sl') {
                         addLog(`🛡 Stop loss -${cfg.stopLoss} triggered.`, 'stop');
-                        setWinPopup({ profit: cycle.cycleProfit, stopped: true });
+                        setWinPopup({ profit: cycle.cycleProfit, stopped: true, sessionPnl: sessionPnlRef.current, wins: winsRef.current, losses: lossesRef.current, reason: 'stop-loss' });
                         break;
                     }
 
@@ -976,7 +1204,7 @@ const BotDetail: React.FC<{
                         continue;
                     }
                     addLog(`🛑 Stop loss hit — stopped after ${cycle.consLoss} consecutive losses.`, 'stop');
-                    setWinPopup({ profit: cycle.cycleProfit, stopped: true });
+                    setWinPopup({ profit: cycle.cycleProfit, stopped: true, sessionPnl: sessionPnlRef.current, wins: winsRef.current, losses: lossesRef.current, reason: 'loss-limit' });
                     break;
                 }
 
@@ -995,17 +1223,17 @@ const BotDetail: React.FC<{
 
                 if (!bot.multiple) {
                     addLog('🎉 TICK WIN — Bot stopped.', 'win');
-                    setWinPopup({ profit: cycle.cycleProfit, stopped: true });
+                    setWinPopup({ profit: cycle.cycleProfit, stopped: true, sessionPnl: sessionPnlRef.current, wins: winsRef.current, losses: lossesRef.current, reason: 'win' });
                     break;
                 }
 
                 if (cfg.tpGuard && sessionPnlRef.current >= slotTakeProfit()) {
                     addLog(`🎯 Take profit ${slotTakeProfit()} reached.`, 'stop');
-                    setWinPopup({ profit: cycle.cycleProfit, stopped: true });
+                    setWinPopup({ profit: cycle.cycleProfit, stopped: true, sessionPnl: sessionPnlRef.current, wins: winsRef.current, losses: lossesRef.current, reason: 'take-profit' });
                     break;
                 }
 
-                setWinPopup({ profit: cycle.cycleProfit, stopped: false });
+                setWinPopup({ profit: cycle.cycleProfit, stopped: false, sessionPnl: sessionPnlRef.current, wins: winsRef.current, losses: lossesRef.current, reason: 'win' });
                 addLog('🔄 Returning to market scan...', 'scan');
             } catch (err: any) {
                 addLog(`⚠ ${err?.error?.message || err?.message || 'Trade error — retrying...'}`, 'error');
@@ -1015,7 +1243,16 @@ const BotDetail: React.FC<{
 
         if (tickUnsubRef.current) { tickUnsubRef.current(); tickUnsubRef.current = null; }
         if (multiScan) unsubscribeAllMarkets();
-        addLog('⏹ Bot stopped.', 'info');
+        tickSignalRef.current = null;
+        /* ── Bot-stopped summary in terminal ── */
+        const finalPnl   = sessionPnlRef.current;
+        const totalTrades = winsRef.current + lossesRef.current;
+        const winRate = totalTrades > 0 ? ((winsRef.current / totalTrades) * 100).toFixed(1) : '0.0';
+        addLog('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'separator');
+        addLog(`⏹  BOT STOPPED`, 'stop-summary');
+        addLog(`   Session P/L : ${finalPnl >= 0 ? '+' : ''}${finalPnl.toFixed(2)} USD`, finalPnl >= 0 ? 'win' : 'loss');
+        addLog(`   Trades      : ${totalTrades}  |  Wins: ${winsRef.current}  |  Losses: ${lossesRef.current}  |  Win-rate: ${winRate}%`, 'info');
+        addLog('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'separator');
         setRunning(false);
         setEntryReady(false);
     }, [running, derivTrade, bot, cfg, addLog, subscribeMarket, subscribeAllMarkets, unsubscribeAllMarkets, onPreloadXml, runXmlBotCycle]);
@@ -1254,52 +1491,123 @@ const BotDetail: React.FC<{
                                                     {/* Algorithm */}
                                                     <div className='sb-field'>
                                                         <label>Algorithm</label>
-                                                        <select value={cond.algorithm} onChange={() => {}} disabled={running}>
-                                                            <option value='LDP'>LDP</option>
+                                                        <select value={cond.algorithm}
+                                                            onChange={e => conditionSet(g.id, cond.id, { algorithm: e.target.value as AlgorithmType })}
+                                                            disabled={running}>
+                                                            {ALGORITHM_OPTIONS.map(a => <option key={a} value={a}>{a}</option>)}
                                                         </select>
                                                     </div>
 
-                                                    {/* Strict + If Last row */}
+                                                    {/* Algorithm description chip */}
+                                                    <div className='sb-algo-desc'>
+                                                        {cond.algorithm === 'LDP' && 'Last-Digit Pattern: checks consecutive digit streaks'}
+                                                        {cond.algorithm === 'Market Percentage' && 'Statistical: fires when ≥X% of recent digits match'}
+                                                        {cond.algorithm === 'Sequence Radar' && 'Pattern: detects alternating / trend / zigzag sequences'}
+                                                        {cond.algorithm === 'Complex Patterns' && 'Multi-phase: compares first vs second half of window'}
+                                                        {cond.algorithm === 'Entry Point Pattern' && 'Reversal: pressure-based entry from sensitivity streak'}
+                                                    </div>
+
+                                                    {/* Window size (If Last) */}
                                                     <div className='sb-field-row'>
-                                                        <div className='sb-field-row sb-field-row--center'>
-                                                            <label>Strict</label>
-                                                            <button className={`sb-toggle ${cond.strict ? 'on' : 'off'}`}
-                                                                onClick={() => conditionSet(g.id, cond.id, { strict: !cond.strict })} disabled={running}>
-                                                                {cond.strict ? 'ACTIVE' : 'OFF'}
-                                                            </button>
-                                                        </div>
                                                         <div className='sb-field'>
-                                                            <label>If Last</label>
+                                                            <label>If Last (window)</label>
                                                             <select value={cond.ifLast}
                                                                 onChange={e => conditionSet(g.id, cond.id, { ifLast: Number(e.target.value) })}
                                                                 disabled={running}>
                                                                 {IF_LAST_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
                                                             </select>
                                                         </div>
-                                                    </div>
-
-                                                    {/* Digits Is + digit value (if applicable) */}
-                                                    <div className='sb-field-row'>
-                                                        <div className='sb-field'>
-                                                            <label>Digits Is</label>
-                                                            <select value={cond.digitsIs}
-                                                                onChange={e => conditionSet(g.id, cond.id, { digitsIs: e.target.value as DigitsIsType })}
-                                                                disabled={running}>
-                                                                {DIGITS_IS_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                                                            </select>
-                                                        </div>
-                                                        {/* Digit value for OVER/UNDER/MATCHES/DIFFERS */}
-                                                        {['OVER','UNDER','MATCHES','DIFFERS'].includes(cond.digitsIs) && (
-                                                            <div className='sb-field'>
-                                                                <label>Digit</label>
-                                                                <select value={cond.digitValue ?? 5}
-                                                                    onChange={e => conditionSet(g.id, cond.id, { digitValue: Number(e.target.value) })}
-                                                                    disabled={running}>
-                                                                    {[0,1,2,3,4,5,6,7,8,9].map(n => <option key={n} value={n}>{n}</option>)}
-                                                                </select>
+                                                        {/* Strict toggle — only relevant for LDP */}
+                                                        {cond.algorithm === 'LDP' && (
+                                                            <div className='sb-field-row sb-field-row--center'>
+                                                                <label>Strict</label>
+                                                                <button className={`sb-toggle ${cond.strict ? 'on' : 'off'}`}
+                                                                    onClick={() => conditionSet(g.id, cond.id, { strict: !cond.strict })} disabled={running}>
+                                                                    {cond.strict ? 'ON' : 'OFF'}
+                                                                </button>
                                                             </div>
                                                         )}
                                                     </div>
+
+                                                    {/* Algorithm-specific fields */}
+                                                    {(cond.algorithm === 'LDP' || cond.algorithm === 'Market Percentage' || cond.algorithm === 'Entry Point Pattern') && (
+                                                        <div className='sb-field-row'>
+                                                            <div className='sb-field'>
+                                                                <label>Digits Is</label>
+                                                                <select value={cond.digitsIs}
+                                                                    onChange={e => conditionSet(g.id, cond.id, { digitsIs: e.target.value as DigitsIsType })}
+                                                                    disabled={running}>
+                                                                    {DIGITS_IS_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                                                </select>
+                                                            </div>
+                                                            {['OVER','UNDER','MATCHES','DIFFERS'].includes(cond.digitsIs) && (
+                                                                <div className='sb-field'>
+                                                                    <label>Digit</label>
+                                                                    <select value={cond.digitValue ?? 5}
+                                                                        onChange={e => conditionSet(g.id, cond.id, { digitValue: Number(e.target.value) })}
+                                                                        disabled={running}>
+                                                                        {[0,1,2,3,4,5,6,7,8,9].map(n => <option key={n} value={n}>{n}</option>)}
+                                                                    </select>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+
+                                                    {/* Market Percentage — threshold */}
+                                                    {cond.algorithm === 'Market Percentage' && (
+                                                        <div className='sb-field'>
+                                                            <label>Threshold %</label>
+                                                            <NumberField value={cond.percentageThreshold ?? 60} min={50} max={100}
+                                                                onCommit={n => conditionSet(g.id, cond.id, { percentageThreshold: n })} disabled={running} />
+                                                            <span className='sb-unit'>% of window</span>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Sequence Radar — sequence type */}
+                                                    {cond.algorithm === 'Sequence Radar' && (
+                                                        <div className='sb-field'>
+                                                            <label>Sequence Type</label>
+                                                            <select value={cond.sequenceType ?? 'alternating'}
+                                                                onChange={e => conditionSet(g.id, cond.id, { sequenceType: e.target.value as any })}
+                                                                disabled={running}>
+                                                                <option value='alternating'>Alternating (ODD↔EVEN)</option>
+                                                                <option value='increasing'>Increasing (each ≥ prev)</option>
+                                                                <option value='decreasing'>Decreasing (each ≤ prev)</option>
+                                                                <option value='zigzag'>Zigzag (direction flips)</option>
+                                                                <option value='flat'>Flat (low volatility ≤2 range)</option>
+                                                            </select>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Complex Patterns — pattern type */}
+                                                    {cond.algorithm === 'Complex Patterns' && (
+                                                        <div className='sb-field'>
+                                                            <label>Pattern</label>
+                                                            <select value={cond.complexPattern ?? 'high-low'}
+                                                                onChange={e => conditionSet(g.id, cond.id, { complexPattern: e.target.value as any })}
+                                                                disabled={running}>
+                                                                <option value='high-low'>High → Low (avg drops second half)</option>
+                                                                <option value='low-high'>Low → High (avg rises second half)</option>
+                                                                <option value='ramp-up'>Ramp Up (linear rise slope ≥0.5)</option>
+                                                                <option value='ramp-down'>Ramp Down (linear drop slope ≤-0.5)</option>
+                                                                <option value='spike'>Spike (outlier digit ±3 from mean)</option>
+                                                            </select>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Entry Point Pattern — sensitivity */}
+                                                    {cond.algorithm === 'Entry Point Pattern' && (
+                                                        <div className='sb-field'>
+                                                            <label>Sensitivity</label>
+                                                            <select value={cond.sensitivity ?? 'medium'}
+                                                                onChange={e => conditionSet(g.id, cond.id, { sensitivity: e.target.value as any })}
+                                                                disabled={running}>
+                                                                <option value='high'>High — 2 tick reversal (fast)</option>
+                                                                <option value='medium'>Medium — 3 tick reversal</option>
+                                                                <option value='low'>Low — 5 tick reversal (conservative)</option>
+                                                            </select>
+                                                        </div>
+                                                    )}
 
                                                     {/* Recovery Limit */}
                                                     <div className='sb-field-row'>
@@ -1307,6 +1615,7 @@ const BotDetail: React.FC<{
                                                             <label>Recovery Limit</label>
                                                             <NumberField value={cond.recoveryLimit} min={0} max={20}
                                                                 onCommit={n => conditionSet(g.id, cond.id, { recoveryLimit: n })} disabled={running} />
+                                                            <span className='sb-unit' title='After a loss: relaxed window size (faster re-entry, same contract type)'>ticks after loss</span>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -1518,13 +1827,71 @@ const BotDetail: React.FC<{
                 {/* ── Right — Terminal ── */}
                 <div className='sb-detail__terminal-col'>
                     {winPopup && (
-                        <div className={`sb-win-popup ${winPopup.stopped ? 'stopped' : ''}`}>
-                            <span className='sb-win-popup__icon'>🎉</span>
-                            <div>
-                                <strong>TICK WIN +{winPopup.profit.toFixed(2)} USD</strong>
-                                <p>{winPopup.stopped ? 'Bot stopped.' : 'Recovery cleared — resuming scan.'}</p>
+                        <div className='sb-win-overlay' onClick={() => setWinPopup(null)}>
+                            <div className={`sb-win-modal ${winPopup.stopped ? (winPopup.sessionPnl >= 0 ? 'stopped-win' : 'stopped-loss') : 'cycle-win'}`}
+                                 onClick={e => e.stopPropagation()}>
+                                {/* Animated glow ring */}
+                                <div className='sb-win-modal__glow' />
+
+                                {/* Icon */}
+                                <div className='sb-win-modal__icon'>
+                                    {winPopup.reason === 'win' ? '🏆' :
+                                     winPopup.reason === 'take-profit' ? '🎯' :
+                                     winPopup.reason === 'stop-loss' ? '🛡' :
+                                     winPopup.reason === 'loss-limit' ? '⚠️' : '⏹'}
+                                </div>
+
+                                {/* Title */}
+                                <div className='sb-win-modal__title'>
+                                    {winPopup.stopped
+                                        ? (winPopup.reason === 'take-profit' ? 'TAKE PROFIT HIT'
+                                           : winPopup.reason === 'stop-loss'  ? 'STOP LOSS TRIGGERED'
+                                           : winPopup.reason === 'loss-limit' ? 'LOSS LIMIT REACHED'
+                                           : 'BOT STOPPED')
+                                        : 'TRADE WON'}
+                                </div>
+
+                                {/* Cycle P/L */}
+                                <div className={`sb-win-modal__amount ${winPopup.profit >= 0 ? 'pos' : 'neg'}`}>
+                                    {winPopup.profit >= 0 ? '+' : ''}{winPopup.profit.toFixed(2)} USD
+                                </div>
+
+                                {/* Session summary stats */}
+                                {winPopup.stopped && (
+                                    <div className='sb-win-modal__stats'>
+                                        <div className='sb-win-modal__stat'>
+                                            <span>Session P/L</span>
+                                            <strong className={winPopup.sessionPnl >= 0 ? 'pos' : 'neg'}>
+                                                {winPopup.sessionPnl >= 0 ? '+' : ''}{winPopup.sessionPnl.toFixed(2)} USD
+                                            </strong>
+                                        </div>
+                                        <div className='sb-win-modal__stat'>
+                                            <span>Trades</span>
+                                            <strong>{winPopup.wins + winPopup.losses}</strong>
+                                        </div>
+                                        <div className='sb-win-modal__stat'>
+                                            <span>Wins / Losses</span>
+                                            <strong><span className='pos'>{winPopup.wins}</span> / <span className='neg'>{winPopup.losses}</span></strong>
+                                        </div>
+                                        {(winPopup.wins + winPopup.losses) > 0 && (
+                                            <div className='sb-win-modal__stat'>
+                                                <span>Win Rate</span>
+                                                <strong>{((winPopup.wins / (winPopup.wins + winPopup.losses)) * 100).toFixed(1)}%</strong>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Subtitle */}
+                                <div className='sb-win-modal__subtitle'>
+                                    {winPopup.stopped ? 'Session complete' : 'Recovery cleared — continuing scan'}
+                                </div>
+
+                                {/* CTA button */}
+                                <button className='sb-win-modal__ok' onClick={() => setWinPopup(null)}>
+                                    {winPopup.stopped ? 'OK' : 'Continue →'}
+                                </button>
                             </div>
-                            <button onClick={() => setWinPopup(null)}>×</button>
                         </div>
                     )}
                     {/* Active market indicator */}
