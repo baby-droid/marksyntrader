@@ -2238,17 +2238,43 @@ const ScalperBots: React.FC = observer(() => {
         );
     }
 
+    const showFolders = !openGroup && !searching;
+
     return (
         <div className='scalper-bots'>
-            <div className='scalper-bots__header'>
-                <div className='scalper-bots__header-left'>
-                    <h1>⚡ <span>AHMED SCALPER BOTS</span></h1>
-                    <p>{SCALPER_BOTS.length} strategies · Click a card to configure &amp; run</p>
-                </div>
-                <div className='scalper-bots__header-right'>
+            {/* ── Full-width search bar ── */}
+            <div className='scalper-bots__searchbar'>
+                <svg width='16' height='16' viewBox='0 0 20 20' fill='none' stroke='currentColor' strokeWidth='2'>
+                    <circle cx='8.5' cy='8.5' r='6'/><path d='M14 14l4 4'/>
+                </svg>
+                <input
+                    type='text'
+                    placeholder='Search for bots or category...'
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                />
+            </div>
+
+            {/* ── Breadcrumb navbar ── */}
+            <div className='scalper-bots__navbar'>
+                <button
+                    className='scalper-bots__nav-home'
+                    onClick={() => { setOpenGroup(null); setSearch(''); }}
+                >
+                    🏠 Home
+                </button>
+                {(openGroup || searching) && (
+                    <>
+                        <span className='scalper-bots__nav-sep'>›</span>
+                        <span className='scalper-bots__nav-crumb'>
+                            {searching ? `Search: "${search}"` : `${openGroup} Scalpers`}
+                        </span>
+                    </>
+                )}
+                <div className='scalper-bots__nav-right'>
                     <AccountBadge />
                     <div className={`scalper-bots__conn ${derivTrade.authorized ? 'on' : 'off'}`}>
-                        <span>{derivTrade.authorized ? '● LIVE' : '○ Offline'}</span>
+                        {derivTrade.authorized ? '● LIVE' : '○ Offline'}
                     </div>
                     {derivTrade.balance !== null && (
                         <div className='scalper-bots__balance'>
@@ -2258,36 +2284,27 @@ const ScalperBots: React.FC = observer(() => {
                 </div>
             </div>
 
-            <div className='scalper-bots__filters'>
-                <div className='scalper-bots__search-box'>
-                    <span>🔍</span>
-                    <input type='text' placeholder='Search all scalpers...' value={search}
-                        onChange={e => setSearch(e.target.value)} />
-                </div>
-                {(openGroup || searching) && (
-                    <button className='scalper-bots__filter-btn' onClick={() => { setOpenGroup(null); setSearch(''); }}>
-                        ‹ Folders
-                    </button>
-                )}
-                {openGroup && !searching && (
-                    <span className='scalper-bots__breadcrumb'>
-                        {GROUP_DEFS.find(g => g.key === openGroup)?.icon} {openGroup} Scalpers
-                    </span>
-                )}
-                <span className='scalper-bots__count'>{filtered.length} bots</span>
-            </div>
-
-            {!openGroup && !searching ? (
+            {showFolders ? (
+                /* ── Folder grid ── */
                 <div className='scalper-bots__folders'>
                     {GROUP_DEFS.map(g => (
                         <div key={g.key} className='sb-folder' onClick={() => setOpenGroup(g.key)}>
-                            <div className='sb-folder__icon'>📁<span className='sb-folder__emoji'>{g.icon}</span></div>
+                            <div className='sb-folder__icon'>
+                                {/* Dark-green SVG folder icon matching reference */}
+                                <svg width='88' height='70' viewBox='0 0 88 70' fill='none' xmlns='http://www.w3.org/2000/svg'>
+                                    {/* folder back / tab */}
+                                    <path d='M4 16C4 12.686 6.686 10 10 10H32L40 19H80C83.314 19 86 21.686 86 25V60C86 63.314 83.314 66 80 66H10C6.686 66 4 63.314 4 60V16Z' fill='#1e4d37'/>
+                                    {/* folder face */}
+                                    <path d='M4 29H86V60C86 63.314 83.314 66 80 66H10C6.686 66 4 63.314 4 60V29Z' fill='#2d6a4f'/>
+                                </svg>
+                            </div>
                             <div className='sb-folder__label'>{g.label} Scalpers</div>
                             <div className='sb-folder__count'>{groupCounts[g.key] || 0} bots</div>
                         </div>
                     ))}
                 </div>
             ) : (
+                /* ── Bot card grid ── */
                 <div className='scalper-bots__grid'>
                     {filtered.map(bot => (
                         <div key={bot.key} className='sb-card' onClick={() => setSelectedBot(bot)}>
