@@ -21,6 +21,10 @@ const ALL_MARKETS = [
         { label: 'Volatility 75 Index',  value: 'R_75'  },
         { label: 'Volatility 100 Index', value: 'R_100' },
     ]},
+    { group: 'Bear & Bull', options: [
+        { label: 'Bear Market Index', value: 'WBEAR1HZ' },
+        { label: 'Bull Market Index', value: 'WBULL1HZ' },
+    ]},
     { group: 'Jump', options: [
         { label: 'Jump 10 Index',  value: 'JD10'  },
         { label: 'Jump 25 Index',  value: 'JD25'  },
@@ -384,6 +388,10 @@ const ManualTrader: React.FC = () => {
     const tradeDurRef    = useRef(0);
     const tradeTicksRef  = useRef<{ digit: number; order: number }[]>([]);
 
+    /* ── Bulk trade ── */
+    const [bulkMode, setBulkMode]   = useState(false);
+    const [bulkCount, setBulkCount] = useState(5);
+
     const proposalTimer = useRef<any>(null);
     const idRef = useRef(0);
 
@@ -473,12 +481,40 @@ const ManualTrader: React.FC = () => {
         return () => { if (proposalTimer.current) clearTimeout(proposalTimer.current); };
     }, [stake, duration, symbolValue, ctDef, barrier, authorized, currency, send]);
 
-    /* Execute trade */
+    /* Execute trade — single or bulk */
     const buy = useCallback(async (def: typeof ctDef.types[0]) => {
         if (!authorized) return;
         const s = parseFloat(stake);
         if (isNaN(s) || s < 0.35) return;
 
+        /* ── Bulk mode: fire N simultaneous contracts ── */
+        if (bulkMode && bulkCount > 1) {
+            const contractParams: any = {
+                symbol: symbolValue, contract_type: def.type as any,
+                duration, duration_unit: 't', stake: s,
+                ...(ctDef.hasBarrier ? { barrier: String(barrier) } : {}),
+            };
+            const results = await Promise.allSettled(
+                Array.from({ length: bulkCount }, () =>
+                    new Promise<number>(resolve =>
+                        buyContract(contractParams, c => resolve(applyCommission(c.profit)))
+                            .catch(() => resolve(0))
+                    )
+                )
+            );
+            const totalProfit = results.reduce((acc, r) => acc + (r.status === 'fulfilled' ? r.value : 0), 0);
+            setPnl(prev => prev + totalProfit);
+            const tradeId = idRef.current++;
+            const bulk: any = {
+                id: tradeId, symbol: symbol.label, type: `${def.label} ×${bulkCount}`,
+                contractType: def.type, stake: s * bulkCount, status: totalProfit >= 0 ? 'won' : 'lost',
+                profit: totalProfit, time: Date.now(),
+            };
+            setPositions(p => [bulk, ...p.slice(0, 49)]);
+            return;
+        }
+
+        /* ── Single contract ── */
         const tradeId = idRef.current++;
         tradeTicksRef.current = [];
         tradeActiveRef.current = true;
@@ -504,7 +540,7 @@ const ManualTrader: React.FC = () => {
                 {
                     symbol: symbolValue, contract_type: def.type as any,
                     duration, duration_unit: 't', stake: s,
-                    ...(ctDef.hasBarrier ? { barrier } : {}),
+                    ...(ctDef.hasBarrier ? { barrier: String(barrier) } : {}),
                 },
                 c => {
                     clearInterval(iv);
@@ -759,6 +795,34 @@ const ManualTrader: React.FC = () => {
                                 +
                             </button>
                         </div>
+                    </div>
+
+                    {/* ── Bulk Trade Toggle ── */}
+                    <div className='mtp-section'>
+                        <div className='mtp-bulk-row'>
+                            <button
+                                className={`mtp-bulk-toggle ${bulkMode ? 'active' : ''}`}
+                                onClick={() => setBulkMode(v => !v)}>
+                                {bulkMode ? '⚡ BULK ON' : '○ BULK OFF'}
+                            </button>
+                            {bulkMode && (
+                                <div className='mtp-bulk-count'>
+                                    <span>×</span>
+                                    {[2, 3, 5, 10, 20].map(n => (
+                                        <button key={n}
+                                            className={`mtp-dur-btn ${bulkCount === n ? 'active' : ''}`}
+                                            onClick={() => setBulkCount(n)}>
+                                            {n}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                        {bulkMode && (
+                            <div className='mtp-bulk-info'>
+                                {bulkCount} contracts × {parseFloat(stake).toFixed(2)} = {(bulkCount * parseFloat(stake)).toFixed(2)} {currency || 'USD'} total
+                            </div>
+                        )}
                     </div>
 
                     {!authorized && (

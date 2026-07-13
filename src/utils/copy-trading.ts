@@ -151,12 +151,18 @@ class CopyEngine {
             ws.onerror = () => this.update(id, { status: 'error', lastError: 'Connection error' });
 
             await new Promise<void>((res, rej) => {
-                ws.onopen = () => res();
-                setTimeout(() => rej(new Error('timeout')), 10000);
+                const t = setTimeout(() => rej(new Error('Connection timed out — check your internet and try again.')), 20000);
+                ws.onopen = () => { clearTimeout(t); res(); };
             });
 
-            const auth = await this.send(conn, { authorize: trimmed });
-            if (!auth.authorize) throw new Error('Invalid token');
+            // Authorize with its own 20-second timeout
+            const auth = await Promise.race([
+                this.send(conn, { authorize: trimmed }),
+                new Promise<never>((_, rej) =>
+                    setTimeout(() => rej(new Error('Authorize timed out — invalid or expired token.')), 20000)
+                ),
+            ]);
+            if (!auth.authorize) throw new Error('Token rejected by Deriv (check scopes: Read + Trade required).');
             const { loginid, currency, balance, is_virtual, account_list } = auth.authorize;
             // Build structured account_list with clear real/demo labels
             const parsedAccountList: FollowerAccount[] = Array.isArray(account_list)
