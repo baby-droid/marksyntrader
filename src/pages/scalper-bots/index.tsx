@@ -846,6 +846,21 @@ const BotDetail: React.FC<{
     /* Per-session counters (refs so they stay accurate inside async callbacks) */
     const winsRef         = useRef(0);
     const lossesRef       = useRef(0);
+    /* ── Live-feed health & run-lifecycle tracking ──
+       lastTickAtRef: timestamp of the most recent tick from ANY subscribed
+       market — the watchdog below force-reconnects the feed if it goes stale.
+       curMarketRef/marketListRef/multiScanRef mirror startBot's local
+       variables so the watchdog (a separate effect) can resubscribe the right
+       market(s) without needing them threaded through props.
+       firstTradeRef: the very first trade of a fresh run waits for full
+       workspace/feed readiness (normal speed) — every trade after that stays
+       supersonic (tick-driven, zero artificial delay). */
+    const lastTickAtRef   = useRef(Date.now());
+    const curMarketRef    = useRef(cfg.market);
+    const marketListRef   = useRef<string[]>([cfg.market]);
+    const multiScanRef    = useRef(false);
+    const firstTradeRef   = useRef(true);
+    const prevConnectedRef = useRef(true);
 
     useEffect(() => subscribeCurrency(() => setDisplayCur(getDisplayCurrency())), []);
     useEffect(() => { setActiveMarket(cfg.market); }, [cfg.market]);
