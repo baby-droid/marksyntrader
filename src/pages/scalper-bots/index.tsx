@@ -596,14 +596,18 @@ const BotDetail: React.FC<{
                             setActiveMarket(curMarket);
                             setDigitDisplay(digitWindowRef.current.slice(0, 20));
                             addLog(`🧬 STRATEGY_LOGIC: CONDITION MET ON ${curMarket} — XML_TRADING_ACTIVATOR ENGAGED`, 'switch');
+                            /* Fire the XML bot in the builder as well */
+                            autoRun().catch(() => {});
                             entry = true;
                             break;
                         }
-                    } else if (bot.category === 'Even/Odd' && cfg.strategyLogic.active && cfg.strategyLogic.groups.length > 0) {
+                    } else if (cfg.strategyLogic.active && cfg.strategyLogic.groups.length > 0) {
                         const r = evaluateStrategyLogic(digitWindowRef.current, cfg.strategyLogic.groups);
                         if (r.hit) {
                             lastFiredGroupRef.current = r.group ?? null;
                             addLog('🧬 STRATEGY_LOGIC: CONDITION MET — XML_TRADING_ACTIVATOR ENGAGED', 'switch');
+                            /* Fire the XML bot in the builder as well */
+                            autoRun().catch(() => {});
                             entry = true;
                             break;
                         }
@@ -764,7 +768,7 @@ const BotDetail: React.FC<{
         addLog('⏹ Bot stopped.', 'info');
         setRunning(false);
         setEntryReady(false);
-    }, [running, derivTrade, bot, cfg, addLog, subscribeMarket, subscribeAllMarkets, unsubscribeAllMarkets, onPreloadXml]);
+    }, [running, derivTrade, bot, cfg, addLog, subscribeMarket, subscribeAllMarkets, unsubscribeAllMarkets, onPreloadXml, autoRun]);
 
     const stopBot = useCallback(() => {
         stopRef.current = true;
@@ -923,6 +927,38 @@ const BotDetail: React.FC<{
                         )}
                     </SbAccordion>
 
+                    {/* LDP Info Popup */}
+                    {ldpInfoOpen && (
+                        <div className='sb-ldp-overlay' onClick={() => setLdpInfoOpen(null)}>
+                            <div className='sb-ldp-popup' onClick={e => e.stopPropagation()}>
+                                <div className='sb-ldp-popup__title'>HOW LDP WORKS</div>
+                                <div className='sb-ldp-popup__sub'>LDP PATTERN ENGINE</div>
+                                <p className='sb-ldp-popup__desc'>Analyzes the frequency of a specific digit appearing consecutively in the market history to trigger an entry.</p>
+                                <div className='sb-ldp-popup__items'>
+                                    <div className='sb-ldp-item'>
+                                        <span className='sb-ldp-item__num'>1</span>
+                                        <div>
+                                            <strong>Occurrence Limit</strong>
+                                            <p>Counts how many times your chosen digit appears consecutively in the recent history.</p>
+                                        </div>
+                                    </div>
+                                    <div className='sb-ldp-item'>
+                                        <strong>Strict</strong>
+                                        <p>Occurrence from ldp trend start or anywhere in the trend</p>
+                                    </div>
+                                    <div className='sb-ldp-item'>
+                                        <span className='sb-ldp-item__num'>2</span>
+                                        <div>
+                                            <strong>Recovery Logic</strong>
+                                            <p>Uses the Recovery Limit to adjust sensitivity during different market phases.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button className='sb-ldp-popup__close' onClick={() => setLdpInfoOpen(null)}>Cancel</button>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Strategy Logic */}
                     <SbAccordion title='💡 Strategy Logic' badge={cfg.strategyLogic.active ? 'ACTIVE' : 'DISABLED'} badgeColor={cfg.strategyLogic.active ? '#22c55e' : '#64748b'} defaultOpen>
                         <div className='sb-field-row sb-field-row--center'>
@@ -935,60 +971,103 @@ const BotDetail: React.FC<{
                         <div className='sb-field-row sb-field-row--center'>
                             <label>Strategy</label>
                             <button className={`sb-toggle ${cfg.strategyLogic.active ? 'on' : 'off'}`}
-                                onClick={() => slSet({ active: !cfg.strategyLogic.active })} disabled={running || bot.category !== 'Even/Odd'}>
+                                onClick={() => slSet({ active: !cfg.strategyLogic.active })} disabled={running}>
                                 {cfg.strategyLogic.active ? 'ACTIVE' : 'INACTIVE'}
                             </button>
                         </div>
-                        {bot.category !== 'Even/Odd' ? (
-                            <p className='sb-hint'>This bot trades on barrier-reversal logic (OVER/UNDER) — the condition builder applies to Even/Odd scalpers.</p>
-                        ) : cfg.strategyLogic.active && (
+                        {cfg.strategyLogic.active && (
                             <>
-                                {cfg.strategyLogic.groups.map((g, idx) => (
+                                {cfg.strategyLogic.groups.map((g, gIdx) => (
                                     <div key={g.id} className='sb-or-group'>
                                         <div className='sb-or-group__header'>
-                                            <span className='sb-or-group__badge'>OR GROUP #{idx + 1}</span>
+                                            <span className='sb-or-group__badge'>OR GROUP #{gIdx + 1}</span>
+                                            {cfg.strategyLogic.groups.length > 1 && !running && (
+                                                <button className='sb-condition-delete' onClick={() => removeGroup(g.id)} title='Delete group'>🗑</button>
+                                            )}
                                         </div>
                                         <div className='sb-or-group__body'>
-                                            <div className='sb-field-row sb-field-row--center'>
-                                                <span className='sb-condition-label'>CONDITION</span>
-                                                {cfg.strategyLogic.groups.length > 1 && !running && (
-                                                    <button className='sb-condition-delete' onClick={() => removeGroup(g.id)} title='Delete condition'>🗑</button>
-                                                )}
-                                            </div>
-                                            <div className='sb-field'>
-                                                <label>Algorithm</label>
-                                                <select value={g.algorithm} onChange={() => {}} disabled={running}>
-                                                    <option value='LDP'>LDP — Last Digit Pattern</option>
-                                                </select>
-                                            </div>
-                                            <div className='sb-field-row'>
-                                                <div className='sb-field-row sb-field-row--center'>
-                                                    <label>Strict</label>
-                                                    <button className={`sb-toggle ${g.strict ? 'on' : 'off'}`}
-                                                        onClick={() => groupSet(g.id, { strict: !g.strict })} disabled={running}>
-                                                        {g.strict ? 'ACTIVE' : 'OFF'}
-                                                    </button>
+                                            {g.conditions.map((cond, cIdx) => (
+                                                <div key={cond.id} className='sb-cond-block'>
+                                                    {/* Condition header */}
+                                                    <div className='sb-cond-block__header'>
+                                                        <span className={`sb-condition-label ${cIdx > 0 ? 'and' : ''}`}>
+                                                            {cIdx === 0 ? 'CONDITION' : 'AND CONDITION'}
+                                                        </span>
+                                                        <div className='sb-cond-block__actions'>
+                                                            {g.conditions.length > 1 && !running && (
+                                                                <button className='sb-condition-delete' onClick={() => removeCondition(g.id, cond.id)} title='Remove'>🗑</button>
+                                                            )}
+                                                            <button className='sb-ldp-info-btn' onClick={() => setLdpInfoOpen(cond.id)} title='How LDP works'>ⓘ</button>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Algorithm */}
+                                                    <div className='sb-field'>
+                                                        <label>Algorithm</label>
+                                                        <select value={cond.algorithm} onChange={() => {}} disabled={running}>
+                                                            <option value='LDP'>LDP</option>
+                                                        </select>
+                                                    </div>
+
+                                                    {/* Strict + If Last row */}
+                                                    <div className='sb-field-row'>
+                                                        <div className='sb-field-row sb-field-row--center'>
+                                                            <label>Strict</label>
+                                                            <button className={`sb-toggle ${cond.strict ? 'on' : 'off'}`}
+                                                                onClick={() => conditionSet(g.id, cond.id, { strict: !cond.strict })} disabled={running}>
+                                                                {cond.strict ? 'ACTIVE' : 'OFF'}
+                                                            </button>
+                                                        </div>
+                                                        <div className='sb-field'>
+                                                            <label>If Last</label>
+                                                            <select value={cond.ifLast}
+                                                                onChange={e => conditionSet(g.id, cond.id, { ifLast: Number(e.target.value) })}
+                                                                disabled={running}>
+                                                                {IF_LAST_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
+                                                            </select>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Digits Is + digit value (if applicable) */}
+                                                    <div className='sb-field-row'>
+                                                        <div className='sb-field'>
+                                                            <label>Digits Is</label>
+                                                            <select value={cond.digitsIs}
+                                                                onChange={e => conditionSet(g.id, cond.id, { digitsIs: e.target.value as DigitsIsType })}
+                                                                disabled={running}>
+                                                                {DIGITS_IS_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                                            </select>
+                                                        </div>
+                                                        {/* Digit value for OVER/UNDER/MATCHES/DIFFERS */}
+                                                        {['OVER','UNDER','MATCHES','DIFFERS'].includes(cond.digitsIs) && (
+                                                            <div className='sb-field'>
+                                                                <label>Digit</label>
+                                                                <select value={cond.digitValue ?? 5}
+                                                                    onChange={e => conditionSet(g.id, cond.id, { digitValue: Number(e.target.value) })}
+                                                                    disabled={running}>
+                                                                    {[0,1,2,3,4,5,6,7,8,9].map(n => <option key={n} value={n}>{n}</option>)}
+                                                                </select>
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Recovery Limit */}
+                                                    <div className='sb-field-row'>
+                                                        <div className='sb-field'>
+                                                            <label>Recovery Limit</label>
+                                                            <NumberField value={cond.recoveryLimit} min={0} max={20}
+                                                                onCommit={n => conditionSet(g.id, cond.id, { recoveryLimit: n })} disabled={running} />
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                                <div className='sb-field'>
-                                                    <label>If Last</label>
-                                                    <NumberField value={g.ifLast} min={1} max={20}
-                                                        onCommit={n => groupSet(g.id, { ifLast: n })} disabled={running} />
-                                                </div>
-                                            </div>
-                                            <div className='sb-field-row'>
-                                                <div className='sb-field'>
-                                                    <label>Digits Is</label>
-                                                    <select value={g.digitsIs} onChange={e => groupSet(g.id, { digitsIs: e.target.value as 'ODD' | 'EVEN' })} disabled={running}>
-                                                        <option value='ODD'>ODD</option>
-                                                        <option value='EVEN'>EVEN</option>
-                                                    </select>
-                                                </div>
-                                                <div className='sb-field'>
-                                                    <label>Recovery Limit</label>
-                                                    <NumberField value={g.recoveryLimit} min={1} max={20}
-                                                        onCommit={n => groupSet(g.id, { recoveryLimit: n })} disabled={running} />
-                                                </div>
-                                            </div>
+                                            ))}
+
+                                            {/* + ADD AND LOGIC */}
+                                            {!running && (
+                                                <button className='sb-add-and-btn' onClick={() => addCondition(g.id)}>
+                                                    + ADD AND LOGIC
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 ))}
@@ -1294,20 +1373,26 @@ const ScalperBots: React.FC = observer(() => {
         return matchCat && matchSrch;
     });
 
-    const loadXmlIntoWorkspace = useCallback(async (xml: string, name: string) => {
+    /* Robust XML loader — tries the store API first, falls back to direct Blockly DOM inject.
+       Returns true when the workspace was successfully updated. */
+    const loadXmlIntoWorkspace = useCallback(async (xml: string, name: string): Promise<boolean> => {
+        // Attempt 1: store's loadStrategyToBuilder (handles unsupported elements gracefully)
         const lm: any = store?.load_modal;
         if (lm?.loadStrategyToBuilder) {
-            try { await lm.loadStrategyToBuilder({ id: name, xml, name, save_type: 'unsaved' }, false); return true; }
-            catch {}
+            try {
+                await lm.loadStrategyToBuilder({ id: name, xml, name, save_type: 'unsaved' }, false);
+                return true;
+            } catch { /* fall through to direct Blockly approach */ }
         }
+        // Attempt 2: direct Blockly workspace injection (bypasses unsupported-element validation)
         try {
             const B = (window as any).Blockly;
             if (!B?.derivWorkspace) return false;
             const dom = B.Xml.textToDom(xml);
-            B.derivWorkspace.asyncClear?.();
+            try { B.derivWorkspace.asyncClear?.(); } catch {}
             B.Xml.domToWorkspace(dom, B.derivWorkspace);
             B.derivWorkspace.strategy_to_load = xml;
-            B.svgResize?.(B.derivWorkspace);
+            try { B.svgResize?.(B.derivWorkspace); } catch {}
             try { B.derivWorkspace.scrollCenter?.(); } catch {}
             return true;
         } catch { return false; }
@@ -1316,29 +1401,25 @@ const ScalperBots: React.FC = observer(() => {
     const autoRun = useCallback(async () => {
         const rp: any = store?.run_panel;
         if (!rp?.onRunButtonClick) return;
-        for (let i = 0; i < 6; i++) {
-            try { if (!rp.is_running) { await rp.onRunButtonClick(); return; } }
-            catch { if (i < 5) await new Promise(r => setTimeout(r, 500)); }
+        for (let i = 0; i < 8; i++) {
+            try { if (!rp.is_running) { await rp.onRunButtonClick(); return; } else { return; } }
+            catch { if (i < 7) await new Promise(r => setTimeout(r, 400)); }
         }
     }, [store]);
 
     const handleLoadXml = useCallback(async (bot: TScalperBot) => {
         try {
             const res = await fetch(bot.xmlFile);
-            if (!res.ok) throw new Error();
+            if (!res.ok) throw new Error(`Failed to fetch ${bot.xmlFile}`);
             const xml = await res.text();
+            // Navigate to Bot Builder tab so Blockly initialises
             store?.dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING);
             store?.run_panel?.toggleDrawer?.(true);
-            let ok = await loadXmlIntoWorkspace(xml, bot.name);
-            if (!ok) {
-                ok = await new Promise<boolean>(resolve => {
-                    let n = 0;
-                    const poll = setInterval(async () => {
-                        n++;
-                        const r = await loadXmlIntoWorkspace(xml, bot.name);
-                        if (r || n >= 50) { clearInterval(poll); resolve(r); }
-                    }, 100);
-                });
+            // Wait up to 8 s for Blockly to be ready
+            let ok = false;
+            for (let n = 0; n < 80 && !ok; n++) {
+                ok = await loadXmlIntoWorkspace(xml, bot.name);
+                if (!ok) await new Promise(r => setTimeout(r, 100));
             }
         } catch { store?.dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING); }
     }, [store, loadXmlIntoWorkspace]);
@@ -1348,16 +1429,23 @@ const ScalperBots: React.FC = observer(() => {
         setTimeout(() => autoRun(), 900);
     }, [handleLoadXml, autoRun]);
 
-    /* Silently sync the Bot Builder workspace with this bot's default XML — no tab
-       switch, no UI disruption — used automatically whenever the terminal Run button
-       is pressed so "Run" always has the matching XML strategy loaded. */
+    /* Silently sync the Bot Builder workspace with this bot's default XML.
+       Retries up to 30 times (3 s total) so multi-scalper XML loads even
+       when Blockly is initialising in the background. */
     const handlePreloadXml = useCallback(async (bot: TScalperBot) => {
         try {
             const res = await fetch(bot.xmlFile);
             if (!res.ok) return;
             const xml = await res.text();
-            await loadXmlIntoWorkspace(xml, bot.name);
-        } catch { /* non-fatal — terminal engine trades independently of the workspace */ }
+            // Try immediately, then retry until Blockly workspace is ready
+            let ok = await loadXmlIntoWorkspace(xml, bot.name);
+            if (!ok) {
+                for (let n = 0; n < 30 && !ok; n++) {
+                    await new Promise(r => setTimeout(r, 100));
+                    ok = await loadXmlIntoWorkspace(xml, bot.name);
+                }
+            }
+        } catch { /* non-fatal — terminal engine trades independently */ }
     }, [loadXmlIntoWorkspace]);
 
     if (selectedBot) {
