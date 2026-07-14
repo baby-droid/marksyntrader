@@ -52,8 +52,29 @@
             background: linear-gradient(135deg, #ef4444, #b91c1c);
             box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
         }
+    }
 
-        &--supersonic.active {
+    /* Fast Execution — independent toggle, sits beside the Normal/Crazy/Turbo
+       group rather than inside it, since it can be combined with any of them. */
+    &__fast {
+        border: 1px solid var(--border-normal, #d6dadb);
+        background: transparent;
+        border-radius: 1.4rem;
+        padding: 0.4rem 1rem;
+        font-size: 1.05rem;
+        font-weight: 700;
+        color: var(--text-general, #333);
+        cursor: pointer;
+        transition: all 0.15s ease;
+        white-space: nowrap;
+
+        &:hover:not(.active) {
+            background: rgba(0, 0, 0, 0.05);
+        }
+
+        &.active {
+            color: #fff;
+            border-color: transparent;
             background: linear-gradient(135deg, #06b6d4, #7c3aed);
             box-shadow: 0 0 12px rgba(124, 58, 237, 0.6);
         }

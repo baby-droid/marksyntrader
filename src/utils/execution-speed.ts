@@ -1,73 +1,104 @@
 /**
  * Global bot execution speed.
  *
- * Controls how aggressively the trading engine re-purchases contracts:
- *  - normal     : default pacing (waits for a contract to settle before the next).
- *  - crazy      : reduced inter-trade delay for faster re-entry.
- *  - turbo      : minimal delay — fastest re-entry the API allows.
- *  - supersonic : "Fast Execution" — zero delay, zero cooldown, no contract-
- *                 switch pause and no next-execution reload wait. Every trade
- *                 is picked and fired back-to-back the instant the engine is
- *                 free, with the highest pipeline depth of all tiers.
+ * Two independent axes:
+ *  1. `speed` (normal | crazy | turbo) — how many purchases fan out per tick
+ *     and how the engine reacts to rate limits.
+ *  2. `fastExecution` (on/off) — an independent "Fast Execution" toggle that
+ *     forces zero delay for EVERY single trade regardless of which speed
+ *     tier is selected. It can be combined with Normal, Crazy, or Turbo —
+ *     e.g. Crazy + Fast Execution fans out several purchases per tick AND
+ *     removes any remaining inter-trade delay/cooldown/contract-switch pause
+ *     for each of them.
  *
- * The value is shared app-wide (speed toggle beside Run, the floating AI, and
- * the trade engine all read it) and persisted so it survives reloads.
+ * Both values are shared app-wide (speed toggle beside Run, the floating AI,
+ * and the trade engine all read them) and persisted so they survive reloads.
  */
-export type ExecutionSpeed = 'normal' | 'crazy' | 'turbo' | 'supersonic';
+export type ExecutionSpeed = 'normal' | 'crazy' | 'turbo';
 
 const STORAGE_KEY = 'execution_speed';
+const FAST_EXEC_STORAGE_KEY = 'fast_execution_enabled';
 
-// Inter-trade delay (ms) applied by the engine between purchases per speed.
-// Crazy, Turbo and Supersonic all fire with zero artificial delay — any
-// positive value (even 1ms) adds a real setTimeout/event-loop tick per trade,
-// which is not "no delay". Turbo/Supersonic additionally skip proposal
-// pre-checks where possible (see Purchase.js) so they re-enter purchase the
-// instant the engine allows it.
+// Inter-trade delay (ms) applied by the engine between purchases per speed,
+// BEFORE the independent Fast Execution toggle is taken into account (see
+// getExecutionSpeedDelay below, which forces 0 when Fast Execution is on).
 export const SPEED_DELAY_MS: Record<ExecutionSpeed, number> = {
-    normal: 200,     // reduced from 1000ms — fast like dBot.deriv.com
-    crazy: 0,        // no artificial delay — fires the instant the engine is ready
-    turbo: 0,        // no artificial delay — fastest re-entry the API allows
-    supersonic: 0,   // zero delay, zero cooldown, no reload wait between contracts
+    normal: 200,  // reduced from 1000ms — fast like dBot.deriv.com
+    crazy: 0,     // no artificial delay — fires the instant the engine is ready
+    turbo: 0,     // no artificial delay — fastest re-entry the API allows
 };
 
-// Max concurrent in-flight contracts per speed tier.
-// Higher = more contracts processing simultaneously = higher throughput.
+// Max concurrent in-flight contracts per speed tier. Fast Execution bumps
+// whichever tier is active up to the highest practical cap (see
+// getMaxInflight below).
 export const SPEED_MAX_INFLIGHT: Record<ExecutionSpeed, number> = {
-    normal: 1,       // sequential
-    crazy: 100,      // high pipeline depth
-    turbo: 500,      // unlimited practical cap — saturate the API
-    supersonic: 1000, // highest pipeline depth — seamless back-to-back firing
+    normal: 1,    // sequential
+    crazy: 100,   // high pipeline depth
+    turbo: 500,   // unlimited practical cap — saturate the API
 };
+const FAST_EXEC_MAX_INFLIGHT = 1000;
 
 // Purchases fired per tick for each speed tier. Normal fires a single
-// purchase per tick (one contract at a time, as before). Crazy, Turbo and
-// Supersonic fire several purchases in parallel on the SAME tick, each an
-// independent contract — this is what actually multiplies throughput per
-// tick rather than just relaxing the inter-trade delay.
+// purchase per tick (one contract at a time, as before). Crazy and Turbo
+// fire several purchases in parallel on the SAME tick, each an independent
+// contract. Fast Execution (see getPurchasesPerTick below) raises this
+// further on top of whichever tier is selected — it never lowers it.
 export const SPEED_PURCHASES_PER_TICK: Record<ExecutionSpeed, number> = {
     normal: 1,
     crazy: 5,
     turbo: 10,
-    supersonic: 20,
 };
+const FAST_EXEC_PURCHASES_PER_TICK = 20;
 
 const listeners = new Set<(speed: ExecutionSpeed) => void>();
+const fastExecListeners = new Set<(enabled: boolean) => void>();
 
-const read = (): ExecutionSpeed => {
+const readSpeed = (): ExecutionSpeed => {
     try {
         const v = localStorage.getItem(STORAGE_KEY);
-        if (v === 'normal' || v === 'crazy' || v === 'turbo' || v === 'supersonic') return v;
+        if (v === 'normal' || v === 'crazy' || v === 'turbo') return v;
     } catch {
         /* localStorage unavailable */
     }
     return 'normal';
 };
 
-let current: ExecutionSpeed = read();
+const readFastExec = (): boolean => {
+    try {
+        return localStorage.getItem(FAST_EXEC_STORAGE_KEY) === '1';
+    } catch {
+        return false;
+    }
+};
+
+let current: ExecutionSpeed = readSpeed();
+let fastExecutionEnabled: boolean = readFastExec();
 
 export const getExecutionSpeed = (): ExecutionSpeed => current;
 
-export const getExecutionSpeedDelay = (): number => SPEED_DELAY_MS[current];
+export const isFastExecutionEnabled = (): boolean => fastExecutionEnabled;
+
+/**
+ * Effective inter-trade delay (ms). Fast Execution always wins — 0ms,
+ * seamless, no cooldown, no contract-switch pause, no next-execution reload
+ * wait — no matter which speed tier (Normal/Crazy/Turbo) is selected.
+ */
+export const getExecutionSpeedDelay = (): number =>
+    fastExecutionEnabled ? 0 : SPEED_DELAY_MS[current];
+
+/** Effective max concurrent in-flight contracts — the higher of the active tier or Fast Execution's cap. */
+export const getMaxInflight = (): number =>
+    fastExecutionEnabled ? Math.max(SPEED_MAX_INFLIGHT[current], FAST_EXEC_MAX_INFLIGHT) : SPEED_MAX_INFLIGHT[current];
+
+/** Effective purchases fired per tick — the higher of the active tier or Fast Execution's throughput. */
+export const getPurchasesPerTick = (): number =>
+    fastExecutionEnabled
+        ? Math.max(SPEED_PURCHASES_PER_TICK[current], FAST_EXEC_PURCHASES_PER_TICK)
+        : SPEED_PURCHASES_PER_TICK[current];
+
+/** True when the engine should skip the proposal round-trip and buy directly. */
+export const useDirectBuyForSpeed = (): boolean =>
+    fastExecutionEnabled || current === 'crazy' || current === 'turbo';
 
 export const setExecutionSpeed = (speed: ExecutionSpeed): void => {
     current = speed;
@@ -79,9 +110,26 @@ export const setExecutionSpeed = (speed: ExecutionSpeed): void => {
     listeners.forEach(fn => fn(speed));
 };
 
+export const setFastExecutionEnabled = (enabled: boolean): void => {
+    fastExecutionEnabled = enabled;
+    try {
+        localStorage.setItem(FAST_EXEC_STORAGE_KEY, enabled ? '1' : '0');
+    } catch {
+        /* localStorage unavailable */
+    }
+    fastExecListeners.forEach(fn => fn(enabled));
+};
+
 export const subscribeExecutionSpeed = (fn: (speed: ExecutionSpeed) => void): (() => void) => {
     listeners.add(fn);
     return () => {
         listeners.delete(fn);
+    };
+};
+
+export const subscribeFastExecution = (fn: (enabled: boolean) => void): (() => void) => {
+    fastExecListeners.add(fn);
+    return () => {
+        fastExecListeners.delete(fn);
     };
 };

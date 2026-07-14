@@ -200,6 +200,7 @@ export default class TicksService {
             const subscription = api_base.api.onMessage().subscribe(({ data }) => {
                 if (data.msg_type === 'tick') {
                     const { tick } = data;
+                    if (!tick) return; // malformed/empty tick payload (e.g. mid-reconnect) — ignore safely
                     const { symbol, id } = tick;
                     if (this.ticks.has(symbol)) {
                         this.subscriptions = this.subscriptions.setIn(['tick', symbol], id);
