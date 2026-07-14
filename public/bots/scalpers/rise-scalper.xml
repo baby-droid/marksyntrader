@@ -12,7 +12,7 @@
           <field name="SYMBOL_LIST">1HZ10V</field>
           <next>
             <block type="trade_definition_tradetype" id="tdtype1" deletable="false" movable="false">
-              <field name="TRADETYPECAT_LIST">digits</field>
+              <field name="TRADETYPECAT_LIST">callput</field>
               <field name="TRADETYPE_LIST">callput</field>
               <next>
                 <block type="trade_definition_contracttype" id="tdcontract1" deletable="false" movable="false">

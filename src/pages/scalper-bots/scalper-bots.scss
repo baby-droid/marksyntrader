@@ -248,6 +248,19 @@
     &:hover:not(:disabled) { background: #f3f4f6; }
     &:disabled { opacity: 0.5; cursor: not-allowed; }
   }
+  /* ⚡ Fast Execution toggle — appears next to RUN button when bot is stopped */
+  &__fast-btn {
+    padding: 0.4rem 0.8rem; border-radius: 0.45rem;
+    border: 1px solid #d1d5db; background: #f9fafb; color: #374151;
+    font-size: 0.82rem; font-weight: 800; cursor: pointer; font-family: inherit;
+    transition: all 0.14s;
+    &:hover { background: #fef3c7; border-color: #f59e0b; color: #92400e; }
+    &.active {
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      border-color: #d97706; color: #fff;
+      box-shadow: 0 0 8px rgba(245,158,11,0.35);
+    }
+  }
 
   /* ── Body ── */
   &__body {

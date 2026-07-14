@@ -614,4 +614,55 @@
     font-size: 1.2rem;
     line-height: 1.5;
   }
+
+  /* ⚡ ENTER NOW — pulsing call-to-action shown inside the signal card */
+  &__enter-now {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-top: 0.55rem;
+    padding: 0.55rem 0.8rem;
+    background: rgba(0, 255, 150, 0.07);
+    border: 1px solid rgba(0, 255, 150, 0.35);
+    border-radius: 0.5rem;
+    animation: blink 1.4s infinite;
+  }
+
+  &__enter-now-pulse {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #00ff96;
+    box-shadow: 0 0 6px #00ff96;
+    flex-shrink: 0;
+    animation: blink 0.8s infinite;
+  }
+
+  &__enter-now-label {
+    font-size: 0.78rem;
+    font-weight: 900;
+    color: #00ff96;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  &__enter-now-market {
+    font-size: 0.72rem;
+    color: rgba(255, 255, 255, 0.65);
+    flex: 1;
+  }
+
+  &__enter-now-btn {
+    padding: 0.3rem 0.9rem;
+    border-radius: 0.35rem;
+    border: none;
+    background: #00ff96;
+    color: #0a1628;
+    font-size: 0.74rem;
+    font-weight: 800;
+    cursor: pointer;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    &:hover { background: #00cc78; }
+    &:disabled { opacity: 0.4; cursor: not-allowed; }
+  }
 }

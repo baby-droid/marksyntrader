@@ -281,7 +281,12 @@ const HACK_SCAN_MSGS = [
 ];
 
 /* ─── Entry signal detection ─── */
-function checkEntry(digits: number[], contractType: string, barrier: number | null): boolean {
+function checkEntry(
+    digits: number[],
+    contractType: string,
+    barrier: number | null,
+    prices?: number[],  // raw price window (newest first) — used for Rise/Fall
+): boolean {
     if (digits.length < 5) return false;
     const recent = digits.slice(0, 10);
 
@@ -311,6 +316,60 @@ function checkEntry(digits: number[], contractType: string, barrier: number | nu
             let streak = 0;
             for (const d of recent) { if (d > barrier) streak++; else break; }
             return streak >= 2;
+        }
+        case 'CALL': {
+            /* Rise scalper — contrarian: bet RISE after ≥3 consecutive falling prices
+               (reversal entry). Uses raw price window when available, falls back to
+               digit momentum check (digit increasing means price rose). */
+            if (prices && prices.length >= 4) {
+                // prices[0]=newest, prices[1]=previous; price is falling if newest < previous
+                let down = 0;
+                for (let i = 0; i < prices.length - 1; i++) {
+                    if (prices[i] < prices[i + 1]) down++; else break;
+                }
+                return down >= 3;
+            }
+            // Digit fallback: ≥3 consecutive digits falling (price proxy)
+            let dStreak = 0;
+            for (let i = 0; i < recent.length - 1; i++) {
+                if (recent[i] <= recent[i + 1]) dStreak++; else break;
+            }
+            return dStreak >= 3;
+        }
+        case 'PUT': {
+            /* Fall scalper — contrarian: bet FALL after ≥3 consecutive rising prices */
+            if (prices && prices.length >= 4) {
+                let up = 0;
+                for (let i = 0; i < prices.length - 1; i++) {
+                    if (prices[i] > prices[i + 1]) up++; else break;
+                }
+                return up >= 3;
+            }
+            let dStreak = 0;
+            for (let i = 0; i < recent.length - 1; i++) {
+                if (recent[i] >= recent[i + 1]) dStreak++; else break;
+            }
+            return dStreak >= 3;
+        }
+        case 'DIGITMATCH': {
+            if (barrier === null) return digits.length >= 5;
+            /* Delayed Exhaustion: digit absent ≥8 consecutive ticks → expect it next */
+            let absent = 0;
+            for (const d of recent.concat(digits.slice(10, 30))) { if (d !== barrier) absent++; else break; }
+            if (absent >= 8) return true;
+            /* Double echo: same target digit appeared twice in a row → momentum repeat */
+            if (recent.length >= 3 && recent[0] === barrier && recent[1] === barrier) return true;
+            /* High-frequency skew: target digit <6% in last 50 ticks → overdue */
+            const total = digits.length;
+            const matchCount = digits.filter(d => d === barrier).length;
+            if (total >= 20 && matchCount / total < 0.06) return true;
+            return false;
+        }
+        case 'DIGITDIFF': {
+            if (barrier === null) return true;
+            // reversal: barrier appeared ≥3 times in last 10 → overdue for another
+            const cnt = recent.filter(d => d === barrier).length;
+            return cnt >= 3;
         }
         default:
             return digits.length >= 3; // fallback: just need some data
@@ -669,6 +728,11 @@ const BotDetail: React.FC<{
 }> = ({ bot, derivTrade, onBack, onLoadXml, onLoadAndRun, onPreloadXml }) => {
     const store = useStore();
 
+    /* ── Fast Execution toggle ── skip condition scan, fire immediately on first tick */
+    const [fastExec, setFastExec] = useState(false);
+    const fastExecRef = useRef(false);
+    useEffect(() => { fastExecRef.current = fastExec; }, [fastExec]);
+
     /* Patch the already-loaded Blockly workspace's market/stake/martingale-size/
        prediction fields WITHOUT reloading the XML from disk — this keeps the
        real Bot Builder bot in lock-step with the terminal's current run
@@ -861,6 +925,7 @@ const BotDetail: React.FC<{
     const txIdRef         = useRef(0);
     const termRef         = useRef<HTMLDivElement>(null);
     const digitWindowRef  = useRef<number[]>([]);
+    const priceWindowRef  = useRef<number[]>([]); // raw prices (newest first) for Rise/Fall
     const tickUnsubRef    = useRef<(() => void) | null>(null);
     const marketIdxRef    = useRef(0);
     const lastFiredGroupRef = useRef<StrategyOrGroup | null>(null);
@@ -968,10 +1033,15 @@ const BotDetail: React.FC<{
     const subscribeMarket = useCallback((market: string) => {
         if (tickUnsubRef.current) { tickUnsubRef.current(); tickUnsubRef.current = null; }
         digitWindowRef.current = [];
+        priceWindowRef.current = [];
         setDigitDisplay([]);
         const unsub = derivTrade.subscribeTicks(market, tick => {
             const d = tick.digit != null ? tick.digit : getLastDigit(tick.quote);
             digitWindowRef.current = [d, ...digitWindowRef.current].slice(0, 50);
+            // Also track raw prices for Rise/Fall momentum detection
+            if (tick.quote != null) {
+                priceWindowRef.current = [Number(tick.quote), ...priceWindowRef.current].slice(0, 50);
+            }
             setDigitDisplay(prev => [d, ...prev].slice(0, 20));
             // ✅ Reset stall timer on every real tick — prevents false-fire watchdog
             lastTickAtRef.current = Date.now();
@@ -1075,23 +1145,36 @@ const BotDetail: React.FC<{
         const slotBarrier = () => (activeSlot === 'm2' ? cfg.market2.barrier : bot.prediction);
         const slotTakeProfit = () => (activeSlot === 'm2' ? cfg.market2.takeProfit : cfg.takeProfit);
         const slotMartingale = () => (activeSlot === 'm2' ? cfg.market2.martingale : cfg.martingale);
-        const slotBaseStake = () => (activeSlot === 'm2' ? cfg.market2.stake : (cfg.riskManager.inject ? cfg.riskManager.overrideStake : cfg.stake));
+        const slotBaseStake = () => (activeSlot === 'm2' ? cfg.market2.stake : cfg.stake);
         const slotUseStakeOverride = () => (activeSlot === 'm2' ? cfg.market2.useStakeOverride : cfg.useStakeOverride);
         const slotStakeOverride = () => (activeSlot === 'm2' ? cfg.market2.stakeOverride : cfg.stakeOverride);
 
         /* Compute the correct stake for the next trade given accumulated consecutive losses.
            Risk Manager multiplier takes priority when inject+active+onLose are on.
-           Falls back to the bot's own martingale multiplier (applied to last actual buy price). */
+           Falls back to the bot's own martingale multiplier (applied to last actual buy price).
+
+           STAKE OVERRIDE CEILING (Risk Manager):
+           The Risk Manager "Stake (Override)" field works as a ceiling, same as the
+           Trade Parameters "Stake Override":
+           — When the computed RM stake reaches/exceeds overrideStake → reset to base stake.
+           — When the standard martingale reaches/exceeds overrideStake (and inject is ON) → same reset. */
         const computeNextStake = (totalConsLoss: number, lastBuyPrice: number): number => {
             if (totalConsLoss === 0) return slotBaseStake();
             const rm = cfg.riskManager;
             if (rm.inject && rm.active && rm.onLose && totalConsLoss >= rm.activateLimit) {
                 /* Deactivate limit: reset back to base after too many losses */
                 if (rm.deactivateLimit > 0 && totalConsLoss >= rm.deactivateLimit) return slotBaseStake();
-                return +(rm.overrideStake * Math.pow(rm.multiplier, totalConsLoss - rm.activateLimit + 1)).toFixed(2);
+                /* RM martingale: grows from the base stake using the RM multiplier */
+                const rmStake = +(slotBaseStake() * Math.pow(rm.multiplier, totalConsLoss - rm.activateLimit + 1)).toFixed(2);
+                /* overrideStake = ceiling — matches the Trade Parameters "Stake Override" behaviour */
+                if (rm.overrideStake > 0 && rmStake >= rm.overrideStake) return slotBaseStake();
+                return rmStake;
             }
-            /* Standard martingale: multiply the last actual buy price by the martingale factor */
-            return +(lastBuyPrice * slotMartingale()).toFixed(2);
+            /* Standard martingale: multiply the last actual buy price by the slot martingale factor */
+            const martStake = +(lastBuyPrice * slotMartingale()).toFixed(2);
+            /* When Risk Manager inject is ON, its overrideStake also caps standard martingale */
+            if (rm.inject && rm.overrideStake > 0 && martStake >= rm.overrideStake) return slotBaseStake();
+            return martStake;
         };
 
         let curStake = slotBaseStake();
@@ -1205,8 +1288,12 @@ const BotDetail: React.FC<{
                             entry = true;
                             break;
                         }
+                    } else if (fastExecRef.current && digitWindowRef.current.length >= 1) {
+                        /* ⚡ FAST EXECUTION — bypass strategy scan, fire on the very first tick */
+                        addLog('⚡ FAST_EXEC: immediate entry (scan bypassed)', 'entry');
+                        entry = true;
                     } else {
-                        entry = checkEntry(digitWindowRef.current, bot.contractType, bot.prediction);
+                        entry = checkEntry(digitWindowRef.current, bot.contractType, bot.prediction, priceWindowRef.current);
                     }
                     scanTick++;
 
@@ -1375,6 +1462,10 @@ const BotDetail: React.FC<{
 
                     /* No switch — same market, continue scanning with accumulated martingale stake */
                     addLog(`🔄 RECOVERY: same market ${curMarket} | stake ${curStake.toFixed(2)} | barrier: ${activeBarrier ?? 'auto'}`, 'switch');
+                    /* Small buffer between cycles — lets any lingering bot.stop event from the
+                       previous cycle drain before the new cycle registers its own listeners,
+                       preventing cross-cycle interference that would cause an immediate resolve. */
+                    await new Promise(r => setTimeout(r, 300));
                     continue;
                 }
 
@@ -1447,8 +1538,11 @@ const BotDetail: React.FC<{
 
     const stopBot = useCallback(() => {
         stopRef.current = true;
-        addLog('⏸ Stop signal sent...', 'info');
-    }, [addLog]);
+        /* Immediately kill the XML bot engine — don't wait for the cycle to finish */
+        const rp: any = store?.run_panel;
+        try { rp?.onStopButtonClick?.(); } catch {}
+        addLog('⏹ STOP — halting immediately.', 'stop');
+    }, [addLog, store]);
 
     /* Add/remove markets from multi-market list */
     const addMarket = () => {
@@ -1482,9 +1576,18 @@ const BotDetail: React.FC<{
                         <span className='sb-detail__balance'>{derivTrade.currency} {derivTrade.balance.toFixed(2)}</span>
                     )}
                     {!running ? (
-                        <button className='sb-detail__start-btn' onClick={startBot} disabled={!derivTrade.authorized}>
-                            {derivTrade.authorized ? '▶ RUN' : '○ Connecting...'}
-                        </button>
+                        <>
+                            <button className='sb-detail__start-btn' onClick={startBot} disabled={!derivTrade.authorized}>
+                                {derivTrade.authorized ? '▶ RUN' : '○ Connecting...'}
+                            </button>
+                            <button
+                                className={`sb-detail__fast-btn ${fastExec ? 'active' : ''}`}
+                                onClick={() => setFastExec(f => !f)}
+                                title='Fast Execution: bypass entry scan, fire instantly on first tick'
+                            >
+                                ⚡ {fastExec ? 'FAST ON' : 'FAST'}
+                            </button>
+                        </>
                     ) : (
                         <button className='sb-detail__stop-btn' onClick={stopBot}>⏹ STOP</button>
                     )}
