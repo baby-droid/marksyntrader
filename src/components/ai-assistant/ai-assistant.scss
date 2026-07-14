@@ -102,6 +102,135 @@
     overflow: hidden;
     max-height: 90vh;
     overflow-y: auto;
+    color: #333;
+    transition: background 0.2s, color 0.2s;
+  }
+
+  /* ── Dark theme ── */
+  &--dark {
+    background: #0d1117 !important;
+    color: #e2e8f0 !important;
+    border-color: #1e293b !important;
+
+    .ai-assistant__modal-header {
+      background: #0b0f1a !important;
+      border-bottom-color: #1e293b !important;
+      h3 { color: #e2e8f0 !important; }
+    }
+
+    .ai-assistant__body { background: #0d1117; }
+
+    .ai-assistant__field label { color: #94a3b8 !important; }
+
+    .ai-assistant__field input,
+    .ai-assistant__field select {
+      background: #1e293b !important;
+      border-color: #334155 !important;
+      color: #e2e8f0 !important;
+      &:focus { border-color: #4c7dff !important; }
+    }
+
+    .ai-assistant__trade-types .ai-assistant__type-btn {
+      background: #1e293b !important;
+      border-color: #334155 !important;
+      color: #94a3b8 !important;
+      &.active {
+        background: #1e3a5f !important;
+        border-color: #4c7dff !important;
+        color: #7eb3ff !important;
+      }
+      &:hover:not(.active) { background: #273549 !important; }
+    }
+
+    .ai-assistant__signal {
+      background: linear-gradient(160deg, #0f1e2e, #0d1a14) !important;
+      border-color: #1e3a2a !important;
+      &--high { border-color: #166534 !important; background: linear-gradient(160deg, #0a1f12, #0d2018) !important; }
+      &--medium { border-color: #854d0e !important; background: linear-gradient(160deg, #1a1505, #1e1a08) !important; }
+      &--low { border-color: #1e3060 !important; background: linear-gradient(160deg, #0d1630, #0f1a38) !important; }
+    }
+    .ai-assistant__signal-found { color: #4ade80 !important; }
+    .ai-assistant__signal-conf  { color: #4ade80 !important; }
+    .ai-assistant__signal-market { color: #e2e8f0 !important; }
+    .ai-assistant__signal-type   { color: #7eb3ff !important; }
+    .ai-assistant__signal-note   { color: #94a3b8 !important; }
+    .ai-assistant__signal-group  { color: #64748b !important; }
+
+    .ai-assistant__alt-signals { color: #94a3b8 !important; }
+    .ai-assistant__alt {
+      background: #1e293b !important;
+      color: #7eb3ff !important;
+      &:hover { background: #273549 !important; }
+    }
+
+    .ai-assistant__searching {
+      background: #0f172a !important;
+      border-color: #1e293b !important;
+      color: #94a3b8 !important;
+    }
+
+    .ai-assistant__live-analysis {
+      background: #0f1e3a !important;
+      color: #94a3b8 !important;
+    }
+
+    .ai-assistant__scan-progress { color: #7eb3ff !important; }
+    .ai-assistant__scan-bar { background: #1e293b !important; }
+
+    .ai-assistant__auto-note {
+      background: #0f1e3a !important;
+      border-color: #1e3060 !important;
+      color: #7eb3ff !important;
+    }
+
+    .ai-assistant__tp-note {
+      background: rgba(76,125,255,0.12) !important;
+      color: #94a3b8 !important;
+    }
+
+    .ai-assistant__footer {
+      border-top-color: #1e293b !important;
+      background: #0b0f1a !important;
+    }
+
+    .ai-assistant__close {
+      border-color: #334155 !important;
+      color: #94a3b8 !important;
+      &:hover { background: #1e293b !important; }
+    }
+
+    .ai-assistant__load-run {
+      background: linear-gradient(135deg, #166534, #15803d) !important;
+    }
+
+    .ai-assistant__field--toggle {
+      background: #0f2a1a !important;
+      border-color: #166534 !important;
+      p { color: #94a3b8 !important; }
+    }
+  }
+
+  /* ── Light theme (explicit, mirrors original palette) ── */
+  &--light {
+    background: #fff !important;
+    color: #333 !important;
+
+    .ai-assistant__modal-header {
+      background: #f8faff !important;
+      border-bottom-color: #eee !important;
+      h3 { color: #1a1a2e !important; }
+    }
+
+    .ai-assistant__footer {
+      border-top-color: #eee !important;
+      background: transparent !important;
+    }
+
+    .ai-assistant__close {
+      border-color: #ddd !important;
+      color: #666 !important;
+      &:hover { background: #f0f0f0 !important; }
+    }
   }
 
   &__modal-header {

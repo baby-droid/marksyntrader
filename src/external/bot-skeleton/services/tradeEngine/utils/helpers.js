@@ -143,6 +143,20 @@ const getBackoffDelayInMs = (error_obj, delay_index) => {
     // In fast modes (crazy/turbo) retry rate-limit errors almost immediately —
     // 100 ms for crazy, 50 ms for turbo — never let delay_index compound them.
     const speed = getExecutionSpeed();
+    if (isRateLimit && speed === 'supersonic') {
+        const fast_ms = 20;
+        const next_delay_in_seconds = 0.02;
+        const resolved_msg_type_fast = msg_type || echo_req?.msg_type || 'buy';
+        const error_details_fast = {
+            message_type: resolved_msg_type_fast,
+            delay: next_delay_in_seconds,
+            request: echo_req?.req_id ?? '',
+            message: message || localize('The market is closed'),
+            trade_type: '',
+        };
+        logError(getLocalizedErrorMessage('RateLimit', error_details_fast));
+        return fast_ms;
+    }
     if (isRateLimit && speed === 'turbo') {
         logError && (() => {})(); // suppress — we still need message_to_print below
         // skip the normal block and return a tiny fixed delay
@@ -333,7 +347,7 @@ export const doUntilDone = (promiseFn, errors_to_ignore, api_base) => {
             const isRateLimit = error_code === 'RateLimit' || error_code === 'RateLimitExceeded';
             // In fast modes, never compound the delay_index for rate limits —
             // the fixed short backoff in getBackoffDelayInMs is already correct.
-            if (!isRateLimit || (speed !== 'crazy' && speed !== 'turbo')) {
+            if (!isRateLimit || (speed !== 'crazy' && speed !== 'turbo' && speed !== 'supersonic')) {
                 delay_index++;
             }
             makeDelay().then(repeatFn);

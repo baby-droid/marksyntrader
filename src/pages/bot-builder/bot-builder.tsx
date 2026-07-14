@@ -299,7 +299,7 @@ const BotBuilder = observer(() => {
     const pendingAutoRun = React.useRef(false);
 
     // ── Draggable Free Bots button ──
-    const FREE_BOTS_POS_KEY = 'free_bots_btn_pos';
+    const FREE_BOTS_POS_KEY = 'free_bots_btn_pos_v2';
     const getInitialFreeBotPos = () => {
         try {
             const saved = localStorage.getItem(FREE_BOTS_POS_KEY);

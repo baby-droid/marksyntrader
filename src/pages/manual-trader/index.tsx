@@ -489,26 +489,36 @@ const ManualTrader: React.FC = () => {
         setApiLog(prev => [{ type, label, payload, ts: new Date().toLocaleTimeString('en', { hour12: false }) }, ...prev].slice(0, 30));
 
     /* Execute trade — single or bulk */
-    const buy = useCallback(async (def: typeof ctDef.types[0]) => {
+    const buy = useCallback(async (
+        def: typeof ctDef.types[0],
+        _ctDef: typeof ctDef,
+        _duration: number,
+        _barrier: number,
+        _stake: string,
+        _bulkMode: boolean,
+        _bulkCount: number,
+        _symbolValue: string,
+        _symbol: typeof symbol,
+    ) => {
         if (!authorized) return;
-        const s = parseFloat(stake);
+        const s = parseFloat(_stake);
         if (isNaN(s) || s < 0.35) return;
 
-        /* ── Build contract params ── */
+        /* ── Build contract params — always use barrier for types that need it ── */
         const contractParams: any = {
-            symbol: symbolValue, contract_type: def.type as any,
-            duration, duration_unit: 't', stake: s,
-            ...(ctDef.hasBarrier ? { barrier: String(barrier) } : {}),
+            symbol: _symbolValue, contract_type: def.type as any,
+            duration: _duration, duration_unit: 't', stake: s,
+            ...(_ctDef.hasBarrier ? { barrier: String(_barrier) } : {}),
         };
 
         /* ── Bulk mode: fire N simultaneous contracts ── */
-        if (bulkMode && bulkCount > 1) {
-            pushLog('request', `BUY ×${bulkCount} ${def.label}`, {
+        if (_bulkMode && _bulkCount > 1) {
+            pushLog('request', `BUY ×${_bulkCount} ${def.label}`, {
                 buy: '1', price: s,
                 parameters: contractParams,
             });
             const results = await Promise.allSettled(
-                Array.from({ length: bulkCount }, () =>
+                Array.from({ length: _bulkCount }, () =>
                     new Promise<number>(resolve =>
                         buyContract(contractParams, c => resolve(applyCommission(c.profit)))
                             .catch(() => resolve(0))
@@ -516,7 +526,7 @@ const ManualTrader: React.FC = () => {
                 )
             );
             const totalProfit = results.reduce((acc, r) => acc + (r.status === 'fulfilled' ? r.value : 0), 0);
-            pushLog(totalProfit >= 0 ? 'response' : 'error', `RESULT ×${bulkCount}`, {
+            pushLog(totalProfit >= 0 ? 'response' : 'error', `RESULT ×${_bulkCount}`, {
                 total_profit: totalProfit.toFixed(2),
                 won: results.filter(r => r.status === 'fulfilled' && (r as any).value > 0).length,
                 lost: results.filter(r => r.status === 'fulfilled' && (r as any).value <= 0).length,
@@ -524,8 +534,8 @@ const ManualTrader: React.FC = () => {
             setPnl(prev => prev + totalProfit);
             const tradeId = idRef.current++;
             const bulk: any = {
-                id: tradeId, symbol: symbol.label, type: `${def.label} ×${bulkCount}`,
-                contractType: def.type, stake: s * bulkCount, status: totalProfit >= 0 ? 'won' : 'lost',
+                id: tradeId, symbol: _symbol.label, type: `${def.label} ×${_bulkCount}`,
+                contractType: def.type, stake: s * _bulkCount, status: totalProfit >= 0 ? 'won' : 'lost',
                 profit: totalProfit, time: Date.now(),
             };
             setPositions(p => [bulk, ...p.slice(0, 49)]);
@@ -536,13 +546,13 @@ const ManualTrader: React.FC = () => {
         const tradeId = idRef.current++;
         tradeTicksRef.current = [];
         tradeActiveRef.current = true;
-        tradeDurRef.current = duration;
-        setTradeState({ ticks: [], duration, settled: false, result: null, profit: 0, exitDigit: null });
+        tradeDurRef.current = _duration;
+        setTradeState({ ticks: [], duration: _duration, settled: false, result: null, profit: 0, exitDigit: null });
 
         const pos = {
-            id: tradeId, symbol: symbol.label, type: def.label,
+            id: tradeId, symbol: _symbol.label, type: def.label,
             contractType: def.type, stake: s, status: 'open',
-            profit: 0, tick: 0, duration, time: Date.now(),
+            profit: 0, tick: 0, duration: _duration, time: Date.now(),
         };
         setPositions(p => [pos, ...p.slice(0, 49)]);
 
@@ -553,29 +563,25 @@ const ManualTrader: React.FC = () => {
             parameters: {
                 contract_type: def.type,
                 currency: 'USD',
-                duration,
+                duration: _duration,
                 duration_unit: 't',
                 basis: 'stake',
                 amount: s,
-                symbol: symbolValue,
-                ...(ctDef.hasBarrier ? { barrier: String(barrier) } : {}),
+                symbol: _symbolValue,
+                ...(_ctDef.hasBarrier ? { barrier: String(_barrier) } : {}),
             },
         });
 
         let t = 0;
         const iv = setInterval(() => {
             t++;
-            setPositions(p => p.map(x => x.id === tradeId && x.status === 'open' ? { ...x, tick: Math.min(t, duration) } : x));
-            if (t >= duration) clearInterval(iv);
+            setPositions(p => p.map(x => x.id === tradeId && x.status === 'open' ? { ...x, tick: Math.min(t, _duration) } : x));
+            if (t >= _duration) clearInterval(iv);
         }, 1000);
 
         try {
             await buyContract(
-                {
-                    symbol: symbolValue, contract_type: def.type as any,
-                    duration, duration_unit: 't', stake: s,
-                    ...(ctDef.hasBarrier ? { barrier: String(barrier) } : {}),
-                },
+                contractParams,
                 c => {
                     clearInterval(iv);
                     const profit    = applyCommission(c.profit);
@@ -610,7 +616,7 @@ const ManualTrader: React.FC = () => {
             setTradeState(null);
             setPositions(p => p.filter(x => x.id !== tradeId));
         }
-    }, [authorized, stake, symbolValue, duration, barrier, ctDef, symbol, buyContract]);
+    }, [authorized, buyContract]);
 
     const fmt       = (usd: number) => `${fromUsd(usd).toFixed(2)} ${displayCur}`;
     const stakeNum  = parseFloat(stake) || 0;
@@ -891,7 +897,7 @@ const ManualTrader: React.FC = () => {
                                 <button
                                     className={`mtp-buy-btn ${i === 0 ? 'mtp-buy-btn--a' : 'mtp-buy-btn--b'}`}
                                     style={{ '--bc': def.color } as React.CSSProperties}
-                                    onClick={() => buy(def)}
+                                    onClick={() => buy(def, ctDef, duration, barrier, stake, bulkMode, bulkCount, symbolValue, symbol)}
                                     disabled={!authorized}>
                                     <span className='mtp-buy-btn__icon'>{def.icon}</span>
                                     <span className='mtp-buy-btn__label'>{def.label}</span>

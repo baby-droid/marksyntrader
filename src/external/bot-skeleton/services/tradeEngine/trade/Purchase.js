@@ -14,7 +14,7 @@ let purchase_reference;
 // Normal=1/s sequential. Crazy/Turbo set to 0 = bypass throttle entirely
 // for true zero-delay fire-and-forget (the API server enforces its own limits).
 let _buyTimestamps = [];
-const _buyRateLimit = { normal: 1, crazy: 0, turbo: 0 };
+const _buyRateLimit = { normal: 1, crazy: 0, turbo: 0, supersonic: 0 };
 
 // Side purchases (Crazy/Turbo's extra per-tick contracts) are NOT tracked by
 // the main single-contract state machine, so Stop/Terminate cannot see them
@@ -153,7 +153,7 @@ export default Engine =>
             // buy parameters instead of a pre-fetched proposal ID. This eliminates
             // the proposal→wait→buy latency that was the main throughput bottleneck.
             const useDirectBuy =
-                (speed === 'crazy' || speed === 'turbo') &&
+                (speed === 'crazy' || speed === 'turbo' || speed === 'supersonic') &&
                 !this.options.timeMachineEnabled;
 
             if (this.is_proposal_subscription_required && !useDirectBuy) {

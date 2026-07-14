@@ -606,6 +606,14 @@ const AIAssistant: React.FC = () => {
     const [liveDigit, setLiveDigit] = useState<number | null>(null);
     const antennaWsRef = useRef<WebSocket | null>(null);
 
+    // Dark/light theme toggle — persisted to localStorage, defaults to dark
+    const [aiThemeDark, setAiThemeDark] = useState<boolean>(() => {
+        try { const v = localStorage.getItem('ai_assistant_theme'); return v === null ? true : v === 'dark'; } catch { return true; }
+    });
+    useEffect(() => {
+        try { localStorage.setItem('ai_assistant_theme', aiThemeDark ? 'dark' : 'light'); } catch {}
+    }, [aiThemeDark]);
+
     const wsRefs    = useRef<WebSocket[]>([]);
     const freqRef   = useRef<Map<string, DigitFreq>>(new Map());
     const scanDoneRef = useRef(false);
@@ -949,19 +957,22 @@ const AIAssistant: React.FC = () => {
 
             {isOpen && (
                 <div className='ai-assistant__overlay' onClick={() => setIsOpen(false)}>
-                    <div className='ai-assistant__modal' onClick={e => e.stopPropagation()}>
+                    <div className={`ai-assistant__modal${aiThemeDark ? ' ai-assistant--dark' : ' ai-assistant--light'}`} onClick={e => e.stopPropagation()}>
                         <div className='ai-assistant__modal-header'>
                             <div
                                 className='ai-assistant__live-digit'
                                 title={antennaOn ? 'Live last digit of tracked market' : 'Antenna is off'}
-                                style={{ display: 'flex', alignItems: 'center', gap: 4, marginRight: 6, opacity: antennaOn ? 1 : 0.35 }}
+                                style={{ display: 'flex', alignItems: 'center', gap: 6, marginRight: 8, opacity: antennaOn ? 1 : 0.35 }}
                             >
-                                <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#8aa0b8' }}>DIGIT</span>
+                                <span style={{ fontSize: '0.72rem', fontWeight: 800, color: aiThemeDark ? '#8aa0b8' : '#555', letterSpacing: '0.06em' }}>DIGIT</span>
                                 <span style={{
-                                    minWidth: 22, height: 22, borderRadius: '50%', display: 'inline-flex',
-                                    alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.8rem',
-                                    background: antennaOn && liveDigit !== null ? '#00ff9622' : 'rgba(255,255,255,0.06)',
-                                    color: antennaOn && liveDigit !== null ? '#00ff96' : '#8aa0b8', border: '1px solid rgba(255,255,255,0.12)',
+                                    minWidth: 46, height: 46, borderRadius: '50%', display: 'inline-flex',
+                                    alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '1.7rem',
+                                    background: antennaOn && liveDigit !== null ? '#0b0f1a' : '#0b0f1a',
+                                    color: antennaOn && liveDigit !== null ? '#00ff96' : '#445566',
+                                    border: `2px solid ${antennaOn && liveDigit !== null ? '#00ff9655' : 'rgba(255,255,255,0.10)'}`,
+                                    boxShadow: antennaOn && liveDigit !== null ? '0 0 12px rgba(0,255,150,0.35)' : 'none',
+                                    padding: '4px',
                                 }}>
                                     {antennaOn && liveDigit !== null ? liveDigit : '–'}
                                 </span>
@@ -981,6 +992,18 @@ const AIAssistant: React.FC = () => {
                                 }}
                             >
                                 📡 {antennaOn ? 'ON' : 'OFF'}
+                            </button>
+                            {/* Dark / Light theme toggle */}
+                            <button
+                                onClick={() => setAiThemeDark(d => !d)}
+                                title={aiThemeDark ? 'Switch to Light mode' : 'Switch to Dark mode'}
+                                style={{
+                                    border: 'none', borderRadius: 6, padding: '3px 8px', fontSize: '0.85rem',
+                                    cursor: 'pointer', background: aiThemeDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+                                    color: aiThemeDark ? '#e2e8f0' : '#555',
+                                }}
+                            >
+                                {aiThemeDark ? '☀' : '🌙'}
                             </button>
                             <button className='ai-assistant__close' onClick={() => setIsOpen(false)}>✕</button>
                         </div>

@@ -52,6 +52,11 @@
             background: linear-gradient(135deg, #ef4444, #b91c1c);
             box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
         }
+
+        &--supersonic.active {
+            background: linear-gradient(135deg, #06b6d4, #7c3aed);
+            box-shadow: 0 0 12px rgba(124, 58, 237, 0.6);
+        }
     }
 
     &--compact {

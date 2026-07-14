@@ -11,6 +11,7 @@ const OPTIONS: { value: ExecutionSpeed; label: string; title: string }[] = [
     { value: 'normal', label: 'Normal', title: 'Normal speed — waits for each contract to settle' },
     { value: 'crazy', label: 'Crazy', title: 'Crazy speed — much faster re-entry' },
     { value: 'turbo', label: 'Turbo', title: 'Turbo speed — fastest re-entry the API allows' },
+    { value: 'supersonic', label: 'Fast Execution', title: 'Fast Execution — supersonic, zero-delay trade picking with no cooldown, contract-switch pause, or reload wait' },
 ];
 
 type TSpeedControl = {

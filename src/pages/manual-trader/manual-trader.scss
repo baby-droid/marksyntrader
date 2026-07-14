@@ -102,14 +102,14 @@
   gap: 0;
 }
 
-/* ─── Chart column (left, grows) ─── */
+/* ─── Chart column (left, grows) — gets more horizontal space ─── */
 .mt-chart-col {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   overflow-y: auto;
   gap: 0;
-  min-width: 0;
   background: #0d1117;
 }
 
@@ -194,12 +194,11 @@
     animation: pulse-ind 1s infinite;
   }
 
-  /* 10 medium-sized circles in a row */
+  /* 10 medium-sized circles in a row — no max-width cap so they fill the chart column */
   &__row {
     display: grid;
     grid-template-columns: repeat(10, 1fr);
     gap: 0.3rem;
-    max-width: 560px;       /* cap width so circles stay medium */
   }
 
   &__legend {
@@ -234,14 +233,14 @@
   }
 }
 
-/* Triangle — bigger as requested */
+/* Triangle — enlarged for clear visibility above current digit circle */
 .mt-tri {
-  font-size: 1.5rem;
+  font-size: 2.4rem;
   font-weight: 900;
   color: #7c3aed;         /* purple triangle as in reference */
   text-align: center;
-  height: 18px;
-  line-height: 18px;
+  height: 26px;
+  line-height: 26px;
   opacity: 0;
   transition: opacity 0.15s;
 
