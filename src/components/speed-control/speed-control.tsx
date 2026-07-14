@@ -11,9 +11,9 @@ import {
 import './speed-control.scss';
 
 const OPTIONS: { value: ExecutionSpeed; label: string; title: string }[] = [
-    { value: 'normal', label: 'Normal', title: 'Normal speed — waits for each contract to settle' },
-    { value: 'crazy', label: 'Crazy', title: 'Crazy speed — much faster re-entry' },
-    { value: 'turbo', label: 'Turbo', title: 'Turbo speed — fastest re-entry the API allows' },
+    { value: 'normal', label: 'Normal', title: 'Normal — waits for each contract to settle before next' },
+    { value: 'crazy',  label: 'Crazy',  title: 'Crazy — much faster re-entry, some contracts in flight' },
+    { value: 'turbo',  label: 'Turbo',  title: 'Turbo — fastest re-entry the API allows, max in-flight' },
 ];
 
 type TSpeedControl = {
@@ -30,7 +30,7 @@ const SpeedControl: React.FC<TSpeedControl> = ({ className, compact }) => {
 
     return (
         <div className={`speed-control ${compact ? 'speed-control--compact' : ''} ${className || ''}`}>
-            {!compact && <span className='speed-control__label'>Speed</span>}
+            {/* Normal / Crazy / Turbo tier selector */}
             <div className='speed-control__group' role='group' aria-label='Execution speed'>
                 {OPTIONS.map(opt => (
                     <button
@@ -47,16 +47,17 @@ const SpeedControl: React.FC<TSpeedControl> = ({ className, compact }) => {
                     </button>
                 ))}
             </div>
-            {/* Fast Execution — independent toggle, combinable with any of the tiers above.
-                Forces zero delay/cooldown/contract-switch pause per trade regardless of mode. */}
+            {/* Fast — independent zero-delay toggle, combinable with any tier.
+                Forces zero delay / zero cooldown for EVERY single trade.
+                Has a vivid background so it's always clearly visible. */}
             <button
                 type='button'
-                title='Fast Execution — seamless zero-delay firing of every single trade, on top of whichever speed tier is selected above'
+                title='Fast — single contracts at supersonic zero-delay speed. Zero wait between any two trades, regardless of speed tier.'
                 aria-pressed={fastExec}
                 className={`speed-control__fast ${fastExec ? 'active' : ''}`}
                 onClick={() => setFastExecutionEnabled(!fastExec)}
             >
-                ⚡ Fast Execution
+                ⚡ Fast
             </button>
         </div>
     );

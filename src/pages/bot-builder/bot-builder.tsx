@@ -116,9 +116,9 @@ const FreeBotsSidePanel: React.FC<TFreeBotsPanelProps> = ({ onClose, onLoadDone 
 
     return (
         <div style={{
-            position: 'absolute', top: 0, right: 0, width: '300px', height: '100%',
-            background: '#11143a', borderLeft: '1.5px solid rgba(99,102,241,0.35)',
-            zIndex: 20, display: 'flex', flexDirection: 'column', boxShadow: '-6px 0 24px rgba(0,0,0,0.5)',
+            position: 'absolute', top: 0, left: 0, width: '300px', height: '100%',
+            background: '#11143a', borderRight: '1.5px solid rgba(99,102,241,0.35)',
+            zIndex: 20, display: 'flex', flexDirection: 'column', boxShadow: '6px 0 24px rgba(0,0,0,0.5)',
         }}>
             <div style={{
                 padding: '14px 16px', borderBottom: '1px solid rgba(99,102,241,0.25)',

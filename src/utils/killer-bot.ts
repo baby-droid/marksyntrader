@@ -127,8 +127,23 @@ export function buildKillerXml(template: string, params: KillerParams): string {
         const predValue = tradeOptions.querySelector('value[name="PREDICTION"]');
         if (map.prediction) {
             if (predValue) {
+                // PREDICTION block already exists — just update the number
                 const predField = predValue.querySelector('field[name="NUM"]');
                 if (predField) predField.textContent = String(barrier);
+            } else {
+                // Template has no PREDICTION block — CREATE one dynamically.
+                // Without this, barrier is never written to the XML so the
+                // Blockly bot always uses the default (usually 0 or missing).
+                const predEl = doc.createElement('value');
+                predEl.setAttribute('name', 'PREDICTION');
+                const numBlock = doc.createElement('block');
+                numBlock.setAttribute('type', 'math_number');
+                const numField = doc.createElement('field');
+                numField.setAttribute('name', 'NUM');
+                numField.textContent = String(barrier);
+                numBlock.appendChild(numField);
+                predEl.appendChild(numBlock);
+                tradeOptions.appendChild(predEl);
             }
         } else if (predValue) {
             predValue.remove();

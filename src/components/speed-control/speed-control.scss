@@ -1,39 +1,32 @@
 .speed-control {
     display: flex;
     align-items: center;
-    gap: 0.6rem;
-
-    &__label {
-        font-size: 1rem;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        color: var(--text-less-prominent, #999);
-    }
+    gap: 0.4rem;
 
     &__group {
         display: inline-flex;
         background: var(--general-section-1, #f2f3f4);
         border: 1px solid var(--border-normal, #d6dadb);
-        border-radius: 1.6rem;
-        padding: 0.2rem;
-        gap: 0.2rem;
+        border-radius: 1.2rem;
+        padding: 0.15rem;
+        gap: 0.1rem;
     }
 
     &__btn {
         border: none;
         background: transparent;
-        border-radius: 1.4rem;
-        padding: 0.4rem 1rem;
-        font-size: 1.1rem;
+        border-radius: 1rem;
+        padding: 0.2rem 0.5rem;
+        font-size: 0.82rem;
         font-weight: 600;
-        color: var(--text-general, #333);
+        color: var(--text-general, #555);
         cursor: pointer;
         transition: all 0.15s ease;
         white-space: nowrap;
+        line-height: 1.3;
 
         &:hover:not(.active) {
-            background: rgba(0, 0, 0, 0.05);
+            background: rgba(0, 0, 0, 0.07);
         }
 
         &.active {
@@ -50,40 +43,49 @@
 
         &--turbo.active {
             background: linear-gradient(135deg, #ef4444, #b91c1c);
-            box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+            box-shadow: 0 0 8px rgba(239, 68, 68, 0.45);
         }
     }
 
-    /* Fast Execution — independent toggle, sits beside the Normal/Crazy/Turbo
-       group rather than inside it, since it can be combined with any of them. */
+    /* ⚡ Fast — always has a vivid visible background so users can see
+       at a glance whether it's on or off. Active = electric purple glow. */
     &__fast {
-        border: 1px solid var(--border-normal, #d6dadb);
-        background: transparent;
-        border-radius: 1.4rem;
-        padding: 0.4rem 1rem;
-        font-size: 1.05rem;
+        border: none;
+        border-radius: 1rem;
+        padding: 0.2rem 0.65rem;
+        font-size: 0.82rem;
         font-weight: 700;
-        color: var(--text-general, #333);
         cursor: pointer;
         transition: all 0.15s ease;
         white-space: nowrap;
+        line-height: 1.3;
+        /* Inactive state: muted purple so it's visible but not dominant */
+        background: rgba(124, 58, 237, 0.18);
+        color: #a78bfa;
+        border: 1px solid rgba(124, 58, 237, 0.3);
 
         &:hover:not(.active) {
-            background: rgba(0, 0, 0, 0.05);
+            background: rgba(124, 58, 237, 0.28);
+            color: #c4b5fd;
         }
 
         &.active {
             color: #fff;
             border-color: transparent;
-            background: linear-gradient(135deg, #06b6d4, #7c3aed);
-            box-shadow: 0 0 12px rgba(124, 58, 237, 0.6);
+            background: linear-gradient(135deg, #7c3aed, #06b6d4);
+            box-shadow: 0 0 10px rgba(124, 58, 237, 0.55);
         }
     }
 
+    /* Compact variant — used inside the floating run button */
     &--compact {
         .speed-control__btn {
-            padding: 0.3rem 0.7rem;
-            font-size: 1rem;
+            padding: 0.18rem 0.45rem;
+            font-size: 0.78rem;
+        }
+        .speed-control__fast {
+            padding: 0.18rem 0.55rem;
+            font-size: 0.78rem;
         }
     }
 }
