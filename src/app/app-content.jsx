@@ -25,6 +25,7 @@ import BotBuilder from '../pages/bot-builder';
 import Main from '../pages/main';
 import AIAssistant from '../components/ai-assistant';
 import InstallPrompt from '../components/install-prompt';
+import RiskDisclaimer from '../components/floating/RiskDisclaimer';
 import './app.scss';
 import 'react-toastify/dist/ReactToastify.css';
 import '../components/bot-notification/bot-notification.scss';
@@ -251,6 +252,7 @@ const AppContent = observer(() => {
                             <ToastContainer limit={3} draggable={false} />
                             <InstallPrompt />
                             <AIAssistant />
+                            <RiskDisclaimer />
                         </div>
                     </ThemeProvider>
                 </AuthLoadingWrapper>

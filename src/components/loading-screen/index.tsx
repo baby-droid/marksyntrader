@@ -213,13 +213,35 @@ const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready = false, onDone }) 
             </div>
 
             <div className='ls-hero'>
+                {/* Marksyntrader logo + wordmark */}
+                <div className='ls-logo'>
+                    <div className='ls-logo__ring'>
+                        <svg viewBox='0 0 48 48' fill='none' xmlns='http://www.w3.org/2000/svg' className='ls-logo__svg'>
+                            <circle cx='24' cy='24' r='22' stroke='#22c55e' strokeWidth='2.5' />
+                            <circle cx='24' cy='24' r='16' fill='rgba(34,197,94,0.12)' />
+                            <text x='24' y='29' textAnchor='middle' fontSize='14' fontWeight='900' fontFamily='Orbitron,sans-serif' fill='#22c55e'>M</text>
+                        </svg>
+                        <div className='ls-logo__glow' />
+                    </div>
+                    <div className='ls-logo__wordmark'>
+                        <span className='ls-logo__name'>Marksyn<span className='ls-logo__name-hl'>trader</span></span>
+                        <span className='ls-logo__tagline'>SMART TRADING WORKSPACE</span>
+                    </div>
+                </div>
+
                 <div className='ls-hero__badge'>FREE DERIV BOTS, AUTOMATION, AND TRADING TOOLS IN ONE WORKSPACE</div>
                 <h1 className='ls-hero__title'>Trade with <span className='ls-hero__title-hl'>better structure</span></h1>
                 <p className='ls-hero__sub'>Use manual trading, charts, copy tools, automation, and market analysis without jumping between separate apps.</p>
                 <div className='ls-hero__cta'>
                     <button className='ls-btn-primary'>↗ Log In and Trade &nbsp;→</button>
                     <button className='ls-btn-secondary'>⚡ Create Free Account</button>
-                    <a href='#' className='ls-hero__explore'>Explore the course ↓</a>
+                    <a href='https://chat.whatsapp.com/EkscsxyF4j0CpuWzv0bqUw' target='_blank' rel='noreferrer' className='ls-hero__wa-link'>
+                        <svg viewBox='0 0 32 32' fill='none' style={{ width: 16, height: 16 }}>
+                            <circle cx='16' cy='16' r='16' fill='#25D366' />
+                            <path d='M23.5 8.5C21.7 6.7 19.3 5.7 16.7 5.7C11.4 5.7 7 10.1 7 15.4C7 17.1 7.5 18.8 8.3 20.2L7 25L12 23.7C13.4 24.5 14.9 24.9 16.5 24.9H16.6C21.9 24.9 26.3 20.5 26.3 15.2C26.3 12.6 25.3 10.3 23.5 8.5ZM16.6 23.2C15.2 23.2 13.8 22.8 12.6 22.1L12.3 21.9L9.2 22.7L10 19.7L9.8 19.4C9 18.1 8.6 16.8 8.6 15.4C8.6 11 12.2 7.4 16.6 7.4C18.7 7.4 20.7 8.2 22.2 9.7C23.7 11.2 24.5 13.2 24.5 15.3C24.6 19.7 21 23.2 16.6 23.2Z' fill='white' />
+                        </svg>
+                        Join WhatsApp Group
+                    </a>
                 </div>
             </div>
 
