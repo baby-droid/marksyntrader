@@ -1913,58 +1913,33 @@ const BotDetail: React.FC<{
                                                         {cond.algorithm === 'Sequence Radar' && 'Pattern: detects alternating / trend / zigzag sequences'}
                                                         {cond.algorithm === 'Complex Patterns' && 'Multi-phase: compares first vs second half of window'}
                                                         {cond.algorithm === 'Entry Point Pattern' && 'Reversal: pressure-based entry from sensitivity streak'}
-                                                        {cond.algorithm === 'NDP' && 'Next Digit Prediction: LDP streak confirmation + secondary reversal confirmation'}
+                                                        {cond.algorithm === 'NDP' && 'Next Digit Prediction: checks the next consecutive digit streak — add it as an AND condition after LDP so both must be met to enter'}
                                                     </div>
 
-                                                    {/* Window size (If Last) — not used by NDP, which has its own LDP/NDP windows below */}
-                                                    {cond.algorithm !== 'NDP' && (
-                                                        <div className='sb-field-row'>
-                                                            <div className='sb-field'>
-                                                                <label>If Last (window)</label>
-                                                                <select value={cond.ifLast}
-                                                                    onChange={e => conditionSet(g.id, cond.id, { ifLast: Number(e.target.value) })}
-                                                                    disabled={running}>
-                                                                    {IF_LAST_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
-                                                                </select>
-                                                            </div>
-                                                            {/* Strict toggle — only relevant for LDP */}
-                                                            {cond.algorithm === 'LDP' && (
-                                                                <div className='sb-field-row sb-field-row--center'>
-                                                                    <label>Strict</label>
-                                                                    <button className={`sb-toggle ${cond.strict ? 'on' : 'off'}`}
-                                                                        onClick={() => conditionSet(g.id, cond.id, { strict: !cond.strict })} disabled={running}>
-                                                                        {cond.strict ? 'ON' : 'OFF'}
-                                                                    </button>
-                                                                </div>
-                                                            )}
+                                                    {/* Window size (If Last) */}
+                                                    <div className='sb-field-row'>
+                                                        <div className='sb-field'>
+                                                            <label>If Last (window)</label>
+                                                            <select value={cond.ifLast}
+                                                                onChange={e => conditionSet(g.id, cond.id, { ifLast: Number(e.target.value) })}
+                                                                disabled={running}>
+                                                                {IF_LAST_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
+                                                            </select>
                                                         </div>
-                                                    )}
-
-                                                    {/* NDP — Next Digit Prediction fields (LDP streak window + reversal window) */}
-                                                    {cond.algorithm === 'NDP' && (
-                                                        <>
-                                                            <div className='sb-field-row'>
-                                                                <div className='sb-field'>
-                                                                    <label>LDP Window</label>
-                                                                    <NumberField value={cond.ldpWindow ?? 7} min={2} max={20}
-                                                                        onCommit={n => conditionSet(g.id, cond.id, { ldpWindow: n })} disabled={running} />
-                                                                    <span className='sb-unit'>older ticks (LDP streak)</span>
-                                                                </div>
-                                                                <div className='sb-field'>
-                                                                    <label>NDP Window</label>
-                                                                    <NumberField value={cond.ndpWindow ?? 2} min={1} max={10}
-                                                                        onCommit={n => conditionSet(g.id, cond.id, { ndpWindow: n })} disabled={running} />
-                                                                    <span className='sb-unit'>newest ticks (reversal start)</span>
-                                                                </div>
+                                                        {/* Strict toggle — LDP and NDP share the same strict/majority logic */}
+                                                        {(cond.algorithm === 'LDP' || cond.algorithm === 'NDP') && (
+                                                            <div className='sb-field-row sb-field-row--center'>
+                                                                <label>Strict</label>
+                                                                <button className={`sb-toggle ${cond.strict ? 'on' : 'off'}`}
+                                                                    onClick={() => conditionSet(g.id, cond.id, { strict: !cond.strict })} disabled={running}>
+                                                                    {cond.strict ? 'ON' : 'OFF'}
+                                                                </button>
                                                             </div>
-                                                            <p className='sb-hint' style={{ marginTop: 2 }}>
-                                                                After the LDP streak is confirmed over {cond.ldpWindow ?? 7} older ticks, NDP checks the newest {cond.ndpWindow ?? 2} tick(s) for the opposite streak starting — a secondary reversal confirmation per contract type.
-                                                            </p>
-                                                        </>
-                                                    )}
+                                                        )}
+                                                    </div>
 
                                                     {/* Algorithm-specific fields */}
-                                                    {(cond.algorithm === 'LDP' || cond.algorithm === 'Market Percentage' || cond.algorithm === 'Entry Point Pattern') && (
+                                                    {(cond.algorithm === 'LDP' || cond.algorithm === 'NDP' || cond.algorithm === 'Market Percentage' || cond.algorithm === 'Entry Point Pattern') && (
                                                         <div className='sb-field-row'>
                                                             <div className='sb-field'>
                                                                 <label>Digits Is</label>
