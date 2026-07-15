@@ -6,7 +6,7 @@ import { DBOT_TABS } from '@/constants/bot-contents';
 import { useDerivTrade } from '@/hooks/useDerivTrade';
 import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import { applyCommission } from '@/utils/commission';
-import { observer as globalObserver } from '@/external/bot-skeleton';
+import { observer as globalObserver, api_base } from '@/external/bot-skeleton';
 import { isEnded } from '@/components/shared';
 import manifest from '../../../public/bots/scalpers/manifest.json';
 import VpsMode, { VpsSettings } from './VpsMode';
@@ -882,9 +882,25 @@ const BotDetail: React.FC<{
         onSettled: (info: { profit: number; won: boolean; market: string; buyPrice: number; exitDigit: number | null; consLoss: number }) => void;
         onLog: (msg: string, kind?: string) => void;
     }): Promise<{ forceStopped: boolean; reason: 'tp' | 'sl' | 'loss_limit' | null; cycleProfit: number; consLoss: number; lastWon: boolean }> => {
-        return new Promise(resolve => {
+        return new Promise(resolve => { (async () => {
             const rp: any = store?.run_panel;
             if (!rp?.onRunButtonClick) { resolve({ forceStopped: false, reason: null, cycleProfit: 0, consLoss: params.priorConsLoss || 0, lastWon: true }); return; }
+
+            /* ── Wait out any in-flight teardown from the PREVIOUS forced stop ──
+               globalObserver emits 'bot.stop' from inside terminateSession()
+               *before* it finishes unsubscribing/tearing down, and dbot.js only
+               recreates a fresh interpreter (`this.interpreter = Interpreter()`)
+               after that teardown promise resolves. Our previous cycle resolves
+               on that early 'bot.stop' event, so firing the next run immediately
+               could race dbot.js's own stopBot() — runBot() no-ops while
+               api_base.is_stopping is still true, or reuses a not-yet-reset
+               interpreter, and the freshly patched stake/martingale values never
+               reach the actual trade (symptom: stake stays flat after a loss
+               instead of escalating). Poll briefly until teardown settles. */
+            const teardownStart = Date.now();
+            while (api_base.is_stopping && Date.now() - teardownStart < 3000) {
+                await new Promise(r => setTimeout(r, 25));
+            }
 
             patchWorkspaceParams({
                 market: params.market, stake: params.stake,
@@ -967,7 +983,7 @@ const BotDetail: React.FC<{
                 try { rp.onStopButtonClick?.(); } catch {}
                 setTimeout(finish, 1500); // give bot.stop one last chance to fire cleanly
             }, 45_000);
-        });
+        })(); });
     }, [store, patchWorkspaceParams]);
 
     const [cfg, setCfg]         = useState<BotConfig>(() => DEFAULT_CONFIG(bot));
