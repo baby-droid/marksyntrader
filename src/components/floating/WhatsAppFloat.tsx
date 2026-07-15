@@ -112,7 +112,8 @@ function formatSignalText(s: SignalRecord, tf: string): string {
     const tfLbl = TIMEFRAME_OPTS.find(o => o.value === tf)?.label ?? tf;
     return (
         `📡 *MARKSYNTRADER SIGNAL*\n` +
-        `🎯 *${s.action}*\n` +
+        `━━━━━━━━━━━━━━━\n` +
+        `🎯 Action: *${s.action}*\n` +
         `📊 Market: ${s.market}\n` +
         `⏱ Timeframe: ${tfLbl}\n` +
         `💰 Stake: ${s.stake} · ${s.ticks}T\n` +
@@ -120,8 +121,8 @@ function formatSignalText(s: SignalRecord, tf: string): string {
         `✅ Confidence: ${s.confidence}%\n` +
         `⏰ Time: ${s.time}\n` +
         `━━━━━━━━━━━━━━━\n` +
-        `⚠️ _Trade at your own risk._\n` +
-        `🌐 marksyntrader.com`
+        `🚀 Trade this signal live on Marksyntrader:\n` +
+        `🌐 ${SITE_LINK}`
     );
 }
 
@@ -129,6 +130,15 @@ function formatSignalText(s: SignalRecord, tf: string): string {
 function shareToWA(text: string) {
     const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
     window.open(url, '_blank', 'noopener,noreferrer');
+}
+
+/* ─── Open WhatsApp directly to the admin chat with the pairing code pre-filled.
+   Called the instant a code is generated (and on re-pair) so the user actually
+   lands in WhatsApp instead of just seeing a code with no connection. ─── */
+function connectPairCodeToWhatsApp(code: string, phone: string) {
+    const link = `https://wa.me/${WA_ADMIN_NUM}?text=${encodeURIComponent(`PAIR ${code} — ${phone}`)}`;
+    window.open(link, '_blank', 'noopener,noreferrer');
+    return link;
 }
 
 /* ─── SVGs ─── */
@@ -156,6 +166,21 @@ const StepDots = ({ step, total }: { step: number; total: number }) => (
         {Array.from({ length: total }).map((_, i) => (
             <span key={i} className={`wa-step-dot${i === step ? ' active' : i < step ? ' done' : ''}`} />
         ))}
+    </div>
+);
+
+/* ─── Previous / Next wizard navigation — shown on every pairing step ─── */
+const StepNav = ({
+    onPrev, onNext, prevDisabled, hideNext, nextLabel = 'Next →', prevLabel = '← Previous',
+}: {
+    onPrev: () => void; onNext?: () => void; prevDisabled?: boolean; hideNext?: boolean;
+    nextLabel?: string; prevLabel?: string;
+}) => (
+    <div className='wa-pair-stepnav'>
+        <button className='wa-pair-stepnav__btn prev' onClick={onPrev} disabled={prevDisabled}>{prevLabel}</button>
+        {!hideNext && (
+            <button className='wa-pair-stepnav__btn next' onClick={onNext}>{nextLabel}</button>
+        )}
     </div>
 );
 
@@ -263,6 +288,17 @@ const WhatsAppFloat: React.FC = () => {
         const code = generatePairCode(cleaned);
         savePair({ phone: cleaned, code, step: 1 });
         setPhoneError('');
+        // Take the user straight into WhatsApp with the code pre-filled — don't
+        // just show a code and hope they find the right button.
+        connectPairCodeToWhatsApp(code, cleaned);
+    };
+
+    /* ─── Re-pair: regenerate a fresh code for the already-linked number and
+       jump straight back into WhatsApp with it — without losing the number. ─── */
+    const handleRepair = () => {
+        const code = generatePairCode(pair.phone);
+        savePair({ code, step: 1 });
+        connectPairCodeToWhatsApp(code, pair.phone);
     };
 
     /* ─── Step 1: join group + send code ─── */
@@ -313,6 +349,8 @@ const WhatsAppFloat: React.FC = () => {
                     Generate My Pairing Code →
                 </button>
 
+                <StepNav prevDisabled onPrev={() => {}} onNext={handlePhoneSubmit} nextLabel='Next →' />
+
                 <p className='wa-pair-fine'>
                     Signals are shared via WhatsApp's built-in share — no third-party bots.
                 </p>
@@ -360,15 +398,23 @@ const WhatsAppFloat: React.FC = () => {
                     </div>
                 </div>
 
+                {/* Fallback if the automatic WhatsApp popup was blocked by the browser */}
+                <button className='wa-pair-reconnect' onClick={() => connectPairCodeToWhatsApp(pair.code, pair.phone)}>
+                    <WaSvg size={14} /> Not connected? Tap to open WhatsApp again
+                </button>
+
                 <div className='wa-pair-divider'><span>after joining & sending code</span></div>
 
                 <button className='wa-pair-cta' onClick={() => savePair({ step: 2 })}>
                     ✅ I've Joined &amp; Sent My Code
                 </button>
 
-                <button className='wa-pair-back' onClick={() => { savePair({ step: 0 }); setPhoneInput(pair.phone); }}>
-                    ← Change number ({pair.phone})
-                </button>
+                <StepNav
+                    onPrev={() => { savePair({ step: 0 }); setPhoneInput(pair.phone); }}
+                    onNext={() => savePair({ step: 2 })}
+                    prevLabel={`← Previous (${pair.phone})`}
+                    nextLabel='Next →'
+                />
             </div>
         );
 
@@ -431,9 +477,16 @@ const WhatsAppFloat: React.FC = () => {
                     <WaSvg size={15} /> Share Latest Signal to Group
                 </button>
 
-                <button className='wa-pair-disconnect' onClick={() => { savePair(defaultPair); setPhoneInput(''); }}>
-                    🔌 Unlink / Change Number
-                </button>
+                <div className='wa-pair-action-btns-row'>
+                    <button className='wa-pair-repair' onClick={handleRepair}>
+                        🔁 Re-pair (new code)
+                    </button>
+                    <button className='wa-pair-disconnect' onClick={() => { savePair(defaultPair); setPhoneInput(''); }}>
+                        🔌 Unlink / Change Number
+                    </button>
+                </div>
+
+                <StepNav hideNext onPrev={() => savePair({ step: 1 })} prevLabel='← Previous' />
 
                 <p className='wa-pair-fine'>
                     Signals open WhatsApp share — choose the group, tap Send. · {INTERVAL_OPTS.find(o => o.value === settings.intervalSec)?.label}
