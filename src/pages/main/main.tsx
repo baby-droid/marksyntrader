@@ -44,8 +44,7 @@ import RunStrategy from '../dashboard/run-strategy';
 import SettingsPanel from '@/components/settings-panel';
 import FloatingRunButton from '@/components/floating/FloatingRunButton';
 import PWAInstall from '@/components/floating/PWAInstall';
-import WhatsAppButton from '@/components/floating/WhatsAppButton';
-import WhatsAppSignals from '@/components/floating/WhatsAppSignals';
+import WhatsAppFloat from '@/components/floating/WhatsAppFloat';
 import './main.scss';
 
 const ChartWrapper   = lazy(() => import('../chart/chart-wrapper'));
@@ -447,8 +446,7 @@ const AppWrapper = observer(() => {
             {/* Floating panels */}
             <FloatingRunButton />
             <PWAInstall />
-            <WhatsAppButton />
-            <WhatsAppSignals />
+            <WhatsAppFloat />
 
             <DesktopWrapper>
                 <div className='main__run-strategy-wrapper'>

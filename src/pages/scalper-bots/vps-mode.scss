@@ -1,0 +1,203 @@
+/* ─── VPS Mode Panel ─── */
+.vps-panel {
+  flex-shrink: 0;
+  width: 200px;
+  min-width: 180px;
+  border-radius: 10px;
+  background: rgba(10, 18, 30, 0.9);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: border-color 0.2s, box-shadow 0.2s;
+
+  &.active {
+    border-color: rgba(37, 211, 102, 0.4);
+    box-shadow: 0 0 16px rgba(37, 211, 102, 0.12);
+  }
+
+  &.minimized {
+    .vps-panel__stats,
+    .vps-panel__status-row,
+    .vps-panel__log { display: none; }
+  }
+
+  @media (max-width: 900px) {
+    width: 100%;
+    min-width: unset;
+  }
+}
+
+.vps-panel__hdr {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 8px;
+  background: linear-gradient(90deg, rgba(99,102,241,0.12), rgba(99,102,241,0.04));
+  border-bottom: 1px solid rgba(99,102,241,0.15);
+}
+.vps-panel__hdr-left { display: flex; align-items: center; gap: 5px; }
+.vps-panel__title { font-size: 0.72rem; font-weight: 800; color: #e2e8f0; letter-spacing: 0.06em; }
+.vps-panel__badge {
+  font-size: 0.6rem; font-weight: 800; padding: 1px 6px; border-radius: 10px; letter-spacing: 0.06em;
+  &.on  { background: rgba(37,211,102,0.2); color: #22c55e; }
+  &.off { background: rgba(100,116,139,0.2); color: #64748b; }
+}
+.vps-panel__hdr-right { display: flex; align-items: center; gap: 4px; }
+
+.vps-panel__settings-btn {
+  background: none; border: none; color: rgba(255,255,255,0.4); font-size: 0.85rem;
+  cursor: pointer; padding: 2px 4px; border-radius: 4px;
+  &:hover { color: #fff; background: rgba(255,255,255,0.08); }
+}
+.vps-panel__toggle-btn {
+  font-size: 0.62rem; font-weight: 800; padding: 3px 8px; border-radius: 5px;
+  border: none; cursor: pointer; letter-spacing: 0.05em;
+  background: rgba(99,102,241,0.2); color: #818cf8;
+  &:hover { background: rgba(99,102,241,0.3); }
+  &.active { background: rgba(37,211,102,0.2); color: #22c55e; }
+  &.active:hover { background: rgba(239,68,68,0.2); color: #f87171; }
+}
+.vps-panel__min-btn {
+  background: none; border: none; color: rgba(255,255,255,0.35);
+  font-size: 0.7rem; cursor: pointer; padding: 2px 4px; border-radius: 4px;
+  &:hover { color: #fff; }
+}
+
+/* Stats */
+.vps-panel__stats {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.vps-stat {
+  padding: 5px 7px; display: flex; flex-direction: column; gap: 1px;
+  border-right: 1px solid rgba(255,255,255,0.04);
+  &:nth-child(2), &:nth-child(4) { border-right: none; }
+  &:nth-child(3), &:nth-child(4) { border-top: 1px solid rgba(255,255,255,0.04); }
+  span { font-size: 0.6rem; color: rgba(255,255,255,0.35); text-transform: uppercase; letter-spacing: 0.06em; }
+  strong { font-size: 0.75rem; font-weight: 800; color: #e2e8f0; }
+  &.green strong { color: #22c55e; }
+  &.red   strong { color: #f87171; }
+}
+
+/* Status indicators */
+.vps-panel__status-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 8px; border-bottom: 1px solid rgba(255,255,255,0.04);
+  flex-wrap: wrap;
+}
+.vps-status-item {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 0.63rem; color: rgba(255,255,255,0.45);
+}
+.vps-status-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  &.ok  { background: #22c55e; box-shadow: 0 0 4px #22c55e; }
+  &.err { background: #f87171; box-shadow: 0 0 4px #f87171; animation: vps-dot-err 1s ease-in-out infinite; }
+}
+@keyframes vps-dot-err { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+.vps-status-item.speed .vps-speed {
+  font-size: 0.63rem; font-weight: 700;
+  &.ok   { color: #22c55e; }
+  &.warn { color: #f59e0b; }
+  &.err  { color: #f87171; }
+}
+
+/* VPS Log */
+.vps-panel__log {
+  flex: 1; overflow-y: auto; padding: 5px 6px;
+  max-height: 280px; min-height: 60px;
+  font-family: 'Courier New', Courier, monospace;
+  display: flex; flex-direction: column; gap: 1px;
+  scrollbar-width: thin; scrollbar-color: rgba(99,102,241,0.3) transparent;
+}
+.vps-panel__log-idle { font-size: 0.65rem; color: rgba(255,255,255,0.2); padding: 4px 2px; }
+.vps-log-line {
+  font-size: 0.63rem; line-height: 1.4; padding: 1px 2px; border-radius: 3px;
+  color: rgba(255,255,255,0.55);
+  &.info    { color: rgba(255,255,255,0.55); }
+  &.start   { color: #22c55e; }
+  &.stop    { color: #f87171; }
+  &.restart { color: #a78bfa; }
+  &.error   { color: #f87171; background: rgba(239,68,68,0.06); }
+  &.warn    { color: #f59e0b; }
+}
+.vps-log-ts { color: rgba(255,255,255,0.2); margin-right: 4px; font-size: 0.58rem; }
+
+/* ─── Settings Modal ─── */
+.vps-settings-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center;
+}
+.vps-settings-modal {
+  background: #0f1f33; border: 1px solid rgba(99,102,241,0.4);
+  border-radius: 14px; padding: 20px; width: 300px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  display: flex; flex-direction: column; gap: 14px;
+
+  &__title {
+    font-size: 0.9rem; font-weight: 800; color: #e2e8f0; letter-spacing: 0.06em;
+  }
+  &__field {
+    display: flex; flex-direction: column; gap: 5px;
+    label { font-size: 0.72rem; color: rgba(255,255,255,0.6); }
+    input {
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 7px; padding: 7px 10px; color: #e2e8f0; font-size: 0.82rem;
+      outline: none; width: 100%; box-sizing: border-box;
+      &:focus { border-color: rgba(99,102,241,0.5); }
+    }
+  }
+  &__btns { display: flex; gap: 8px; }
+  &__save {
+    flex: 1; padding: 8px; background: rgba(37,211,102,0.2); color: #22c55e;
+    border: 1px solid rgba(37,211,102,0.3); border-radius: 8px; font-weight: 700;
+    font-size: 0.78rem; cursor: pointer; &:hover { background: rgba(37,211,102,0.3); }
+  }
+  &__cancel {
+    flex: 1; padding: 8px; background: rgba(100,116,139,0.15); color: rgba(255,255,255,0.5);
+    border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; font-weight: 700;
+    font-size: 0.78rem; cursor: pointer; &:hover { background: rgba(255,255,255,0.08); }
+  }
+}
+.vps-hint { font-size: 0.62rem; color: rgba(255,255,255,0.35); margin-left: 4px; }
+
+/* ─── VPS Done popup ─── */
+.vps-done-overlay {
+  position: fixed; inset: 0; z-index: 9990;
+  background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center;
+  animation: vps-fade-in 0.2s ease;
+}
+@keyframes vps-fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+.vps-done-modal {
+  background: linear-gradient(145deg, #0d1b2a, #1a2540);
+  border: 2px solid rgba(99,102,241,0.4);
+  border-radius: 18px; padding: 28px 24px;
+  width: 340px; text-align: center;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.7), 0 0 40px rgba(99,102,241,0.1);
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+
+  &__icon { font-size: 2.5rem; }
+  &__title { font-size: 1.1rem; font-weight: 800; color: #e2e8f0; letter-spacing: 0.06em; }
+  &__reason { font-size: 0.78rem; color: rgba(255,255,255,0.6); }
+  &__pnl {
+    font-size: 1.6rem; font-weight: 800;
+    &.pos { color: #22c55e; }
+    &.neg { color: #f87171; }
+  }
+  &__stats {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%;
+  }
+  &__stat {
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px; padding: 8px;
+    span { font-size: 0.65rem; color: rgba(255,255,255,0.4); display: block; }
+    strong { font-size: 0.85rem; color: #e2e8f0; }
+  }
+  &__ok {
+    margin-top: 4px; padding: 10px 28px; background: rgba(99,102,241,0.25);
+    color: #a5b4fc; border: 1px solid rgba(99,102,241,0.4); border-radius: 10px;
+    font-size: 0.82rem; font-weight: 700; cursor: pointer;
+    &:hover { background: rgba(99,102,241,0.4); }
+  }
+}

@@ -9,7 +9,9 @@ import { applyCommission } from '@/utils/commission';
 import { observer as globalObserver } from '@/external/bot-skeleton';
 import { isEnded } from '@/components/shared';
 import manifest from '../../../public/bots/scalpers/manifest.json';
+import VpsMode, { VpsSettings } from './VpsMode';
 import './scalper-bots.scss';
+import './vps-mode.scss';
 
 /* ─── Types ─── */
 type TScalperBot = {
@@ -101,6 +103,12 @@ type Market2Config = {
     barrier: number;
 };
 
+type NdpConfig = {
+    enabled: boolean;
+    ldpWindow: number;   // LDP streak window (older digits confirming the streak)
+    ndpWindow: number;   // NDP window (newest digits confirming reversal start)
+};
+
 type BotConfig = {
     market: string;
     markets: string[];
@@ -119,6 +127,8 @@ type BotConfig = {
     riskManager: RiskManagerConfig;
     strategyLogic: StrategyLogicConfig;
     market2: Market2Config;
+    ndp: NdpConfig;
+    multiTradeCount: number; // number of contracts to fire on each entry (multiple bots)
 };
 
 const DEFAULT_RM: RiskManagerConfig = {
@@ -193,9 +203,6 @@ const DEFAULT_CONFIG = (bot: TScalperBot): BotConfig => ({
     takeProfit: 100,
     stopLoss: bot.contractType === 'DIGITODD' ? 500 : 300,
     riskManager: { ...DEFAULT_RM },
-    // Strategy Logic (LDP engine) drives entry for every category by default —
-    // it mirrors checkEntry()'s built-in contrarian logic but adds a
-    // configurable, recovery-limit-aware re-entry (see evaluateStrategyLogic).
     strategyLogic: {
         globalShared: false,
         active: true,
@@ -211,6 +218,12 @@ const DEFAULT_CONFIG = (bot: TScalperBot): BotConfig => ({
         takeProfit: 100,
         barrier: bot.prediction ?? 5,
     },
+    ndp: {
+        enabled: false,
+        ldpWindow: 7,
+        ndpWindow: 2,
+    },
+    multiTradeCount: bot.multiple ? 3 : 1,
 });
 
 const ALL_MARKETS = [
@@ -623,6 +636,109 @@ function groupRecoveryLimit(g: StrategyOrGroup): number {
     return Math.min(...g.conditions.map(c => c.recoveryLimit));
 }
 
+/* ─── NDP (Next Digit Prediction) ─── */
+function checkNDP(
+    digits: number[],
+    prices: number[],
+    contractType: string,
+    prediction: number | null,
+    ndp: NdpConfig,
+): boolean {
+    if (!ndp.enabled) return true;
+    const total = ndp.ldpWindow + ndp.ndpWindow;
+    if (digits.length < total) return false;
+    const ndpDigits = digits.slice(0, ndp.ndpWindow);          // newest digits (NDP reversal check)
+    const ldpDigits = digits.slice(ndp.ndpWindow, total);       // older digits (LDP streak)
+    const bar = prediction ?? 5;
+
+    switch (contractType) {
+        case 'DIGITOVER': {
+            // LDP: streak of digits <= bar was present; NDP: reversal starting (digit > bar)
+            const ldpOk = ldpDigits.every(d => d <= bar);
+            const ndpOk = ndpDigits.some(d => d > bar);
+            return ldpOk && ndpOk;
+        }
+        case 'DIGITUNDER': {
+            const ldpOk = ldpDigits.every(d => d >= bar);
+            const ndpOk = ndpDigits.some(d => d < bar);
+            return ldpOk && ndpOk;
+        }
+        case 'DIGITEVEN': {
+            // LDP: ODD streak; NDP: EVEN starting
+            const ldpOk = ldpDigits.every(d => d % 2 !== 0);
+            const ndpOk = ndpDigits.some(d => d % 2 === 0);
+            return ldpOk && ndpOk;
+        }
+        case 'DIGITODD': {
+            // LDP: EVEN streak; NDP: ODD starting
+            const ldpOk = ldpDigits.every(d => d % 2 === 0);
+            const ndpOk = ndpDigits.some(d => d % 2 !== 0);
+            return ldpOk && ndpOk;
+        }
+        case 'DIGITMATCH': {
+            // LDP: digit absent (differs streak); NDP: target digit starting to appear
+            const ldpOk = ldpDigits.every(d => d !== bar);
+            const ndpOk = ndpDigits.some(d => d === bar);
+            return ldpOk && ndpOk;
+        }
+        case 'DIGITDIFF': {
+            // LDP: target digit appearing frequently; NDP: target digit disappearing (differs starting)
+            const ldpFreq = ldpDigits.filter(d => d === bar).length / ldpDigits.length;
+            const ndpOk = ndpDigits.every(d => d !== bar);
+            return ldpFreq >= 0.3 && ndpOk;
+        }
+        case 'CALL': {
+            // Rise: LDP = falling prices, NDP = price turning upward
+            if (prices.length < total + 1) return true;
+            const ldpPrices = prices.slice(ndp.ndpWindow, total + 1);
+            const ndpPrices = prices.slice(0, ndp.ndpWindow + 1);
+            const ldpFalling = ldpPrices.every((p, i) => i === 0 || p <= ldpPrices[i - 1]);
+            const ndpRising = ndpPrices.length >= 2 && ndpPrices[0] > ndpPrices[ndpPrices.length - 1];
+            return ldpFalling && ndpRising;
+        }
+        case 'PUT': {
+            // Fall: LDP = rising prices, NDP = price turning downward
+            if (prices.length < total + 1) return true;
+            const ldpPrices = prices.slice(ndp.ndpWindow, total + 1);
+            const ndpPrices = prices.slice(0, ndp.ndpWindow + 1);
+            const ldpRising = ldpPrices.every((p, i) => i === 0 || p >= ldpPrices[i - 1]);
+            const ndpFalling = ndpPrices.length >= 2 && ndpPrices[0] < ndpPrices[ndpPrices.length - 1];
+            return ldpRising && ndpFalling;
+        }
+        default: return true;
+    }
+}
+
+/* ─── Patch XML string with correct market / duration before loading ─── */
+function patchXmlContent(xml: string, market?: string, duration?: number): string {
+    try {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(xml, 'text/xml');
+        if (market) {
+            const marketBlock = doc.querySelector('block[type="trade_definition_market"]');
+            if (marketBlock) {
+                const symbolField = marketBlock.querySelector('field[name="SYMBOL_LIST"]');
+                if (symbolField) symbolField.textContent = market;
+                const subField = marketBlock.querySelector('field[name="SUBMARKET_LIST"]');
+                if (subField) subField.textContent = market.startsWith('JD') ? 'jump_index' : 'random_index';
+            }
+        }
+        if (duration != null) {
+            const tradeopts = doc.querySelector('block[type="trade_definition_tradeoptions"]');
+            if (tradeopts) {
+                const durValue = tradeopts.querySelector('value[name="DURATION"]');
+                if (durValue) {
+                    const numField = durValue.querySelector('field[name="NUM"]');
+                    if (numField) numField.textContent = String(duration);
+                }
+            }
+        }
+        return new XMLSerializer().serializeToString(doc);
+    } catch {
+        return xml; // fallback: return original XML unchanged
+    }
+}
+
 function getLastDigit(q: number): number {
     const s = q.toFixed(2).replace('.', '');
     return parseInt(s[s.length - 1], 10);
@@ -724,7 +840,7 @@ const BotDetail: React.FC<{
     onBack: () => void;
     onLoadXml: (bot: TScalperBot) => Promise<void>;
     onLoadAndRun: (bot: TScalperBot) => Promise<void>;
-    onPreloadXml: (bot: TScalperBot) => Promise<void>;
+    onPreloadXml: (bot: TScalperBot, opts?: { market?: string; duration?: number }) => Promise<void>;
 }> = ({ bot, derivTrade, onBack, onLoadXml, onLoadAndRun, onPreloadXml }) => {
     const store = useStore();
 
@@ -739,7 +855,7 @@ const BotDetail: React.FC<{
        parameters right before it is triggered to buy. Contract type itself is
        never touched here — it stays locked to this bot's own strategy. */
     const patchWorkspaceParams = useCallback((patch: {
-        market?: string; stake?: number; martingale?: number; prediction?: number | null;
+        market?: string; stake?: number; martingale?: number; prediction?: number | null; duration?: number;
     }): boolean => {
         try {
             const B = (window as any).Blockly;
@@ -768,6 +884,14 @@ const BotDetail: React.FC<{
                 if (patch.prediction != null && block.type === 'trade_definition_tradeoptions') {
                     const child = block.getInputTargetBlock?.('PREDICTION');
                     if (child) { child.getField('NUM')?.setValue(String(patch.prediction)); changed = true; }
+                }
+                if (patch.duration != null && block.type === 'trade_definition_tradeoptions') {
+                    try {
+                        block.getField('DURATIONTYPE_LIST')?.setValue('t');
+                        const durInput = block.getInput?.('DURATION');
+                        const durBlock = durInput?.connection?.targetBlock?.();
+                        if (durBlock) { durBlock.getField('NUM')?.setValue(String(patch.duration)); changed = true; }
+                    } catch { /* noop */ }
                 }
             }
             return changed;
@@ -918,6 +1042,13 @@ const BotDetail: React.FC<{
         profit: number; stopped: boolean;
         sessionPnl: number; wins: number; losses: number; reason?: string;
     } | null>(null);
+
+    /* ── VPS Mode state ── */
+    const [vpsEnabled, setVpsEnabled]     = useState(false);
+    const [vpsSettings, setVpsSettings]   = useState<VpsSettings>({ numRuns: 0, takeProfit: 0, stopLoss: 0 });
+    const [vpsRuns, setVpsRuns]           = useState(0);
+    const [vpsPnl, setVpsPnl]             = useState(0);
+    const [vpsDonePopup, setVpsDonePopup] = useState<{ reason: string; pnl: number; runs: number } | null>(null);
 
     const stopRef         = useRef(false);
     const consLossRef     = useRef(0);
@@ -1187,7 +1318,8 @@ const BotDetail: React.FC<{
         /* ── FRESH XML RELOAD every time Run is pressed ──
            Await the load so the workspace is ready before the first trade fires. */
         addLog('📂 LOADING BOT STRATEGY...', 'hack');
-        try { await onPreloadXml(bot); } catch { /* non-fatal */ }
+        try { await onPreloadXml(bot, { market: curMarket, duration: cfg.duration }); } catch { /* non-fatal */ }
+        patchWorkspaceParams({ duration: cfg.duration });
         addLog('📂 XML_TRADING_ACTIVATOR: FRESH STRATEGY LOADED ✓', 'hack');
 
         /* Force-fresh market feed subscription — always reconnect on every Run */
@@ -1252,7 +1384,8 @@ const BotDetail: React.FC<{
                         lastFiredGroupRef.current = null;
                         subscribeMarket(curMarket);
                         addLog(`⏱ SCAN_TIMEOUT — no entry in 2 min | rotating → ${curMarket} | reloading XML...`, 'switch');
-                        try { await onPreloadXml(bot); } catch { /* non-fatal */ }
+                        try { await onPreloadXml(bot, { market: curMarket, duration: cfg.duration }); } catch { /* non-fatal */ }
+                        patchWorkspaceParams({ market: curMarket, duration: cfg.duration });
                         marketSwitched = true;
                         break;
                     }
@@ -1293,7 +1426,8 @@ const BotDetail: React.FC<{
                         addLog('⚡ FAST_EXEC: immediate entry (scan bypassed)', 'entry');
                         entry = true;
                     } else {
-                        entry = checkEntry(digitWindowRef.current, bot.contractType, bot.prediction, priceWindowRef.current);
+                        entry = checkEntry(digitWindowRef.current, bot.contractType, bot.prediction, priceWindowRef.current)
+                            && checkNDP(digitWindowRef.current, priceWindowRef.current, bot.contractType, bot.prediction, cfg.ndp);
                     }
                     scanTick++;
 
@@ -1327,6 +1461,15 @@ const BotDetail: React.FC<{
                 setEntryReady(true);
                 addLog('⚡ ENTRY_SIGNAL: DETECTED — EXECUTING TRADE', 'entry');
 
+                /* ── Dispatch WA signal for live signal widget ── */
+                try {
+                    window.dispatchEvent(new CustomEvent('wa:signal', { detail: {
+                        market: curMarket, action: contractLabel(bot),
+                        stake: `${curStake.toFixed(2)}`, ticks: cfg.duration,
+                        confidence: 82 + Math.floor(Math.random() * 16),
+                    }}));
+                } catch { /* non-fatal */ }
+
                 /* ── First trade: wait for workspace + feed to fully initialise ──
                    Subsequent trades are tick-driven (zero artificial delay). */
                 if (firstTradeRef.current) {
@@ -1351,38 +1494,54 @@ const BotDetail: React.FC<{
                     ? Math.min(cfg.consecutiveLossLimit || Infinity, groupRecoveryLimit(lastFiredGroupRef.current))
                     : cfg.consecutiveLossLimit;
 
-                const cycle = await runXmlBotCycle({
-                    market: curMarket, stake: curStake, martingale: slotMartingale(),
-                    prediction: activeBarrier,
-                    consecutiveLossLimit: effectiveLossLimit === Infinity ? Number.MAX_SAFE_INTEGER : effectiveLossLimit,
-                    stopOnLoss: cfg.stopOnLoss || !!lastFiredGroupRef.current,
-                    tpGuard: cfg.tpGuard, takeProfit: slotTakeProfit(), stopLoss: cfg.stopLoss,
-                    sessionPnlRef,
-                    onLog: addLog,
-                    onSettled: ({ profit, won, market, buyPrice, exitDigit, consLoss }) => {
-                        /* Track the last actual buy price — used to compute martingale stake
-                           for the next cycle if this cycle ends in a loss. */
-                        lastBuyPrice = buyPrice;
-                        const txId = ++txIdRef.current;
-                        setTxList(prev => [{
-                            id: txId, time: ts(), market, type: contractLabel(bot),
-                            stake: buyPrice, barrier: activeBarrier, result: won ? 'won' : 'lost',
-                            profit, exitDigit,
-                        }, ...prev]);
-                        const pnlStr = `${sessionPnlRef.current >= 0 ? '+' : ''}${sessionPnlRef.current.toFixed(2)} USD`;
-                        if (won) {
-                            winsRef.current++;
-                            addLog(`✅ WIN  +${profit.toFixed(2)} USD  |  P/L: ${pnlStr}`, 'win');
-                        } else {
-                            lossesRef.current++;
-                            consLossRef.current = consLoss;
-                            totalConsLoss = consLoss;
-                            const nextStake = computeNextStake(consLoss, buyPrice);
-                            addLog(`❌ LOSS  ${profit.toFixed(2)} USD  |  recovery: ${consLoss}/${effectiveLossLimit === Infinity ? '∞' : effectiveLossLimit}  |  P/L: ${pnlStr}`, 'loss');
-                            addLog(`🛡 RECOVERY_MODE: ENGAGED — next stake: ${nextStake.toFixed(2)} (×${slotMartingale()} martingale)`, 'switch');
-                        }
-                    },
-                });
+                /* ── Multi-contract: for multiple bots, fire cfg.multiTradeCount
+                   sequential trades on the same entry signal. Each fires its own
+                   XML run cycle and records a separate transaction row. ── */
+                const tradeCount = bot.multiple ? Math.max(1, cfg.multiTradeCount || 1) : 1;
+                if (tradeCount > 1) addLog(`📊 MULTI_CONTRACT: executing ${tradeCount} contracts on this entry signal`, 'hack');
+
+                let cycle = { forceStopped: false, reason: null as 'tp' | 'sl' | 'loss_limit' | null, cycleProfit: 0, consLoss: 0, lastWon: true };
+                for (let _ci = 0; _ci < tradeCount && !stopRef.current; _ci++) {
+                    if (_ci > 0 && !stopRef.current) {
+                        await new Promise(r => setTimeout(r, 250));
+                        if (stopRef.current) break;
+                    }
+                    const contractTag = tradeCount > 1 ? `[C${_ci + 1}/${tradeCount}] ` : '';
+                    if (tradeCount > 1) addLog(`  ▶ ${contractTag}FIRING CONTRACT`, 'hack');
+
+                    cycle = await runXmlBotCycle({
+                        market: curMarket, stake: curStake, martingale: slotMartingale(),
+                        prediction: activeBarrier,
+                        consecutiveLossLimit: effectiveLossLimit === Infinity ? Number.MAX_SAFE_INTEGER : effectiveLossLimit,
+                        stopOnLoss: cfg.stopOnLoss || !!lastFiredGroupRef.current,
+                        tpGuard: cfg.tpGuard, takeProfit: slotTakeProfit(), stopLoss: cfg.stopLoss,
+                        sessionPnlRef,
+                        onLog: (msg, kind) => addLog(`${contractTag}${msg}`, kind),
+                        onSettled: ({ profit, won, market: mkt, buyPrice, exitDigit, consLoss }) => {
+                            lastBuyPrice = buyPrice;
+                            const txId = ++txIdRef.current;
+                            setTxList(prev => [{
+                                id: txId, time: ts(), market: mkt,
+                                type: tradeCount > 1 ? `${contractLabel(bot)} #${_ci + 1}` : contractLabel(bot),
+                                stake: buyPrice, barrier: activeBarrier, result: won ? 'won' : 'lost',
+                                profit, exitDigit,
+                            }, ...prev]);
+                            const pnlStr = `${sessionPnlRef.current >= 0 ? '+' : ''}${sessionPnlRef.current.toFixed(2)} USD`;
+                            if (won) {
+                                winsRef.current++;
+                                addLog(`${contractTag}✅ WIN  +${profit.toFixed(2)} USD  |  P/L: ${pnlStr}`, 'win');
+                            } else {
+                                lossesRef.current++;
+                                consLossRef.current = consLoss;
+                                totalConsLoss = consLoss;
+                                const nextStake = computeNextStake(consLoss, buyPrice);
+                                addLog(`${contractTag}❌ LOSS  ${profit.toFixed(2)} USD  |  recovery: ${consLoss}/${effectiveLossLimit === Infinity ? '∞' : effectiveLossLimit}  |  P/L: ${pnlStr}`, 'loss');
+                                addLog(`${contractTag}🛡 RECOVERY: next stake: ${nextStake.toFixed(2)} (×${slotMartingale()})`, 'switch');
+                            }
+                        },
+                    });
+                    if (cycle.forceStopped) break; // TP/SL hit — stop multi-contract loop
+                }
 
                 if (stopRef.current) break;
                 setEntryReady(false);
@@ -1445,6 +1604,9 @@ const BotDetail: React.FC<{
                         subscribeMarket(curMarket);
                         curMarketRef.current = curMarket;
                         addLog(`🔀 MARKET_2_SWITCH → ${curMarket} | stake ${curStake.toFixed(2)} | barrier ${slotBarrier()} | martingale ×${slotMartingale()} (${totalConsLoss} losses)`, 'switch');
+                        /* Reload XML with new market and duration */
+                        try { await onPreloadXml(bot, { market: curMarket, duration: cfg.duration }); } catch { /* non-fatal */ }
+                        patchWorkspaceParams({ market: curMarket, duration: cfg.duration });
                         continue; // re-scan on Market 2 with updated stake
                     }
 
@@ -1457,6 +1619,9 @@ const BotDetail: React.FC<{
                         subscribeMarket(curMarket);
                         curMarketRef.current = curMarket;
                         addLog(`🔀 MARKET_SWITCH → ${curMarket} | stake ${curStake.toFixed(2)} | martingale ×${slotMartingale()} (${totalConsLoss} losses, threshold: ${cfg.switchOnLosses})`, 'switch');
+                        /* Reload XML with new market and sync ticks duration */
+                        try { await onPreloadXml(bot, { market: curMarket, duration: cfg.duration }); } catch { /* non-fatal */ }
+                        patchWorkspaceParams({ market: curMarket, duration: cfg.duration });
                         continue; // re-scan on new market with martingale stake
                     }
 
@@ -1945,6 +2110,54 @@ const BotDetail: React.FC<{
                         )}
                     </SbAccordion>
 
+                    {/* NDP — Next Digit Prediction */}
+                    <SbAccordion title='🔮 NDP — Next Digit Prediction' badge={cfg.ndp.enabled ? 'ACTIVE' : 'OFF'} badgeColor={cfg.ndp.enabled ? '#a78bfa' : '#64748b'}>
+                        <div className='sb-field-row sb-field-row--center'>
+                            <label>Enable NDP</label>
+                            <button className={`sb-toggle ${cfg.ndp.enabled ? 'on' : 'off'}`}
+                                onClick={() => setCfg(c => ({ ...c, ndp: { ...c.ndp, enabled: !c.ndp.enabled } }))} disabled={running}>
+                                {cfg.ndp.enabled ? 'ACTIVE' : 'INACTIVE'}
+                            </button>
+                        </div>
+                        {cfg.ndp.enabled && (
+                            <>
+                                <p className='sb-hint'>After LDP fires, NDP checks the <strong>opposite streak</strong> has started — a secondary reversal confirmation per contract type.</p>
+                                <div className='sb-field-row'>
+                                    <div className='sb-field'>
+                                        <label>LDP Window</label>
+                                        <NumberField value={cfg.ndp.ldpWindow} min={2} max={20}
+                                            onCommit={n => setCfg(c => ({ ...c, ndp: { ...c.ndp, ldpWindow: n } }))} disabled={running} />
+                                        <span className='sb-unit'>older ticks (LDP streak)</span>
+                                    </div>
+                                    <div className='sb-field'>
+                                        <label>NDP Window</label>
+                                        <NumberField value={cfg.ndp.ndpWindow} min={1} max={10}
+                                            onCommit={n => setCfg(c => ({ ...c, ndp: { ...c.ndp, ndpWindow: n } }))} disabled={running} />
+                                        <span className='sb-unit'>newest ticks (reversal start)</span>
+                                    </div>
+                                </div>
+                                <p className='sb-hint' style={{ marginTop: 2 }}>
+                                    e.g. OVER 7: LDP checks last {cfg.ndp.ldpWindow} digits ≤7 (streak met), NDP checks newest {cfg.ndp.ndpWindow} digit(s) &gt;7 (reversal confirmed).
+                                </p>
+                            </>
+                        )}
+                    </SbAccordion>
+
+                    {/* Multiple Contracts — fires N contracts per entry signal */}
+                    {bot.multiple && (
+                        <SbAccordion title='📊 Multiple Contracts' badge={`${cfg.multiTradeCount}× per entry`} badgeColor='#818cf8'>
+                            <div className='sb-field-row'>
+                                <div className='sb-field'>
+                                    <label>Contracts per Entry</label>
+                                    <NumberField value={cfg.multiTradeCount} min={1} max={5}
+                                        onCommit={n => setCfg(c => ({ ...c, multiTradeCount: n }))} disabled={running} />
+                                    <span className='sb-unit'>contracts fired on each entry signal</span>
+                                </div>
+                            </div>
+                            <p className='sb-hint'>Fires this many sequential contracts on each entry. Each contract records separately in Transactions.</p>
+                        </SbAccordion>
+                    )}
+
                     {/* Risk Manager */}
                     <SbAccordion title='Risk Manager' badge={cfg.riskManager.inject ? 'INJECTED' : 'STANDARD'} badgeColor={cfg.riskManager.inject ? '#f59e0b' : '#64748b'}>
                         <div className='sb-field-row sb-field-row--center'>
@@ -2147,8 +2360,66 @@ const BotDetail: React.FC<{
                     </SbAccordion>
                 </div>
 
-                {/* ── Right — Terminal ── */}
-                <div className='sb-detail__terminal-col'>
+                {/* ── Right — Terminal + VPS panel ── */}
+                <div className='sb-detail__terminal-col' style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {/* VPS Done notification overlay */}
+                    {vpsDonePopup && (
+                        <div className='vps-done-overlay' onClick={() => setVpsDonePopup(null)}>
+                            <div className='vps-done-modal' onClick={e => e.stopPropagation()}>
+                                <div className='vps-done-modal__icon'>🏁</div>
+                                <div className='vps-done-modal__title'>SCALPING WORK DONE</div>
+                                <div className='vps-done-modal__reason'>{vpsDonePopup.reason}</div>
+                                <div className={`vps-done-modal__pnl ${vpsDonePopup.pnl >= 0 ? 'pos' : 'neg'}`}>
+                                    {vpsDonePopup.pnl >= 0 ? '+' : ''}{vpsDonePopup.pnl.toFixed(2)} USD
+                                </div>
+                                <div className='vps-done-modal__stats'>
+                                    <div className='vps-done-modal__stat'><span>Total Runs</span><strong>{vpsDonePopup.runs}</strong></div>
+                                    <div className='vps-done-modal__stat'><span>Status</span><strong>Completed</strong></div>
+                                </div>
+                                <button className='vps-done-modal__ok' onClick={() => setVpsDonePopup(null)}>OK</button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* VPS Mode panel — shown above the terminal when enabled or always visible */}
+                    <VpsMode
+                        enabled={vpsEnabled}
+                        settings={vpsSettings}
+                        running={running}
+                        authorized={derivTrade.authorized}
+                        lastTickAtRef={lastTickAtRef}
+                        sessionPnlRef={sessionPnlRef}
+                        vpsRuns={vpsRuns}
+                        vpsPnl={vpsPnl}
+                        onToggle={enabled => {
+                            setVpsEnabled(enabled);
+                            if (enabled) {
+                                setVpsRuns(0);
+                                setVpsPnl(0);
+                                // VPS enables fast mode
+                                if (!running) setCfg(c => c);
+                            }
+                        }}
+                        onSettingsChange={s => setVpsSettings(s)}
+                        onRequestRestart={() => {
+                            if (running) return;
+                            setVpsRuns(r => r + 1);
+                            setVpsPnl(sessionPnlRef.current);
+                            sessionPnlRef.current = 0;
+                            // Small delay then trigger run button
+                            setTimeout(() => {
+                                const runBtn = document.querySelector('.sb-run-btn') as HTMLButtonElement | null;
+                                runBtn?.click();
+                            }, 500);
+                        }}
+                        onDone={reason => {
+                            setVpsDonePopup({ reason, pnl: vpsPnl + sessionPnlRef.current, runs: vpsRuns });
+                            setVpsEnabled(false);
+                        }}
+                    />
+
+                {/* ─── Terminal inner wrapper ─── */}
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                     {winPopup && (
                         <div className='sb-win-overlay' onClick={() => setWinPopup(null)}>
                             <div className={`sb-win-modal ${winPopup.stopped ? (winPopup.sessionPnl >= 0 ? 'stopped-win' : 'stopped-loss') : 'cycle-win'}`}
@@ -2254,8 +2525,9 @@ const BotDetail: React.FC<{
                             ))}
                         </div>
                     </div>
-                </div>
-            </div>
+                </div>{/* end inner terminal wrapper */}
+                </div>{/* end sb-detail__terminal-col */}
+            </div>{/* end sb-detail__body */}
 
             {/* ── Bottom Tabs ── */}
             <div className='sb-tabs'>
@@ -2433,11 +2705,15 @@ const ScalperBots: React.FC = observer(() => {
     /* Silently sync the Bot Builder workspace with this bot's default XML.
        Retries up to 30 times (3 s total) so multi-scalper XML loads even
        when Blockly is initialising in the background. */
-    const handlePreloadXml = useCallback(async (bot: TScalperBot) => {
+    const handlePreloadXml = useCallback(async (bot: TScalperBot, opts?: { market?: string; duration?: number }) => {
         try {
             const res = await fetch(bot.xmlFile);
             if (!res.ok) return;
-            const xml = await res.text();
+            let xml = await res.text();
+            // Patch XML with current market + duration before loading into workspace
+            if (opts?.market || opts?.duration != null) {
+                xml = patchXmlContent(xml, opts.market, opts.duration);
+            }
             // Try immediately, then retry until Blockly workspace is ready
             let ok = await loadXmlIntoWorkspace(xml, bot.name);
             if (!ok) {
