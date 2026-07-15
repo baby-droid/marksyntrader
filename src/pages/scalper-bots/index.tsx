@@ -562,9 +562,10 @@ function describeConditionFired(
     digits: number[],
     inRecovery: boolean,
     isAnd: boolean,
+    offset = 0,
 ): string {
     const reqCount = inRecovery ? (cond.recoveryLimit ?? 1) : cond.ifLast;
-    const window = digits.slice(0, reqCount);
+    const window = digits.slice(offset, offset + reqCount);
     const tag = isAnd ? 'AND' : 'IF';
 
     switch (cond.algorithm) {
@@ -625,6 +626,22 @@ function describeBuyAction(contractType: string, prediction: number | null): str
    recoveryLimit — e.g. Over 2 normally needs 2 consecutive Under-2 digits
    to enter, but after a loss it only needs `recoveryLimit` (e.g. 1) so it
    recovers faster, while the contract type/barrier stay exactly the same. */
+/* Per-group digit-window offset: NDP represents "the digit right now" (the
+   freshest ticks), while every other algorithm in the same group (LDP, etc.)
+   represents the streak that happened BEFORE that — so it must be evaluated
+   further back in the digit history, not overlapping the NDP window.
+   e.g. pattern 0,1,4 (oldest→newest): LDP "last 2 under 3" matches 0,1 and
+   NDP "next digit over 2" matches 4 — LDP is offset by NDP's window size so
+   the two windows are adjacent, not overlapping on the same latest digits. */
+function ndpWindowFor(g: StrategyOrGroup, inRecovery: boolean): number {
+    return g.conditions
+        .filter(c => c.algorithm === 'NDP')
+        .reduce((sum, c) => sum + Math.max(1, inRecovery ? (c.recoveryLimit ?? 1) : c.ifLast), 0);
+}
+function offsetFor(cond: StrategyCondition, ndpWindow: number): number {
+    return cond.algorithm !== 'NDP' ? ndpWindow : 0;
+}
+
 function evaluateStrategyLogic(
     digits: number[],
     groups: StrategyOrGroup[],
@@ -632,10 +649,14 @@ function evaluateStrategyLogic(
     ctx?: { prices: number[]; contractType: string; prediction: number | null },
 ): { hit: boolean; group?: StrategyOrGroup } {
     for (const g of groups) {
+        const ndpWindow = ndpWindowFor(g, inRecovery);
         // All conditions in the group must pass (AND logic)
-        const allPass = g.conditions.every(cond =>
-            evaluateSingleCondition(digits, cond, inRecovery ? cond.recoveryLimit : cond.ifLast, ctx)
-        );
+        const allPass = g.conditions.every(cond => {
+            const offset = offsetFor(cond, ndpWindow);
+            const slice = offset > 0 ? digits.slice(offset) : digits;
+            const priceOffset = ctx && offset > 0 ? { ...ctx, prices: ctx.prices.slice(offset) } : ctx;
+            return evaluateSingleCondition(slice, cond, inRecovery ? cond.recoveryLimit : cond.ifLast, priceOffset);
+        });
         if (allPass) return { hit: true, group: g };
     }
     return { hit: false };
@@ -1218,9 +1239,12 @@ const BotDetail: React.FC<{
         setTerminal([]);
         setWinPopup(null);
 
-        /* Determine market list */
+        /* Determine market list — the MARKET field in Trade Parameters is always the
+           starting market; the Market Switcher's added markets are additional
+           rotation targets that come after it (deduped so it isn't repeated). */
         const marketList = cfg.useMarketSwitch && cfg.markets.length > 0
-            ? [...cfg.markets] : [cfg.market];
+            ? [cfg.market, ...cfg.markets.filter(m => m !== cfg.market)]
+            : [cfg.market];
         const multiScan = bot.category === 'Even/Odd' && cfg.strategyLogic.active
             && cfg.useMarketSwitch && marketList.length > 1;
         let curMarketIdx = 0;
@@ -1371,8 +1395,9 @@ const BotDetail: React.FC<{
                                 if (inRecovery) {
                                     addLog(`🔄 RECOVERY MODE — relaxed entry (recovery limit used instead of ifLast)`, 'switch');
                                 }
+                                const ndpWindow = ndpWindowFor(r.group, inRecovery);
                                 r.group.conditions.forEach((cond, idx) => {
-                                    const desc = describeConditionFired(cond, digitWindowRef.current, inRecovery, idx > 0);
+                                    const desc = describeConditionFired(cond, digitWindowRef.current, inRecovery, idx > 0, offsetFor(cond, ndpWindow));
                                     addLog(`  ${idx === 0 ? '📋' : '     ↳'} ${desc}`, 'scan');
                                 });
                                 addLog(`  ⟹ ${describeBuyAction(bot.contractType, bot.prediction)}`, 'entry');
@@ -1426,6 +1451,7 @@ const BotDetail: React.FC<{
                         market: curMarket, action: contractLabel(bot),
                         stake: `${curStake.toFixed(2)}`, ticks: cfg.duration,
                         confidence: 82 + Math.floor(Math.random() * 16),
+                        bot: bot.name,
                     }}));
                 } catch { /* non-fatal */ }
 
@@ -2352,7 +2378,11 @@ const BotDetail: React.FC<{
                         onRequestRestart={() => {
                             if (running) return;
                             setVpsRuns(r => r + 1);
-                            setVpsPnl(sessionPnlRef.current);
+                            /* Accumulate, don't overwrite — vpsPnl must hold the running total
+                               across every VPS run (matching Summary/Transactions), or a
+                               TP/SL that only ever reflects the last run's P/L never actually
+                               triggers off the real cumulative total. */
+                            setVpsPnl(p => +(p + sessionPnlRef.current).toFixed(2));
                             sessionPnlRef.current = 0;
                             // Re-fire the terminal's own RUN handler directly — do not rely on a
                             // DOM selector (the terminal's actual class is .sb-detail__start-btn,

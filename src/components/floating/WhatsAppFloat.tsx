@@ -55,6 +55,7 @@ interface SignalRecord {
     id: number; market: string; action: string;
     entry: string; bot: string; confidence: number;
     stake: string; ticks: number; time: string; fromScalper?: boolean;
+    date?: string;
 }
 interface PairConfig {
     phone: string;
@@ -107,22 +108,31 @@ function generatePairCode(phone: string): string {
     return code;
 }
 
-/* ─── Format signal as WA message ─── */
+/* ─── Format signal as a polished WA "flyer" message.
+   Leads with the bot name (the thing the user actually asked for), then a
+   clean bordered card layout so it reads like a designed signal flyer
+   instead of a plain log line when pasted into WhatsApp. ─── */
 function formatSignalText(s: SignalRecord, tf: string): string {
     const tfLbl = TIMEFRAME_OPTS.find(o => o.value === tf)?.label ?? tf;
+    const confBar = '▰'.repeat(Math.round(s.confidence / 10)) + '▱'.repeat(10 - Math.round(s.confidence / 10));
+    const dateStr = s.date ?? new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     return (
-        `📡 *MARKSYNTRADER SIGNAL*\n` +
-        `━━━━━━━━━━━━━━━\n` +
-        `🎯 Action: *${s.action}*\n` +
-        `📊 Market: ${s.market}\n` +
-        `⏱ Timeframe: ${tfLbl}\n` +
-        `💰 Stake: ${s.stake} · ${s.ticks}T\n` +
-        `🤖 Bot: ${s.bot}\n` +
-        `✅ Confidence: ${s.confidence}%\n` +
-        `⏰ Time: ${s.time}\n` +
-        `━━━━━━━━━━━━━━━\n` +
-        `🚀 Trade this signal live on Marksyntrader:\n` +
-        `🌐 ${SITE_LINK}`
+        `╔═══════════════════╗\n` +
+        `   🚀 *MARKSYNTRADER*\n` +
+        `   ⚡ LIVE SIGNAL ALERT\n` +
+        `╚═══════════════════╝\n\n` +
+        `🤖 *Bot:* ${s.bot}\n` +
+        `📊 *Market:* ${s.market}\n` +
+        `🎯 *Action:* *${s.action}*\n` +
+        `⏱ *Timeframe:* ${tfLbl}\n` +
+        `💰 *Stake:* ${s.stake}  ·  ${s.ticks}T\n\n` +
+        `✅ *Confidence:* ${s.confidence}%\n` +
+        `${confBar}\n\n` +
+        `🗓 ${dateStr}  ⏰ ${s.time}\n` +
+        `───────────────────\n` +
+        `📲 Trade this signal live:\n` +
+        `🌐 ${SITE_LINK}\n\n` +
+        `_Signals are for informational purposes — trade responsibly._`
     );
 }
 
@@ -266,9 +276,11 @@ const WhatsAppFloat: React.FC = () => {
             if (!d) return;
             const sig: SignalRecord = {
                 id: idRef.current++, market: d.market, action: d.action,
-                entry: '—', bot: 'Scalper Terminal',
+                entry: '—', bot: d.bot || 'Scalper Terminal',
                 confidence: d.confidence ?? 85, stake: d.stake,
-                ticks: d.ticks, time: new Date().toLocaleTimeString(), fromScalper: true,
+                ticks: d.ticks, time: new Date().toLocaleTimeString(),
+                date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+                fromScalper: true,
             };
             setSignals(prev => [sig, ...prev].slice(0, 8));
             setFlash(true); setTimeout(() => setFlash(false), 900);

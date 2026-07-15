@@ -123,9 +123,14 @@ const VpsMode: React.FC<VpsModeProps> = ({
         prevRunningRef.current = running;
 
         if (wasRunning && !running && !doneRef.current && !restartPendingRef.current) {
-            /* Bot just stopped — check VPS limits before restarting */
+            /* Bot just stopped — check VPS limits before restarting.
+               vpsPnl is the cumulative total from all PRIOR runs; the run that
+               just ended hasn't been flushed into it yet (that happens in
+               onRequestRestart), so it must be added in here or TP/SL checks
+               would always be one run behind the real total shown in
+               Summary/Transactions. */
             const nextRuns = vpsRuns + 1;
-            const pnl = vpsPnl;
+            const pnl = vpsPnl + sessionPnlRef.current;
 
             const tpHit = settings.takeProfit > 0 && pnl >= settings.takeProfit;
             const slHit = settings.stopLoss > 0 && pnl <= -Math.abs(settings.stopLoss);
