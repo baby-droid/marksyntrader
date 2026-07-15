@@ -10,6 +10,8 @@ description: NDP is now a per-condition Algorithm option (not a global accordion
 
 **Why:** user wants NDP to behave like a first-class selectable strategy, not an always-on secondary gate stacked on every other algorithm.
 
+**Update:** user later asked for NDP to use the exact same fields as LDP (If Last / Digits Is / Strict / Recovery Limit), not its own ldpWindow/ndpWindow pair. NDP's evaluation is now folded into the same switch-case as LDP in `evaluateSingleCondition` (identical strict/majority streak logic) — it's kept as a separate algorithm value purely so a user can add it as a second AND condition alongside an LDP condition in one OR group; the group's existing `every()` AND-logic already enforces "both LDP and NDP must be met to enter." The old two-window `checkNDP()` helper and its ctx-based special case were deleted as dead code.
+
 ## VPS auto-restart DOM-selector bug
 - `VpsMode`'s auto-restart called `document.querySelector('.sb-run-btn')` to re-click Run — but no element in the scalper bot UI ever had that class (the real button is `.sb-detail__start-btn` calling the component's own `startBot()`). The restart silently no-op'd.
 - Fixed by calling `startBot()` directly from the `onRequestRestart` callback in `index.tsx` instead of a DOM query.
