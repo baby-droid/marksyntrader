@@ -53,8 +53,8 @@ type DigitsIsType = typeof DIGITS_IS_OPTIONS[number];
 
 const IF_LAST_OPTIONS = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20];
 
-/* ── The 5 analysis algorithms available in the OR Group conditions ── */
-const ALGORITHM_OPTIONS = ['LDP', 'Market Percentage', 'Sequence Radar', 'Complex Patterns', 'Entry Point Pattern'] as const;
+/* ── The 6 analysis algorithms available in the OR Group conditions ── */
+const ALGORITHM_OPTIONS = ['LDP', 'Market Percentage', 'Sequence Radar', 'Complex Patterns', 'Entry Point Pattern', 'NDP'] as const;
 type AlgorithmType = typeof ALGORITHM_OPTIONS[number];
 
 /** A single strategy sub-condition (one row in the UI).
@@ -76,6 +76,9 @@ type StrategyCondition = {
     complexPattern: 'high-low' | 'low-high' | 'ramp-up' | 'ramp-down' | 'spike';
     // ── Entry Point Pattern extras ──
     sensitivity: 'low' | 'medium' | 'high';
+    // ── NDP (Next Digit Prediction) extras ──
+    ldpWindow: number;   // older ticks confirming the LDP streak
+    ndpWindow: number;   // newest ticks confirming the reversal has started
 };
 
 /** One OR group — all its conditions must pass (AND within the group). */
@@ -103,12 +106,6 @@ type Market2Config = {
     barrier: number;
 };
 
-type NdpConfig = {
-    enabled: boolean;
-    ldpWindow: number;   // LDP streak window (older digits confirming the streak)
-    ndpWindow: number;   // NDP window (newest digits confirming reversal start)
-};
-
 type BotConfig = {
     market: string;
     markets: string[];
@@ -127,7 +124,6 @@ type BotConfig = {
     riskManager: RiskManagerConfig;
     strategyLogic: StrategyLogicConfig;
     market2: Market2Config;
-    ndp: NdpConfig;
     multiTradeCount: number; // number of contracts to fire on each entry (multiple bots)
 };
 
@@ -147,6 +143,8 @@ const COND_DEFAULTS = {
     sequenceType: 'alternating' as const,
     complexPattern: 'high-low' as const,
     sensitivity: 'medium' as const,
+    ldpWindow: 7,
+    ndpWindow: 2,
 };
 
 let sbCondSeq = 0;
@@ -217,11 +215,6 @@ const DEFAULT_CONFIG = (bot: TScalperBot): BotConfig => ({
         stakeOverride: 20,
         takeProfit: 100,
         barrier: bot.prediction ?? 5,
-    },
-    ndp: {
-        enabled: false,
-        ldpWindow: 7,
-        ndpWindow: 2,
     },
     multiTradeCount: bot.multiple ? 3 : 1,
 });
@@ -422,7 +415,19 @@ function buildMatchFn(cond: StrategyCondition): (d: number, prev: number | null)
 /* ─── Single-condition evaluation — all 5 algorithms ───
    requiredCount: normally cond.ifLast; during recovery the caller passes
    cond.recoveryLimit so re-entry is faster while contract type stays locked. */
-function evaluateSingleCondition(digits: number[], cond: StrategyCondition, requiredCount?: number): boolean {
+function evaluateSingleCondition(
+    digits: number[],
+    cond: StrategyCondition,
+    requiredCount?: number,
+    ctx?: { prices: number[]; contractType: string; prediction: number | null },
+): boolean {
+    /* ── NDP (Next Digit Prediction) ── evaluated on the raw digit/price windows
+       (its own ldpWindow+ndpWindow define the analysis size, not `ifLast`). */
+    if (cond.algorithm === 'NDP') {
+        if (!ctx) return false;
+        return checkNDP(digits, ctx.prices, ctx.contractType, ctx.prediction, cond.ldpWindow ?? 7, cond.ndpWindow ?? 2);
+    }
+
     const n = Math.max(1, requiredCount ?? cond.ifLast);
     if (digits.length < n) return false;
     const recent = digits.slice(0, n);
@@ -595,6 +600,10 @@ function describeConditionFired(
             const n = sn[cond.sensitivity ?? 'medium'] ?? 3;
             return `${tag} Entry Point (${cond.sensitivity ?? 'medium'} sensitivity): ${n}-tick reversal pressure from ${cond.digitsIs} [${window.join(',')}]`;
         }
+        case 'NDP': {
+            const ldpW = cond.ldpWindow ?? 7, ndpW = cond.ndpWindow ?? 2;
+            return `${tag} NDP: LDP streak confirmed over ${ldpW} older ticks, reversal confirmed over newest ${ndpW} tick(s)`;
+        }
         default: return `${tag} condition matched`;
     }
 }
@@ -620,11 +629,16 @@ function describeBuyAction(contractType: string, prediction: number | null): str
    recoveryLimit — e.g. Over 2 normally needs 2 consecutive Under-2 digits
    to enter, but after a loss it only needs `recoveryLimit` (e.g. 1) so it
    recovers faster, while the contract type/barrier stay exactly the same. */
-function evaluateStrategyLogic(digits: number[], groups: StrategyOrGroup[], inRecovery = false): { hit: boolean; group?: StrategyOrGroup } {
+function evaluateStrategyLogic(
+    digits: number[],
+    groups: StrategyOrGroup[],
+    inRecovery = false,
+    ctx?: { prices: number[]; contractType: string; prediction: number | null },
+): { hit: boolean; group?: StrategyOrGroup } {
     for (const g of groups) {
         // All conditions in the group must pass (AND logic)
         const allPass = g.conditions.every(cond =>
-            evaluateSingleCondition(digits, cond, inRecovery ? cond.recoveryLimit : cond.ifLast)
+            evaluateSingleCondition(digits, cond, inRecovery ? cond.recoveryLimit : cond.ifLast, ctx)
         );
         if (allPass) return { hit: true, group: g };
     }
@@ -636,19 +650,22 @@ function groupRecoveryLimit(g: StrategyOrGroup): number {
     return Math.min(...g.conditions.map(c => c.recoveryLimit));
 }
 
-/* ─── NDP (Next Digit Prediction) ─── */
+/* ─── NDP (Next Digit Prediction) ───
+   Now selectable directly from the Algorithm dropdown (like LDP, Market
+   Percentage, etc.) instead of a separate global gate — ldpWindow/ndpWindow
+   live on the condition itself. */
 function checkNDP(
     digits: number[],
     prices: number[],
     contractType: string,
     prediction: number | null,
-    ndp: NdpConfig,
+    ldpWindow: number,
+    ndpWindow: number,
 ): boolean {
-    if (!ndp.enabled) return true;
-    const total = ndp.ldpWindow + ndp.ndpWindow;
+    const total = ldpWindow + ndpWindow;
     if (digits.length < total) return false;
-    const ndpDigits = digits.slice(0, ndp.ndpWindow);          // newest digits (NDP reversal check)
-    const ldpDigits = digits.slice(ndp.ndpWindow, total);       // older digits (LDP streak)
+    const ndpDigits = digits.slice(0, ndpWindow);          // newest digits (NDP reversal check)
+    const ldpDigits = digits.slice(ndpWindow, total);       // older digits (LDP streak)
     const bar = prediction ?? 5;
 
     switch (contractType) {
@@ -690,8 +707,8 @@ function checkNDP(
         case 'CALL': {
             // Rise: LDP = falling prices, NDP = price turning upward
             if (prices.length < total + 1) return true;
-            const ldpPrices = prices.slice(ndp.ndpWindow, total + 1);
-            const ndpPrices = prices.slice(0, ndp.ndpWindow + 1);
+            const ldpPrices = prices.slice(ndpWindow, total + 1);
+            const ndpPrices = prices.slice(0, ndpWindow + 1);
             const ldpFalling = ldpPrices.every((p, i) => i === 0 || p <= ldpPrices[i - 1]);
             const ndpRising = ndpPrices.length >= 2 && ndpPrices[0] > ndpPrices[ndpPrices.length - 1];
             return ldpFalling && ndpRising;
@@ -699,8 +716,8 @@ function checkNDP(
         case 'PUT': {
             // Fall: LDP = rising prices, NDP = price turning downward
             if (prices.length < total + 1) return true;
-            const ldpPrices = prices.slice(ndp.ndpWindow, total + 1);
-            const ndpPrices = prices.slice(0, ndp.ndpWindow + 1);
+            const ldpPrices = prices.slice(ndpWindow, total + 1);
+            const ndpPrices = prices.slice(0, ndpWindow + 1);
             const ldpRising = ldpPrices.every((p, i) => i === 0 || p >= ldpPrices[i - 1]);
             const ndpFalling = ndpPrices.length >= 2 && ndpPrices[0] < ndpPrices[ndpPrices.length - 1];
             return ldpRising && ndpFalling;
@@ -1201,7 +1218,7 @@ const BotDetail: React.FC<{
                 const win = [d, ...(multiWindowsRef.current.get(market) || [])].slice(0, 50);
                 multiWindowsRef.current.set(market, win);
                 if (!readyMarketRef.current) {
-                    const r = evaluateStrategyLogic(win, cfg.strategyLogic.groups);
+                    const r = evaluateStrategyLogic(win, cfg.strategyLogic.groups, false, { prices: [], contractType: bot.contractType, prediction: bot.prediction });
                     if (r.hit) {
                         readyMarketRef.current = market;
                         lastFiredGroupRef.current = r.group ?? null;
@@ -1403,7 +1420,7 @@ const BotDetail: React.FC<{
                         }
                     } else if (cfg.strategyLogic.active && cfg.strategyLogic.groups.length > 0) {
                         const inRecovery = totalConsLoss > 0;
-                        const r = evaluateStrategyLogic(digitWindowRef.current, cfg.strategyLogic.groups, inRecovery);
+                        const r = evaluateStrategyLogic(digitWindowRef.current, cfg.strategyLogic.groups, inRecovery, { prices: priceWindowRef.current, contractType: bot.contractType, prediction: bot.prediction });
                         if (r.hit) {
                             lastFiredGroupRef.current = r.group ?? null;
                             /* ── Plain-English condition interpretation in terminal ── */
@@ -1426,8 +1443,7 @@ const BotDetail: React.FC<{
                         addLog('⚡ FAST_EXEC: immediate entry (scan bypassed)', 'entry');
                         entry = true;
                     } else {
-                        entry = checkEntry(digitWindowRef.current, bot.contractType, bot.prediction, priceWindowRef.current)
-                            && checkNDP(digitWindowRef.current, priceWindowRef.current, bot.contractType, bot.prediction, cfg.ndp);
+                        entry = checkEntry(digitWindowRef.current, bot.contractType, bot.prediction, priceWindowRef.current);
                     }
                     scanTick++;
 
@@ -1977,29 +1993,55 @@ const BotDetail: React.FC<{
                                                         {cond.algorithm === 'Sequence Radar' && 'Pattern: detects alternating / trend / zigzag sequences'}
                                                         {cond.algorithm === 'Complex Patterns' && 'Multi-phase: compares first vs second half of window'}
                                                         {cond.algorithm === 'Entry Point Pattern' && 'Reversal: pressure-based entry from sensitivity streak'}
+                                                        {cond.algorithm === 'NDP' && 'Next Digit Prediction: LDP streak confirmation + secondary reversal confirmation'}
                                                     </div>
 
-                                                    {/* Window size (If Last) */}
-                                                    <div className='sb-field-row'>
-                                                        <div className='sb-field'>
-                                                            <label>If Last (window)</label>
-                                                            <select value={cond.ifLast}
-                                                                onChange={e => conditionSet(g.id, cond.id, { ifLast: Number(e.target.value) })}
-                                                                disabled={running}>
-                                                                {IF_LAST_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
-                                                            </select>
-                                                        </div>
-                                                        {/* Strict toggle — only relevant for LDP */}
-                                                        {cond.algorithm === 'LDP' && (
-                                                            <div className='sb-field-row sb-field-row--center'>
-                                                                <label>Strict</label>
-                                                                <button className={`sb-toggle ${cond.strict ? 'on' : 'off'}`}
-                                                                    onClick={() => conditionSet(g.id, cond.id, { strict: !cond.strict })} disabled={running}>
-                                                                    {cond.strict ? 'ON' : 'OFF'}
-                                                                </button>
+                                                    {/* Window size (If Last) — not used by NDP, which has its own LDP/NDP windows below */}
+                                                    {cond.algorithm !== 'NDP' && (
+                                                        <div className='sb-field-row'>
+                                                            <div className='sb-field'>
+                                                                <label>If Last (window)</label>
+                                                                <select value={cond.ifLast}
+                                                                    onChange={e => conditionSet(g.id, cond.id, { ifLast: Number(e.target.value) })}
+                                                                    disabled={running}>
+                                                                    {IF_LAST_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
+                                                                </select>
                                                             </div>
-                                                        )}
-                                                    </div>
+                                                            {/* Strict toggle — only relevant for LDP */}
+                                                            {cond.algorithm === 'LDP' && (
+                                                                <div className='sb-field-row sb-field-row--center'>
+                                                                    <label>Strict</label>
+                                                                    <button className={`sb-toggle ${cond.strict ? 'on' : 'off'}`}
+                                                                        onClick={() => conditionSet(g.id, cond.id, { strict: !cond.strict })} disabled={running}>
+                                                                        {cond.strict ? 'ON' : 'OFF'}
+                                                                    </button>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+
+                                                    {/* NDP — Next Digit Prediction fields (LDP streak window + reversal window) */}
+                                                    {cond.algorithm === 'NDP' && (
+                                                        <>
+                                                            <div className='sb-field-row'>
+                                                                <div className='sb-field'>
+                                                                    <label>LDP Window</label>
+                                                                    <NumberField value={cond.ldpWindow ?? 7} min={2} max={20}
+                                                                        onCommit={n => conditionSet(g.id, cond.id, { ldpWindow: n })} disabled={running} />
+                                                                    <span className='sb-unit'>older ticks (LDP streak)</span>
+                                                                </div>
+                                                                <div className='sb-field'>
+                                                                    <label>NDP Window</label>
+                                                                    <NumberField value={cond.ndpWindow ?? 2} min={1} max={10}
+                                                                        onCommit={n => conditionSet(g.id, cond.id, { ndpWindow: n })} disabled={running} />
+                                                                    <span className='sb-unit'>newest ticks (reversal start)</span>
+                                                                </div>
+                                                            </div>
+                                                            <p className='sb-hint' style={{ marginTop: 2 }}>
+                                                                After the LDP streak is confirmed over {cond.ldpWindow ?? 7} older ticks, NDP checks the newest {cond.ndpWindow ?? 2} tick(s) for the opposite streak starting — a secondary reversal confirmation per contract type.
+                                                            </p>
+                                                        </>
+                                                    )}
 
                                                     {/* Algorithm-specific fields */}
                                                     {(cond.algorithm === 'LDP' || cond.algorithm === 'Market Percentage' || cond.algorithm === 'Entry Point Pattern') && (
@@ -2106,39 +2148,6 @@ const BotDetail: React.FC<{
                                     <button className='sb-add-condition-btn' onClick={addGroup}>+ ADD OR GROUP</button>
                                 )}
                                 <p className='sb-hint'>When the condition is true, the terminal fires the XML trading activator and executes the trade automatically.</p>
-                            </>
-                        )}
-                    </SbAccordion>
-
-                    {/* NDP — Next Digit Prediction */}
-                    <SbAccordion title='🔮 NDP — Next Digit Prediction' badge={cfg.ndp.enabled ? 'ACTIVE' : 'OFF'} badgeColor={cfg.ndp.enabled ? '#a78bfa' : '#64748b'}>
-                        <div className='sb-field-row sb-field-row--center'>
-                            <label>Enable NDP</label>
-                            <button className={`sb-toggle ${cfg.ndp.enabled ? 'on' : 'off'}`}
-                                onClick={() => setCfg(c => ({ ...c, ndp: { ...c.ndp, enabled: !c.ndp.enabled } }))} disabled={running}>
-                                {cfg.ndp.enabled ? 'ACTIVE' : 'INACTIVE'}
-                            </button>
-                        </div>
-                        {cfg.ndp.enabled && (
-                            <>
-                                <p className='sb-hint'>After LDP fires, NDP checks the <strong>opposite streak</strong> has started — a secondary reversal confirmation per contract type.</p>
-                                <div className='sb-field-row'>
-                                    <div className='sb-field'>
-                                        <label>LDP Window</label>
-                                        <NumberField value={cfg.ndp.ldpWindow} min={2} max={20}
-                                            onCommit={n => setCfg(c => ({ ...c, ndp: { ...c.ndp, ldpWindow: n } }))} disabled={running} />
-                                        <span className='sb-unit'>older ticks (LDP streak)</span>
-                                    </div>
-                                    <div className='sb-field'>
-                                        <label>NDP Window</label>
-                                        <NumberField value={cfg.ndp.ndpWindow} min={1} max={10}
-                                            onCommit={n => setCfg(c => ({ ...c, ndp: { ...c.ndp, ndpWindow: n } }))} disabled={running} />
-                                        <span className='sb-unit'>newest ticks (reversal start)</span>
-                                    </div>
-                                </div>
-                                <p className='sb-hint' style={{ marginTop: 2 }}>
-                                    e.g. OVER 7: LDP checks last {cfg.ndp.ldpWindow} digits ≤7 (streak met), NDP checks newest {cfg.ndp.ndpWindow} digit(s) &gt;7 (reversal confirmed).
-                                </p>
                             </>
                         )}
                     </SbAccordion>
@@ -2406,10 +2415,11 @@ const BotDetail: React.FC<{
                             setVpsRuns(r => r + 1);
                             setVpsPnl(sessionPnlRef.current);
                             sessionPnlRef.current = 0;
-                            // Small delay then trigger run button
+                            // Re-fire the terminal's own RUN handler directly — do not rely on a
+                            // DOM selector (the terminal's actual class is .sb-detail__start-btn,
+                            // not .sb-run-btn, so a querySelector click here would silently no-op).
                             setTimeout(() => {
-                                const runBtn = document.querySelector('.sb-run-btn') as HTMLButtonElement | null;
-                                runBtn?.click();
+                                if (!running && derivTrade.authorized) startBot();
                             }, 500);
                         }}
                         onDone={reason => {
