@@ -13,6 +13,13 @@ description: NDP next-digit prediction, VPS mode auto-restart, 3-contract multip
 
 **Why:** Secondary confirmation layer — LDP fires first (streak of opposite digits), NDP checks reversal has started.
 
+## TRADE_STALL after a loss (any XML) — dead trade_again block
+All 41 scalper XMLs in `public/bots/scalpers/` had a `trade_again` block queued in the `after_purchase` loss (ELSE) branch, right after updating the martingale stake variable. The terminal (`index.tsx`) is the sole owner of the retry/martingale loop and force-stops the XML bot via `onStopButtonClick()` on every loss — but if the XML's own `trade_again` fired before that stop landed, the bot engine could re-enter a purchase with stale state, leaving the terminal's next `onRunButtonClick()` call to never produce a `bot.contract`/`bot.stop` event — surfacing as a 45s `TRADE_STALL`. It didn't reproduce on every loss (race timing), which made it look tied to a specific loss count. Fixed by stripping `<next><block type="trade_again">...</block></next>` from every scalper XML.
+
+**Why:** dual ownership of "what happens after a loss" (terminal force-stop AND XML self-retry) is a race condition by construction.
+
+**How to apply:** any new/edited scalper XML's `after_purchase` loss branch must only update the martingale stake variable — never include a `trade_again` block. Grep `public/bots/scalpers/*.xml` for `trade_again` to confirm none exist.
+
 ## VPS Mode
 - `VpsMode.tsx` at `src/pages/scalper-bots/VpsMode.tsx`.
 - Props: `enabled, settings (numRuns/takeProfit/stopLoss), running, authorized, lastTickAtRef, sessionPnlRef, vpsRuns, vpsPnl, onToggle, onSettingsChange, onRequestRestart, onDone`.

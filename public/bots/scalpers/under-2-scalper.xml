@@ -146,9 +146,6 @@
                   </value>
                 </block>
               </value>
-              <next>
-                <block type="trade_again" id="aplosstradeagain1"></block>
-              </next>
             </block>
           </statement>
         </block>
