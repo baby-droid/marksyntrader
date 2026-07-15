@@ -872,12 +872,19 @@ const BotDetail: React.FC<{
         market: string; stake: number; martingale: number; prediction: number | null;
         consecutiveLossLimit: number; stopOnLoss: boolean; tpGuard: boolean;
         takeProfit: number; stopLoss: number; sessionPnlRef: { current: number };
+        /* Consecutive-loss count carried in from the outer scan loop BEFORE this
+           cycle's trade. Each cycle only ever settles ONE contract (the bot is
+           force-stopped on every loss — see onContract below), so seeding from
+           this value is what lets the martingale/consecutive-loss chain survive
+           across cycles, market switches, and market-2 fallbacks instead of
+           resetting to 0/1 every single trade. */
+        priorConsLoss?: number;
         onSettled: (info: { profit: number; won: boolean; market: string; buyPrice: number; exitDigit: number | null; consLoss: number }) => void;
         onLog: (msg: string, kind?: string) => void;
     }): Promise<{ forceStopped: boolean; reason: 'tp' | 'sl' | 'loss_limit' | null; cycleProfit: number; consLoss: number; lastWon: boolean }> => {
         return new Promise(resolve => {
             const rp: any = store?.run_panel;
-            if (!rp?.onRunButtonClick) { resolve({ forceStopped: false, reason: null, cycleProfit: 0, consLoss: 0, lastWon: true }); return; }
+            if (!rp?.onRunButtonClick) { resolve({ forceStopped: false, reason: null, cycleProfit: 0, consLoss: params.priorConsLoss || 0, lastWon: true }); return; }
 
             patchWorkspaceParams({
                 market: params.market, stake: params.stake,
@@ -886,7 +893,7 @@ const BotDetail: React.FC<{
 
             const seen = new Set<number | string>();
             let cycleProfit = 0;
-            let consLoss = 0;
+            let consLoss = params.priorConsLoss || 0;
             let lastWon = true;   // updated on every settled contract; false = last trade was a loss
             let forceStopped = false;
             let reason: 'tp' | 'sl' | 'loss_limit' | null = null;
@@ -1452,6 +1459,11 @@ const BotDetail: React.FC<{
                         stopOnLoss: cfg.stopOnLoss || !!lastFiredGroupRef.current,
                         tpGuard: cfg.tpGuard, takeProfit: slotTakeProfit(), stopLoss: cfg.stopLoss,
                         sessionPnlRef,
+                        /* Seed with the running total so a loss here extends the SAME
+                           consecutive-loss chain the outer loop has been tracking —
+                           across trades, across market switches, and across market-2
+                           fallback — instead of restarting the count from this cycle. */
+                        priorConsLoss: totalConsLoss,
                         onLog: (msg, kind) => addLog(`${contractTag}${msg}`, kind),
                         onSettled: ({ profit, won, market: mkt, buyPrice, exitDigit, consLoss }) => {
                             lastBuyPrice = buyPrice;
@@ -1468,6 +1480,10 @@ const BotDetail: React.FC<{
                                 addLog(`${contractTag}✅ WIN  +${profit.toFixed(2)} USD  |  P/L: ${pnlStr}`, 'win');
                             } else {
                                 lossesRef.current++;
+                                /* consLoss is now the TRUE running consecutive-loss count
+                                   (seeded via priorConsLoss above), not a per-trade 0/1 —
+                                   this is what lets martingale keep escalating loss after
+                                   loss until a win, even across a market switch. */
                                 consLossRef.current = consLoss;
                                 totalConsLoss = consLoss;
                                 const nextStake = computeNextStake(consLoss, buyPrice);
