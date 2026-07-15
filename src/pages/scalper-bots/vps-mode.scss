@@ -104,8 +104,11 @@
 
 /* VPS Log */
 .vps-panel__log {
-  flex: 1; overflow-y: auto; padding: 5px 6px;
-  max-height: 280px; min-height: 60px;
+  /* Fixed height (not flex/min/max) so the panel never grows with the log —
+     it always renders at the same default size; overflow scrolls internally
+     and old entries are dropped in state (see addLog's slice(0,10)) rather
+     than pushing the box taller. */
+  flex: none; height: 180px; overflow-y: auto; padding: 5px 6px;
   font-family: 'Courier New', Courier, monospace;
   display: flex; flex-direction: column; gap: 1px;
   scrollbar-width: thin; scrollbar-color: rgba(99,102,241,0.3) transparent;
@@ -114,6 +117,7 @@
 .vps-log-line {
   font-size: 0.63rem; line-height: 1.4; padding: 1px 2px; border-radius: 3px;
   color: rgba(255,255,255,0.55);
+  white-space: normal; word-break: normal; overflow-wrap: break-word; /* wrap by word, never mid-word */
   &.info    { color: rgba(255,255,255,0.55); }
   &.start   { color: #22c55e; }
   &.stop    { color: #f87171; }

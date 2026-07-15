@@ -36,6 +36,7 @@ interface VpsModeProps {
     onToggle: (enabled: boolean) => void;
     onSettingsChange: (s: VpsSettings) => void;
     onRequestRestart: () => void;
+    onForceReconnect: () => void;
     onDone: (reason: string) => void;
 }
 
@@ -43,7 +44,7 @@ const VpsMode: React.FC<VpsModeProps> = ({
     enabled, settings, running, authorized,
     lastTickAtRef, sessionPnlRef,
     vpsRuns, vpsPnl,
-    onToggle, onSettingsChange, onRequestRestart, onDone,
+    onToggle, onSettingsChange, onRequestRestart, onForceReconnect, onDone,
 }) => {
     const [log, setLog]               = useState<{ t: string; msg: string; kind: string }[]>([]);
     const [status, setStatus]         = useState<VpsStatusInfo>({ accountOk: false, internetOk: true, terminalAlive: true, speed: 0 });
@@ -55,11 +56,15 @@ const VpsMode: React.FC<VpsModeProps> = ({
     const prevRunningRef              = useRef(running);
     const restartPendingRef           = useRef(false);
     const doneRef                     = useRef(false);
+    const lastReconnectAttemptRef     = useRef(0); // cooldown so we don't hammer reconnect every 10s
+    const wasStalledRef               = useRef(false);
 
     const ts = () => new Date().toLocaleTimeString('en', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
+    // Cap kept low (10) so the panel never accumulates a long scroll history —
+    // it always shows the same handful of most-recent lines at a fixed size.
     const addLog = useCallback((msg: string, kind = 'info') => {
-        setLog(prev => [{ t: ts(), msg, kind }, ...prev].slice(0, 150));
+        setLog(prev => [{ t: ts(), msg, kind }, ...prev].slice(0, 10));
     }, []);
 
     /* ─── Periodic health check ─── */
@@ -87,7 +92,22 @@ const VpsMode: React.FC<VpsModeProps> = ({
 
             if (!accountOk) addLog('⚠ ACCOUNT_DISCONNECTED — waiting for reconnect...', 'error');
             if (!internetOk) addLog('🌐 NETWORK_LOST — reconnection pending...', 'error');
-            if (!terminalAlive && running) addLog('⚠ TERMINAL_STALL: no tick in 40s — forcing restart...', 'error');
+
+            if (!terminalAlive && running) {
+                wasStalledRef.current = true;
+                const now = Date.now();
+                /* 15s cooldown between reconnect attempts — actually resubscribes
+                   the live tick feed instead of just repeating the warning every
+                   10s health-check tick, which never fixed anything on its own. */
+                if (now - lastReconnectAttemptRef.current > 15_000) {
+                    lastReconnectAttemptRef.current = now;
+                    addLog('⚠ TERMINAL_STALL: no tick in 40s — forcing reconnect...', 'error');
+                    onForceReconnect();
+                }
+            } else if (terminalAlive && wasStalledRef.current) {
+                wasStalledRef.current = false;
+                addLog('🔌 FEED_RESTORED — live ticks resumed', 'restart');
+            }
         };
 
         check();

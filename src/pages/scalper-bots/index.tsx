@@ -2305,6 +2305,18 @@ const BotDetail: React.FC<{
                             }
                         }}
                         onSettingsChange={s => setVpsSettings(s)}
+                        onForceReconnect={() => {
+                            // Real feed reconnect (not just a log message) — resubscribes the
+                            // live tick stream for the market currently being scanned so the
+                            // terminal actually recovers from a stalled feed, instead of just
+                            // repeating the stall warning forever.
+                            try {
+                                if (tickUnsubRef.current) { tickUnsubRef.current(); tickUnsubRef.current = null; }
+                                subscribeMarket(curMarketRef.current);
+                                lastTickAtRef.current = Date.now();
+                                lastReconnectAtRef.current = Date.now();
+                            } catch { /* retried again by the next VPS health check */ }
+                        }}
                         onRequestRestart={() => {
                             if (running) return;
                             setVpsRuns(r => r + 1);
