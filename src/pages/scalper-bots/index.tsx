@@ -76,9 +76,6 @@ type StrategyCondition = {
     complexPattern: 'high-low' | 'low-high' | 'ramp-up' | 'ramp-down' | 'spike';
     // ── Entry Point Pattern extras ──
     sensitivity: 'low' | 'medium' | 'high';
-    // ── NDP (Next Digit Prediction) extras ──
-    ldpWindow: number;   // older ticks confirming the LDP streak
-    ndpWindow: number;   // newest ticks confirming the reversal has started
 };
 
 /** One OR group — all its conditions must pass (AND within the group). */
@@ -143,8 +140,6 @@ const COND_DEFAULTS = {
     sequenceType: 'alternating' as const,
     complexPattern: 'high-low' as const,
     sensitivity: 'medium' as const,
-    ldpWindow: 7,
-    ndpWindow: 2,
 };
 
 let sbCondSeq = 0;
@@ -421,23 +416,21 @@ function evaluateSingleCondition(
     requiredCount?: number,
     ctx?: { prices: number[]; contractType: string; prediction: number | null },
 ): boolean {
-    /* ── NDP (Next Digit Prediction) ── evaluated on the raw digit/price windows
-       (its own ldpWindow+ndpWindow define the analysis size, not `ifLast`). */
-    if (cond.algorithm === 'NDP') {
-        if (!ctx) return false;
-        return checkNDP(digits, ctx.prices, ctx.contractType, ctx.prediction, cond.ldpWindow ?? 7, cond.ndpWindow ?? 2);
-    }
-
     const n = Math.max(1, requiredCount ?? cond.ifLast);
     if (digits.length < n) return false;
     const recent = digits.slice(0, n);
     const matchFn = buildMatchFn(cond);
 
     switch (cond.algorithm) {
-        /* ── LDP (Last Digit Pattern) ──────────────────────────────────────────
-           Strict=ON: every digit in the window must match.
-           Strict=OFF: more than half must match (majority). */
+        /* ── LDP (Last Digit Pattern) / NDP (Next Digit Prediction) ──────────────
+           Same evaluation: Strict=ON requires every digit in the window to
+           match; Strict=OFF requires a majority. NDP uses identical fields
+           (If Last / Digits Is / Strict / Recovery Limit) to LDP — it exists
+           as its own selectable algorithm so it can be added as a second,
+           independent AND condition confirming the "next" digit streak on
+           top of an LDP condition in the same OR group (both must pass). */
         case 'LDP':
+        case 'NDP':
         default: {
             if (cond.strict) {
                 let prev: number | null = null;
@@ -601,8 +594,11 @@ function describeConditionFired(
             return `${tag} Entry Point (${cond.sensitivity ?? 'medium'} sensitivity): ${n}-tick reversal pressure from ${cond.digitsIs} [${window.join(',')}]`;
         }
         case 'NDP': {
-            const ldpW = cond.ldpWindow ?? 7, ndpW = cond.ndpWindow ?? 2;
-            return `${tag} NDP: LDP streak confirmed over ${ldpW} older ticks, reversal confirmed over newest ${ndpW} tick(s)`;
+            const digitStr = window.length ? `[${window.join(',')}]` : '[…]';
+            const modeNote = inRecovery
+                ? ` ← recovery limit (${cond.recoveryLimit} digit${cond.recoveryLimit > 1 ? 's' : ''})`
+                : ` (${cond.ifLast} digits)`;
+            return `${tag} NDP: next ${reqCount} digit${reqCount > 1 ? 's' : ''} are ${cond.digitsIs}${modeNote}: ${digitStr}`;
         }
         default: return `${tag} condition matched`;
     }
@@ -648,82 +644,6 @@ function evaluateStrategyLogic(
 /* Helper: recovery limit = minimum across all conditions in the fired group */
 function groupRecoveryLimit(g: StrategyOrGroup): number {
     return Math.min(...g.conditions.map(c => c.recoveryLimit));
-}
-
-/* ─── NDP (Next Digit Prediction) ───
-   Now selectable directly from the Algorithm dropdown (like LDP, Market
-   Percentage, etc.) instead of a separate global gate — ldpWindow/ndpWindow
-   live on the condition itself. */
-function checkNDP(
-    digits: number[],
-    prices: number[],
-    contractType: string,
-    prediction: number | null,
-    ldpWindow: number,
-    ndpWindow: number,
-): boolean {
-    const total = ldpWindow + ndpWindow;
-    if (digits.length < total) return false;
-    const ndpDigits = digits.slice(0, ndpWindow);          // newest digits (NDP reversal check)
-    const ldpDigits = digits.slice(ndpWindow, total);       // older digits (LDP streak)
-    const bar = prediction ?? 5;
-
-    switch (contractType) {
-        case 'DIGITOVER': {
-            // LDP: streak of digits <= bar was present; NDP: reversal starting (digit > bar)
-            const ldpOk = ldpDigits.every(d => d <= bar);
-            const ndpOk = ndpDigits.some(d => d > bar);
-            return ldpOk && ndpOk;
-        }
-        case 'DIGITUNDER': {
-            const ldpOk = ldpDigits.every(d => d >= bar);
-            const ndpOk = ndpDigits.some(d => d < bar);
-            return ldpOk && ndpOk;
-        }
-        case 'DIGITEVEN': {
-            // LDP: ODD streak; NDP: EVEN starting
-            const ldpOk = ldpDigits.every(d => d % 2 !== 0);
-            const ndpOk = ndpDigits.some(d => d % 2 === 0);
-            return ldpOk && ndpOk;
-        }
-        case 'DIGITODD': {
-            // LDP: EVEN streak; NDP: ODD starting
-            const ldpOk = ldpDigits.every(d => d % 2 === 0);
-            const ndpOk = ndpDigits.some(d => d % 2 !== 0);
-            return ldpOk && ndpOk;
-        }
-        case 'DIGITMATCH': {
-            // LDP: digit absent (differs streak); NDP: target digit starting to appear
-            const ldpOk = ldpDigits.every(d => d !== bar);
-            const ndpOk = ndpDigits.some(d => d === bar);
-            return ldpOk && ndpOk;
-        }
-        case 'DIGITDIFF': {
-            // LDP: target digit appearing frequently; NDP: target digit disappearing (differs starting)
-            const ldpFreq = ldpDigits.filter(d => d === bar).length / ldpDigits.length;
-            const ndpOk = ndpDigits.every(d => d !== bar);
-            return ldpFreq >= 0.3 && ndpOk;
-        }
-        case 'CALL': {
-            // Rise: LDP = falling prices, NDP = price turning upward
-            if (prices.length < total + 1) return true;
-            const ldpPrices = prices.slice(ndpWindow, total + 1);
-            const ndpPrices = prices.slice(0, ndpWindow + 1);
-            const ldpFalling = ldpPrices.every((p, i) => i === 0 || p <= ldpPrices[i - 1]);
-            const ndpRising = ndpPrices.length >= 2 && ndpPrices[0] > ndpPrices[ndpPrices.length - 1];
-            return ldpFalling && ndpRising;
-        }
-        case 'PUT': {
-            // Fall: LDP = rising prices, NDP = price turning downward
-            if (prices.length < total + 1) return true;
-            const ldpPrices = prices.slice(ndpWindow, total + 1);
-            const ndpPrices = prices.slice(0, ndpWindow + 1);
-            const ldpRising = ldpPrices.every((p, i) => i === 0 || p >= ldpPrices[i - 1]);
-            const ndpFalling = ndpPrices.length >= 2 && ndpPrices[0] < ndpPrices[ndpPrices.length - 1];
-            return ldpRising && ndpFalling;
-        }
-        default: return true;
-    }
 }
 
 /* ─── Patch XML string with correct market / duration before loading ─── */
