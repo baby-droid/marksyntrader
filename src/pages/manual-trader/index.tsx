@@ -57,45 +57,51 @@ const ALL_SYMBOLS_FLAT = ALL_MARKETS.flatMap(g => g.options);
 /* ─── Contract Types ─── */
 const CONTRACT_TYPES = [
     {
-        id: 'over_under', label: 'Over/Under', icon: '🎯', hasBarrier: true,
+        id: 'over_under', label: 'Over/Under', icon: '🎯',
+        hasBarrier: true, barrierType: 'digit' as const, durationUnit: 't' as const,
         types: [
             { label: 'Over',  type: 'DIGITOVER',  color: '#22c55e', icon: '▲' },
             { label: 'Under', type: 'DIGITUNDER', color: '#ef4444', icon: '▼' },
         ],
     },
     {
-        id: 'even_odd', label: 'Even/Odd', icon: '⚖️', hasBarrier: false,
+        id: 'even_odd', label: 'Even/Odd', icon: '⚖️',
+        hasBarrier: false, barrierType: 'none' as const, durationUnit: 't' as const,
         types: [
             { label: 'Even', type: 'DIGITEVEN', color: '#3b82f6', icon: '2' },
             { label: 'Odd',  type: 'DIGITODD',  color: '#8b5cf6', icon: '1' },
         ],
     },
     {
-        id: 'match_differ', label: 'Match/Differ', icon: '🔢', hasBarrier: true,
+        id: 'match_differ', label: 'Match/Differ', icon: '🔢',
+        hasBarrier: true, barrierType: 'digit' as const, durationUnit: 't' as const,
         types: [
             { label: 'Matches', type: 'DIGITMATCH', color: '#f59e0b', icon: '=' },
             { label: 'Differs', type: 'DIGITDIFF',  color: '#06b6d4', icon: '≠' },
         ],
     },
     {
-        id: 'rise_fall', label: 'Rise/Fall', icon: '📈', hasBarrier: false,
+        id: 'rise_fall', label: 'Rise/Fall', icon: '📈',
+        hasBarrier: false, barrierType: 'none' as const, durationUnit: 't' as const,
         types: [
             { label: 'Rise', type: 'CALL', color: '#22c55e', icon: '↑' },
             { label: 'Fall', type: 'PUT',  color: '#ef4444', icon: '↓' },
         ],
     },
     {
-        id: 'touch', label: 'Touch/No Touch', icon: '👆', hasBarrier: true,
+        id: 'touch', label: 'Touch/No Touch', icon: '👆',
+        hasBarrier: true, barrierType: 'price' as const, durationUnit: 's' as const,
         types: [
             { label: 'Touch',    type: 'ONETOUCH', color: '#22c55e', icon: '⟳' },
             { label: 'No Touch', type: 'NOTOUCH',  color: '#ef4444', icon: '⊘' },
         ],
     },
     {
-        id: 'higher_lower', label: 'Higher/Lower', icon: '⬆', hasBarrier: false,
+        id: 'higher_lower', label: 'Higher/Lower', icon: '⬆',
+        hasBarrier: true, barrierType: 'price' as const, durationUnit: 's' as const,
         types: [
-            { label: 'Higher', type: 'CALL_SPREAD', color: '#22c55e', icon: '⬆' },
-            { label: 'Lower',  type: 'PUT_SPREAD',  color: '#ef4444', icon: '⬇' },
+            { label: 'Higher', type: 'HIGHER', color: '#22c55e', icon: '⬆' },
+            { label: 'Lower',  type: 'LOWER',  color: '#ef4444', icon: '⬇' },
         ],
     },
 ];
@@ -371,7 +377,9 @@ const ManualTrader: React.FC = () => {
     const [symbolValue, setSymbolValue]   = useState('1HZ100V');
     const [ctIdx, setCtIdx]               = useState(0); // contract type index
     const [duration, setDuration]         = useState(5);
-    const [barrier, setBarrier]           = useState(4);
+    const [secDuration, setSecDuration]   = useState(60); // for seconds-based contracts
+    const [barrier, setBarrier]           = useState(4);  // digit barrier (0-9)
+    const [priceBarrier, setPriceBarrier] = useState('+0.10'); // price barrier for HIGHER/LOWER/TOUCH
     const [stake, setStake]               = useState('1.00');
     const [pnl, setPnl]                   = useState(0);
     const [positions, setPositions]       = useState<any[]>([]);
@@ -461,6 +469,9 @@ const ManualTrader: React.FC = () => {
             const s = parseFloat(stake);
             if (isNaN(s) || s < 0.35) { setPayouts({}); return; }
             setPayoutLoading(true);
+            const isSecBased = ctDef.durationUnit === 's';
+            const dur = isSecBased ? secDuration : duration;
+            const durUnit = ctDef.durationUnit;
             try {
                 const results: Record<string, number | null> = {};
                 await Promise.all(ctDef.types.map(async def => {
@@ -468,9 +479,11 @@ const ManualTrader: React.FC = () => {
                         const req: any = {
                             proposal: 1, amount: s, basis: 'stake',
                             contract_type: def.type, currency: currency || 'USD',
-                            duration, duration_unit: 't', symbol: symbolValue,
+                            duration: dur, duration_unit: durUnit,
+                            underlying_symbol: symbolValue,
                         };
-                        if (ctDef.hasBarrier) req.barrier = String(barrier);
+                        if (ctDef.barrierType === 'digit') req.barrier = String(barrier);
+                        if (ctDef.barrierType === 'price') req.barrier = priceBarrier;
                         const res = await send(req);
                         results[def.type] = res?.proposal?.payout ? parseFloat(res.proposal.payout) : null;
                     } catch { results[def.type] = null; }
@@ -480,7 +493,7 @@ const ManualTrader: React.FC = () => {
             finally { setPayoutLoading(false); }
         }, 500);
         return () => { if (proposalTimer.current) clearTimeout(proposalTimer.current); };
-    }, [stake, duration, symbolValue, ctDef, barrier, authorized, currency, send]);
+    }, [stake, duration, secDuration, symbolValue, ctDef, barrier, priceBarrier, authorized, currency, send]);
 
     /* ── API request / response log ── */
     const [apiLog, setApiLog] = useState<{ type: 'request'|'response'|'error'; label: string; payload: any; ts: string }[]>([]);
@@ -493,7 +506,9 @@ const ManualTrader: React.FC = () => {
         def: typeof ctDef.types[0],
         _ctDef: typeof ctDef,
         _duration: number,
+        _secDuration: number,
         _barrier: number,
+        _priceBarrier: string,
         _stake: string,
         _bulkMode: boolean,
         _bulkCount: number,
@@ -504,11 +519,23 @@ const ManualTrader: React.FC = () => {
         const s = parseFloat(_stake);
         if (isNaN(s) || s < 0.35) return;
 
-        /* ── Build contract params — always use barrier for types that need it ── */
+        const isSecBased = _ctDef.durationUnit === 's';
+        const dur     = isSecBased ? _secDuration : _duration;
+        const durUnit = _ctDef.durationUnit;
+
+        /* ── Build barrier value ── */
+        let barrierVal: string | undefined;
+        if (_ctDef.barrierType === 'digit') barrierVal = String(_barrier);
+        if (_ctDef.barrierType === 'price') barrierVal = _priceBarrier;
+
+        /* ── Build contract params ── */
         const contractParams: any = {
-            symbol: _symbolValue, contract_type: def.type as any,
-            duration: _duration, duration_unit: 't', stake: s,
-            ...(_ctDef.hasBarrier ? { barrier: String(_barrier) } : {}),
+            symbol: _symbolValue,
+            contract_type: def.type as any,
+            duration: dur,
+            duration_unit: durUnit,
+            stake: s,
+            ...(barrierVal !== undefined ? { barrier: barrierVal } : {}),
         };
 
         /* ── Bulk mode: fire N simultaneous contracts ── */
@@ -546,38 +573,37 @@ const ManualTrader: React.FC = () => {
         const tradeId = idRef.current++;
         tradeTicksRef.current = [];
         tradeActiveRef.current = true;
-        tradeDurRef.current = _duration;
-        setTradeState({ ticks: [], duration: _duration, settled: false, result: null, profit: 0, exitDigit: null });
+        tradeDurRef.current = isSecBased ? 0 : dur; // only track digit ticks for tick-based contracts
+        setTradeState({ ticks: [], duration: dur, settled: false, result: null, profit: 0, exitDigit: null });
 
         const pos = {
             id: tradeId, symbol: _symbol.label, type: def.label,
             contractType: def.type, stake: s, status: 'open',
-            profit: 0, tick: 0, duration: _duration, time: Date.now(),
+            profit: 0, tick: 0, duration: dur, time: Date.now(),
         };
         setPositions(p => [pos, ...p.slice(0, 49)]);
 
         /* Log the buy request (Deriv API format) */
         pushLog('request', `BUY ${def.label}`, {
-            buy: '1',
-            price: s,
+            buy: '1', price: s,
             parameters: {
                 contract_type: def.type,
                 currency: 'USD',
-                duration: _duration,
-                duration_unit: 't',
+                duration: dur,
+                duration_unit: durUnit,
                 basis: 'stake',
                 amount: s,
-                symbol: _symbolValue,
-                ...(_ctDef.hasBarrier ? { barrier: String(_barrier) } : {}),
+                underlying_symbol: _symbolValue,
+                ...(barrierVal !== undefined ? { barrier: barrierVal } : {}),
             },
         });
 
         let t = 0;
         const iv = setInterval(() => {
             t++;
-            setPositions(p => p.map(x => x.id === tradeId && x.status === 'open' ? { ...x, tick: Math.min(t, _duration) } : x));
-            if (t >= _duration) clearInterval(iv);
-        }, 1000);
+            setPositions(p => p.map(x => x.id === tradeId && x.status === 'open' ? { ...x, tick: Math.min(t, dur) } : x));
+            if (t >= dur) clearInterval(iv);
+        }, isSecBased ? 1000 : 1000);
 
         try {
             await buyContract(
@@ -783,26 +809,45 @@ const ManualTrader: React.FC = () => {
                         ))}
                     </select>
 
-                    {/* Duration */}
-                    <div className='mtp-section'>
-                        <div className='mtp-section__label'>Ticks</div>
-                        <div className='mtp-dur-row'>
-                            {TICK_DURATIONS.map(v => (
-                                <button key={v}
-                                    className={`mtp-dur-btn ${duration === v ? 'active' : ''}`}
-                                    onClick={() => setDuration(v)}>
-                                    {v}
-                                </button>
-                            ))}
-                            <NumberField className='mtp-dur-inp' min={1} max={10}
-                                value={duration}
-                                onCommit={n => setDuration(n)} />
+                    {/* Duration — ticks for digit/rise-fall, seconds for higher/lower & touch */}
+                    {ctDef.durationUnit === 't' ? (
+                        <div className='mtp-section'>
+                            <div className='mtp-section__label'>Ticks</div>
+                            <div className='mtp-dur-row'>
+                                {TICK_DURATIONS.map(v => (
+                                    <button key={v}
+                                        className={`mtp-dur-btn ${duration === v ? 'active' : ''}`}
+                                        onClick={() => setDuration(v)}>
+                                        {v}
+                                    </button>
+                                ))}
+                                <NumberField className='mtp-dur-inp' min={1} max={10}
+                                    value={duration}
+                                    onCommit={n => setDuration(n)} />
+                            </div>
+                            <div className='mtp-dur-label'>{duration} Ticks</div>
                         </div>
-                        <div className='mtp-dur-label'>{duration} Ticks</div>
-                    </div>
+                    ) : (
+                        <div className='mtp-section'>
+                            <div className='mtp-section__label'>Duration (seconds)</div>
+                            <div className='mtp-dur-row'>
+                                {[15, 30, 60, 120, 300].map(v => (
+                                    <button key={v}
+                                        className={`mtp-dur-btn ${secDuration === v ? 'active' : ''}`}
+                                        onClick={() => setSecDuration(v)}>
+                                        {v >= 60 ? `${v / 60}m` : `${v}s`}
+                                    </button>
+                                ))}
+                                <NumberField className='mtp-dur-inp' min={15} max={3600}
+                                    value={secDuration}
+                                    onCommit={n => setSecDuration(n)} />
+                            </div>
+                            <div className='mtp-dur-label'>{secDuration >= 60 ? `${(secDuration / 60).toFixed(1)} min` : `${secDuration} sec`}</div>
+                        </div>
+                    )}
 
-                    {/* Digit prediction */}
-                    {ctDef.hasBarrier && (
+                    {/* Digit prediction — for DIGITOVER/UNDER/MATCH/DIFFER */}
+                    {ctDef.barrierType === 'digit' && (
                         <div className='mtp-section'>
                             <div className='mtp-section__label'>Last Digit Prediction</div>
                             <div className='mtp-digit-grid'>
@@ -823,6 +868,30 @@ const ManualTrader: React.FC = () => {
                                     </button>
                                 ))}
                             </div>
+                        </div>
+                    )}
+
+                    {/* Price barrier — for HIGHER/LOWER & TOUCH/NO-TOUCH */}
+                    {ctDef.barrierType === 'price' && (
+                        <div className='mtp-section'>
+                            <div className='mtp-section__label'>Barrier (relative, e.g. +0.10)</div>
+                            <div className='mtp-price-barrier-row'>
+                                {['-0.10', '-0.05', '+0.05', '+0.10', '+0.20'].map(v => (
+                                    <button key={v}
+                                        className={`mtp-dur-btn mtp-pb-preset ${priceBarrier === v ? 'active' : ''}`}
+                                        onClick={() => setPriceBarrier(v)}>
+                                        {v}
+                                    </button>
+                                ))}
+                            </div>
+                            <input
+                                className='mtp-price-barrier-inp'
+                                type='text'
+                                value={priceBarrier}
+                                onChange={e => setPriceBarrier(e.target.value)}
+                                placeholder='+0.10'
+                            />
+                            <div className='mtp-dur-label'>Barrier offset from entry spot</div>
                         </div>
                     )}
 
@@ -897,7 +966,7 @@ const ManualTrader: React.FC = () => {
                                 <button
                                     className={`mtp-buy-btn ${i === 0 ? 'mtp-buy-btn--a' : 'mtp-buy-btn--b'}`}
                                     style={{ '--bc': def.color } as React.CSSProperties}
-                                    onClick={() => buy(def, ctDef, duration, barrier, stake, bulkMode, bulkCount, symbolValue, symbol)}
+                                    onClick={() => buy(def, ctDef, duration, secDuration, barrier, priceBarrier, stake, bulkMode, bulkCount, symbolValue, symbol)}
                                     disabled={!authorized}>
                                     <span className='mtp-buy-btn__icon'>{def.icon}</span>
                                     <span className='mtp-buy-btn__label'>{def.label}</span>

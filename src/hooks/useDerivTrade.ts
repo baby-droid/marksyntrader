@@ -177,7 +177,7 @@ export function useDerivTrade() {
                 currency: cur_,
                 duration,
                 duration_unit,
-                symbol,
+                underlying_symbol: symbol,
             };
             if (needsBarrier && barrier !== undefined && barrier !== null) {
                 proposalReq.barrier = String(barrier);

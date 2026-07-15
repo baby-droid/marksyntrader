@@ -1,9 +1,8 @@
 .mt-page {
   display: flex;
   flex-direction: column;
-  /* Fill the full viewport — override any parent height constraints */
-  height: 100vh;
-  max-height: 100vh;
+  /* Fill parent container — works inside the app shell which already accounts for headers */
+  height: 100%;
   min-height: 0;
   overflow: hidden;
   background: #0d1117;
@@ -577,6 +576,34 @@
   transition: all 0.14s;
   &:hover { border-color: #3b82f6; color: #1d4ed8; background: #eff6ff; }
   &.active { background: #1e40af; border-color: #1e40af; color: #fff; }
+}
+
+/* Price barrier row */
+.mtp-price-barrier-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-bottom: 0.4rem;
+}
+.mtp-pb-preset {
+  font-size: 0.72rem;
+  min-width: 44px;
+  padding: 0 0.3rem;
+}
+.mtp-price-barrier-inp {
+  width: 100%;
+  padding: 0.4rem 0.65rem;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 0.45rem;
+  color: #e2e8f0;
+  font-size: 0.92rem;
+  font-weight: 700;
+  font-family: 'Share Tech Mono', monospace;
+  letter-spacing: 0.04em;
+  text-align: center;
+  &:focus { outline: none; border-color: rgba(59,130,246,0.45); }
+  &::placeholder { color: #475569; }
 }
 
 /* Stake */
