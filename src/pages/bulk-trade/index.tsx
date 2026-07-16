@@ -84,7 +84,10 @@ const BulkTrade = observer(() => {
   const fmtProfit = (usd: number) => `${usd >= 0 ? '+' : ''}${fromUsd(usd).toFixed(2)} ${displayCur}`;
 
   const { balance, currency, buyContract, tradeResults, winCount, lossCount, totalProfit, clearResults } = useDerivTrading();
-  const { digits, lastDigit, currentPrice, isConnected } = useDigitStats(market);
+  const { digits, lastDigit, currentPrice, isConnected, setSymbol } = useDigitStats(market);
+
+  // Sync market changes into useDigitStats (it only reads initialSymbol on mount)
+  useEffect(() => { setSymbol(market); }, [market, setSymbol]);
 
   const prevDigitRef = React.useRef<number | null>(null);
   const [digitFlash, setDigitFlash] = React.useState(false);

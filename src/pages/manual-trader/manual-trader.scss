@@ -352,7 +352,7 @@
 .mt-circle__pct-ext {
   font-size: 0.82rem;
   font-weight: 800;
-  color: #7dd3fc;
+  color: #000000;
   text-align: center;
   line-height: 1.1;
   margin-top: 0.12rem;
@@ -1253,4 +1253,31 @@
   .mt-trade-panel { padding-bottom: 0.8rem; }
   /* Digit circles — allow horizontal scroll on very small screens */
   .mt-digit-circles { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* Smaller circles on tiny screens */
+  .mt-circle-cell {
+    gap: 0;
+  }
+  .mt-circle {
+    width: 44px !important;
+    height: 44px !important;
+  }
+  .mt-circles__row {
+    gap: 0.25rem;
+  }
+
+  /* Bigger % text — black — on mobile */
+  .mt-circle__pct-ext {
+    font-size: 1.05rem !important;
+    font-weight: 900 !important;
+    color: #000 !important;
+  }
+
+  /* Bigger Over/Under buy buttons */
+  .mtp-buy-btn {
+    padding: 1rem 1.2rem !important;
+    font-size: 1.15rem !important;
+    border-radius: 0.8rem !important;
+  }
+  .mtp-buy-btn__label { font-size: 1.15rem !important; }
 }

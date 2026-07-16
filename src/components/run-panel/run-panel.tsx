@@ -369,7 +369,11 @@ const RunPanel = observer(() => {
     const { statistics } = transactions;
     const { active_tour, active_tab } = dashboard;
     const { total_payout, total_profit, total_stake, won_contracts, lost_contracts, number_of_runs } = statistics;
-    const { BOT_BUILDER, CHART, AHMED_LEARNING } = DBOT_TABS;
+    const { BOT_BUILDER, CHART, AHMED_LEARNING, MANUAL_TRADER, BULK_TRADE, AUTO_TRADES } = DBOT_TABS;
+
+    // On mobile, hide the run panel entirely on pages that have their own trade UI
+    const HIDE_ON_MOBILE = [MANUAL_TRADER, BULK_TRADE, AUTO_TRADES];
+    const hide_on_mobile = !isDesktop && HIDE_ON_MOBILE.includes(active_tab);
 
     React.useEffect(() => {
         onMount();
@@ -382,6 +386,8 @@ const RunPanel = observer(() => {
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    if (hide_on_mobile) return null;
 
     const content = (
         <DrawerContent

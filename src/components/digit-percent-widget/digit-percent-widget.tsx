@@ -288,9 +288,13 @@ const DigitPercentWidget: React.FC = () => {
     const stats100     = computeStreamStats(last100Ticks, threshold);
     const statsAll     = computeStreamStats(ticks, threshold);
 
+    // Default: right side on small screens so it never blocks page headings on mobile
+    const isMobileWidth = typeof window !== 'undefined' && window.innerWidth <= 600;
     const panelStyle: React.CSSProperties = panelPos
         ? { position: 'fixed', left: panelPos.x, top: panelPos.y, transform: 'none', zIndex: 9999 }
-        : { position: 'fixed', left: '0.8rem', top: '50%', transform: 'translateY(-50%)', zIndex: 9999 };
+        : isMobileWidth
+            ? { position: 'fixed', right: '0.4rem', top: '8rem', zIndex: 9999 }
+            : { position: 'fixed', left: '0.8rem', top: '50%', transform: 'translateY(-50%)', zIndex: 9999 };
 
     const dmBg    = darkMode ? '#0f172a' : undefined;
     const dmBd    = darkMode ? '#334155' : undefined;

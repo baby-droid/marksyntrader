@@ -492,6 +492,29 @@ const ManualTrader: React.FC = () => {
         return () => { cancelled = true; };
     }, [symbolValue, authorized, send]);
 
+    /* No-tick timeout — detect stale/unavailable markets (e.g. WBEAR, WBULL) */
+    const [noTickWarning, setNoTickWarning] = useState(false);
+    const noTickTimerRef = useRef<any>(null);
+    useEffect(() => {
+        setNoTickWarning(false);
+        if (noTickTimerRef.current) clearTimeout(noTickTimerRef.current);
+        noTickTimerRef.current = setTimeout(() => {
+            setNoTickWarning(prev => {
+                // Only warn if we still have no digits after 10 s
+                return digitHistory.length === 0;
+            });
+        }, 10000);
+        return () => { if (noTickTimerRef.current) clearTimeout(noTickTimerRef.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [symbolValue]);
+    // Clear warning as soon as first tick arrives
+    useEffect(() => {
+        if (digitHistory.length > 0) {
+            setNoTickWarning(false);
+            if (noTickTimerRef.current) clearTimeout(noTickTimerRef.current);
+        }
+    }, [digitHistory.length]);
+
     /* Live tick subscription */
     useEffect(() => {
         const unsub = subscribeTicks(symbolValue, tick => {
@@ -973,8 +996,13 @@ const ManualTrader: React.FC = () => {
                                     </span>
                                 );
                             })}
-                            {digitHistory.length === 0 && (
+                            {digitHistory.length === 0 && !noTickWarning && (
                                 <span className='mt-stream__empty'>Waiting for ticks…</span>
+                            )}
+                            {noTickWarning && (
+                                <span className='mt-stream__empty' style={{ color: '#f59e0b', display: 'block', padding: '0.4rem 0.6rem', fontSize: '0.85rem' }}>
+                                    ⚠ No ticks received for {symbolValue}. This market may be unavailable or require a different account type.
+                                </span>
                             )}
                         </div>
                     </div>

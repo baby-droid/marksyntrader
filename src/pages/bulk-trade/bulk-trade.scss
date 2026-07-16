@@ -403,10 +403,40 @@
 /* ─── Mobile ─── */
 @media (max-width: 600px) {
   .bulk-trade {
-    padding: 1rem;
+    padding: 0.8rem;
 
     &__droprow { grid-template-columns: 1fr; }
     &__row3 { grid-template-columns: 1fr 1fr; }
     &__header { flex-direction: column; }
+
+    /* Reorder: right column (circles + execute) before left column (controls) */
+    &__body {
+      display: flex;
+      flex-direction: column;
+    }
+    &__right {
+      order: -1; /* show circles first */
+    }
+    &__controls {
+      order: 0;
+    }
+
+    /* Compact digit display on tiny screens */
+    &__digit-display {
+      padding: 0.8rem 1rem;
+      gap: 0.8rem;
+    }
+    &__digit-value {
+      font-size: 3.6rem;
+    }
+
+    /* Execute button — sticky at very bottom */
+    &__execute {
+      position: sticky;
+      bottom: 0.5rem;
+      z-index: 20;
+      font-size: 1.3rem;
+      padding: 1.1rem 1.2rem;
+    }
   }
 }
