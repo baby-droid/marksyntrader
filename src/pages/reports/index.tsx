@@ -40,6 +40,84 @@ async function fetchContractInfo(contract_id: number): Promise<any> {
 
 const TABS = ['P&L History', 'Open Positions', 'Statement'];
 
+/* ── Trade Detail Modal ── */
+interface TradeDetailModalProps {
+    trade: any;
+    info: any;
+    cur: string;
+    onClose: () => void;
+}
+const TradeDetailModal: React.FC<TradeDetailModalProps> = ({ trade, info, cur, onClose }) => (
+    <div className='reports__modal-overlay' onClick={onClose}>
+        <div className='reports__modal' onClick={e => e.stopPropagation()}>
+            <div className='reports__modal-header'>
+                <h3>Trade Detail</h3>
+                <button className='reports__modal-close' onClick={onClose}>✕</button>
+            </div>
+            <div className='reports__modal-body'>
+                <div className='reports__modal-grid'>
+                    <div className='reports__modal-field'>
+                        <span>Type</span>
+                        <strong>{trade.contract_type}</strong>
+                    </div>
+                    <div className='reports__modal-field'>
+                        <span>Market</span>
+                        <strong>{trade.underlying || info?.underlying_symbol || '—'}</strong>
+                    </div>
+                    <div className='reports__modal-field'>
+                        <span>Result</span>
+                        <strong className={trade.pnl > 0 ? 'pos' : 'neg'}>
+                            {trade.pnl > 0 ? '✓ WIN' : '✗ LOSS'}
+                        </strong>
+                    </div>
+                    <div className='reports__modal-field'>
+                        <span>P/L ({cur})</span>
+                        <strong className={trade.pnl > 0 ? 'pos' : 'neg'}>
+                            {trade.pnl > 0 ? '+' : ''}{trade.pnl.toFixed(2)}
+                        </strong>
+                    </div>
+                    <div className='reports__modal-field'>
+                        <span>Stake</span>
+                        <strong>{trade.buy_price > 0 ? trade.buy_price.toFixed(2) : '—'}</strong>
+                    </div>
+                    <div className='reports__modal-field'>
+                        <span>Entry Time</span>
+                        <strong>{fmt(trade.purchase_time)}</strong>
+                    </div>
+                    <div className='reports__modal-field'>
+                        <span>Exit Time</span>
+                        <strong>{fmt(trade.sell_time)}</strong>
+                    </div>
+                    <div className='reports__modal-field'>
+                        <span>Entry Spot</span>
+                        <strong>{info?.entry_tick ?? info?.entry_spot ?? '—'}</strong>
+                    </div>
+                    <div className='reports__modal-field'>
+                        <span>Exit Spot</span>
+                        <strong>{info?.exit_tick ?? info?.exit_spot ?? '—'}</strong>
+                    </div>
+                    <div className='reports__modal-field'>
+                        <span>Contract ID</span>
+                        <strong style={{ fontSize: '1rem', wordBreak: 'break-all' }}>{trade.contract_id || '—'}</strong>
+                    </div>
+                    {info?.barrier && (
+                        <div className='reports__modal-field'>
+                            <span>Barrier</span>
+                            <strong>{info.barrier}</strong>
+                        </div>
+                    )}
+                    {info?.tick_count && (
+                        <div className='reports__modal-field'>
+                            <span>Duration</span>
+                            <strong>{info.tick_count} ticks</strong>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    </div>
+);
+
 const Reports = observer(() => {
     const { balance, currency } = useDerivTrading();
     const [activeTab, setActiveTab]     = useState(0);
@@ -52,6 +130,7 @@ const Reports = observer(() => {
     const [totalPnl, setTotalPnl]       = useState(0);
     const [winRate, setWinRate]         = useState(0);
     const [limit, setLimit]             = useState(50);
+    const [selectedTrade, setSelectedTrade] = useState<any>(null);
     /* contract_info cache: contract_id → details */
     const infoCache = useRef<Record<number, any>>({});
     const [infoMap, setInfoMap]         = useState<Record<number, any>>({});
@@ -311,7 +390,9 @@ const Reports = observer(() => {
                                     const info = infoMap[t.contract_id];
                                     return (
                                         <div key={t.transaction_id}
-                                            className={`reports__trade-row ${t.pnl > 0 ? 'won' : 'lost'}`}>
+                                            className={`reports__trade-row ${t.pnl > 0 ? 'won' : 'lost'}`}
+                                            onClick={() => setSelectedTrade(t)}
+                                            style={{ cursor: 'pointer' }}>
                                             <div className='reports__trade-type-cell'>
                                                 <span className='reports__trade-type'>{t.contract_type}</span>
                                                 {t.underlying && <span className='reports__trade-mkt'>{t.underlying}</span>}
@@ -421,6 +502,17 @@ const Reports = observer(() => {
                 </div>
             )}
         </div>
+
+        {/* Trade detail modal */}
+        {selectedTrade && (
+            <TradeDetailModal
+                trade={selectedTrade}
+                info={infoMap[selectedTrade.contract_id]}
+                cur={cur}
+                onClose={() => setSelectedTrade(null)}
+            />
+        )}
+    </div>
     );
 });
 
