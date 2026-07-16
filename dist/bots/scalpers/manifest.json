@@ -1,0 +1,740 @@
+[
+  {
+    "key": "even-scalper",
+    "name": "Even Scalper",
+    "contractType": "DIGITEVEN",
+    "prediction": null,
+    "multiple": false,
+    "category": "Even/Odd",
+    "xmlFile": "/bots/scalpers/even-scalper.xml"
+  },
+  {
+    "key": "even-multiple-scalper",
+    "name": "Even Multiple Scalper",
+    "contractType": "DIGITEVEN",
+    "prediction": null,
+    "multiple": true,
+    "category": "Even/Odd",
+    "xmlFile": "/bots/scalpers/even-scalper.xml"
+  },
+  {
+    "key": "odd-scalper",
+    "name": "Odd Scalper",
+    "contractType": "DIGITODD",
+    "prediction": null,
+    "multiple": false,
+    "category": "Even/Odd",
+    "xmlFile": "/bots/scalpers/odd-scalper.xml"
+  },
+  {
+    "key": "odd-multiple-scalper",
+    "name": "Odd Multiple Scalper",
+    "contractType": "DIGITODD",
+    "prediction": null,
+    "multiple": true,
+    "category": "Even/Odd",
+    "xmlFile": "/bots/scalpers/odd-scalper.xml"
+  },
+  {
+    "key": "over-1-scalper",
+    "name": "Over 1 Scalper",
+    "contractType": "DIGITOVER",
+    "prediction": 1,
+    "multiple": false,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/over-1-scalper.xml"
+  },
+  {
+    "key": "over-1-multiple-scalper",
+    "name": "Over 1 Multiple Scalper",
+    "contractType": "DIGITOVER",
+    "prediction": 1,
+    "multiple": true,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/over-1-scalper.xml"
+  },
+  {
+    "key": "over-2-scalper",
+    "name": "Over 2 Scalper",
+    "contractType": "DIGITOVER",
+    "prediction": 2,
+    "multiple": false,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/over-2-scalper.xml"
+  },
+  {
+    "key": "over-2-multiple-scalper",
+    "name": "Over 2 Multiple Scalper",
+    "contractType": "DIGITOVER",
+    "prediction": 2,
+    "multiple": true,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/over-2-scalper.xml"
+  },
+  {
+    "key": "over-3-scalper",
+    "name": "Over 3 Scalper",
+    "contractType": "DIGITOVER",
+    "prediction": 3,
+    "multiple": false,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/over-3-scalper.xml"
+  },
+  {
+    "key": "over-3-multiple-scalper",
+    "name": "Over 3 Multiple Scalper",
+    "contractType": "DIGITOVER",
+    "prediction": 3,
+    "multiple": true,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/over-3-scalper.xml"
+  },
+  {
+    "key": "over-4-scalper",
+    "name": "Over 4 Scalper",
+    "contractType": "DIGITOVER",
+    "prediction": 4,
+    "multiple": false,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/over-4-scalper.xml"
+  },
+  {
+    "key": "over-4-multiple-scalper",
+    "name": "Over 4 Multiple Scalper",
+    "contractType": "DIGITOVER",
+    "prediction": 4,
+    "multiple": true,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/over-4-scalper.xml"
+  },
+  {
+    "key": "over-5-scalper",
+    "name": "Over 5 Scalper",
+    "contractType": "DIGITOVER",
+    "prediction": 5,
+    "multiple": false,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/over-5-scalper.xml"
+  },
+  {
+    "key": "over-5-multiple-scalper",
+    "name": "Over 5 Multiple Scalper",
+    "contractType": "DIGITOVER",
+    "prediction": 5,
+    "multiple": true,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/over-5-scalper.xml"
+  },
+  {
+    "key": "over-6-scalper",
+    "name": "Over 6 Scalper",
+    "contractType": "DIGITOVER",
+    "prediction": 6,
+    "multiple": false,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/over-6-scalper.xml"
+  },
+  {
+    "key": "over-6-multiple-scalper",
+    "name": "Over 6 Multiple Scalper",
+    "contractType": "DIGITOVER",
+    "prediction": 6,
+    "multiple": true,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/over-6-scalper.xml"
+  },
+  {
+    "key": "over-7-scalper",
+    "name": "Over 7 Scalper",
+    "contractType": "DIGITOVER",
+    "prediction": 7,
+    "multiple": false,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/over-7-scalper.xml"
+  },
+  {
+    "key": "over-7-multiple-scalper",
+    "name": "Over 7 Multiple Scalper",
+    "contractType": "DIGITOVER",
+    "prediction": 7,
+    "multiple": true,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/over-7-scalper.xml"
+  },
+  {
+    "key": "over-8-scalper",
+    "name": "Over 8 Scalper",
+    "contractType": "DIGITOVER",
+    "prediction": 8,
+    "multiple": false,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/over-8-scalper.xml"
+  },
+  {
+    "key": "over-8-multiple-scalper",
+    "name": "Over 8 Multiple Scalper",
+    "contractType": "DIGITOVER",
+    "prediction": 8,
+    "multiple": true,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/over-8-scalper.xml"
+  },
+  {
+    "key": "over-9-scalper",
+    "name": "Over 9 Scalper",
+    "contractType": "DIGITOVER",
+    "prediction": 9,
+    "multiple": false,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/over-9-scalper.xml"
+  },
+  {
+    "key": "over-9-multiple-scalper",
+    "name": "Over 9 Multiple Scalper",
+    "contractType": "DIGITOVER",
+    "prediction": 9,
+    "multiple": true,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/over-9-scalper.xml"
+  },
+  {
+    "key": "under-1-scalper",
+    "name": "Under 1 Scalper",
+    "contractType": "DIGITUNDER",
+    "prediction": 1,
+    "multiple": false,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/under-1-scalper.xml"
+  },
+  {
+    "key": "under-1-multiple-scalper",
+    "name": "Under 1 Multiple Scalper",
+    "contractType": "DIGITUNDER",
+    "prediction": 1,
+    "multiple": true,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/under-1-scalper.xml"
+  },
+  {
+    "key": "under-2-scalper",
+    "name": "Under 2 Scalper",
+    "contractType": "DIGITUNDER",
+    "prediction": 2,
+    "multiple": false,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/under-2-scalper.xml"
+  },
+  {
+    "key": "under-2-multiple-scalper",
+    "name": "Under 2 Multiple Scalper",
+    "contractType": "DIGITUNDER",
+    "prediction": 2,
+    "multiple": true,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/under-2-scalper.xml"
+  },
+  {
+    "key": "under-3-scalper",
+    "name": "Under 3 Scalper",
+    "contractType": "DIGITUNDER",
+    "prediction": 3,
+    "multiple": false,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/under-3-scalper.xml"
+  },
+  {
+    "key": "under-3-multiple-scalper",
+    "name": "Under 3 Multiple Scalper",
+    "contractType": "DIGITUNDER",
+    "prediction": 3,
+    "multiple": true,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/under-3-scalper.xml"
+  },
+  {
+    "key": "under-4-scalper",
+    "name": "Under 4 Scalper",
+    "contractType": "DIGITUNDER",
+    "prediction": 4,
+    "multiple": false,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/under-4-scalper.xml"
+  },
+  {
+    "key": "under-4-multiple-scalper",
+    "name": "Under 4 Multiple Scalper",
+    "contractType": "DIGITUNDER",
+    "prediction": 4,
+    "multiple": true,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/under-4-scalper.xml"
+  },
+  {
+    "key": "under-5-scalper",
+    "name": "Under 5 Scalper",
+    "contractType": "DIGITUNDER",
+    "prediction": 5,
+    "multiple": false,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/under-5-scalper.xml"
+  },
+  {
+    "key": "under-5-multiple-scalper",
+    "name": "Under 5 Multiple Scalper",
+    "contractType": "DIGITUNDER",
+    "prediction": 5,
+    "multiple": true,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/under-5-scalper.xml"
+  },
+  {
+    "key": "under-6-scalper",
+    "name": "Under 6 Scalper",
+    "contractType": "DIGITUNDER",
+    "prediction": 6,
+    "multiple": false,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/under-6-scalper.xml"
+  },
+  {
+    "key": "under-6-multiple-scalper",
+    "name": "Under 6 Multiple Scalper",
+    "contractType": "DIGITUNDER",
+    "prediction": 6,
+    "multiple": true,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/under-6-scalper.xml"
+  },
+  {
+    "key": "under-7-scalper",
+    "name": "Under 7 Scalper",
+    "contractType": "DIGITUNDER",
+    "prediction": 7,
+    "multiple": false,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/under-7-scalper.xml"
+  },
+  {
+    "key": "under-7-multiple-scalper",
+    "name": "Under 7 Multiple Scalper",
+    "contractType": "DIGITUNDER",
+    "prediction": 7,
+    "multiple": true,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/under-7-scalper.xml"
+  },
+  {
+    "key": "under-8-scalper",
+    "name": "Under 8 Scalper",
+    "contractType": "DIGITUNDER",
+    "prediction": 8,
+    "multiple": false,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/under-8-scalper.xml"
+  },
+  {
+    "key": "under-8-multiple-scalper",
+    "name": "Under 8 Multiple Scalper",
+    "contractType": "DIGITUNDER",
+    "prediction": 8,
+    "multiple": true,
+    "category": "Over/Under",
+    "xmlFile": "/bots/scalpers/under-8-scalper.xml"
+  },
+  {
+    "key": "rise-scalper",
+    "name": "Rise Scalper",
+    "contractType": "CALL",
+    "prediction": null,
+    "multiple": false,
+    "category": "Rise/Fall",
+    "xmlFile": "/bots/scalpers/rise-scalper.xml"
+  },
+  {
+    "key": "rise-scalper-multiple",
+    "name": "Rise Scalper Multiple",
+    "contractType": "CALL",
+    "prediction": null,
+    "multiple": true,
+    "category": "Rise/Fall",
+    "xmlFile": "/bots/scalpers/rise-scalper.xml"
+  },
+  {
+    "key": "fall-scalper",
+    "name": "Fall Scalper",
+    "contractType": "PUT",
+    "prediction": null,
+    "multiple": false,
+    "category": "Rise/Fall",
+    "xmlFile": "/bots/scalpers/fall-scalper.xml"
+  },
+  {
+    "key": "fall-scalper-multiple",
+    "name": "Fall Scalper Multiple",
+    "contractType": "PUT",
+    "prediction": null,
+    "multiple": true,
+    "category": "Rise/Fall",
+    "xmlFile": "/bots/scalpers/fall-scalper.xml"
+  },
+  {
+    "key": "matches-0-scalper",
+    "name": "Matches 0 Scalper",
+    "contractType": "DIGITMATCH",
+    "prediction": 0,
+    "multiple": false,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/matches-0-scalper.xml"
+  },
+  {
+    "key": "matches-0-scalper-multiple",
+    "name": "Matches 0 Scalper Multiple",
+    "contractType": "DIGITMATCH",
+    "prediction": 0,
+    "multiple": true,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/matches-0-scalper.xml"
+  },
+  {
+    "key": "matches-1-scalper",
+    "name": "Matches 1 Scalper",
+    "contractType": "DIGITMATCH",
+    "prediction": 1,
+    "multiple": false,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/matches-1-scalper.xml"
+  },
+  {
+    "key": "matches-1-scalper-multiple",
+    "name": "Matches 1 Scalper Multiple",
+    "contractType": "DIGITMATCH",
+    "prediction": 1,
+    "multiple": true,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/matches-1-scalper.xml"
+  },
+  {
+    "key": "matches-2-scalper",
+    "name": "Matches 2 Scalper",
+    "contractType": "DIGITMATCH",
+    "prediction": 2,
+    "multiple": false,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/matches-2-scalper.xml"
+  },
+  {
+    "key": "matches-2-scalper-multiple",
+    "name": "Matches 2 Scalper Multiple",
+    "contractType": "DIGITMATCH",
+    "prediction": 2,
+    "multiple": true,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/matches-2-scalper.xml"
+  },
+  {
+    "key": "matches-3-scalper",
+    "name": "Matches 3 Scalper",
+    "contractType": "DIGITMATCH",
+    "prediction": 3,
+    "multiple": false,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/matches-3-scalper.xml"
+  },
+  {
+    "key": "matches-3-scalper-multiple",
+    "name": "Matches 3 Scalper Multiple",
+    "contractType": "DIGITMATCH",
+    "prediction": 3,
+    "multiple": true,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/matches-3-scalper.xml"
+  },
+  {
+    "key": "matches-4-scalper",
+    "name": "Matches 4 Scalper",
+    "contractType": "DIGITMATCH",
+    "prediction": 4,
+    "multiple": false,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/matches-4-scalper.xml"
+  },
+  {
+    "key": "matches-4-scalper-multiple",
+    "name": "Matches 4 Scalper Multiple",
+    "contractType": "DIGITMATCH",
+    "prediction": 4,
+    "multiple": true,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/matches-4-scalper.xml"
+  },
+  {
+    "key": "matches-5-scalper",
+    "name": "Matches 5 Scalper",
+    "contractType": "DIGITMATCH",
+    "prediction": 5,
+    "multiple": false,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/matches-5-scalper.xml"
+  },
+  {
+    "key": "matches-5-scalper-multiple",
+    "name": "Matches 5 Scalper Multiple",
+    "contractType": "DIGITMATCH",
+    "prediction": 5,
+    "multiple": true,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/matches-5-scalper.xml"
+  },
+  {
+    "key": "matches-6-scalper",
+    "name": "Matches 6 Scalper",
+    "contractType": "DIGITMATCH",
+    "prediction": 6,
+    "multiple": false,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/matches-6-scalper.xml"
+  },
+  {
+    "key": "matches-6-scalper-multiple",
+    "name": "Matches 6 Scalper Multiple",
+    "contractType": "DIGITMATCH",
+    "prediction": 6,
+    "multiple": true,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/matches-6-scalper.xml"
+  },
+  {
+    "key": "matches-7-scalper",
+    "name": "Matches 7 Scalper",
+    "contractType": "DIGITMATCH",
+    "prediction": 7,
+    "multiple": false,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/matches-7-scalper.xml"
+  },
+  {
+    "key": "matches-7-scalper-multiple",
+    "name": "Matches 7 Scalper Multiple",
+    "contractType": "DIGITMATCH",
+    "prediction": 7,
+    "multiple": true,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/matches-7-scalper.xml"
+  },
+  {
+    "key": "matches-8-scalper",
+    "name": "Matches 8 Scalper",
+    "contractType": "DIGITMATCH",
+    "prediction": 8,
+    "multiple": false,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/matches-8-scalper.xml"
+  },
+  {
+    "key": "matches-8-scalper-multiple",
+    "name": "Matches 8 Scalper Multiple",
+    "contractType": "DIGITMATCH",
+    "prediction": 8,
+    "multiple": true,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/matches-8-scalper.xml"
+  },
+  {
+    "key": "matches-9-scalper",
+    "name": "Matches 9 Scalper",
+    "contractType": "DIGITMATCH",
+    "prediction": 9,
+    "multiple": false,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/matches-9-scalper.xml"
+  },
+  {
+    "key": "matches-9-scalper-multiple",
+    "name": "Matches 9 Scalper Multiple",
+    "contractType": "DIGITMATCH",
+    "prediction": 9,
+    "multiple": true,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/matches-9-scalper.xml"
+  },
+  {
+    "key": "differs-0-scalper",
+    "name": "Differs 0 Scalper",
+    "contractType": "DIGITDIFF",
+    "prediction": 0,
+    "multiple": false,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/differs-0-scalper.xml"
+  },
+  {
+    "key": "differs-0-scalper-multiple",
+    "name": "Differs 0 Scalper Multiple",
+    "contractType": "DIGITDIFF",
+    "prediction": 0,
+    "multiple": true,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/differs-0-scalper.xml"
+  },
+  {
+    "key": "differs-1-scalper",
+    "name": "Differs 1 Scalper",
+    "contractType": "DIGITDIFF",
+    "prediction": 1,
+    "multiple": false,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/differs-1-scalper.xml"
+  },
+  {
+    "key": "differs-1-scalper-multiple",
+    "name": "Differs 1 Scalper Multiple",
+    "contractType": "DIGITDIFF",
+    "prediction": 1,
+    "multiple": true,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/differs-1-scalper.xml"
+  },
+  {
+    "key": "differs-2-scalper",
+    "name": "Differs 2 Scalper",
+    "contractType": "DIGITDIFF",
+    "prediction": 2,
+    "multiple": false,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/differs-2-scalper.xml"
+  },
+  {
+    "key": "differs-2-scalper-multiple",
+    "name": "Differs 2 Scalper Multiple",
+    "contractType": "DIGITDIFF",
+    "prediction": 2,
+    "multiple": true,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/differs-2-scalper.xml"
+  },
+  {
+    "key": "differs-3-scalper",
+    "name": "Differs 3 Scalper",
+    "contractType": "DIGITDIFF",
+    "prediction": 3,
+    "multiple": false,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/differs-3-scalper.xml"
+  },
+  {
+    "key": "differs-3-scalper-multiple",
+    "name": "Differs 3 Scalper Multiple",
+    "contractType": "DIGITDIFF",
+    "prediction": 3,
+    "multiple": true,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/differs-3-scalper.xml"
+  },
+  {
+    "key": "differs-4-scalper",
+    "name": "Differs 4 Scalper",
+    "contractType": "DIGITDIFF",
+    "prediction": 4,
+    "multiple": false,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/differs-4-scalper.xml"
+  },
+  {
+    "key": "differs-4-scalper-multiple",
+    "name": "Differs 4 Scalper Multiple",
+    "contractType": "DIGITDIFF",
+    "prediction": 4,
+    "multiple": true,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/differs-4-scalper.xml"
+  },
+  {
+    "key": "differs-5-scalper",
+    "name": "Differs 5 Scalper",
+    "contractType": "DIGITDIFF",
+    "prediction": 5,
+    "multiple": false,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/differs-5-scalper.xml"
+  },
+  {
+    "key": "differs-5-scalper-multiple",
+    "name": "Differs 5 Scalper Multiple",
+    "contractType": "DIGITDIFF",
+    "prediction": 5,
+    "multiple": true,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/differs-5-scalper.xml"
+  },
+  {
+    "key": "differs-6-scalper",
+    "name": "Differs 6 Scalper",
+    "contractType": "DIGITDIFF",
+    "prediction": 6,
+    "multiple": false,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/differs-6-scalper.xml"
+  },
+  {
+    "key": "differs-6-scalper-multiple",
+    "name": "Differs 6 Scalper Multiple",
+    "contractType": "DIGITDIFF",
+    "prediction": 6,
+    "multiple": true,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/differs-6-scalper.xml"
+  },
+  {
+    "key": "differs-7-scalper",
+    "name": "Differs 7 Scalper",
+    "contractType": "DIGITDIFF",
+    "prediction": 7,
+    "multiple": false,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/differs-7-scalper.xml"
+  },
+  {
+    "key": "differs-7-scalper-multiple",
+    "name": "Differs 7 Scalper Multiple",
+    "contractType": "DIGITDIFF",
+    "prediction": 7,
+    "multiple": true,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/differs-7-scalper.xml"
+  },
+  {
+    "key": "differs-8-scalper",
+    "name": "Differs 8 Scalper",
+    "contractType": "DIGITDIFF",
+    "prediction": 8,
+    "multiple": false,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/differs-8-scalper.xml"
+  },
+  {
+    "key": "differs-8-scalper-multiple",
+    "name": "Differs 8 Scalper Multiple",
+    "contractType": "DIGITDIFF",
+    "prediction": 8,
+    "multiple": true,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/differs-8-scalper.xml"
+  },
+  {
+    "key": "differs-9-scalper",
+    "name": "Differs 9 Scalper",
+    "contractType": "DIGITDIFF",
+    "prediction": 9,
+    "multiple": false,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/differs-9-scalper.xml"
+  },
+  {
+    "key": "differs-9-scalper-multiple",
+    "name": "Differs 9 Scalper Multiple",
+    "contractType": "DIGITDIFF",
+    "prediction": 9,
+    "multiple": true,
+    "category": "Matches/Differs",
+    "xmlFile": "/bots/scalpers/differs-9-scalper.xml"
+  }
+]

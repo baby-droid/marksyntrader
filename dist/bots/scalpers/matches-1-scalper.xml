@@ -1,0 +1,155 @@
+<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
+    <variables>
+      <variable id="varstake1">stake</variable>
+      <variable id="varmstake1">martingale stake</variable>
+      <variable id="varmsize1">martingale size</variable>
+    </variables>
+    <block type="trade_definition" id="tdblock1" deletable="false" x="0" y="0">
+      <statement name="TRADE_OPTIONS">
+        <block type="trade_definition_market" id="tdmarket1" deletable="false" movable="false">
+          <field name="MARKET_LIST">synthetic_index</field>
+          <field name="SUBMARKET_LIST">random_index</field>
+          <field name="SYMBOL_LIST">1HZ10V</field>
+          <next>
+            <block type="trade_definition_tradetype" id="tdtype1" deletable="false" movable="false">
+              <field name="TRADETYPECAT_LIST">digits</field>
+              <field name="TRADETYPE_LIST">matchesdiffers</field>
+              <next>
+                <block type="trade_definition_contracttype" id="tdcontract1" deletable="false" movable="false">
+                  <field name="TYPE_LIST">DIGITMATCH</field>
+                  <next>
+                    <block type="trade_definition_candleinterval" id="tdcandle1" deletable="false" movable="false">
+                      <field name="CANDLEINTERVAL_LIST">60</field>
+                      <next>
+                        <block type="trade_definition_restartbuysell" id="tdrestartbs1" deletable="false" movable="false">
+                          <field name="TIME_MACHINE_ENABLED">FALSE</field>
+                          <next>
+                            <block type="trade_definition_restartonerror" id="tdrestarterr1" deletable="false" movable="false">
+                              <field name="RESTARTONERROR">TRUE</field>
+                            </block>
+                          </next>
+                        </block>
+                      </next>
+                    </block>
+                  </next>
+                </block>
+              </next>
+            </block>
+          </next>
+        </block>
+      </statement>
+      <statement name="INITIALIZATION">
+        <block type="variables_set" id="initset1">
+          <field name="VAR" id="varstake1">stake</field>
+          <value name="VALUE">
+            <block type="math_number" id="initnum1">
+              <field name="NUM">1</field>
+            </block>
+          </value>
+          <next>
+            <block type="variables_set" id="initset2">
+              <field name="VAR" id="varmstake1">martingale stake</field>
+              <value name="VALUE">
+                <block type="variables_get" id="initget1">
+                  <field name="VAR" id="varstake1">stake</field>
+                </block>
+              </value>
+              <next>
+                <block type="variables_set" id="initset3">
+                  <field name="VAR" id="varmsize1">martingale size</field>
+                  <value name="VALUE">
+                    <block type="math_number" id="initnum2">
+                      <field name="NUM">2</field>
+                    </block>
+                  </value>
+                </block>
+              </next>
+            </block>
+          </next>
+        </block>
+      </statement>
+      <statement name="SUBMARKET">
+        <block type="trade_definition_tradeoptions" id="tdoptions1">
+          <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
+          <field name="DURATIONTYPE_LIST">t</field>
+          <value name="DURATION">
+            <shadow type="math_number_positive" id="durshadow1">
+              <field name="NUM">1</field>
+            </shadow>
+          </value>
+          <value name="AMOUNT">
+            <shadow type="math_number_positive" id="amtshadow1">
+              <field name="NUM">1</field>
+            </shadow>
+            <block type="variables_get" id="amtget1">
+              <field name="VAR" id="varmstake1">martingale stake</field>
+            </block>
+          </value>
+          <value name="PREDICTION">
+            <shadow type="math_number_positive" id="predshadow1" inline="true">
+              <field name="NUM">1</field>
+            </shadow>
+          </value>
+        </block>
+      </statement>
+    </block>
+
+    <block type="before_purchase" id="bpblock1" deletable="false" x="0" y="450">
+      <statement name="BEFOREPURCHASE_STACK">
+        <block type="purchase" id="purchase1">
+          <field name="PURCHASE_LIST">DIGITMATCH</field>
+        </block>
+      </statement>
+    </block>
+
+    <block type="after_purchase" id="apblock1" x="550" y="450">
+      <statement name="AFTERPURCHASE_STACK">
+        <block type="controls_if" id="apif1">
+          <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+          <value name="IF0">
+            <block type="contract_check_result" id="apcheck1">
+              <field name="CHECK_RESULT">win</field>
+            </block>
+          </value>
+          <statement name="DO0">
+            <block type="variables_set" id="apwinset1">
+              <field name="VAR" id="varmstake1">martingale stake</field>
+              <value name="VALUE">
+                <block type="variables_get" id="apwinget1">
+                  <field name="VAR" id="varstake1">stake</field>
+                </block>
+              </value>
+              
+            </block>
+          </statement>
+          <statement name="ELSE">
+            <block type="variables_set" id="aplossset1">
+              <field name="VAR" id="varmstake1">martingale stake</field>
+              <value name="VALUE">
+                <block type="math_arithmetic" id="aplossmath1">
+                  <field name="OP">MULTIPLY</field>
+                  <value name="A">
+                    <shadow type="math_number" id="aplossshadowa1">
+                      <field name="NUM">1</field>
+                    </shadow>
+                    <block type="variables_get" id="aplossgeta1">
+                      <field name="VAR" id="varmstake1">martingale stake</field>
+                    </block>
+                  </value>
+                  <value name="B">
+                    <shadow type="math_number" id="aplossshadowb1">
+                      <field name="NUM">1</field>
+                    </shadow>
+                    <block type="variables_get" id="aplossgetb1">
+                      <field name="VAR" id="varmsize1">martingale size</field>
+                    </block>
+                  </value>
+                </block>
+              </value>
+            </block>
+          </statement>
+        </block>
+      </statement>
+    </block>
+    </xml>
+    
