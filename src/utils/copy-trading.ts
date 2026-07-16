@@ -163,6 +163,11 @@ class CopyEngine {
                 ),
             ]);
             if (!auth.authorize) throw new Error('Token rejected by Deriv (check scopes: Read + Trade required).');
+            // Verify the token has both read and trade scopes
+            const scopes: string[] = auth.authorize.scopes || [];
+            if (!scopes.includes('trade')) {
+                throw new Error('Token is missing the "trade" scope. In Deriv → Account Settings → API Token, create a token with both Read AND Trade scopes enabled.');
+            }
             const { loginid, currency, balance, is_virtual, account_list } = auth.authorize;
             // Build structured account_list with clear real/demo labels
             const parsedAccountList: FollowerAccount[] = Array.isArray(account_list)
@@ -250,7 +255,16 @@ class CopyEngine {
                 symbol: sig.symbol,
             };
             if (sig.barrier !== undefined) parameters.barrier = String(sig.barrier);
-            this.send(conn, { buy: '1', price: stake, parameters })
+                /* Use proposal→buy so the follower gets a proper contract_id.
+               'buy: 1' with parameters is the recommended approach per Deriv API docs. */
+            this.send(conn, { proposal: 1, ...parameters })
+                .then((propRes: any) => {
+                    if (propRes?.error) throw new Error(propRes.error.message);
+                    const pid = propRes?.proposal?.id;
+                    const askPrice = propRes?.proposal?.ask_price ?? stake;
+                    if (!pid) throw new Error('No proposal id');
+                    return this.send(conn, { buy: pid, price: Number(askPrice) });
+                })
                 .then(() => {
                     this.update(f.id, { replicated: f.replicated + 1 });
                     this.log(`🔁 ${f.loginid}: ${sig.contract_type} @ ${stake} ${f.currency}`);

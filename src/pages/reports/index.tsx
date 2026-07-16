@@ -300,28 +300,29 @@ const Reports = observer(() => {
                             <div className='reports__day-trades'>
                                 {/* Table header */}
                                 <div className='reports__trade-row reports__trade-row--head'>
-                                    <div>Type</div>
-                                    <div>Buy</div>
-                                    <div>Sell / Close</div>
+                                    <div>Type / Market</div>
+                                    <div>Buy time / Price</div>
+                                    <div>Sell time / Price</div>
                                     <div>Entry spot</div>
                                     <div>Exit spot</div>
-                                    <div>P/L</div>
-                                    <div>Balance</div>
+                                    <div>P/L ({cur})</div>
                                 </div>
                                 {trades.map(t => {
                                     const info = infoMap[t.contract_id];
                                     return (
                                         <div key={t.transaction_id}
                                             className={`reports__trade-row ${t.pnl > 0 ? 'won' : 'lost'}`}>
-                                            <div className='reports__trade-type'>{t.contract_type}</div>
+                                            <div className='reports__trade-type-cell'>
+                                                <span className='reports__trade-type'>{t.contract_type}</span>
+                                                {t.underlying && <span className='reports__trade-mkt'>{t.underlying}</span>}
+                                            </div>
                                             <div className='reports__trade-time-cell'>
                                                 <span className='ts'>{fmtTime(t.purchase_time)}</span>
-                                                {info?.buy_price != null && (
-                                                    <span className='sub'>{Number(info.buy_price).toFixed(2)}</span>
-                                                )}
+                                                <span className='sub'>{t.buy_price > 0 ? t.buy_price.toFixed(2) : ''}</span>
                                             </div>
                                             <div className='reports__trade-time-cell'>
                                                 <span className='ts'>{fmtTime(t.sell_time)}</span>
+                                                <span className='sub'>{t.sell_price > 0 ? t.sell_price.toFixed(2) : ''}</span>
                                             </div>
                                             <div className='reports__trade-spot'>
                                                 {info?.entry_tick ?? info?.entry_spot ?? '—'}
@@ -330,10 +331,7 @@ const Reports = observer(() => {
                                                 {info?.exit_tick ?? info?.exit_spot ?? '—'}
                                             </div>
                                             <div className={`reports__trade-pnl ${t.pnl > 0 ? 'pos' : 'neg'}`}>
-                                                {fmtPnl(t.pnl)}
-                                            </div>
-                                            <div className='reports__trade-balance'>
-                                                {t.balance_after.toFixed(2)}
+                                                {t.pnl > 0 ? '+' : ''}{t.pnl.toFixed(2)}
                                             </div>
                                         </div>
                                     );

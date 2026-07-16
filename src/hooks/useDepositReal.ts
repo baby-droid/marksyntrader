@@ -12,7 +12,7 @@
 import { useCallback, useState } from 'react';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 
-const CASHIER_FALLBACK = 'https://app.deriv.com/cashier/deposit';
+const CASHIER_FALLBACK = 'https://app.deriv.com/portfolio';
 
 export type DepositState = 'idle' | 'loading' | 'error';
 

@@ -519,13 +519,35 @@ const AutoTrades: React.FC = () => {
         { label: 'V50', value: 'R_50' }, { label: 'V75', value: 'R_75' }, { label: 'V100', value: 'R_100' },
     ];
 
+    /* ── Account type indicator ── */
+    const [isDemo, setIsDemo] = React.useState(() => {
+        const id = localStorage.getItem('active_loginid') || '';
+        return id.startsWith('VRTC') || id.startsWith('VR');
+    });
+    React.useEffect(() => {
+        const handler = () => {
+            const id = localStorage.getItem('active_loginid') || '';
+            setIsDemo(id.startsWith('VRTC') || id.startsWith('VR'));
+        };
+        window.addEventListener('storage', handler);
+        return () => window.removeEventListener('storage', handler);
+    }, []);
+
     return (
         <div className='autotrades'>
-            <div className='autotrades__tabs'>
-                <button className={`autotrades__tab ${activeTab === 'smart' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('smart')}>Smart Trading</button>
-                <button className={`autotrades__tab ${activeTab === 'autobots' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('autobots')}>Auto Bots</button>
+            <div className='autotrades__topbar'>
+                <div className='autotrades__tabs'>
+                    <button className={`autotrades__tab ${activeTab === 'smart' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('smart')}>Smart Trading</button>
+                    <button className={`autotrades__tab ${activeTab === 'autobots' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('autobots')}>Auto Bots</button>
+                </div>
+                <span className={`autotrades__acct-badge ${isDemo ? 'demo' : 'real'}`}>
+                    {isDemo ? '🔵 DEMO ACCOUNT' : '🟢 REAL ACCOUNT'}
+                </span>
+                <span className='autotrades__acct-note'>
+                    {isDemo ? 'Bots trade on demo funds' : 'Bots trade with real money'}
+                </span>
             </div>
 
             {/* ── Smart Trading Tab ── */}
