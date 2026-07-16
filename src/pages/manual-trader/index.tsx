@@ -458,6 +458,46 @@ const ManualTrader: React.FC = () => {
     /* ── Skip entry tick (1s markets send the entry tick first; it should not count as T1) ── */
     const skipNextTickRef = useRef(false);
 
+    /* ── Sound engine ── */
+    const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem('mt_sound') !== 'off');
+    const [voiceType, setVoiceType]       = useState<'robot' | 'female' | 'male'>(() =>
+        (localStorage.getItem('mt_voice') as any) || 'female');
+    const [soundPanelOpen, setSoundPanelOpen] = useState(false);
+    const soundEnabledRef = useRef(soundEnabled);
+    const voiceTypeRef    = useRef(voiceType);
+    const displayCurRef   = useRef('USD');
+    useEffect(() => { soundEnabledRef.current = soundEnabled; localStorage.setItem('mt_sound', soundEnabled ? 'on' : 'off'); }, [soundEnabled]);
+    useEffect(() => { voiceTypeRef.current = voiceType; localStorage.setItem('mt_voice', voiceType); }, [voiceType]);
+    useEffect(() => { displayCurRef.current = displayCur; }, [displayCur]);
+
+    /* Stable speak function — reads live refs so it never needs to be in dep arrays */
+    const speak = useCallback((text: string) => {
+        if (!soundEnabledRef.current || !('speechSynthesis' in window)) return;
+        window.speechSynthesis.cancel();
+        const utter = new SpeechSynthesisUtterance(text);
+        const vt = voiceTypeRef.current;
+        if (vt === 'robot') {
+            utter.pitch = 0.05;
+            utter.rate  = 1.3;
+            utter.volume = 1;
+        } else if (vt === 'female') {
+            utter.pitch = 1.7;
+            utter.rate  = 1.05;
+            utter.volume = 1;
+            const voices = window.speechSynthesis.getVoices();
+            const v = voices.find(x => /samantha|karen|victoria|moira|fiona|allison|zira|female/i.test(x.name));
+            if (v) utter.voice = v;
+        } else {
+            utter.pitch = 0.65;
+            utter.rate  = 0.92;
+            utter.volume = 1;
+            const voices = window.speechSynthesis.getVoices();
+            const v = voices.find(x => /david|daniel|alex|mark|male|google uk english male/i.test(x.name));
+            if (v) utter.voice = v;
+        }
+        window.speechSynthesis.speak(utter);
+    }, []);
+
     /* ── Positions sidebar ── */
     const [positionsPanelOpen, setPositionsPanelOpen] = useState(true);
     const [positionsTab, setPositionsTab] = useState<'open' | 'closed'>('open');
@@ -545,6 +585,8 @@ const ManualTrader: React.FC = () => {
                     const entry = { digit: d, order: tradeTicksRef.current.length + 1 };
                     tradeTicksRef.current = [...tradeTicksRef.current, entry];
                     setTradeState(prev => prev ? { ...prev, ticks: [...tradeTicksRef.current] } : prev);
+                    /* Voice: count each tick aloud */
+                    speak(`T ${entry.order}`);
 
                     /* Flash the digit circle for this tick */
                     if (activeTickTimerRef.current) clearTimeout(activeTickTimerRef.current);
@@ -723,6 +765,12 @@ const ManualTrader: React.FC = () => {
             const anyResult   = settled[0];
 
             setPnl(prev => prev + totalProfit);
+            /* Voice: announce bulk result */
+            const _bulkAmt = fromUsd(Math.abs(totalProfit)).toFixed(2);
+            if (totalProfit >= 0)
+                speak(`Wow! Money earned! ${_bulkAmt} ${displayCurRef.current}`);
+            else
+                speak(`Sorry. Money lost. ${_bulkAmt} ${displayCurRef.current}`);
 
             pushLog(totalProfit >= 0 ? 'response' : 'error', `BULK RESULT ×${_bulkCount}`, {
                 total_profit: totalProfit.toFixed(2),
@@ -804,6 +852,12 @@ const ManualTrader: React.FC = () => {
                         ? { ...x, status: c.status, profit, entry: c.entry_spot, exit: c.exit_spot }
                         : x));
                     setPnl(prev => prev + profit);
+                    /* Voice: announce single-contract result */
+                    const _amt = fromUsd(Math.abs(profit)).toFixed(2);
+                    if (c.status === 'won')
+                        speak(`Wow! Money earned! ${_amt} ${displayCurRef.current}`);
+                    else
+                        speak(`Sorry. Money lost. ${_amt} ${displayCurRef.current}`);
                     if (tradeStateTimeoutRef.current) clearTimeout(tradeStateTimeoutRef.current);
                     tradeStateTimeoutRef.current = setTimeout(() => setTradeState(null), 5000);
                 }
@@ -815,7 +869,7 @@ const ManualTrader: React.FC = () => {
             setTradeState(null);
             setPositions(p => p.filter(x => x.id !== tradeId));
         }
-    }, [authorized, buyContract]);
+    }, [authorized, buyContract, speak]);
 
     /* Build map: digit → [T1, T2, …] order numbers that landed on it */
     const tradeTickMap = useMemo(() => {
@@ -869,6 +923,46 @@ const ManualTrader: React.FC = () => {
                     <div className={`mt-topbar__stat ${pnl >= 0 ? 'pos' : 'neg'}`}>
                         <span>Session P/L</span>
                         <strong>{pnl >= 0 ? '+' : ''}{fmt(pnl)}</strong>
+                    </div>
+
+                    {/* Sound settings */}
+                    <div className='mt-sound-wrap'>
+                        <button
+                            className={`mt-sound-btn ${soundEnabled ? 'on' : 'off'}`}
+                            title='Sound settings'
+                            onClick={() => setSoundPanelOpen(v => !v)}>
+                            {soundEnabled ? '🔊' : '🔇'}
+                        </button>
+                        {soundPanelOpen && (
+                            <div className='mt-sound-panel'>
+                                <div className='mt-sound-panel__hdr'>🔊 Sound Settings</div>
+
+                                <button
+                                    className={`mt-sound-panel__toggle ${soundEnabled ? 'on' : ''}`}
+                                    onClick={() => setSoundEnabled(v => !v)}>
+                                    {soundEnabled ? '🔊 Sound ON' : '🔇 Sound OFF'}
+                                </button>
+
+                                <div className='mt-sound-panel__label'>Voice Type</div>
+                                <div className='mt-sound-panel__voices'>
+                                    {(['robot', 'female', 'male'] as const).map(v => (
+                                        <button key={v}
+                                            className={`mt-sound-voice-btn ${voiceType === v ? 'active' : ''}`}
+                                            onClick={() => setVoiceType(v)}>
+                                            {v === 'robot' ? '🤖 Robot' : v === 'female' ? '👩 Female' : '👨 Male'}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <div className='mt-sound-panel__label' style={{ marginTop: '0.5rem', fontSize: '0.68rem', color: '#64748b' }}>
+                                    Speaks: T1 T2… on each tick · "Wow!" on win · "Sorry" on loss
+                                </div>
+                                <button className='mt-sound-panel__test'
+                                    onClick={() => speak('Hello! I am your trading assistant. T one. T two. Wow! Money earned!')}>
+                                    ▶ Test Voice
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
@@ -988,7 +1082,7 @@ const ManualTrader: React.FC = () => {
                     <div className='mt-stream-card'>
                         <div className='mt-stream-card__label'>Recent Digits</div>
                         <div className='mt-stream'>
-                            {digitHistory.slice(-40).reverse().map((d, i) => {
+                            {digitHistory.slice(-10).reverse().map((d, i) => {
                                 const c = getDigitCircleColors(pcts)[d];
                                 return (
                                     <span key={i}
