@@ -422,3 +422,19 @@
     cursor: not-allowed;
   }
 }
+
+/* ─── Mobile Responsive (extra) ─── */
+@media (max-width: 600px) {
+  .copy-trading {
+    padding: 1rem !important;
+
+    &__header { flex-direction: column !important; gap: 0.8rem !important; }
+    &__controls { flex-direction: column !important; gap: 0.8rem !important; }
+    &__accounts-grid {
+      grid-template-columns: 1fr !important;
+    }
+    &__stats-grid {
+      grid-template-columns: 1fr 1fr !important;
+    }
+  }
+}

@@ -496,3 +496,19 @@
     .lost & { color: #E24A43; }
   }
 }
+
+/* ─── Mobile Responsive ─── */
+@media (max-width: 600px) {
+  .pro-hedge {
+    padding: 1rem;
+    gap: 1rem;
+
+    &__header { flex-direction: column; gap: 0.8rem; h1 { font-size: 1.6rem; } }
+    &__header-right { flex-wrap: wrap; gap: 0.8rem; }
+    &__balance { align-items: flex-start; strong { font-size: 1.4rem; } }
+
+    &__body {
+      flex-direction: column !important;
+    }
+  }
+}

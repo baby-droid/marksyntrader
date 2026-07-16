@@ -1,0 +1,216 @@
+/**
+ * Global Mobile Responsive Overrides
+ * Targets: Nokia C32 (~360px) → tablet (~768px) → desktop (1280px+)
+ * Applied on top of all component/page styles.
+ */
+
+/* ─── Ensure smooth scrolling and no horizontal overflow on the root ─── */
+html, body {
+    overflow-x: hidden;
+    -webkit-text-size-adjust: 100%;
+}
+
+/* ─── Run Panel ─── */
+@media (max-width: 1024px) {
+    .run-panel {
+        &__container {
+            width: 100% !important;
+        }
+
+        &__stat {
+            width: 100% !important;
+        }
+    }
+}
+
+/* ─── AI Assistant Panel ─── */
+@media (max-width: 600px) {
+    .ai-assistant {
+        &__panel {
+            width: 100% !important;
+            max-width: 100% !important;
+            left: 0 !important;
+            right: 0 !important;
+            border-radius: 0 !important;
+        }
+    }
+}
+
+/* ─── Dashboard tab container ─── */
+@media (max-width: 600px) {
+    .bot-dashboard {
+        height: auto !important;
+        min-height: calc(100vh - 4.4rem);
+    }
+
+    .tab__dashboard {
+        flex-direction: column !important;
+    }
+}
+
+/* ─── Layout header ─── */
+@media (max-width: 600px) {
+    .deriv-header {
+        padding: 0 0.8rem !important;
+    }
+
+    .header__deposit-btn {
+        padding: 5px 10px !important;
+        font-size: 1.1rem !important;
+
+        span:last-child {
+            display: none; /* hide text, keep icon on very small screens */
+        }
+    }
+
+    .deriv-account-switcher__button {
+        margin-inline-end: 0 !important;
+    }
+}
+
+/* ─── Main page tabs — always horizontally scrollable ─── */
+@media (max-width: 900px) {
+    .dc-tabs__list {
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        -webkit-overflow-scrolling: touch !important;
+        scrollbar-width: none !important;
+        flex-wrap: nowrap !important;
+
+        &::-webkit-scrollbar { display: none !important; }
+    }
+
+    .dc-tabs__item {
+        flex-shrink: 0 !important;
+        white-space: nowrap !important;
+        padding: 0 1rem !important;
+        font-size: 1.2rem !important;
+    }
+}
+
+/* ─── Main page content padding ─── */
+@media (max-width: 600px) {
+    .main {
+        padding: 0 !important;
+        height: calc(100vh - 5.6rem) !important;
+    }
+
+    .main__container {
+        overflow-x: hidden;
+    }
+}
+
+/* ─── Nav drawer — full-width on tiny screens ─── */
+@media (max-width: 360px) {
+    .nav-drawer__panel {
+        width: 100vw !important;
+    }
+}
+
+/* ─── Dialogs / Modals ─── */
+@media (max-width: 600px) {
+    .dc-dialog__wrapper {
+        padding: 1.2rem !important;
+
+        .dc-dialog__dialog {
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            border-radius: 1.2rem !important;
+        }
+    }
+}
+
+/* ─── Floating buttons — keep within safe area ─── */
+@media (max-width: 600px) {
+    .floating-run-button {
+        bottom: max(1.2rem, env(safe-area-inset-bottom, 1.2rem)) !important;
+    }
+
+    .risk-disclaimer-float {
+        bottom: max(1.2rem, env(safe-area-inset-bottom, 1.2rem)) !important;
+    }
+}
+
+/* ─── Journal / Run panel drawer on mobile ─── */
+@media (max-width: 600px) {
+    .dc-drawer {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+}
+
+/* ─── Reports / data tables — always scrollable ─── */
+@media (max-width: 768px) {
+    .data-list table,
+    .reports table,
+    .autotrades table {
+        display: block;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        max-width: 100%;
+    }
+}
+
+/* ─── Quick Strategy form ─── */
+@media (max-width: 600px) {
+    .quick-strategy {
+        &__form {
+            padding: 1rem !important;
+        }
+
+        &__input-row {
+            flex-direction: column !important;
+            gap: 0.8rem !important;
+        }
+    }
+}
+
+/* ─── Loading screen ─── */
+@media (max-width: 600px) {
+    .loading-screen {
+        &__content {
+            padding: 1.6rem !important;
+        }
+
+        &__logo {
+            width: 80px !important;
+            height: 80px !important;
+        }
+
+        &__title {
+            font-size: 1.6rem !important;
+        }
+    }
+}
+
+/* ─── Install prompt / PWA banner ─── */
+@media (max-width: 600px) {
+    .install-prompt {
+        width: calc(100vw - 2rem) !important;
+        max-width: 100% !important;
+        left: 1rem !important;
+        right: 1rem !important;
+    }
+}
+
+/* ─── Settings panel ─── */
+@media (max-width: 600px) {
+    .settings-panel {
+        width: 100% !important;
+        max-width: 100% !important;
+        right: 0 !important;
+        border-radius: 1.2rem 1.2rem 0 0 !important;
+        bottom: 0 !important;
+        top: auto !important;
+    }
+}
+
+/* ─── Bot notification toast ─── */
+@media (max-width: 600px) {
+    .Toastify__toast-container {
+        width: calc(100vw - 2rem) !important;
+        left: 1rem !important;
+        right: 1rem !important;
+    }
+}

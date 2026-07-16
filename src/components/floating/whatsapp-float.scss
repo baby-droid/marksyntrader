@@ -39,7 +39,7 @@
 
 /* ─── Panel ─── */
 .wa-float-panel {
-  position: fixed; z-index: 9100; width: 335px;
+  position: fixed; z-index: 9100; width: min(335px, calc(100vw - 24px));
   border-radius: 14px;
   background: linear-gradient(145deg,#0d1b2a,#1a2540);
   border: 1px solid rgba(37,211,102,.28);

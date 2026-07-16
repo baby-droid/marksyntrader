@@ -465,3 +465,22 @@
     &__right { min-height: 50vh; }
   }
 }
+
+/* ─── Mobile Responsive (extra) ─── */
+@media (max-width: 600px) {
+  .dcircles {
+    padding: 1rem !important;
+
+    &__grid {
+      grid-template-columns: 1fr !important;
+    }
+    &__tabs-row {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      &::-webkit-scrollbar { display: none; }
+      flex-wrap: nowrap;
+    }
+    &__tx-list, &__journal-list { font-size: 1.1rem; }
+  }
+}

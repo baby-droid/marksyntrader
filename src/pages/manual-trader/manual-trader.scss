@@ -99,8 +99,7 @@
   flex: 1;
   min-height: 0;
   gap: 0;
-  overflow: auto; /* enables both-axis scroll on small screens */
-  min-width: 640px; /* allow horizontal scroll before collapsing */
+  overflow: auto;
 }
 
 /* ─── Chart column (left, grows) — gets more horizontal space ─── */
@@ -1209,9 +1208,27 @@
 
 /* ─── Responsive ─── */
 @media (max-width: 920px) {
-  .mt-body { flex-direction: column; overflow-y: auto; }
-  .mt-trade-panel { width: 100%; border-left: none; border-top: 1px solid rgba(255,255,255,0.07); }
-  .mt-chart-col   { overflow-y: visible; }
+  .mt-body { flex-direction: column; overflow-x: hidden; overflow-y: auto; }
+  .mt-trade-panel {
+    width: 100% !important;
+    min-width: 0 !important;
+    border-left: none;
+    border-top: 1px solid rgba(255,255,255,0.07);
+    max-height: none;
+  }
+  .mt-chart-col   { overflow-y: visible; flex: none; }
   .mt-pos-sidebar { display: none; }
   .mt-pos-sidebar__toggle { display: none; }
+  .mt-topbar { padding: 0.5rem 0.8rem; gap: 0.4rem; }
+  .mt-topbar__right { gap: 0.6rem; flex-wrap: wrap; }
+  .mt-chart-card__hdr { flex-wrap: wrap; gap: 0.5rem; padding: 0.4rem 0.8rem; }
+}
+
+@media (max-width: 480px) {
+  .mt-page { font-size: 0.9rem; }
+  .mt-topbar { padding: 0.4rem 0.6rem; }
+  .mt-topbar__stat strong { font-size: 0.95rem; }
+  .mt-trade-panel { padding-bottom: 0.8rem; }
+  /* Digit circles — allow horizontal scroll on very small screens */
+  .mt-digit-circles { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 }

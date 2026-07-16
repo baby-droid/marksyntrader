@@ -560,3 +560,35 @@
         }
     }
 }
+
+/* ─── Mobile Responsive ─── */
+@media (max-width: 768px) {
+    .run-panel {
+        &__container {
+            width: 100% !important;
+        }
+
+        &__stat {
+            width: 100% !important;
+        }
+    }
+
+    .dc-modal__container_self-exclusion__modal {
+        width: 100% !important;
+        max-width: 100% !important;
+        height: auto !important;
+    }
+
+    .statistics__modal {
+        width: 100% !important;
+        max-width: 100% !important;
+        height: auto !important;
+    }
+}
+
+@media (max-width: 600px) {
+    .dc-dialog__container_run-panel__dialog {
+        width: calc(100vw - 2rem) !important;
+        max-width: 100% !important;
+    }
+}
