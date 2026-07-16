@@ -262,7 +262,8 @@ const DigitRow: React.FC<{
     tradeState: TradeState | null;
     totalTicks: number;
     historyReady: boolean;
-}> = ({ pcts, counts, currentDigit, tradeState, totalTicks, historyReady }) => {
+    activeTradeTickDigit?: number | null;
+}> = ({ pcts, counts, currentDigit, tradeState, totalTicks, historyReady, activeTradeTickDigit }) => {
     const colors = useMemo(() => getDigitCircleColors(pcts), [pcts]);
 
     return (
@@ -304,6 +305,9 @@ const DigitRow: React.FC<{
 
                     const isColored = color !== '#94a3b8';
 
+                    /* Which ticks of the current trade landed on this digit */
+                    const isActiveTick = activeTradeTickDigit === d && tradeState && !tradeState.settled;
+
                     return (
                         <div key={d} className={`mt-circle-cell ${isCurrent ? 'is-current' : ''}`}>
                             {/* Downward triangle — shows on current digit */}
@@ -311,7 +315,7 @@ const DigitRow: React.FC<{
 
                             {/* Circle — solid fill when colored */}
                             <div
-                                className={`mt-circle ${isColored ? 'mt-circle--filled' : ''} ${isExit ? `mt-circle--${tradeResult}` : ''}`}
+                                className={`mt-circle ${isColored ? 'mt-circle--filled' : ''} ${isExit ? `mt-circle--${tradeResult}` : ''} ${isActiveTick ? 'mt-circle--tick-active' : ''}`}
                                 style={{
                                     '--cc': isColored ? color : '#ffffff',
                                     boxShadow: isExit && tradeResult === 'won'
@@ -401,6 +405,10 @@ const ManualTrader: React.FC = () => {
     const [bulkMode, setBulkMode]   = useState(false);
     const [bulkCount, setBulkCount] = useState(5);
 
+    /* ── Active-tick highlight during contract settlement ── */
+    const [activeTradeTickDigit, setActiveTradeTickDigit] = useState<number | null>(null);
+    const activeTickTimerRef = useRef<any>(null);
+
     const proposalTimer = useRef<any>(null);
     const idRef = useRef(0);
 
@@ -441,6 +449,11 @@ const ManualTrader: React.FC = () => {
                 const entry = { digit: tick.digit, order: tradeTicksRef.current.length + 1 };
                 tradeTicksRef.current = [...tradeTicksRef.current, entry];
                 setTradeState(prev => prev ? { ...prev, ticks: [...tradeTicksRef.current] } : prev);
+
+                /* Flash the digit circle for this tick */
+                if (activeTickTimerRef.current) clearTimeout(activeTickTimerRef.current);
+                setActiveTradeTickDigit(tick.digit);
+                activeTickTimerRef.current = setTimeout(() => setActiveTradeTickDigit(null), 550);
             }
         });
         return unsub;
@@ -715,6 +728,7 @@ const ManualTrader: React.FC = () => {
                         tradeState={tradeState}
                         totalTicks={digitHistory.length}
                         historyReady={historyReady}
+                        activeTradeTickDigit={activeTradeTickDigit}
                     />
 
                     {/* Recent digit stream */}
@@ -934,6 +948,12 @@ const ManualTrader: React.FC = () => {
                                             {n}
                                         </button>
                                     ))}
+                                    <NumberField
+                                        className='mtp-bulk-count-inp'
+                                        min={1} max={100}
+                                        value={bulkCount}
+                                        onCommit={n => setBulkCount(n)}
+                                    />
                                 </div>
                             )}
                         </div>

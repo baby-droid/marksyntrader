@@ -99,6 +99,8 @@
   flex: 1;
   min-height: 0;
   gap: 0;
+  overflow: auto; /* enables both-axis scroll on small screens */
+  min-width: 640px; /* allow horizontal scroll before collapsing */
 }
 
 /* ─── Chart column (left, grows) — gets more horizontal space ─── */
@@ -193,11 +195,12 @@
     animation: pulse-ind 1s infinite;
   }
 
-  /* 10 medium-sized circles in a row — no max-width cap so they fill the chart column */
+  /* 10 smaller circles in a row — capped at 56 px each, centred */
   &__row {
     display: grid;
-    grid-template-columns: repeat(10, 1fr);
-    gap: 0.3rem;
+    grid-template-columns: repeat(10, minmax(0, 56px));
+    justify-content: center;
+    gap: 0.25rem;
   }
 
   &__legend {
@@ -318,12 +321,23 @@
 
 /* Percentage label — sits OUTSIDE below the circle */
 .mt-circle__pct-ext {
-  font-size: 0.68rem;
-  font-weight: 600;
-  color: #64748b;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #334155;
   text-align: center;
   line-height: 1.2;
   margin-top: 0.18rem;
+}
+
+/* Active-tick flash — fires while contract is counting ticks */
+.mt-circle--tick-active {
+  animation: circle-tick-flash 0.5s ease !important;
+}
+
+@keyframes circle-tick-flash {
+  0%   { box-shadow: 0 0 0 0 rgba(99,102,241,0); }
+  30%  { box-shadow: 0 0 0 6px rgba(99,102,241,0.6), 0 0 18px rgba(99,102,241,0.4); transform: scale(1.15); }
+  100% { box-shadow: 0 0 0 3px rgba(99,102,241,0.3); transform: scale(1); }
 }
 
 @keyframes circle-flash-win {
@@ -656,6 +670,19 @@
   align-items: center;
   gap: 0.4rem;
   flex-wrap: wrap;
+}
+.mtp-bulk-count-inp {
+  width: 52px;
+  height: 30px;
+  border-radius: 0.4rem;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: #e2e8f0;
+  font-size: 0.88rem;
+  font-weight: 700;
+  text-align: center;
+  font-family: inherit;
+  &:focus { outline: none; border-color: rgba(245,158,11,0.5); }
 }
 .mtp-bulk-toggle {
   padding: 0.38rem 0.8rem;

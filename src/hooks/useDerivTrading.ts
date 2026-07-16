@@ -90,21 +90,32 @@ export function useDerivTrading(): UseDerivTradingReturn {
     const { symbol, contract_type, stake, duration, duration_unit = 't', barrier, currency: cur = currency } = params;
     try {
       setIsTrading(true);
-      // Direct buy — single round-trip, no proposal step needed
-      const buyParams: any = {
-        buy: '1',
-        price: stake,
-        parameters: {
-          amount: stake,
-          basis: 'stake',
-          contract_type,
-          currency: cur,
-          duration,
-          duration_unit,
-          symbol,
-        },
+      // Step 1: proposal → get ask_price and proposal ID
+      // NOTE: Deriv API requires underlying_symbol (not symbol) in proposal requests.
+      // Direct buy with inline parameters causes "Input validation failed" for digit types.
+      const proposalReq: any = {
+        proposal: 1,
+        amount: stake,
+        basis: 'stake',
+        contract_type,
+        currency: cur,
+        duration,
+        duration_unit,
+        underlying_symbol: symbol,
       };
-      if (barrier !== undefined) buyParams.parameters.barrier = String(barrier);
+      if (barrier !== undefined) proposalReq.barrier = String(barrier);
+      const proposalRes = await api_base.api.send(proposalReq);
+      if (proposalRes?.error) throw proposalRes.error;
+      const proposalId = proposalRes?.proposal?.id;
+      const askPrice = Number(proposalRes?.proposal?.ask_price ?? stake);
+      if (!proposalId) throw new Error('Proposal failed — no ID returned');
+
+      // Step 2: buy using proposal ID
+      const buyParams: any = {
+        buy: proposalId,
+        price: askPrice,
+      };
+      // (no inline parameters block — use the proposal ID path only)
 
       const buyRes = await api_base.api.send(buyParams);
 
@@ -121,29 +132,7 @@ export function useDerivTrading(): UseDerivTradingReturn {
       });
 
       if (!buyRes?.buy?.contract_id) {
-        // Fallback: proposal + buy
-        const proposalReq: any = {
-          proposal: 1,
-          amount: stake,
-          basis: 'stake',
-          contract_type,
-          currency: cur,
-          duration,
-          duration_unit,
-          symbol,
-        };
-        if (barrier !== undefined) proposalReq.barrier = String(barrier);
-        const proposalRes = await api_base.api.send(proposalReq);
-        if (!proposalRes?.proposal?.id) return null;
-        const buyRes2 = await api_base.api.send({
-          buy: proposalRes.proposal.id,
-          price: proposalRes.proposal.ask_price,
-        });
-        if (!buyRes2?.buy?.contract_id) return null;
-        const cid2 = String(buyRes2.buy.contract_id);
-        activeContracts.current.add(cid2);
-        monitorContract(cid2, contract_type, stake);
-        return { id: cid2, type: contract_type, stake, profit: 0, won: false, time: Date.now() };
+        throw new Error('Buy failed — no contract ID returned');
       }
 
       const contractId = String(buyRes.buy.contract_id);
