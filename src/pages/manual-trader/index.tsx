@@ -23,8 +23,8 @@ const ALL_MARKETS = [
         { label: 'Volatility 100 Index', value: 'R_100' },
     ]},
     { group: 'Bear & Bull', options: [
-        { label: 'Bear Market Index', value: 'WBEAR1HZ' },
-        { label: 'Bull Market Index', value: 'WBULL1HZ' },
+        { label: 'Bear Market Index', value: 'WBEAR' },
+        { label: 'Bull Market Index', value: 'WBULL' },
     ]},
     { group: 'Jump', options: [
         { label: 'Jump 10 Index',  value: 'JD10'  },
@@ -263,7 +263,8 @@ const DigitRow: React.FC<{
     totalTicks: number;
     historyReady: boolean;
     activeTradeTickDigit?: number | null;
-}> = ({ pcts, counts, currentDigit, tradeState, totalTicks, historyReady, activeTradeTickDigit }) => {
+    tradeTickMap?: Map<number, number[]>;
+}> = ({ pcts, counts, currentDigit, tradeState, totalTicks, historyReady, activeTradeTickDigit, tradeTickMap }) => {
     const colors = useMemo(() => getDigitCircleColors(pcts), [pcts]);
 
     return (
@@ -287,58 +288,65 @@ const DigitRow: React.FC<{
                     const isCurrent   = d === currentDigit;
                     const color       = colors[d];
                     const pct         = pcts[d];
-                    const tradeCount  = tradeState?.ticks.filter(t => t.digit === d).length ?? 0;
                     const isExit      = tradeState?.exitDigit === d && tradeState?.settled;
                     const tradeResult = tradeState?.result;
+                    const isColored   = color !== '#94a3b8';
 
-                    let borderColor = color;
-                    let glow        = 'none';
-                    if (isExit && tradeResult === 'won') {
-                        borderColor = '#22c55e';
-                        glow = '0 0 0 3px #22c55e88, 0 0 18px #22c55e55';
-                    } else if (isExit && tradeResult === 'lost') {
-                        borderColor = '#ef4444';
-                        glow = '0 0 0 3px #ef444488, 0 0 18px #ef444455';
-                    } else if (isCurrent) {
-                        glow = `0 0 0 2px ${color}66`;
-                    }
+                    /* Tick orders (T1, T2, …) that landed on this digit during current trade */
+                    const tickOrders        = tradeTickMap?.get(d) ?? [];
+                    const hasTickDuringTrade = tickOrders.length > 0 && tradeState && !tradeState.settled;
+                    const latestOrder       = tickOrders.at(-1);
 
-                    const isColored = color !== '#94a3b8';
-
-                    /* Which ticks of the current trade landed on this digit */
+                    /* Active-tick flash */
                     const isActiveTick = activeTradeTickDigit === d && tradeState && !tradeState.settled;
 
                     return (
                         <div key={d} className={`mt-circle-cell ${isCurrent ? 'is-current' : ''}`}>
-                            {/* Downward triangle — shows on current digit */}
-                            <div className={`mt-tri ${isCurrent ? 'mt-tri--on' : ''}`}>▼</div>
+                            {/* Triangle / tick label — above each circle */}
+                            <div className={`mt-tri ${(isCurrent || hasTickDuringTrade) ? 'mt-tri--on' : ''} ${hasTickDuringTrade ? 'mt-tri--tick-label' : ''}`}>
+                                {hasTickDuringTrade ? `T${latestOrder}` : '▼'}
+                            </div>
 
-                            {/* Circle — solid fill when colored */}
+                            {/* Circle */}
                             <div
-                                className={`mt-circle ${isColored ? 'mt-circle--filled' : ''} ${isExit ? `mt-circle--${tradeResult}` : ''} ${isActiveTick ? 'mt-circle--tick-active' : ''}`}
+                                className={[
+                                    'mt-circle',
+                                    isColored ? 'mt-circle--filled' : '',
+                                    isExit ? `mt-circle--${tradeResult}` : '',
+                                    hasTickDuringTrade ? 'mt-circle--trade-tick' : '',
+                                    isActiveTick ? 'mt-circle--tick-active' : '',
+                                ].filter(Boolean).join(' ')}
                                 style={{
-                                    '--cc': isColored ? color : '#ffffff',
-                                    boxShadow: isExit && tradeResult === 'won'
-                                        ? '0 0 0 3px #22c55e88, 0 0 18px #22c55e55'
+                                    '--cc': isExit && tradeResult === 'won'
+                                        ? '#22c55e'
                                         : isExit && tradeResult === 'lost'
-                                        ? '0 0 0 3px #ef444488, 0 0 18px #ef444455'
+                                        ? '#ef4444'
+                                        : hasTickDuringTrade
+                                        ? '#1e293b'   /* dark charcoal while ticking */
+                                        : isColored ? color : '#ffffff',
+                                    boxShadow: isExit && tradeResult === 'won'
+                                        ? '0 0 0 4px #22c55e99, 0 0 22px #22c55e77'
+                                        : isExit && tradeResult === 'lost'
+                                        ? '0 0 0 4px #ef444499, 0 0 22px #ef444477'
                                         : isCurrent
                                         ? '0 0 0 2.5px #7c3aed, 0 0 10px #7c3aed55'
                                         : undefined,
-                                    transform: isCurrent ? 'scale(1.12)' : 'scale(1)',
+                                    transform: (isCurrent || isExit) ? 'scale(1.12)' : 'scale(1)',
                                 } as React.CSSProperties}
                             >
-                                <span className={`mt-circle__num ${isColored ? 'mt-circle__num--light' : ''}`}>
+                                <span className={`mt-circle__num ${(isColored || hasTickDuringTrade || isExit) ? 'mt-circle__num--light' : ''}`}>
                                     {d}
                                 </span>
-                                {tradeCount > 0 && (
-                                    <span className='mt-circle__trade-dot'
-                                        style={{
-                                            background: isExit && tradeResult === 'won' ? '#22c55e'
-                                                : isExit && tradeResult === 'lost' ? '#ef4444'
-                                                : '#3b82f6',
-                                        }}>
-                                        {tradeCount}
+
+                                {/* T1/T2 badges inside circle for intermediate ticks */}
+                                {hasTickDuringTrade && tickOrders.map(order => (
+                                    <span key={order} className='mt-circle__tick-badge'>T{order}</span>
+                                ))}
+
+                                {/* WIN / LOSS label on the exit circle */}
+                                {isExit && tradeResult && (
+                                    <span className={`mt-circle__exit-label mt-circle__exit-label--${tradeResult}`}>
+                                        {tradeResult === 'won' ? 'WIN' : 'LOSS'}
                                     </span>
                                 )}
                             </div>
@@ -346,7 +354,7 @@ const DigitRow: React.FC<{
                             {/* Percentage — outside below circle */}
                             <div className='mt-circle__pct-ext'>{pct.toFixed(1)}%</div>
 
-                            {/* Win/loss amount */}
+                            {/* Profit readout on exit digit */}
                             {isExit && tradeResult && (
                                 <div className={`mt-circle__result mt-circle__result--${tradeResult}`}>
                                     {tradeResult === 'won'
@@ -366,7 +374,7 @@ const DigitRow: React.FC<{
                 <span style={{ color: '#ef4444' }}>● Lowest</span>
                 <span style={{ color: '#eab308' }}>● 2nd Low</span>
                 <span style={{ color: '#94a3b8' }}>● Others</span>
-                <span style={{ color: '#ef4444' }}>▼ Current</span>
+                <span style={{ color: '#7c3aed' }}>▼ Current</span>
             </div>
         </div>
     );
@@ -408,6 +416,10 @@ const ManualTrader: React.FC = () => {
     /* ── Active-tick highlight during contract settlement ── */
     const [activeTradeTickDigit, setActiveTradeTickDigit] = useState<number | null>(null);
     const activeTickTimerRef = useRef<any>(null);
+
+    /* ── Positions sidebar ── */
+    const [positionsPanelOpen, setPositionsPanelOpen] = useState(false);
+    const [positionsTab, setPositionsTab] = useState<'open' | 'closed'>('open');
 
     const proposalTimer = useRef<any>(null);
     const idRef = useRef(0);
@@ -551,34 +563,90 @@ const ManualTrader: React.FC = () => {
             ...(barrierVal !== undefined ? { barrier: barrierVal } : {}),
         };
 
-        /* ── Bulk mode: fire N simultaneous contracts ── */
+        /* ── Bulk mode: fire N simultaneous contracts (same entry/exit) ── */
         if (_bulkMode && _bulkCount > 1) {
+            const bulkTradeId = idRef.current++;
+
+            /* Show as open in positions immediately */
+            const bulkPos: any = {
+                id: bulkTradeId, symbol: _symbol.label,
+                type: `${def.label} ×${_bulkCount}`,
+                contractType: def.type,
+                stake: s * _bulkCount,   /* total stake across all contracts */
+                status: 'open', profit: 0, tick: 0, duration: dur, time: Date.now(),
+            };
+            setPositions(p => [bulkPos, ...p.slice(0, 49)]);
+
+            /* Track ticks visually — same as single mode */
+            tradeTicksRef.current = [];
+            tradeActiveRef.current = true;
+            tradeDurRef.current = isSecBased ? 0 : dur;
+            setTradeState({ ticks: [], duration: dur, settled: false, result: null, profit: 0, exitDigit: null });
+
             pushLog('request', `BUY ×${_bulkCount} ${def.label}`, {
-                buy: '1', price: s,
+                contracts: _bulkCount, stake_each: s, total_stake: s * _bulkCount,
                 parameters: contractParams,
             });
+
+            /* Tick progress counter for positions panel */
+            let t = 0;
+            const iv = setInterval(() => {
+                t++;
+                setPositions(p => p.map(x => x.id === bulkTradeId && x.status === 'open'
+                    ? { ...x, tick: Math.min(t, dur) } : x));
+                if (t >= dur) clearInterval(iv);
+            }, 1000);
+
+            /* Fire all N contracts simultaneously → same entry tick → same result */
             const results = await Promise.allSettled(
                 Array.from({ length: _bulkCount }, () =>
-                    new Promise<number>(resolve =>
-                        buyContract(contractParams, c => resolve(applyCommission(c.profit)))
-                            .catch(() => resolve(0))
+                    new Promise<{ profit: number; status: string; entry?: number; exit?: number }>(resolve =>
+                        buyContract(contractParams, c => resolve({
+                            profit: applyCommission(c.profit),
+                            status: c.status ?? 'lost',
+                            entry: c.entry_spot,
+                            exit: c.exit_spot,
+                        })).catch(() => resolve({ profit: 0, status: 'lost' }))
                     )
                 )
             );
-            const totalProfit = results.reduce((acc, r) => acc + (r.status === 'fulfilled' ? r.value : 0), 0);
-            pushLog(totalProfit >= 0 ? 'response' : 'error', `RESULT ×${_bulkCount}`, {
-                total_profit: totalProfit.toFixed(2),
-                won: results.filter(r => r.status === 'fulfilled' && (r as any).value > 0).length,
-                lost: results.filter(r => r.status === 'fulfilled' && (r as any).value <= 0).length,
-            });
+
+            clearInterval(iv);
+            tradeActiveRef.current = false;
+
+            const settled = results
+                .filter(r => r.status === 'fulfilled')
+                .map(r => (r as any).value);
+            const totalProfit = settled.reduce((a: number, r: any) => a + r.profit, 0);
+            const anyResult   = settled[0];
+            const exitSpot    = anyResult?.exit;
+            const exitDigit   = exitSpot ? getLastDigit(Number(exitSpot)) : null;
+            const tradeResult = totalProfit >= 0 ? 'won' : 'lost';
+
+            /* Update trade-state so digit circles show the outcome */
+            setTradeState(prev => prev ? {
+                ...prev, settled: true,
+                result: tradeResult,
+                profit: totalProfit,
+                exitDigit,
+            } : null);
+
+            setPositions(p => p.map(x => x.id === bulkTradeId
+                ? { ...x, status: tradeResult, profit: totalProfit,
+                    entry: anyResult?.entry, exit: exitSpot }
+                : x));
             setPnl(prev => prev + totalProfit);
-            const tradeId = idRef.current++;
-            const bulk: any = {
-                id: tradeId, symbol: _symbol.label, type: `${def.label} ×${_bulkCount}`,
-                contractType: def.type, stake: s * _bulkCount, status: totalProfit >= 0 ? 'won' : 'lost',
-                profit: totalProfit, time: Date.now(),
-            };
-            setPositions(p => [bulk, ...p.slice(0, 49)]);
+
+            pushLog(totalProfit >= 0 ? 'response' : 'error', `BULK RESULT ×${_bulkCount}`, {
+                total_profit: totalProfit.toFixed(2),
+                per_contract: (totalProfit / _bulkCount).toFixed(2),
+                won: settled.filter((r: any) => r.profit > 0).length,
+                lost: settled.filter((r: any) => r.profit <= 0).length,
+                entry_spot: anyResult?.entry,
+                exit_spot: exitSpot,
+            });
+
+            setTimeout(() => setTradeState(null), 6000);
             return;
         }
 
@@ -657,6 +725,17 @@ const ManualTrader: React.FC = () => {
         }
     }, [authorized, buyContract]);
 
+    /* Build map: digit → [T1, T2, …] order numbers that landed on it */
+    const tradeTickMap = useMemo(() => {
+        const m = new Map<number, number[]>();
+        if (!tradeState?.ticks) return m;
+        tradeState.ticks.forEach(t => {
+            if (!m.has(t.digit)) m.set(t.digit, []);
+            m.get(t.digit)!.push(t.order);
+        });
+        return m;
+    }, [tradeState?.ticks]);
+
     const fmt       = (usd: number) => `${fromUsd(usd).toFixed(2)} ${displayCur}`;
     const stakeNum  = parseFloat(stake) || 0;
     const openPos   = positions.filter(p => p.status === 'open');
@@ -704,6 +783,87 @@ const ManualTrader: React.FC = () => {
 
             {/* ─── Body ─── */}
             <div className='mt-body'>
+                {/* ── Positions Sidebar (left) ── */}
+                <div className={`mt-pos-sidebar${positionsPanelOpen ? ' open' : ''}`}>
+                    <div className='mt-pos-sidebar__hdr'>
+                        <span>Positions</span>
+                        <button className='mt-pos-sidebar__close' onClick={() => setPositionsPanelOpen(false)}>×</button>
+                    </div>
+                    <div className='mt-pos-sidebar__tabs'>
+                        <button className={`mt-pos-sidebar__tab${positionsTab === 'open' ? ' active' : ''}`}
+                            onClick={() => setPositionsTab('open')}>
+                            Open
+                            {openPos.length > 0 && <span className='mt-pos-sidebar__tab-badge'>{openPos.length}</span>}
+                        </button>
+                        <button className={`mt-pos-sidebar__tab${positionsTab === 'closed' ? ' active' : ''}`}
+                            onClick={() => setPositionsTab('closed')}>
+                            Closed
+                        </button>
+                    </div>
+                    <div className='mt-pos-sidebar__body'>
+                        {positionsTab === 'open' ? (
+                            openPos.length === 0 ? (
+                                <div className='mt-pos-sidebar__empty'>
+                                    <span className='mt-pos-sidebar__empty-icon'>🧳</span>
+                                    <p>You have no open positions.</p>
+                                </div>
+                            ) : openPos.map(p => (
+                                <div key={p.id} className='mt-pos-sidebar__row open'>
+                                    <div className='mt-pos-sidebar__r-top'>
+                                        <span className='mt-pos-sidebar__sym'>{p.symbol}</span>
+                                        <span className='mt-pos-sidebar__dot'>● LIVE</span>
+                                    </div>
+                                    <span className='mt-pos-sidebar__type'>{p.type}</span>
+                                    <div className='mt-pos-sidebar__prog'>
+                                        <div style={{ width: `${Math.min(100, (p.tick / p.duration) * 100)}%` }} />
+                                    </div>
+                                    <div className='mt-pos-sidebar__r-bot'>
+                                        <span>{fmt(p.stake)}</span>
+                                        <span className='mt-pos-sidebar__tick'>{p.tick}/{p.duration}T</span>
+                                    </div>
+                                </div>
+                            ))
+                        ) : (
+                            closedPos.length === 0 ? (
+                                <div className='mt-pos-sidebar__empty'>
+                                    <span className='mt-pos-sidebar__empty-icon'>📋</span>
+                                    <p>No closed positions yet.</p>
+                                </div>
+                            ) : closedPos.slice(0, 25).map(p => (
+                                <div key={p.id} className={`mt-pos-sidebar__row ${p.status}`}>
+                                    <div className='mt-pos-sidebar__r-top'>
+                                        <span className='mt-pos-sidebar__sym'>{p.symbol}</span>
+                                        <span className={`mt-pos-sidebar__badge ${p.status}`}>
+                                            {p.status === 'won' ? '✓ WIN' : '✗ LOSS'}
+                                        </span>
+                                    </div>
+                                    <span className='mt-pos-sidebar__type'>{p.type}</span>
+                                    {(p.entry || p.exit) && (
+                                        <div className='mt-pos-sidebar__spots'>
+                                            {p.entry && <span>In: {p.entry}</span>}
+                                            {p.exit  && <span>Out: {p.exit}</span>}
+                                        </div>
+                                    )}
+                                    <div className='mt-pos-sidebar__r-bot'>
+                                        <span>{fmt(p.stake)}</span>
+                                        <span className={`mt-pos-sidebar__profit ${p.profit >= 0 ? 'pos' : 'neg'}`}>
+                                            {p.profit >= 0 ? '+' : ''}{fmt(p.profit)}
+                                        </span>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
+
+                {/* Positions toggle button — shows when sidebar is closed */}
+                {!positionsPanelOpen && (
+                    <button className='mt-pos-sidebar__toggle' onClick={() => setPositionsPanelOpen(true)}>
+                        <span>📋</span>
+                        <span>Pos</span>
+                    </button>
+                )}
+
                 {/* ── Chart + circles column ── */}
                 <div className='mt-chart-col'>
                     {/* Chart card */}
@@ -729,6 +889,7 @@ const ManualTrader: React.FC = () => {
                         totalTicks={digitHistory.length}
                         historyReady={historyReady}
                         activeTradeTickDigit={activeTradeTickDigit}
+                        tradeTickMap={tradeTickMap}
                     />
 
                     {/* Recent digit stream */}
@@ -755,46 +916,6 @@ const ManualTrader: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Positions */}
-                    {(openPos.length > 0 || closedPos.length > 0) && (
-                        <div className='mt-positions'>
-                            <div className='mt-positions__hdr'>
-                                Contracts
-                                {closedPos.length > 0 && (
-                                    <button className='mt-clear-btn'
-                                        onClick={() => setPositions(p => p.filter(x => x.status === 'open'))}>
-                                        Clear
-                                    </button>
-                                )}
-                            </div>
-                            {openPos.map(p => (
-                                <div key={p.id} className='mt-pos-row open'>
-                                    <span className='mt-pos-sym'>{p.symbol}</span>
-                                    <span className='mt-pos-type'>{p.type}</span>
-                                    <span className='mt-pos-stake'>{fmt(p.stake)}</span>
-                                    <div className='mt-pos-prog'>
-                                        <div style={{ width: `${(p.tick / p.duration) * 100}%` }} />
-                                    </div>
-                                    <span className='mt-pos-tick'>{p.tick}/{p.duration}T</span>
-                                </div>
-                            ))}
-                            {closedPos.slice(0, 15).map(p => (
-                                <div key={p.id} className={`mt-pos-row ${p.status}`}>
-                                    <span className='mt-pos-sym'>{p.symbol}</span>
-                                    <span className='mt-pos-type'>{p.type}</span>
-                                    <span className='mt-pos-stake'>{fmt(p.stake)}</span>
-                                    {p.entry && <span className='mt-pos-price'>In: {p.entry}</span>}
-                                    {p.exit  && <span className='mt-pos-price'>Out: {p.exit}</span>}
-                                    <span className={`mt-pos-badge ${p.status}`}>
-                                        {p.status === 'won' ? '✓ WIN' : '✗ LOSS'}
-                                    </span>
-                                    <span className={`mt-pos-profit ${p.profit >= 0 ? 'pos' : 'neg'}`}>
-                                        {p.profit >= 0 ? '+' : ''}{fmt(p.profit)}
-                                    </span>
-                                </div>
-                            ))}
-                        </div>
-                    )}
                 </div>
 
                 {/* ── Right Trade Panel ── */}
