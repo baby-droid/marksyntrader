@@ -119,8 +119,10 @@ function getLastDigitByPip(q: number, pipSize = 2): number {
  * Rank is per-digit (index), not per-percentage value — so ties are broken
  * by digit index and no two digits ever share a colour incorrectly.
  */
+const CIRCLE_DEFAULT_BG = '#1b2a42'; // dark navy — used as the "unranked" circle background
+
 function getDigitCircleColors(pcts: number[]): string[] {
-    const colors = new Array(10).fill('none'); // transparent = dark CSS default
+    const colors = new Array(10).fill(CIRCLE_DEFAULT_BG);
     const allZero = pcts.every(p => p === 0);
     if (allZero) return colors;
 
@@ -133,7 +135,7 @@ function getDigitCircleColors(pcts: number[]): string[] {
     colors[ranked[1].d] = '#3b82f6';   // 2nd high → blue
     colors[ranked[8].d] = '#eab308';   // 2nd low  → amber
     colors[ranked[9].d] = '#ef4444';   // lowest   → red
-    // digits ranked 2-7 stay 'none' (use CSS dark default)
+    // ranks 2-7 keep the dark default bg
     return colors;
 }
 
@@ -301,7 +303,8 @@ const DigitRow: React.FC<{
                     const pct         = pcts[d];
                     const isExit      = tradeState?.exitDigit === d && tradeState?.settled;
                     const tradeResult = tradeState?.result;
-                    const isColored   = color !== '#94a3b8';
+                    // "colored" = has a meaningful rank colour (green/blue/amber/red), not the dark default
+                    const isColored   = color !== CIRCLE_DEFAULT_BG;
 
                     /* Tick orders (T1, T2, …) that landed on this digit during current trade */
                     const tickOrders        = tradeTickMap?.get(d) ?? [];
@@ -333,8 +336,8 @@ const DigitRow: React.FC<{
                                         : isExit && tradeResult === 'lost'
                                         ? '#ef4444'
                                         : hasTickDuringTrade
-                                        ? '#1e293b'   /* dark charcoal while ticking */
-                                        : isColored ? color : 'none', /* 'none' → CSS default dark bg */
+                                        ? '#1e293b'
+                                        : color, /* always a real colour — never 'none' */
                                     boxShadow: isExit && tradeResult === 'won'
                                         ? '0 0 0 4px #22c55e99, 0 0 22px #22c55e77'
                                         : isExit && tradeResult === 'lost'
@@ -345,7 +348,8 @@ const DigitRow: React.FC<{
                                     transform: (isCurrent || isExit) ? 'scale(1.12)' : 'scale(1)',
                                 } as React.CSSProperties}
                             >
-                                <span className={`mt-circle__num ${(isColored || hasTickDuringTrade || isExit) ? 'mt-circle__num--light' : ''}`}>
+                                {/* Always bright white text — background is always dark */}
+                                <span className='mt-circle__num mt-circle__num--light'>
                                     {d}
                                 </span>
 

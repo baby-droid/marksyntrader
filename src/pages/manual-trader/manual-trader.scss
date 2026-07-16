@@ -97,22 +97,19 @@
 /* ─── Body layout ─── */
 .mt-body {
   display: flex;
-  flex: 1 1 0;
+  flex: 1;
   min-height: 0;
   gap: 0;
-  /* horizontal scroll when total columns exceed screen width;
-     vertical scroll is per-column, not here */
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: auto;   /* both directions — page stays locked, content scrolls */
 }
 
 /* ─── Chart column (left, grows) — gets more horizontal space ─── */
 .mt-chart-col {
   flex: 1 1 0;
-  min-width: 300px;   /* below 300px the body scrolls horizontally instead */
+  min-width: 280px;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;   /* left col scrolls vertically independently */
+  overflow-y: auto;
   overflow-x: hidden;
   gap: 0;
   background: #0d1117;
@@ -171,55 +168,58 @@
 
 /* ─── Digit Circles ─── */
 .mt-circles {
-  padding: 0.3rem 0.6rem 0.2rem;
-  background: #0d1420;
-  border-bottom: 1px solid rgba(255,255,255,0.07);
+  padding: 0.4rem 0.5rem 0.3rem 0.3rem;
+  background: #0b1120;
+  border-bottom: 1px solid rgba(255,255,255,0.09);
   flex-shrink: 0;
 
   &__hdr {
     display: flex;
     align-items: center;
     gap: 0.7rem;
-    margin-bottom: 0.15rem;
+    margin-bottom: 0.25rem;
     flex-wrap: wrap;
+    padding-left: 0.25rem;
   }
   &__label {
-    font-size: 0.68rem;
+    font-size: 0.72rem;
     font-weight: 700;
-    color: #475569;
+    color: #64748b;
     text-transform: uppercase;
     letter-spacing: 0.07em;
   }
   &__ticks {
-    font-size: 0.67rem;
-    color: #475569;
+    font-size: 0.7rem;
+    color: #64748b;
     margin-left: auto;
   }
   &__trade-ind {
-    font-size: 0.7rem;
+    font-size: 0.72rem;
     color: #f59e0b;
     font-weight: 700;
     animation: pulse-ind 1s infinite;
   }
 
-  /* 10 circles — capped at 58px each, centred, with comfortable gap */
+  /* 10 circles — 66px each, anchored to left edge */
   &__row {
     display: grid;
-    grid-template-columns: repeat(10, minmax(0, 58px));
-    justify-content: center;
-    gap: 0.55rem;
+    grid-template-columns: repeat(10, 66px);
+    justify-content: start;   /* flush left, not centred */
+    gap: 0.5rem;
+    padding-left: 0.15rem;
   }
 
   &__legend {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.45rem;
-    margin-top: 0.2rem;
-    padding-top: 0.2rem;
-    border-top: 1px solid rgba(255,255,255,0.06);
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+    padding-top: 0.25rem;
+    padding-left: 0.25rem;
+    border-top: 1px solid rgba(255,255,255,0.07);
     span {
-      font-size: 0.65rem;
-      font-weight: 600;
+      font-size: 0.7rem;
+      font-weight: 700;
     }
   }
 }
@@ -278,8 +278,8 @@
   width: 100%;
   aspect-ratio: 1;
   border-radius: 50%;
-  border: 2px solid rgba(255,255,255,0.12);
-  background: var(--cc, #1e2d45);  /* dark default background */
+  border: 2px solid rgba(255,255,255,0.15);
+  background: var(--cc, #1b2a42);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -299,12 +299,13 @@
   &--lost { animation: circle-flash-loss 0.6s ease; }
 
   &__num {
-    font-size: clamp(0.82rem, 1.8vw, 1.1rem);
+    font-size: clamp(1rem, 2vw, 1.25rem);
     font-weight: 900;
     line-height: 1;
-    color: #e2e8f0;      /* light text on dark circles */
+    color: #e2e8f0;
 
-    &--light { color: #fff; }  /* white on coloured circles */
+    /* Always bright white on dark/coloured circles */
+    &--light { color: #ffffff; text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
   }
 
   &__trade-dot {
@@ -337,12 +338,13 @@
 
 /* Percentage label — sits OUTSIDE below the circle */
 .mt-circle__pct-ext {
-  font-size: 1rem;
+  font-size: 0.82rem;
   font-weight: 800;
-  color: #94a3b8;
+  color: #7dd3fc;
   text-align: center;
-  line-height: 1.2;
-  margin-top: 0.15rem;
+  line-height: 1.1;
+  margin-top: 0.12rem;
+  letter-spacing: -0.01em;
 }
 
 /* Active-tick flash — fires while contract is counting ticks */
@@ -378,19 +380,19 @@
 /* WIN / LOSS overlay inside exit digit circle */
 .mt-circle__exit-label {
   position: absolute;
-  bottom: 1px;
+  bottom: 2px;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 0.44rem;
+  font-size: 0.62rem;       /* was 0.44rem — now clearly readable */
   font-weight: 900;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.04em;
   line-height: 1;
-  border-radius: 2px;
-  padding: 1px 2px;
+  border-radius: 3px;
+  padding: 1px 3px;
   white-space: nowrap;
 
-  &--won  { color: #fff; background: rgba(0,0,0,0.25); }
-  &--lost { color: #fff; background: rgba(0,0,0,0.25); }
+  &--won  { color: #fff; background: rgba(0,80,0,0.55); }
+  &--lost { color: #fff; background: rgba(120,0,0,0.55); }
 }
 
 @keyframes circle-tick-flash {
