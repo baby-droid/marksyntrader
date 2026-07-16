@@ -122,6 +122,11 @@ const DigitCircles: React.FC<DigitCirclesProps> = ({
                 data-digit={digit}
                 className={`digit-circles__wrapper${isLast ? ' digit-circles__wrapper--current' : ''}`}
               >
+                {/* Black triangle pointer — floats ABOVE the active circle */}
+                <span className={`digit-circles__pointer${isLast ? ' digit-circles__pointer--on' : ''}`}>
+                  ▼
+                </span>
+
                 <div
                   className='digit-circles__circle'
                   style={{
@@ -133,15 +138,12 @@ const DigitCircles: React.FC<DigitCirclesProps> = ({
                     boxShadow: isLast
                       ? `0 0 14px ${bg}aa, 0 0 4px ${bg}`
                       : `0 2px 6px rgba(0,0,0,0.12)`,
+                    zIndex: isLast ? 5 : undefined,
                   }}
                 >
                   <span className='digit-circles__number'>{digit}</span>
                   {showPercentage && (
                     <span className='digit-circles__percent'>{percentage.toFixed(1)}%</span>
-                  )}
-                  {/* Triangle sits in the MIDDLE of the circle, absolutely centred */}
-                  {isLast && (
-                    <span className='digit-circles__rank digit-circles__rank--current'>▼</span>
                   )}
                 </div>
 

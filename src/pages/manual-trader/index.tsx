@@ -119,7 +119,13 @@ function getLastDigitByPip(q: number, pipSize = 2): number {
  * Rank is per-digit (index), not per-percentage value — so ties are broken
  * by digit index and no two digits ever share a colour incorrectly.
  */
-const CIRCLE_DEFAULT_BG = '#1b2a42'; // dark navy — used as the "unranked" circle background
+const CIRCLE_DEFAULT_BG = '#ffffff'; // white background for unranked circles (matches design spec)
+const CIRCLE_COLORED_BG_MAP = new Map([
+    ['#22c55e', true],
+    ['#3b82f6', true],
+    ['#eab308', true],
+    ['#ef4444', true],
+]);
 
 function getDigitCircleColors(pcts: number[]): string[] {
     const colors = new Array(10).fill(CIRCLE_DEFAULT_BG);
@@ -135,8 +141,13 @@ function getDigitCircleColors(pcts: number[]): string[] {
     colors[ranked[1].d] = '#3b82f6';   // 2nd high → blue
     colors[ranked[8].d] = '#eab308';   // 2nd low  → amber
     colors[ranked[9].d] = '#ef4444';   // lowest   → red
-    // ranks 2-7 keep the dark default bg
+    // ranks 2-7 keep the white default bg
     return colors;
+}
+
+// Returns dark text color for light/white circles, white for colored circles
+function getCircleTextColor(bg: string): string {
+    return CIRCLE_COLORED_BG_MAP.has(bg) ? '#ffffff' : '#1a1a2e';
 }
 
 /* ─── Account Badge ─── */
@@ -325,7 +336,7 @@ const DigitRow: React.FC<{
                             <div
                                 className={[
                                     'mt-circle',
-                                    isColored ? 'mt-circle--filled' : '',
+                                    isColored ? 'mt-circle--filled' : 'mt-circle--plain',
                                     isExit ? `mt-circle--${tradeResult}` : '',
                                     hasTickDuringTrade ? 'mt-circle--trade-tick' : '',
                                     isActiveTick ? 'mt-circle--tick-active' : '',
@@ -336,20 +347,26 @@ const DigitRow: React.FC<{
                                         : isExit && tradeResult === 'lost'
                                         ? '#ef4444'
                                         : hasTickDuringTrade
-                                        ? '#1e293b'
-                                        : color, /* always a real colour — never 'none' */
+                                        ? '#f0f4ff'
+                                        : color,
                                     boxShadow: isExit && tradeResult === 'won'
                                         ? '0 0 0 4px #22c55e99, 0 0 22px #22c55e77'
                                         : isExit && tradeResult === 'lost'
                                         ? '0 0 0 4px #ef444499, 0 0 22px #ef444477'
                                         : isCurrent
-                                        ? '0 0 0 2.5px #7c3aed, 0 0 10px #7c3aed55'
+                                        ? '0 0 0 2.5px #000, 0 0 10px rgba(0,0,0,0.3)'
                                         : undefined,
                                     transform: (isCurrent || isExit) ? 'scale(1.12)' : 'scale(1)',
                                 } as React.CSSProperties}
                             >
-                                {/* Always bright white text — background is always dark */}
-                                <span className='mt-circle__num mt-circle__num--light'>
+                                {/* Text color: dark on white/plain circles, white on coloured */}
+                                <span className='mt-circle__num' style={{
+                                    color: isExit
+                                        ? '#ffffff'
+                                        : hasTickDuringTrade
+                                        ? '#1a1a2e'
+                                        : getCircleTextColor(color),
+                                }}>
                                     {d}
                                 </span>
 
