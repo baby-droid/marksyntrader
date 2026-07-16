@@ -417,8 +417,11 @@ const ManualTrader: React.FC = () => {
     const [activeTradeTickDigit, setActiveTradeTickDigit] = useState<number | null>(null);
     const activeTickTimerRef = useRef<any>(null);
 
+    /* ── Skip entry tick (1s markets send the entry tick first; it should not count as T1) ── */
+    const skipNextTickRef = useRef(false);
+
     /* ── Positions sidebar ── */
-    const [positionsPanelOpen, setPositionsPanelOpen] = useState(false);
+    const [positionsPanelOpen, setPositionsPanelOpen] = useState(true);
     const [positionsTab, setPositionsTab] = useState<'open' | 'closed'>('open');
 
     const proposalTimer = useRef<any>(null);
@@ -457,15 +460,24 @@ const ManualTrader: React.FC = () => {
             setPriceHistory(prev => [...prev.slice(-119), tick.quote]);
             setDigitHistory(prev => [...prev, tick.digit].slice(-HISTORY_SIZE));
 
-            if (tradeActiveRef.current && tradeTicksRef.current.length < tradeDurRef.current) {
-                const entry = { digit: tick.digit, order: tradeTicksRef.current.length + 1 };
-                tradeTicksRef.current = [...tradeTicksRef.current, entry];
-                setTradeState(prev => prev ? { ...prev, ticks: [...tradeTicksRef.current] } : prev);
+            if (tradeActiveRef.current) {
+                /* Skip the entry tick — in 1s markets the entry tick arrives first
+                   before the contract actually starts counting. T1 is the tick AFTER entry. */
+                if (skipNextTickRef.current) {
+                    skipNextTickRef.current = false;
+                    return; // don't count this tick
+                }
 
-                /* Flash the digit circle for this tick */
-                if (activeTickTimerRef.current) clearTimeout(activeTickTimerRef.current);
-                setActiveTradeTickDigit(tick.digit);
-                activeTickTimerRef.current = setTimeout(() => setActiveTradeTickDigit(null), 550);
+                if (tradeTicksRef.current.length < tradeDurRef.current) {
+                    const entry = { digit: tick.digit, order: tradeTicksRef.current.length + 1 };
+                    tradeTicksRef.current = [...tradeTicksRef.current, entry];
+                    setTradeState(prev => prev ? { ...prev, ticks: [...tradeTicksRef.current] } : prev);
+
+                    /* Flash the digit circle for this tick */
+                    if (activeTickTimerRef.current) clearTimeout(activeTickTimerRef.current);
+                    setActiveTradeTickDigit(tick.digit);
+                    activeTickTimerRef.current = setTimeout(() => setActiveTradeTickDigit(null), 550);
+                }
             }
         });
         return unsub;
@@ -563,23 +575,12 @@ const ManualTrader: React.FC = () => {
             ...(barrierVal !== undefined ? { barrier: barrierVal } : {}),
         };
 
-        /* ── Bulk mode: fire N simultaneous contracts (same entry/exit) ── */
+        /* ── Bulk mode: fire N individual contracts simultaneously ── */
         if (_bulkMode && _bulkCount > 1) {
-            const bulkTradeId = idRef.current++;
-
-            /* Show as open in positions immediately */
-            const bulkPos: any = {
-                id: bulkTradeId, symbol: _symbol.label,
-                type: `${def.label} ×${_bulkCount}`,
-                contractType: def.type,
-                stake: s * _bulkCount,   /* total stake across all contracts */
-                status: 'open', profit: 0, tick: 0, duration: dur, time: Date.now(),
-            };
-            setPositions(p => [bulkPos, ...p.slice(0, 49)]);
-
-            /* Track ticks visually — same as single mode */
+            /* Track ticks visually using the first contract */
             tradeTicksRef.current = [];
             tradeActiveRef.current = true;
+            skipNextTickRef.current = true; // skip entry tick
             tradeDurRef.current = isSecBased ? 0 : dur;
             setTradeState({ ticks: [], duration: dur, settled: false, result: null, profit: 0, exitDigit: null });
 
@@ -588,25 +589,53 @@ const ManualTrader: React.FC = () => {
                 parameters: contractParams,
             });
 
-            /* Tick progress counter for positions panel */
+            /* Create N individual position entries immediately */
+            const bulkIds = Array.from({ length: _bulkCount }, () => idRef.current++);
+            const now = Date.now();
+            const newPositions = bulkIds.map(id => ({
+                id, symbol: _symbol.label, type: def.label,
+                contractType: def.type, stake: s,
+                status: 'open', profit: 0, tick: 0, duration: dur, time: now,
+            }));
+            setPositions(p => [...newPositions, ...p.slice(0, 49)]);
+
+            /* Tick progress counter for all bulk positions */
             let t = 0;
             const iv = setInterval(() => {
                 t++;
-                setPositions(p => p.map(x => x.id === bulkTradeId && x.status === 'open'
-                    ? { ...x, tick: Math.min(t, dur) } : x));
+                setPositions(p => p.map(x =>
+                    bulkIds.includes(x.id) && x.status === 'open'
+                        ? { ...x, tick: Math.min(t, dur) } : x));
                 if (t >= dur) clearInterval(iv);
             }, 1000);
 
-            /* Fire all N contracts simultaneously → same entry tick → same result */
+            /* Fire all N contracts simultaneously — each is a separate Deriv contract */
+            let firstSettled = true;
             const results = await Promise.allSettled(
-                Array.from({ length: _bulkCount }, () =>
-                    new Promise<{ profit: number; status: string; entry?: number; exit?: number }>(resolve =>
-                        buyContract(contractParams, c => resolve({
-                            profit: applyCommission(c.profit),
-                            status: c.status ?? 'lost',
-                            entry: c.entry_spot,
-                            exit: c.exit_spot,
-                        })).catch(() => resolve({ profit: 0, status: 'lost' }))
+                bulkIds.map((id, idx) =>
+                    new Promise<{ id: number; profit: number; status: string; entry?: number; exit?: number }>(resolve =>
+                        buyContract(contractParams, c => {
+                            const profit = applyCommission(c.profit);
+                            const exitSpot = c.exit_spot;
+                            /* Only the first settled contract drives the visual trade state */
+                            if (firstSettled) {
+                                firstSettled = false;
+                                const exitDigit = exitSpot ? getLastDigit(Number(exitSpot)) : null;
+                                setTradeState(prev => prev ? {
+                                    ...prev, settled: true,
+                                    result: profit >= 0 ? 'won' : 'lost',
+                                    profit,
+                                    exitDigit,
+                                } : null);
+                            }
+                            setPositions(p => p.map(x => x.id === id
+                                ? { ...x, status: c.status ?? (profit >= 0 ? 'won' : 'lost'), profit, entry: c.entry_spot, exit: exitSpot }
+                                : x));
+                            resolve({ id, profit, status: c.status ?? 'lost', entry: c.entry_spot, exit: exitSpot });
+                        }).catch(() => {
+                            setPositions(p => p.filter(x => x.id !== id));
+                            resolve({ id, profit: 0, status: 'lost' });
+                        })
                     )
                 )
             );
@@ -619,22 +648,7 @@ const ManualTrader: React.FC = () => {
                 .map(r => (r as any).value);
             const totalProfit = settled.reduce((a: number, r: any) => a + r.profit, 0);
             const anyResult   = settled[0];
-            const exitSpot    = anyResult?.exit;
-            const exitDigit   = exitSpot ? getLastDigit(Number(exitSpot)) : null;
-            const tradeResult = totalProfit >= 0 ? 'won' : 'lost';
 
-            /* Update trade-state so digit circles show the outcome */
-            setTradeState(prev => prev ? {
-                ...prev, settled: true,
-                result: tradeResult,
-                profit: totalProfit,
-                exitDigit,
-            } : null);
-
-            setPositions(p => p.map(x => x.id === bulkTradeId
-                ? { ...x, status: tradeResult, profit: totalProfit,
-                    entry: anyResult?.entry, exit: exitSpot }
-                : x));
             setPnl(prev => prev + totalProfit);
 
             pushLog(totalProfit >= 0 ? 'response' : 'error', `BULK RESULT ×${_bulkCount}`, {
@@ -643,7 +657,7 @@ const ManualTrader: React.FC = () => {
                 won: settled.filter((r: any) => r.profit > 0).length,
                 lost: settled.filter((r: any) => r.profit <= 0).length,
                 entry_spot: anyResult?.entry,
-                exit_spot: exitSpot,
+                exit_spot: anyResult?.exit,
             });
 
             setTimeout(() => setTradeState(null), 6000);
@@ -654,6 +668,7 @@ const ManualTrader: React.FC = () => {
         const tradeId = idRef.current++;
         tradeTicksRef.current = [];
         tradeActiveRef.current = true;
+        skipNextTickRef.current = true; // skip entry tick — T1 is the tick AFTER entry
         tradeDurRef.current = isSecBased ? 0 : dur; // only track digit ticks for tick-based contracts
         setTradeState({ ticks: [], duration: dur, settled: false, result: null, profit: 0, exitDigit: null });
 

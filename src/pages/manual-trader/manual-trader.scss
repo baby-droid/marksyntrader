@@ -163,28 +163,28 @@
 
 /* ─── Digit Circles ─── */
 .mt-circles {
-  padding: 0.35rem 0.8rem 0.3rem;
-  background: #ffffff;
-  border-bottom: 1px solid #e5e7eb;
+  padding: 0.3rem 0.6rem 0.2rem;
+  background: #0d1420;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
   flex-shrink: 0;
 
   &__hdr {
     display: flex;
     align-items: center;
     gap: 0.7rem;
-    margin-bottom: 0.2rem;
+    margin-bottom: 0.15rem;
     flex-wrap: wrap;
   }
   &__label {
-    font-size: 0.7rem;
+    font-size: 0.68rem;
     font-weight: 700;
-    color: #64748b;
+    color: #475569;
     text-transform: uppercase;
     letter-spacing: 0.07em;
   }
   &__ticks {
-    font-size: 0.68rem;
-    color: #9ca3af;
+    font-size: 0.67rem;
+    color: #475569;
     margin-left: auto;
   }
   &__trade-ind {
@@ -194,21 +194,21 @@
     animation: pulse-ind 1s infinite;
   }
 
-  /* 10 circles — capped at 54 px each, centred, with small gap */
+  /* 10 circles — capped at 58px each, centred, with comfortable gap */
   &__row {
     display: grid;
-    grid-template-columns: repeat(10, minmax(0, 54px));
+    grid-template-columns: repeat(10, minmax(0, 58px));
     justify-content: center;
-    gap: 0.35rem;   /* slightly larger gap between circles */
+    gap: 0.55rem;
   }
 
   &__legend {
     display: flex;
     flex-wrap: wrap;
     gap: 0.45rem;
-    margin-top: 0.25rem;
-    padding-top: 0.25rem;
-    border-top: 1px solid #f1f5f9;
+    margin-top: 0.2rem;
+    padding-top: 0.2rem;
+    border-top: 1px solid rgba(255,255,255,0.06);
     span {
       font-size: 0.65rem;
       font-weight: 600;
@@ -270,8 +270,8 @@
   width: 100%;
   aspect-ratio: 1;
   border-radius: 50%;
-  border: 2px solid rgba(203,213,225,0.5);
-  background: var(--cc, #ffffff);
+  border: 2px solid rgba(255,255,255,0.12);
+  background: var(--cc, #1e2d45);  /* dark default background */
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -291,10 +291,10 @@
   &--lost { animation: circle-flash-loss 0.6s ease; }
 
   &__num {
-    font-size: clamp(0.72rem, 1.6vw, 0.95rem);
-    font-weight: 800;
+    font-size: clamp(0.82rem, 1.8vw, 1.1rem);
+    font-weight: 900;
     line-height: 1;
-    color: #111827;      /* dark on white circles */
+    color: #e2e8f0;      /* light text on dark circles */
 
     &--light { color: #fff; }  /* white on coloured circles */
   }
@@ -329,12 +329,12 @@
 
 /* Percentage label — sits OUTSIDE below the circle */
 .mt-circle__pct-ext {
-  font-size: 0.88rem;
-  font-weight: 700;
-  color: #334155;
+  font-size: 1rem;
+  font-weight: 800;
+  color: #94a3b8;
   text-align: center;
   line-height: 1.2;
-  margin-top: 0.18rem;
+  margin-top: 0.15rem;
 }
 
 /* Active-tick flash — fires while contract is counting ticks */
@@ -404,18 +404,18 @@
 
 /* ─── Recent digit stream ─── */
 .mt-stream-card {
-  padding: 0.65rem 1rem;
+  padding: 0.4rem 0.8rem 0.5rem;
   background: #0d1117;
   border-bottom: 1px solid rgba(255,255,255,0.05);
   flex-shrink: 0;
 
   &__label {
-    font-size: 0.78rem;
+    font-size: 0.75rem;
     font-weight: 700;
     color: #64748b;
     text-transform: uppercase;
     letter-spacing: 0.07em;
-    margin-bottom: 0.45rem;
+    margin-bottom: 0.3rem;
   }
 }
 
@@ -569,15 +569,15 @@
 
 /* Section */
 .mtp-section {
-  padding: 0.65rem 0.8rem 0;
+  padding: 0.4rem 0.8rem 0;
 
   &__label {
-    font-size: 0.75rem;
+    font-size: 0.73rem;
     font-weight: 700;
     color: #64748b;
     text-transform: uppercase;
     letter-spacing: 0.07em;
-    margin-bottom: 0.45rem;
+    margin-bottom: 0.3rem;
   }
 }
 
@@ -616,9 +616,9 @@
   &:focus { outline: none; border-color: rgba(59,130,246,0.35); }
 }
 .mtp-dur-label {
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   color: #475569;
-  margin-top: 0.3rem;
+  margin-top: 0.2rem;
   text-align: center;
 }
 
@@ -782,7 +782,7 @@
 
 /* Buy block */
 .mtp-buy-block {
-  padding: 0.5rem 0.8rem 0;
+  padding: 0.35rem 0.8rem 0;
 }
 
 .mtp-payout-row {
