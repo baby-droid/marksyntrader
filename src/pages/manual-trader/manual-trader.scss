@@ -1259,11 +1259,18 @@
     gap: 0;
   }
   .mt-circle {
-    width: 44px !important;
-    height: 44px !important;
+    width: 38px !important;
+    height: 38px !important;
   }
   .mt-circles__row {
-    gap: 0.25rem;
+    gap: 0.15rem;
+    justify-content: space-evenly;
+  }
+  /* Larger moving triangle */
+  .mt-tri {
+    font-size: 1.5rem !important;
+    height: 22px !important;
+    line-height: 22px !important;
   }
 
   /* Bigger % text — black — on mobile */

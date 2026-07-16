@@ -133,8 +133,11 @@ const BulkTrade = observer(() => {
 
   useEffect(() => {
     if (!martingale || tradeResults.length === 0) return;
-    const newResults = tradeResults.slice(0, tradeResults.length - prevResultLenRef.current);
-    if (newResults.length === 0) return;
+    const newCount = tradeResults.length - prevResultLenRef.current;
+    // Wait until all contracts in the current batch have settled
+    if (newCount < count) return;
+    // tradeResults is ordered newest-first; the fresh batch is the first `newCount` items
+    const newResults = tradeResults.slice(0, newCount);
     const batchWins   = newResults.filter(r => r.won).length;
     const batchLosses = newResults.filter(r => !r.won).length;
     if (batchLosses > batchWins) {
@@ -142,6 +145,8 @@ const BulkTrade = observer(() => {
     } else {
       setActiveStake(stake);
     }
+    // Advance the baseline so the next batch starts fresh
+    prevResultLenRef.current = tradeResults.length;
   }, [tradeResults.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const wins = winCount;

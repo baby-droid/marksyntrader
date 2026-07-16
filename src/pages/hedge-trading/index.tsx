@@ -109,6 +109,12 @@ const HedgeTrading: React.FC = () => {
     const pnlRef = useRef(0);  // safe ref for P/L — avoids stale closure in callbacks
     const autoHedgeRef = useRef(false);
     const executeHedgeRef = useRef<(() => void) | null>(null);
+    // Refs tracking "effective" stakes — updated synchronously in finalize() for martingale,
+    // bypassing React's async state updates so the next trade fires with the right stake.
+    const effectiveStakeARef = useRef(legA.stake);
+    const effectiveStakeBRef = useRef(legB.stake);
+    useEffect(() => { effectiveStakeARef.current = legA.stake; }, [legA.stake]);
+    useEffect(() => { effectiveStakeBRef.current = legB.stake; }, [legB.stake]);
 
     // Subscribe to live ticks for current digit display
     useEffect(() => {
@@ -152,8 +158,8 @@ const HedgeTrading: React.FC = () => {
         const id = tradeCountRef.current;
 
         const duration = durTicks[legA.durationIdx];
-        const stakeA = legA.stake;
-        const stakeB = legB.stake;
+        const stakeA = effectiveStakeARef.current;
+        const stakeB = effectiveStakeBRef.current;
 
         const entry: TradeResult = {
             id, legA: contractTypes.aLabel, legB: contractTypes.bLabel,
@@ -177,6 +183,18 @@ const HedgeTrading: React.FC = () => {
             // TP/SL check — safe here since we're NOT inside a state setter
             if (tpEnabled && pnlRef.current >= takeProfitVal) { stopAll(); return; }
             if (slEnabled && pnlRef.current <= -stopLossVal)  { stopAll(); return; }
+            // Apply martingale before firing the next trade
+            if (net < 0) {
+                // Loss — multiply each leg's effective stake if martingale is enabled
+                if (legA.martingale)
+                    effectiveStakeARef.current = Math.max(0.35, +(effectiveStakeARef.current * legA.martingaleMulti).toFixed(2));
+                if (legB.martingale)
+                    effectiveStakeBRef.current = Math.max(0.35, +(effectiveStakeBRef.current * legB.martingaleMulti).toFixed(2));
+            } else {
+                // Win — reset to base stakes
+                effectiveStakeARef.current = legA.stake;
+                effectiveStakeBRef.current = legB.stake;
+            }
             // Auto-hedge: re-fire immediately after settlement (not on a timer)
             if (autoHedgeRef.current) {
                 executeHedgeRef.current?.();

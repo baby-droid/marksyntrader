@@ -170,7 +170,7 @@ const AccountBadge: React.FC = () => {
 };
 
 /* ─── Rich SVG Price Chart ─── */
-const PriceChart: React.FC<{ prices: number[]; currentPrice: number | null }> = ({ prices, currentPrice }) => {
+const PriceChart: React.FC<{ prices: number[]; currentPrice: number | null; pipSize?: number }> = ({ prices, currentPrice, pipSize = 2 }) => {
     const W = 800, H = 210, PAD_L = 6, PAD_R = 72, PAD_T = 12, PAD_B = 24;
     const innerW = W - PAD_L - PAD_R;
     const innerH = H - PAD_T - PAD_B;
@@ -255,7 +255,7 @@ const PriceChart: React.FC<{ prices: number[]; currentPrice: number | null }> = 
                 width={(PAD_R - 4).toFixed(1)} height='18' rx='3' fill='#2563eb' opacity='0.95' />
             <text x={(PAD_L + innerW + PAD_R / 2 - 1).toFixed(1)} y={(curY + 4.5).toFixed(1)}
                 fill='#fff' fontSize='10' textAnchor='middle' fontFamily='monospace' fontWeight='700'>
-                {(currentPrice ?? prices[prices.length - 1]).toFixed(2)}
+                {(currentPrice ?? prices[prices.length - 1]).toFixed(pipSize)}
             </text>
 
             {/* Time axis */}
@@ -452,6 +452,8 @@ const ManualTrader: React.FC = () => {
     /* ── Active-tick highlight during contract settlement ── */
     const [activeTradeTickDigit, setActiveTradeTickDigit] = useState<number | null>(null);
     const activeTickTimerRef = useRef<any>(null);
+    /* ── Trade-state clear timeout — tracked so new trades cancel the old timer ── */
+    const tradeStateTimeoutRef = useRef<any>(null);
 
     /* ── Skip entry tick (1s markets send the entry tick first; it should not count as T1) ── */
     const skipNextTickRef = useRef(false);
@@ -651,7 +653,7 @@ const ManualTrader: React.FC = () => {
             /* Track ticks visually using the first contract */
             tradeTicksRef.current = [];
             tradeActiveRef.current = true;
-            skipNextTickRef.current = true; // skip entry tick
+            skipNextTickRef.current = _symbolValue.startsWith('1HZ'); // only skip on 1s markets
             tradeDurRef.current = isSecBased ? 0 : dur;
             setTradeState({ ticks: [], duration: dur, settled: false, result: null, profit: 0, exitDigit: null });
 
@@ -691,7 +693,7 @@ const ManualTrader: React.FC = () => {
                             /* Only the first settled contract drives the visual trade state */
                             if (firstSettled) {
                                 firstSettled = false;
-                                const exitDigit = exitSpot ? getLastDigit(Number(exitSpot)) : null;
+                                const exitDigit = exitSpot ? getLastDigitByPip(Number(exitSpot), pipSizeRef.current) : null;
                                 setTradeState(prev => prev ? {
                                     ...prev, settled: true,
                                     result: profit >= 0 ? 'won' : 'lost',
@@ -731,7 +733,8 @@ const ManualTrader: React.FC = () => {
                 exit_spot: anyResult?.exit,
             });
 
-            setTimeout(() => setTradeState(null), 6000);
+            if (tradeStateTimeoutRef.current) clearTimeout(tradeStateTimeoutRef.current);
+            tradeStateTimeoutRef.current = setTimeout(() => setTradeState(null), 5000);
             return;
         }
 
@@ -739,7 +742,9 @@ const ManualTrader: React.FC = () => {
         const tradeId = idRef.current++;
         tradeTicksRef.current = [];
         tradeActiveRef.current = true;
-        skipNextTickRef.current = true; // skip entry tick — T1 is the tick AFTER entry
+        // Only skip the entry tick on 1s markets — on plain/bear/bull markets the
+        // first tick AFTER execution is T1 and must NOT be skipped.
+        skipNextTickRef.current = _symbolValue.startsWith('1HZ');
         tradeDurRef.current = isSecBased ? 0 : dur; // only track digit ticks for tick-based contracts
         setTradeState({ ticks: [], duration: dur, settled: false, result: null, profit: 0, exitDigit: null });
 
@@ -779,7 +784,7 @@ const ManualTrader: React.FC = () => {
                     clearInterval(iv);
                     const profit    = applyCommission(c.profit);
                     const exitSpot  = c.exit_spot;
-                    const exitDigit = exitSpot ? getLastDigit(Number(exitSpot)) : null;
+                    const exitDigit = exitSpot ? getLastDigitByPip(Number(exitSpot), pipSizeRef.current) : null;
                     /* Log the settled contract response */
                     pushLog(c.status === 'won' ? 'response' : 'error', `CONTRACT ${c.contract_id}`, {
                         contract_id: c.contract_id,
@@ -799,7 +804,8 @@ const ManualTrader: React.FC = () => {
                         ? { ...x, status: c.status, profit, entry: c.entry_spot, exit: c.exit_spot }
                         : x));
                     setPnl(prev => prev + profit);
-                    setTimeout(() => setTradeState(null), 6000);
+                    if (tradeStateTimeoutRef.current) clearTimeout(tradeStateTimeoutRef.current);
+                    tradeStateTimeoutRef.current = setTimeout(() => setTradeState(null), 5000);
                 }
             );
         } catch (err: any) {
@@ -963,7 +969,7 @@ const ManualTrader: React.FC = () => {
                                 <span className='mt-chart-card__dg'>Last digit: <b>{currentDigit}</b></span>
                             )}
                         </div>
-                        <PriceChart prices={priceHistory} currentPrice={currentPrice} />
+                        <PriceChart prices={priceHistory} currentPrice={currentPrice} pipSize={pipSizeRef.current} />
                     </div>
 
                     {/* Digit circles */}
