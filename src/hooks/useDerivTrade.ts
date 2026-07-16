@@ -18,6 +18,7 @@ export interface TickData {
     digit: number;
     quote: number;
     epoch: number;
+    pip_size: number;
 }
 
 export interface ContractResult {
@@ -54,8 +55,8 @@ export interface BuyParams {
 
 const NEEDS_BARRIER = new Set(['DIGITOVER','DIGITUNDER','DIGITMATCH','DIGITDIFF']);
 
-function getLastDigit(quote: number): number {
-    const s = quote.toFixed(2).replace('.', '');
+function getLastDigit(quote: number, pipSize = 2): number {
+    const s = quote.toFixed(pipSize).replace('.', '');
     return parseInt(s[s.length - 1], 10);
 }
 
@@ -101,11 +102,13 @@ export function useDerivTrade() {
 
             if (d.tick) {
                 const q = d.tick.quote;
+                const ps = d.tick.pip_size ?? 2;
                 const tick: TickData = {
                     symbol: d.tick.symbol,
-                    digit: getLastDigit(q),
+                    digit: getLastDigit(q, ps),
                     quote: q,
                     epoch: d.tick.epoch,
+                    pip_size: ps,
                 };
                 tickCallbacksRef.current.get(d.tick.symbol)?.(tick);
             }

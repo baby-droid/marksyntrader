@@ -1,10 +1,11 @@
 .mt-page {
   display: flex;
   flex-direction: column;
-  /* Fill parent container — works inside the app shell which already accounts for headers */
+  /* Locked to the exact available viewport — no expanding, no shrinking */
   height: 100%;
+  max-height: 100%;
   min-height: 0;
-  overflow: hidden;
+  overflow: hidden;   /* page itself never scrolls — children handle their own overflow */
   background: #0d1117;
   font-family: 'IBM Plex Sans', 'Inter', -apple-system, sans-serif;
   color: #e2e8f0;
@@ -96,19 +97,23 @@
 /* ─── Body layout ─── */
 .mt-body {
   display: flex;
-  flex: 1;
+  flex: 1 1 0;
   min-height: 0;
   gap: 0;
-  overflow: auto;
+  /* horizontal scroll when total columns exceed screen width;
+     vertical scroll is per-column, not here */
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 /* ─── Chart column (left, grows) — gets more horizontal space ─── */
 .mt-chart-col {
   flex: 1 1 0;
-  min-width: 0;
+  min-width: 300px;   /* below 300px the body scrolls horizontally instead */
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
+  overflow-y: auto;   /* left col scrolls vertically independently */
+  overflow-x: hidden;
   gap: 0;
   background: #0d1117;
 }
@@ -148,12 +153,15 @@
 
 .mt-chart__svg {
   width: 100%;
-  height: 210px;
+  height: 185px;       /* fixed — never grows, never pushes siblings */
+  max-height: 185px;
+  min-height: 185px;
   display: block;
+  flex-shrink: 0;
 }
 
 .mt-chart-empty {
-  height: 210px;
+  height: 185px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -499,17 +507,17 @@
 
 /* ─── Right Trade Panel ─── */
 .mt-trade-panel {
-  width: min(360px, 36vw);
-  min-width: 280px;
-  flex-shrink: 0;
+  width: 300px;
+  flex-shrink: 0;   /* never squish — body scrolls horizontally if viewport is narrow */
   background: #161b27;
   border-left: 1px solid rgba(255,255,255,0.07);
   display: flex;
   flex-direction: column;
   gap: 0;
-  overflow-y: auto;
+  overflow-y: auto;   /* right col scrolls vertically independently */
+  overflow-x: hidden;
   height: 100%;
-  padding-bottom: 1.2rem;
+  padding-bottom: 1rem;
 }
 
 /* Contract type navigator */

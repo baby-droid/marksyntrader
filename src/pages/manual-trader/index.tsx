@@ -109,21 +109,32 @@ const CONTRACT_TYPES = [
 const TICK_DURATIONS = [1, 2, 3, 5, 10];
 const HISTORY_SIZE   = 1000;
 
-function getLastDigit(q: number) {
-    const s = q.toFixed(2).replace('.', '');
+function getLastDigitByPip(q: number, pipSize = 2): number {
+    const s = q.toFixed(pipSize).replace('.', '');
     return parseInt(s[s.length - 1], 10);
 }
 
+/**
+ * Assign colours by strict rank of each digit's percentage.
+ * Rank is per-digit (index), not per-percentage value — so ties are broken
+ * by digit index and no two digits ever share a colour incorrectly.
+ */
 function getDigitCircleColors(pcts: number[]): string[] {
-    const nonZero = pcts.filter(p => p > 0);
-    if (nonZero.length === 0) return new Array(10).fill('#94a3b8');
-    const uniqueSorted = [...new Set(pcts)].filter(p => p > 0).sort((a, b) => b - a);
-    const cm: Record<string, string> = {};
-    if (uniqueSorted.length >= 2) cm[String(uniqueSorted[uniqueSorted.length - 2])] = '#eab308';
-    if (uniqueSorted.length >= 1) cm[String(uniqueSorted[uniqueSorted.length - 1])] = '#ef4444';
-    if (uniqueSorted.length >= 2) cm[String(uniqueSorted[1])] = '#3b82f6';
-    if (uniqueSorted.length >= 1) cm[String(uniqueSorted[0])] = '#22c55e';
-    return pcts.map(p => (p > 0 ? (cm[String(p)] ?? '#94a3b8') : '#94a3b8'));
+    const colors = new Array(10).fill('none'); // transparent = dark CSS default
+    const allZero = pcts.every(p => p === 0);
+    if (allZero) return colors;
+
+    // Sort digits by pct descending; break ties by digit value ascending
+    const ranked = pcts
+        .map((p, d) => ({ d, p }))
+        .sort((a, b) => b.p - a.p || a.d - b.d);
+
+    colors[ranked[0].d] = '#22c55e';   // highest  → green
+    colors[ranked[1].d] = '#3b82f6';   // 2nd high → blue
+    colors[ranked[8].d] = '#eab308';   // 2nd low  → amber
+    colors[ranked[9].d] = '#ef4444';   // lowest   → red
+    // digits ranked 2-7 stay 'none' (use CSS dark default)
+    return colors;
 }
 
 /* ─── Account Badge ─── */
@@ -323,7 +334,7 @@ const DigitRow: React.FC<{
                                         ? '#ef4444'
                                         : hasTickDuringTrade
                                         ? '#1e293b'   /* dark charcoal while ticking */
-                                        : isColored ? color : '#ffffff',
+                                        : isColored ? color : 'none', /* 'none' → CSS default dark bg */
                                     boxShadow: isExit && tradeResult === 'won'
                                         ? '0 0 0 4px #22c55e99, 0 0 22px #22c55e77'
                                         : isExit && tradeResult === 'lost'
@@ -404,6 +415,10 @@ const ManualTrader: React.FC = () => {
     const [digitHistory, setDigitHistory] = useState<number[]>([]);
     const [historyReady, setHistoryReady] = useState(false);
 
+    /* pip_size — derived from first live tick; used to decode digit from price */
+    const pipSizeRef = useRef(2);
+    const rawHistoryRef = useRef<number[]>([]); // raw prices from ticks_history
+
     const [tradeState, setTradeState] = useState<TradeState | null>(null);
     const tradeActiveRef = useRef(false);
     const tradeDurRef    = useRef(0);
@@ -437,6 +452,8 @@ const ManualTrader: React.FC = () => {
         setPriceHistory([]);
         setCurrentDigit(null);
         setCurrentPrice(null);
+        pipSizeRef.current = 2; // reset until first live tick tells us the real pip_size
+        rawHistoryRef.current = [];
         if (!authorized || !send) return;
         let cancelled = false;
         (async () => {
@@ -444,7 +461,9 @@ const ManualTrader: React.FC = () => {
                 const res = await send({ ticks_history: symbolValue, count: 1000, end: 'latest', style: 'ticks' });
                 if (cancelled) return;
                 const prices: number[] = res?.history?.prices || [];
-                setDigitHistory(prices.map(getLastDigit));
+                rawHistoryRef.current = prices;
+                // Decode with current pip_size (may be updated later when first live tick arrives)
+                setDigitHistory(prices.map(p => getLastDigitByPip(p, pipSizeRef.current)));
                 setPriceHistory(prices.slice(-120));
                 setHistoryReady(true);
             } catch { setHistoryReady(true); }
@@ -455,10 +474,18 @@ const ManualTrader: React.FC = () => {
     /* Live tick subscription */
     useEffect(() => {
         const unsub = subscribeTicks(symbolValue, tick => {
-            setCurrentDigit(tick.digit);
+            /* First live tick — lock in the authoritative pip_size and recompute history */
+            if (tick.pip_size && tick.pip_size !== pipSizeRef.current) {
+                pipSizeRef.current = tick.pip_size;
+                if (rawHistoryRef.current.length > 0) {
+                    setDigitHistory(rawHistoryRef.current.map(p => getLastDigitByPip(p, tick.pip_size)));
+                }
+            }
+            const d = getLastDigitByPip(tick.quote, pipSizeRef.current);
+            setCurrentDigit(d);
             setCurrentPrice(tick.quote);
             setPriceHistory(prev => [...prev.slice(-119), tick.quote]);
-            setDigitHistory(prev => [...prev, tick.digit].slice(-HISTORY_SIZE));
+            setDigitHistory(prev => [...prev, d].slice(-HISTORY_SIZE));
 
             if (tradeActiveRef.current) {
                 /* Skip the entry tick — in 1s markets the entry tick arrives first
@@ -469,13 +496,13 @@ const ManualTrader: React.FC = () => {
                 }
 
                 if (tradeTicksRef.current.length < tradeDurRef.current) {
-                    const entry = { digit: tick.digit, order: tradeTicksRef.current.length + 1 };
+                    const entry = { digit: d, order: tradeTicksRef.current.length + 1 };
                     tradeTicksRef.current = [...tradeTicksRef.current, entry];
                     setTradeState(prev => prev ? { ...prev, ticks: [...tradeTicksRef.current] } : prev);
 
                     /* Flash the digit circle for this tick */
                     if (activeTickTimerRef.current) clearTimeout(activeTickTimerRef.current);
-                    setActiveTradeTickDigit(tick.digit);
+                    setActiveTradeTickDigit(d);
                     activeTickTimerRef.current = setTimeout(() => setActiveTradeTickDigit(null), 550);
                 }
             }
