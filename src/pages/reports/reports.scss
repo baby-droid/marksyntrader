@@ -146,7 +146,8 @@
 
   &__trade-row {
     display: grid;
-    grid-template-columns: 5.5rem 9rem 9rem 7rem 7rem 6rem 7rem;
+    /* Type+Mkt | Buy | Sell | Entry | Exit | P/L — 6 cols, no Balance col */
+    grid-template-columns: 7rem 9rem 9rem 8rem 8rem 7rem;
     gap: 0.6rem;
     align-items: center;
     padding: 0.85rem 1.4rem;
@@ -168,19 +169,31 @@
     }
 
     @media (max-width: 900px) {
-      grid-template-columns: 5rem 1fr 1fr;
+      grid-template-columns: 5.5rem 1fr 1fr;
       gap: 0.5rem;
     }
+  }
+
+  &__trade-type-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    align-items: flex-start;
   }
 
   &__trade-type {
     font-weight: 800;
     color: var(--text-general, #333);
-    font-size: 1rem;
+    font-size: 0.95rem;
     background: var(--general-section-1, #f0f0f0);
-    padding: 0.2rem 0.5rem;
-    border-radius: 0.35rem;
-    text-align: center;
+    padding: 0.15rem 0.45rem;
+    border-radius: 0.3rem;
+  }
+
+  &__trade-mkt {
+    font-size: 0.85rem;
+    color: #4C7DFF;
+    font-weight: 600;
   }
 
   &__trade-time-cell {
@@ -188,17 +201,17 @@
     flex-direction: column;
     gap: 0.1rem;
     .ts  { font-size: 1rem; color: #555; font-variant-numeric: tabular-nums; }
-    .sub { font-size: 0.9rem; color: #aaa; }
+    .sub { font-size: 0.85rem; color: #888; font-variant-numeric: tabular-nums; }
   }
 
   &__trade-spot {
-    font-size: 1rem;
-    color: #666;
+    font-size: 0.95rem;
+    color: #555;
     font-variant-numeric: tabular-nums;
   }
 
   &__trade-time  { color: #aaa; font-size: 1.1rem; }
-  &__trade-pnl   { font-weight: 700; &.pos { color: #42B883; } &.neg { color: #E24A43; } }
+  &__trade-pnl   { font-weight: 800; font-size: 1.1rem; &.pos { color: #16a34a; } &.neg { color: #dc2626; } }
   &__trade-balance { color: #666; font-variant-numeric: tabular-nums; }
 
   &__open { display: flex; flex-direction: column; gap: 1.2rem; }
