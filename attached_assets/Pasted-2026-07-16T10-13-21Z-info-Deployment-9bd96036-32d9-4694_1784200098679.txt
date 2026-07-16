@@ -1,0 +1,212 @@
+2026-07-16T10:13:21Z info: Deployment: 9bd96036-32d9-4694-805b-f2b18e476483
+2026-07-16T10:13:21Z info: Build: 2381bdee-72ab-4252-99f6-0944ff02f54a
+2026-07-16T10:13:22Z info: Running Security Scan
+2026-07-16T10:13:25Z info: Installing packages
+--> npm install
+
+2026-07-16T10:13:56Z info: Security Scan Complete
+
+added 1 package, and audited 1556 packages in 51s
+
+
+319 packages are looking for funding
+  run `npm fund` for details
+
+
+28 vulnerabilities (11 moderate, 17 high)
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+
+npm notice
+npm notice New major version of npm available! 10.9.8 -> 12.0.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.0.1
+npm notice To update run: npm install -g npm@12.0.1
+npm notice
+
+2026-07-16T10:14:17Z info: Starting Build
+
+> my-trading-bot@0.2.0 prebuild
+> node scripts/generate-brand-css.js
+
+
+🎨 Updating brand colors in _themes.scss...
+
+
+✅ Brand configuration is valid
+
+✓ No changes needed - brand styling already up to date
+
+
+🎯 Next steps:
+1. No changes were needed
+2. To force regeneration: npm run generate:brand-css
+
+
+> my-trading-bot@0.2.0 build
+> rsbuild build
+
+
+Rsbuild v1.7.6
+
+
+warn    [rsbuild:config] The "source.alias" config is deprecated, use "resolve.alias" instead.
+
+info    build started...
+
+error   Build error: 
+File: ./src/pages/reports/index.tsx:1:1
+  × Module build failed (from builtin:swc-loader):
+  ├─▶   ×   x Expected ',', got '{'
+  │     │      ,-[/home/runner/workspace/src/pages/reports/index.tsx:506:1]
+  │     │  503 |             )}
+  │     │  504 |         </div>
+  │     │  505 |
+  │     │  506 |         {/* Trade detail modal */}
+  │     │      :         ^
+  │     │  507 |         {selectedTrade && (
+  │     │  508 |             <TradeDetailModal
+  │     │  509 |                 trade={selectedTrade}
+  │     │      `----
+  │     │
+  │   
+  ╰─▶   × Syntax Error
+      
+Import traces (entry → error):
+  ./src/main.tsx
+  ./src/app/AuthWrapper.tsx
+  … (4 hidden)
+  ./src/pages/main/main.tsx
+  ./src/pages/reports/index.tsx ×
+
+
+error   build failed in 8.73 s
+
+error   Rspack build failed.
+    at file:///home/runner/workspace/node_modules/@rsbuild/core/dist/131.js:4214:145
+    at /home/runner/workspace/node_modules/@rspack/core/dist/index.js:10967:46
+    at /home/runner/workspace/node_modules/@rspack/core/dist/index.js:7135:113
+    at done (/home/runner/workspace/node_modules/@rspack/core/node_modules/@rspack/lite-tapable/dist/index.cjs:373:13)
+    at AsyncParallelHook.callAsyncStageRange (/home/runner/workspace/node_modules/@rspack/core/node_modules/@rspack/lite-tapable/dist/index.cjs:379:46)
+    at AsyncParallelHook.callAsync (/home/runner/workspace/node_modules/@rspack/core/node_modules/@rspack/lite-tapable/dist/index.cjs:101:21)
+    at Cache.shutdown (/home/runner/workspace/node_modules/@rspack/core/dist/index.js:7188:33)
+    at /home/runner/workspace/node_modules/@rspack/core/dist/index.js:10966:28
+    at done (/home/runner/workspace/node_modules/@rspack/core/node_modules/@rspack/lite-tapable/dist/index.cjs:426:13)
+    at next (/home/runner/workspace/node_modules/@rspack/core/node_modules/@rspack/lite-tapable/dist/index.cjs:469:55)
+    at AsyncSeriesHook.callAsyncStageRange (/home/runner/workspace/node_modules/@rspack/core/node_modules/@rspack/lite-tapable/dist/index.cjs:475:9)
+    at AsyncSeriesHook.callAsync (/home/runner/workspace/node_modules/@rspack/core/node_modules/@rspack/lite-tapable/dist/index.cjs:101:21)
+    at Compiler.close (/home/runner/workspace/node_modules/@rspack/core/dist/index.js:10964:38)
+    at file:///home/runner/workspace/node_modules/@rsbuild/core/dist/131.js:4213:22
+    at finalCallback (/home/runner/workspace/node_modules/@rspack/core/dist/index.js:10877:140)
+    at /home/runner/workspace/node_modules/@rspack/core/dist/index.js:10894:84
+    at done (/home/runner/workspace/node_modules/@rspack/core/node_modules/@rspack/lite-tapable/dist/index.cjs:426:13)
+    at promise.then.index (/home/runner/workspace/node_modules/@rspack/core/node_modules/@rspack/lite-tapable/dist/index.cjs:442:55)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+
+error   Build error: 
+File: ./src/pages/reports/index.tsx:1:1
+  × Module build failed (from builtin:swc-loader):
+  ├─▶   ×   x Expected ',', got '{'
+  │     │      ,-[/home/runner/workspace/src/pages/reports/index.tsx:506:1]
+  │     │  503 |             )}
+  │     │  504 |         </div>
+  │     │  505 |
+  │     │  506 |         {/* Trade detail modal */}
+  │     │      :         ^
+  │     │  507 |         {selectedTrade && (
+  │     │  508 |             <TradeDetailModal
+  │     │  509 |                 trade={selectedTrade}
+  │     │      `----
+  │     │
+  │   
+  ╰─▶   × Syntax Error
+      
+Import traces (entry → error):
+  ./src/main.tsx
+  ./src/app/AuthWrapper.tsx
+  … (4 hidden)
+  ./src/pages/main/main.tsx
+  ./src/pages/reports/index.tsx ×
+
+
+error   Build error: 
+File: ./src/pages/reports/index.tsx:1:1
+  × Module build failed (from builtin:swc-loader):
+  ├─▶   ×   x Expected ',', got '{'
+  │     │      ,-[/home/runner/workspace/src/pages/reports/index.tsx:506:1]
+  │     │  503 |             )}
+  │     │  504 |         </div>
+  │     │  505 |
+  │     │  506 |         {/* Trade detail modal */}
+  │     │      :         ^
+  │     │  507 |         {selectedTrade && (
+  │     │  508 |             <TradeDetailModal
+  │     │  509 |                 trade={selectedTrade}
+  │     │      `----
+  │     │
+  │   
+  ╰─▶   × Syntax Error
+      
+Import traces (entry → error):
+  ./src/main.tsx
+  ./src/app/AuthWrapper.tsx
+  … (4 hidden)
+  ./src/pages/main/main.tsx
+  ./src/pages/reports/index.tsx ×
+
+
+error   Build error: 
+File: ./src/pages/reports/index.tsx:1:1
+  × Module build failed (from builtin:swc-loader):
+  ├─▶   ×   x Expected ',', got '{'
+  │     │      ,-[/home/runner/workspace/src/pages/reports/index.tsx:506:1]
+  │     │  503 |             )}
+  │     │  504 |         </div>
+  │     │  505 |
+  │     │  506 |         {/* Trade detail modal */}
+  │     │      :         ^
+  │     │  507 |         {selectedTrade && (
+  │     │  508 |             <TradeDetailModal
+  │     │  509 |                 trade={selectedTrade}
+  │     │      `----
+  │     │
+  │   
+  ╰─▶   × Syntax Error
+      
+Import traces (entry → error):
+  ./src/main.tsx
+  ./src/app/AuthWrapper.tsx
+  … (4 hidden)
+  ./src/pages/main/main.tsx
+  ./src/pages/reports/index.tsx ×
+
+
+error   Build error: 
+File: ./src/pages/reports/index.tsx:1:1
+  × Module build failed (from builtin:swc-loader):
+  ├─▶   ×   x Expected ',', got '{'
+  │     │      ,-[/home/runner/workspace/src/pages/reports/index.tsx:506:1]
+  │     │  503 |             )}
+  │     │  504 |         </div>
+  │     │  505 |
+  │     │  506 |         {/* Trade detail modal */}
+  │     │      :         ^
+  │     │  507 |         {selectedTrade && (
+  │     │  508 |             <TradeDetailModal
+  │     │  509 |                 trade={selectedTrade}
+  │     │      `----
+  │     │
+  │   
+  ╰─▶   × Syntax Error
+      
+Import traces (entry → error):
+  ./src/main.tsx
+  ./src/app/AuthWrapper.tsx
+  … (4 hidden)
+  ./src/pages/main/main.tsx
+  ./src/pages/reports/index.tsx ×

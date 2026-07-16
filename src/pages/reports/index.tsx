@@ -501,18 +501,17 @@ const Reports = observer(() => {
                     )}
                 </div>
             )}
-        </div>
 
-        {/* Trade detail modal */}
-        {selectedTrade && (
-            <TradeDetailModal
-                trade={selectedTrade}
-                info={infoMap[selectedTrade.contract_id]}
-                cur={cur}
-                onClose={() => setSelectedTrade(null)}
-            />
-        )}
-    </div>
+            {/* Trade detail modal */}
+            {selectedTrade && (
+                <TradeDetailModal
+                    trade={selectedTrade}
+                    info={infoMap[selectedTrade.contract_id]}
+                    cur={cur}
+                    onClose={() => setSelectedTrade(null)}
+                />
+            )}
+        </div>
     );
 });
 
