@@ -11,7 +11,7 @@ body {
     overflow-x: hidden;
     width: 100%;
     height: calc(100vh - 9rem);
-    padding: 1.6rem;
+    padding: 0;  /* removed outer padding; full-page apps fill 100% */
 
     &--green {
         background: linear-gradient(160deg, #021a0a 0%, #011208 50%, #000a04 100%);

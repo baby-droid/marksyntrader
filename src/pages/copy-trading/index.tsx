@@ -19,6 +19,18 @@ const MODES: { id: CopyMode; title: string; desc: string; icon: string }[] = [
     desc: "Test on demo — signals are copied to each follower's real account with a risk multiplier.",
     icon: '🧪',
   },
+  {
+    id: 'demo_demo',
+    title: 'Demo → Demo',
+    desc: "Safe practice mode — demo signals copied to each follower's demo account. No real money.",
+    icon: '🎓',
+  },
+  {
+    id: 'real_demo',
+    title: 'Real → Demo',
+    desc: "Train followers risk-free — your real trades are mirrored to followers' demo accounts.",
+    icon: '📚',
+  },
 ];
 
 const CopyTrading = observer(() => {

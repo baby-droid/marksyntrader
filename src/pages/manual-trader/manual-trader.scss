@@ -117,7 +117,7 @@
 
 /* ─── Chart card ─── */
 .mt-chart-card {
-  background: #131820;
+  background: #111827;
   border-bottom: 1px solid rgba(255,255,255,0.06);
   flex-shrink: 0;
 
@@ -150,15 +150,15 @@
 
 .mt-chart__svg {
   width: 100%;
-  height: 185px;       /* fixed — never grows, never pushes siblings */
-  max-height: 185px;
-  min-height: 185px;
+  height: 261px;       /* default expanded: +2cm over baseline 185px */
+  max-height: 261px;
+  min-height: 261px;
   display: block;
   flex-shrink: 0;
 }
 
 .mt-chart-empty {
-  height: 185px;
+  height: 261px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -522,7 +522,7 @@
 
 /* ─── Right Trade Panel ─── */
 .mt-trade-panel {
-  width: 300px;
+  width: 414px;
   flex-shrink: 0;   /* never squish — body scrolls horizontally if viewport is narrow */
   background: #161b27;
   border-left: 1px solid rgba(255,255,255,0.07);

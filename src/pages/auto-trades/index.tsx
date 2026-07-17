@@ -392,7 +392,12 @@ function AiBotCard({ bot, globalStake, globalMartingale, session, onSessionUpdat
 
 // ── Main component ─────────────────────────────────────────────────────────────
 const AutoTrades: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<'smart' | 'autobots'>('smart');
+    const [activeTab, setActiveTab] = useState<'smart' | 'autobots' | 'speedbot' | 'printer'>('smart');
+    // Summary panel state
+    const [summaryTab, setSummaryTab] = useState<'summary' | 'transactions' | 'journal'>('summary');
+    const [summaryStats, setSummaryStats] = useState({ stake: 0, payout: 0, runs: 0, won: 0, lost: 0, profit: 0 });
+    const [journal, setJournal] = useState<string[]>([]);
+    const [transactions, setTransactions] = useState<Array<{ time: string; contract: string; profit: number; symbol: string }>>([]);
 
     // ── Smart Trading state
     const [smartSymbol, setSmartSymbol] = useState('1HZ10V');
@@ -512,11 +517,24 @@ const AutoTrades: React.FC = () => {
     const anyActive = Object.values(sessions).some(s => s.active);
 
     const ALL_SYMBOLS = [
+        // Volatility 1s
         { label: 'V10 (1s)', value: '1HZ10V' }, { label: 'V25 (1s)', value: '1HZ25V' },
         { label: 'V50 (1s)', value: '1HZ50V' }, { label: 'V75 (1s)', value: '1HZ75V' },
         { label: 'V100 (1s)', value: '1HZ100V' },
+        // Volatility
         { label: 'V10', value: 'R_10' }, { label: 'V25', value: 'R_25' },
         { label: 'V50', value: 'R_50' }, { label: 'V75', value: 'R_75' }, { label: 'V100', value: 'R_100' },
+        // Jump
+        { label: 'Jump 10', value: 'JD10' }, { label: 'Jump 25', value: 'JD25' },
+        { label: 'Jump 50', value: 'JD50' }, { label: 'Jump 75', value: 'JD75' }, { label: 'Jump 100', value: 'JD100' },
+        // Boom
+        { label: 'Boom 300', value: 'BOOM300N' }, { label: 'Boom 500', value: 'BOOM500' }, { label: 'Boom 1000', value: 'BOOM1000' },
+        // Crash
+        { label: 'Crash 300', value: 'CRASH300N' }, { label: 'Crash 500', value: 'CRASH500' }, { label: 'Crash 1000', value: 'CRASH1000' },
+        // Step
+        { label: 'Step Index', value: 'STPX' },
+        // Daily Reset (Bear & Bull)
+        { label: 'Bear Market', value: 'RDBEAR' }, { label: 'Bull Market', value: 'RDBULL' },
     ];
 
     /* ── Account type indicator ── */
@@ -541,6 +559,10 @@ const AutoTrades: React.FC = () => {
                         onClick={() => setActiveTab('smart')}>Smart Trading</button>
                     <button className={`autotrades__tab ${activeTab === 'autobots' ? 'active' : ''}`}
                         onClick={() => setActiveTab('autobots')}>Auto Bots</button>
+                    <button className={`autotrades__tab ${activeTab === 'speedbot' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('speedbot')}>Speed Bot</button>
+                    <button className={`autotrades__tab ${activeTab === 'printer' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('printer')}>Printer</button>
                 </div>
                 <span className={`autotrades__acct-badge ${isDemo ? 'demo' : 'real'}`}>
                     {isDemo ? '🔵 DEMO ACCOUNT' : '🟢 REAL ACCOUNT'}
@@ -549,6 +571,9 @@ const AutoTrades: React.FC = () => {
                     {isDemo ? 'Bots trade on demo funds' : 'Bots trade with real money'}
                 </span>
             </div>
+            {/* ── Two-column layout: content left + summary panel right ── */}
+            <div className='autotrades__layout'>
+            <div className='autotrades__main-col'>
 
             {/* ── Smart Trading Tab ── */}
             {activeTab === 'smart' && (
@@ -582,10 +607,12 @@ const AutoTrades: React.FC = () => {
                         <div className='autotrades__smart-field'>
                             <label>Analysis Depth</label>
                             <select value={smartDepth} onChange={e => setSmartDepth(+e.target.value)} disabled={smartRunning}>
-                                <option value={50}>Last 50 ticks</option>
                                 <option value={100}>Last 100 ticks</option>
                                 <option value={200}>Last 200 ticks</option>
+                                <option value={300}>Last 300 ticks</option>
                                 <option value={500}>Last 500 ticks</option>
+                                <option value={750}>Last 750 ticks</option>
+                                <option value={1000}>Last 1000 ticks</option>
                             </select>
                         </div>
                         <div className='autotrades__smart-field'>
@@ -757,6 +784,230 @@ const AutoTrades: React.FC = () => {
                     </div>
                 </div>
             )}
+
+            {/* ── Speed Bot Tab ── */}
+            {activeTab === 'speedbot' && (
+                <div className='autotrades__speedbot'>
+                    <div className='autotrades__speedbot-header'>
+                        <span className='autotrades__speedbot-icon'>⚡</span>
+                        <div>
+                            <h2>Speed Bot</h2>
+                            <p>Ultra-fast tick-based entry detection. Contrarian streaks, instant execution.</p>
+                        </div>
+                    </div>
+                    <div className='autotrades__speedbot-info'>
+                        <div className='autotrades__speedbot-card'>
+                            <div className='autotrades__speedbot-card-icon'>🚀</div>
+                            <strong>Turbo Mode</strong>
+                            <span>Fire-and-forget zero-delay contracts on every detected streak entry.</span>
+                        </div>
+                        <div className='autotrades__speedbot-card'>
+                            <div className='autotrades__speedbot-card-icon'>🎯</div>
+                            <strong>Contrarian Entry</strong>
+                            <span>Detects 3+ consecutive streak in one digit, trades the reversal.</span>
+                        </div>
+                        <div className='autotrades__speedbot-card'>
+                            <div className='autotrades__speedbot-card-icon'>⚙️</div>
+                            <strong>Scalper Engine</strong>
+                            <span>Uses the full Scalper Bot engine — navigate to Speed Lab for full controls.</span>
+                        </div>
+                    </div>
+                    <div className='autotrades__speedbot-cta'>
+                        <p>For full Speed Bot controls including market selection, martingale, VPS mode, and take profit/stop loss — use the Speed Lab tab.</p>
+                        <button className='autotrades__speedbot-btn'
+                            onClick={() => {
+                                // Navigate to the Speed Lab tab (DBOT_TABS.SPEEDLAB)
+                                const store = (window as any).__store__;
+                                store?.dashboard?.setActiveTab?.(4);
+                            }}>
+                            ⚡ Open Speed Lab
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Printer Tab ── */}
+            {activeTab === 'printer' && (
+                <div className='autotrades__printer'>
+                    <div className='autotrades__printer-header'>
+                        <span>🖨️</span>
+                        <div>
+                            <h2>Trade Printer</h2>
+                            <p>Live trade log — print and export your trading session.</p>
+                        </div>
+                    </div>
+                    <div className='autotrades__printer-stats'>
+                        <div className='autotrades__printer-stat'>
+                            <span>Total Stake</span>
+                            <strong>${summaryStats.stake.toFixed(2)}</strong>
+                        </div>
+                        <div className='autotrades__printer-stat'>
+                            <span>Total Payout</span>
+                            <strong>${summaryStats.payout.toFixed(2)}</strong>
+                        </div>
+                        <div className='autotrades__printer-stat'>
+                            <span>Contracts Won</span>
+                            <strong className='pos'>{summaryStats.won}</strong>
+                        </div>
+                        <div className='autotrades__printer-stat'>
+                            <span>Contracts Lost</span>
+                            <strong className='neg'>{summaryStats.lost}</strong>
+                        </div>
+                        <div className='autotrades__printer-stat'>
+                            <span>Total P/L</span>
+                            <strong className={summaryStats.profit >= 0 ? 'pos' : 'neg'}>
+                                {summaryStats.profit >= 0 ? '+' : ''}{summaryStats.profit.toFixed(2)}
+                            </strong>
+                        </div>
+                        <div className='autotrades__printer-stat'>
+                            <span>No. of Runs</span>
+                            <strong>{summaryStats.runs}</strong>
+                        </div>
+                    </div>
+                    <div className='autotrades__printer-log-wrap'>
+                        <div className='autotrades__printer-log-hdr'>
+                            <span>Trade Log</span>
+                            <button onClick={() => {
+                                setTransactions([]);
+                                setJournal([]);
+                                setSummaryStats({ stake: 0, payout: 0, runs: 0, won: 0, lost: 0, profit: 0 });
+                            }} className='autotrades__printer-clear'>🗑 Clear</button>
+                            <button onClick={() => {
+                                const lines = transactions.map(t =>
+                                    `${t.time}\t${t.symbol}\t${t.contract}\t${t.profit >= 0 ? '+' : ''}${t.profit.toFixed(2)}`
+                                ).join('\n');
+                                const blob = new Blob([`Time\tSymbol\tContract\tP/L\n${lines}`], { type: 'text/plain' });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a'); a.href = url; a.download = 'trades.txt'; a.click();
+                            }} className='autotrades__printer-export'>⬇ Export</button>
+                        </div>
+                        <div className='autotrades__printer-log'>
+                            {transactions.length === 0
+                                ? <div className='autotrades__printer-empty'>No trades yet. Start a bot to see the log here.</div>
+                                : transactions.slice(-50).reverse().map((t, i) => (
+                                    <div key={i} className={`autotrades__printer-row ${t.profit >= 0 ? 'won' : 'lost'}`}>
+                                        <span className='time'>{t.time}</span>
+                                        <span className='sym'>{t.symbol}</span>
+                                        <span className='ctype'>{t.contract}</span>
+                                        <span className='pl'>{t.profit >= 0 ? '+' : ''}{t.profit.toFixed(2)}</span>
+                                    </div>
+                                ))
+                            }
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            </div>{/* end .autotrades__main-col */}
+
+            {/* ── Right summary panel (visible for Smart + AutoBots tabs) ── */}
+            {(activeTab === 'smart' || activeTab === 'autobots') && (
+                <div className='autotrades__summary-panel'>
+                    <div className='autotrades__summary-tabs'>
+                        {(['summary', 'transactions', 'journal'] as const).map(t => (
+                            <button key={t}
+                                className={`autotrades__summary-tab ${summaryTab === t ? 'active' : ''}`}
+                                onClick={() => setSummaryTab(t)}>
+                                {t.charAt(0).toUpperCase() + t.slice(1)}
+                            </button>
+                        ))}
+                    </div>
+
+                    {summaryTab === 'summary' && (
+                        <div className='autotrades__summary-body'>
+                            {summaryStats.runs === 0 ? (
+                                <div className='autotrades__summary-idle'>
+                                    <div className='autotrades__summary-idle-icon'>📊</div>
+                                    <p>When you're ready to trade, hit <strong>Run</strong>.</p>
+                                    <p>You'll be able to track your bot's performance here.</p>
+                                </div>
+                            ) : (
+                                <div className='autotrades__summary-stats'>
+                                    <div className='autotrades__summary-stat'>
+                                        <span>Total stake</span>
+                                        <strong>${summaryStats.stake.toFixed(2)}</strong>
+                                    </div>
+                                    <div className='autotrades__summary-stat'>
+                                        <span>Total payout</span>
+                                        <strong>${summaryStats.payout.toFixed(2)}</strong>
+                                    </div>
+                                    <div className='autotrades__summary-stat'>
+                                        <span>No. of runs</span>
+                                        <strong>{summaryStats.runs}</strong>
+                                    </div>
+                                    <div className='autotrades__summary-stat'>
+                                        <span>Contracts lost</span>
+                                        <strong className='neg'>{summaryStats.lost}</strong>
+                                    </div>
+                                    <div className='autotrades__summary-stat'>
+                                        <span>Contracts won</span>
+                                        <strong className='pos'>{summaryStats.won}</strong>
+                                    </div>
+                                    <div className='autotrades__summary-stat'>
+                                        <span>Total profit/loss</span>
+                                        <strong className={summaryStats.profit >= 0 ? 'pos' : 'neg'}>
+                                            {summaryStats.profit >= 0 ? '+' : ''}{summaryStats.profit.toFixed(2)} USD
+                                        </strong>
+                                    </div>
+                                    <button className='autotrades__summary-reset'
+                                        onClick={() => setSummaryStats({ stake: 0, payout: 0, runs: 0, won: 0, lost: 0, profit: 0 })}>
+                                        ↺ Reset
+                                    </button>
+                                </div>
+                            )}
+                            <div className='autotrades__summary-whats'>
+                                <button className='autotrades__summary-whats-btn'>What's this?</button>
+                            </div>
+                        </div>
+                    )}
+
+                    {summaryTab === 'transactions' && (
+                        <div className='autotrades__summary-body'>
+                            {transactions.length === 0 ? (
+                                <div className='autotrades__summary-idle'>
+                                    <div className='autotrades__summary-idle-icon'>📋</div>
+                                    <p>No transactions yet.</p>
+                                </div>
+                            ) : (
+                                <div className='autotrades__txn-list'>
+                                    {transactions.slice(-30).reverse().map((t, i) => (
+                                        <div key={i} className={`autotrades__txn-row ${t.profit >= 0 ? 'won' : 'lost'}`}>
+                                            <div className='autotrades__txn-left'>
+                                                <span className='autotrades__txn-sym'>{t.symbol}</span>
+                                                <span className='autotrades__txn-type'>{t.contract}</span>
+                                            </div>
+                                            <div className='autotrades__txn-right'>
+                                                <span className={`autotrades__txn-pl ${t.profit >= 0 ? 'pos' : 'neg'}`}>
+                                                    {t.profit >= 0 ? '+' : ''}{t.profit.toFixed(2)}
+                                                </span>
+                                                <span className='autotrades__txn-time'>{t.time}</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {summaryTab === 'journal' && (
+                        <div className='autotrades__summary-body'>
+                            {journal.length === 0 ? (
+                                <div className='autotrades__summary-idle'>
+                                    <div className='autotrades__summary-idle-icon'>📓</div>
+                                    <p>Journal is empty. Start trading to see logs.</p>
+                                </div>
+                            ) : (
+                                <div className='autotrades__journal-list'>
+                                    {journal.slice(-50).reverse().map((entry, i) => (
+                                        <div key={i} className='autotrades__journal-entry'>{entry}</div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
+            </div>{/* end .autotrades__layout */}
         </div>
     );
 };

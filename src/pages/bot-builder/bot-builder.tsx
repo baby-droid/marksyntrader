@@ -15,16 +15,23 @@ import BotBuilderTourHandler from '../tutorials/dbot-tours/bot-builder-tour';
 import QuickStrategy1 from './quick-strategy';
 import WorkspaceWrapper from './workspace-wrapper';
 
+const PALE_BLUE = '#7ec8e3';
+const PALE_BLUE2 = '#89c4f4';
+const PALE_BLUE3 = '#5ab9ea';
+const PALE_BLUE4 = '#add8e6';
+const PALE_BLUE5 = '#6cb4e4';
+
 const FREE_BOTS_LIST = [
-    { id: 'ahmed-syn-even-odd', name: 'Ahmed SYN Even/Odd v1.2', market: 'V25 1s', badge: 'AHMED ★', badgeColor: '#00ff88', xmlFile: '/bots/ahmed-syn-even-odd.xml', icon: '🤖' },
-    { id: 'over1', name: 'AI Auto SYN Over 1', market: 'V50 1s', badge: 'HOT', badgeColor: '#f44336', xmlFile: '/bots/over1.xml', icon: '⚡' },
-    { id: 'over2', name: 'AI Auto SYN Over 2', market: 'V50 1s', badge: 'HOT', badgeColor: '#f44336', xmlFile: '/bots/over2.xml', icon: '🎯' },
-    { id: 'over3', name: 'AI Auto SYN Over 3', market: 'V50 1s', badge: 'STRONG', badgeColor: '#22a36c', xmlFile: '/bots/over3.xml', icon: '💪' },
-    { id: 'under8', name: 'AI Auto SYN Under 8', market: 'V100 1s', badge: 'NEW', badgeColor: '#4e7cf5', xmlFile: '/bots/under8.xml', icon: '🎰' },
-    { id: 'under7', name: 'AI Auto SYN Under 7', market: 'V100 1s', badge: 'NEW', badgeColor: '#4e7cf5', xmlFile: '/bots/under7.xml', icon: '🔥' },
-    { id: 'under6', name: 'AI Auto SYN Under 6', market: 'V50 1s', badge: 'SOLID', badgeColor: '#f5c842', xmlFile: '/bots/under6.xml', icon: '⚔' },
-    { id: 'evenodd', name: 'Ahmed SpeedBot Even/Odd v3', market: 'V10 1s', badge: 'AI', badgeColor: '#a855f7', xmlFile: '/bots/evenodd.xml', icon: '🤖' },
-    { id: 'mrvunja', name: 'Mr Vunja Deriv V2026', market: 'V75 1s', badge: '2026', badgeColor: '#ff6b00', xmlFile: '/bots/mrvunja.xml', icon: '💎' },
+    { id: 'ahmed-syn-even-odd', name: 'Ahmed SYN Even/Odd v1.2', market: 'V25 1s', badge: 'AHMED ★', badgeColor: PALE_BLUE, xmlFile: '/bots/ahmed-syn-even-odd.xml', icon: '🤖' },
+    { id: 'over1', name: 'AI Auto SYN Over 1', market: 'V50 1s', badge: 'HOT', badgeColor: PALE_BLUE2, xmlFile: '/bots/over1.xml', icon: '⚡' },
+    { id: 'over2', name: 'AI Auto SYN Over 2', market: 'V50 1s', badge: 'HOT', badgeColor: PALE_BLUE3, xmlFile: '/bots/over2.xml', icon: '🎯' },
+    { id: 'over3', name: 'AI Auto SYN Over 3', market: 'V50 1s', badge: 'STRONG', badgeColor: PALE_BLUE4, xmlFile: '/bots/over3.xml', icon: '💪' },
+    { id: 'under8', name: 'AI Auto SYN Under 8', market: 'V100 1s', badge: 'NEW', badgeColor: PALE_BLUE5, xmlFile: '/bots/under8.xml', icon: '🎰' },
+    { id: 'under7', name: 'AI Auto SYN Under 7', market: 'V100 1s', badge: 'NEW', badgeColor: PALE_BLUE2, xmlFile: '/bots/under7.xml', icon: '🔥' },
+    { id: 'under6', name: 'AI Auto SYN Under 6', market: 'V50 1s', badge: 'SOLID', badgeColor: PALE_BLUE3, xmlFile: '/bots/under6.xml', icon: '⚔' },
+    { id: 'evenodd', name: 'Ahmed SpeedBot Even/Odd v3', market: 'V10 1s', badge: 'AI', badgeColor: PALE_BLUE, xmlFile: '/bots/evenodd.xml', icon: '🤖' },
+    { id: 'mrvunja', name: 'Mr Vunja Deriv V2026', market: 'V75 1s', badge: '2026', badgeColor: PALE_BLUE4, xmlFile: '/bots/mrvunja.xml', icon: '💎' },
+    { id: 'market-killer-prime-v1', name: 'Market Killer Prime v1', market: 'V25 1s', badge: 'PRIME ★', badgeColor: PALE_BLUE5, xmlFile: '/bots/market-killer-prime-v1.xml', icon: '🎯' },
 ];
 
 type TFreeBotsPanelProps = {

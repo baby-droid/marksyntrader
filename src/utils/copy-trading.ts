@@ -22,7 +22,7 @@ import { MasterTradeSignal, subscribeMasterTrades } from './trade-bus';
 const APP_ID = process.env.NEXT_PUBLIC_DERIV_APP_ID || 1089;
 const WS_URL = `wss://ws.binaryws.com/websockets/v3?app_id=${APP_ID}`;
 
-export type CopyMode = 'real_real' | 'demo_real';
+export type CopyMode = 'real_real' | 'demo_real' | 'demo_demo' | 'real_demo';
 
 export type FollowerStatus = 'pending' | 'active' | 'error' | 'removed';
 

@@ -1,0 +1,105 @@
+**Extracted text (exactly as shown):**
+
+```text
+Add real OAuth follower accounts from your session or paste legacy API tokens (from Deriv account settings). Your master account uses OAuth + OTP; the engine mirrors each master trade to followers.
+```
+
+### Copy Trading Settings (UI Specification)
+
+If you're building a copy trading dashboard, you can include settings like these:
+
+```text
+Copy Trading Settings
+
+Master Account
+✔ OAuth Login
+✔ API Token
+✔ Account ID
+✔ Account Name
+✔ Connected
+
+Followers
+
+Maximum Followers
+10
+
+Follower Authentication
+OAuth
+Legacy API Token
+
+Execution Mode
+Instant
+Parallel
+
+Trade Synchronization
+✔ Contract Type
+✔ Stake
+✔ Duration
+✔ Barrier
+✔ Market
+✔ Currency Conversion
+
+Mirror Settings
+✔ Mirror Buy
+✔ Mirror Sell
+✔ Same Stake
+✔ Same Duration
+✔ Same Prediction
+✔ Same Contract Parameters
+
+Risk Settings
+Maximum Daily Loss
+Maximum Stake
+Stop Copy on Error
+Pause Followers
+
+Connection Status
+Master Connected
+10 Followers Connected
+
+Execution Statistics
+Trades Mirrored
+Success Rate
+Failed Orders
+Average Execution Delay
+```
+
+### Replicating Trades Across Multiple Accounts
+
+Using the Deriv API, a copy-trading application can be designed so that:
+
+1. A **master account** authenticates (OAuth or API token, depending on the account type and supported authentication flow).
+2. The application subscribes to the master's trading activity or otherwise detects when a new trade is placed.
+3. When a qualifying trade is detected, the application sends equivalent `buy` requests to each authorized follower account using that follower's own authenticated session or token.
+4. Each follower account executes independently, and the application tracks the resulting contract IDs and statuses.
+
+A conceptual flow is:
+
+```text
+Master Account
+      │
+      │ Detect new trade
+      ▼
+Copy Trading Engine
+      │
+      ├── Follower 1
+      ├── Follower 2
+      ├── Follower 3
+      ├── ...
+      └── Follower 10
+```
+
+### Important Consideration
+
+Although you can **mirror the same trade parameters** (market, contract type, duration, barrier, stake, etc.) to multiple accounts, you **cannot guarantee identical results** across all accounts.
+
+Differences can occur because of factors such as:
+
+* execution timing,
+* market movement between requests,
+* account balances,
+* currency differences,
+* rejected orders,
+* contract availability.
+
+In other words, a copy-trading engine can aim to place **the same trade** on all authorized follower accounts, but it cannot guarantee "the same wins and losses" on every account. The actual outcome depends on each account's successful execution and the market conditions at the moment each trade is accepted.

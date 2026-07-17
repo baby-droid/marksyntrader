@@ -22,9 +22,9 @@ const ALL_MARKETS = [
         { label: 'Volatility 75 Index',  value: 'R_75'  },
         { label: 'Volatility 100 Index', value: 'R_100' },
     ]},
-    { group: 'Bear & Bull', options: [
-        { label: 'Bear Market Index', value: 'WBEAR' },
-        { label: 'Bull Market Index', value: 'WBULL' },
+    { group: 'Daily Reset (Bear & Bull)', options: [
+        { label: 'Bear Market Index', value: 'RDBEAR' },
+        { label: 'Bull Market Index', value: 'RDBULL' },
     ]},
     { group: 'Jump', options: [
         { label: 'Jump 10 Index',  value: 'JD10'  },
@@ -47,8 +47,8 @@ const ALL_MARKETS = [
         { label: 'Step Index', value: 'STPX' },
     ]},
     { group: 'Range Break', options: [
-        { label: 'Range Break 100 Index', value: 'RDBULL' },
-        { label: 'Range Break 200 Index', value: 'RDBEAR' },
+        { label: 'Range Break 100 Index', value: 'RB100' },
+        { label: 'Range Break 200 Index', value: 'RB200' },
     ]},
 ];
 
@@ -534,7 +534,7 @@ const ManualTrader: React.FC = () => {
         return () => { cancelled = true; };
     }, [symbolValue, authorized, send]);
 
-    /* No-tick timeout — detect stale/unavailable markets (e.g. WBEAR, WBULL) */
+    /* No-tick timeout — detect stale/unavailable markets (e.g. RDBEAR, RDBULL daily-reset) */
     const [noTickWarning, setNoTickWarning] = useState(false);
     const noTickTimerRef = useRef<any>(null);
     useEffect(() => {
