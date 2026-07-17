@@ -399,100 +399,166 @@ const AutoTrades: React.FC = () => {
     const [journal, setJournal] = useState<string[]>([]);
     const [transactions, setTransactions] = useState<Array<{ time: string; contract: string; profit: number; symbol: string }>>([]);
 
-    // ── Smart Trading state
-    const [smartSymbol, setSmartSymbol] = useState('1HZ10V');
-    const [smartStake, setSmartStake] = useState(1);
-    const [smartMartingale, setSmartMartingale] = useState(2);
-    const [smartTakeProfit, setSmartTakeProfit] = useState(5);
-    const [smartStopLoss, setSmartStopLoss] = useState(30);
-    const [smartDepth, setSmartDepth] = useState(100);
-    const [smartRunning, setSmartRunning] = useState(false);
-    const [smartPaused, setSmartPaused] = useState(false);
-    const [smartStats, setSmartStats] = useState({ profit: 0, trades: 0, wins: 0 });
-    const smartStopRef = useRef(false);
-    // Mirror of smartRunning as a ref — avoids stale closure when useCallback deps change
-    const smartRunningRef = useRef(false);
-    const smartPausedRef = useRef(false);
-    const smartPausedStakeRef = useRef<number | null>(null);
-    const smartDigits = useLiveDigitsState(smartSymbol);
+    // ── Smart Trader (multi-card) state ──────────────────────────────────────────
+    type SmartCardId = 'risefall' | 'evenodd' | 'overunder' | 'matchdiffer';
+    const SMART_CARD_IDS: SmartCardId[] = ['risefall', 'evenodd', 'overunder', 'matchdiffer'];
+
+    const [smartSharedSymbol, setSmartSharedSymbol] = useState('1HZ10V');
+    const [smartSharedDepth, setSmartSharedDepth] = useState(100);
+    const smartSharedSymbolRef = useRef('1HZ10V');
+    const smartSharedDepthRef = useRef(100);
+    useEffect(() => { smartSharedSymbolRef.current = smartSharedSymbol; }, [smartSharedSymbol]);
+    useEffect(() => { smartSharedDepthRef.current = smartSharedDepth; }, [smartSharedDepth]);
+
+    const smartDigits = useLiveDigitsState(smartSharedSymbol);
     const smartDigitsRef = useRef(smartDigits);
     useEffect(() => { smartDigitsRef.current = smartDigits; }, [smartDigits]);
-    const smartAnalysis = computeSmartAnalysis(smartDigits, smartDepth);
+
+    // Live price tracker for the smart header
+    const [smartLivePrice, setSmartLivePrice] = React.useState<number | null>(null);
+    React.useEffect(() => {
+        const wsUrl = `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID_DIGIT}`;
+        const ws = new WebSocket(wsUrl);
+        ws.onopen = () => ws.send(JSON.stringify({ ticks: smartSharedSymbol, subscribe: 1 }));
+        ws.onmessage = e => {
+            try { const d = JSON.parse(e.data); if (d.tick?.quote) setSmartLivePrice(d.tick.quote); } catch {}
+        };
+        return () => ws.close();
+    }, [smartSharedSymbol]);
+
     const buyAndWait = useBuyAndWait();
 
-    // Stable refs for params so the async loop always sees current values
-    const smartStakeRef = useRef(smartStake);
-    const smartMartingaleRef = useRef(smartMartingale);
-    const smartTakeProfitRef = useRef(smartTakeProfit);
-    const smartStopLossRef = useRef(smartStopLoss);
-    const smartSymbolRef = useRef(smartSymbol);
-    useEffect(() => { smartStakeRef.current = smartStake; }, [smartStake]);
-    useEffect(() => { smartMartingaleRef.current = smartMartingale; }, [smartMartingale]);
-    useEffect(() => { smartTakeProfitRef.current = smartTakeProfit; }, [smartTakeProfit]);
-    useEffect(() => { smartStopLossRef.current = smartStopLoss; }, [smartStopLoss]);
-    useEffect(() => { smartSymbolRef.current = smartSymbol; }, [smartSymbol]);
+    // Per-card config (editable params)
+    const [smartCardCfg, setSmartCardCfg] = useState<Record<SmartCardId, {
+        stake: number; ticks: number; martingale: number; condition: number; barrier: number;
+    }>>({
+        risefall:    { stake: 5, ticks: 1, martingale: 1, condition: 50, barrier: 5 },
+        evenodd:     { stake: 5, ticks: 1, martingale: 1, condition: 51, barrier: 5 },
+        overunder:   { stake: 5, ticks: 1, martingale: 1, condition: 55, barrier: 5 },
+        matchdiffer: { stake: 5, ticks: 1, martingale: 1, condition: 100, barrier: 5 },
+    });
+    const smartCardCfgRef = useRef(smartCardCfg);
+    useEffect(() => { smartCardCfgRef.current = smartCardCfg; }, [smartCardCfg]);
 
+    const updateCardCfg = useCallback((id: SmartCardId, patch: Partial<typeof smartCardCfg['risefall']>) => {
+        setSmartCardCfg(prev => ({ ...prev, [id]: { ...prev[id], ...patch } }));
+    }, []);
 
-    const runSmartBot = useCallback(async (resumeStake?: number) => {
-        // Use ref (not state) to avoid stale closure — state may lag one render
-        if (smartRunningRef.current) {
-            // Pause: set stop flag, bot exits after current contract settles
-            smartStopRef.current = true;
-            smartPausedRef.current = true;
-            smartRunningRef.current = false;
-            setSmartRunning(false);
-            setSmartPaused(true);
+    // Per-card session (runtime state)
+    const [smartCardSess, setSmartCardSess] = useState<Record<SmartCardId, {
+        running: boolean; wins: number; losses: number; profit: number; lastLog: string;
+    }>>({
+        risefall:    { running: false, wins: 0, losses: 0, profit: 0, lastLog: '' },
+        evenodd:     { running: false, wins: 0, losses: 0, profit: 0, lastLog: '' },
+        overunder:   { running: false, wins: 0, losses: 0, profit: 0, lastLog: '' },
+        matchdiffer: { running: false, wins: 0, losses: 0, profit: 0, lastLog: '' },
+    });
+    const smartStopFlags = useRef<Record<string, boolean>>({
+        risefall: false, evenodd: false, overunder: false, matchdiffer: false,
+    });
+    const smartCurrentStakes = useRef<Record<string, number>>({
+        risefall: 5, evenodd: 5, overunder: 5, matchdiffer: 5,
+    });
+
+    const updateSess = useCallback((id: SmartCardId, patch: Partial<typeof smartCardSess['risefall']>) => {
+        setSmartCardSess(prev => ({ ...prev, [id]: { ...prev[id], ...patch } }));
+    }, []);
+
+    // Pick the trade for each card type using live digits
+    const pickSmartTrade = useCallback((id: SmartCardId) => {
+        const digits = smartDigitsRef.current;
+        const cfg = smartCardCfgRef.current[id];
+        const depth = Math.min(smartSharedDepthRef.current, digits.length);
+        const last = digits.slice(-Math.max(depth, 20));
+
+        if (id === 'risefall') {
+            // Count consecutive rises vs falls (price direction via digit delta)
+            const rises = last.slice(1).filter((d, i) => d !== last[i]).length; // digit changed
+            const riseProb = last.length > 1 ? (last.slice(1).filter((d, i) => d > last[i]).length / (last.length - 1)) * 100 : 50;
+            return { contract: riseProb >= cfg.condition ? 'CALL' : 'PUT', barrier: null, riseProb: +riseProb.toFixed(2) };
+        }
+        if (id === 'evenodd') {
+            const evenCount = last.filter(d => d % 2 === 0).length;
+            const evenProb = last.length > 0 ? (evenCount / last.length) * 100 : 50;
+            return { contract: evenProb >= cfg.condition ? 'DIGITEVEN' : 'DIGITODD', barrier: null, evenProb: +evenProb.toFixed(2) };
+        }
+        if (id === 'overunder') {
+            const overCount = last.filter(d => d > cfg.barrier).length;
+            const overProb = last.length > 0 ? (overCount / last.length) * 100 : 50;
+            return { contract: overProb >= cfg.condition ? 'DIGITOVER' : 'DIGITUNDER', barrier: cfg.barrier, overProb: +overProb.toFixed(2) };
+        }
+        // matchdiffer — find least-frequent digit
+        const freq = Array.from({ length: 10 }, (_, i) => last.filter(d => d === i).length);
+        const minDigit = freq.indexOf(Math.min(...freq));
+        return { contract: 'DIGITDIFF', barrier: minDigit, freq };
+    }, []);
+
+    // Start/stop a smart card bot
+    const toggleSmartCard = useCallback((id: SmartCardId) => {
+        if (smartCardSess[id].running) {
+            smartStopFlags.current[id] = true;
             return;
         }
-        smartStopRef.current = false;
-        smartPausedRef.current = false;
-        smartRunningRef.current = true;
-        setSmartRunning(true);
-        setSmartPaused(false);
-        if (!resumeStake) {
-            setSmartStats({ profit: 0, trades: 0, wins: 0 });
-            smartPausedStakeRef.current = null;
-        }
-        let stk = resumeStake ?? smartStakeRef.current;
-        let sessionProfit = 0;
 
-        while (!smartStopRef.current) {
-            try {
-                const live = smartDigitsRef.current;
-                const n = Math.min(smartDepth, live.length);
-                const last = live.slice(-n);
-                const freq = Array.from({ length: 10 }, (_, i) => last.filter(d => d === i).length);
-                const minDigit = freq.indexOf(Math.min(...freq));
+        // Init run
+        smartStopFlags.current[id] = false;
+        const cfg = smartCardCfgRef.current[id];
+        smartCurrentStakes.current[id] = cfg.stake;
+        updateSess(id, { running: true, wins: 0, losses: 0, profit: 0, lastLog: 'Starting…' });
 
-                const profit = await buyAndWait(smartSymbolRef.current, 'DIGITDIFF', minDigit, stk);
-                if (smartStopRef.current) break;
+        let wins = 0, losses = 0, sessionProfit = 0;
 
-                const won = profit > 0;
-                sessionProfit += profit;
-                setSmartStats(p => ({
-                    profit: +(p.profit + profit).toFixed(2),
-                    trades: p.trades + 1,
-                    wins: p.wins + (won ? 1 : 0),
-                }));
-                if (won) {
-                    stk = smartStakeRef.current;
-                    smartPausedStakeRef.current = null;
-                } else {
-                    stk = Math.max(0.35, +(stk * smartMartingaleRef.current).toFixed(2));
-                    smartPausedStakeRef.current = stk;
+        const loop = async () => {
+            while (!smartStopFlags.current[id]) {
+                try {
+                    const { contract, barrier } = pickSmartTrade(id);
+                    const currentCfg = smartCardCfgRef.current[id];
+                    const stk = smartCurrentStakes.current[id];
+                    const sym = smartSharedSymbolRef.current;
+
+                    const profit = await buyAndWait(sym, contract, barrier, stk);
+                    if (smartStopFlags.current[id]) break;
+
+                    const won = profit > 0;
+                    sessionProfit = +(sessionProfit + profit).toFixed(2);
+                    if (won) wins++; else losses++;
+
+                    const ts = new Date().toLocaleTimeString('en', { hour12: false });
+                    const logMsg = `${won ? '✅' : '❌'} ${contract}${barrier !== null ? '@' + barrier : ''} ${fmtProfit(profit)}`;
+                    updateSess(id, { wins, losses, profit: sessionProfit, lastLog: logMsg });
+
+                    // Feed shared summary + transactions
+                    setSummaryStats(prev => ({
+                        stake: +(prev.stake + stk).toFixed(2),
+                        payout: +(prev.payout + (won ? stk + profit : 0)).toFixed(2),
+                        runs: prev.runs + 1,
+                        won: prev.won + (won ? 1 : 0),
+                        lost: prev.lost + (won ? 0 : 1),
+                        profit: +(prev.profit + profit).toFixed(2),
+                    }));
+                    setTransactions(prev => [...prev.slice(-99), {
+                        time: ts, contract: `${contract}${barrier !== null ? '@' + barrier : ''}`,
+                        profit: +profit.toFixed(2), symbol: sym,
+                    }]);
+                    setJournal(prev => [`[${ts}] [${id}] ${logMsg}`, ...prev].slice(0, 50));
+
+                    // Martingale
+                    smartCurrentStakes.current[id] = won
+                        ? currentCfg.stake
+                        : Math.max(0.35, +(stk * currentCfg.martingale).toFixed(2));
+                } catch {
+                    await new Promise(r => setTimeout(r, 1500));
                 }
-                if (sessionProfit >= smartTakeProfitRef.current) break;
-                if (sessionProfit <= -smartStopLossRef.current) break;
-            } catch {
-                await new Promise(r => setTimeout(r, 1500));
             }
-        }
-        smartStopRef.current = false;
-        smartRunningRef.current = false;
-        setSmartRunning(false);
-        // If the stop was triggered by Pause (not manual stop), keep smartPaused=true
-        // so the Resume button stays visible
-    }, [smartDepth, buyAndWait]);
+            smartStopFlags.current[id] = false;
+            setSmartCardSess(prev => ({
+                ...prev,
+                [id]: { ...prev[id], running: false, lastLog: `Stopped. P/L: ${fmtProfit(sessionProfit)}` },
+            }));
+        };
+
+        loop(); // fire-and-forget async loop
+    }, [smartCardSess, buyAndWait, pickSmartTrade, updateSess]);
 
     // ── AI Bots state
     const [globalStake, setGlobalStake] = useState(1.0);
@@ -576,150 +642,266 @@ const AutoTrades: React.FC = () => {
             <div className='autotrades__main-col'>
 
             {/* ── Smart Trading Tab ── */}
-            {activeTab === 'smart' && (
-                <div className='autotrades__smart'>
-                    <div className='autotrades__smart-header'>
-                        <h2>💡 Money Laundering Bot</h2>
-                        <p>AI-picks the least frequent digit for DIGITDIFF with martingale recovery</p>
+            {activeTab === 'smart' && (() => {
+                // Compute live stats for all cards from shared digits
+                const depth = Math.min(smartSharedDepth, smartDigits.length);
+                const last = smartDigits.slice(-Math.max(depth, 20));
+                const n = last.length;
+
+                // Rise/Fall
+                const riseCount = last.slice(1).filter((d, i) => d > last[i]).length;
+                const riseProb = n > 1 ? (riseCount / (n - 1)) * 100 : 50;
+                const fallProb = 100 - riseProb;
+
+                // Even/Odd
+                const evenCount = last.filter(d => d % 2 === 0).length;
+                const evenProb = n > 0 ? (evenCount / n) * 100 : 50;
+                const oddProb = 100 - evenProb;
+
+                // Over/Under (using each card's barrier)
+                const ouBarrier = smartCardCfg.overunder.barrier;
+                const overCount = last.filter(d => d > ouBarrier).length;
+                const overProb = n > 0 ? (overCount / n) * 100 : 50;
+                const underProb = 100 - overProb;
+
+                // Matches/Differs
+                const freq = Array.from({ length: 10 }, (_, i) => last.filter(d => d === i).length);
+                const maxFreq = Math.max(...freq);
+                const mostFreqDigit = freq.indexOf(maxFreq);
+                const minFreq = Math.min(...freq);
+                const leastFreqDigit = freq.indexOf(minFreq);
+                const matchProb = n > 0 ? (freq[mostFreqDigit] / n) * 100 : 10;
+                const differProb = 100 - (n > 0 ? (freq[leastFreqDigit] / n) * 100 : 10);
+                const last10 = smartDigits.slice(-10);
+
+                const CARD_DEFS = [
+                    { id: 'risefall' as SmartCardId,    title: 'Rise/Fall',         icon: '📈' },
+                    { id: 'evenodd' as SmartCardId,     title: 'Even/Odd',          icon: '⚖️'  },
+                    { id: 'overunder' as SmartCardId,   title: 'Over/Under',        icon: '🎯' },
+                    { id: 'matchdiffer' as SmartCardId, title: 'Matches/Differs',   icon: '🔢' },
+                ];
+
+                return (
+                <div className='st'>
+                    {/* Header bar */}
+                    <div className='st__header'>
+                        <span className='st__title'>Smart Trading</span>
+                        <div className='st__header-row'>
+                            <div className='st__hfield'>
+                                <label>Symbol</label>
+                                <select value={smartSharedSymbol} onChange={e => setSmartSharedSymbol(e.target.value)}>
+                                    {ALL_SYMBOLS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                                </select>
+                            </div>
+                            <div className='st__hfield'>
+                                <label>Analysis Ticks</label>
+                                <select value={smartSharedDepth} onChange={e => setSmartSharedDepth(+e.target.value)}>
+                                    {[100,200,300,500,750,1000].map(v => <option key={v} value={v}>{v}</option>)}
+                                </select>
+                            </div>
+                            <div className='st__price-badge'>
+                                Price: <strong>{smartLivePrice != null ? smartLivePrice.toFixed(3) : '—'}</strong>
+                            </div>
+                        </div>
+                        <div className='st__data-status'>
+                            <span className={`st__dot ${smartDigits.length > 0 ? 'live' : ''}`} />
+                            {smartDigits.length > 0 ? `${smartDigits.length} ticks loaded` : 'Loading market data…'}
+                        </div>
                     </div>
 
-                    <div className='autotrades__smart-settings'>
-                        <div className='autotrades__smart-field'>
-                            <label>Initial Stake ($)</label>
-                            <input type='number' min='0.35' step='0.01' value={smartStake}
-                                onChange={e => setSmartStake(+e.target.value)} disabled={smartRunning} />
-                        </div>
-                        <div className='autotrades__smart-field'>
-                            <label>Martingale ×</label>
-                            <input type='number' min='1' max='5' step='0.1' value={smartMartingale}
-                                onChange={e => setSmartMartingale(+e.target.value)} disabled={smartRunning} />
-                        </div>
-                        <div className='autotrades__smart-field'>
-                            <label>Take Profit ($)</label>
-                            <input type='number' min='0.1' step='0.5' value={smartTakeProfit}
-                                onChange={e => setSmartTakeProfit(+e.target.value)} disabled={smartRunning} />
-                        </div>
-                        <div className='autotrades__smart-field'>
-                            <label>Stop Loss ($)</label>
-                            <input type='number' min='0.1' step='0.5' value={smartStopLoss}
-                                onChange={e => setSmartStopLoss(+e.target.value)} disabled={smartRunning} />
-                        </div>
-                        <div className='autotrades__smart-field'>
-                            <label>Analysis Depth</label>
-                            <select value={smartDepth} onChange={e => setSmartDepth(+e.target.value)} disabled={smartRunning}>
-                                <option value={100}>Last 100 ticks</option>
-                                <option value={200}>Last 200 ticks</option>
-                                <option value={300}>Last 300 ticks</option>
-                                <option value={500}>Last 500 ticks</option>
-                                <option value={750}>Last 750 ticks</option>
-                                <option value={1000}>Last 1000 ticks</option>
-                            </select>
-                        </div>
-                        <div className='autotrades__smart-field'>
-                            <label>Symbol</label>
-                            <select value={smartSymbol} onChange={e => setSmartSymbol(e.target.value)} disabled={smartRunning}>
-                                {ALL_SYMBOLS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                            </select>
-                        </div>
-                    </div>
+                    {/* Bot cards grid */}
+                    <div className='st__cards'>
+                        {CARD_DEFS.map(card => {
+                            const sess = smartCardSess[card.id];
+                            const cfg = smartCardCfg[card.id];
+                            const isRunning = sess.running;
+                            const totalTrades = sess.wins + sess.losses;
+                            const winRate = totalTrades > 0 ? ((sess.wins / totalTrades) * 100).toFixed(1) : '0.0';
 
-                    <div className='autotrades__smart-actions'>
-                        {smartPaused && (
-                            <div className='autotrades__pause-banner'>
-                                ⏸ PAUSED — Waiting to resume. Martingale stake saved.
-                            </div>
-                        )}
-                        {smartRunning ? (
-                            <button className='autotrades__smart-run running' onClick={() => runSmartBot()}>
-                                ⏸ Pause Trading
-                            </button>
-                        ) : smartPaused ? (
-                            <button className='autotrades__smart-run resume' onClick={() => {
-                                setSmartPaused(false);
-                                smartPausedRef.current = false;
-                                runSmartBot(smartPausedStakeRef.current ?? undefined);
-                            }}>
-                                ▶ Resume{smartPausedStakeRef.current ? ` (stake: ${smartPausedStakeRef.current.toFixed(2)})` : ''}
-                            </button>
-                        ) : (
-                            <button className='autotrades__smart-run' onClick={() => runSmartBot()}>
-                                ▶ Start Trading
-                            </button>
-                        )}
-                        {smartPaused && (
-                            <button className='autotrades__smart-reset' onClick={() => { setSmartPaused(false); smartPausedStakeRef.current = null; setSmartStats({ profit: 0, trades: 0, wins: 0 }); }}>
-                                ↺ Reset Session
-                            </button>
-                        )}
-                    </div>
+                            let statA: string, statB: string, labelA: string, labelB: string;
+                            let probA: number, probB: number;
+                            if (card.id === 'risefall') {
+                                labelA = 'Rise'; labelB = 'Fall';
+                                probA = riseProb; probB = fallProb;
+                                statA = riseProb.toFixed(2) + '%'; statB = fallProb.toFixed(2) + '%';
+                            } else if (card.id === 'evenodd') {
+                                labelA = 'Even'; labelB = 'Odd';
+                                probA = evenProb; probB = oddProb;
+                                statA = evenProb.toFixed(2) + '%'; statB = oddProb.toFixed(2) + '%';
+                            } else if (card.id === 'overunder') {
+                                labelA = `Over`; labelB = `Under`;
+                                probA = overProb; probB = underProb;
+                                statA = overProb.toFixed(2) + '%'; statB = underProb.toFixed(2) + '%';
+                            } else {
+                                labelA = 'Matches'; labelB = 'Differs';
+                                probA = matchProb; probB = differProb;
+                                statA = matchProb.toFixed(2) + '%'; statB = differProb.toFixed(2) + '%';
+                            }
 
-                    <div className='autotrades__smart-panels'>
-                        <div className='autotrades__smart-panel'>
-                            <h3>Trading Status</h3>
-                            <div className='autotrades__status-grid'>
-                                <div><span className='lbl'>Symbol</span><span className='val'>{smartSymbol}</span></div>
-                                <div><span className='lbl'>Contract</span><span className='val'>DIGITDIFF</span></div>
-                                <div><span className='lbl'>Base Stake</span><span className='val'>${smartStake.toFixed(2)}</span></div>
-                                <div><span className='lbl'>Status</span><span className='val'>{smartRunning ? '🟢 Running' : smartPaused ? '⏸ Paused' : '○ Idle'}</span></div>
-                                <div><span className='lbl'>Trades</span><span className='val'>{smartStats.trades}</span></div>
-                            </div>
-                        </div>
+                            return (
+                                <div key={card.id} className={`st__card ${isRunning ? 'running' : ''}`}>
+                                    <div className='st__card-top'>
+                                        <span className='st__card-icon'>{card.icon}</span>
+                                        <strong className='st__card-title'>{card.title}</strong>
+                                        {isRunning && <span className='st__running-dot'>●</span>}
+                                    </div>
 
-                        <div className='autotrades__smart-panel'>
-                            <h3>Smart Analysis</h3>
-                            <div className='autotrades__analysis-status'>
-                                <span className={`autotrades__status-dot ${smartDigits.length > 0 ? 'live' : 'loading'}`} />
-                                {smartDigits.length > 0 ? `✓ Ready — ${smartDigits.length} ticks` : 'Loading...'}
-                            </div>
-                            <div className='autotrades__analysis-row'>
-                                <span className='lbl'>Prediction (Differ)</span>
-                                <span className='val pred'>{smartAnalysis.prediction}</span>
-                            </div>
-                            <div className='autotrades__analysis-row'>
-                                <span className='lbl'>Analyzed</span>
-                                <span className='val'>{smartAnalysis.ticks}/{smartDepth}</span>
-                            </div>
-                            <div className='autotrades__analysis-row'>
-                                <span className='lbl'>Last 10 Digits</span>
-                                <span className='val digits-row'>
-                                    {smartAnalysis.last10.map((d, i) => (
-                                        <span key={i} className={`autotrades__digit-badge d${d}`}>{d}</span>
-                                    ))}
-                                </span>
-                            </div>
-                            <div className='autotrades__freq-row'>
-                                {smartAnalysis.digitFreq.map((cnt, d) => (
-                                    <span key={d} className={`autotrades__freq-item ${d === smartAnalysis.prediction ? 'pred' : ''}`}>
-                                        <span className='d-label'>{d}</span>
-                                        <span className='d-count'>{cnt}</span>
-                                    </span>
-                                ))}
-                            </div>
-                        </div>
+                                    {/* Live stat bars */}
+                                    <div className='st__bars'>
+                                        <div className='st__bar-row'>
+                                            <span className='st__bar-label'>{labelA}</span>
+                                            <div className='st__bar-track'>
+                                                <div className='st__bar-fill green' style={{ width: `${probA.toFixed(1)}%` }} />
+                                            </div>
+                                            <span className='st__bar-pct green'>{statA}</span>
+                                        </div>
+                                        <div className='st__bar-row'>
+                                            <span className='st__bar-label'>{labelB}</span>
+                                            <div className='st__bar-track'>
+                                                <div className='st__bar-fill red' style={{ width: `${probB.toFixed(1)}%` }} />
+                                            </div>
+                                            <span className='st__bar-pct red'>{statB}</span>
+                                        </div>
+                                    </div>
 
-                        <div className='autotrades__smart-panel'>
-                            <h3>Performance</h3>
-                            <div className='autotrades__perf-grid'>
-                                <div>
-                                    <span className='lbl'>Total Profit</span>
-                                    <span className={`val big ${smartStats.profit >= 0 ? 'pos' : 'neg'}`}>
-                                        {fmtProfit(smartStats.profit)}
-                                    </span>
+                                    {/* Last Digits Pattern */}
+                                    {(card.id === 'overunder' || card.id === 'matchdiffer') && (
+                                        <div className='st__digit-pattern'>
+                                            <div className='st__pattern-label'>Last Digits Pattern</div>
+                                            <div className='st__pattern-dots'>
+                                                {last10.map((d, i) => (
+                                                    <span key={i} className={`st__pdot ${(card.id === 'evenodd' || card.id === 'overunder') ? (d % 2 === 0 ? 'even' : 'odd') : `d${d % 5}`}`}>{d}</span>
+                                                ))}
+                                            </div>
+                                            <div className='st__pattern-note'>
+                                                {card.id === 'overunder'
+                                                    ? `O=Over (>${ouBarrier}), E=Equal (=${ouBarrier}), U=Under (<${ouBarrier})`
+                                                    : `Most frequent: ${mostFreqDigit} (${matchProb.toFixed(2)}%)`}
+                                            </div>
+                                            {card.id === 'matchdiffer' && (
+                                                <div className='st__freq-dist'>
+                                                    <div className='st__freq-label'>Digit Frequency Distribution</div>
+                                                    <div className='st__freq-bars'>
+                                                        {freq.map((cnt, d) => {
+                                                            const pct = n > 0 ? (cnt / n) * 100 : 10;
+                                                            return (
+                                                                <div key={d} className='st__freq-col'>
+                                                                    <div className='st__freq-bar-wrap'>
+                                                                        <div className={`st__freq-bar ${d === leastFreqDigit ? 'pred' : ''}`}
+                                                                            style={{ height: `${Math.max(4, pct * 2)}px` }} />
+                                                                    </div>
+                                                                    <span className='st__freq-d'>{d}</span>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Trading Condition */}
+                                    <div className='st__condition'>
+                                        <div className='st__condition-title'>Trading Condition</div>
+                                        <div className='st__condition-row'>
+                                            <span className='st__cond-lbl'>If</span>
+                                            {card.id === 'risefall' && (
+                                                <span className='st__cond-text'>Rise Prob &gt; {cfg.condition}%</span>
+                                            )}
+                                            {card.id === 'evenodd' && (
+                                                <span className='st__cond-text'>Even Prob &gt; {cfg.condition}%</span>
+                                            )}
+                                            {card.id === 'overunder' && (
+                                                <span className='st__cond-text'>Over Prob &gt; {cfg.condition}%</span>
+                                            )}
+                                            {card.id === 'matchdiffer' && (
+                                                <span className='st__cond-text'>Check last {cfg.condition} digits → Differ {leastFreqDigit}</span>
+                                            )}
+                                        </div>
+                                        <div className='st__condition-row'>
+                                            <span className='st__cond-lbl'>Then</span>
+                                            {card.id === 'risefall' && <span className='st__cond-text'>Buy {riseProb >= cfg.condition ? 'Rise' : 'Fall'}</span>}
+                                            {card.id === 'evenodd' && <span className='st__cond-text'>Buy {evenProb >= cfg.condition ? 'Even' : 'Odd'}</span>}
+                                            {card.id === 'overunder' && (
+                                                <span className='st__cond-text'>Buy {overProb >= cfg.condition ? 'Over' : 'Under'} digit {ouBarrier}</span>
+                                            )}
+                                            {card.id === 'matchdiffer' && <span className='st__cond-text'>Buy Differ on {leastFreqDigit}</span>}
+                                        </div>
+                                        {card.id === 'overunder' && (
+                                            <div className='st__condition-row'>
+                                                <span className='st__cond-lbl'>Barrier</span>
+                                                <input type='number' min='0' max='9' step='1'
+                                                    className='st__cond-input'
+                                                    value={cfg.barrier}
+                                                    disabled={isRunning}
+                                                    onChange={e => updateCardCfg(card.id, { barrier: +e.target.value })} />
+                                            </div>
+                                        )}
+                                        <div className='st__condition-row'>
+                                            <span className='st__cond-lbl'>Threshold %</span>
+                                            <input type='number' min='0' max='100' step='1'
+                                                className='st__cond-input'
+                                                value={cfg.condition}
+                                                disabled={isRunning}
+                                                onChange={e => updateCardCfg(card.id, { condition: +e.target.value })} />
+                                        </div>
+                                    </div>
+
+                                    {/* Per-card params */}
+                                    <div className='st__params'>
+                                        <div className='st__param'>
+                                            <label>Stake</label>
+                                            <input type='number' min='0.35' step='0.5' value={cfg.stake}
+                                                disabled={isRunning}
+                                                onChange={e => updateCardCfg(card.id, { stake: +e.target.value })} />
+                                        </div>
+                                        <div className='st__param'>
+                                            <label>Ticks</label>
+                                            <input type='number' min='1' max='10' step='1' value={cfg.ticks}
+                                                disabled={isRunning}
+                                                onChange={e => updateCardCfg(card.id, { ticks: +e.target.value })} />
+                                        </div>
+                                        <div className='st__param'>
+                                            <label>Martingale</label>
+                                            <input type='number' min='1' max='5' step='0.1' value={cfg.martingale}
+                                                disabled={isRunning}
+                                                onChange={e => updateCardCfg(card.id, { martingale: +e.target.value })} />
+                                        </div>
+                                    </div>
+
+                                    {/* Session stats */}
+                                    {totalTrades > 0 && (
+                                        <div className='st__sess-stats'>
+                                            <span className='pos'>✓ {sess.wins}</span>
+                                            <span className='neg'>✗ {sess.losses}</span>
+                                            <span className={sess.profit >= 0 ? 'pos' : 'neg'}>{fmtProfit(sess.profit)}</span>
+                                            <span className='rate'>{winRate}%</span>
+                                        </div>
+                                    )}
+
+                                    {sess.lastLog && <div className='st__lastlog'>{sess.lastLog}</div>}
+
+                                    {/* Run button */}
+                                    <button
+                                        className={`st__run-btn ${isRunning ? 'stop' : ''}`}
+                                        onClick={() => toggleSmartCard(card.id)}
+                                    >
+                                        {isRunning ? '⏹ Stop Auto Trading' : '▶ Start Auto Trading'}
+                                    </button>
                                 </div>
-                                <div><span className='lbl'>Trades</span><span className='val big'>{smartStats.trades}</span></div>
-                                <div><span className='lbl'>Wins</span><span className='val pos'>{smartStats.wins}</span></div>
-                                <div><span className='lbl'>Losses</span><span className='val neg'>{smartStats.trades - smartStats.wins}</span></div>
-                                <div>
-                                    <span className='lbl'>Win Rate</span>
-                                    <span className='val'>
-                                        {smartStats.trades > 0 ? ((smartStats.wins / smartStats.trades) * 100).toFixed(1) : '0.0'}%
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
+                            );
+                        })}
+                    </div>
+
+                    {/* Status bar */}
+                    <div className='st__status-bar'>
+                        {SMART_CARD_IDS.some(id => smartCardSess[id].running)
+                            ? '● Bot is running…'
+                            : '○ Bot is not running'}
                     </div>
                 </div>
-            )}
+                );
+            })()}
 
             {/* ── Auto Bots Tab ── */}
             {activeTab === 'autobots' && (

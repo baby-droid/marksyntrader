@@ -695,7 +695,10 @@ const ManualTrader: React.FC = () => {
             /* Track ticks visually using the first contract */
             tradeTicksRef.current = [];
             tradeActiveRef.current = true;
-            skipNextTickRef.current = _symbolValue.startsWith('1HZ'); // only skip on 1s markets
+            // Always skip the entry tick — on ALL markets (including plain index, bear/bull)
+            // the first WebSocket tick that arrives after the buy is the entry price itself,
+            // not T1. T1 is the NEXT tick after the entry tick.
+            skipNextTickRef.current = true;
             tradeDurRef.current = isSecBased ? 0 : dur;
             setTradeState({ ticks: [], duration: dur, settled: false, result: null, profit: 0, exitDigit: null });
 
@@ -790,9 +793,10 @@ const ManualTrader: React.FC = () => {
         const tradeId = idRef.current++;
         tradeTicksRef.current = [];
         tradeActiveRef.current = true;
-        // Only skip the entry tick on 1s markets — on plain/bear/bull markets the
-        // first tick AFTER execution is T1 and must NOT be skipped.
-        skipNextTickRef.current = _symbolValue.startsWith('1HZ');
+        // Always skip the entry tick on ALL markets — on both 1s and plain/bear/bull markets
+        // the first WebSocket tick arriving after the buy is the entry price, not T1.
+        // T1 is the tick AFTER the entry tick, matching Deriv's own tick numbering.
+        skipNextTickRef.current = true;
         tradeDurRef.current = isSecBased ? 0 : dur; // only track digit ticks for tick-based contracts
         setTradeState({ ticks: [], duration: dur, settled: false, result: null, profit: 0, exitDigit: null });
 

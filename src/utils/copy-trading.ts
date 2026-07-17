@@ -19,8 +19,8 @@ import { MasterTradeSignal, subscribeMasterTrades } from './trade-bus';
 // — using the generic demo app id (1089) here caused follower authorize/buy
 // calls to run under a different app's trading scopes, which is the root
 // cause of followers failing to link or reciprocate trades reliably.
-const APP_ID = process.env.NEXT_PUBLIC_DERIV_APP_ID || 1089;
-const WS_URL = `wss://ws.binaryws.com/websockets/v3?app_id=${APP_ID}`;
+const APP_ID = process.env.NEXT_PUBLIC_DERIV_APP_ID || 36300;
+const WS_URL = `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`;
 
 export type CopyMode = 'real_real' | 'demo_real' | 'demo_demo' | 'real_demo';
 
@@ -151,15 +151,15 @@ class CopyEngine {
             ws.onerror = () => this.update(id, { status: 'error', lastError: 'Connection error' });
 
             await new Promise<void>((res, rej) => {
-                const t = setTimeout(() => rej(new Error('Connection timed out — check your internet and try again.')), 20000);
+                const t = setTimeout(() => rej(new Error('Connection timed out — check your internet and try again.')), 30000);
                 ws.onopen = () => { clearTimeout(t); res(); };
             });
 
-            // Authorize with its own 20-second timeout
+            // Authorize with its own 30-second timeout
             const auth = await Promise.race([
                 this.send(conn, { authorize: trimmed }),
                 new Promise<never>((_, rej) =>
-                    setTimeout(() => rej(new Error('Authorize timed out — invalid or expired token.')), 20000)
+                    setTimeout(() => rej(new Error('Authorize timed out — token may be invalid, expired, or missing Read+Trade scopes.')), 30000)
                 ),
             ]);
             if (!auth.authorize) throw new Error('Token rejected by Deriv (check scopes: Read + Trade required).');

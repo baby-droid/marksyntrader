@@ -508,14 +508,15 @@
   &__header {
     display: flex; align-items: center; gap: 0.5rem;
     padding: 0.5rem 1rem;
-    background: #f9fafb; cursor: pointer;
+    background: #dbeafe; cursor: pointer;
     border: none; width: 100%; text-align: left;
     font-family: inherit; transition: background 0.12s;
-    &:hover { background: #f3f4f6; }
+    border-left: 3px solid #3b82f6;
+    &:hover { background: #bfdbfe; }
   }
 
   &__title {
-    font-size: 0.75rem; font-weight: 800; color: #374151;
+    font-size: 0.75rem; font-weight: 800; color: #1e40af;
     text-transform: uppercase; letter-spacing: 0.06em; flex: 1;
   }
 
@@ -534,7 +535,7 @@
     background: #fff;
   }
 
-  &.open &__header { background: #f0f4ff; }
+  &.open &__header { background: #bfdbfe; border-left-color: #1d4ed8; }
 }
 
 /* Bot action buttons row (DEFAULT BOT / SELECT BOT / ...) */
