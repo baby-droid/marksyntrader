@@ -7,21 +7,32 @@ import { useDerivTrading } from '@/hooks/useDerivTrading';
 import './pro-hedge.scss';
 
 const MARKETS = [
-  { label: 'V10',     value: 'R_10'    },
-  { label: 'V25',     value: 'R_25'    },
-  { label: 'V50',     value: 'R_50'    },
-  { label: 'V75',     value: 'R_75'    },
-  { label: 'V100',    value: 'R_100'   },
-  { label: 'V10 1s',  value: '1HZ10V'  },
-  { label: 'V25 1s',  value: '1HZ25V'  },
-  { label: 'V50 1s',  value: '1HZ50V'  },
-  { label: 'V75 1s',  value: '1HZ75V'  },
-  { label: 'V100 1s', value: '1HZ100V' },
-  { label: 'Jump 10', value: 'JD10'    },
-  { label: 'Jump 25', value: 'JD25'    },
-  { label: 'Jump 50', value: 'JD50'    },
-  { label: 'Jump 75', value: 'JD75'    },
-  { label: 'Jump 100',value: 'JD100'   },
+  { label: 'V10',      value: 'R_10'      },
+  { label: 'V25',      value: 'R_25'      },
+  { label: 'V50',      value: 'R_50'      },
+  { label: 'V75',      value: 'R_75'      },
+  { label: 'V100',     value: 'R_100'     },
+  { label: 'V10 1s',   value: '1HZ10V'   },
+  { label: 'V25 1s',   value: '1HZ25V'   },
+  { label: 'V50 1s',   value: '1HZ50V'   },
+  { label: 'V75 1s',   value: '1HZ75V'   },
+  { label: 'V100 1s',  value: '1HZ100V'  },
+  { label: 'Jump 10',  value: 'JD10'     },
+  { label: 'Jump 25',  value: 'JD25'     },
+  { label: 'Jump 50',  value: 'JD50'     },
+  { label: 'Jump 75',  value: 'JD75'     },
+  { label: 'Jump 100', value: 'JD100'    },
+  { label: 'Bear',     value: 'RDBEAR'   },
+  { label: 'Bull',     value: 'RDBULL'   },
+  { label: 'Boom 300', value: 'BOOM300N' },
+  { label: 'Boom 500', value: 'BOOM500'  },
+  { label: 'Boom 1000',value: 'BOOM1000' },
+  { label: 'Crash 300',value: 'CRASH300N'},
+  { label: 'Crash 500',value: 'CRASH500' },
+  { label: 'Crash 1k', value: 'CRASH1000'},
+  { label: 'Step',     value: 'STPX'     },
+  { label: 'Range 100',value: 'RB100'    },
+  { label: 'Range 200',value: 'RB200'    },
 ];
 
 const TRADE_TYPE_GROUPS = [
@@ -38,7 +49,7 @@ const STAKE_PRESETS = [0.5, 1, 2, 5];
 
 function LegCard({
   label, color, contractType, stake, ticks, martingale,
-  onStakeChange, onTicksChange, onMartingaleChange,
+  currentStake, onStakeChange, onTicksChange, onMartingaleChange,
   prediction, onPredictionChange, currency,
 }: any) {
   const needsPred = ['DIGITOVER','DIGITUNDER','DIGITMATCH','DIGITDIFF'].includes(contractType);
@@ -66,7 +77,7 @@ function LegCard({
 
       {/* Stake */}
       <div className='pro-hedge__leg-section'>
-        <label>Stake ({currency})</label>
+        <label>Base Stake ({currency})</label>
         <div className='pro-hedge__stake-row'>
           {STAKE_PRESETS.map(s => (
             <button
@@ -82,6 +93,12 @@ function LegCard({
             className='pro-hedge__stake-input'
           />
         </div>
+        {currentStake !== stake && (
+          <div className='pro-hedge__running-stake'>
+            Running: <strong>{currency} {currentStake.toFixed(2)}</strong>
+            <span className='pro-hedge__running-hint'>(martingale)</span>
+          </div>
+        )}
       </div>
 
       {/* Prediction (if needed) */}
@@ -121,8 +138,8 @@ function LegCard({
 
       {/* Stake preview */}
       <div className='pro-hedge__leg-preview'>
-        Stake: <strong>{currency} {stake.toFixed(2)}</strong>
-        {martingale > 1 && <span> → loss×{martingale}</span>}
+        Next stake: <strong>{currency} {currentStake.toFixed(2)}</strong>
+        {martingale > 1 && <span> | loss×{martingale}</span>}
       </div>
     </div>
   );
@@ -146,37 +163,99 @@ const ProHedge = observer(() => {
   const [autoHedge, setAutoHedge]   = useState(false);
   const [hedgeInterval, setHedgeInterval] = useState(2000);
   const [tradeLog, setTradeLog] = useState<any[]>([]);
+
+  /* ── Independent per-leg running stakes ── */
+  const runningStakeARef = useRef(stakeA);
+  const runningStakeBRef = useRef(stakeB);
+  const [displayStakeA, setDisplayStakeA] = useState(stakeA);
+  const [displayStakeB, setDisplayStakeB] = useState(stakeB);
+
+  // Keep refs in sync when the user changes the BASE stake
+  useEffect(() => {
+    runningStakeARef.current = stakeA;
+    setDisplayStakeA(stakeA);
+  }, [stakeA]);
+  useEffect(() => {
+    runningStakeBRef.current = stakeB;
+    setDisplayStakeB(stakeB);
+  }, [stakeB]);
+
   const autoRef = useRef<any>(null);
 
   const { digits, lastDigit, currentPrice, isConnected } = useDigitStats(market);
   const { balance, currency, buyContract, isTrading, tradeResults, totalProfit, winCount, lossCount } = useDerivTrading();
 
   const executeHedge = useCallback(async () => {
+    const curStakeA = runningStakeARef.current;
+    const curStakeB = runningStakeBRef.current;
+
     const logEntry = {
       time: new Date().toLocaleTimeString(),
       price: currentPrice ?? 0,
       typeA: tradeGroup.typeA,
       typeB: tradeGroup.typeB,
-      stakeA, stakeB,
+      stakeA: curStakeA,
+      stakeB: curStakeB,
     };
+
+    const isPredA = ['DIGITOVER','DIGITUNDER','DIGITMATCH','DIGITDIFF'].includes(tradeGroup.typeA);
+    const isPredB = ['DIGITOVER','DIGITUNDER','DIGITMATCH','DIGITDIFF'].includes(tradeGroup.typeB);
+
     const [resA, resB] = await Promise.all([
       buyContract({
         symbol: market,
         contract_type: tradeGroup.typeA,
-        stake: stakeA,
+        stake: curStakeA,
         duration: ticksA,
-        barrier: ['DIGITOVER','DIGITUNDER','DIGITMATCH','DIGITDIFF'].includes(tradeGroup.typeA) ? String(predA) : undefined,
+        barrier: isPredA ? String(predA) : undefined,
       }),
       buyContract({
         symbol: market,
         contract_type: tradeGroup.typeB,
-        stake: stakeB,
+        stake: curStakeB,
         duration: ticksB,
-        barrier: ['DIGITOVER','DIGITUNDER','DIGITMATCH','DIGITDIFF'].includes(tradeGroup.typeB) ? String(predB) : undefined,
+        barrier: isPredB ? String(predB) : undefined,
       }),
     ]);
+
     setTradeLog(prev => [logEntry, ...prev].slice(0, 100));
-  }, [market, tradeGroup, stakeA, stakeB, ticksA, ticksB, predA, predB, buyContract, currentPrice]);
+
+    /* ── Apply martingale independently per leg ── */
+    // Leg A
+    if (resA != null) {
+      const wonA = (resA.profit ?? resA.payout ?? 0) > 0 || resA.won === true || resA.status === 'won';
+      if (wonA) {
+        // Win: reset A to base stake
+        runningStakeARef.current = stakeA;
+        setDisplayStakeA(stakeA);
+      } else {
+        // Loss: multiply A stake by martingale (if martingale is on)
+        if (martA > 1) {
+          const next = Math.max(0.35, +(curStakeA * martA).toFixed(2));
+          runningStakeARef.current = next;
+          setDisplayStakeA(next);
+        }
+        // if martingale OFF (martA===1) leave stake the same (base)
+      }
+    }
+
+    // Leg B
+    if (resB != null) {
+      const wonB = (resB.profit ?? resB.payout ?? 0) > 0 || resB.won === true || resB.status === 'won';
+      if (wonB) {
+        // Win: reset B to base stake
+        runningStakeBRef.current = stakeB;
+        setDisplayStakeB(stakeB);
+      } else {
+        // Loss: multiply B stake by martingale (if martingale is on)
+        if (martB > 1) {
+          const next = Math.max(0.35, +(curStakeB * martB).toFixed(2));
+          runningStakeBRef.current = next;
+          setDisplayStakeB(next);
+        }
+      }
+    }
+  }, [market, tradeGroup, ticksA, ticksB, stakeA, stakeB, martA, martB, predA, predB, buyContract, currentPrice]);
 
   const toggleAuto = useCallback(() => {
     if (autoHedge) {
@@ -260,6 +339,7 @@ const ProHedge = observer(() => {
           color='a'
           contractType={tradeGroup.typeA}
           stake={stakeA}
+          currentStake={displayStakeA}
           ticks={ticksA}
           martingale={martA}
           prediction={predA}
@@ -275,6 +355,7 @@ const ProHedge = observer(() => {
           color='b'
           contractType={tradeGroup.typeB}
           stake={stakeB}
+          currentStake={displayStakeB}
           ticks={ticksB}
           martingale={martB}
           prediction={predB}
@@ -304,7 +385,8 @@ const ProHedge = observer(() => {
           <span>Hedges</span><strong>{tradeLog.length}</strong>
         </div>
         <div className='pro-hedge__stat'>
-          <span>Total Stake</span><strong>{currency} {(stakeA + stakeB).toFixed(2)}</strong>
+          <span>Next Stakes</span>
+          <strong>{currency} {displayStakeA.toFixed(2)} / {displayStakeB.toFixed(2)}</strong>
         </div>
       </div>
 
@@ -358,6 +440,8 @@ const ProHedge = observer(() => {
           </div>
           <p className='pro-hedge__settings-note'>
             Auto hedge stops when P/L reaches TP/SL or max trade count is hit.
+            Each leg's martingale is independent — a winning leg resets to base stake
+            while a losing leg multiplies only its own stake.
           </p>
         </div>
       )}
@@ -374,10 +458,10 @@ const ProHedge = observer(() => {
               <div key={i} className='pro-hedge__log-row'>
                 <span className='pro-hedge__log-time'>{e.time}</span>
                 <span>{e.typeA}</span>
-                <span>${e.stakeA}</span>
+                <span>${e.stakeA.toFixed(2)}</span>
                 <span className='pro-hedge__log-sep'>⚔</span>
                 <span>{e.typeB}</span>
-                <span>${e.stakeB}</span>
+                <span>${e.stakeB.toFixed(2)}</span>
                 <span style={{ opacity: 0.5 }}>@ {typeof e.price === 'number' ? e.price.toFixed(4) : '—'}</span>
               </div>
             ))}

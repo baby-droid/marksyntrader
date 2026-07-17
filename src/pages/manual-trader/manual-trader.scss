@@ -253,23 +253,23 @@
 
 /* Triangle / tick-label — above each digit circle */
 .mt-tri {
-  font-size: 1.1rem;
+  font-size: 1.6rem;
   font-weight: 900;
   color: #000000;
   text-align: center;
-  height: 16px;
-  line-height: 16px;
+  height: 22px;
+  line-height: 22px;
   opacity: 0;
-  transition: opacity 0.15s;
+  transition: opacity 0.08s; /* near-instant fade to match tick speed */
 
   &--on {
     opacity: 1;
-    animation: tri-bounce 0.45s ease infinite alternate;
+    animation: tri-bounce 0.35s ease infinite alternate;
   }
 
   /* Tick-order label (T1, T2…) — different colour + no bounce */
   &--tick-label {
-    font-size: 0.68rem;
+    font-size: 0.75rem;
     font-weight: 900;
     color: #f59e0b;
     letter-spacing: 0.03em;
@@ -645,6 +645,38 @@
   text-align: center;
 }
 
+/* Tick circle selector (1–10 dots) */
+.mtp-tick-circles {
+  display: flex;
+  align-items: center;
+  gap: 0.22rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.25rem;
+}
+.mtp-tick-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.05);
+  border: 1.5px solid rgba(255,255,255,0.12);
+  color: #94a3b8;
+  font-size: 0.75rem;
+  font-weight: 800;
+  font-family: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.12s;
+  &:hover { background: rgba(59,130,246,0.15); border-color: rgba(59,130,246,0.4); color: #93c5fd; }
+  &.active {
+    background: rgba(59,130,246,0.28);
+    border-color: #3b82f6;
+    color: #fff;
+    box-shadow: 0 0 8px rgba(59,130,246,0.4);
+  }
+}
+
 /* Digit grid */
 .mtp-digit-grid {
   display: grid;
@@ -830,14 +862,15 @@
   cursor: default;
 }
 
-/* Buy buttons — wide, prominent */
+/* Buy buttons — prominent; narrower width (¾) + taller */
 .mtp-buy-btn {
-  width: 100%;
+  width: 75%;
+  align-self: center;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 0.6rem;
-  padding: 1rem 1.75rem;
+  padding: 1.3rem 1rem;
   border-radius: 0.7rem;
   border: none;
   cursor: pointer;
@@ -1269,9 +1302,9 @@
   }
   /* Larger moving triangle */
   .mt-tri {
-    font-size: 1.5rem !important;
-    height: 22px !important;
-    line-height: 22px !important;
+    font-size: 1.9rem !important;
+    height: 26px !important;
+    line-height: 26px !important;
   }
 
   /* Bigger % text — black — on mobile */

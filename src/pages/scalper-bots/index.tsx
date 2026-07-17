@@ -215,21 +215,40 @@ const DEFAULT_CONFIG = (bot: TScalperBot): BotConfig => ({
 });
 
 const ALL_MARKETS = [
-    { label: 'V10 (1s)',  value: '1HZ10V'  },
-    { label: 'V25 (1s)',  value: '1HZ25V'  },
-    { label: 'V50 (1s)',  value: '1HZ50V'  },
-    { label: 'V75 (1s)',  value: '1HZ75V'  },
-    { label: 'V100 (1s)', value: '1HZ100V' },
-    { label: 'V10',       value: 'R_10'    },
-    { label: 'V25',       value: 'R_25'    },
-    { label: 'V50',       value: 'R_50'    },
-    { label: 'V75',       value: 'R_75'    },
-    { label: 'V100',      value: 'R_100'   },
-    { label: 'Jump 10',   value: 'JD10'    },
-    { label: 'Jump 25',   value: 'JD25'    },
-    { label: 'Jump 50',   value: 'JD50'    },
-    { label: 'Jump 75',   value: 'JD75'    },
-    { label: 'Jump 100',  value: 'JD100'   },
+    // Volatility 1-second
+    { label: 'V10 (1s)',    value: '1HZ10V'    },
+    { label: 'V25 (1s)',    value: '1HZ25V'    },
+    { label: 'V50 (1s)',    value: '1HZ50V'    },
+    { label: 'V75 (1s)',    value: '1HZ75V'    },
+    { label: 'V100 (1s)',   value: '1HZ100V'   },
+    // Volatility
+    { label: 'V10',         value: 'R_10'      },
+    { label: 'V25',         value: 'R_25'      },
+    { label: 'V50',         value: 'R_50'      },
+    { label: 'V75',         value: 'R_75'      },
+    { label: 'V100',        value: 'R_100'     },
+    // Daily Reset (Bear & Bull)
+    { label: 'Bear Market', value: 'RDBEAR'    },
+    { label: 'Bull Market', value: 'RDBULL'    },
+    // Jump
+    { label: 'Jump 10',     value: 'JD10'      },
+    { label: 'Jump 25',     value: 'JD25'      },
+    { label: 'Jump 50',     value: 'JD50'      },
+    { label: 'Jump 75',     value: 'JD75'      },
+    { label: 'Jump 100',    value: 'JD100'     },
+    // Boom
+    { label: 'Boom 300',    value: 'BOOM300N'  },
+    { label: 'Boom 500',    value: 'BOOM500'   },
+    { label: 'Boom 1000',   value: 'BOOM1000'  },
+    // Crash
+    { label: 'Crash 300',   value: 'CRASH300N' },
+    { label: 'Crash 500',   value: 'CRASH500'  },
+    { label: 'Crash 1000',  value: 'CRASH1000' },
+    // Step
+    { label: 'Step Index',  value: 'STPX'      },
+    // Range Break
+    { label: 'Range 100',   value: 'RB100'     },
+    { label: 'Range 200',   value: 'RB200'     },
 ];
 
 const SCALPER_BOTS: TScalperBot[] = manifest as TScalperBot[];
@@ -667,6 +686,16 @@ function groupRecoveryLimit(g: StrategyOrGroup): number {
     return Math.min(...g.conditions.map(c => c.recoveryLimit));
 }
 
+/* ─── Map Deriv symbol → Blockly SUBMARKET_LIST value ─── */
+function symbolToSubmarket(sym: string): string {
+    if (sym.startsWith('JD'))                          return 'jump_index';
+    if (sym.startsWith('BOOM') || sym.startsWith('CRASH')) return 'daily_reset_index';
+    if (sym === 'RDBEAR' || sym === 'RDBULL')          return 'daily_reset_index';
+    if (sym === 'STPX')                                return 'step_index';
+    if (sym.startsWith('RB'))                          return 'range_break_index';
+    return 'random_index'; // 1HZ*, R_* Volatility indices
+}
+
 /* ─── Patch XML string with correct market / duration before loading ─── */
 function patchXmlContent(xml: string, market?: string, duration?: number): string {
     try {
@@ -678,7 +707,7 @@ function patchXmlContent(xml: string, market?: string, duration?: number): strin
                 const symbolField = marketBlock.querySelector('field[name="SYMBOL_LIST"]');
                 if (symbolField) symbolField.textContent = market;
                 const subField = marketBlock.querySelector('field[name="SUBMARKET_LIST"]');
-                if (subField) subField.textContent = market.startsWith('JD') ? 'jump_index' : 'random_index';
+                if (subField) subField.textContent = symbolToSubmarket(market);
             }
         }
         if (duration != null) {
@@ -823,7 +852,7 @@ const BotDetail: React.FC<{
             for (const block of blocks) {
                 if (patch.market && block.type === 'trade_definition_market') {
                     try {
-                        block.getField('SUBMARKET_LIST')?.setValue(patch.market.startsWith('JD') ? 'jump_index' : 'random_index');
+                        block.getField('SUBMARKET_LIST')?.setValue(symbolToSubmarket(patch.market));
                         block.getField('SYMBOL_LIST')?.setValue(patch.market);
                         changed = true;
                     } catch { /* noop */ }
@@ -1499,7 +1528,7 @@ const BotDetail: React.FC<{
                         prediction: activeBarrier,
                         consecutiveLossLimit: effectiveLossLimit === Infinity ? Number.MAX_SAFE_INTEGER : effectiveLossLimit,
                         stopOnLoss: cfg.stopOnLoss || !!lastFiredGroupRef.current,
-                        tpGuard: cfg.tpGuard, takeProfit: slotTakeProfit(), stopLoss: cfg.stopLoss,
+                        tpGuard: true, takeProfit: slotTakeProfit(), stopLoss: cfg.stopLoss,
                         sessionPnlRef,
                         /* Seed with the running total so a loss here extends the SAME
                            consecutive-loss chain the outer loop has been tracking —
@@ -1540,22 +1569,36 @@ const BotDetail: React.FC<{
                 if (stopRef.current) break;
                 setEntryReady(false);
 
-                /* ── Guard-triggered stops (TP / SL) — always break immediately ── */
+                /* ── Guard-triggered stops (TP / SL / Loss Limit) — always break immediately ── */
                 if (cycle.forceStopped) {
                     consLossRef.current = cycle.consLoss;
                     totalConsLoss = cycle.consLoss;
 
                     if (cycle.reason === 'tp') {
-                        addLog(`🎯 Take profit ${slotTakeProfit()} reached.`, 'stop');
+                        addLog(`🎯 Take profit ${slotTakeProfit()} reached. Bot + VPS stopped.`, 'stop');
                         setWinPopup({ profit: cycle.cycleProfit, stopped: true, sessionPnl: sessionPnlRef.current, wins: winsRef.current, losses: lossesRef.current, reason: 'take-profit' });
                         break;
                     }
                     if (cycle.reason === 'sl') {
-                        addLog(`🛡 Stop loss -${cfg.stopLoss} triggered.`, 'stop');
+                        addLog(`🛡 Stop loss -${cfg.stopLoss} triggered. Bot + VPS stopped.`, 'stop');
                         setWinPopup({ profit: cycle.cycleProfit, stopped: true, sessionPnl: sessionPnlRef.current, wins: winsRef.current, losses: lossesRef.current, reason: 'stop-loss' });
                         break;
                     }
-                    // loss_limit falls through to the loss handling below
+                    if (cycle.reason === 'loss_limit') {
+                        addLog(`🛑 Conservative losses (${cfg.consecutiveLossLimit}) hit — bot and VPS halted.`, 'stop');
+                        setWinPopup({ profit: cycle.cycleProfit, stopped: true, sessionPnl: sessionPnlRef.current, wins: winsRef.current, losses: lossesRef.current, reason: 'loss-limit' });
+                        break; // breaks outer loop — VPS will NOT auto-restart
+                    }
+                }
+
+                /* ── Deactivate Limit check: stop trading when session wins OR losses hit the limit ── */
+                {
+                    const dLimit = cfg.riskManager.deactivateLimit;
+                    if (dLimit > 0 && (winsRef.current >= dLimit || lossesRef.current >= dLimit)) {
+                        addLog(`🛑 DEACTIVATE_LIMIT ${dLimit}: session wins=${winsRef.current} losses=${lossesRef.current} — trading deactivated.`, 'stop');
+                        setWinPopup({ profit: cycle.cycleProfit, stopped: true, sessionPnl: sessionPnlRef.current, wins: winsRef.current, losses: lossesRef.current, reason: 'deactivate-limit' });
+                        break;
+                    }
                 }
 
                 /* ── Loss handling ──
@@ -1649,7 +1692,7 @@ const BotDetail: React.FC<{
                 lastBuyPrice = curStake;
 
                 /* Check TP guard before stopping */
-                if (cfg.tpGuard && sessionPnlRef.current >= slotTakeProfit()) {
+                if (sessionPnlRef.current >= slotTakeProfit()) {
                     addLog(`🎯 Take profit ${slotTakeProfit()} reached.`, 'stop');
                     setWinPopup({ profit: cycle.cycleProfit, stopped: true, sessionPnl: sessionPnlRef.current, wins: winsRef.current, losses: lossesRef.current, reason: 'take-profit' });
                     break;

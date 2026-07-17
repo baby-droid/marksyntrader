@@ -770,10 +770,11 @@ const ManualTrader: React.FC = () => {
             setPnl(prev => prev + totalProfit);
             /* Voice: announce bulk result */
             const _bulkAmt = fromUsd(Math.abs(totalProfit)).toFixed(2);
+            const _curName = displayCurRef.current === 'KSH' ? 'Kenyan Shillings' : displayCurRef.current;
             if (totalProfit >= 0)
-                speak(`Wow! Money earned! ${_bulkAmt} ${displayCurRef.current}`);
+                speak(`Wow! Money earned! ${_bulkAmt} ${_curName}`);
             else
-                speak(`Sorry. Money lost. ${_bulkAmt} ${displayCurRef.current}`);
+                speak(`Sorry. Money lost. ${_bulkAmt} ${_curName}`);
 
             pushLog(totalProfit >= 0 ? 'response' : 'error', `BULK RESULT ×${_bulkCount}`, {
                 total_profit: totalProfit.toFixed(2),
@@ -858,10 +859,11 @@ const ManualTrader: React.FC = () => {
                     setPnl(prev => prev + profit);
                     /* Voice: announce single-contract result */
                     const _amt = fromUsd(Math.abs(profit)).toFixed(2);
+                    const _curName2 = displayCurRef.current === 'KSH' ? 'Kenyan Shillings' : displayCurRef.current;
                     if (c.status === 'won')
-                        speak(`Wow! Money earned! ${_amt} ${displayCurRef.current}`);
+                        speak(`Wow! Money earned! ${_amt} ${_curName2}`);
                     else
-                        speak(`Sorry. Money lost. ${_amt} ${displayCurRef.current}`);
+                        speak(`Sorry. Money lost. ${_amt} ${_curName2}`);
                     if (tradeStateTimeoutRef.current) clearTimeout(tradeStateTimeoutRef.current);
                     tradeStateTimeoutRef.current = setTimeout(() => setTradeState(null), 5000);
                 }
@@ -1143,19 +1145,20 @@ const ManualTrader: React.FC = () => {
                     {ctDef.durationUnit === 't' ? (
                         <div className='mtp-section'>
                             <div className='mtp-section__label'>Ticks</div>
-                            <div className='mtp-dur-row'>
-                                {TICK_DURATIONS.map(v => (
-                                    <button key={v}
-                                        className={`mtp-dur-btn ${duration === v ? 'active' : ''}`}
-                                        onClick={() => setDuration(v)}>
-                                        {v}
+                            {/* 1-10 small circle selectors */}
+                            <div className='mtp-tick-circles'>
+                                {[1,2,3,4,5,6,7,8,9,10].map(n => (
+                                    <button
+                                        key={n}
+                                        className={`mtp-tick-dot ${duration === n ? 'active' : ''}`}
+                                        onClick={() => setDuration(n)}
+                                        title={`${n} tick${n > 1 ? 's' : ''}`}
+                                    >
+                                        {n}
                                     </button>
                                 ))}
-                                <NumberField className='mtp-dur-inp' min={1} max={10}
-                                    value={duration}
-                                    onCommit={n => setDuration(n)} />
                             </div>
-                            <div className='mtp-dur-label'>{duration} Ticks</div>
+                            <div className='mtp-dur-label'>{duration} Tick{duration > 1 ? 's' : ''}</div>
                         </div>
                     ) : (
                         <div className='mtp-section'>
