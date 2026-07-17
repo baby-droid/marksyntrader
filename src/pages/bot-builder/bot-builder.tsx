@@ -68,6 +68,45 @@ const FreeBotsSidePanel: React.FC<TFreeBotsPanelProps> = ({ onClose, onLoadDone 
             });
         }
 
+        // ── Unsupported-block guard ──────────────────────────────────────────
+        // Pre-scan the XML for block types not registered in the current Blockly
+        // instance. Register a coloured "Unsupported" dummy for each missing type
+        // so Blockly renders a placeholder instead of silently deleting the block.
+        try {
+            const Blockly = (window as any).Blockly;
+            if (Blockly?.Blocks && block_string) {
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(block_string, 'text/xml');
+                const blockEls = xmlDoc.querySelectorAll('block');
+                const missingTypes = new Set<string>();
+                blockEls.forEach(el => {
+                    const type = el.getAttribute('type');
+                    if (type && !Blockly.Blocks[type]) missingTypes.add(type);
+                });
+                missingTypes.forEach(type => {
+                    Blockly.Blocks[type] = {
+                        init(this: any) {
+                            this.jsonInit({
+                                message0: `⚠ Unsupported: ${type}`,
+                                colour: '#555',
+                                tooltip: `Block type "${type}" is not available in this workspace. It was loaded from an external bot file.`,
+                                helpUrl: '',
+                            });
+                            this.setOutput(true);
+                            this.setPreviousStatement(true);
+                            this.setNextStatement(true);
+                        },
+                    };
+                });
+                if (missingTypes.size > 0) {
+                    console.info(`[Bot Loader] Registered ${missingTypes.size} unsupported-block placeholder(s):`, [...missingTypes]);
+                }
+            }
+        } catch (e) {
+            console.warn('[Bot Loader] Unsupported-block pre-scan failed:', e);
+        }
+        // ────────────────────────────────────────────────────────────────────
+
         await load({
             block_string,
             drop_event: null,

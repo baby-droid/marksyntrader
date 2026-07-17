@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React, { useState, useCallback } from 'react';
 import { fromUsd, getDisplayCurrency } from '@/utils/currency-display';
-import api_base from '@/external/bot-skeleton/services/api/api-base';
+import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 
 type TradeCategory = 'options' | 'multipliers' | 'accumulators';
 type SubType = string;

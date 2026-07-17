@@ -171,7 +171,7 @@
      badgeColor) so every card gets its own glow / border / icon-ring color
      instead of the previous one-size-fits-all blue theme. */
   &__card {
-    --accent: #00c8ff;
+    --accent: #89c4f4;
     position: relative;
     background:
       radial-gradient(120% 140% at 100% 0%, color-mix(in srgb, var(--accent) 14%, transparent) 0%, transparent 55%),
