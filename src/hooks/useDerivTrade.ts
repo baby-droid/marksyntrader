@@ -37,6 +37,7 @@ export interface SettledContract {
     entry_spot?: number;
     exit_spot?: number;
     buy_price?: number;
+    pip_size?: number;   // authoritative pip_size from the settled POC
 }
 
 export type ContractType =
@@ -120,13 +121,19 @@ export function useDerivTrade() {
                     const cb = pocCallbacksRef.current.get(cid);
                     if (cb) {
                         const profit = parseFloat(poc.profit ?? '0');
+                        // Use the definitive status from the API; fall back to profit sign
+                        const status: 'won' | 'lost' =
+                            poc.status === 'won' ? 'won'
+                            : poc.status === 'lost' ? 'lost'
+                            : profit > 0 ? 'won' : 'lost';
                         cb({
                             contract_id: cid,
                             profit,
-                            status: poc.status === 'won' || profit > 0 ? 'won' : 'lost',
+                            status,
                             entry_spot: poc.entry_spot,
                             exit_spot: poc.exit_spot,
                             buy_price: poc.buy_price,
+                            pip_size: poc.pip_size != null ? Number(poc.pip_size) : undefined,
                         });
                         pocCallbacksRef.current.delete(cid);
                     }

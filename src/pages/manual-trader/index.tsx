@@ -325,11 +325,19 @@ const DigitRow: React.FC<{
                     /* Active-tick flash */
                     const isActiveTick = activeTradeTickDigit === d && tradeState && !tradeState.settled;
 
+                    // Triangle logic:
+                    // · Settled trade → freeze at exitDigit; don't follow live ticks
+                    // · Active unsettled trade → follow currentDigit (live); tick label shows Tn
+                    // · No trade → follow currentDigit (live pointer)
+                    const isSettledExit = !!(tradeState?.settled && tradeState?.exitDigit === d);
+                    const triOn = tradeState?.settled ? isSettledExit : (isCurrent || hasTickDuringTrade);
+                    const isTickLabel = hasTickDuringTrade; // only show Tn label while contract is live
+
                     return (
                         <div key={d} className={`mt-circle-cell ${isCurrent ? 'is-current' : ''}`}>
                             {/* Triangle / tick label — above each circle */}
-                            <div className={`mt-tri ${(isCurrent || hasTickDuringTrade) ? 'mt-tri--on' : ''} ${hasTickDuringTrade ? 'mt-tri--tick-label' : ''}`}>
-                                {hasTickDuringTrade ? `T${latestOrder}` : '▼'}
+                            <div className={`mt-tri ${triOn ? 'mt-tri--on' : ''} ${isTickLabel ? 'mt-tri--tick-label' : ''}`}>
+                                {isTickLabel ? `T${latestOrder}` : '▼'}
                             </div>
 
                             {/* Circle */}
@@ -735,13 +743,18 @@ const ManualTrader: React.FC = () => {
                         buyContract(contractParams, c => {
                             const profit = applyCommission(c.profit);
                             const exitSpot = c.exit_spot;
+                            // Sync authoritative pip_size from POC so exit digit is correct
+                            if (c.pip_size && c.pip_size !== pipSizeRef.current) {
+                                pipSizeRef.current = c.pip_size;
+                            }
                             /* Only the first settled contract drives the visual trade state */
                             if (firstSettled) {
                                 firstSettled = false;
-                                const exitDigit = exitSpot ? getLastDigitByPip(Number(exitSpot), pipSizeRef.current) : null;
+                                const resolvedPip = c.pip_size ?? pipSizeRef.current;
+                                const exitDigit = exitSpot ? getLastDigitByPip(Number(exitSpot), resolvedPip) : null;
                                 setTradeState(prev => prev ? {
                                     ...prev, settled: true,
-                                    result: profit >= 0 ? 'won' : 'lost',
+                                    result: c.status === 'won' ? 'won' : profit > 0 ? 'won' : 'lost',
                                     profit,
                                     exitDigit,
                                 } : null);
@@ -794,10 +807,10 @@ const ManualTrader: React.FC = () => {
         const tradeId = idRef.current++;
         tradeTicksRef.current = [];
         tradeActiveRef.current = true;
-        // Always skip the entry tick on ALL markets — on both 1s and plain/bear/bull markets
-        // the first WebSocket tick arriving after the buy is the entry price, not T1.
-        // T1 is the tick AFTER the entry tick, matching Deriv's own tick numbering.
-        skipNextTickRef.current = true;
+        // Only skip on 1-second markets (1HZ*) where the entry price echoes as tick #0.
+        // On all other markets (Vol 10/25/75/100, Bear, Bull, Jump, Boom, Crash, Step…)
+        // the first WebSocket tick after the buy IS T1 — counting starts immediately.
+        skipNextTickRef.current = _symbolValue.startsWith('1HZ');
         tradeDurRef.current = isSecBased ? 0 : dur; // only track digit ticks for tick-based contracts
         setTradeState({ ticks: [], duration: dur, settled: false, result: null, profit: 0, exitDigit: null });
 
@@ -837,7 +850,13 @@ const ManualTrader: React.FC = () => {
                     clearInterval(iv);
                     const profit    = applyCommission(c.profit);
                     const exitSpot  = c.exit_spot;
-                    const exitDigit = exitSpot ? getLastDigitByPip(Number(exitSpot), pipSizeRef.current) : null;
+                    // Use pip_size from the settled POC (authoritative) if provided;
+                    // fall back to the value locked in from the first live tick.
+                    const resolvedPip = c.pip_size ?? pipSizeRef.current;
+                    if (c.pip_size && c.pip_size !== pipSizeRef.current) {
+                        pipSizeRef.current = c.pip_size; // sync for future ticks
+                    }
+                    const exitDigit = exitSpot ? getLastDigitByPip(Number(exitSpot), resolvedPip) : null;
                     /* Log the settled contract response */
                     pushLog(c.status === 'won' ? 'response' : 'error', `CONTRACT ${c.contract_id}`, {
                         contract_id: c.contract_id,
