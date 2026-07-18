@@ -703,10 +703,10 @@ const ManualTrader: React.FC = () => {
             /* Track ticks visually using the first contract */
             tradeTicksRef.current = [];
             tradeActiveRef.current = true;
-            // Always skip the entry tick — on ALL markets (including plain index, bear/bull)
-            // the first WebSocket tick that arrives after the buy is the entry price itself,
-            // not T1. T1 is the NEXT tick after the entry tick.
-            skipNextTickRef.current = true;
+            // Only skip the entry-echo tick on 1-second markets (1HZ*).
+            // On plain index (R_*), Bear/Bull (RDBEAR/RDBULL), Jump (JD*), Boom, Crash, etc.
+            // the first WebSocket tick after the buy IS T1 — no skip.
+            skipNextTickRef.current = _symbolValue.startsWith('1HZ');
             tradeDurRef.current = isSecBased ? 0 : dur;
             setTradeState({ ticks: [], duration: dur, settled: false, result: null, profit: 0, exitDigit: null });
 

@@ -1053,6 +1053,10 @@ const BotDetail: React.FC<{
         sessionPnl: number; wins: number; losses: number; reason?: string;
     } | null>(null);
 
+    /* Recovery mode dialog — shown when stop-loss is hit so user can choose to recover */
+    const [recoveryDialog, setRecoveryDialog] = useState<{ lossAmt: number } | null>(null);
+    const recoveryResolverRef = useRef<((accepted: boolean) => void) | null>(null);
+
     /* ── VPS Mode state ── */
     const [vpsEnabled, setVpsEnabled]     = useState(false);
     const [vpsSettings, setVpsSettings]   = useState<VpsSettings>({ numRuns: 0, takeProfit: 0, stopLoss: 0 });
@@ -1328,6 +1332,11 @@ const BotDetail: React.FC<{
         /* Total consecutive losses across all cycles — drives market-switch and martingale. */
         let totalConsLoss = 0;
 
+        /* ── Session-level tracking for cool-off and recovery ── */
+        let consecutiveWins = 0;     // reset to 0 on any loss; triggers cool-off at 7
+        let inRecovery = false;       // set when user accepts recovery after SL hit
+        let recoveryCoolLoss = 0;    // consecutive losses accumulated during recovery cool-off check
+
         /* ── FRESH XML RELOAD every time Run is pressed ──
            Await the load so the workspace is ready before the first trade fires. */
         addLog('📂 LOADING BOT STRATEGY...', 'hack');
@@ -1551,6 +1560,8 @@ const BotDetail: React.FC<{
                                 addLog(`${contractTag}✅ WIN  +${profit.toFixed(2)} USD  |  P/L: ${pnlStr}`, 'win');
                             } else {
                                 lossesRef.current++;
+                                /* Any loss breaks the consecutive-win streak */
+                                consecutiveWins = 0;
                                 /* consLoss is now the TRUE running consecutive-loss count
                                    (seeded via priorConsLoss above), not a per-trade 0/1 —
                                    this is what lets martingale keep escalating loss after
@@ -1559,7 +1570,7 @@ const BotDetail: React.FC<{
                                 totalConsLoss = consLoss;
                                 const nextStake = computeNextStake(consLoss, buyPrice);
                                 addLog(`${contractTag}❌ LOSS  ${profit.toFixed(2)} USD  |  recovery: ${consLoss}/${effectiveLossLimit === Infinity ? '∞' : effectiveLossLimit}  |  P/L: ${pnlStr}`, 'loss');
-                                addLog(`${contractTag}🛡 RECOVERY: next stake: ${nextStake.toFixed(2)} (×${slotMartingale()})`, 'switch');
+                                addLog(`${contractTag}🛡 MARTINGALE: next stake ${nextStake.toFixed(2)} (×${slotMartingale()}) — scanning for entry...`, 'switch');
                             }
                         },
                     });
@@ -1569,25 +1580,50 @@ const BotDetail: React.FC<{
                 if (stopRef.current) break;
                 setEntryReady(false);
 
-                /* ── Guard-triggered stops (TP / SL / Loss Limit) — always break immediately ── */
+                /* ── Guard-triggered stops ── */
                 if (cycle.forceStopped) {
                     consLossRef.current = cycle.consLoss;
                     totalConsLoss = cycle.consLoss;
 
                     if (cycle.reason === 'tp') {
-                        addLog(`🎯 Take profit ${slotTakeProfit()} reached. Bot + VPS stopped.`, 'stop');
+                        /* ── TP hit: stop all engines immediately ── */
+                        addLog(`🎯 TAKE PROFIT ${slotTakeProfit()} REACHED — ALL ENGINES STOPPED ✓`, 'stop');
                         setWinPopup({ profit: cycle.cycleProfit, stopped: true, sessionPnl: sessionPnlRef.current, wins: winsRef.current, losses: lossesRef.current, reason: 'take-profit' });
                         break;
                     }
+
                     if (cycle.reason === 'sl') {
-                        addLog(`🛡 Stop loss -${cfg.stopLoss} triggered. Bot + VPS stopped.`, 'stop');
-                        setWinPopup({ profit: cycle.cycleProfit, stopped: true, sessionPnl: sessionPnlRef.current, wins: winsRef.current, losses: lossesRef.current, reason: 'stop-loss' });
-                        break;
+                        /* ── SL hit: ask user whether to activate recovery mode ── */
+                        addLog(`🛑 STOP LOSS -${cfg.stopLoss} TRIGGERED — session P/L: ${sessionPnlRef.current.toFixed(2)} USD`, 'stop');
+                        const lossAmt = Math.abs(sessionPnlRef.current);
+                        const accepted = await new Promise<boolean>(resolve => {
+                            recoveryResolverRef.current = resolve;
+                            setRecoveryDialog({ lossAmt });
+                        });
+                        setRecoveryDialog(null);
+                        recoveryResolverRef.current = null;
+
+                        if (!accepted) {
+                            addLog('✖ Recovery declined — bot stopped.', 'stop');
+                            setWinPopup({ profit: cycle.cycleProfit, stopped: true, sessionPnl: sessionPnlRef.current, wins: winsRef.current, losses: lossesRef.current, reason: 'stop-loss' });
+                            break;
+                        }
+                        /* User accepted: activate recovery mode and fall through to the
+                           loss handling block below, which will continue scanning */
+                        inRecovery = true;
+                        recoveryCoolLoss = 0;
+                        consecutiveWins = 0;
+                        addLog(`🔄 RECOVERY MODE ACTIVATED — target: recover ${lossAmt.toFixed(2)} loss until P/L = 0.00`, 'switch');
+                        /* Fall through — !cycle.lastWon block below will handle the stake
+                           update and continue the main scan loop */
                     }
+
                     if (cycle.reason === 'loss_limit') {
-                        addLog(`🛑 Conservative losses (${cfg.consecutiveLossLimit}) hit — bot and VPS halted.`, 'stop');
-                        setWinPopup({ profit: cycle.cycleProfit, stopped: true, sessionPnl: sessionPnlRef.current, wins: winsRef.current, losses: lossesRef.current, reason: 'loss-limit' });
-                        break; // breaks outer loop — VPS will NOT auto-restart
+                        /* ── Loss limit: DON'T stop — log warning and continue with martingale ──
+                           The consecutive-loss limit is now a market-switch threshold, not a
+                           halt condition. The bot continues scanning and trading until a win. */
+                        addLog(`⚠ CONS_LOSS_LIMIT ${cfg.consecutiveLossLimit} — martingale continues on next entry signal`, 'hack');
+                        /* Fall through — !cycle.lastWon block below handles stake + continue */
                     }
                 }
 
@@ -1664,6 +1700,47 @@ const BotDetail: React.FC<{
 
                     /* No switch — same market, continue scanning with accumulated martingale stake */
                     addLog(`🔄 RECOVERY: same market ${curMarket} | stake ${curStake.toFixed(2)} | barrier: ${activeBarrier ?? 'auto'}`, 'switch');
+
+                    /* ── Recovery mode: track cool-off and check completion ── */
+                    if (inRecovery) {
+                        recoveryCoolLoss++;
+
+                        /* If P/L has been restored to 0 by the martingale wins, we are done */
+                        if (sessionPnlRef.current >= 0) {
+                            inRecovery = false;
+                            addLog(`✅ RECOVERY COMPLETE — loss fully recovered! P/L: +${sessionPnlRef.current.toFixed(2)} USD`, 'win');
+                            setWinPopup({ profit: cycle.cycleProfit, stopped: true, sessionPnl: sessionPnlRef.current, wins: winsRef.current, losses: lossesRef.current, reason: 'recovery-complete' });
+                            break;
+                        }
+
+                        /* 3 consecutive losses during recovery → pause and read market health */
+                        if (recoveryCoolLoss >= 3) {
+                            addLog(`⏸ RECOVERY COOL-OFF: 3 losses in a row — reading market for 3 ticks without trading...`, 'hack');
+                            let favorable = 0, unfavorable = 0;
+                            for (let _ri = 0; _ri < 3 && !stopRef.current; _ri++) {
+                                /* Wait for the next live tick */
+                                await new Promise<void>(res => {
+                                    let done = false;
+                                    const fin = () => { if (!done) { done = true; res(); } };
+                                    tickSignalRef.current = fin;
+                                    setTimeout(fin, 2000);
+                                });
+                                const favors = checkEntry(digitWindowRef.current, bot.contractType, bot.prediction, priceWindowRef.current);
+                                addLog(`  📊 COOL-OFF read ${_ri + 1}/3: ${favors ? '✓ favourable' : '✗ unfavourable'}`, 'scan');
+                                if (favors) favorable++; else unfavorable++;
+                            }
+                            recoveryCoolLoss = 0;
+                            addLog(`  📊 Market verdict: ${favorable} favourable vs ${unfavorable} unfavourable`, 'scan');
+                            if (favorable <= unfavorable) {
+                                const coolSecs = 15;
+                                addLog(`⏸ MARKET UNFAVOURABLE — cooling off ${coolSecs}s before resuming recovery...`, 'hack');
+                                await new Promise(r => setTimeout(r, coolSecs * 1_000));
+                            } else {
+                                addLog(`✅ MARKET FAVOURABLE — resuming recovery trading`, 'switch');
+                            }
+                        }
+                    }
+
                     /* Small buffer between cycles — lets any lingering bot.stop event from the
                        previous cycle drain before the new cycle registers its own listeners,
                        preventing cross-cycle interference that would cause an immediate resolve. */
@@ -1671,12 +1748,11 @@ const BotDetail: React.FC<{
                     continue;
                 }
 
-                /* ── Natural WIN ──
-                   XML bot stopped naturally after a win. Reset stake to base and stop
-                   so the user presses RUN to begin a fresh entry-signal scan. */
+                /* ── Natural WIN ── */
                 totalConsLoss = 0;
                 consLossRef.current = 0;
                 lastFiredGroupRef.current = null;
+                consecutiveWins++;
 
                 /* Restore default market after a win if we had switched */
                 if (activeSlot === 'm2' || curMarketIdx !== 0) {
@@ -1691,11 +1767,39 @@ const BotDetail: React.FC<{
                 curStake = slotBaseStake();
                 lastBuyPrice = curStake;
 
+                /* ── Recovery mode: continue trading after a win until P/L ≥ 0 ── */
+                if (inRecovery) {
+                    recoveryCoolLoss = 0; // win resets the recovery cool-off loss counter
+                    const pnlNow = sessionPnlRef.current;
+                    if (pnlNow >= 0) {
+                        inRecovery = false;
+                        addLog(`✅ RECOVERY COMPLETE — loss fully recovered! P/L: +${pnlNow.toFixed(2)} USD`, 'win');
+                        setWinPopup({ profit: cycle.cycleProfit, stopped: true, sessionPnl: pnlNow, wins: winsRef.current, losses: lossesRef.current, reason: 'recovery-complete' });
+                        break;
+                    }
+                    /* Still in the red — keep trading with fresh base stake */
+                    addLog(`🔄 RECOVERY WIN +${cycle.cycleProfit.toFixed(2)} | still recovering... P/L: ${pnlNow.toFixed(2)} USD`, 'win');
+                    await new Promise(r => setTimeout(r, 300));
+                    continue; // re-scan and trade again until loss is erased
+                }
+
                 /* Check TP guard before stopping */
                 if (sessionPnlRef.current >= slotTakeProfit()) {
-                    addLog(`🎯 Take profit ${slotTakeProfit()} reached.`, 'stop');
+                    addLog(`🎯 TAKE PROFIT ${slotTakeProfit()} REACHED — ALL ENGINES STOPPED ✓`, 'stop');
                     setWinPopup({ profit: cycle.cycleProfit, stopped: true, sessionPnl: sessionPnlRef.current, wins: winsRef.current, losses: lossesRef.current, reason: 'take-profit' });
                     break;
+                }
+
+                /* ── 7 consecutive wins → cool-off before stopping ──
+                   After a hot streak the bot pauses briefly so the market can
+                   breathe, then stops cleanly. This prevents over-trading on
+                   momentum and gives the user a natural re-entry point. */
+                if (consecutiveWins >= 7) {
+                    const coolSecs = 30;
+                    addLog(`⏸ COOL-OFF: 7 consecutive wins — pausing ${coolSecs}s before stopping`, 'hack');
+                    await new Promise(r => setTimeout(r, coolSecs * 1_000));
+                    addLog(`▶ COOL-OFF COMPLETE — stopping for fresh scalp`, 'hack');
+                    consecutiveWins = 0;
                 }
 
                 /* ── Stop after every successful trade ──
@@ -2442,6 +2546,41 @@ const BotDetail: React.FC<{
 
                 {/* ─── Terminal inner wrapper ─── */}
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+
+                    {/* ── Recovery Mode Dialog — shown when stop-loss is hit ── */}
+                    {recoveryDialog && (
+                        <div className='sb-recovery-overlay'>
+                            <div className='sb-recovery-modal'>
+                                <div className='sb-recovery-modal__glow' />
+                                <div className='sb-recovery-modal__icon'>🛡</div>
+                                <div className='sb-recovery-modal__title'>STOP LOSS HIT</div>
+                                <div className='sb-recovery-modal__desc'>
+                                    Session loss: <strong className='neg'>-{recoveryDialog.lossAmt.toFixed(2)} USD</strong>
+                                    <br /><br />
+                                    Activate <strong>Recovery Mode</strong>?<br />
+                                    <span className='sb-recovery-modal__hint'>
+                                        The bot will continue trading with martingale until your loss is fully recovered (P/L ≥ 0.00).
+                                        <br />Cool-off kicks in automatically after 3 consecutive losses during recovery.
+                                    </span>
+                                </div>
+                                <div className='sb-recovery-modal__btns'>
+                                    <button className='sb-recovery-modal__yes' onClick={() => {
+                                        recoveryResolverRef.current?.(true);
+                                        recoveryResolverRef.current = null;
+                                    }}>
+                                        ✅ YES — Recover Loss
+                                    </button>
+                                    <button className='sb-recovery-modal__no' onClick={() => {
+                                        recoveryResolverRef.current?.(false);
+                                        recoveryResolverRef.current = null;
+                                    }}>
+                                        ✖ NO — Stop Trading
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {winPopup && (
                         <div className='sb-win-overlay' onClick={() => setWinPopup(null)}>
                             <div className={`sb-win-modal ${winPopup.stopped ? (winPopup.sessionPnl >= 0 ? 'stopped-win' : 'stopped-loss') : 'cycle-win'}`}
@@ -2451,18 +2590,20 @@ const BotDetail: React.FC<{
 
                                 {/* Icon */}
                                 <div className='sb-win-modal__icon'>
-                                    {winPopup.reason === 'win' ? '🏆' :
-                                     winPopup.reason === 'take-profit' ? '🎯' :
-                                     winPopup.reason === 'stop-loss' ? '🛡' :
-                                     winPopup.reason === 'loss-limit' ? '⚠️' : '⏹'}
+                                    {winPopup.reason === 'win'               ? '🏆' :
+                                     winPopup.reason === 'take-profit'       ? '🎯' :
+                                     winPopup.reason === 'stop-loss'         ? '🛡' :
+                                     winPopup.reason === 'recovery-complete' ? '✅' :
+                                     winPopup.reason === 'loss-limit'        ? '⚠️' : '⏹'}
                                 </div>
 
                                 {/* Title */}
                                 <div className='sb-win-modal__title'>
                                     {winPopup.stopped
-                                        ? (winPopup.reason === 'take-profit' ? 'TAKE PROFIT HIT'
-                                           : winPopup.reason === 'stop-loss'  ? 'STOP LOSS TRIGGERED'
-                                           : winPopup.reason === 'loss-limit' ? 'LOSS LIMIT REACHED'
+                                        ? (winPopup.reason === 'take-profit'       ? 'TAKE PROFIT HIT'
+                                           : winPopup.reason === 'stop-loss'       ? 'STOP LOSS TRIGGERED'
+                                           : winPopup.reason === 'recovery-complete' ? 'LOSS FULLY RECOVERED'
+                                           : winPopup.reason === 'loss-limit'      ? 'LOSS LIMIT REACHED'
                                            : 'BOT STOPPED')
                                         : 'TRADE WON'}
                                 </div>
