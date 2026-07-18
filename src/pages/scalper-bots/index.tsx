@@ -686,41 +686,47 @@ function groupRecoveryLimit(g: StrategyOrGroup): number {
     return Math.min(...g.conditions.map(c => c.recoveryLimit));
 }
 
-/* ─── Map Deriv symbol → Blockly SUBMARKET_LIST value ─── */
+/* ─── Map Deriv symbol → Blockly SUBMARKET_LIST value ─── *
+   Values must match what the Deriv active_symbols API returns as submarket names.
+   Blockly populates its SUBMARKET_LIST dropdown directly from those API values,
+   so any mismatch causes the field to silently reject setValue() calls. */
 function symbolToSubmarket(sym: string): string {
-    if (sym.startsWith('JD'))                          return 'jump_index';
-    if (sym.startsWith('BOOM') || sym.startsWith('CRASH')) return 'daily_reset_index';
-    if (sym === 'RDBEAR' || sym === 'RDBULL')          return 'daily_reset_index';
-    if (sym === 'STPX')                                return 'step_index';
-    if (sym.startsWith('RB'))                          return 'range_break_index';
+    if (sym.startsWith('JD'))                             return 'jump_index';
+    if (sym.startsWith('BOOM') || sym.startsWith('CRASH')) return 'crash_index';   // Boom/Crash indices
+    if (sym === 'RDBEAR' || sym === 'RDBULL')             return 'daily_reset_index'; // Bear/Bull daily reset
+    if (sym === 'STPX')                                   return 'step_index';
+    if (sym.startsWith('RB'))                             return 'range_break';    // Range Break (not range_break_index)
     return 'random_index'; // 1HZ*, R_* Volatility indices
 }
 
-/* ─── Patch XML string with correct market / duration before loading ─── */
+/* ─── Patch XML string with correct market / duration before loading ───
+   Uses regex replacement instead of DOMParser+XMLSerializer to avoid
+   namespace attributes (xmlns="...") being injected by XMLSerializer,
+   which corrupt the Blockly XML format and cause silent load failures. */
 function patchXmlContent(xml: string, market?: string, duration?: number): string {
     try {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(xml, 'text/xml');
+        let out = xml;
         if (market) {
-            const marketBlock = doc.querySelector('block[type="trade_definition_market"]');
-            if (marketBlock) {
-                const symbolField = marketBlock.querySelector('field[name="SYMBOL_LIST"]');
-                if (symbolField) symbolField.textContent = market;
-                const subField = marketBlock.querySelector('field[name="SUBMARKET_LIST"]');
-                if (subField) subField.textContent = symbolToSubmarket(market);
-            }
+            // Patch SUBMARKET_LIST inside trade_definition_market block
+            out = out.replace(
+                /(<field name="SUBMARKET_LIST">)[^<]*(<\/field>)/,
+                `$1${symbolToSubmarket(market)}$2`
+            );
+            // Patch SYMBOL_LIST inside trade_definition_market block
+            out = out.replace(
+                /(<field name="SYMBOL_LIST">)[^<]*(<\/field>)/,
+                `$1${market}$2`
+            );
         }
         if (duration != null) {
-            const tradeopts = doc.querySelector('block[type="trade_definition_tradeoptions"]');
-            if (tradeopts) {
-                const durValue = tradeopts.querySelector('value[name="DURATION"]');
-                if (durValue) {
-                    const numField = durValue.querySelector('field[name="NUM"]');
-                    if (numField) numField.textContent = String(duration);
-                }
-            }
+            // The duration NUM field inside trade_definition_tradeoptions > DURATION value
+            // We locate it by replacing the first occurrence of NUM after the DURATION value tag
+            out = out.replace(
+                /(name="DURATION"[\s\S]*?<field name="NUM">)\d+(<\/field>)/,
+                `$1${duration}$2`
+            );
         }
-        return new XMLSerializer().serializeToString(doc);
+        return out;
     } catch {
         return xml; // fallback: return original XML unchanged
     }
@@ -852,8 +858,26 @@ const BotDetail: React.FC<{
             for (const block of blocks) {
                 if (patch.market && block.type === 'trade_definition_market') {
                     try {
-                        block.getField('SUBMARKET_LIST')?.setValue(symbolToSubmarket(patch.market));
-                        block.getField('SYMBOL_LIST')?.setValue(patch.market);
+                        const submarketVal = symbolToSubmarket(patch.market);
+                        const subField  = block.getField('SUBMARKET_LIST');
+                        const symField  = block.getField('SYMBOL_LIST');
+                        if (subField) {
+                            // Try standard setValue first; if the dropdown rejects the value
+                            // (e.g. Bear/Bull → daily_reset_index, Jump → jump_index aren't in
+                            // the current options list yet), force-set via value_ directly.
+                            try { subField.setValue(submarketVal); } catch { /* noop */ }
+                            if (subField.getValue() !== submarketVal) {
+                                (subField as any).value_ = submarketVal;
+                                try { subField.forceRerender?.(); } catch { /* noop */ }
+                            }
+                        }
+                        if (symField) {
+                            try { symField.setValue(patch.market); } catch { /* noop */ }
+                            if (symField.getValue() !== patch.market) {
+                                (symField as any).value_ = patch.market;
+                                try { symField.forceRerender?.(); } catch { /* noop */ }
+                            }
+                        }
                         changed = true;
                     } catch { /* noop */ }
                 }

@@ -1314,23 +1314,23 @@ const ManualTrader: React.FC = () => {
                             : null;
                         return (
                             <div key={def.type} className='mtp-buy-block'>
-                                <div className='mtp-payout-row'>
-                                    <span className='mtp-payout-lbl'>Payout</span>
-                                    <span className='mtp-payout-val'>
-                                        {payoutLoading ? '…' : po != null ? fmt(po) : '—'}
-                                        <span className='mtp-payout-info'> ℹ</span>
-                                    </span>
-                                </div>
                                 <button
                                     className={`mtp-buy-btn ${i === 0 ? 'mtp-buy-btn--a' : 'mtp-buy-btn--b'}`}
                                     style={{ '--bc': def.color } as React.CSSProperties}
                                     onClick={() => buy(def, ctDef, duration, secDuration, barrier, priceBarrier, stake, bulkMode, bulkCount, symbolValue, symbol)}
                                     disabled={!authorized}>
-                                    <span className='mtp-buy-btn__icon'>{def.icon}</span>
-                                    <span className='mtp-buy-btn__label'>{def.label}</span>
-                                    {pct != null && (
-                                        <span className='mtp-buy-btn__pct'>{pct}%</span>
-                                    )}
+                                    <span className='mtp-buy-btn__top'>
+                                        <span className='mtp-buy-btn__icon'>{def.icon}</span>
+                                        <span className='mtp-buy-btn__label'>{def.label}</span>
+                                    </span>
+                                    <span className='mtp-buy-btn__payout'>
+                                        {payoutLoading
+                                            ? <span className='mtp-buy-btn__pct'>…</span>
+                                            : pct != null
+                                                ? <span className='mtp-buy-btn__pct'>{pct}%</span>
+                                                : <span className='mtp-buy-btn__pct mtp-buy-btn__pct--empty'>—</span>
+                                        }
+                                    </span>
                                 </button>
                             </div>
                         );
