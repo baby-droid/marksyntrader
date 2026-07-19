@@ -74,6 +74,10 @@ interface FollowerConn {
     dead:                 boolean;
     token:                string;
     accountId:            string;
+    /** Guards against concurrent connectFollower calls for the same follower.
+     *  A second call awaits the in-progress one then returns, preventing two
+     *  simultaneous OTP WebSockets which orphan trade-buy promise responses. */
+    connecting:           Promise<void> | null;
 }
 
 interface CopyEngineOptions {
@@ -236,6 +240,13 @@ class CopyEngine {
     /** Fingerprint → timestamp dedup for early/pre-signals (no contract_id yet).
      *  Fingerprint: "symbol|contract_type|duration|barrier".  TTL = 5 s. */
     private recentSignals:     Map<string, number>  = new Map();
+    /** Tracks fingerprints published by no-contract-id pre-signals so the
+     *  subsequent transaction-backup signal (which HAS a contract_id) can be
+     *  blocked and won't cause a duplicate follower buy. */
+    private preSignaledFps:    Map<string, number>  = new Map();
+    /** Kept alive for the engine lifetime — DerivAPIBasic sends a real WS
+     *  subscribe message on every api.onMessage().subscribe() call, so we must
+     *  create it only once and never unsubscribe it. */
     private txnApiSub:         { unsubscribe: () => void } | null = null;
 
     constructor(private readonly opts: CopyEngineOptions) {}
@@ -370,37 +381,65 @@ class CopyEngine {
         const conn = this.conns.get(id);
         if (!conn || conn.dead) return;
 
-        const { token, accountId } = conn;
+        // ── Concurrent-call guard ────────────────────────────────────────────
+        // If a connectFollower call is already in progress for this follower,
+        // wait for it to finish then return — do NOT open a second WebSocket.
+        // Without this guard, overlapping calls from restoreState + page onChange
+        // create two simultaneous OTP WebSockets.  The second overwrites conn.ws,
+        // which orphans all wsSend pending-promise callbacks on the first socket:
+        // trade-buy replies are silently dropped and mirroring appears broken.
+        if (conn.connecting) {
+            await conn.connecting;
+            return;
+        }
 
-        const onMessage = (d: any): void => {
-            if (!d || conn.dead) return;
-            if (d.req_id != null && conn.pending.has(d.req_id)) {
-                const cb = conn.pending.get(d.req_id)!;
-                conn.pending.delete(d.req_id);
-                cb(d);
+        let resolveConnecting!: () => void;
+        conn.connecting = new Promise(r => { resolveConnecting = r; });
+
+        try {
+            // Silently close any stale WebSocket before opening a new one.
+            // Null out onclose first so closing it doesn't trigger scheduleReconnect.
+            if (conn.ws) {
+                const stale = conn.ws;
+                stale.onclose = null;
+                try { stale.close(); } catch { /* noop */ }
+                conn.ws = null;
             }
-            if (d.balance?.balance != null) {
-                this.updateFollower(id, { balance: parseFloat(String(d.balance.balance)) });
-            }
-        };
-        const onClose = (): void => {
-            if (conn.dead) return;
-            this.drainPending(conn);   // reject any in-flight wsSend promises immediately
-            this.updateFollower(id, { status: 'error', lastError: 'Connection lost — reconnecting…' });
-            this.scheduleReconnect(id);
-        };
-        const onError = (_e: Event): void => { /* onClose fires after */ };
+            if (conn.pingTimer) { clearInterval(conn.pingTimer); conn.pingTimer = null; }
 
-        if (conn.pingTimer) { clearInterval(conn.pingTimer); conn.pingTimer = null; }
+            const { token, accountId } = conn;
 
-        const ws = await openOtpWebSocket(token, accountId, onMessage, onClose, onError);
-        conn.ws = ws;
+            const onMessage = (d: any): void => {
+                if (!d || conn.dead) return;
+                if (d.req_id != null && conn.pending.has(d.req_id)) {
+                    const cb = conn.pending.get(d.req_id)!;
+                    conn.pending.delete(d.req_id);
+                    cb(d);
+                }
+                if (d.balance?.balance != null) {
+                    this.updateFollower(id, { balance: parseFloat(String(d.balance.balance)) });
+                }
+            };
+            const onClose = (): void => {
+                if (conn.dead) return;
+                this.drainPending(conn);   // reject any in-flight wsSend promises immediately
+                this.updateFollower(id, { status: 'error', lastError: 'Connection lost — reconnecting…' });
+                this.scheduleReconnect(id);
+            };
+            const onError = (_e: Event): void => { /* onClose fires after */ };
 
-        conn.pingTimer = setInterval(() => {
-            if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ ping: 1 }));
-        }, PING_MS);
+            const ws = await openOtpWebSocket(token, accountId, onMessage, onClose, onError);
+            conn.ws = ws;
 
-        this.wsSend(conn, { balance: 1, subscribe: 1 }).catch(() => {});
+            conn.pingTimer = setInterval(() => {
+                if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ ping: 1 }));
+            }, PING_MS);
+
+            this.wsSend(conn, { balance: 1, subscribe: 1 }).catch(() => {});
+        } finally {
+            conn.connecting = null;
+            resolveConnecting();
+        }
     }
 
     private scheduleReconnect(id: string): void {
@@ -470,7 +509,7 @@ class CopyEngine {
         const conn: FollowerConn = {
             ws: null, reqId: 1, pending: new Map(),
             pingTimer: null, reconnectCount: 0, reconnectSessionStart: 0, dead: false,
-            token: trimmed, accountId: '',
+            token: trimmed, accountId: '', connecting: null,
         };
         this.conns.set(id, conn);
 
@@ -634,10 +673,16 @@ class CopyEngine {
         }
         this.running  = true;
         this.mirroredContracts.clear();
+        this.recentSignals.clear();
+        this.preSignaledFps.clear();
         this.unsubBus = subscribeMasterTrades(sig => this.onMasterTrade(sig));
         // Fallback: subscribe to master account transactions so trades from ALL
         // UI paths (bot, manual, scalper, AI assistant) are always captured.
-        this.subscribeMasterTransactions();
+        // IMPORTANT: only subscribe once per engine lifetime — DerivAPIBasic's
+        // api.onMessage().subscribe() sends a real {transaction:1,subscribe:1}
+        // WS message each call.  Calling it on every start() causes duplicate
+        // listeners AND repeated AlreadySubscribed errors that corrupt routing.
+        if (!this.txnApiSub) this.subscribeMasterTransactions();
         this.log(`▶ ${this.opts.label} started (${this.modeLabel()}).`);
         this.saveState();
         this.emit();
@@ -648,8 +693,9 @@ class CopyEngine {
         this.running = false;
         this.unsubBus?.();
         this.unsubBus = null;
-        try { this.txnApiSub?.unsubscribe?.(); } catch { /* noop */ }
-        this.txnApiSub = null;
+        // Do NOT unsubscribe txnApiSub — DerivAPIBasic sends a new WS subscribe
+        // message on every api.onMessage().subscribe() call, so we keep the one
+        // listener alive permanently and gate on this.running inside the callback.
         this.mirroredContracts.clear();
         this.log(`⏸ ${this.opts.label} stopped.`);
         this.saveState();
@@ -755,6 +801,26 @@ class CopyEngine {
         // fire for the same trade.
         if (sig.contract_id) {
             if (this.mirroredContracts.has(sig.contract_id)) return;
+
+            // ── Cross-check: was this trade already handled by a pre-signal? ──
+            // When the manual-trader fires publishMasterTrade WITHOUT a contract_id
+            // (before the buy is confirmed), the trade executes immediately.
+            // The transaction-backup path then fires again WITH the contract_id.
+            // mirroredContracts can't block it (the pre-signal never added a cid),
+            // but preSignaledFps tracks the fingerprint of every pre-signal that ran.
+            // If we find a matching fingerprint within 5 s, the pre-signal already
+            // handled this trade — block the backup and register the cid so any
+            // further signals for the same contract are also blocked.
+            const fp = `${sig.symbol}|${sig.contract_type}|${sig.duration}|${sig.barrier ?? ''}`;
+            const preTs = this.preSignaledFps.get(fp);
+            if (preTs && Date.now() - preTs < 5000) {
+                this.mirroredContracts.add(sig.contract_id); // prevent future dupes
+                return;
+            }
+
+            // Not a backup — this is a fresh signal (e.g. from the bot bridge).
+            // Register the contract_id so any later signal for the same contract
+            // (e.g. the transaction-backup for this bot trade) is blocked.
             this.mirroredContracts.add(sig.contract_id);
             if (this.mirroredContracts.size > 200) {
                 const first = this.mirroredContracts.values().next().value as number;
@@ -762,26 +828,28 @@ class CopyEngine {
             }
         }
 
-        // ── Deduplication layer 2: fingerprint (ONLY for signals without contract_id)
+        // ── Deduplication layer 2: fingerprint for pre-signals (no contract_id)
         //
-        // This dedup exists solely for the manual-trade path where publishMasterTrade
-        // is fired BEFORE the buy is confirmed (so no contract_id yet), and the
-        // transaction-backup path later fires the same trade WITH a contract_id.
-        // The fingerprint window prevents that second publish from causing a double-buy.
+        // Applies ONLY to signals published without a contract_id — these come from
+        // the manual-trader hooks (useDerivTrade / useDerivTrading) which publish
+        // before the buy is confirmed so the follower enters on the SAME tick.
         //
-        // Bot/scalper signals from copy-trade-bridge.ts ALWAYS carry a contract_id and
-        // are already deduplicated above via mirroredContracts.  Applying the fingerprint
-        // to them would block every second loop trade on the same symbol/type within 5 s,
-        // causing followers to miss alternate trades — that is the bug being fixed here.
+        // Bot/scalper signals from copy-trade-bridge.ts always have a contract_id
+        // and are deduplicated above via mirroredContracts.  Applying fingerprint to
+        // them would block every second loop trade that shares symbol/type/duration
+        // within 5 s — the previous regression this was introduced to fix.
         if (!sig.contract_id) {
             const fp     = `${sig.symbol}|${sig.contract_type}|${sig.duration}|${sig.barrier ?? ''}`;
             const fpNow  = Date.now();
             const fpLast = this.recentSignals.get(fp);
             if (fpLast && fpNow - fpLast < 5000) return;   // same manual trade within 5 s → skip
             this.recentSignals.set(fp, fpNow);
+            // Record in preSignaledFps so the transaction-backup (with contract_id)
+            // for this same trade is blocked by the cross-check in layer 1 above.
+            this.preSignaledFps.set(fp, fpNow);
             if (this.recentSignals.size > 100) {
                 const oldestKey = this.recentSignals.keys().next().value as string | undefined;
-                if (oldestKey) this.recentSignals.delete(oldestKey);
+                if (oldestKey) { this.recentSignals.delete(oldestKey); this.preSignaledFps.delete(oldestKey); }
             }
         }
 
