@@ -381,19 +381,12 @@ const CopyTrading = observer(() => {
                       }
                     </div>
 
-                    {/* Controls: ratio + commission */}
+                    {/* Controls: ratio only — commission is automatic */}
                     <label className='copy-trading__follower-ctrl' title={ratioLabel}>
                       <span>×</span>
                       <input
                         type='number' min={0.01} step={0.1} value={acc.ratio}
                         onChange={e => copyEngine.setRatio(acc.id, Number(e.target.value))}
-                      />
-                    </label>
-                    <label className='copy-trading__follower-ctrl copy-trading__follower-ctrl--comm' title='Commission %'>
-                      <span>%</span>
-                      <input
-                        type='number' min={0} max={50} step={0.5} value={acc.commission ?? 0}
-                        onChange={e => copyEngine.setCommission(acc.id, Number(e.target.value))}
                       />
                     </label>
 

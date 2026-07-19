@@ -1,0 +1,540 @@
+From the screenshots, this is essentially a **Deriv Over/Under trading interface clone** with custom overlays, statistics, and prediction widgets. The UI can be recreated very closely, but the actual trading functions (placing trades, fetching live prices, payouts, account balance, etc.) require using Deriv's official APIs and your own implementation rather than copying their proprietary code.
+
+## 1. Main Layout
+
+```
+┌──────────────────────────────────────────────────────────────┬──────────────────────┐
+│                                                              │ Trading Panel        │
+│   TradingView Lightweight Chart                             │                     │
+│                                                              │ Trade Type          │
+│                                                              │ Tick Duration       │
+│                                                              │ Digit Selection     │
+│                                                              │ Stake/Payout        │
+│                                                              │ Buy Buttons         │
+│                                                              │                     │
+└──────────────────────────────────────────────────────────────┴──────────────────────┘
+```
+
+Recommended Grid
+
+```
+Display: Grid
+
+Columns:
+75%
+25%
+
+Gap:
+20px
+
+Height:
+100vh
+```
+
+---
+
+# 2. Chart
+
+Use
+
+```
+TradingView Lightweight Charts
+```
+
+Settings
+
+```
+Background:
+#FFFFFF
+
+Grid:
+Enabled
+
+Grid Color:
+#ECECEC
+
+Crosshair:
+Dashed
+
+Price Scale:
+Right
+
+Time Scale:
+Bottom
+
+Area Chart
+
+Line Width:
+2
+
+Line Color:
+#222222
+
+Area Top:
+rgba(0,0,0,0.18)
+
+Area Bottom:
+rgba(0,0,0,0)
+```
+
+---
+
+# 3. Left Toolbar
+
+Icons
+
+```
+Chart Type
+Indicators
+Drawing
+Trend Line
+Download
+```
+
+Container
+
+```
+Width:
+52px
+
+Border Radius:
+12px
+
+Background:
+white
+
+Shadow:
+0 2px 10px rgba(0,0,0,.08)
+```
+
+---
+
+# 4. Market Selector
+
+```
+Volatility 100 (1s)
+
+Dropdown
+
+Current Price
+
+Price Change
+
+Green/Red Indicator
+```
+
+Container
+
+```
+Height:
+78px
+
+Radius:
+12px
+
+Background:
+white
+
+Padding:
+20px
+
+Shadow:
+0 2px 8px rgba(0,0,0,.08)
+```
+
+---
+
+# 5. Prediction Panel
+
+Buttons
+
+```
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+```
+
+CSS
+
+```
+width:
+50px
+
+height:
+42px
+
+radius:
+8px
+
+gap:
+8px
+```
+
+Selected
+
+```
+Background:
+#DDE3EA
+
+Border:
+2px solid #B5BEC8
+```
+
+---
+
+# 6. Tick Duration Slider
+
+Slider
+
+```
+Min:
+1 Tick
+
+Max:
+10 Ticks
+```
+
+Style
+
+```
+Height:
+6px
+
+Radius:
+999px
+
+Track:
+#E4E4E4
+
+Thumb:
+#C6CBD2
+```
+
+---
+
+# 7. Stake Panel
+
+Tabs
+
+```
+Stake
+Payout
+```
+
+Controls
+
+```
+[-] 10 [+]
+
+Back Button
+```
+
+Container
+
+```
+Radius:
+10px
+
+Background:
+#F4F5F7
+```
+
+---
+
+# 8. Buy Buttons
+
+Over Button
+
+```
+Background:
+#2FB9BF
+
+Gradient
+
+Left
+
+Arrow Icon
+
+Percentage
+
+White Text
+```
+
+Under Button
+
+```
+Background:
+#F14343
+
+Gradient
+
+Arrow Icon
+
+Percentage
+```
+
+Border Radius
+
+```
+10px
+```
+
+Height
+
+```
+72px
+```
+
+---
+
+# 9. Digit Statistics Circles
+
+Bottom row
+
+```
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+```
+
+Each circle
+
+```
+70px
+
+Circular
+
+White
+
+Border:
+3px solid #2AB8C0
+
+Percentage Below
+
+Animated
+```
+
+Selected
+
+```
+Red Fill
+
+Scale:
+1.15
+
+Shadow:
+0 0 20px rgba(255,0,0,.25)
+```
+
+---
+
+# 10. Trade Markers
+
+Buy
+
+```
+Green Flag
+
+Green Circle
+
+Trade Number
+```
+
+Sell
+
+```
+Red Flag
+
+Red Circle
+```
+
+Win
+
+```
+Blue Flag
+
+Blue Circle
+```
+
+Use SVG instead of PNG.
+
+---
+
+# 11. Countdown
+
+Blue dashed vertical line
+
+```
+Animation:
+Move every tick
+
+Label
+
+1/5
+
+2/5
+
+3/5
+
+4/5
+
+5/5
+```
+
+---
+
+# 12. Floating AI Button
+
+```
+70x70
+
+Blue Glow
+
+Position:
+bottom-right
+
+Blur Shadow
+```
+
+---
+
+# 13. Color Palette
+
+```
+Background
+#FFFFFF
+
+Primary
+#2FB9BF
+
+Danger
+#F14343
+
+Dark
+#222222
+
+Border
+#E8E8E8
+
+Gray
+#B7B7B7
+```
+
+---
+
+# 14. Typography
+
+```
+Font
+
+Inter
+
+Weights
+
+400
+
+500
+
+600
+
+700
+```
+
+---
+
+# 15. Animations
+
+Every
+
+200ms
+
+```
+Digit Circle Pulse
+
+Buy Button Glow
+
+Trade Marker Drop
+
+Chart Marker Fade
+
+Tick Counter Slide
+
+Price Flash
+
+Countdown Update
+```
+
+---
+
+# 16. Functions Required
+
+To replicate the behavior shown, implement these modules:
+
+```
+Market Stream
+- Live tick subscription
+- Current price
+- Last digit extraction
+
+Chart Engine
+- Real-time chart updates
+- Trade markers
+- Countdown line
+
+Statistics Engine
+- Last-digit frequency (0-9)
+- Percentage calculation
+- Hot/cold digit highlighting
+
+Trading Engine
+- Over/Under purchase
+- Stake management
+- Tick duration
+- Contract monitoring
+- Win/loss settlement
+
+UI State
+- Selected digit
+- Stake/Payout mode
+- Tick duration
+- Active contract
+- Loading states
+
+History
+- Open contracts
+- Closed contracts
+- Win/Loss markers
+- Journal
+- Session statistics
+```
+
+---
+
+# 17. Recommended Tech Stack
+
+* **Frontend:** React + TypeScript
+* **Build Tool:** Vite
+* **Styling:** Tailwind CSS + Framer Motion
+* **Charting:** TradingView Lightweight Charts
+* **State Management:** Zustand
+* **WebSocket:** Deriv WebSocket API
+* **Icons:** Lucide React
+* **Data Fetching:** TanStack Query (optional)
+* **Backend (optional):** Node.js + Express for logs, analytics, and user data
+* **Persistence:** IndexedDB or SQLite (via backend) for trade history and journals
+
+Following this architecture will let you build a UI that looks and behaves very similarly to the screenshots while using your own implementation and Deriv's supported APIs for live market data and order execution.

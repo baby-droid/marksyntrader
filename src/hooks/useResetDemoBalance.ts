@@ -2,12 +2,51 @@
  * Shared hook: reset a virtual/demo account balance back to 10,000 USD
  * via Deriv's `topup_virtual` API call.
  *
- * Exported from here so both the account-switcher inline button and the
- * header's left-side reset button share exactly the same logic.
+ * The hook ensures the WebSocket connection is authorized with the demo
+ * account's token before calling topup_virtual, so it works even when
+ * the active connection was last used for a different account.
  */
 import { useCallback, useState } from 'react';
 import { toast } from 'react-toastify';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
+
+/** Try to extract the virtual account's access token from localStorage. */
+function getVirtualToken(): string | null {
+    try {
+        // 1. Stored as 'client.accounts' (Deriv-style JSON object keyed by loginid)
+        const raw = localStorage.getItem('client.accounts');
+        if (raw) {
+            const accs = JSON.parse(raw);
+            for (const [loginid, data] of Object.entries(accs as Record<string, any>)) {
+                if ((loginid.startsWith('VRTC') || loginid.startsWith('VR')) && data?.token) {
+                    return data.token;
+                }
+            }
+        }
+
+        // 2. Stored as 'accountsList' (object keyed by loginid → token string)
+        const al = localStorage.getItem('accountsList');
+        if (al) {
+            const map = JSON.parse(al);
+            const activeId = localStorage.getItem('active_loginid') ?? '';
+            if ((activeId.startsWith('VRTC') || activeId.startsWith('VR')) && map[activeId]) {
+                return map[activeId];
+            }
+            // Any virtual account
+            for (const [id, tok] of Object.entries(map as Record<string, any>)) {
+                if (id.startsWith('VRTC') || id.startsWith('VR')) return tok as string;
+            }
+        }
+
+        // 3. Stored as 'deriv_token' or 'client.token'
+        const single = localStorage.getItem('client.token') ?? localStorage.getItem('deriv_token');
+        if (single) return single;
+
+        return null;
+    } catch {
+        return null;
+    }
+}
 
 export const useResetDemoBalance = () => {
     const [isResetting, setIsResetting] = useState(false);
@@ -24,6 +63,23 @@ export const useResetDemoBalance = () => {
         setResetError(null);
         setResetSuccess(false);
         try {
+            // Ensure we are authorized as the virtual account.
+            // api_base.account_info is set after a successful `authorize` response.
+            const accInfo: any = (api_base as any).account_info;
+            if (!accInfo?.is_virtual) {
+                const virtToken = getVirtualToken();
+                if (virtToken) {
+                    const authResp = await (api_base.api as any).send({ authorize: virtToken });
+                    if (authResp?.error) {
+                        throw new Error(authResp.error.message ?? 'Authorization failed');
+                    }
+                } else {
+                    // No virtual token found — proceed anyway (connection may already be demo)
+                    console.warn('useResetDemoBalance: no virtual token found in localStorage');
+                }
+            }
+
+            // Now call topup_virtual to reset demo balance
             const response = await (api_base.api as any).send({ topup_virtual: 1 });
             if (response?.error) {
                 const msg = response.error.message || response.error.code || 'Reset failed';

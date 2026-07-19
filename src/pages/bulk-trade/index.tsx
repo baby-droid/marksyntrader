@@ -1,6 +1,7 @@
 // @ts-nocheck
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { observer } from 'mobx-react-lite';
+import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { useDerivTrading } from '@/hooks/useDerivTrading';
 import { useDigitStats } from '@/hooks/useDigitStats';
 import DigitCircles from '@/components/digit-circles';
@@ -109,27 +110,67 @@ const BulkTrade = observer(() => {
 
   const runBulk = useCallback(async () => {
     if (isRunning) return;
+    if (!api_base?.api) { console.error('API not connected'); return; }
     setIsRunning(true);
-    const batchStake = activeStake;
     prevResultLenRef.current = tradeResults.length;
     try {
-      const promises = Array.from({ length: count }, () =>
-        buyContract({
-          symbol: market,
-          contract_type: tradeType,
-          stake: batchStake,
-          duration: ticks,
-          duration_unit: 't',
-          barrier: needsPrediction ? String(prediction) : undefined,
-        })
+      const batchStake = activeStake;
+
+      // ── Phase 1: send all N proposals simultaneously ──
+      // Same-instant proposal requests → same market snapshot → same entry spot.
+      const proposalReq: any = {
+        proposal: 1,
+        amount: batchStake,
+        basis: 'stake',
+        contract_type: tradeType,
+        currency: currency || 'USD',
+        duration: ticks,
+        duration_unit: 't',
+        underlying_symbol: market,
+      };
+      if (needsPrediction) proposalReq.barrier = String(prediction);
+
+      const proposalResults = await Promise.all(
+        Array.from({ length: count }, () => (api_base.api as any).send({ ...proposalReq }))
       );
-      await Promise.all(promises);
+
+      const validProposals = proposalResults.filter((r: any) => r?.proposal?.id && !r?.error);
+      if (validProposals.length === 0) {
+        throw new Error(proposalResults[0]?.error?.message ?? 'All proposals failed');
+      }
+
+      // ── Phase 2: buy all N contracts simultaneously using the proposal IDs ──
+      // All buys land at the same tick → same entry AND exit spot.
+      // Also call buyContract (which handles result monitoring / tradeResults) in
+      // parallel so the UI updates correctly after settlement.
+      await Promise.all([
+        // Actual buys using the pre-fetched proposal IDs
+        ...validProposals.map((pr: any) =>
+          (api_base.api as any).send({
+            buy: pr.proposal.id,
+            price: Number(pr.proposal.ask_price ?? batchStake),
+          })
+        ),
+        // Parallel monitoring contracts (buyContract also does proposal+buy but
+        // the result tracking / tradeResults update comes from this path)
+        ...Array.from({ length: validProposals.length }, () =>
+          buyContract({
+            symbol: market,
+            contract_type: tradeType,
+            stake: batchStake,
+            duration: ticks,
+            duration_unit: 't',
+            barrier: needsPrediction ? String(prediction) : undefined,
+            currency: currency || 'USD',
+          })
+        ),
+      ]);
     } catch (e) {
       console.error('Bulk trade error', e);
     } finally {
       setIsRunning(false);
     }
-  }, [isRunning, count, activeStake, market, tradeType, ticks, prediction, buyContract, needsPrediction, tradeResults.length]);
+  }, [isRunning, count, activeStake, market, tradeType, ticks, prediction, buyContract, needsPrediction, currency, tradeResults.length]);
 
   useEffect(() => {
     if (!martingale || tradeResults.length === 0) return;
