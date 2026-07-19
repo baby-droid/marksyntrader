@@ -1119,24 +1119,6 @@ const BotDetail: React.FC<{
     const [vpsPnl, setVpsPnl]             = useState(0);
     const [vpsDonePopup, setVpsDonePopup] = useState<{ reason: string; pnl: number; runs: number } | null>(null);
 
-    /* ── Purchase Block state ── */
-    const [purchaseLoading, setPurchaseLoading] = useState(false);
-    const [purchaseResult, setPurchaseResult]   = useState<{ ok: boolean; msg: string } | null>(null);
-    const purchaseInFlightRef = useRef(false); // synchronous guard — blocks re-entry before React re-renders
-
-    /* ── Trade Restart state ── */
-    const [autoRestartEnabled, setAutoRestartEnabled]       = useState(false);
-    const [autoRestartDelay, setAutoRestartDelay]           = useState(3);
-    const [autoRestartSwitchMarket, setAutoRestartSwitchMarket] = useState(false);
-    const autoRestartTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
-    /* Refs so timer callbacks always see latest values */
-    const autoRestartEnabledRef = useRef(false);
-    const autoRestartDelayRef   = useRef(3);
-    const autoRestartSwitchRef  = useRef(false);
-    const startBotRef           = useRef<(() => Promise<void>) | null>(null);
-    const cfgRef                = useRef<BotConfig | null>(null);
-    const prevRunningRef        = useRef(false);
-
     const stopRef         = useRef(false);
     const consLossRef     = useRef(0);
     const sessionPnlRef   = useRef(0);
@@ -1176,12 +1158,6 @@ const BotDetail: React.FC<{
 
     useEffect(() => subscribeCurrency(() => setDisplayCur(getDisplayCurrency())), []);
     useEffect(() => { setActiveMarket(cfg.market); }, [cfg.market]);
-
-    /* Sync restart + cfg refs so timer callbacks always see latest values */
-    useEffect(() => { autoRestartEnabledRef.current = autoRestartEnabled; }, [autoRestartEnabled]);
-    useEffect(() => { autoRestartDelayRef.current   = autoRestartDelay;   }, [autoRestartDelay]);
-    useEffect(() => { autoRestartSwitchRef.current  = autoRestartSwitchMarket; }, [autoRestartSwitchMarket]);
-    useEffect(() => { cfgRef.current = cfg; }, [cfg]);
 
     const summary = useMemo(() => {
         const won  = txList.filter(t => t.result === 'won').length;
@@ -1281,33 +1257,7 @@ const BotDetail: React.FC<{
         if (tickUnsubRef.current) tickUnsubRef.current();
         multiUnsubsRef.current.forEach(u => u());
         multiUnsubsRef.current.clear();
-        if (autoRestartTimerRef.current) clearTimeout(autoRestartTimerRef.current);
     }, []);
-
-    /* ── Auto-restart: fires when bot transitions from running → stopped ── */
-    useEffect(() => {
-        const wasRunning = prevRunningRef.current;
-        prevRunningRef.current = running;
-        if (wasRunning && !running && autoRestartEnabledRef.current && !stopRef.current) {
-            if (autoRestartTimerRef.current) clearTimeout(autoRestartTimerRef.current);
-            autoRestartTimerRef.current = setTimeout(() => {
-                const currentCfg = cfgRef.current;
-                if (autoRestartSwitchRef.current && currentCfg && currentCfg.markets.length > 1) {
-                    const curIdx   = currentCfg.markets.indexOf(currentCfg.market);
-                    const nextMkt  = currentCfg.markets[(curIdx + 1) % currentCfg.markets.length];
-                    setCfg(prev => ({ ...prev, market: nextMkt }));
-                    /* Give React one tick to flush the state update before re-starting */
-                    setTimeout(() => startBotRef.current?.(), 80);
-                } else {
-                    startBotRef.current?.();
-                }
-            }, autoRestartDelayRef.current * 1000);
-        }
-        if (running && autoRestartTimerRef.current) {
-            clearTimeout(autoRestartTimerRef.current);
-            autoRestartTimerRef.current = null;
-        }
-    }, [running]);
 
     /* ── Parallel multi-market scanning: subscribe every configured market at once and
          flag the first one whose Strategy Logic condition fires ── */
@@ -1953,54 +1903,13 @@ const BotDetail: React.FC<{
         setEntryReady(false);
     }, [running, derivTrade, bot, cfg, addLog, subscribeMarket, subscribeAllMarkets, unsubscribeAllMarkets, onPreloadXml, runXmlBotCycle]);
 
-    /* Keep startBotRef in sync so the auto-restart timer can call startBot */
-    useEffect(() => { startBotRef.current = startBot as any; }, [startBot]);
-
     const stopBot = useCallback(() => {
         stopRef.current = true;
-        if (autoRestartTimerRef.current) { clearTimeout(autoRestartTimerRef.current); autoRestartTimerRef.current = null; }
         /* Immediately kill the XML bot engine — don't wait for the cycle to finish */
         const rp: any = store?.run_panel;
         try { rp?.onStopButtonClick?.(); } catch {}
         addLog('⏹ STOP — halting immediately.', 'stop');
     }, [addLog, store]);
-
-    /* ── Direct purchase (single manual contract, no scan) ── */
-    const purchaseDirect = useCallback(async () => {
-        // Synchronous ref guard prevents double-orders before React state re-renders
-        if (purchaseInFlightRef.current || !derivTrade.authorized) return;
-        purchaseInFlightRef.current = true;
-        const api = (api_base as any).api;
-        if (!api) { setPurchaseResult({ ok: false, msg: '❌ Not connected' }); purchaseInFlightRef.current = false; return; }
-        setPurchaseLoading(true);
-        setPurchaseResult(null);
-        try {
-            const req: any = {
-                proposal: 1, amount: cfg.stake, basis: 'stake',
-                contract_type: bot.contractType,
-                currency: getDisplayCurrency() || 'USD',
-                duration: cfg.duration, duration_unit: 't',
-                underlying_symbol: cfg.market,
-            };
-            if (bot.prediction !== null) req.barrier = String(bot.prediction);
-            const pr = await api.send(req);
-            if (pr?.error) throw new Error(pr.error.message);
-            const proposalId = pr?.proposal?.id;
-            const askPrice   = Number(pr?.proposal?.ask_price ?? cfg.stake);
-            if (!proposalId) throw new Error('No proposal received');
-            const buyRes = await api.send({ buy: proposalId, price: askPrice });
-            if (buyRes?.error) throw new Error(buyRes.error.message);
-            const contractId = buyRes?.buy?.contract_id;
-            setPurchaseResult({ ok: true, msg: `✅ #${contractId} open` });
-            addLog(`⚡ PURCHASE: Contract #${contractId} — ${contractLabel(bot)} @ ${cfg.market} stake:${cfg.stake}`, 'info');
-        } catch (e: any) {
-            setPurchaseResult({ ok: false, msg: `❌ ${e.message}` });
-        } finally {
-            purchaseInFlightRef.current = false;
-            setPurchaseLoading(false);
-            setTimeout(() => setPurchaseResult(null), 5000);
-        }
-    }, [derivTrade, cfg, bot, addLog]);
 
     /* Add/remove markets from multi-market list */
     const addMarket = () => {
@@ -2618,102 +2527,6 @@ const BotDetail: React.FC<{
                             bot.contractType === 'DIGITOVER' ? `≥2 consecutive digits ≤${bot.prediction} → bet OVER` :
                             `≥2 consecutive digits >${bot.prediction} → bet UNDER`
                         }</p>
-                    </SbAccordion>
-
-                    {/* ── Purchase Block ── */}
-                    <SbAccordion title='⚡ Purchase Block' badge='MANUAL BUY' badgeColor='#f59e0b' defaultOpen>
-                        <div className='sb-field-row'>
-                            <div className='sb-field'>
-                                <label>Market</label>
-                                <span className='sb-badge'>{marketLabel(cfg.market)}</span>
-                            </div>
-                            <div className='sb-field'>
-                                <label>Contract</label>
-                                <span className='sb-badge'>{contractLabel(bot)}</span>
-                            </div>
-                        </div>
-                        <div className='sb-field-row'>
-                            <div className='sb-field'>
-                                <label>Stake</label>
-                                <span className='sb-badge'>{cfg.stake.toFixed(2)} USD</span>
-                            </div>
-                            <div className='sb-field'>
-                                <label>Duration</label>
-                                <span className='sb-badge'>{cfg.duration} tick{cfg.duration !== 1 ? 's' : ''}</span>
-                            </div>
-                        </div>
-                        {bot.prediction !== null && (
-                            <div className='sb-field'>
-                                <label>Barrier / Digit</label>
-                                <span className='sb-badge'>{bot.prediction}</span>
-                            </div>
-                        )}
-                        {purchaseResult && (
-                            <div className={`sb-purchase-result ${purchaseResult.ok ? 'ok' : 'err'}`}>
-                                {purchaseResult.msg}
-                            </div>
-                        )}
-                        <button
-                            className={`sb-purchase-btn ${purchaseLoading ? 'loading' : ''}`}
-                            onClick={purchaseDirect}
-                            disabled={purchaseLoading || !derivTrade.authorized || running}
-                        >
-                            {purchaseLoading ? '⏳ Placing order…' : `⚡ BUY NOW — ${contractLabel(bot)}`}
-                        </button>
-                        <p className='sb-hint'>Places a single manual contract using the current Trade Parameters. Does not start the bot scan.</p>
-                    </SbAccordion>
-
-                    {/* ── Trade Restart Block ── */}
-                    <SbAccordion title='🔄 Trade Restart' badge={autoRestartEnabled ? 'AUTO-ON' : 'MANUAL'} badgeColor={autoRestartEnabled ? '#22c55e' : '#64748b'}>
-                        <div className='sb-field-row sb-field-row--center'>
-                            <label>Auto Restart</label>
-                            <button
-                                className={`sb-toggle ${autoRestartEnabled ? 'on' : 'off'}`}
-                                onClick={() => setAutoRestartEnabled(e => !e)}
-                                disabled={running}
-                            >
-                                {autoRestartEnabled ? 'ON' : 'OFF'}
-                            </button>
-                        </div>
-                        {autoRestartEnabled && (
-                            <>
-                                <div className='sb-field'>
-                                    <label>Restart Delay</label>
-                                    <NumberField
-                                        value={autoRestartDelay} min={0} max={300}
-                                        onCommit={n => setAutoRestartDelay(n)}
-                                        disabled={running}
-                                    />
-                                    <span className='sb-unit'>seconds</span>
-                                </div>
-                                <div className='sb-field-row sb-field-row--center'>
-                                    <label>Switch Market on Restart</label>
-                                    <button
-                                        className={`sb-toggle ${autoRestartSwitchMarket ? 'on' : 'off'}`}
-                                        onClick={() => setAutoRestartSwitchMarket(e => !e)}
-                                        disabled={running}
-                                    >
-                                        {autoRestartSwitchMarket ? 'ON' : 'OFF'}
-                                    </button>
-                                </div>
-                                {autoRestartSwitchMarket && (
-                                    <p className='sb-hint'>Rotates through: {cfg.markets.join(' → ')} on each restart cycle.</p>
-                                )}
-                                <p className='sb-hint'>
-                                    Bot auto-restarts {autoRestartDelay}s after a win/TP stop{autoRestartSwitchMarket ? ', switching to the next market each cycle' : ''}.
-                                    Manual STOP cancels auto-restart.
-                                </p>
-                            </>
-                        )}
-                        {!running && (
-                            <button
-                                className='sb-restart-btn'
-                                onClick={() => { stopRef.current = false; startBotRef.current?.(); }}
-                                disabled={!derivTrade.authorized}
-                            >
-                                🔄 RESTART NOW
-                            </button>
-                        )}
                     </SbAccordion>
                 </div>
 

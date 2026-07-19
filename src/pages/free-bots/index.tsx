@@ -1,8 +1,9 @@
 // @ts-nocheck
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useStore } from '@/hooks/useStore';
 import { DBOT_TABS } from '@/constants/bot-contents';
+import { api_base } from '@/external/bot-skeleton';
 import './free-bots.scss';
 
 const FREE_BOTS = [
@@ -188,6 +189,14 @@ const FREE_BOTS = [
 
 const CATEGORIES = ['All', 'Over/Under', 'Even/Odd'];
 
+// Market Killer Prime V1 — market rotation for Trade Restart
+const MKP_MARKETS = [
+  { label: 'V25 1s',  symbol: '1HZ25V'  },
+  { label: 'V50 1s',  symbol: '1HZ50V'  },
+  { label: 'V75 1s',  symbol: '1HZ75V'  },
+  { label: 'V100 1s', symbol: '1HZ100V' },
+];
+
 const FreeBots = observer(() => {
   const store = useStore();
   const [category, setCategory] = useState('All');
@@ -196,12 +205,52 @@ const FreeBots = observer(() => {
   const [loadedId, setLoadedId] = useState<string | null>(null);
   const [disclaimer, setDisclaimer] = useState(true);
 
+  // ── Market Killer Prime V1 panel state ──────────────────────────────────────
+  const [mkpOpen, setMkpOpen]                   = useState(false);
+  const [mkpStake, setMkpStake]                 = useState(1.00);
+  const [mkpTicks, setMkpTicks]                 = useState(1);
+  const [mkpMarketIdx, setMkpMarketIdx]         = useState(0); // index into MKP_MARKETS
+  const [mkpLoading, setMkpLoading]             = useState(false);
+  const [mkpResult, setMkpResult]               = useState<{ ok: boolean; msg: string } | null>(null);
+  const [mkpContractOpen, setMkpContractOpen]   = useState(false); // true while contract is live
+  const [mkpLastOutcome, setMkpLastOutcome]      = useState<'won' | 'lost' | null>(null);
+  const [mkpAutoRestart, setMkpAutoRestart]     = useState(false);
+  const [mkpDelay, setMkpDelay]                 = useState(3);
+  const [mkpSwitchMarket, setMkpSwitchMarket]   = useState(false);
+
+  // Synchronous in-flight guard (prevents double-orders on rapid taps)
+  const mkpInFlightRef    = useRef(false);
+  const mkpRestartRef     = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mkpAutoRestartRef = useRef(false);
+  const mkpDelayRef       = useRef(3);
+  const mkpSwitchRef      = useRef(false);
+  const mkpMarketIdxRef   = useRef(0);
+  const mkpStakeRef       = useRef(1.00);
+  const mkpTicksRef       = useRef(1);
+
+  // Keep refs in sync
+  useEffect(() => { mkpAutoRestartRef.current = mkpAutoRestart; }, [mkpAutoRestart]);
+  useEffect(() => { mkpDelayRef.current       = mkpDelay;        }, [mkpDelay]);
+  useEffect(() => { mkpSwitchRef.current      = mkpSwitchMarket; }, [mkpSwitchMarket]);
+  useEffect(() => { mkpMarketIdxRef.current   = mkpMarketIdx;    }, [mkpMarketIdx]);
+  useEffect(() => { mkpStakeRef.current       = mkpStake;        }, [mkpStake]);
+  useEffect(() => { mkpTicksRef.current       = mkpTicks;        }, [mkpTicks]);
+
+  // Clear restart timer when panel closes
+  useEffect(() => {
+    if (!mkpOpen && mkpRestartRef.current) {
+      clearTimeout(mkpRestartRef.current);
+      mkpRestartRef.current = null;
+    }
+  }, [mkpOpen]);
+
   const filtered = FREE_BOTS.filter(b => {
     const matchCat    = category === 'All' || b.category === category;
     const matchSearch = !search || b.name.toLowerCase().includes(search.toLowerCase());
     return matchCat && matchSearch;
   });
 
+  // ── Bot Builder load helpers ─────────────────────────────────────────────────
   const loadXmlIntoWorkspace = useCallback(async (bot: typeof FREE_BOTS[0], xml: string) => {
     const workspace = (window as any).Blockly?.derivWorkspace;
     if (!workspace) return false;
@@ -304,6 +353,101 @@ const FreeBots = observer(() => {
     }
   }, [store, loadXmlIntoWorkspace, autoRun]);
 
+  // ── Market Killer Prime V1 — Direct Purchase ────────────────────────────────
+  const mkpPurchase = useCallback(async () => {
+    if (mkpInFlightRef.current) return;
+    const api = (api_base as any)?.api;
+    if (!api) { setMkpResult({ ok: false, msg: '❌ Not connected to Deriv' }); return; }
+
+    mkpInFlightRef.current = true;
+    setMkpLoading(true);
+    setMkpResult(null);
+    setMkpLastOutcome(null);
+
+    const symbol     = MKP_MARKETS[mkpMarketIdxRef.current].symbol;
+    const stake      = mkpStakeRef.current;
+    const ticks      = mkpTicksRef.current;
+
+    try {
+      // 1. Get proposal
+      const pr = await api.send({
+        proposal: 1, amount: stake, basis: 'stake',
+        contract_type: 'DIGITOVER',
+        currency: 'USD',
+        duration: ticks, duration_unit: 't',
+        underlying_symbol: symbol,
+        barrier: '2',
+      });
+      if (pr?.error) throw new Error(pr.error.message);
+      const proposalId = pr?.proposal?.id;
+      const askPrice   = Number(pr?.proposal?.ask_price ?? stake);
+      if (!proposalId) throw new Error('No proposal received');
+
+      // 2. Buy
+      const buyRes = await api.send({ buy: proposalId, price: askPrice });
+      if (buyRes?.error) throw new Error(buyRes.error.message);
+      const contractId = buyRes?.buy?.contract_id;
+      setMkpResult({ ok: true, msg: `✅ Contract #${contractId} opened on ${MKP_MARKETS[mkpMarketIdxRef.current].label}` });
+      setMkpContractOpen(true);
+
+      // 3. Subscribe to settlement
+      try {
+        const settleSub = api.subscribe({ proposal_open_contract: 1, contract_id: Number(contractId), subscribe: 1 });
+        settleSub.subscribe({
+          next: (res: any) => {
+            const poc = res?.proposal_open_contract;
+            if (!poc) return;
+            if (poc.status === 'won' || poc.status === 'lost') {
+              const won    = poc.status === 'won';
+              const profit = Number(poc.profit ?? 0);
+              setMkpContractOpen(false);
+              setMkpLastOutcome(won ? 'won' : 'lost');
+              setMkpResult({
+                ok: won,
+                msg: won
+                  ? `🏆 WON +${profit.toFixed(2)} USD`
+                  : `❌ LOST ${Math.abs(profit).toFixed(2)} USD`,
+              });
+              try { settleSub.unsubscribe?.(); } catch {}
+
+              // Auto-restart
+              if (mkpAutoRestartRef.current) {
+                if (mkpRestartRef.current) clearTimeout(mkpRestartRef.current);
+                if (mkpSwitchRef.current) {
+                  // Rotate to next market
+                  const nextIdx = (mkpMarketIdxRef.current + 1) % MKP_MARKETS.length;
+                  setMkpMarketIdx(nextIdx);
+                  mkpMarketIdxRef.current = nextIdx;
+                }
+                mkpRestartRef.current = setTimeout(() => {
+                  mkpInFlightRef.current = false;
+                  setMkpResult(null);
+                  mkpPurchase();
+                }, mkpDelayRef.current * 1000);
+              }
+            }
+          },
+          error: () => { try { settleSub.unsubscribe?.(); } catch {} },
+        });
+      } catch { /* settlement sub non-fatal */ }
+
+    } catch (e: any) {
+      setMkpResult({ ok: false, msg: `❌ ${e.message ?? 'Purchase failed'}` });
+    } finally {
+      mkpInFlightRef.current = false;
+      setMkpLoading(false);
+      // Auto-clear error result after 6 s (won/lost result stays longer)
+      setTimeout(() => setMkpResult(prev => (prev && !prev.ok && prev.msg.startsWith('❌ ')) ? null : prev), 6000);
+    }
+  }, []);
+
+  const mkpCancel = useCallback(() => {
+    if (mkpRestartRef.current) { clearTimeout(mkpRestartRef.current); mkpRestartRef.current = null; }
+    setMkpAutoRestart(false);
+    setMkpResult(null);
+    setMkpLastOutcome(null);
+  }, []);
+
   return (
     <div className='free-bots'>
       {disclaimer && (
@@ -340,7 +484,7 @@ const FreeBots = observer(() => {
         {filtered.map(bot => (
           <div
             key={bot.id}
-            className={`free-bots__card ${loadedId === bot.id ? 'free-bots__card--loaded' : ''}`}
+            className={`free-bots__card ${loadedId === bot.id ? 'free-bots__card--loaded' : ''} ${bot.id === 'market-killer-prime-v1' && mkpOpen ? 'free-bots__card--prime-active' : ''}`}
             style={{ '--accent': bot.badgeColor } as React.CSSProperties}
           >
             <div className='free-bots__card-glow' />
@@ -375,7 +519,8 @@ const FreeBots = observer(() => {
                 <span className='free-bots__meta-val free-bots__meta-val--green'>{bot.winRate}</span>
               </div>
             </div>
-            {/* Two buttons: Load Bot (green) + Load & Run (accent) */}
+
+            {/* Standard buttons for all bots */}
             <div className='free-bots__btn-row'>
               <button
                 className='free-bots__load-btn free-bots__load-btn--green'
@@ -400,9 +545,204 @@ const FreeBots = observer(() => {
                 )}
               </button>
             </div>
+
+            {/* Extra "Configure & Trade" button only for Market Killer Prime V1 */}
+            {bot.id === 'market-killer-prime-v1' && (
+              <button
+                className={`free-bots__load-btn free-bots__load-btn--prime ${mkpOpen ? 'active' : ''}`}
+                onClick={() => setMkpOpen(o => !o)}
+                title='Open Purchase & Restart panel'
+                style={{ marginTop: '0.3rem', width: '100%' }}
+              >
+                {mkpOpen ? '✕ Close Panel' : '⚡ Configure & Trade'}
+              </button>
+            )}
           </div>
         ))}
       </div>
+
+      {/* ── Market Killer Prime V1 — Purchase & Restart Panel ─────────────────── */}
+      {mkpOpen && (
+        <div className='mkp-panel'>
+          <div className='mkp-panel__header'>
+            <span className='mkp-panel__icon'>👑</span>
+            <div>
+              <h2 className='mkp-panel__title'>Market Killer Prime V1 — Trade Control</h2>
+              <p className='mkp-panel__subtitle'>DIGIT OVER 2 · Martingale 2.2x · V25 1s default</p>
+            </div>
+            <button className='mkp-panel__close' onClick={() => { setMkpOpen(false); mkpCancel(); }}>✕</button>
+          </div>
+
+          <div className='mkp-panel__body'>
+            {/* ── Purchase Block ────────────────────────────── */}
+            <div className='mkp-block mkp-block--purchase'>
+              <div className='mkp-block__label'>
+                <span className='mkp-block__icon'>⚡</span>
+                <span>PURCHASE BLOCK</span>
+                <span className='mkp-block__badge'>MANUAL BUY</span>
+              </div>
+
+              <div className='mkp-fields'>
+                {/* Market selector */}
+                <div className='mkp-field'>
+                  <label>Market</label>
+                  <div className='mkp-market-pills'>
+                    {MKP_MARKETS.map((m, i) => (
+                      <button
+                        key={m.symbol}
+                        className={`mkp-pill ${mkpMarketIdx === i ? 'active' : ''}`}
+                        onClick={() => setMkpMarketIdx(i)}
+                        disabled={mkpLoading || mkpContractOpen}
+                      >
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Stake + Ticks row */}
+                <div className='mkp-field-row'>
+                  <div className='mkp-field'>
+                    <label>Stake (USD)</label>
+                    <div className='mkp-input-row'>
+                      <button className='mkp-stepper' onClick={() => setMkpStake(s => Math.max(0.35, +(s - 0.5).toFixed(2)))} disabled={mkpLoading || mkpContractOpen}>−</button>
+                      <input
+                        type='number' className='mkp-input' value={mkpStake} min={0.35} step={0.5}
+                        onChange={e => setMkpStake(Math.max(0.35, +parseFloat(e.target.value || '0.35').toFixed(2)))}
+                        disabled={mkpLoading || mkpContractOpen}
+                      />
+                      <button className='mkp-stepper' onClick={() => setMkpStake(s => +(s + 0.5).toFixed(2))} disabled={mkpLoading || mkpContractOpen}>+</button>
+                    </div>
+                  </div>
+                  <div className='mkp-field'>
+                    <label>Ticks</label>
+                    <div className='mkp-input-row'>
+                      <button className='mkp-stepper' onClick={() => setMkpTicks(t => Math.max(1, t - 1))} disabled={mkpLoading || mkpContractOpen}>−</button>
+                      <input
+                        type='number' className='mkp-input' value={mkpTicks} min={1} max={10} step={1}
+                        onChange={e => setMkpTicks(Math.max(1, Math.min(10, parseInt(e.target.value || '1'))))}
+                        disabled={mkpLoading || mkpContractOpen}
+                      />
+                      <button className='mkp-stepper' onClick={() => setMkpTicks(t => Math.min(10, t + 1))} disabled={mkpLoading || mkpContractOpen}>+</button>
+                    </div>
+                  </div>
+                  <div className='mkp-field'>
+                    <label>Barrier</label>
+                    <div className='mkp-static-val'>OVER 2</div>
+                  </div>
+                </div>
+
+                {/* Contract status / outcome indicator */}
+                {mkpContractOpen && (
+                  <div className='mkp-status mkp-status--open'>
+                    <span className='mkp-status__dot' /> Contract live — waiting for settlement…
+                  </div>
+                )}
+                {mkpLastOutcome && !mkpContractOpen && (
+                  <div className={`mkp-status mkp-status--${mkpLastOutcome}`}>
+                    {mkpLastOutcome === 'won' ? '🏆 WIN' : '❌ LOSS'}
+                  </div>
+                )}
+
+                {/* Result toast */}
+                {mkpResult && (
+                  <div className={`mkp-result ${mkpResult.ok ? 'mkp-result--win' : 'mkp-result--loss'}`}>
+                    {mkpResult.msg}
+                  </div>
+                )}
+
+                <button
+                  className={`mkp-buy-btn ${mkpLoading ? 'loading' : ''} ${mkpContractOpen ? 'waiting' : ''}`}
+                  onClick={mkpPurchase}
+                  disabled={mkpLoading || mkpContractOpen}
+                >
+                  {mkpContractOpen ? '⏳ Contract live…' : mkpLoading ? '⏳ Placing order…' : `⚡ BUY NOW — DIGIT OVER 2 @ ${MKP_MARKETS[mkpMarketIdx].label}`}
+                </button>
+                <p className='mkp-hint'>Places a single direct DIGIT OVER 2 contract. No bot scan needed.</p>
+              </div>
+            </div>
+
+            {/* ── Trade Restart Block ────────────────────────── */}
+            <div className='mkp-block mkp-block--restart'>
+              <div className='mkp-block__label'>
+                <span className='mkp-block__icon'>🔄</span>
+                <span>TRADE RESTART</span>
+                <span className={`mkp-block__badge ${mkpAutoRestart ? 'mkp-block__badge--on' : ''}`}>
+                  {mkpAutoRestart ? 'AUTO-ON' : 'MANUAL'}
+                </span>
+              </div>
+
+              <div className='mkp-fields'>
+                {/* Auto-restart toggle */}
+                <div className='mkp-toggle-row'>
+                  <span>Auto Restart after settlement</span>
+                  <button
+                    className={`mkp-toggle ${mkpAutoRestart ? 'on' : 'off'}`}
+                    onClick={() => setMkpAutoRestart(e => !e)}
+                  >
+                    <span className='mkp-toggle__knob' />
+                  </button>
+                </div>
+
+                {mkpAutoRestart && (
+                  <>
+                    {/* Delay */}
+                    <div className='mkp-field'>
+                      <label>Restart Delay (seconds)</label>
+                      <div className='mkp-input-row'>
+                        <button className='mkp-stepper' onClick={() => setMkpDelay(d => Math.max(0, d - 1))}>−</button>
+                        <input
+                          type='number' className='mkp-input' value={mkpDelay} min={0} max={300}
+                          onChange={e => setMkpDelay(Math.max(0, parseInt(e.target.value || '0')))}
+                        />
+                        <button className='mkp-stepper' onClick={() => setMkpDelay(d => d + 1)}>+</button>
+                      </div>
+                    </div>
+
+                    {/* Market switch toggle */}
+                    <div className='mkp-toggle-row'>
+                      <span>Switch market on each restart</span>
+                      <button
+                        className={`mkp-toggle ${mkpSwitchMarket ? 'on' : 'off'}`}
+                        onClick={() => setMkpSwitchMarket(e => !e)}
+                      >
+                        <span className='mkp-toggle__knob' />
+                      </button>
+                    </div>
+
+                    {mkpSwitchMarket && (
+                      <p className='mkp-hint'>
+                        Rotates: {MKP_MARKETS.map(m => m.label).join(' → ')} on each restart.
+                        Currently on <strong>{MKP_MARKETS[mkpMarketIdx].label}</strong>.
+                      </p>
+                    )}
+
+                    <p className='mkp-hint'>
+                      After each trade settles, waits {mkpDelay}s then auto-buys again
+                      {mkpSwitchMarket ? ', switching market each cycle' : ''}.
+                    </p>
+
+                    <button className='mkp-cancel-btn' onClick={mkpCancel}>
+                      ⏹ Cancel Auto-Restart
+                    </button>
+                  </>
+                )}
+
+                {/* Manual restart button (always visible when not auto) */}
+                {!mkpAutoRestart && (
+                  <button
+                    className='mkp-restart-btn'
+                    onClick={mkpPurchase}
+                    disabled={mkpLoading || mkpContractOpen}
+                  >
+                    🔄 BUY AGAIN NOW
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 });
