@@ -9,6 +9,10 @@ html {
     font-size: 62.5%;
 }
 
+// Global responsive design — must come after html base so responsive.scss
+// can override font-size with media queries.
+@use 'responsive';
+
 body {
     // Updated to use brand font variable from brand.config.json
     font-family: var(--brand-font-primary);

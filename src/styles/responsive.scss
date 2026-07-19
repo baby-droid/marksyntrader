@@ -1,0 +1,532 @@
+/* ═══════════════════════════════════════════════════════════════
+   MARKSYNTRADER — GLOBAL RESPONSIVE SYSTEM
+   Targets:
+     • Mobile  xs  : ≤ 480px   (Galaxy S25 6.2", S25+ 6.5")
+     • Mobile  sm  : 481–600px  (large phones, landscape)
+     • Tablet      : 601–900px
+     • Desktop sm  : 901–1280px (13.3" scaled)
+     • Desktop md  : 1281–1919px (15.6" Vivobook, 13.3" native)
+     • Desktop lg  : ≥ 1920px  (24" monitors)
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ─── Touch targets: all interactive elements ≥ 44px on mobile ── */
+@media (max-width: 600px) {
+  button,
+  .dc-tabs__item,
+  [role='tab'],
+  [role='button'],
+  a {
+    min-height: 44px;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* ═══ 1. ROOT FONT SCALING ═══════════════════════════════════════
+   Base: 62.5% = 1rem → 10px (desktop)
+   Scale down on small screens so rem-based sizing shrinks naturally. */
+
+html {
+  font-size: 62.5%;               /* 1rem = 10px — desktop base */
+
+  @media (max-width: 1280px) and (min-width: 901px) {
+    font-size: 58%;               /* 13.3" laptop */
+  }
+
+  @media (max-width: 900px) and (min-width: 601px) {
+    font-size: 55%;               /* tablets */
+  }
+
+  @media (max-width: 600px) and (min-width: 481px) {
+    font-size: 52%;               /* large phones */
+  }
+
+  @media (max-width: 480px) {
+    font-size: 50%;               /* phones — 1rem = 5px; buttons stay legible */
+  }
+
+  @media (min-width: 1920px) {
+    font-size: 65%;               /* 24" monitor — slight upscale */
+  }
+}
+
+/* ═══ 2. LAYOUT SHELL ════════════════════════════════════════════ */
+.bot-dashboard, .bot {
+  @media (max-width: 600px) {
+    overflow-x: hidden;
+  }
+}
+
+/* ═══ 3. MAIN CONTENT AREA ══════════════════════════════════════ */
+.main {
+  /* Smooth scrolling everywhere */
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+
+  @media (max-width: 600px) {
+    height: calc(100dvh - 5.6rem); /* dvh accounts for mobile browser chrome */
+    overflow-x: hidden;
+  }
+
+  @media (min-width: 1920px) {
+    max-width: 2560px;
+    margin: 0 auto;
+  }
+}
+
+/* ═══ 4. HEADER ═════════════════════════════════════════════════ */
+.deriv-header,
+.deriv-header > *,
+[class*='deriv-header'] {
+  @media (max-width: 600px) {
+    /* Tighten header for mobile */
+    padding-inline: 8px !important;
+    gap: 6px !important;
+  }
+}
+
+/* App logo — shrink on mobile */
+.app-logo {
+  @media (max-width: 480px) {
+    img, svg { height: 28px !important; width: auto !important; }
+  }
+}
+
+/* Header auth actions — tighter spacing */
+.auth-actions {
+  @media (max-width: 600px) {
+    gap: 4px !important;
+    padding-block: 4px !important;
+
+    button {
+      padding: 5px 10px !important;
+      font-size: 1.15rem !important;
+      border-radius: 12px !important;
+      margin-inline-end: 4px !important;
+      min-height: 36px;
+    }
+  }
+}
+
+/* Demo reset button — hide label on very small screens, show icon only */
+.header__demo-reset-btn {
+  @media (max-width: 380px) {
+    padding: 5px 8px !important;
+    font-size: 0 !important; /* hide text */
+    &::before { content: '↺'; font-size: 1.4rem; }
+  }
+}
+
+/* ═══ 5. TAB BAR ════════════════════════════════════════════════ */
+.dc-tabs__list {
+  /* Always scrollable horizontally */
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
+  scroll-snap-type: x proximity;
+
+  @media (max-width: 600px) {
+    gap: 0 !important;
+    padding: 0 !important;
+  }
+}
+
+.dc-tabs__item {
+  flex-shrink: 0;
+  scroll-snap-align: start;
+  white-space: nowrap;
+
+  @media (max-width: 900px) {
+    height: 4.2rem !important;
+    padding: 0 1rem !important;
+    font-size: 1.1rem !important;
+
+    svg { width: 14px !important; height: 14px !important; margin-inline-end: 3px !important; }
+  }
+
+  @media (max-width: 600px) {
+    height: 3.8rem !important;
+    padding: 0 0.8rem !important;
+    font-size: 1rem !important;
+
+    /* Hide icon on very small mobile to fit more tabs */
+    svg { display: none !important; }
+  }
+
+  @media (max-width: 380px) {
+    padding: 0 0.6rem !important;
+    font-size: 0.95rem !important;
+  }
+}
+
+/* Tab shadows (left/right scroll indicators) */
+.tabs-shadow {
+  @media (max-width: 600px) {
+    width: 32px;
+    height: 32px;
+  }
+}
+
+/* ═══ 6. DASHBOARD PAGE ═════════════════════════════════════════ */
+.dashboard {
+  &__chart-wrapper {
+    @media (max-width: 600px) {
+      height: calc(100dvh - 9.8rem) !important;
+    }
+  }
+}
+
+/* ═══ 7. CHART PAGE (75/25 grid) ════════════════════════════════ */
+/* On mobile the trading panel goes below the chart */
+.chart-wrapper-grid,
+[style*='gridTemplateColumns: 75% 25%'],
+[style*='grid-template-columns: 75% 25%'] {
+  @media (max-width: 900px) {
+    display: flex !important;
+    flex-direction: column !important;
+    overflow-y: auto !important;
+  }
+}
+
+/* ChartTradePanel — full width on mobile */
+.ctp {
+  @media (max-width: 900px) {
+    height: auto !important;
+    min-height: 520px;
+    border-left: none !important;
+    border-top: 1px solid #e8e8e8;
+  }
+
+  &__digits {
+    @media (max-width: 600px) {
+      gap: 3px;
+    }
+  }
+
+  &__digit-btn {
+    @media (max-width: 600px) {
+      width: 30px;
+      height: 30px;
+      font-size: 12px;
+    }
+  }
+
+  &__buy-btn {
+    @media (max-width: 600px) {
+      height: 60px;
+      font-size: 16px;
+    }
+  }
+
+  &__circles {
+    @media (max-width: 600px) {
+      gap: 2px;
+    }
+  }
+
+  &__circle {
+    @media (max-width: 600px) {
+      width: 24px;
+      height: 24px;
+      font-size: 10px;
+    }
+  }
+}
+
+/* ═══ 8. MANUAL TRADER ══════════════════════════════════════════ */
+.manual-trader,
+.mt-page {
+  @media (max-width: 900px) {
+    flex-direction: column !important;
+  }
+
+  @media (max-width: 600px) {
+    padding: 0.8rem !important;
+  }
+}
+
+/* Manual trader panel */
+.mtp-panel,
+[class*='mtp-'] {
+  @media (max-width: 900px) {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}
+
+/* Buy buttons row on mobile */
+.mtp-buy-row {
+  @media (max-width: 600px) {
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+}
+
+.mtp-buy-btn {
+  @media (max-width: 600px) {
+    min-height: 52px !important;
+    font-size: 1.4rem !important;
+  }
+}
+
+/* ═══ 9. BULK TRADE ═════════════════════════════════════════════ */
+.bulk-trade {
+  @media (max-width: 900px) {
+    padding: 1.2rem !important;
+  }
+
+  &__body {
+    @media (max-width: 900px) {
+      flex-direction: column !important;
+    }
+  }
+
+  &__right {
+    @media (max-width: 900px) {
+      width: 100% !important;
+    }
+  }
+
+  &__execute {
+    @media (max-width: 600px) {
+      font-size: 1.3rem !important;
+      padding: 1rem !important;
+    }
+  }
+
+  &__droprow {
+    @media (max-width: 600px) {
+      flex-direction: column !important;
+    }
+  }
+
+  &__row3 {
+    @media (max-width: 600px) {
+      grid-template-columns: 1fr !important;
+      flex-direction: column !important;
+    }
+  }
+}
+
+/* ═══ 10. PRO HEDGE ═════════════════════════════════════════════ */
+.pro-hedge {
+  @media (max-width: 900px) {
+    padding: 1.2rem !important;
+  }
+
+  &__body {
+    @media (max-width: 900px) {
+      flex-direction: column !important;
+    }
+  }
+
+  &__leg-card {
+    @media (max-width: 900px) {
+      width: 100% !important;
+    }
+  }
+
+  &__execute-btn,
+  &__auto-btn {
+    @media (max-width: 600px) {
+      padding: 0.5rem 1rem !important;
+      font-size: 1.1rem !important;
+    }
+  }
+}
+
+/* ═══ 11. COPY TRADING ══════════════════════════════════════════ */
+.copy-trading {
+  @media (max-width: 900px) {
+    padding: 1rem !important;
+    flex-direction: column !important;
+  }
+
+  &__follower-row {
+    @media (max-width: 600px) {
+      flex-wrap: wrap !important;
+      height: auto !important;
+      padding: 0.8rem !important;
+      gap: 6px !important;
+    }
+  }
+
+  &__engines {
+    @media (max-width: 900px) {
+      flex-direction: column !important;
+      gap: 1.2rem !important;
+    }
+  }
+}
+
+/* ═══ 12. SCALPER BOTS ══════════════════════════════════════════ */
+.scalper-bots,
+[class*='scalper'] {
+  @media (max-width: 900px) {
+    flex-direction: column !important;
+    padding: 1rem !important;
+  }
+}
+
+/* ═══ 13. SPEED LAB ═════════════════════════════════════════════ */
+[class*='speed-lab'],
+[class*='speedlab'] {
+  @media (max-width: 900px) {
+    flex-direction: column !important;
+    padding: 1rem !important;
+  }
+}
+
+/* ═══ 14. ANALYSIS PAGE ═════════════════════════════════════════ */
+.analysis {
+  @media (max-width: 900px) {
+    padding: 1rem !important;
+    flex-direction: column !important;
+  }
+}
+
+/* ═══ 15. REPORTS ═══════════════════════════════════════════════ */
+[class*='reports'],
+[class*='report-'] {
+  @media (max-width: 600px) {
+    padding: 1rem !important;
+    font-size: 1.15rem !important;
+  }
+}
+
+/* ═══ 16. MODALS ════════════════════════════════════════════════ */
+.dc-dialog,
+[class*='deriv-modal'],
+[class*='dc-modal'] {
+  @media (max-width: 600px) {
+    width: calc(100vw - 2rem) !important;
+    max-width: 100% !important;
+    border-radius: 1.2rem !important;
+    left: 1rem !important;
+    right: 1rem !important;
+    transform: none !important;
+    margin: 0 !important;
+  }
+}
+
+/* ═══ 17. NAV DRAWER ════════════════════════════════════════════ */
+.nav-drawer {
+  &__panel {
+    @media (max-width: 480px) {
+      width: 88vw !important;
+    }
+  }
+
+  &__item {
+    @media (max-width: 480px) {
+      padding: 1rem 1.4rem !important;
+      font-size: 1.3rem !important;
+      min-height: 48px !important;
+    }
+  }
+}
+
+/* ═══ 18. RUN PANEL / FLOATING BUTTONS ═════════════════════════ */
+.main__run-strategy-wrapper {
+  @media (max-width: 600px) {
+    inset-inline-end: 0.8rem !important;
+    top: 5rem !important;
+  }
+}
+
+/* ═══ 19. SCROLLBAR POLISH ══════════════════════════════════════ */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 200, 83, 0.3) transparent;
+
+  &::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+  &::-webkit-scrollbar-track { background: transparent; }
+  &::-webkit-scrollbar-thumb {
+    background: rgba(0, 200, 83, 0.25);
+    border-radius: 10px;
+  }
+
+  @media (max-width: 600px) {
+    /* Hide scrollbars on mobile — rely on native momentum scrolling */
+    scrollbar-width: none;
+    &::-webkit-scrollbar { display: none; }
+  }
+}
+
+/* ═══ 20. TOASTS ════════════════════════════════════════════════ */
+.Toastify__toast-container {
+  @media (max-width: 600px) {
+    width: calc(100vw - 2rem) !important;
+    left: 1rem !important;
+    right: 1rem !important;
+    bottom: 1rem !important;
+    transform: none !important;
+  }
+}
+
+/* ═══ 21. FLOATERS (WhatsApp, Risk, AI) ════════════════════════ */
+[class*='floating'],
+[class*='float-btn'],
+[class*='whatsapp'] {
+  @media (max-width: 600px) {
+    /* Ensure floaters don't overlap the tab bar */
+    bottom: 6rem !important;
+  }
+}
+
+/* ═══ 22. GRID UTILITY: 2-col → 1-col on mobile ════════════════ */
+@media (max-width: 600px) {
+  [class*='__droprow'],
+  [class*='__row3'],
+  [class*='grid-2'],
+  [class*='two-col'] {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+}
+
+/* ═══ 23. LARGE SCREEN OPTIMIZATIONS ═══════════════════════════ */
+@media (min-width: 1920px) {
+  /* Give more breathing room on 24" monitors */
+  .main__container {
+    padding-inline: 2.4rem;
+  }
+
+  .dc-tabs__item {
+    height: 5.2rem;
+    padding: 0 2rem;
+    font-size: 1.4rem;
+  }
+
+  /* Bigger touch targets on large screens too */
+  button { min-height: 38px; }
+}
+
+/* ═══ 24. PORTRAIT → LANDSCAPE TRANSITION ON MOBILE ═══════════ */
+@media (max-width: 900px) and (orientation: landscape) {
+  .main {
+    height: calc(100dvh - 5.2rem);
+  }
+
+  .dc-tabs__list {
+    height: 3.8rem;
+  }
+}
+
+/* ═══ 25. SAFE AREA (notch / home bar on iPhone / Android) ══════ */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .main {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .install-popup {
+    bottom: calc(1.6rem + env(safe-area-inset-bottom));
+  }
+}

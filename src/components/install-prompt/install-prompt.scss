@@ -1,79 +1,262 @@
-.install-prompt {
+/* ─── Install Popup ─────────────────────────────────────────────
+   Centered bottom-of-screen card that appears on every load.
+   Clean dark design matching the app's brand palette.
+   ─────────────────────────────────────────────────────────────── */
+
+.install-popup {
   position: fixed;
   bottom: 2rem;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 9999;
-  animation: slideUp 0.4s ease;
+  z-index: 99999;
+  width: min(42rem, calc(100vw - 2.4rem));
+  animation: install-popup-in 0.38s cubic-bezier(0.16, 1, 0.3, 1) both;
 
-  &__content {
+  @media (max-width: 480px) {
+    bottom: 1.2rem;
+    width: calc(100vw - 2rem);
+  }
+
+  &__card {
+    position: relative;
+    background: linear-gradient(145deg, #0d1b2a 0%, #0a1520 60%, #071018 100%);
+    border: 1px solid rgba(0, 200, 83, 0.3);
+    border-radius: 1.8rem;
+    padding: 2rem 2rem 1.6rem;
+    box-shadow:
+      0 20px 60px rgba(0, 0, 0, 0.6),
+      0 0 0 1px rgba(0, 255, 100, 0.08) inset,
+      0 4px 24px rgba(0, 200, 83, 0.15);
+    display: flex;
+    flex-direction: column;
+    gap: 1.4rem;
+
+    @media (max-width: 480px) {
+      padding: 1.6rem 1.4rem 1.2rem;
+      border-radius: 1.4rem;
+      gap: 1.2rem;
+    }
+  }
+
+  /* ── Close button ─────────────────────────────────────── */
+  &__close {
+    position: absolute;
+    top: 1.2rem;
+    right: 1.2rem;
+    width: 28px;
+    height: 28px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 1.2rem;
+    cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 1.2rem;
-    background: #1a1a2e;
-    border: 1px solid #4C7DFF;
-    border-radius: 1.6rem;
-    padding: 1.2rem 1.6rem;
-    box-shadow: 0 8px 32px rgba(76, 125, 255, 0.3);
-    min-width: 32rem;
-    max-width: 90vw;
+    justify-content: center;
+    transition: all 0.15s;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.12);
+      color: #fff;
+      border-color: rgba(255, 255, 255, 0.3);
+    }
   }
 
-  &__icon img {
-    width: 4rem;
-    height: 4rem;
-    border-radius: 0.8rem;
-    object-fit: cover;
+  /* ── Top row: icon + brand ────────────────────────────── */
+  &__top {
+    display: flex;
+    align-items: center;
+    gap: 1.4rem;
+    padding-right: 2.4rem; /* make room for close btn */
   }
 
-  &__text {
-    flex: 1;
+  &__icon {
+    flex-shrink: 0;
+    width: 5.6rem;
+    height: 5.6rem;
+    border-radius: 1.2rem;
+    overflow: hidden;
+    border: 1.5px solid rgba(0, 200, 83, 0.4);
+    box-shadow: 0 0 16px rgba(0, 200, 83, 0.2);
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    @media (max-width: 480px) {
+      width: 4.8rem;
+      height: 4.8rem;
+    }
+  }
+
+  &__brand {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
   }
 
   &__title {
-    font-size: 1.4rem;
-    font-weight: 700;
+    font-size: 1.8rem;
+    font-weight: 800;
     color: #fff;
-    margin: 0;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+
+    @media (max-width: 480px) {
+      font-size: 1.6rem;
+    }
   }
 
-  &__subtitle {
-    font-size: 1.2rem;
-    color: #aaa;
-    margin: 0;
+  &__sub {
+    font-size: 1.15rem;
+    color: rgba(255, 255, 255, 0.45);
+    font-weight: 500;
   }
 
-  &__actions {
+  /* ── Feature list ─────────────────────────────────────── */
+  &__features {
+    list-style: none;
+    margin: 0;
+    padding: 0;
     display: flex;
-    gap: 0.8rem;
-    align-items: center;
+    flex-direction: column;
+    gap: 0.7rem;
+
+    li {
+      font-size: 1.25rem;
+      color: rgba(255, 255, 255, 0.72);
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      line-height: 1.4;
+    }
+
+    @media (max-width: 480px) {
+      gap: 0.5rem;
+      li { font-size: 1.15rem; }
+    }
   }
 
+  /* ── Primary install button ───────────────────────────── */
   &__btn {
+    width: 100%;
+    padding: 1.3rem;
     border: none;
+    border-radius: 1.2rem;
+    font-size: 1.5rem;
+    font-weight: 800;
     cursor: pointer;
-    border-radius: 0.8rem;
-    font-weight: 600;
-    font-size: 1.3rem;
-    padding: 0.6rem 1.4rem;
+    font-family: inherit;
     transition: all 0.2s;
+    letter-spacing: 0.02em;
 
-    &--install {
-      background: #4C7DFF;
+    &--primary {
+      background: linear-gradient(135deg, #00c853, #007a35);
       color: #fff;
-      &:hover { background: #3a6be0; }
+      box-shadow: 0 4px 20px rgba(0, 200, 83, 0.35);
+
+      &:hover {
+        filter: brightness(1.08);
+        transform: translateY(-1px);
+        box-shadow: 0 6px 24px rgba(0, 200, 83, 0.45);
+      }
+
+      &:active {
+        transform: translateY(0);
+      }
     }
 
-    &--dismiss {
-      background: transparent;
-      color: #aaa;
-      padding: 0.6rem;
-      &:hover { color: #fff; }
+    @media (max-width: 480px) {
+      padding: 1.1rem;
+      font-size: 1.35rem;
     }
+  }
+
+  /* ── iOS instructions ─────────────────────────────────── */
+  &__ios {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 1rem;
+    padding: 1.2rem 1.4rem;
+  }
+
+  &__ios-title {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #00c853;
+    margin: 0 0 0.8rem;
+  }
+
+  &__ios-steps {
+    margin: 0;
+    padding-inline-start: 1.8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+
+    li {
+      font-size: 1.2rem;
+      color: rgba(255, 255, 255, 0.7);
+      line-height: 1.5;
+    }
+  }
+
+  &__ios-icon {
+    display: inline-block;
+    padding: 1px 6px;
+    background: rgba(0, 122, 255, 0.2);
+    border-radius: 4px;
+    color: #4fc3f7;
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin: 0 2px;
+  }
+
+  /* ── Desktop manual fallback ──────────────────────────── */
+  &__manual {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 1rem;
+    padding: 1.2rem 1.4rem;
+
+    p {
+      font-size: 1.2rem;
+      color: rgba(255, 255, 255, 0.65);
+      margin: 0;
+      line-height: 1.6;
+
+      strong { color: #fff; }
+      span { font-size: 1.4rem; color: #00c853; }
+    }
+  }
+
+  /* ── "Maybe later" dismiss link ───────────────────────── */
+  &__later {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 1.2rem;
+    cursor: pointer;
+    font-family: inherit;
+    text-align: center;
+    padding: 0.2rem;
+    transition: color 0.15s;
+
+    &:hover { color: rgba(255, 255, 255, 0.6); }
   }
 }
 
-@keyframes slideUp {
-  from { opacity: 0; transform: translateX(-50%) translateY(2rem); }
-  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+/* ── Entry animation ────────────────────────────────────── */
+@keyframes install-popup-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(2.4rem) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
 }
