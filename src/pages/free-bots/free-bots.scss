@@ -1,7 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;600;700&display=swap');
 
 .free-bots {
-  padding: 1.6rem 2rem;
+  padding: 0.8rem 1rem;
   width: 100%;
   max-width: 100%;
   min-height: 100%;
@@ -16,21 +16,21 @@
   &__disclaimer {
     display: flex;
     align-items: center;
-    gap: 1.2rem;
-    padding: 1rem 1.6rem;
-    margin-bottom: 1.6rem;
+    gap: 0.8rem;
+    padding: 0.6rem 1rem;
+    margin-bottom: 0.8rem;
     background: rgba(255, 193, 7, 0.08);
     border: 1px solid rgba(255, 193, 7, 0.3);
-    border-radius: 0.8rem;
-    font-size: 1.2rem;
+    border-radius: 0.6rem;
+    font-size: 1.1rem;
     color: rgba(255,255,255,0.7);
 
-    &-icon { font-size: 1.6rem; flex-shrink: 0; }
+    &-icon { font-size: 1.2rem; flex-shrink: 0; }
     &-text { flex: 1; line-height: 1.4; strong { color: #ffd54f; } }
     &-close {
       background: none; border: none; color: rgba(255,255,255,0.4);
-      font-size: 1.4rem; cursor: pointer; padding: 0.2rem 0.6rem;
-      border-radius: 0.4rem; transition: all 0.15s;
+      font-size: 1.2rem; cursor: pointer; padding: 0.2rem 0.4rem;
+      border-radius: 0.3rem; transition: all 0.15s;
       &:hover { color: #fff; background: rgba(255,255,255,0.1); }
     }
   }
@@ -41,12 +41,12 @@
     align-items: flex-start;
     justify-content: space-between;
     flex-wrap: wrap;
-    gap: 1.2rem;
-    margin-bottom: 1.6rem;
+    gap: 0.6rem;
+    margin-bottom: 0.8rem;
 
     h1 {
       font-family: 'Orbitron', monospace;
-      font-size: 2rem;
+      font-size: 1.4rem;
       font-weight: 900;
       margin: 0;
       letter-spacing: 0.04em;
@@ -57,36 +57,14 @@
         background-clip: text;
       }
     }
-    p { margin: 0.4rem 0 0; font-size: 1.2rem; color: rgba(0, 200, 255, 0.6); letter-spacing: 0.05em; }
-  }
-
-  &__header-actions {
-    display: flex;
-    align-items: center;
-    gap: 1.2rem;
-    flex-wrap: wrap;
-  }
-
-  &__circles-btn {
-    padding: 0.8rem 1.6rem;
-    background: rgba(0, 200, 255, 0.1);
-    border: 1px solid rgba(0, 200, 255, 0.3);
-    border-radius: 0.8rem;
-    color: #00c8ff;
-    font-size: 1.3rem;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.2s;
-    font-family: 'Rajdhani', sans-serif;
-    letter-spacing: 0.04em;
-    &:hover { background: rgba(0, 200, 255, 0.2); border-color: rgba(0, 200, 255, 0.6); }
+    p { margin: 0.2rem 0 0; font-size: 1rem; color: rgba(0, 200, 255, 0.6); letter-spacing: 0.05em; }
   }
 
   &__search-box {
     display: flex;
     align-items: center;
-    gap: 0.8rem;
-    padding: 0.8rem 1.4rem;
+    gap: 0.6rem;
+    padding: 0.5rem 1rem;
     background: rgba(255,255,255,0.05);
     border: 1px solid rgba(255,255,255,0.1);
     border-radius: 2rem;
@@ -99,9 +77,9 @@
       background: none;
       border: none;
       outline: none;
-      font-size: 1.3rem;
+      font-size: 1.1rem;
       color: rgba(255,255,255,0.9);
-      width: 20rem;
+      width: 15rem;
       font-family: 'Rajdhani', sans-serif;
       &::placeholder { color: rgba(255,255,255,0.3); }
     }
@@ -112,19 +90,19 @@
     display: flex;
     align-items: center;
     justify-content: flex-start;
-    gap: 0.8rem;
+    gap: 0.6rem;
     flex-wrap: wrap;
-    margin-bottom: 2rem;
+    margin-bottom: 1rem;
     position: relative;
-    padding-left: 8%;
+    padding-left: 6%;
   }
 
   &__filter-btn {
-    padding: 0.6rem 1.6rem;
+    padding: 0.35rem 1rem;
     border-radius: 2rem;
     border: 1px solid rgba(255,255,255,0.15);
     background: rgba(255,255,255,0.04);
-    font-size: 1.2rem;
+    font-size: 1rem;
     font-weight: 600;
     cursor: pointer;
     color: rgba(255,255,255,0.6);
@@ -143,20 +121,20 @@
   &__count {
     position: absolute;
     right: 0;
-    font-size: 1.2rem;
+    font-size: 1rem;
     color: rgba(0, 200, 255, 0.5);
     font-family: 'Orbitron', monospace;
     letter-spacing: 0.05em;
   }
 
-  /* ─── Grid ─── */
+  /* ─── Grid — 4 per row, cards half the previous size ─── */
   &__grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 1.6rem;
+    gap: 0.8rem;
 
     @media (max-width: 1400px) {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
     }
     @media (max-width: 1024px) {
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -166,10 +144,7 @@
     }
   }
 
-  /* ─── Card ───
-     Each card carries a per-bot `--accent` custom property (set inline from
-     badgeColor) so every card gets its own glow / border / icon-ring color
-     instead of the previous one-size-fits-all blue theme. */
+  /* ─── Card (half size of previous) ─── */
   &__card {
     --accent: #89c4f4;
     position: relative;
@@ -177,24 +152,24 @@
       radial-gradient(120% 140% at 100% 0%, color-mix(in srgb, var(--accent) 14%, transparent) 0%, transparent 55%),
       linear-gradient(135deg, rgba(10, 22, 50, 0.9) 0%, rgba(5, 12, 30, 0.95) 100%);
     border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
-    border-radius: 1.6rem;
-    padding: 2rem;
+    border-radius: 0.9rem;
+    padding: 0.85rem;
     display: flex;
     flex-direction: column;
-    gap: 1.4rem;
+    gap: 0.55rem;
     overflow: hidden;
     transition: border-color 0.25s, box-shadow 0.25s, transform 0.2s;
     cursor: default;
 
     &:hover {
       border-color: color-mix(in srgb, var(--accent) 65%, transparent);
-      box-shadow: 0 0 32px color-mix(in srgb, var(--accent) 25%, transparent), 0 8px 24px rgba(0,0,0,0.3);
-      transform: translateY(-3px);
+      box-shadow: 0 0 20px color-mix(in srgb, var(--accent) 20%, transparent), 0 4px 14px rgba(0,0,0,0.25);
+      transform: translateY(-2px);
     }
 
     &--loaded {
       border-color: rgba(66, 184, 131, 0.5) !important;
-      box-shadow: 0 0 30px rgba(66, 184, 131, 0.2) !important;
+      box-shadow: 0 0 20px rgba(66, 184, 131, 0.2) !important;
     }
   }
 
@@ -205,37 +180,42 @@
     background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 70%, transparent), transparent);
   }
 
+  /* ─── Card top row ─── */
+  &__card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.4rem;
+  }
+
   &__card-icon-ring {
-    width: 5.2rem;
-    height: 5.2rem;
+    width: 2.8rem;
+    height: 2.8rem;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 1.2rem;
+    border-radius: 0.6rem;
     background: color-mix(in srgb, var(--accent) 16%, transparent);
     border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
-    box-shadow: 0 0 22px color-mix(in srgb, var(--accent) 20%, transparent);
+    flex-shrink: 0;
   }
 
   /* ─── Badge ─── */
   &__badge {
-    position: absolute;
-    top: 1.4rem;
-    right: 1.4rem;
-    padding: 0.2rem 0.8rem;
-    border-radius: 0.4rem;
-    font-size: 1rem;
+    padding: 0.1rem 0.5rem;
+    border-radius: 0.3rem;
+    font-size: 0.75rem;
     font-weight: 800;
     color: #fff;
     font-family: 'Orbitron', monospace;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
   }
 
   /* ─── Icon ─── */
   &__card-icon {
-    font-size: 3.2rem;
+    font-size: 1.6rem;
     line-height: 1;
-    filter: drop-shadow(0 0 8px rgba(0, 200, 255, 0.4));
   }
 
   /* ─── Body ─── */
@@ -243,13 +223,13 @@
 
   &__category-tag {
     display: inline-block;
-    padding: 0.2rem 0.8rem;
-    border-radius: 0.4rem;
-    font-size: 1rem;
+    padding: 0.1rem 0.5rem;
+    border-radius: 0.3rem;
+    font-size: 0.75rem;
     font-weight: 700;
     background: rgba(76, 125, 255, 0.15);
     color: #4C7DFF;
-    margin-bottom: 0.8rem;
+    margin-bottom: 0.4rem;
     letter-spacing: 0.06em;
     text-transform: uppercase;
     border: 1px solid rgba(76, 125, 255, 0.25);
@@ -257,41 +237,45 @@
 
   &__bot-name {
     font-family: 'Rajdhani', sans-serif;
-    font-size: 1.6rem;
+    font-size: 1.1rem;
     font-weight: 700;
     color: rgba(255,255,255,0.92);
-    margin: 0 0 0.6rem;
+    margin: 0 0 0.3rem;
     letter-spacing: 0.02em;
     line-height: 1.2;
-    padding-right: 4rem; // avoid badge overlap
   }
 
   &__bot-desc {
-    font-size: 1.2rem;
+    font-size: 0.9rem;
     color: rgba(255,255,255,0.45);
     margin: 0;
-    line-height: 1.5;
+    line-height: 1.4;
+    // Clamp to 2 lines to keep cards compact
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
 
   /* ─── Meta ─── */
   &__card-meta {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));
-    gap: 0.8rem;
+    grid-template-columns: repeat(auto-fill, minmax(5rem, 1fr));
+    gap: 0.4rem;
   }
 
   &__meta-item {
     display: flex;
     flex-direction: column;
-    gap: 0.2rem;
-    padding: 0.6rem 0.8rem;
+    gap: 0.1rem;
+    padding: 0.3rem 0.5rem;
     background: rgba(255,255,255,0.04);
-    border-radius: 0.6rem;
+    border-radius: 0.4rem;
     border: 1px solid rgba(255,255,255,0.06);
   }
 
   &__meta-label {
-    font-size: 0.9rem;
+    font-size: 0.65rem;
     color: rgba(255,255,255,0.3);
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -299,30 +283,35 @@
   }
 
   &__meta-val {
-    font-size: 1.2rem;
+    font-size: 0.9rem;
     font-weight: 700;
     color: rgba(255,255,255,0.85);
     font-family: 'Rajdhani', sans-serif;
-
     &--green { color: #42B883; }
   }
 
-  /* ─── Load Button ─── */
+  /* ─── Button row ─── */
+  &__btn-row {
+    display: flex;
+    gap: 0.4rem;
+  }
+
+  /* ─── Load Buttons (half size) ─── */
   &__load-btn {
-    width: 100%;
-    padding: 1.2rem;
-    background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #7b6cff));
-    color: #fff;
+    flex: 1;
+    padding: 0.5rem 0.4rem;
     border: none;
-    border-radius: 0.8rem;
-    font-size: 1.4rem;
+    border-radius: 0.5rem;
+    font-size: 1rem;
     font-weight: 700;
     cursor: pointer;
     transition: all 0.2s;
     font-family: 'Rajdhani', sans-serif;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.04em;
+    color: #fff;
     position: relative;
     overflow: hidden;
+    white-space: nowrap;
 
     &::before {
       content: '';
@@ -332,29 +321,67 @@
       transform: translateX(-100%);
       transition: transform 0.4s;
     }
-
     &:hover:not(:disabled)::before { transform: translateX(100%); }
-    &:hover:not(:disabled) { box-shadow: 0 4px 20px rgba(76, 125, 255, 0.4); transform: translateY(-1px); }
+    &:hover:not(:disabled) { filter: brightness(1.1); transform: translateY(-1px); }
     &:disabled { opacity: 0.7; cursor: not-allowed; }
-    &.loaded { background: linear-gradient(135deg, #42B883, #00e676); box-shadow: 0 4px 20px rgba(66, 184, 131, 0.4); }
+
+    // GREEN — Load Bot button
+    &--green {
+      background: linear-gradient(135deg, #22c55e, #16a34a);
+      &:hover:not(:disabled) { box-shadow: 0 3px 14px rgba(34,197,94,0.4); }
+    }
+
+    // Accent gradient — Load & Run button
+    &--run {
+      background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #7b6cff));
+      &:hover:not(:disabled) { box-shadow: 0 3px 14px rgba(76, 125, 255, 0.35); }
+      &.loaded { background: linear-gradient(135deg, #42B883, #00e676); }
+    }
   }
 
   /* ─── Empty ─── */
   &__empty {
     grid-column: 1 / -1;
     text-align: center;
-    padding: 4rem;
+    padding: 3rem;
     color: rgba(255,255,255,0.3);
-    font-size: 1.4rem;
+    font-size: 1.2rem;
   }
 }
 
-/* ─── Mobile Responsive (extra) ─── */
+/* ─── Mobile Responsive ─── */
+@media (max-width: 768px) {
+  .free-bots {
+    padding: 0.6rem 0.7rem;
+
+    &__header { h1 { font-size: 1.2rem; } p { font-size: 0.85rem; } }
+
+    &__load-btn {
+      // Reduce vertical size on mobile
+      padding: 0.3rem 0.3rem;
+      font-size: 0.9rem;
+      &--run {
+        // Run button: minimum visible vertical size
+        padding: 0.25rem 0.3rem;
+        font-size: 0.85rem;
+      }
+    }
+
+    &__bot-name { font-size: 0.95rem; }
+    &__bot-desc { font-size: 0.8rem; }
+    &__card { padding: 0.6rem; gap: 0.4rem; }
+    &__card-icon-ring { width: 2.2rem; height: 2.2rem; }
+    &__card-icon { font-size: 1.2rem; }
+  }
+}
+
 @media (max-width: 480px) {
   .free-bots {
-    padding: 1rem;
-
-    &__header { flex-direction: column; gap: 0.8rem; h1 { font-size: 1.6rem; } }
-    &__header-actions { gap: 0.8rem; }
+    &__header { flex-direction: column; gap: 0.4rem; }
+    &__load-btn {
+      font-size: 0.8rem;
+      padding: 0.22rem 0.25rem;
+      &--run { padding: 0.18rem 0.25rem; }
+    }
   }
 }

@@ -26,6 +26,10 @@ import Main from '../pages/main';
 import AIAssistant from '../components/ai-assistant';
 import InstallPrompt from '../components/install-prompt';
 import RiskDisclaimer from '../components/floating/RiskDisclaimer';
+// ── Global copy-trading boot ──────────────────────────────────────────────
+// Importing copy-trading initialises the bot-contract bridge (copy-trade-bridge.ts)
+// so bot trades are captured for mirroring regardless of which page is active.
+import { copyEngine } from '../utils/copy-trading';
 import './app.scss';
 import 'react-toastify/dist/ReactToastify.css';
 import '../components/bot-notification/bot-notification.scss';
@@ -221,6 +225,20 @@ const AppContent = observer(() => {
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [is_api_initialized, client.loginid]);
+
+    // ── Global copy-trading restore ───────────────────────────────────────────
+    // Restores saved follower sessions and auto-starts the copy engine when the
+    // user logs in — independently of whether the copy-trading page is open.
+    // The engine only starts if there are stored followers; otherwise it's a no-op.
+    React.useEffect(() => {
+        if (!client.is_logged_in || !is_api_initialized) return;
+        // Delay slightly so api_base is fully initialised
+        const t = setTimeout(() => {
+            copyEngine.restoreState().catch(() => {});
+        }, 2000);
+        return () => clearTimeout(t);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [client.is_logged_in, is_api_initialized]);
 
     if (common?.error) return null;
 
