@@ -2,163 +2,119 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useDerivTrading } from '@/hooks/useDerivTrading';
-import { copyEngine, CopyMode, Follower, FollowerAccount } from '@/utils/copy-trading';
+import { copyEngine, mirrorEngine, CopyMode, Follower, FollowerAccount } from '@/utils/copy-trading';
 import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import './copy-trading.scss';
 
+// ── Mode options ─────────────────────────────────────────────────────────────
 const MODES: { id: CopyMode; title: string; desc: string; icon: string }[] = [
-  {
-    id: 'demo_demo',
-    title: 'Demo → Demo',
-    desc: 'Master demo trades are copied to follower demo account. No real money.',
-    icon: '🎓',
-  },
-  {
-    id: 'real_real',
-    title: 'Real → Real',
-    desc: 'Master real trades are mirrored to follower real account. Stake scaled by ratio.',
-    icon: '💵',
-  },
-  {
-    id: 'demo_real',
-    title: 'Demo → Real',
-    desc: 'Master demo trades are copied to follower real account with risk multiplier.',
-    icon: '🧪',
-  },
-  {
-    id: 'real_demo',
-    title: 'Real → Demo',
-    desc: 'Master real trades are mirrored to follower demo account. Risk-free training.',
-    icon: '📚',
-  },
+  { id: 'demo_demo', title: 'Demo → Demo', desc: 'Copy demo trades to follower demo account.', icon: '🎓' },
+  { id: 'real_real', title: 'Real → Real', desc: 'Mirror real trades to follower real account.', icon: '💵' },
+  { id: 'demo_real', title: 'Demo → Real', desc: 'Copy demo trades to follower real account.', icon: '🧪' },
+  { id: 'real_demo', title: 'Real → Demo', desc: 'Mirror real trades to follower demo account.', icon: '📚' },
 ];
 
-const MIRROR_KEY = 'ct_master_mirror_v1';
-const EXPIRE_MS  = 48 * 60 * 60 * 1000;
+// ── Mirror state persistence (separate from mirror engine storage) ────────────
+const MIRROR_LS_KEY = 'ct_master_mirror_v1';
+const EXPIRE_MS     = 48 * 60 * 60 * 1000;
 
-function saveMirrorState(active: boolean, running: boolean) {
-  try {
-    localStorage.setItem(MIRROR_KEY, JSON.stringify({
-      active, running, expires: Date.now() + EXPIRE_MS,
-    }));
-  } catch {}
+function saveMirrorUi(active: boolean, running: boolean) {
+  try { localStorage.setItem(MIRROR_LS_KEY, JSON.stringify({ active, running, expires: Date.now() + EXPIRE_MS })); } catch {}
 }
-function loadMirrorState() {
+function loadMirrorUi() {
   try {
-    const raw = localStorage.getItem(MIRROR_KEY);
+    const raw = localStorage.getItem(MIRROR_LS_KEY);
     if (!raw) return null;
     const s = JSON.parse(raw);
-    if (!s?.expires || Date.now() > s.expires) { localStorage.removeItem(MIRROR_KEY); return null; }
+    if (!s?.expires || Date.now() > s.expires) { localStorage.removeItem(MIRROR_LS_KEY); return null; }
     return s;
   } catch { return null; }
 }
 
-/**
- * Auto-detect the logged-in user's real (non-virtual) account token.
- *
- * Storage locations tried in order (covers API-token login and OAuth login):
- *  1. sessionStorage.deriv_accounts  (DerivWSAccountsService.storeAccounts)
- *  2. localStorage.deriv_accounts    (deriv-core storeDerivAccounts)
- *  3. localStorage.clientAccounts    (OAuth login fallback)
- *
- * Token source (in order):
- *  1. localStorage.auth_info.access_token  (storeAuthInfo — API-token login)
- *  2. localStorage.accountsList[loginid]   (OAuth login)
- *  3. localStorage.authToken               (account-switching hook)
- */
+// ── Real account auto-detection ───────────────────────────────────────────────
 function getRealAccountToken(): { loginid: string; token: string } | null {
   try {
-    // ── 1. Derive the bearer token ──────────────────────────────────────
+    // ── 1. Bearer token ──────────────────────────────────────────────────
     let masterToken: string | null = null;
     try {
       const authInfo = JSON.parse(localStorage.getItem('auth_info') ?? 'null');
-      if (authInfo?.access_token && (!authInfo.expires_at || Date.now() < authInfo.expires_at * 1000)) {
+      if (authInfo?.access_token && (!authInfo.expires_at || Date.now() < authInfo.expires_at * 1000))
         masterToken = authInfo.access_token;
-      }
     } catch { /* ignore */ }
     if (!masterToken) masterToken = localStorage.getItem('authToken');
 
-    // ── 2. Find a real account ──────────────────────────────────────────
-    // Try sessionStorage.deriv_accounts (API-token login via DerivWSAccountsService)
+    // ── 2. Account lists (most reliable sources first) ───────────────────
     const tryParsed = (src: Storage, key: string): any[] | null => {
       try { return JSON.parse(src.getItem(key) ?? 'null'); } catch { return null; }
     };
-
-    const sessionAccts = tryParsed(sessionStorage, 'deriv_accounts');
-    const localAccts   = tryParsed(localStorage,   'deriv_accounts');
-
-    for (const list of [sessionAccts, localAccts]) {
+    for (const list of [tryParsed(sessionStorage, 'deriv_accounts'), tryParsed(localStorage, 'deriv_accounts')]) {
       if (!Array.isArray(list)) continue;
       const real = list.find((a: any) => a.account_type === 'real' || (!a.account_type && !a.is_virtual));
-      if (real && masterToken) {
-        return { loginid: real.account_id ?? real.loginid, token: masterToken };
-      }
+      if (real && masterToken) return { loginid: real.account_id ?? real.loginid, token: masterToken };
     }
 
-    // ── 3. OAuth fallback: clientAccounts + accountsList ─────────────────
+    // ── 3. OAuth fallback ────────────────────────────────────────────────
     const clientAccounts = tryParsed(localStorage, 'clientAccounts') as any;
     const accountsList   = tryParsed(localStorage, 'accountsList')   as any;
     if (clientAccounts && typeof clientAccounts === 'object') {
       for (const [loginid, accData] of Object.entries(clientAccounts)) {
         const acc = accData as any;
         const tok = (accountsList && accountsList[loginid]) || masterToken;
-        if (!acc.is_virtual && tok) {
-          return { loginid, token: tok };
-        }
+        if (!acc.is_virtual && tok) return { loginid, token: tok };
       }
     }
-
     return null;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
+// ── Main component ────────────────────────────────────────────────────────────
 const CopyTrading = observer(() => {
-  const { balance, currency, totalProfit, subscribeBalance } = useDerivTrading() as any;
-  const [followers, setFollowers] = useState<Follower[]>([]);
-  const [mode, setMode] = useState<CopyMode>(copyEngine.getMode());
-  const [isCopying, setIsCopying] = useState(copyEngine.isRunning());
+  const { balance, totalProfit, subscribeBalance } = useDerivTrading() as any;
+  const [displayCur, setDisplayCur] = useState(getDisplayCurrency());
+
+  // ── Copy engine state ──────────────────────────────────────────────────
+  const [followers, setFollowers]   = useState<Follower[]>([]);
+  const [mode, setMode]             = useState<CopyMode>(copyEngine.getMode());
+  const [isCopying, setIsCopying]   = useState(copyEngine.isRunning());
   const [tokenInput, setTokenInput] = useState('');
   const [ratioInput, setRatioInput] = useState(1);
-  const [log, setLog] = useState<string[]>([]);
-  const [displayCur, setDisplayCur] = useState(getDisplayCurrency());
-  const prevActiveCount = useRef(0);
-  const restoredRef = useRef(false);
+  const [log, setLog]               = useState<string[]>([]);
+  const prevActiveRef               = useRef(0);
+  const restoredRef                 = useRef(false);
 
-  // ── Master Demo → Real mirror state ──
-  const [mirrorRunning, setMirrorRunning] = useState(false);
-  const [mirrorFollowerId, setMirrorFollowerId] = useState<string | null>(null);
-  const [mirrorLoading, setMirrorLoading] = useState(false);
-  const [mirrorLoginId, setMirrorLoginId] = useState<string | null>(null);
+  // ── Mirror engine state ────────────────────────────────────────────────
+  const [mirrorFollowers, setMirrorFollowers] = useState<Follower[]>([]);
+  const [mirrorRunning, setMirrorRunning]     = useState(false);
+  const [mirrorLoading, setMirrorLoading]     = useState(false);
+  const [mirrorLog, setMirrorLog]             = useState<string[]>([]);
+
+  const fmt      = (usd: number) => `${fromUsd(usd).toFixed(2)} ${displayCur}`;
+  const fmtProfit = (usd: number) => `${usd >= 0 ? '+' : ''}${fromUsd(usd).toFixed(2)} ${displayCur}`;
+  const ratioLabel = mode === 'real_real' ? 'Stake ratio' : 'Risk ×';
 
   useEffect(() => { return subscribeCurrency(() => setDisplayCur(getDisplayCurrency())); }, []);
   useEffect(() => { subscribeBalance?.(); }, []);
 
-  // Restore persisted state on mount (runs once)
+  // Restore both engines on mount
   useEffect(() => {
     if (restoredRef.current) return;
     restoredRef.current = true;
     copyEngine.restoreState().catch(() => {});
-
-    // Restore mirror state — auto-detect real account, no stored token needed
-    const ms = loadMirrorState();
-    if (ms?.running) {
-      // Will be re-started via startMirror when user re-enters the page
-    }
+    mirrorEngine.restoreState().catch(() => {});
+    // Restore mirror UI state
+    const ms = loadMirrorUi();
+    if (ms?.running) setMirrorRunning(true);
   }, []);
 
+  // Copy engine listeners
   useEffect(() => {
-    const offChange = copyEngine.onChange(newFollowers => {
-      setFollowers(newFollowers);
-      const activeCount = newFollowers.filter(f => f.status === 'active').length;
-      if (activeCount > prevActiveCount.current && !copyEngine.isRunning()) {
-        setTimeout(() => {
-          copyEngine.start();
-          setIsCopying(copyEngine.isRunning());
-        }, 400);
+    const offChange = copyEngine.onChange(fs => {
+      setFollowers(fs);
+      const activeCount = fs.filter(f => f.status === 'active').length;
+      if (activeCount > prevActiveRef.current && !copyEngine.isRunning()) {
+        setTimeout(() => { copyEngine.start(); setIsCopying(copyEngine.isRunning()); }, 400);
       }
-      prevActiveCount.current = activeCount;
+      prevActiveRef.current = activeCount;
       setIsCopying(copyEngine.isRunning());
     });
     const offLog = copyEngine.onLog(msg =>
@@ -167,91 +123,82 @@ const CopyTrading = observer(() => {
     return () => { offChange(); offLog(); };
   }, []);
 
-  const selectMode = useCallback((m: CopyMode) => {
-    setMode(m);
-    copyEngine.setMode(m);
+  // Mirror engine listeners
+  useEffect(() => {
+    const offChange = mirrorEngine.onChange(fs => {
+      setMirrorFollowers(fs);
+      setMirrorRunning(mirrorEngine.isRunning());
+    });
+    const offLog = mirrorEngine.onLog(msg =>
+      setMirrorLog(prev => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev].slice(0, 50))
+    );
+    return () => { offChange(); offLog(); };
   }, []);
 
-  const addToken = useCallback(() => {
-    const token = tokenInput.trim();
-    if (!token) return;
-    copyEngine.addFollower(token, ratioInput);
+  // Copy engine actions
+  const selectMode = useCallback((m: CopyMode) => { setMode(m); copyEngine.setMode(m); }, []);
+  const addToken   = useCallback(() => {
+    const t = tokenInput.trim();
+    if (!t) return;
+    copyEngine.addFollower(t, ratioInput);
     setTokenInput('');
   }, [tokenInput, ratioInput]);
-
   const pasteToken = useCallback(async () => {
-    try {
-      const text = await navigator.clipboard.readText();
-      if (text.trim()) setTokenInput(text.trim());
-    } catch {}
+    try { const txt = await navigator.clipboard.readText(); if (txt.trim()) setTokenInput(txt.trim()); } catch {}
   }, []);
-
   const toggleCopy = useCallback(() => {
-    if (isCopying) {
-      copyEngine.stop();
-      setIsCopying(false);
-    } else {
-      copyEngine.start();
-      setIsCopying(copyEngine.isRunning());
-    }
+    if (isCopying) { copyEngine.stop(); setIsCopying(false); }
+    else           { copyEngine.start(); setIsCopying(copyEngine.isRunning()); }
   }, [isCopying]);
 
-  // ── Mirror: Demo → Real ──
+  // Mirror engine actions (independent of copy engine)
   const startMirror = useCallback(async () => {
     const realAcct = getRealAccountToken();
     if (!realAcct) {
-      alert('No real account found. Please log in with a real (non-virtual) Deriv account first.');
+      alert('No real account detected. Log in with a real Deriv account to use the mirror.');
       return;
     }
     setMirrorLoading(true);
-    setMirrorLoginId(realAcct.loginid);
-    // Switch to demo→real mode, add the master's real token as a follower
-    copyEngine.setMode('demo_real');
-    setMode('demo_real');
-    await copyEngine.addFollower(realAcct.token, 1);
-    // Find the newly added follower by token
-    const allFollowers = await new Promise<Follower[]>(resolve => {
-      const unsub = copyEngine.onChange(fs => { unsub(); resolve(fs); });
-    });
-    const mirrorF = allFollowers.find(f => f.token === realAcct.token);
-    if (mirrorF) setMirrorFollowerId(mirrorF.id);
-    setMirrorRunning(true);
-    saveMirrorState(true, true);
+    mirrorEngine.setMode('demo_real');
+    // Clear any existing mirror follower first
+    const existing = mirrorFollowers[0];
+    if (existing) mirrorEngine.removeFollower(existing.id);
+    await mirrorEngine.addFollower(realAcct.token, 1);
+    mirrorEngine.start();
+    setMirrorRunning(mirrorEngine.isRunning());
+    saveMirrorUi(true, true);
     setMirrorLoading(false);
-  }, []);
+  }, [mirrorFollowers]);
 
   const stopMirror = useCallback(() => {
-    if (mirrorFollowerId) {
-      copyEngine.removeFollower(mirrorFollowerId);
-      setMirrorFollowerId(null);
-    }
+    mirrorEngine.stop();
+    const mf = mirrorFollowers[0];
+    if (mf) mirrorEngine.removeFollower(mf.id);
     setMirrorRunning(false);
-    setMirrorLoginId(null);
-    saveMirrorState(false, false);
-  }, [mirrorFollowerId]);
+    saveMirrorUi(false, false);
+  }, [mirrorFollowers]);
 
-  const fmt = (usd: number) => `${fromUsd(usd).toFixed(2)} ${displayCur}`;
-  const fmtProfit = (usd: number) => `${usd >= 0 ? '+' : ''}${fromUsd(usd).toFixed(2)} ${displayCur}`;
-
-  const active = followers.filter(f => f.status === 'active');
+  const active          = followers.filter(f => f.status === 'active');
   const totalReplicated = followers.reduce((s, f) => s + f.replicated, 0);
-  const ratioLabel = mode === 'real_real' ? 'Stake ratio' : 'Risk multiplier';
+  const mirrorAcct      = mirrorFollowers[0];
+  const realAcct        = getRealAccountToken();
 
   return (
     <div className='copy-trading'>
+      {/* Hero */}
       <div className='copy-trading__hero'>
         <div className='copy-trading__hero-content'>
           <div className='copy-trading__live-badge'>● LIVE COPY TRADING</div>
-          <h1>Your account, your control.<br /><span>Mirror trades to <em>10 accounts</em></span></h1>
-          <p>Add a follower API token — copy trading starts automatically once verified and stays active for 48 hrs across page refreshes.</p>
+          <h1>Your account, your control.<br /><span>Mirror trades to <em>15 accounts</em></span></h1>
+          <p>Add follower API tokens — copy trading starts automatically and stays active for 48 hrs across refreshes.</p>
           <div className='copy-trading__hero-stats'>
-            <div className='copy-trading__stat'><strong>{active.length}/10</strong><span>LINKED ACCOUNTS</span></div>
+            <div className='copy-trading__stat'><strong>{active.length}/15</strong><span>LINKED</span></div>
             <div className='copy-trading__stat copy-trading__stat--status'>
               <div className={`copy-trading__status-indicator ${isCopying ? 'active' : ''}`} />
               <strong>{isCopying ? 'Active' : 'Idle'}</strong>
               <span>COPY STATUS</span>
             </div>
-            <div className='copy-trading__stat'><strong>{totalReplicated}</strong><span>TRADES REPLICATED</span></div>
+            <div className='copy-trading__stat'><strong>{totalReplicated}</strong><span>REPLICATED</span></div>
           </div>
         </div>
         <div className='copy-trading__hero-icon'>🔄</div>
@@ -260,17 +207,14 @@ const CopyTrading = observer(() => {
       <div className='copy-trading__body'>
         <div className='copy-trading__left'>
 
-          {/* Master Demo → Master Real Mirror */}
+          {/* ─── Master Demo → Master Real Mirror (independent engine) ─── */}
           <div className='copy-trading__card copy-trading__card--mirror'>
             <div className='copy-trading__card-icon'>🔀</div>
             <h3>Master Demo → Master Real</h3>
-            <p>
-              Mirror your own demo trades to your real account automatically.
-              Uses your currently logged-in real account — no extra API token needed.
-            </p>
-            {!mirrorRunning && (() => {
-              const realAcct = getRealAccountToken();
-              return realAcct ? (
+            <p>Mirror your own demo trades to your real account automatically.</p>
+
+            {!mirrorRunning ? (
+              realAcct ? (
                 <div className='copy-trading__mirror-auto-notice'>
                   ✅ Real account detected: <strong>{realAcct.loginid}</strong>
                 </div>
@@ -278,34 +222,36 @@ const CopyTrading = observer(() => {
                 <div className='copy-trading__mirror-auto-notice copy-trading__mirror-auto-notice--warn'>
                   ⚠️ No real account found. Log in with a real Deriv account to use this feature.
                 </div>
-              );
-            })()}
-            {mirrorRunning && mirrorLoginId && (
-              <div className='copy-trading__mirror-auto-notice'>
-                🟢 Mirroring demo → real account <strong>{mirrorLoginId}</strong>
-              </div>
+              )
+            ) : (
+              mirrorAcct && (
+                <div className='copy-trading__mirror-auto-notice'>
+                  🟢 Mirroring demo → <strong>{mirrorAcct.loginid}</strong>
+                  {mirrorAcct.balance > 0 && <> · {mirrorAcct.currency} {mirrorAcct.balance.toFixed(2)}</>}
+                </div>
+              )
             )}
+
             <button
               className={`copy-trading__mirror-btn ${mirrorRunning ? 'copy-trading__mirror-btn--stop' : 'copy-trading__mirror-btn--start'}`}
               onClick={mirrorRunning ? stopMirror : startMirror}
-              disabled={mirrorLoading || (!mirrorRunning && !getRealAccountToken())}
+              disabled={mirrorLoading || (!mirrorRunning && !realAcct)}
             >
-              {mirrorLoading ? '⏳ Connecting…' : mirrorRunning ? '⏹ Stop Demo→Real Mirror' : '▶ Start Demo→Real Mirror'}
+              {mirrorLoading ? '⏳ Connecting…' : mirrorRunning ? '⏹ Stop Mirror' : '▶ Start Demo→Real Mirror'}
             </button>
-            {mirrorRunning && (
-              <div className='copy-trading__running-notice'>
-                🔀 Demo → Real mirror active — your demo trades are being reflected to your real account.
+
+            {mirrorLog.length > 0 && (
+              <div className='copy-trading__mirror-log'>
+                {mirrorLog.slice(0, 4).map((m, i) => <div key={i} className='copy-trading__mirror-log-entry'>{m}</div>)}
               </div>
             )}
           </div>
 
-          {/* Mode selector */}
+          {/* ─── Copy Mode selector ─── */}
           <div className='copy-trading__card'>
             <h3>Copy Mode</h3>
             <p className='copy-trading__mode-hint'>
-              <strong>Risk multiplier</strong> scales the follower's stake relative to the master's stake.
-              E.g. multiplier 2 means the follower risks 2× the master's stake on each trade.
-              Use 1 for 1:1 mirroring.
+              <strong>Risk ×</strong> scales the follower's stake. <strong>Commission %</strong> is tracked per trade as earned income.
             </p>
             <div className='copy-trading__modes'>
               {MODES.map(m => (
@@ -322,14 +268,10 @@ const CopyTrading = observer(() => {
             </div>
           </div>
 
-          {/* Token adder */}
+          {/* ─── Add follower token ─── */}
           <div className='copy-trading__card'>
             <div className='copy-trading__card-icon'>🔑</div>
-            <h3>Link Follower ({followers.length}/10)</h3>
-            <p>
-              Add a follower API token (Read + Trade scope). Copy trading starts automatically
-              after the token is verified and stays active for 48 hrs across page refreshes.
-            </p>
+            <h3>Link Follower ({followers.length}/15)</h3>
             <div className='copy-trading__token-row'>
               <div className='copy-trading__token-input-wrap'>
                 <input
@@ -351,9 +293,9 @@ const CopyTrading = observer(() => {
               <button
                 className='copy-trading__btn copy-trading__btn--add'
                 onClick={addToken}
-                disabled={followers.length >= 10 || !tokenInput.trim()}
+                disabled={followers.length >= 15 || !tokenInput.trim()}
               >
-                🔗 Add &amp; Join
+                🔗 Link
               </button>
             </div>
 
@@ -361,110 +303,134 @@ const CopyTrading = observer(() => {
               className={`copy-trading__copy-btn ${isCopying ? 'copy-trading__copy-btn--stop' : ''}`}
               onClick={toggleCopy}
               disabled={!isCopying && active.length === 0}
-              title={!isCopying && active.length === 0 ? 'Add and verify a follower token first' : undefined}
             >
               {isCopying ? '⏹ Stop Copy Trading' : active.length === 0 ? '⏳ Waiting for follower…' : '▶ Start Copy Trading'}
             </button>
-
             {isCopying && (
               <div className='copy-trading__running-notice'>
-                ✅ Copy trading is active — trades from your master account will be mirrored automatically.
+                ✅ Copy trading active — trades from your master account are being mirrored.
               </div>
             )}
           </div>
 
+          {/* ─── Activity log ─── */}
           <div className='copy-trading__card copy-trading__card--log'>
             <h3>Activity Log</h3>
             <div className='copy-trading__log'>
-              {log.length === 0 && <p className='copy-trading__log-empty'>No activity yet. Add a follower token to begin.</p>}
-              {log.map((entry, i) => <div key={i} className='copy-trading__log-entry'>{entry}</div>)}
+              {log.length === 0
+                ? <p className='copy-trading__log-empty'>No activity yet. Link a follower token to begin.</p>
+                : log.map((e, i) => <div key={i} className='copy-trading__log-entry'>{e}</div>)
+              }
             </div>
           </div>
         </div>
 
+        {/* ─── Right column: follower accounts ─── */}
         <div className='copy-trading__right'>
           <div className='copy-trading__card'>
             <div className='copy-trading__card-icon'>👥</div>
             <h3>Follower Accounts ({active.length} active)</h3>
+
             {followers.length === 0 ? (
               <div className='copy-trading__no-accounts'>
                 <div className='copy-trading__no-accounts-icon'>🔗</div>
                 <p>No accounts linked yet.</p>
-                <p>Add a follower API token above — it will auto-join after verification.</p>
+                <p>Paste a follower API token to begin.</p>
               </div>
             ) : (
-              <div className='copy-trading__accounts'>
+              <div className='copy-trading__follower-list'>
                 {followers.map(acc => (
-                  <div key={acc.id} className={`copy-trading__account copy-trading__account--${acc.status}`}>
-                    <div className='copy-trading__account-info'>
-                      <div className={`copy-trading__account-dot copy-trading__account-dot--${acc.status}`} />
-                      <div>
-                        <strong>{acc.loginid || '…'}{acc.is_virtual ? ' (demo)' : ' (real)'}</strong>
-                        <span>{acc.currency} {acc.balance?.toFixed(2) ?? '---'}</span>
-                        {acc.status === 'pending' && <span className='copy-trading__verifying'>⏳ Connecting…</span>}
-                      </div>
+                  <div
+                    key={acc.id}
+                    className={`copy-trading__follower-row copy-trading__follower-row--${acc.status}`}
+                  >
+                    {/* Status dot + identity */}
+                    <span className={`copy-trading__follower-dot copy-trading__follower-dot--${acc.status}`} />
+                    <div className='copy-trading__follower-id'>
+                      <strong>{acc.loginid}</strong>
+                      <em>{acc.is_virtual ? 'demo' : 'real'}</em>
                     </div>
+                    <span className='copy-trading__follower-bal'>
+                      {acc.currency !== '---' ? `${acc.currency} ${acc.balance.toFixed(2)}` : '---'}
+                    </span>
 
-                    {/* Account picker — let master choose demo or real */}
+                    {/* Account type switcher — click to switch demo ↔ real */}
                     {acc.account_list && acc.account_list.length > 1 && (
-                      <div className='copy-trading__account-picker'>
-                        <span className='copy-trading__account-picker-label'>Trade on:</span>
-                        <div className='copy-trading__account-picker-btns'>
-                          {acc.account_list.map((a: FollowerAccount) => {
-                            const wantType = mode === 'demo_demo' || mode === 'real_demo' ? 'demo' : 'real';
-                            const isAutoSelected = a.account_type === wantType;
-                            const isCurrent = a.account_id === acc.loginid;
-                            return (
-                              <span
-                                key={a.account_id}
-                                className={`copy-trading__account-badge ${isCurrent ? 'active' : ''} ${a.account_type === 'demo' ? 'virtual' : 'real'}`}
-                                title={isCurrent ? 'Currently active' : isAutoSelected ? `Auto-selected by ${mode} mode` : 'To switch, add its own API token'}
-                              >
-                                {a.account_type === 'demo' ? '🔵' : '🟢'} {a.account_type}
-                                {isCurrent && <span className='copy-trading__badge-active-mark'> ✓</span>}
-                                {isAutoSelected && !isCurrent && <span style={{ fontSize: '0.9rem', color: '#f59e0b' }}> ★</span>}
-                              </span>
-                            );
-                          })}
-                        </div>
-                        <span className='copy-trading__account-list-note'>
-                          ★ = auto-selected by current mode · ✓ = active · Add token to switch account
-                        </span>
+                      <div className='copy-trading__acct-switcher'>
+                        {acc.account_list.map((a: FollowerAccount) => {
+                          const isCurrent = a.account_id === acc.loginid;
+                          return (
+                            <button
+                              key={a.account_id}
+                              title={isCurrent ? 'Currently active' : `Switch to ${a.account_type}`}
+                              className={`copy-trading__acct-badge copy-trading__acct-badge--${a.account_type}${isCurrent ? ' active' : ''}`}
+                              onClick={() => !isCurrent && copyEngine.switchAccount(acc.id, a.account_type)}
+                              disabled={isCurrent || acc.status === 'pending'}
+                            >
+                              {a.account_type === 'demo' ? '🔵' : '🟢'} {a.account_type}
+                              {isCurrent && <span className='copy-trading__acct-check'> ✓</span>}
+                            </button>
+                          );
+                        })}
                       </div>
                     )}
 
-                    <div className='copy-trading__account-meta'>
-                      <div className='copy-trading__account-ratio'>
-                        <label>{ratioLabel === 'Stake ratio' ? '×' : 'risk×'}</label>
-                        <input
-                          type='number' min={0.01} step={0.1} value={acc.ratio}
-                          onChange={e => copyEngine.setRatio(acc.id, Number(e.target.value))}
-                        />
-                      </div>
-                      <div className='copy-trading__account-commission'>
-                        <label>Commission %</label>
-                        <input
-                          type='number' min={0} max={50} step={0.5} value={acc.commission ?? 0}
-                          onChange={e => copyEngine.setCommission(acc.id, Number(e.target.value))}
-                        />
-                      </div>
-                      <span className={`copy-trading__account-status copy-trading__account-status--${acc.status}`}>
-                        {acc.status === 'pending' ? '⏳ verifying…' : acc.status === 'error' ? (acc.lastError || 'error') : acc.status}
+                    {/* Controls: ratio + commission */}
+                    <label className='copy-trading__follower-ctrl' title={ratioLabel}>
+                      <span>×</span>
+                      <input
+                        type='number' min={0.01} step={0.1} value={acc.ratio}
+                        onChange={e => copyEngine.setRatio(acc.id, Number(e.target.value))}
+                      />
+                    </label>
+                    <label className='copy-trading__follower-ctrl copy-trading__follower-ctrl--comm' title='Commission %'>
+                      <span>%</span>
+                      <input
+                        type='number' min={0} max={50} step={0.5} value={acc.commission ?? 0}
+                        onChange={e => copyEngine.setCommission(acc.id, Number(e.target.value))}
+                      />
+                    </label>
+
+                    {/* Stats */}
+                    <span className='copy-trading__follower-trades' title='Trades replicated'>
+                      {acc.replicated}T
+                    </span>
+
+                    {(acc.commissionEarned ?? 0) > 0 && (
+                      <span className='copy-trading__commission-earned' title='Commission earned this session'>
+                        💰{fmt(acc.commissionEarned ?? 0)}
                       </span>
-                      <span>{acc.replicated} trades</span>
-                      {(acc.commissionEarned ?? 0) > 0 && (
-                        <span className='copy-trading__commission-earned' title='Commission tracked this session'>
-                          💰 {fmt(acc.commissionEarned ?? 0)} earned
-                        </span>
-                      )}
-                      <button className='copy-trading__remove' onClick={() => copyEngine.removeFollower(acc.id)}>✕</button>
-                    </div>
+                    )}
+
+                    {/* Status text / error */}
+                    <span
+                      className={`copy-trading__follower-status copy-trading__follower-status--${acc.status}`}
+                      title={acc.status === 'error' ? acc.lastError : acc.status}
+                    >
+                      {acc.status === 'pending' ? '⏳' : acc.status === 'error' ? '⚠' : acc.status === 'active' ? '' : acc.status}
+                    </span>
+
+                    {/* Retry button for errors */}
+                    {acc.status === 'error' && (
+                      <button
+                        className='copy-trading__follower-retry'
+                        onClick={() => copyEngine.retryFollower(acc.id)}
+                        title='Retry connection'
+                      >↺</button>
+                    )}
+
+                    <button
+                      className='copy-trading__follower-remove'
+                      onClick={() => copyEngine.removeFollower(acc.id)}
+                      title='Remove follower'
+                    >✕</button>
                   </div>
                 ))}
               </div>
             )}
           </div>
 
+          {/* Master account card */}
           {balance !== null && (
             <div className='copy-trading__card'>
               <h3>Master Account</h3>
