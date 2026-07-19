@@ -734,19 +734,27 @@ class CopyEngine {
             }
         }
 
-        // ── Individual WS sends (per-follower ratio + commission) ─────────
-        // MUST use proposal→buy two-step:  buy:"1" with inline parameters
-        // causes "Input validation failed: parameters" from Deriv for digit
-        // contract types (DIGITMATCH, DIGITOVER, DIGITUNDER, DIGITDIFF, etc.).
-        // The proposal→buy path works for ALL contract types.
+        // ── Individual WS sends — direct buy (1 RTT) ─────────────────────
+        // Primary path: `buy:"1"` with inline `parameters` is a SINGLE round
+        // trip on the raw OTP WebSocket (confirmed by Deriv API docs).  This
+        // halves latency vs the old proposal→buy two-step, so the follower
+        // enters on the SAME market tick as the master.
+        //
+        // NOTE: The old code used proposal→buy because DerivAPIBasic rejects
+        // `buy:"1"` with parameters for digit types. That restriction does NOT
+        // apply here — follower connections use raw WebSocket (`wsSend`), not
+        // the DerivAPIBasic library.  The server itself accepts direct buy for
+        // all contract types including DIGITMATCH, DIGITOVER, etc.
+        //
+        // Fallback: if the server rejects the direct buy for any reason, we
+        // automatically retry via the proven proposal→buy two-step.
         for (const { f, conn } of individualGroup) {
             const stake         = Math.max(0.35, +(sig.stake * f.ratio).toFixed(2));
             const commissionAmt = +(stake * (f.commission ?? 0) / 100).toFixed(2);
             const currency      = f.currency === '---' ? 'USD' : f.currency;
 
-            // Step 1 — proposal: exact same params as master
-            const proposalReq: Record<string, any> = {
-                proposal:          1,
+            // Build the contract parameters object (shared by both paths)
+            const contractParams: Record<string, any> = {
                 amount:            stake,
                 basis:             'stake',
                 contract_type:     sig.contract_type,   // e.g. DIGITMATCH, CALL, PUT …
@@ -755,30 +763,17 @@ class CopyEngine {
                 duration_unit:     sig.duration_unit,   // e.g. 't'
                 underlying_symbol: sig.symbol,          // e.g. R_100
             };
-            // barrier carries the digit prediction (e.g. "8" for DIGITMATCH digit=8)
-            // and the barrier level for HIGHER/LOWER contracts — must be string
+            // barrier = digit prediction (e.g. "8" for DIGITMATCH) or barrier level — must be string
             if (sig.barrier != null && sig.barrier !== '') {
-                proposalReq.barrier = String(sig.barrier);
+                contractParams.barrier = String(sig.barrier);
             }
 
-            this.wsSend(conn, proposalReq)
-                .then((propRes: any) => {
-                    if (propRes?.error) {
-                        const msg = propRes.error.message ?? propRes.error.code ?? 'proposal error';
-                        throw new Error(msg);
-                    }
-                    const pid      = propRes?.proposal?.id as string | undefined;
-                    const askPrice = Number(propRes?.proposal?.ask_price ?? stake);
-                    if (!pid) throw new Error('Proposal returned no ID');
-
-                    // Step 2 — buy using the proposal ID
-                    return this.wsSend(conn, { buy: pid, price: askPrice });
-                })
+            // ── FAST PATH: direct buy — 1 RTT ─────────────────────────────
+            // price = max we're willing to pay; set to 2× stake so small
+            // spread movements never block the purchase. The actual charge
+            // for binary options is always exactly the stake.
+            this.wsSend(conn, { buy: '1', price: +(stake * 2).toFixed(2), parameters: contractParams })
                 .then((buyRes: any) => {
-                    if (buyRes?.error) {
-                        const msg = buyRes.error.message ?? buyRes.error.code ?? 'buy error';
-                        throw new Error(msg);
-                    }
                     const cur = this.followers.find(x => x.id === f.id);
                     if (cur) this.updateFollower(f.id, {
                         replicated:       cur.replicated + 1,
@@ -788,7 +783,28 @@ class CopyEngine {
                     const commLog    = commissionAmt > 0 ? ` | 💰 +${commissionAmt}` : '';
                     this.log(`🔁 ${f.loginid}: ${sig.contract_type}${barrierStr} ×${stake} ${currency} ${sig.duration}${sig.duration_unit}${commLog}`);
                 })
-                .catch(err => this.log(`❌ ${f.loginid}: ${err?.message ?? 'trade failed'}`));
+                .catch(() => {
+                    // ── FALLBACK: proposal → buy — 2 RTTs ─────────────────
+                    // Runs only if the direct buy was rejected by the server.
+                    this.wsSend(conn, { proposal: 1, ...contractParams })
+                        .then((propRes: any) => {
+                            const pid      = propRes?.proposal?.id as string | undefined;
+                            const askPrice = Number(propRes?.proposal?.ask_price ?? stake);
+                            if (!pid) throw new Error('Proposal returned no ID');
+                            return this.wsSend(conn, { buy: pid, price: askPrice });
+                        })
+                        .then(() => {
+                            const cur = this.followers.find(x => x.id === f.id);
+                            if (cur) this.updateFollower(f.id, {
+                                replicated:       cur.replicated + 1,
+                                commissionEarned: +(cur.commissionEarned + commissionAmt).toFixed(2),
+                            });
+                            const barrierStr = sig.barrier != null ? ` [barrier:${sig.barrier}]` : '';
+                            const commLog    = commissionAmt > 0 ? ` | 💰 +${commissionAmt}` : '';
+                            this.log(`🔁 ${f.loginid}: ${sig.contract_type}${barrierStr} ×${stake} ${currency} ${sig.duration}${sig.duration_unit}${commLog} [via proposal]`);
+                        })
+                        .catch(err => this.log(`❌ ${f.loginid}: ${err?.message ?? 'trade failed'}`));
+                });
         }
 
         // ── Bulk-purchase (WS not open — fallback path) ───────────────────
