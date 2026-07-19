@@ -611,39 +611,49 @@ class CopyEngine {
 
     /** Subscribe to master account's transaction stream so trades placed via
      *  any UI path (bot, manual, scalper) are always captured, even if the
-     *  direct publishMasterTrade call is missed. Deduplicates via contract_id. */
+     *  direct publishMasterTrade call is missed. Deduplicates via contract_id.
+     *
+     *  IMPORTANT: api.onMessage().subscribe(callback) passes the raw parsed WS
+     *  message directly as the argument — NOT wrapped in { data }.
+     *  The transaction field name is `action` (not `action_type`) per Deriv docs.
+     */
     private subscribeMasterTransactions(): void {
         try {
             const api = (api_base as any)?.api;
             if (!api?.onMessage || !api?.send) return;
 
-            // Ask for transaction stream (best-effort; ignore errors)
-            api.send({ transaction: 1, subscribe: 1 }).catch?.(() => {});
+            // api_base.ts already subscribes to the transaction stream on startup.
+            // Do NOT send another subscribe request — Deriv returns AlreadySubscribed.
+            // The events are already flowing; just attach an onMessage listener below.
 
-            const sub = api.onMessage().subscribe(({ data: d }: { data: any }) => {
+            const sub = api.onMessage().subscribe((msg: any) => {
                 if (!this.running) return;
-                if (!d?.transaction) return;
-                const txn = d.transaction;
-                if (txn.action_type !== 'buy') return;
+                // msg IS the raw WS data object (not wrapped in {data})
+                if (!msg?.transaction) return;
+                const txn = msg.transaction;
+                // Deriv docs: field is "action", values: "buy"|"sell"|"deposit"|"withdrawal"
+                if (txn.action !== 'buy') return;
                 const contract_id = Number(txn.contract_id);
                 if (!contract_id || this.mirroredContracts.has(contract_id)) return;
 
-                // Mark as seen — onMasterTrade will skip if already seen from direct path
+                // Mark as seen — onMasterTrade will skip if already seen from direct publish path
                 this.mirroredContracts.add(contract_id);
                 if (this.mirroredContracts.size > 200) {
                     const first = this.mirroredContracts.values().next().value as number;
                     this.mirroredContracts.delete(first);
                 }
 
-                // Fetch full contract details then publish
+                // Fetch full contract details (transaction only has symbol + amount)
                 api.send({ proposal_open_contract: 1, contract_id })
                     .then((res: any) => {
                         if (!this.running) return;
                         const poc = res?.proposal_open_contract;
                         if (!poc) return;
-                        const symbol        = poc.underlying_symbol ?? poc.symbol;
+                        // underlying_symbol from POC; fallback to transaction field
+                        const symbol        = poc.underlying_symbol ?? poc.symbol ?? txn.underlying_symbol;
                         const contract_type = poc.contract_type;
-                        const stake         = Number(poc.buy_price ?? 0);
+                        // buy_price = actual amount debited (the stake)
+                        const stake         = Number(poc.buy_price ?? txn.amount ?? 0);
                         const duration      = Number(poc.duration ?? poc.ticks_count ?? 5);
                         const duration_unit = (poc.duration_unit as string | undefined) ?? 't';
                         const barrier       = poc.barrier ?? undefined;
@@ -659,7 +669,8 @@ class CopyEngine {
             });
 
             this.txnApiSub = sub;
-        } catch { /* api not ready yet — skip, direct path still works */ }
+            this.log(`📡 ${this.opts.label}: subscribed to master transaction stream.`);
+        } catch { /* api not ready yet — skip, direct hook path still works */ }
     }
 
     // ── Trade replication ────────────────────────────────────────────────────
@@ -703,38 +714,40 @@ class CopyEngine {
         }
 
         // ── Individual WS sends (per-follower ratio + commission) ─────────
+        // Use buy:"1" + parameters inline — single round-trip, no proposal step.
+        // This is critical for short tick-contracts that expire before a
+        // proposal→buy two-step completes.
         for (const { f, conn } of individualGroup) {
             const stake         = Math.max(0.35, +(sig.stake * f.ratio).toFixed(2));
             const commissionAmt = +(stake * (f.commission ?? 0) / 100).toFixed(2);
+            const currency      = f.currency === '---' ? 'USD' : f.currency;
 
-            const proposalReq: Record<string, any> = {
-                proposal:          1,
+            // build parameters sub-object
+            const parameters: Record<string, any> = {
                 amount:            stake,
                 basis:             'stake',
                 contract_type:     sig.contract_type,
-                currency:          f.currency === '---' ? 'USD' : f.currency,
+                currency,
                 duration:          sig.duration,
                 duration_unit:     sig.duration_unit,
                 underlying_symbol: sig.symbol,
             };
-            if (sig.barrier != null) proposalReq.barrier = String(sig.barrier);
+            if (sig.barrier != null) parameters.barrier = String(sig.barrier);
 
-            this.wsSend(conn, proposalReq)
-                .then((propRes: any) => {
-                    if (propRes?.error) throw new Error(propRes.error.message);
-                    const pid      = propRes?.proposal?.id as string | undefined;
-                    const askPrice = Number(propRes?.proposal?.ask_price ?? stake);
-                    if (!pid) throw new Error('No proposal ID returned');
-                    return this.wsSend(conn, { buy: pid, price: askPrice });
-                })
-                .then(() => {
+            this.wsSend(conn, {
+                buy:        '1',      // '1' = buy using inline parameters (Deriv docs)
+                price:      stake,    // max price — equals stake for stake-basis contracts
+                parameters,
+            })
+                .then((buyRes: any) => {
+                    if (buyRes?.error) throw new Error(buyRes.error.message ?? buyRes.error.code ?? 'buy error');
                     const cur = this.followers.find(x => x.id === f.id);
                     if (cur) this.updateFollower(f.id, {
                         replicated:       cur.replicated + 1,
                         commissionEarned: +(cur.commissionEarned + commissionAmt).toFixed(2),
                     });
                     const commLog = commissionAmt > 0 ? ` | 💰 +${commissionAmt}` : '';
-                    this.log(`🔁 ${f.loginid}: ${sig.contract_type} ×${stake} ${f.currency}${commLog}`);
+                    this.log(`🔁 ${f.loginid}: ${sig.contract_type} ×${stake} ${currency}${commLog}`);
                 })
                 .catch(err => this.log(`❌ ${f.loginid}: ${err?.message ?? 'buy failed'}`));
         }
