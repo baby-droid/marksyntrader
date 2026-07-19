@@ -34,11 +34,11 @@ const FloatingRunButton: React.FC = observer(() => {
     } = run_panel as any;
     const [collapsed, setCollapsed] = useState(false);
 
-    // Draggable position — load from localStorage, default to right side
+    // Draggable position — load from localStorage, default to middle-left
     const [pos, setPos] = useState<{ x: number; y: number } | null>(() => {
         const saved = loadPos();
         if (saved) return saved;
-        return { x: window.innerWidth - 220, y: Math.floor(window.innerHeight * 0.45) };
+        return { x: 20, y: Math.floor(window.innerHeight * 0.45) };
     });
     const dragRef = useRef<{
         startX: number; startY: number;
@@ -102,7 +102,7 @@ const FloatingRunButton: React.FC = observer(() => {
 
     const style: React.CSSProperties = pos
         ? { left: pos.x, top: pos.y, right: 'auto', bottom: 'auto' }
-        : { right: 24, bottom: 24 };
+        : { left: 20, top: '45vh', right: 'auto', bottom: 'auto' };
 
     // Derive display state cleanly. The bot stays "running" (loaded, active)
     // while paused — only the interpreter's tick loop is halted, so Stop is
