@@ -7,8 +7,9 @@ import './nav-drawer.scss';
 const NAV_ITEMS = [
     { tab: DBOT_TABS.DASHBOARD,      icon: '🏠', label: 'Dashboard' },
     { tab: DBOT_TABS.AHMED_LEARNING, icon: '🧱', label: 'Bot Builder' },
-    { tab: DBOT_TABS.FREE_BOTS,      icon: '🤖', label: 'Free Bots' },
-    { tab: DBOT_TABS.DCIRCLES,       icon: '⬤',  label: 'D-Circles' },
+    { tab: DBOT_TABS.FREE_BOTS,           icon: '🤖', label: 'Free Bots' },
+    { tab: DBOT_TABS.AHMED_SCALPER_BOTS, icon: '⚡', label: 'Scalper Bots' },
+    { tab: DBOT_TABS.DCIRCLES,           icon: '⬤',  label: 'D-Circles' },
     { tab: DBOT_TABS.SPEEDLAB,       icon: '⚡',  label: 'Speed Lab' },
     { tab: DBOT_TABS.HEDGE,          icon: '🔀', label: 'Hedge Trading' },
     { tab: DBOT_TABS.CHART,          icon: '📈', label: 'Charts' },

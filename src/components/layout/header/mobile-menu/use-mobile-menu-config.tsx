@@ -5,6 +5,7 @@ import RootStore from '@/stores/root-store';
 import { LegacyLogout1pxIcon, LegacySettings1pxIcon, LegacyTheme1pxIcon } from '@deriv/quill-icons/Legacy';
 import { useTranslations } from '@deriv-com/translations';
 import { ToggleSwitch } from '@deriv-com/ui';
+import { DBOT_TABS } from '@/constants/bot-contents';
 
 export type TSubmenuSection = 'accountSettings' | 'cashier' | 'reports';
 
@@ -29,7 +30,8 @@ const useMobileMenuConfig = (
 ) => {
     const { localize } = useTranslations();
     const { is_dark_mode_on, toggleTheme } = useThemeSwitcher();
-    const { ui } = useStore() ?? {};
+    const store = useStore() ?? {};
+    const { ui, dashboard } = store as any;
 
     const menuConfig = useMemo((): TMenuConfig[] => {
 
@@ -52,6 +54,12 @@ const useMobileMenuConfig = (
                 // For desktop menu items, see:
                 // src/components/layout/header/header-config.tsx
 
+                {
+                    as: 'button',
+                    label: localize('Scalper Bots'),
+                    LeftComponent: () => <span style={{ fontSize: '1rem', lineHeight: 1 }}>⚡</span>,
+                    onClick: () => dashboard?.setActiveTab?.(DBOT_TABS.AHMED_SCALPER_BOTS),
+                },
                 {
                     as: 'button',
                     label: localize('Settings'),
