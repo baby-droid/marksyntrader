@@ -5,6 +5,7 @@ import {
     connectionStatus$,
     isAuthorized$,
 } from '@/external/bot-skeleton/services/api/observables/connection-status-stream';
+import { publishMasterTrade } from '@/utils/trade-bus';
 
 /**
  * Trading hook — rides on the SAME authenticated WebSocket connection the rest
@@ -223,6 +224,22 @@ export function useDerivTrade() {
             if (!contract_id) {
                 throw new Error('Buy failed — no contract ID returned');
             }
+
+            // Notify copy-trading engine so follower accounts mirror this trade.
+            // Publish immediately after a confirmed buy so followers get the signal
+            // before the market moves.
+            try {
+                publishMasterTrade({
+                    symbol,
+                    contract_type,
+                    stake,
+                    duration,
+                    duration_unit,
+                    barrier,
+                    source: (api_base as any)?.account_info?.is_virtual ? 'demo' : 'real',
+                    time: Date.now(),
+                });
+            } catch { /* never let copy-trade errors affect the master trade */ }
 
             // Step 3 — subscribe to settlement notifications
             if (onSettled) {

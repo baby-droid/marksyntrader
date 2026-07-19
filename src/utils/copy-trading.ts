@@ -21,6 +21,9 @@
  */
 
 import { MasterTradeSignal, subscribeMasterTrades } from './trade-bus';
+// Auto-initialises the DBot→copy-trade bridge (bot.contract listener).
+// Must be imported here so it activates as soon as copy-trading loads.
+import './copy-trade-bridge';
 
 // ── Config ──────────────────────────────────────────────────────────────────
 const REST_BASE          = 'https://api.derivws.com';
