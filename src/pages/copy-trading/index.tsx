@@ -36,10 +36,10 @@ const MODES: { id: CopyMode; title: string; desc: string; icon: string }[] = [
 const MIRROR_KEY = 'ct_master_mirror_v1';
 const EXPIRE_MS  = 48 * 60 * 60 * 1000;
 
-function saveMirrorState(active: boolean, token: string, running: boolean) {
+function saveMirrorState(active: boolean, running: boolean) {
   try {
     localStorage.setItem(MIRROR_KEY, JSON.stringify({
-      active, token, running, expires: Date.now() + EXPIRE_MS,
+      active, running, expires: Date.now() + EXPIRE_MS,
     }));
   } catch {}
 }
@@ -51,6 +51,27 @@ function loadMirrorState() {
     if (!s?.expires || Date.now() > s.expires) { localStorage.removeItem(MIRROR_KEY); return null; }
     return s;
   } catch { return null; }
+}
+
+/**
+ * Auto-detect the logged-in user's real (non-virtual) account token from localStorage.
+ * Returns { loginid, token } for the first active real account found, or null.
+ */
+function getRealAccountToken(): { loginid: string; token: string } | null {
+  try {
+    const accountsList    = JSON.parse(localStorage.getItem('accountsList')    ?? '{}');
+    const clientAccounts  = JSON.parse(localStorage.getItem('clientAccounts')  ?? '{}');
+    // Prefer real (non-virtual) accounts first
+    for (const [loginid, accData] of Object.entries(clientAccounts)) {
+      const acc = accData as any;
+      if (!acc.is_virtual && accountsList[loginid]) {
+        return { loginid, token: accountsList[loginid] };
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 const CopyTrading = observer(() => {
@@ -66,10 +87,10 @@ const CopyTrading = observer(() => {
   const restoredRef = useRef(false);
 
   // ── Master Demo → Real mirror state ──
-  const [mirrorToken, setMirrorToken] = useState('');
   const [mirrorRunning, setMirrorRunning] = useState(false);
   const [mirrorFollowerId, setMirrorFollowerId] = useState<string | null>(null);
   const [mirrorLoading, setMirrorLoading] = useState(false);
+  const [mirrorLoginId, setMirrorLoginId] = useState<string | null>(null);
 
   useEffect(() => { return subscribeCurrency(() => setDisplayCur(getDisplayCurrency())); }, []);
   useEffect(() => { subscribeBalance?.(); }, []);
@@ -80,11 +101,10 @@ const CopyTrading = observer(() => {
     restoredRef.current = true;
     copyEngine.restoreState().catch(() => {});
 
-    // Restore mirror state
+    // Restore mirror state — auto-detect real account, no stored token needed
     const ms = loadMirrorState();
-    if (ms?.token) setMirrorToken(ms.token);
-    if (ms?.running && ms?.token) {
-      // Will be re-started after followers load via the auto-start logic
+    if (ms?.running) {
+      // Will be re-started via startMirror when user re-enters the page
     }
   }, []);
 
@@ -138,23 +158,27 @@ const CopyTrading = observer(() => {
 
   // ── Mirror: Demo → Real ──
   const startMirror = useCallback(async () => {
-    const token = mirrorToken.trim();
-    if (!token) return;
+    const realAcct = getRealAccountToken();
+    if (!realAcct) {
+      alert('No real account found. Please log in with a real (non-virtual) Deriv account first.');
+      return;
+    }
     setMirrorLoading(true);
-    // Temporarily switch to demo→real mode, add master's real token as follower
+    setMirrorLoginId(realAcct.loginid);
+    // Switch to demo→real mode, add the master's real token as a follower
     copyEngine.setMode('demo_real');
     setMode('demo_real');
-    await copyEngine.addFollower(token, 1);
-    // Find the newly added follower
+    await copyEngine.addFollower(realAcct.token, 1);
+    // Find the newly added follower by token
     const allFollowers = await new Promise<Follower[]>(resolve => {
       const unsub = copyEngine.onChange(fs => { unsub(); resolve(fs); });
     });
-    const mirrorF = allFollowers.find(f => f.token === token);
+    const mirrorF = allFollowers.find(f => f.token === realAcct.token);
     if (mirrorF) setMirrorFollowerId(mirrorF.id);
     setMirrorRunning(true);
-    saveMirrorState(true, token, true);
+    saveMirrorState(true, true);
     setMirrorLoading(false);
-  }, [mirrorToken]);
+  }, []);
 
   const stopMirror = useCallback(() => {
     if (mirrorFollowerId) {
@@ -162,8 +186,9 @@ const CopyTrading = observer(() => {
       setMirrorFollowerId(null);
     }
     setMirrorRunning(false);
-    saveMirrorState(false, mirrorToken, false);
-  }, [mirrorFollowerId, mirrorToken]);
+    setMirrorLoginId(null);
+    saveMirrorState(false, false);
+  }, [mirrorFollowerId]);
 
   const fmt = (usd: number) => `${fromUsd(usd).toFixed(2)} ${displayCur}`;
   const fmtProfit = (usd: number) => `${usd >= 0 ? '+' : ''}${fromUsd(usd).toFixed(2)} ${displayCur}`;
@@ -200,27 +225,30 @@ const CopyTrading = observer(() => {
             <div className='copy-trading__card-icon'>🔀</div>
             <h3>Master Demo → Master Real</h3>
             <p>
-              Mirror your own demo trades to your real account. Trades placed on master demo
-              will automatically reflect on your master real account.
+              Mirror your own demo trades to your real account automatically.
+              Uses your currently logged-in real account — no extra API token needed.
             </p>
-            <div className='copy-trading__mirror-token-row'>
-              <div className='copy-trading__token-input-wrap' style={{ flex: 1 }}>
-                <input
-                  type='text'
-                  placeholder='Paste your REAL account API token…'
-                  value={mirrorToken}
-                  onChange={e => setMirrorToken(e.target.value)}
-                  disabled={mirrorRunning}
-                />
-                <button className='copy-trading__paste-btn' onClick={async () => {
-                  try { const t = await navigator.clipboard.readText(); if (t.trim()) setMirrorToken(t.trim()); } catch {}
-                }} title='Paste'>📋</button>
+            {!mirrorRunning && (() => {
+              const realAcct = getRealAccountToken();
+              return realAcct ? (
+                <div className='copy-trading__mirror-auto-notice'>
+                  ✅ Real account detected: <strong>{realAcct.loginid}</strong>
+                </div>
+              ) : (
+                <div className='copy-trading__mirror-auto-notice copy-trading__mirror-auto-notice--warn'>
+                  ⚠️ No real account found. Log in with a real Deriv account to use this feature.
+                </div>
+              );
+            })()}
+            {mirrorRunning && mirrorLoginId && (
+              <div className='copy-trading__mirror-auto-notice'>
+                🟢 Mirroring demo → real account <strong>{mirrorLoginId}</strong>
               </div>
-            </div>
+            )}
             <button
               className={`copy-trading__mirror-btn ${mirrorRunning ? 'copy-trading__mirror-btn--stop' : 'copy-trading__mirror-btn--start'}`}
               onClick={mirrorRunning ? stopMirror : startMirror}
-              disabled={mirrorLoading || (!mirrorRunning && !mirrorToken.trim())}
+              disabled={mirrorLoading || (!mirrorRunning && !getRealAccountToken())}
             >
               {mirrorLoading ? '⏳ Connecting…' : mirrorRunning ? '⏹ Stop Demo→Real Mirror' : '▶ Start Demo→Real Mirror'}
             </button>

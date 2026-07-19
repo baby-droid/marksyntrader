@@ -252,6 +252,26 @@
     margin-bottom: 0.8rem;
   }
 
+  &__mirror-auto-notice {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.55rem 0.9rem;
+    border-radius: 0.5rem;
+    background: rgba(34, 197, 94, 0.1);
+    border: 1px solid rgba(34, 197, 94, 0.25);
+    font-size: 1.05rem;
+    color: #166534;
+    margin-bottom: 0.75rem;
+    font-weight: 500;
+
+    &--warn {
+      background: rgba(251, 191, 36, 0.1);
+      border-color: rgba(251, 191, 36, 0.35);
+      color: #92400e;
+    }
+  }
+
   &__account-picker {
     padding: 0.7rem 1rem;
     background: rgba(76, 125, 255, 0.04);
