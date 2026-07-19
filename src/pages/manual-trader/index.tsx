@@ -703,9 +703,11 @@ const ManualTrader: React.FC = () => {
             /* Track ticks visually using the first contract */
             tradeTicksRef.current = [];
             tradeActiveRef.current = true;
-            // Always skip the first tick after entry — Deriv sends the entry price
-            // as the very next tick on ALL markets before contract counting begins.
-            skipNextTickRef.current = true;
+            // 1s markets (1HZ*): Deriv echoes the entry price as tick #0 before
+            // the contract starts counting — skip it so T1 is the true first contract tick.
+            // Plain / Bear / Bull / Jump / Boom / Crash / Step: the first WS tick
+            // after the buy IS T1 — never skip.
+            skipNextTickRef.current = _symbolValue.startsWith('1HZ');
             tradeDurRef.current = isSecBased ? 0 : dur;
             setTradeState({ ticks: [], duration: dur, settled: false, result: null, profit: 0, exitDigit: null });
 
@@ -806,9 +808,11 @@ const ManualTrader: React.FC = () => {
         const tradeId = idRef.current++;
         tradeTicksRef.current = [];
         tradeActiveRef.current = true;
-        // Always skip the first tick after entry — Deriv sends the entry price
-        // as the very next tick on ALL markets before contract counting begins.
-        skipNextTickRef.current = true;
+        // 1s markets (1HZ*): Deriv echoes the entry price as tick #0 before
+        // the contract starts counting — skip it so T1 is the true first contract tick.
+        // Plain / Bear / Bull / Jump / Boom / Crash / Step: the first WS tick
+        // after the buy IS T1 — never skip.
+        skipNextTickRef.current = _symbolValue.startsWith('1HZ');
         tradeDurRef.current = isSecBased ? 0 : dur; // only track digit ticks for tick-based contracts
         setTradeState({ ticks: [], duration: dur, settled: false, result: null, profit: 0, exitDigit: null });
 
