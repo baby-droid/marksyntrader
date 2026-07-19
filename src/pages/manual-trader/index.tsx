@@ -1308,7 +1308,8 @@ const ManualTrader: React.FC = () => {
                         <div className='mtp-auth-warn'>⚠ Connecting to account…</div>
                     )}
 
-                    {/* Buy buttons — one block per type, payout shown above */}
+                    {/* Buy buttons — side-by-side blocks, payout shown above each */}
+                    <div className='mtp-buy-row'>
                     {ctDef.types.map((def, i) => {
                         const po  = payouts[def.type];
                         const payoutAmt = po != null ? fromUsd(po).toFixed(2) : null;
@@ -1350,6 +1351,7 @@ const ManualTrader: React.FC = () => {
                             </div>
                         );
                     })}
+                    </div>
 
                     {/* ── API Request / Response Log ── */}
                     <div className='mtp-api-log'>

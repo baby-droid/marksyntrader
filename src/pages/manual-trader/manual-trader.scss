@@ -680,26 +680,27 @@
   }
 }
 
-/* Digit grid */
+/* Digit grid — constrained to 50% width */
 .mtp-digit-grid {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 0.22rem;
   margin-bottom: 0.22rem;
+  max-width: 50%;
 }
 .mtp-dg-btn {
   height: 26px;
   border-radius: 0.35rem;
-  background: rgba(255,255,255,0.07);
-  border: 1.5px solid rgba(203,213,225,0.25);
-  color: #94a3b8;
+  background: #ffffff;
+  border: 1.5px solid rgba(0,0,0,0.18);
+  color: #111111;
   font-size: 0.8rem;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.12s;
   font-family: 'Roboto Mono', 'Courier New', monospace;
   font-variant-numeric: tabular-nums;
-  &:hover { border-color: rgba(59,130,246,0.5); color: #60a5fa; background: rgba(59,130,246,0.1); }
+  &:hover { border-color: rgba(59,130,246,0.5); color: #2563eb; background: rgba(59,130,246,0.08); }
   &.active {
     background: #1e40af;
     border-color: #3b82f6;
@@ -846,8 +847,16 @@
 }
 
 /* Buy block */
-.mtp-buy-block {
+/* Buy buttons wrapper — side-by-side layout */
+.mtp-buy-row {
+  display: flex;
+  gap: 0.5rem;
   padding: 0.3rem 0.8rem 0;
+}
+
+.mtp-buy-block {
+  flex: 1;
+  padding: 0;
 }
 
 /* Payout info row — sits above each buy button */
@@ -878,15 +887,15 @@
   line-height: 1;
 }
 
-/* Buy buttons — full-width row with label left, pct right (like reference image) */
+/* Buy buttons — column layout inside side-by-side blocks */
 .mtp-buy-btn {
   width: 100%;
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  padding: 0.78rem 1.1rem 0.78rem 0.9rem;
+  justify-content: center;
+  gap: 0.28rem;
+  padding: 1.1rem 0.5rem;
   border-radius: 0.6rem;
   border: none;
   cursor: pointer;
@@ -895,18 +904,6 @@
   transition: all 0.14s;
   position: relative;
   overflow: hidden;
-
-  /* Subtle right-chevron shape via clip-path pseudo */
-  &::after {
-    content: '';
-    position: absolute;
-    right: -1px;
-    top: 0;
-    bottom: 0;
-    width: 14px;
-    background: rgba(255,255,255,0.12);
-    clip-path: polygon(0 0, 100% 50%, 0 100%);
-  }
 
   &--a {
     background: var(--bc, #22c55e);
@@ -922,28 +919,31 @@
   }
   &:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; }
 
-  /* Left section: icon + label */
+  /* Top row: icon + label centred */
   &__left {
     display: flex;
+    flex-direction: row;
     align-items: center;
-    gap: 0.5rem;
-    flex: 1;
+    justify-content: center;
+    gap: 0.35rem;
+    width: 100%;
   }
   &__icon  { font-size: 1.05rem; line-height: 1; opacity: 0.92; }
   &__label { font-size: 1.0rem; font-weight: 800; letter-spacing: 0.02em; }
 
-  /* Right section: percentage */
+  /* Bottom row: percentage — pinned below label */
   &__right {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
-    flex-shrink: 0;
+    justify-content: center;
+    width: 100%;
   }
   &__pct {
     font-size: 1.05rem;
     font-weight: 900;
     letter-spacing: 0.01em;
     font-variant-numeric: tabular-nums;
+    opacity: 0.9;
     &--empty { opacity: 0.45; }
   }
 

@@ -183,16 +183,19 @@ const HedgeTrading: React.FC = () => {
             // TP/SL check — safe here since we're NOT inside a state setter
             if (tpEnabled && pnlRef.current >= takeProfitVal) { stopAll(); return; }
             if (slEnabled && pnlRef.current <= -stopLossVal)  { stopAll(); return; }
-            // Apply martingale before firing the next trade
-            if (net < 0) {
-                // Loss — multiply each leg's effective stake if martingale is enabled
+            // Apply martingale independently per leg based on each leg's own result
+            // Leg A: lost → multiply; won → reset to base
+            if (settled.pa < 0) {
                 if (legA.martingale)
                     effectiveStakeARef.current = Math.max(0.35, +(effectiveStakeARef.current * legA.martingaleMulti).toFixed(2));
+            } else {
+                effectiveStakeARef.current = legA.stake;
+            }
+            // Leg B: lost → multiply; won → reset to base
+            if (settled.pb < 0) {
                 if (legB.martingale)
                     effectiveStakeBRef.current = Math.max(0.35, +(effectiveStakeBRef.current * legB.martingaleMulti).toFixed(2));
             } else {
-                // Win — reset to base stakes
-                effectiveStakeARef.current = legA.stake;
                 effectiveStakeBRef.current = legB.stake;
             }
             // Auto-hedge: re-fire immediately after settlement (not on a timer)
