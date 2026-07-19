@@ -54,20 +54,60 @@ function loadMirrorState() {
 }
 
 /**
- * Auto-detect the logged-in user's real (non-virtual) account token from localStorage.
- * Returns { loginid, token } for the first active real account found, or null.
+ * Auto-detect the logged-in user's real (non-virtual) account token.
+ *
+ * Storage locations tried in order (covers API-token login and OAuth login):
+ *  1. sessionStorage.deriv_accounts  (DerivWSAccountsService.storeAccounts)
+ *  2. localStorage.deriv_accounts    (deriv-core storeDerivAccounts)
+ *  3. localStorage.clientAccounts    (OAuth login fallback)
+ *
+ * Token source (in order):
+ *  1. localStorage.auth_info.access_token  (storeAuthInfo — API-token login)
+ *  2. localStorage.accountsList[loginid]   (OAuth login)
+ *  3. localStorage.authToken               (account-switching hook)
  */
 function getRealAccountToken(): { loginid: string; token: string } | null {
   try {
-    const accountsList    = JSON.parse(localStorage.getItem('accountsList')    ?? '{}');
-    const clientAccounts  = JSON.parse(localStorage.getItem('clientAccounts')  ?? '{}');
-    // Prefer real (non-virtual) accounts first
-    for (const [loginid, accData] of Object.entries(clientAccounts)) {
-      const acc = accData as any;
-      if (!acc.is_virtual && accountsList[loginid]) {
-        return { loginid, token: accountsList[loginid] };
+    // ── 1. Derive the bearer token ──────────────────────────────────────
+    let masterToken: string | null = null;
+    try {
+      const authInfo = JSON.parse(localStorage.getItem('auth_info') ?? 'null');
+      if (authInfo?.access_token && (!authInfo.expires_at || Date.now() < authInfo.expires_at * 1000)) {
+        masterToken = authInfo.access_token;
+      }
+    } catch { /* ignore */ }
+    if (!masterToken) masterToken = localStorage.getItem('authToken');
+
+    // ── 2. Find a real account ──────────────────────────────────────────
+    // Try sessionStorage.deriv_accounts (API-token login via DerivWSAccountsService)
+    const tryParsed = (src: Storage, key: string): any[] | null => {
+      try { return JSON.parse(src.getItem(key) ?? 'null'); } catch { return null; }
+    };
+
+    const sessionAccts = tryParsed(sessionStorage, 'deriv_accounts');
+    const localAccts   = tryParsed(localStorage,   'deriv_accounts');
+
+    for (const list of [sessionAccts, localAccts]) {
+      if (!Array.isArray(list)) continue;
+      const real = list.find((a: any) => a.account_type === 'real' || (!a.account_type && !a.is_virtual));
+      if (real && masterToken) {
+        return { loginid: real.account_id ?? real.loginid, token: masterToken };
       }
     }
+
+    // ── 3. OAuth fallback: clientAccounts + accountsList ─────────────────
+    const clientAccounts = tryParsed(localStorage, 'clientAccounts') as any;
+    const accountsList   = tryParsed(localStorage, 'accountsList')   as any;
+    if (clientAccounts && typeof clientAccounts === 'object') {
+      for (const [loginid, accData] of Object.entries(clientAccounts)) {
+        const acc = accData as any;
+        const tok = (accountsList && accountsList[loginid]) || masterToken;
+        if (!acc.is_virtual && tok) {
+          return { loginid, token: tok };
+        }
+      }
+    }
+
     return null;
   } catch {
     return null;
@@ -401,10 +441,22 @@ const CopyTrading = observer(() => {
                           onChange={e => copyEngine.setRatio(acc.id, Number(e.target.value))}
                         />
                       </div>
+                      <div className='copy-trading__account-commission'>
+                        <label>Commission %</label>
+                        <input
+                          type='number' min={0} max={50} step={0.5} value={acc.commission ?? 0}
+                          onChange={e => copyEngine.setCommission(acc.id, Number(e.target.value))}
+                        />
+                      </div>
                       <span className={`copy-trading__account-status copy-trading__account-status--${acc.status}`}>
                         {acc.status === 'pending' ? '⏳ verifying…' : acc.status === 'error' ? (acc.lastError || 'error') : acc.status}
                       </span>
                       <span>{acc.replicated} trades</span>
+                      {(acc.commissionEarned ?? 0) > 0 && (
+                        <span className='copy-trading__commission-earned' title='Commission tracked this session'>
+                          💰 {fmt(acc.commissionEarned ?? 0)} earned
+                        </span>
+                      )}
                       <button className='copy-trading__remove' onClick={() => copyEngine.removeFollower(acc.id)}>✕</button>
                     </div>
                   </div>

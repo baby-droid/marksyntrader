@@ -465,6 +465,37 @@
       font-size: 1.2rem;
     }
   }
+
+  &__account-commission {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    label { font-size: 1.1rem; color: #7c3aed; font-weight: 600; }
+    input {
+      width: 5.4rem;
+      padding: 0.4rem 0.6rem;
+      border: 1px solid rgba(124, 58, 237, 0.35);
+      border-radius: 0.5rem;
+      font-size: 1.2rem;
+      color: #7c3aed;
+      background: rgba(124, 58, 237, 0.04);
+      &:focus { outline: none; border-color: #7c3aed; }
+    }
+  }
+
+  &__commission-earned {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #166534;
+    background: rgba(34, 197, 94, 0.1);
+    border: 1px solid rgba(34, 197, 94, 0.25);
+    border-radius: 0.5rem;
+    padding: 0.2rem 0.55rem;
+    white-space: nowrap;
+  }
 }
 
 @keyframes blink {

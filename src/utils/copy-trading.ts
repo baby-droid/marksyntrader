@@ -42,17 +42,19 @@ export interface FollowerAccount {
 }
 
 export interface Follower {
-    id:           string;
-    token:        string;
-    loginid:      string;
-    currency:     string;
-    balance:      number;
-    is_virtual:   boolean;
-    status:       FollowerStatus;
-    ratio:        number;
-    replicated:   number;
-    lastError?:   string;
-    account_list?: FollowerAccount[];
+    id:                string;
+    token:             string;
+    loginid:           string;
+    currency:          string;
+    balance:           number;
+    is_virtual:        boolean;
+    status:            FollowerStatus;
+    ratio:             number;
+    commission:        number;   // % of stake logged as commission per trade (0–50)
+    commissionEarned:  number;   // cumulative USD commission tracked this session
+    replicated:        number;
+    lastError?:        string;
+    account_list?:     FollowerAccount[];
 }
 
 interface FollowerConn {
@@ -218,7 +220,7 @@ class CopyEngine {
                 expires: Date.now() + EXPIRE_MS,
                 followers: this.followers
                     .filter(f => f.status === 'active' || f.status === 'pending')
-                    .map(f => ({ token: f.token, ratio: f.ratio })),
+                    .map(f => ({ token: f.token, ratio: f.ratio, commission: f.commission ?? 0 })),
             };
             localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
         } catch { /* storage unavailable */ }
@@ -236,9 +238,14 @@ class CopyEngine {
             }
             if (state.mode) this.mode = state.mode as CopyMode;
             if (Array.isArray(state.followers)) {
-                for (const f of state.followers as { token: string; ratio: number }[]) {
+                for (const f of state.followers as { token: string; ratio: number; commission?: number }[]) {
                     if (f.token && !this.followers.some(x => x.token === f.token)) {
                         await this.addFollower(f.token, f.ratio ?? 1);
+                        // Restore commission after addFollower sets it to 0
+                        if (f.commission) {
+                            const added = this.followers.find(x => x.token === f.token);
+                            if (added) this.updateFollower(added.id, { commission: f.commission });
+                        }
                     }
                 }
             }
@@ -384,7 +391,9 @@ class CopyEngine {
             id, token: trimmed,
             loginid: 'Verifying…', currency: '---',
             balance: 0, is_virtual: false,
-            status: 'pending', ratio, replicated: 0,
+            status: 'pending', ratio,
+            commission: 0, commissionEarned: 0,
+            replicated: 0,
         };
         this.followers.push(follower);
         this.emit();
@@ -497,6 +506,11 @@ class CopyEngine {
         this.saveState();
     }
 
+    setCommission(id: string, pct: number): void {
+        this.updateFollower(id, { commission: Math.max(0, Math.min(50, pct)) });
+        this.saveState();
+    }
+
     removeFollower(id: string): void {
         const conn = this.conns.get(id);
         if (conn) {
@@ -561,6 +575,7 @@ class CopyEngine {
                 if (!conn || conn.dead || conn.ws?.readyState !== WebSocket.OPEN) return;
 
                 const stake = Math.max(0.35, +(sig.stake * f.ratio).toFixed(2));
+                const commissionAmt = +(stake * (f.commission ?? 0) / 100).toFixed(2);
 
                 // New Deriv API requires `underlying_symbol` (not `symbol`)
                 const proposalReq: Record<string, any> = {
@@ -587,8 +602,14 @@ class CopyEngine {
                     })
                     .then(() => {
                         const cur = this.followers.find(x => x.id === f.id);
-                        if (cur) this.updateFollower(f.id, { replicated: cur.replicated + 1 });
-                        this.log(`🔁 ${f.loginid}: ${sig.contract_type} × ${stake} ${f.currency}`);
+                        if (cur) {
+                            this.updateFollower(f.id, {
+                                replicated:       cur.replicated + 1,
+                                commissionEarned: +(cur.commissionEarned + commissionAmt).toFixed(2),
+                            });
+                        }
+                        const commLog = commissionAmt > 0 ? ` | commission +${commissionAmt} ${f.currency}` : '';
+                        this.log(`🔁 ${f.loginid}: ${sig.contract_type} × ${stake} ${f.currency}${commLog}`);
                     })
                     .catch(err => {
                         this.log(`❌ ${f.loginid}: ${err?.message ?? 'buy failed'}`);
