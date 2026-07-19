@@ -1252,35 +1252,39 @@ const ManualTrader: React.FC = () => {
                     {/* Stake */}
                     <div className='mtp-section'>
                         <div className='mtp-section__label'>Stake</div>
-                        <div className='mtp-stake-row'>
-                            <button className='mtp-stake-adj'
-                                onClick={() => setStake(s => Math.max(0.35, parseFloat(s) - 0.5).toFixed(2))}>
-                                −
-                            </button>
-                            <div className='mtp-stake-mid'>
-                                <input className='mtp-stake-inp' type='number' min='0.35' step='0.01'
-                                    value={stake}
-                                    onChange={e => setStake(e.target.value)} />
-                                <span className='mtp-stake-cur'>{currency || 'USD'}</span>
+                        <div className='mtp-stake-wrap'>
+                            <div className='mtp-stake-row'>
+                                <button className='mtp-stake-adj'
+                                    onClick={() => setStake(s => Math.max(0.35, parseFloat(s) - 0.5).toFixed(2))}>
+                                    −
+                                </button>
+                                <div className='mtp-stake-mid'>
+                                    <input className='mtp-stake-inp' type='number' min='0.35' step='0.01'
+                                        value={stake}
+                                        onChange={e => setStake(e.target.value)} />
+                                    <span className='mtp-stake-cur'>{currency || 'USD'}</span>
+                                </div>
+                                <button className='mtp-stake-adj'
+                                    onClick={() => setStake(s => (parseFloat(s) + 0.5).toFixed(2))}>
+                                    +
+                                </button>
                             </div>
-                            <button className='mtp-stake-adj'
-                                onClick={() => setStake(s => (parseFloat(s) + 0.5).toFixed(2))}>
-                                +
-                            </button>
                         </div>
                     </div>
 
                     {/* ── Bulk Trade Toggle ── */}
                     <div className='mtp-section'>
+                        <div className='mtp-section__label'>Bulk Trade</div>
                         <div className='mtp-bulk-row'>
                             <button
                                 className={`mtp-bulk-toggle ${bulkMode ? 'active' : ''}`}
                                 onClick={() => setBulkMode(v => !v)}>
-                                {bulkMode ? '⚡ BULK ON' : '○ BULK OFF'}
+                                <span className='mtp-bulk-toggle__dot' />
+                                {bulkMode ? 'ON' : 'OFF'}
                             </button>
                             {bulkMode && (
                                 <div className='mtp-bulk-count'>
-                                    <span>×</span>
+                                    <span className='mtp-bulk-count__x'>×</span>
                                     {[2, 3, 5, 10, 20].map(n => (
                                         <button key={n}
                                             className={`mtp-dur-btn ${bulkCount === n ? 'active' : ''}`}
@@ -1299,7 +1303,7 @@ const ManualTrader: React.FC = () => {
                         </div>
                         {bulkMode && (
                             <div className='mtp-bulk-info'>
-                                {bulkCount} contracts × {parseFloat(stake).toFixed(2)} = {(bulkCount * parseFloat(stake)).toFixed(2)} {currency || 'USD'} total
+                                ⚡ {bulkCount} contracts × {parseFloat(stake).toFixed(2)} = <strong>{(bulkCount * parseFloat(stake)).toFixed(2)} {displayCur}</strong> total stake
                             </div>
                         )}
                     </div>
