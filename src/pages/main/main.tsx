@@ -43,7 +43,6 @@ import Dashboard from '../dashboard';
 import RunStrategy from '../dashboard/run-strategy';
 import SettingsPanel from '@/components/settings-panel';
 import FloatingRunButton from '@/components/floating/FloatingRunButton';
-import PWAInstall from '@/components/floating/PWAInstall';
 import WhatsAppFloat from '@/components/floating/WhatsAppFloat';
 import './main.scss';
 
@@ -445,7 +444,6 @@ const AppWrapper = observer(() => {
 
             {/* Floating panels */}
             <FloatingRunButton />
-            <PWAInstall />
             <WhatsAppFloat />
 
             <DesktopWrapper>

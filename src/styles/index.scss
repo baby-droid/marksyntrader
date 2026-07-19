@@ -1,17 +1,12 @@
 @use 'components/shared/styles/themes' as *;
+// Global responsive system — must be loaded alongside themes, before any CSS rules
+@use 'responsive';
+
 // Removed IBM Plex Sans Google Font import - now using brand font from brand.config.json
 // Third-party developers can add their own font imports if needed
 
-// The Deriv design system (and this app's rem-based layout) assumes 1rem = 10px.
-// Without this base the browser default of 16px makes the whole UI render ~1.6x
-// too large ("zoomed"). Anchor the rem scale so sizes render as designed.
-html {
-    font-size: 62.5%;
-}
-
-// Global responsive design — must come after html base so responsive.scss
-// can override font-size with media queries.
-@use 'responsive';
+// html font-size (62.5% base + responsive breakpoints) is now managed entirely
+// in src/styles/responsive.scss so media-query overrides are never clobbered.
 
 body {
     // Updated to use brand font variable from brand.config.json
