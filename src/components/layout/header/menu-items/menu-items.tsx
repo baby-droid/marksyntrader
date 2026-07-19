@@ -41,13 +41,24 @@ import { useStore } from '@/hooks/useStore';
 import { LegacySettings1pxIcon } from '@deriv/quill-icons/Legacy';
 import { useTranslations } from '@deriv-com/translations';
 import { MenuItem, Text } from '@deriv-com/ui';
+import { DBOT_TABS } from '@/constants/bot-contents';
 
 export const MenuItems = observer(() => {
     const { localize } = useTranslations();
-    const { ui } = useStore() ?? {};
+    const store = useStore() ?? {};
+    const { ui, dashboard } = store as any;
 
     return (
         <>
+            <MenuItem
+                as='button'
+                className='app-header__menu'
+                disableHover
+                leftComponent={<span style={{ fontSize: '1rem', lineHeight: 1 }}>⚡</span>}
+                onClick={() => dashboard?.setActiveTab?.(DBOT_TABS.AHMED_SCALPER_BOTS)}
+            >
+                <Text size='sm'>{localize('Scalper Bots')}</Text>
+            </MenuItem>
             <MenuItem
                 as='button'
                 className='app-header__menu'

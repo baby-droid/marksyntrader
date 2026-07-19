@@ -878,6 +878,37 @@ const BotDetail: React.FC<{
                                 try { symField.forceRerender?.(); } catch { /* noop */ }
                             }
                         }
+                        // Bear/Bull (daily_reset_index) and Jump (jump_index) are not in the
+                        // standard Continuous Indices dropdown. dbot's submarket onChange handler
+                        // fires asynchronously and reloads SYMBOL_LIST options — which can reset
+                        // the symbol we just set. Re-apply the symbol at 400 ms and 900 ms to
+                        // ensure it sticks regardless of when the async reset fires.
+                        const mkt = patch.market;
+                        const isNonStandard = mkt === 'RDBEAR' || mkt === 'RDBULL' || mkt.startsWith('JD');
+                        if (isNonStandard) {
+                            const reapplySym = (delay: number) => setTimeout(() => {
+                                try {
+                                    const B2 = (window as any).Blockly;
+                                    if (!B2?.derivWorkspace) return;
+                                    for (const b2 of B2.derivWorkspace.getAllBlocks(false)) {
+                                        if (b2.type === 'trade_definition_market') {
+                                            const subF2 = b2.getField('SUBMARKET_LIST');
+                                            const symF2 = b2.getField('SYMBOL_LIST');
+                                            if (subF2) {
+                                                try { subF2.setValue(submarketVal); } catch {}
+                                                if (subF2.getValue() !== submarketVal) { (subF2 as any).value_ = submarketVal; try { subF2.forceRerender?.(); } catch {} }
+                                            }
+                                            if (symF2) {
+                                                try { symF2.setValue(mkt); } catch {}
+                                                if (symF2.getValue() !== mkt) { (symF2 as any).value_ = mkt; try { symF2.forceRerender?.(); } catch {} }
+                                            }
+                                        }
+                                    }
+                                } catch { /* noop */ }
+                            }, delay);
+                            reapplySym(400);
+                            reapplySym(900);
+                        }
                         changed = true;
                     } catch { /* noop */ }
                 }
@@ -1366,6 +1397,9 @@ const BotDetail: React.FC<{
         addLog('📂 LOADING BOT STRATEGY...', 'hack');
         try { await onPreloadXml(bot, { market: curMarket, duration: cfg.duration }); } catch { /* non-fatal */ }
         patchWorkspaceParams({ duration: cfg.duration });
+        // Re-apply market with staggered delays so it lands AFTER dbot's async
+        // submarket onChange reloads the SYMBOL_LIST options (Bear/Bull/Jump need this).
+        { const rm = curMarket; setTimeout(() => patchWorkspaceParams({ market: rm }), 500); setTimeout(() => patchWorkspaceParams({ market: rm }), 1100); }
         addLog('📂 XML_TRADING_ACTIVATOR: FRESH STRATEGY LOADED ✓', 'hack');
 
         /* Force-fresh market feed subscription — always reconnect on every Run */
@@ -1432,6 +1466,7 @@ const BotDetail: React.FC<{
                         addLog(`⏱ SCAN_TIMEOUT — no entry in 2 min | rotating → ${curMarket} | reloading XML...`, 'switch');
                         try { await onPreloadXml(bot, { market: curMarket, duration: cfg.duration }); } catch { /* non-fatal */ }
                         patchWorkspaceParams({ market: curMarket, duration: cfg.duration });
+                        { const rm = curMarket; setTimeout(() => patchWorkspaceParams({ market: rm }), 500); setTimeout(() => patchWorkspaceParams({ market: rm }), 1000); }
                         marketSwitched = true;
                         break;
                     }
@@ -1704,6 +1739,7 @@ const BotDetail: React.FC<{
                         /* Reload XML with new market and duration */
                         try { await onPreloadXml(bot, { market: curMarket, duration: cfg.duration }); } catch { /* non-fatal */ }
                         patchWorkspaceParams({ market: curMarket, duration: cfg.duration });
+                        { const rm = curMarket; setTimeout(() => patchWorkspaceParams({ market: rm }), 500); setTimeout(() => patchWorkspaceParams({ market: rm }), 1000); }
                         continue; // re-scan on Market 2 with updated stake
                     }
 
@@ -1719,6 +1755,7 @@ const BotDetail: React.FC<{
                         /* Reload XML with new market and sync ticks duration */
                         try { await onPreloadXml(bot, { market: curMarket, duration: cfg.duration }); } catch { /* non-fatal */ }
                         patchWorkspaceParams({ market: curMarket, duration: cfg.duration });
+                        { const rm = curMarket; setTimeout(() => patchWorkspaceParams({ market: rm }), 500); setTimeout(() => patchWorkspaceParams({ market: rm }), 1000); }
                         continue; // re-scan on new market with martingale stake
                     }
 

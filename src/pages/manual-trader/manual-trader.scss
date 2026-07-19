@@ -168,7 +168,7 @@
 
 /* ─── Digit Circles ─── */
 .mt-circles {
-  padding: 0.4rem 0.5rem 0.3rem 0.3rem;
+  padding: 0.2rem 0.4rem 0.15rem 0.3rem;
   background: #f1f5f9;
   border-bottom: 1px solid #e2e8f0;
   flex-shrink: 0;
@@ -314,9 +314,10 @@
   &--lost { animation: circle-flash-loss 0.6s ease; }
 
   &__num {
-    font-size: clamp(1rem, 2vw, 1.25rem);
+    font-size: clamp(0.72rem, 1.4vw, 0.9rem);
     font-weight: 900;
     line-height: 1;
+    font-family: 'Inter', 'Roboto', system-ui, sans-serif;
     /* Color is now driven inline by getCircleTextColor() */
     color: inherit;
   }
@@ -351,13 +352,15 @@
 
 /* Percentage label — sits OUTSIDE below the circle */
 .mt-circle__pct-ext {
-  font-size: 0.82rem;
-  font-weight: 800;
-  color: #000000;
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: #374151;
   text-align: center;
   line-height: 1.1;
-  margin-top: 0.12rem;
-  letter-spacing: -0.01em;
+  margin-top: 0.08rem;
+  letter-spacing: 0;
+  font-family: 'Roboto Mono', 'Courier New', 'SF Mono', monospace;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Active-tick flash — fires while contract is counting ticks */
@@ -1304,11 +1307,13 @@
     line-height: 26px !important;
   }
 
-  /* Bigger % text — black — on mobile */
+  /* % text on mobile — stay compact */
   .mt-circle__pct-ext {
-    font-size: 1.05rem !important;
-    font-weight: 900 !important;
-    color: #000 !important;
+    font-size: 0.68rem !important;
+    font-weight: 700 !important;
+    color: #374151 !important;
+    font-family: 'Roboto Mono', 'Courier New', monospace !important;
+    font-variant-numeric: tabular-nums !important;
   }
 
   /* Bigger Over/Under buy buttons on mobile */

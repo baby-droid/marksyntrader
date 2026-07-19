@@ -220,39 +220,46 @@ const ProHedge = observer(() => {
 
     setTradeLog(prev => [logEntry, ...prev].slice(0, 100));
 
-    /* ── Apply martingale independently per leg ── */
-    // Leg A
+    /* ── Apply martingale independently per leg ──
+       Each leg's outcome is evaluated on its OWN result only.
+       Winning a leg resets that leg's stake to base; losing multiplies only
+       that leg's stake. The other leg is never affected.
+       For Even/Odd pairs one always wins and one always loses — this logic
+       ensures the correct independent martingale is applied to each. */
+
+    // Leg A — use the reliable .won flag set by buyContract hook
     if (resA != null) {
-      const wonA = (resA.profit ?? resA.payout ?? 0) > 0 || resA.won === true || resA.status === 'won';
+      const wonA = resA.won === true || (resA.profit != null ? resA.profit > 0 : false);
       if (wonA) {
-        // Win: reset A to base stake
+        // Win: reset A to its own base stake — do NOT touch Leg B
         runningStakeARef.current = stakeA;
         setDisplayStakeA(stakeA);
       } else {
-        // Loss: multiply A stake by martingale (if martingale is on)
+        // Loss: multiply only A's stake by A's martingale — Leg B is unaffected
         if (martA > 1) {
           const next = Math.max(0.35, +(curStakeA * martA).toFixed(2));
           runningStakeARef.current = next;
           setDisplayStakeA(next);
         }
-        // if martingale OFF (martA===1) leave stake the same (base)
+        // martA === 1 (no martingale) → keep A at base stake unchanged
       }
     }
 
-    // Leg B
+    // Leg B — evaluated independently of Leg A's result
     if (resB != null) {
-      const wonB = (resB.profit ?? resB.payout ?? 0) > 0 || resB.won === true || resB.status === 'won';
+      const wonB = resB.won === true || (resB.profit != null ? resB.profit > 0 : false);
       if (wonB) {
-        // Win: reset B to base stake
+        // Win: reset B to its own base stake — do NOT touch Leg A
         runningStakeBRef.current = stakeB;
         setDisplayStakeB(stakeB);
       } else {
-        // Loss: multiply B stake by martingale (if martingale is on)
+        // Loss: multiply only B's stake by B's martingale — Leg A is unaffected
         if (martB > 1) {
           const next = Math.max(0.35, +(curStakeB * martB).toFixed(2));
           runningStakeBRef.current = next;
           setDisplayStakeB(next);
         }
+        // martB === 1 (no martingale) → keep B at base stake unchanged
       }
     }
   }, [market, tradeGroup, ticksA, ticksB, stakeA, stakeB, martA, martB, predA, predB, buyContract, currentPrice]);
