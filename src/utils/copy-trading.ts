@@ -31,7 +31,8 @@ const REST_BASE          = 'https://api.derivws.com';
 const APP_ID             = String(process.env.NEXT_PUBLIC_DERIV_APP_ID || '36300');
 const PING_MS            = 28_000;
 const CONNECT_TIMEOUT_MS = 20_000;
-const MAX_RECONNECTS     = 5;
+/** 48 hours 40 minutes — how long the reconnect loop keeps retrying per follower. */
+const RECONNECT_WINDOW_MS = ((48 * 60) + 40) * 60 * 1000;
 
 // ── Types ───────────────────────────────────────────────────────────────────
 export type CopyMode       = 'real_real' | 'demo_real' | 'demo_demo' | 'real_demo';
@@ -62,14 +63,17 @@ export interface Follower {
 }
 
 interface FollowerConn {
-    ws:             WebSocket | null;
-    reqId:          number;
-    pending:        Map<number, (d: any) => void>;
-    pingTimer:      ReturnType<typeof setInterval> | null;
-    reconnectCount: number;
-    dead:           boolean;
-    token:          string;
-    accountId:      string;
+    ws:                   WebSocket | null;
+    reqId:                number;
+    pending:              Map<number, (d: any) => void>;
+    pingTimer:            ReturnType<typeof setInterval> | null;
+    reconnectCount:       number;
+    /** Timestamp when the first reconnect attempt began for this outage — used to
+     *  enforce the RECONNECT_WINDOW_MS cap instead of an attempt-count cap. */
+    reconnectSessionStart: number;
+    dead:                 boolean;
+    token:                string;
+    accountId:            string;
 }
 
 interface CopyEngineOptions {
@@ -298,10 +302,23 @@ class CopyEngine {
             }
             // Auto-start: if the engine was running when the page was last closed,
             // restart it automatically — this runs even when NOT on the copy-trading page.
+            //
+            // addFollower() is async (token validation + OTP WebSocket handshake), so
+            // followers are still 'pending' a few seconds after restoreState returns.
+            // We poll every 1 s for up to 30 s instead of a single fixed 2.5 s delay,
+            // so the engine starts as soon as the first follower becomes 'active'
+            // regardless of network speed.
             if (state.running) {
-                setTimeout(() => {
-                    if (!this.running && this.followers.some(x => x.status === 'active')) this.start();
-                }, 2500);
+                const autoStartAt = Date.now();
+                const tryStart = (): void => {
+                    if (this.running) return; // already started
+                    if (this.followers.some(x => x.status === 'active')) {
+                        this.start();
+                    } else if (Date.now() - autoStartAt < 30_000) {
+                        setTimeout(tryStart, 1_000);
+                    }
+                };
+                setTimeout(tryStart, 1_000);
             }
         } catch { /* corrupted — ignore */ }
         finally { this.restoring = false; }
@@ -389,23 +406,35 @@ class CopyEngine {
     private scheduleReconnect(id: string): void {
         const conn = this.conns.get(id);
         if (!conn || conn.dead) return;
-        if (conn.reconnectCount >= MAX_RECONNECTS) {
+
+        // Record when reconnect attempts first began for this outage
+        if (!conn.reconnectSessionStart) conn.reconnectSessionStart = Date.now();
+
+        // Give up only after the reconnect window has expired (48 hrs 40 mins)
+        const elapsed = Date.now() - conn.reconnectSessionStart;
+        if (elapsed > RECONNECT_WINDOW_MS) {
             this.updateFollower(id, {
                 status: 'error',
-                lastError: `Max reconnect attempts reached. Remove and re-add the token.`,
+                lastError: 'Copy session expired — remove and re-add the token to resume.',
             });
             const loginid = this.followers.find(f => f.id === id)?.loginid ?? id;
-            this.log(`⚠️ ${loginid}: max reconnects reached.`);
+            this.log(`⚠️ ${loginid}: reconnect window expired (${Math.round(elapsed / 3600000)}h).`);
             return;
         }
-        const delay = Math.min(2000 * 2 ** conn.reconnectCount, 30_000);
+
+        // Exponential backoff capped at 30s; after many failures the count is clamped
+        // to avoid arithmetic overflow, but we never stop retrying within the window.
+        const clampedCount = Math.min(conn.reconnectCount, 4); // 2^4 = 16 → 32s → capped 30s
+        const delay = Math.min(2000 * 2 ** clampedCount, 30_000);
         conn.reconnectCount++;
         const loginid = this.followers.find(f => f.id === id)?.loginid ?? id;
-        this.log(`🔄 ${loginid}: reconnecting in ${Math.round(delay / 1000)} s…`);
+        this.log(`🔄 ${loginid}: reconnecting in ${Math.round(delay / 1000)} s… (session age ${Math.round(elapsed / 60000)}m)`);
         setTimeout(async () => {
             if (!conn || conn.dead) return;
             try {
                 await this.connectFollower(id);
+                // Success — reset attempt counters but keep session start so the
+                // window is relative to the FIRST outage in this session, not re-zeroed.
                 conn.reconnectCount = 0;
                 this.updateFollower(id, { status: 'active', lastError: undefined });
                 this.log(`✅ ${loginid}: reconnected.`);
@@ -440,7 +469,7 @@ class CopyEngine {
 
         const conn: FollowerConn = {
             ws: null, reqId: 1, pending: new Map(),
-            pingTimer: null, reconnectCount: 0, dead: false,
+            pingTimer: null, reconnectCount: 0, reconnectSessionStart: 0, dead: false,
             token: trimmed, accountId: '',
         };
         this.conns.set(id, conn);
@@ -733,19 +762,27 @@ class CopyEngine {
             }
         }
 
-        // ── Deduplication layer 2: fingerprint (for early signals without contract_id)
-        // Prevents double-buying when the pre-signal (published in parallel with
-        // master's buy, no contract_id) AND a subsequent signal (with contract_id,
-        // from the transaction backup path or a second publishMasterTrade call)
-        // arrive for the same logical trade within a 5-second window.
-        const fp    = `${sig.symbol}|${sig.contract_type}|${sig.duration}|${sig.barrier ?? ''}`;
-        const fpNow = Date.now();
-        const fpLast = this.recentSignals.get(fp);
-        if (fpLast && fpNow - fpLast < 5000) return;   // same trade within 5 s → skip
-        this.recentSignals.set(fp, fpNow);
-        if (this.recentSignals.size > 100) {
-            const oldestKey = this.recentSignals.keys().next().value as string | undefined;
-            if (oldestKey) this.recentSignals.delete(oldestKey);
+        // ── Deduplication layer 2: fingerprint (ONLY for signals without contract_id)
+        //
+        // This dedup exists solely for the manual-trade path where publishMasterTrade
+        // is fired BEFORE the buy is confirmed (so no contract_id yet), and the
+        // transaction-backup path later fires the same trade WITH a contract_id.
+        // The fingerprint window prevents that second publish from causing a double-buy.
+        //
+        // Bot/scalper signals from copy-trade-bridge.ts ALWAYS carry a contract_id and
+        // are already deduplicated above via mirroredContracts.  Applying the fingerprint
+        // to them would block every second loop trade on the same symbol/type within 5 s,
+        // causing followers to miss alternate trades — that is the bug being fixed here.
+        if (!sig.contract_id) {
+            const fp     = `${sig.symbol}|${sig.contract_type}|${sig.duration}|${sig.barrier ?? ''}`;
+            const fpNow  = Date.now();
+            const fpLast = this.recentSignals.get(fp);
+            if (fpLast && fpNow - fpLast < 5000) return;   // same manual trade within 5 s → skip
+            this.recentSignals.set(fp, fpNow);
+            if (this.recentSignals.size > 100) {
+                const oldestKey = this.recentSignals.keys().next().value as string | undefined;
+                if (oldestKey) this.recentSignals.delete(oldestKey);
+            }
         }
 
         const activeFollowers = this.followers.filter(f => f.status === 'active');
