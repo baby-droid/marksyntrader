@@ -673,7 +673,9 @@ class CopyEngine {
                         const contract_type = poc.contract_type;
                         // buy_price = actual amount debited (the stake)
                         const stake         = Number(poc.buy_price ?? txn.amount ?? 0);
-                        const duration      = Number(poc.duration ?? poc.ticks_count ?? 5);
+                        // Deriv POC uses `tick_count` for tick contracts, `duration` for time-based.
+                        // `ticks_count` does not exist in the Deriv API — was always undefined.
+                        const duration      = Number(poc.tick_count ?? poc.duration ?? 1);
                         const duration_unit = (poc.duration_unit as string | undefined) ?? 't';
                         const barrier       = poc.barrier ?? undefined;
                         if (!symbol || !contract_type || stake <= 0) return;

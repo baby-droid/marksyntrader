@@ -45,8 +45,10 @@ function onBotContract(contract: any): void {
     const contract_type = contract.contract_type;
     // buy_price is the actual stake deducted from the account
     const stake         = Number(contract.buy_price ?? contract.stake ?? 0);
-    // For tick contracts duration_unit === 't' and duration === tick count
-    const duration      = Number(contract.duration ?? contract.ticks_count ?? 5);
+    // For tick contracts the POC field is `tick_count` (Deriv API) — NOT `ticks_count`.
+    // `duration` is only set for time-based contracts (seconds/minutes/hours/days).
+    // Fall back to `duration` for non-tick contracts; default 1 tick if nothing is found.
+    const duration      = Number(contract.tick_count ?? contract.duration ?? 1);
     const duration_unit = (contract.duration_unit as string | undefined) ?? 't';
     // barrier is optional — only present for digit / barrier contract types
     const barrier       = contract.barrier ?? undefined;
