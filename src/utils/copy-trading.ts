@@ -20,10 +20,11 @@
  *  real_demo → listen to 'real' master trades → follower needs DEMO account
  */
 
-import { MasterTradeSignal, subscribeMasterTrades } from './trade-bus';
+import { MasterTradeSignal, subscribeMasterTrades, getMasterSource, publishMasterTrade } from './trade-bus';
 // Auto-initialises the DBot→copy-trade bridge (bot.contract listener).
 // Must be imported here so it activates as soon as copy-trading loads.
 import './copy-trade-bridge';
+import { api_base } from '@/external/bot-skeleton';
 
 // ── Config ──────────────────────────────────────────────────────────────────
 const REST_BASE          = 'https://api.derivws.com';
@@ -224,6 +225,11 @@ class CopyEngine {
     private mode:            CopyMode               = 'real_real';
     private running:         boolean                = false;
     private unsubBus:        (() => void) | null    = null;
+    /** Tracks contract_ids already mirrored — prevents double-mirror when both
+     *  the direct publishMasterTrade path and the transaction-subscription
+     *  fallback fire for the same buy. */
+    private mirroredContracts: Set<number>          = new Set();
+    private txnApiSub:         { unsubscribe: () => void } | null = null;
 
     constructor(private readonly opts: CopyEngineOptions) {}
 
@@ -570,7 +576,11 @@ class CopyEngine {
             return;
         }
         this.running  = true;
+        this.mirroredContracts.clear();
         this.unsubBus = subscribeMasterTrades(sig => this.onMasterTrade(sig));
+        // Fallback: subscribe to master account transactions so trades from ALL
+        // UI paths (bot, manual, scalper, AI assistant) are always captured.
+        this.subscribeMasterTransactions();
         this.log(`▶ ${this.opts.label} started (${this.modeLabel()}).`);
         this.saveState();
         this.emit();
@@ -581,6 +591,9 @@ class CopyEngine {
         this.running = false;
         this.unsubBus?.();
         this.unsubBus = null;
+        try { this.txnApiSub?.unsubscribe?.(); } catch { /* noop */ }
+        this.txnApiSub = null;
+        this.mirroredContracts.clear();
         this.log(`⏸ ${this.opts.label} stopped.`);
         this.saveState();
         this.emit();
@@ -594,11 +607,76 @@ class CopyEngine {
         return labels[this.mode];
     }
 
+    // ── Master account transaction subscription (fallback) ───────────────────
+
+    /** Subscribe to master account's transaction stream so trades placed via
+     *  any UI path (bot, manual, scalper) are always captured, even if the
+     *  direct publishMasterTrade call is missed. Deduplicates via contract_id. */
+    private subscribeMasterTransactions(): void {
+        try {
+            const api = (api_base as any)?.api;
+            if (!api?.onMessage || !api?.send) return;
+
+            // Ask for transaction stream (best-effort; ignore errors)
+            api.send({ transaction: 1, subscribe: 1 }).catch?.(() => {});
+
+            const sub = api.onMessage().subscribe(({ data: d }: { data: any }) => {
+                if (!this.running) return;
+                if (!d?.transaction) return;
+                const txn = d.transaction;
+                if (txn.action_type !== 'buy') return;
+                const contract_id = Number(txn.contract_id);
+                if (!contract_id || this.mirroredContracts.has(contract_id)) return;
+
+                // Mark as seen — onMasterTrade will skip if already seen from direct path
+                this.mirroredContracts.add(contract_id);
+                if (this.mirroredContracts.size > 200) {
+                    const first = this.mirroredContracts.values().next().value as number;
+                    this.mirroredContracts.delete(first);
+                }
+
+                // Fetch full contract details then publish
+                api.send({ proposal_open_contract: 1, contract_id })
+                    .then((res: any) => {
+                        if (!this.running) return;
+                        const poc = res?.proposal_open_contract;
+                        if (!poc) return;
+                        const symbol        = poc.underlying_symbol ?? poc.symbol;
+                        const contract_type = poc.contract_type;
+                        const stake         = Number(poc.buy_price ?? 0);
+                        const duration      = Number(poc.duration ?? poc.ticks_count ?? 5);
+                        const duration_unit = (poc.duration_unit as string | undefined) ?? 't';
+                        const barrier       = poc.barrier ?? undefined;
+                        if (!symbol || !contract_type || stake <= 0) return;
+                        publishMasterTrade({
+                            symbol, contract_type, stake, duration, duration_unit, barrier,
+                            source: getMasterSource(),
+                            time:   Date.now(),
+                            contract_id,
+                        });
+                    })
+                    .catch(() => {});
+            });
+
+            this.txnApiSub = sub;
+        } catch { /* api not ready yet — skip, direct path still works */ }
+    }
+
     // ── Trade replication ────────────────────────────────────────────────────
 
     private onMasterTrade(sig: MasterTradeSignal): void {
         if (!this.running) return;
         if (sig.source !== masterSourceFor(this.mode)) return;
+
+        // Deduplication — skip if already mirrored via transaction subscription fallback
+        if (sig.contract_id) {
+            if (this.mirroredContracts.has(sig.contract_id)) return;
+            this.mirroredContracts.add(sig.contract_id);
+            if (this.mirroredContracts.size > 200) {
+                const first = this.mirroredContracts.values().next().value as number;
+                this.mirroredContracts.delete(first);
+            }
+        }
 
         const activeFollowers = this.followers.filter(f => f.status === 'active');
         if (!activeFollowers.length) return;

@@ -2,7 +2,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { api_base } from '@/external/bot-skeleton';
 import { applyCommission } from '@/utils/commission';
-import { publishMasterTrade } from '@/utils/trade-bus';
+import { publishMasterTrade, getMasterSource } from '@/utils/trade-bus';
 
 export interface TradeResult {
   id: string;
@@ -127,8 +127,9 @@ export function useDerivTrading(): UseDerivTradingReturn {
         duration,
         duration_unit,
         barrier,
-        source: api_base?.account_info?.is_virtual ? 'demo' : 'real',
-        time: Date.now(),
+        source:      getMasterSource(),
+        time:        Date.now(),
+        contract_id: buyRes?.buy?.contract_id ? Number(buyRes.buy.contract_id) : undefined,
       });
 
       if (!buyRes?.buy?.contract_id) {

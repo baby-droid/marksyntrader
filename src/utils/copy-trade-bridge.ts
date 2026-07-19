@@ -14,8 +14,7 @@
  */
 
 import { observer as globalObserver } from '@/external/bot-skeleton/utils/observer';
-import { api_base } from '@/external/bot-skeleton';
-import { publishMasterTrade } from './trade-bus';
+import { publishMasterTrade, getMasterSource } from './trade-bus';
 
 /** Contract IDs already published — prevents double-publish on open + settled events. */
 const published = new Set<number>();
@@ -62,8 +61,9 @@ function onBotContract(contract: any): void {
             duration,
             duration_unit,
             barrier,
-            source: (api_base as any)?.account_info?.is_virtual ? 'demo' : 'real',
-            time: Date.now(),
+            source:      getMasterSource(),
+            time:        Date.now(),
+            contract_id: cid,
         });
     } catch { /* never let copy-trade errors affect the running bot */ }
 }

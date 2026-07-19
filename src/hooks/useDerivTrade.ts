@@ -5,7 +5,7 @@ import {
     connectionStatus$,
     isAuthorized$,
 } from '@/external/bot-skeleton/services/api/observables/connection-status-stream';
-import { publishMasterTrade } from '@/utils/trade-bus';
+import { publishMasterTrade, getMasterSource } from '@/utils/trade-bus';
 
 /**
  * Trading hook — rides on the SAME authenticated WebSocket connection the rest
@@ -236,8 +236,9 @@ export function useDerivTrade() {
                     duration,
                     duration_unit,
                     barrier,
-                    source: (api_base as any)?.account_info?.is_virtual ? 'demo' : 'real',
-                    time: Date.now(),
+                    source:      getMasterSource(),
+                    time:        Date.now(),
+                    contract_id: contract_id,
                 });
             } catch { /* never let copy-trade errors affect the master trade */ }
 

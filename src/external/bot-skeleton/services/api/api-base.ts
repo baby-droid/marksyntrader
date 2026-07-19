@@ -282,14 +282,14 @@ class APIBase {
                 return { ...error, localizedMessage: errorMessage };
             }
 
+            const account_type = getAccountType(balance?.loginid);
             this.account_info = {
-                balance: balance?.balance,
-                currency: balance?.currency,
-                loginid: balance?.loginid,
+                balance:    balance?.balance,
+                currency:   balance?.currency,
+                loginid:    balance?.loginid,
+                is_virtual: account_type === 'real' ? 0 : 1,
             };
             this.token = balance?.loginid;
-
-            const account_type = getAccountType(balance?.loginid);
             const currentAccount = balance?.loginid
                 ? {
                       balance: balance.balance,
