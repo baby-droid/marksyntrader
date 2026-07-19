@@ -304,20 +304,38 @@ class CopyEngine {
 
     // ── WS send (req_id matching) ────────────────────────────────────────────
 
-    private wsSend(conn: FollowerConn, msg: object): Promise<any> {
+    private wsSend(conn: FollowerConn, msg: object, timeoutMs = 15_000): Promise<any> {
         return new Promise((resolve, reject) => {
             const id = conn.reqId++;
+            const timer = setTimeout(() => {
+                if (conn.pending.has(id)) {
+                    conn.pending.delete(id);
+                    reject(new Error('Request timed out'));
+                }
+            }, timeoutMs);
+
             conn.pending.set(id, d => {
+                clearTimeout(timer);
                 if (d.error) reject(d.error);
                 else resolve(d);
             });
+
             if (conn.ws?.readyState === WebSocket.OPEN) {
                 conn.ws.send(JSON.stringify({ ...msg, req_id: id }));
             } else {
+                clearTimeout(timer);
                 conn.pending.delete(id);
                 reject(new Error('WebSocket not open'));
             }
         });
+    }
+
+    /** Reject all pending wsSend promises — called on WS close so they don't hang. */
+    private drainPending(conn: FollowerConn): void {
+        for (const cb of conn.pending.values()) {
+            try { cb({ error: { message: 'Connection closed' } }); } catch { /* noop */ }
+        }
+        conn.pending.clear();
     }
 
     // ── Connect / reconnect a follower ───────────────────────────────────────
@@ -341,6 +359,7 @@ class CopyEngine {
         };
         const onClose = (): void => {
             if (conn.dead) return;
+            this.drainPending(conn);   // reject any in-flight wsSend promises immediately
             this.updateFollower(id, { status: 'error', lastError: 'Connection lost — reconnecting…' });
             this.scheduleReconnect(id);
         };
@@ -714,42 +733,60 @@ class CopyEngine {
         }
 
         // ── Individual WS sends (per-follower ratio + commission) ─────────
-        // Use buy:"1" + parameters inline — single round-trip, no proposal step.
-        // This is critical for short tick-contracts that expire before a
-        // proposal→buy two-step completes.
+        // MUST use proposal→buy two-step:  buy:"1" with inline parameters
+        // causes "Input validation failed: parameters" from Deriv for digit
+        // contract types (DIGITMATCH, DIGITOVER, DIGITUNDER, DIGITDIFF, etc.).
+        // The proposal→buy path works for ALL contract types.
         for (const { f, conn } of individualGroup) {
             const stake         = Math.max(0.35, +(sig.stake * f.ratio).toFixed(2));
             const commissionAmt = +(stake * (f.commission ?? 0) / 100).toFixed(2);
             const currency      = f.currency === '---' ? 'USD' : f.currency;
 
-            // build parameters sub-object
-            const parameters: Record<string, any> = {
+            // Step 1 — proposal: exact same params as master
+            const proposalReq: Record<string, any> = {
+                proposal:          1,
                 amount:            stake,
                 basis:             'stake',
-                contract_type:     sig.contract_type,
+                contract_type:     sig.contract_type,   // e.g. DIGITMATCH, CALL, PUT …
                 currency,
-                duration:          sig.duration,
-                duration_unit:     sig.duration_unit,
-                underlying_symbol: sig.symbol,
+                duration:          sig.duration,        // e.g. 1 (one tick)
+                duration_unit:     sig.duration_unit,   // e.g. 't'
+                underlying_symbol: sig.symbol,          // e.g. R_100
             };
-            if (sig.barrier != null) parameters.barrier = String(sig.barrier);
+            // barrier carries the digit prediction (e.g. "8" for DIGITMATCH digit=8)
+            // and the barrier level for HIGHER/LOWER contracts — must be string
+            if (sig.barrier != null && sig.barrier !== '') {
+                proposalReq.barrier = String(sig.barrier);
+            }
 
-            this.wsSend(conn, {
-                buy:        '1',      // '1' = buy using inline parameters (Deriv docs)
-                price:      stake,    // max price — equals stake for stake-basis contracts
-                parameters,
-            })
+            this.wsSend(conn, proposalReq)
+                .then((propRes: any) => {
+                    if (propRes?.error) {
+                        const msg = propRes.error.message ?? propRes.error.code ?? 'proposal error';
+                        throw new Error(msg);
+                    }
+                    const pid      = propRes?.proposal?.id as string | undefined;
+                    const askPrice = Number(propRes?.proposal?.ask_price ?? stake);
+                    if (!pid) throw new Error('Proposal returned no ID');
+
+                    // Step 2 — buy using the proposal ID
+                    return this.wsSend(conn, { buy: pid, price: askPrice });
+                })
                 .then((buyRes: any) => {
-                    if (buyRes?.error) throw new Error(buyRes.error.message ?? buyRes.error.code ?? 'buy error');
+                    if (buyRes?.error) {
+                        const msg = buyRes.error.message ?? buyRes.error.code ?? 'buy error';
+                        throw new Error(msg);
+                    }
                     const cur = this.followers.find(x => x.id === f.id);
                     if (cur) this.updateFollower(f.id, {
                         replicated:       cur.replicated + 1,
                         commissionEarned: +(cur.commissionEarned + commissionAmt).toFixed(2),
                     });
-                    const commLog = commissionAmt > 0 ? ` | 💰 +${commissionAmt}` : '';
-                    this.log(`🔁 ${f.loginid}: ${sig.contract_type} ×${stake} ${currency}${commLog}`);
+                    const barrierStr = sig.barrier != null ? ` [barrier:${sig.barrier}]` : '';
+                    const commLog    = commissionAmt > 0 ? ` | 💰 +${commissionAmt}` : '';
+                    this.log(`🔁 ${f.loginid}: ${sig.contract_type}${barrierStr} ×${stake} ${currency} ${sig.duration}${sig.duration_unit}${commLog}`);
                 })
-                .catch(err => this.log(`❌ ${f.loginid}: ${err?.message ?? 'buy failed'}`));
+                .catch(err => this.log(`❌ ${f.loginid}: ${err?.message ?? 'trade failed'}`));
         }
 
         // ── Bulk-purchase (WS not open — fallback path) ───────────────────
