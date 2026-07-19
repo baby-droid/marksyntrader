@@ -69,23 +69,23 @@
     &__triangle {
         width: 0;
         height: 0;
-        border-left: 8px solid transparent;
-        border-right: 8px solid transparent;
-        border-top: 12px solid #f14343;
+        border-left: 12px solid transparent;
+        border-right: 12px solid transparent;
+        border-top: 18px solid #f14343;
         // Positioned above the circle
     }
 
     // ── Digit circle ─────────────────────────────────────────────────────
     &__circle {
-        width: 40px;
-        height: 40px;
+        width: 80px;
+        height: 80px;
         border-radius: 50%;
         border: 2px solid #d0d5dd;
         background: #fff;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 13px;
+        font-size: 26px;
         font-weight: 700;
         color: #555;
         transition: all 0.2s;
@@ -226,7 +226,7 @@
         padding: 4px 6px 6px;
         gap: 3px;
 
-        &__circle { width: 32px; height: 32px; font-size: 11px; }
+        &__circle { width: 56px; height: 56px; font-size: 18px; }
         &__pct { font-size: 7px; }
         &__price-val { font-size: 11px; }
     }
