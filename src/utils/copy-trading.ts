@@ -215,7 +215,7 @@ async function openOtpWebSocket(
 
 // ── CopyEngine ───────────────────────────────────────────────────────────────
 
-const EXPIRE_MS = 48 * 60 * 60 * 1000; // 48 hours
+const EXPIRE_MS = 72 * 60 * 60 * 1000; // 72 hours
 
 class CopyEngine {
     private followers:       Follower[]             = [];
@@ -224,11 +224,14 @@ class CopyEngine {
     private logListeners:    Set<LogListener>       = new Set();
     private mode:            CopyMode               = 'real_real';
     private running:         boolean                = false;
+    private restoring:       boolean                = false;
     private unsubBus:        (() => void) | null    = null;
-    /** Tracks contract_ids already mirrored — prevents double-mirror when both
-     *  the direct publishMasterTrade path and the transaction-subscription
-     *  fallback fire for the same buy. */
+    /** contract_ids already mirrored — prevents double-mirror between direct
+     *  publish path (which has contract_id) and the transaction backup path. */
     private mirroredContracts: Set<number>          = new Set();
+    /** Fingerprint → timestamp dedup for early/pre-signals (no contract_id yet).
+     *  Fingerprint: "symbol|contract_type|duration|barrier".  TTL = 5 s. */
+    private recentSignals:     Map<string, number>  = new Map();
     private txnApiSub:         { unsubscribe: () => void } | null = null;
 
     constructor(private readonly opts: CopyEngineOptions) {}
@@ -270,6 +273,9 @@ class CopyEngine {
     }
 
     async restoreState(): Promise<void> {
+        // Guard: skip if already restoring or already has followers from a previous restore
+        if (this.restoring || this.followers.length > 0) return;
+        this.restoring = true;
         try {
             const raw = localStorage.getItem(this.opts.storageKey);
             if (!raw) return;
@@ -290,12 +296,15 @@ class CopyEngine {
                     }
                 }
             }
+            // Auto-start: if the engine was running when the page was last closed,
+            // restart it automatically — this runs even when NOT on the copy-trading page.
             if (state.running) {
                 setTimeout(() => {
                     if (!this.running && this.followers.some(x => x.status === 'active')) this.start();
                 }, 2500);
             }
         } catch { /* corrupted — ignore */ }
+        finally { this.restoring = false; }
     }
 
     clearState(): void {
@@ -635,6 +644,11 @@ class CopyEngine {
      *  IMPORTANT: api.onMessage().subscribe(callback) passes the raw parsed WS
      *  message directly as the argument — NOT wrapped in { data }.
      *  The transaction field name is `action` (not `action_type`) per Deriv docs.
+     *
+     *  BUG FIX: do NOT add contract_id to mirroredContracts here before calling
+     *  publishMasterTrade — that caused onMasterTrade to immediately see it as
+     *  "already mirrored" and skip it, making the backup path self-defeating.
+     *  Let onMasterTrade own all deduplication logic.
      */
     private subscribeMasterTransactions(): void {
         try {
@@ -645,6 +659,11 @@ class CopyEngine {
             // Do NOT send another subscribe request — Deriv returns AlreadySubscribed.
             // The events are already flowing; just attach an onMessage listener below.
 
+            // Local set prevents re-processing the SAME transaction event twice
+            // (the stream can occasionally re-emit).  Dedup against already-mirrored
+            // contracts is handled inside onMasterTrade, not here.
+            const txnSeen = new Set<number>();
+
             const sub = api.onMessage().subscribe((msg: any) => {
                 if (!this.running) return;
                 // msg IS the raw WS data object (not wrapped in {data})
@@ -653,28 +672,29 @@ class CopyEngine {
                 // Deriv docs: field is "action", values: "buy"|"sell"|"deposit"|"withdrawal"
                 if (txn.action !== 'buy') return;
                 const contract_id = Number(txn.contract_id);
-                if (!contract_id || this.mirroredContracts.has(contract_id)) return;
+                if (!contract_id) return;
 
-                // Mark as seen — onMasterTrade will skip if already seen from direct publish path
-                this.mirroredContracts.add(contract_id);
-                if (this.mirroredContracts.size > 200) {
-                    const first = this.mirroredContracts.values().next().value as number;
-                    this.mirroredContracts.delete(first);
+                // Skip if this transaction event has already been processed locally
+                if (txnSeen.has(contract_id)) return;
+                txnSeen.add(contract_id);
+                if (txnSeen.size > 200) {
+                    const first = txnSeen.values().next().value as number;
+                    txnSeen.delete(first);
                 }
 
-                // Fetch full contract details (transaction only has symbol + amount)
+                // Fetch full contract details (transaction only has symbol + amount).
+                // NOTE: do NOT add to mirroredContracts here — let onMasterTrade
+                // decide whether to skip (it checks mirroredContracts + fingerprints).
                 api.send({ proposal_open_contract: 1, contract_id })
                     .then((res: any) => {
                         if (!this.running) return;
                         const poc = res?.proposal_open_contract;
                         if (!poc) return;
-                        // underlying_symbol from POC; fallback to transaction field
                         const symbol        = poc.underlying_symbol ?? poc.symbol ?? txn.underlying_symbol;
                         const contract_type = poc.contract_type;
-                        // buy_price = actual amount debited (the stake)
+                        // buy_price = actual stake debited
                         const stake         = Number(poc.buy_price ?? txn.amount ?? 0);
-                        // Deriv POC uses `tick_count` for tick contracts, `duration` for time-based.
-                        // `ticks_count` does not exist in the Deriv API — was always undefined.
+                        // Deriv POC: tick_count for tick contracts, duration for time-based
                         const duration      = Number(poc.tick_count ?? poc.duration ?? 1);
                         const duration_unit = (poc.duration_unit as string | undefined) ?? 't';
                         const barrier       = poc.barrier ?? undefined;
@@ -683,7 +703,7 @@ class CopyEngine {
                             symbol, contract_type, stake, duration, duration_unit, barrier,
                             source: getMasterSource(),
                             time:   Date.now(),
-                            contract_id,
+                            contract_id,   // onMasterTrade will deduplicate via mirroredContracts
                         });
                     })
                     .catch(() => {});
@@ -700,7 +720,10 @@ class CopyEngine {
         if (!this.running) return;
         if (sig.source !== masterSourceFor(this.mode)) return;
 
-        // Deduplication — skip if already mirrored via transaction subscription fallback
+        // ── Deduplication layer 1: contract_id ────────────────────────────
+        // Prevents double-mirror when both the early/parallel publish path
+        // (no contract_id) AND the transaction-backup path (has contract_id)
+        // fire for the same trade.
         if (sig.contract_id) {
             if (this.mirroredContracts.has(sig.contract_id)) return;
             this.mirroredContracts.add(sig.contract_id);
@@ -708,6 +731,21 @@ class CopyEngine {
                 const first = this.mirroredContracts.values().next().value as number;
                 this.mirroredContracts.delete(first);
             }
+        }
+
+        // ── Deduplication layer 2: fingerprint (for early signals without contract_id)
+        // Prevents double-buying when the pre-signal (published in parallel with
+        // master's buy, no contract_id) AND a subsequent signal (with contract_id,
+        // from the transaction backup path or a second publishMasterTrade call)
+        // arrive for the same logical trade within a 5-second window.
+        const fp    = `${sig.symbol}|${sig.contract_type}|${sig.duration}|${sig.barrier ?? ''}`;
+        const fpNow = Date.now();
+        const fpLast = this.recentSignals.get(fp);
+        if (fpLast && fpNow - fpLast < 5000) return;   // same trade within 5 s → skip
+        this.recentSignals.set(fp, fpNow);
+        if (this.recentSignals.size > 100) {
+            const oldestKey = this.recentSignals.keys().next().value as string | undefined;
+            if (oldestKey) this.recentSignals.delete(oldestKey);
         }
 
         const activeFollowers = this.followers.filter(f => f.status === 'active');

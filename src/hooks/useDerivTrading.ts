@@ -110,27 +110,25 @@ export function useDerivTrading(): UseDerivTradingReturn {
       const askPrice = Number(proposalRes?.proposal?.ask_price ?? stake);
       if (!proposalId) throw new Error('Proposal failed — no ID returned');
 
+      // ── Publish copy-trade signal IN PARALLEL with master's buy ──────
+      // Signal fires here (after proposal accepted, before buy confirmed) so
+      // follower buys are in-flight simultaneously with the master's buy.
+      // Engine deduplicates via 5-second fingerprint window.
+      try {
+        publishMasterTrade({
+          symbol,
+          contract_type,
+          stake,
+          duration,
+          duration_unit,
+          barrier,
+          source: getMasterSource(),
+          time:   Date.now(),
+        });
+      } catch { /* never let copy-trade errors affect the master trade */ }
+
       // Step 2: buy using proposal ID
-      const buyParams: any = {
-        buy: proposalId,
-        price: askPrice,
-      };
-      // (no inline parameters block — use the proposal ID path only)
-
-      const buyRes = await api_base.api.send(buyParams);
-
-      // Broadcast to the copy-trading engine (mirror to follower accounts).
-      publishMasterTrade({
-        symbol,
-        contract_type,
-        stake,
-        duration,
-        duration_unit,
-        barrier,
-        source:      getMasterSource(),
-        time:        Date.now(),
-        contract_id: buyRes?.buy?.contract_id ? Number(buyRes.buy.contract_id) : undefined,
-      });
+      const buyRes = await api_base.api.send({ buy: proposalId, price: askPrice });
 
       if (!buyRes?.buy?.contract_id) {
         throw new Error('Buy failed — no contract ID returned');

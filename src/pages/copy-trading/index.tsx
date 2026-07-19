@@ -16,7 +16,7 @@ const MODES: { id: CopyMode; title: string; desc: string; icon: string }[] = [
 
 // ── Mirror state persistence (separate from mirror engine storage) ────────────
 const MIRROR_LS_KEY = 'ct_master_mirror_v1';
-const EXPIRE_MS     = 48 * 60 * 60 * 1000;
+const EXPIRE_MS     = 72 * 60 * 60 * 1000;
 
 function saveMirrorUi(active: boolean, running: boolean) {
   try { localStorage.setItem(MIRROR_LS_KEY, JSON.stringify({ active, running, expires: Date.now() + EXPIRE_MS })); } catch {}

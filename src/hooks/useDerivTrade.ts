@@ -209,6 +209,26 @@ export function useDerivTrade() {
                 throw new Error('Proposal failed — no proposal ID returned');
             }
 
+            // ── Publish copy-trade signal IN PARALLEL with master's buy ────
+            // Firing the signal here (after proposal accepted, before buy confirmed)
+            // means follower accounts start their own buy at the SAME TIME as the
+            // master's buy request is in-flight — both enter on the same market tick.
+            // The copy engine deduplicates using a 5-second fingerprint window so
+            // a later publish (with contract_id) won't cause a second mirror.
+            try {
+                publishMasterTrade({
+                    symbol,
+                    contract_type,
+                    stake,
+                    duration,
+                    duration_unit,
+                    barrier,
+                    source: getMasterSource(),
+                    time:   Date.now(),
+                    // no contract_id yet — engine deduplicates by fingerprint
+                });
+            } catch { /* never let copy-trade errors affect the master trade */ }
+
             // Step 2 — buy using the proposal ID
             let buyRes: any;
             try {
@@ -224,23 +244,6 @@ export function useDerivTrade() {
             if (!contract_id) {
                 throw new Error('Buy failed — no contract ID returned');
             }
-
-            // Notify copy-trading engine so follower accounts mirror this trade.
-            // Publish immediately after a confirmed buy so followers get the signal
-            // before the market moves.
-            try {
-                publishMasterTrade({
-                    symbol,
-                    contract_type,
-                    stake,
-                    duration,
-                    duration_unit,
-                    barrier,
-                    source:      getMasterSource(),
-                    time:        Date.now(),
-                    contract_id: contract_id,
-                });
-            } catch { /* never let copy-trade errors affect the master trade */ }
 
             // Step 3 — subscribe to settlement notifications
             if (onSettled) {

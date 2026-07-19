@@ -44,6 +44,7 @@ import RunStrategy from '../dashboard/run-strategy';
 import SettingsPanel from '@/components/settings-panel';
 import FloatingRunButton from '@/components/floating/FloatingRunButton';
 import WhatsAppFloat from '@/components/floating/WhatsAppFloat';
+import { copyEngine, mirrorEngine } from '@/utils/copy-trading';
 import './main.scss';
 
 const ChartWrapper   = lazy(() => import('../chart/chart-wrapper'));
@@ -144,6 +145,16 @@ const AppWrapper = observer(() => {
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('/sw.js').catch(() => {});
         }
+    }, []);
+
+    // ── Copy-trading: global restore on every page load ────────────────────
+    // restoreState() reads localStorage, reconnects follower WebSockets, and
+    // auto-restarts the engine if it was running when the page was last closed.
+    // This runs regardless of which tab the user lands on, so the engine stays
+    // active across page refreshes and tab switches for the full 72-hour session.
+    useEffect(() => {
+        copyEngine.restoreState().catch(() => {});
+        mirrorEngine.restoreState().catch(() => {});
     }, []);
 
     React.useEffect(() => {
