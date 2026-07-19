@@ -354,26 +354,32 @@ const CopyTrading = observer(() => {
                       {acc.currency !== '---' ? `${acc.currency} ${acc.balance.toFixed(2)}` : '---'}
                     </span>
 
-                    {/* Account type switcher — click to switch demo ↔ real */}
-                    {acc.account_list && acc.account_list.length > 1 && (
-                      <div className='copy-trading__acct-switcher'>
-                        {acc.account_list.map((a: FollowerAccount) => {
-                          const isCurrent = a.account_id === acc.loginid;
-                          return (
-                            <button
-                              key={a.account_id}
-                              title={isCurrent ? 'Currently active' : `Switch to ${a.account_type}`}
-                              className={`copy-trading__acct-badge copy-trading__acct-badge--${a.account_type}${isCurrent ? ' active' : ''}`}
-                              onClick={() => !isCurrent && copyEngine.switchAccount(acc.id, a.account_type)}
-                              disabled={isCurrent || acc.status === 'pending'}
-                            >
-                              {a.account_type === 'demo' ? '🔵' : '🟢'} {a.account_type}
-                              {isCurrent && <span className='copy-trading__acct-check'> ✓</span>}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
+                    {/* Account type switcher — TRADE ON: real ✓ / demo */}
+                    <div className='copy-trading__acct-switcher'>
+                      <span className='copy-trading__acct-switcher-label'>Trade on:</span>
+                      {acc.account_list && acc.account_list.length > 1
+                        ? acc.account_list.map((a: FollowerAccount) => {
+                            const isCurrent = a.account_id === acc.loginid;
+                            return (
+                              <button
+                                key={a.account_id}
+                                title={isCurrent ? 'Currently active' : `Switch to ${a.account_type}`}
+                                className={`copy-trading__acct-badge copy-trading__acct-badge--${a.account_type}${isCurrent ? ' active' : ''}`}
+                                onClick={() => !isCurrent && copyEngine.switchAccount(acc.id, a.account_type)}
+                                disabled={isCurrent || acc.status === 'pending'}
+                              >
+                                {a.account_type}
+                                {isCurrent && <span className='copy-trading__acct-check'> ✓</span>}
+                              </button>
+                            );
+                          })
+                        : (
+                          <span className={`copy-trading__acct-badge copy-trading__acct-badge--${acc.is_virtual ? 'demo' : 'real'} active`}>
+                            {acc.is_virtual ? 'demo' : 'real'} <span className='copy-trading__acct-check'>✓</span>
+                          </span>
+                        )
+                      }
+                    </div>
 
                     {/* Controls: ratio + commission */}
                     <label className='copy-trading__follower-ctrl' title={ratioLabel}>
