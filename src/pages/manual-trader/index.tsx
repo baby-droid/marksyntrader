@@ -703,10 +703,9 @@ const ManualTrader: React.FC = () => {
             /* Track ticks visually using the first contract */
             tradeTicksRef.current = [];
             tradeActiveRef.current = true;
-            // Only skip the entry-echo tick on 1-second markets (1HZ*).
-            // On plain index (R_*), Bear/Bull (RDBEAR/RDBULL), Jump (JD*), Boom, Crash, etc.
-            // the first WebSocket tick after the buy IS T1 — no skip.
-            skipNextTickRef.current = _symbolValue.startsWith('1HZ');
+            // Always skip the first tick after entry — Deriv sends the entry price
+            // as the very next tick on ALL markets before contract counting begins.
+            skipNextTickRef.current = true;
             tradeDurRef.current = isSecBased ? 0 : dur;
             setTradeState({ ticks: [], duration: dur, settled: false, result: null, profit: 0, exitDigit: null });
 
@@ -807,10 +806,9 @@ const ManualTrader: React.FC = () => {
         const tradeId = idRef.current++;
         tradeTicksRef.current = [];
         tradeActiveRef.current = true;
-        // Only skip on 1-second markets (1HZ*) where the entry price echoes as tick #0.
-        // On all other markets (Vol 10/25/75/100, Bear, Bull, Jump, Boom, Crash, Step…)
-        // the first WebSocket tick after the buy IS T1 — counting starts immediately.
-        skipNextTickRef.current = _symbolValue.startsWith('1HZ');
+        // Always skip the first tick after entry — Deriv sends the entry price
+        // as the very next tick on ALL markets before contract counting begins.
+        skipNextTickRef.current = true;
         tradeDurRef.current = isSecBased ? 0 : dur; // only track digit ticks for tick-based contracts
         setTradeState({ ticks: [], duration: dur, settled: false, result: null, profit: 0, exitDigit: null });
 
@@ -1306,24 +1304,37 @@ const ManualTrader: React.FC = () => {
                         <div className='mtp-auth-warn'>⚠ Connecting to account…</div>
                     )}
 
-                    {/* Buy buttons — one block per type */}
+                    {/* Buy buttons — one block per type, payout shown above */}
                     {ctDef.types.map((def, i) => {
                         const po  = payouts[def.type];
+                        const payoutAmt = po != null ? fromUsd(po).toFixed(2) : null;
                         const pct = po != null && stakeNum > 0
-                            ? ((po / stakeNum) * 100).toFixed(1)
+                            ? ((po / stakeNum) * 100).toFixed(2)
                             : null;
                         return (
                             <div key={def.type} className='mtp-buy-block'>
+                                {/* Payout info row above the button */}
+                                <div className='mtp-buy-payout-row'>
+                                    <span className='mtp-buy-payout-label'>Payout</span>
+                                    <span className='mtp-buy-payout-amt'>
+                                        {payoutLoading ? '…' : payoutAmt != null
+                                            ? `${payoutAmt} ${displayCur}`
+                                            : '—'}
+                                    </span>
+                                    <span className='mtp-buy-payout-info' title='Potential payout if you win'>ⓘ</span>
+                                </div>
                                 <button
                                     className={`mtp-buy-btn ${i === 0 ? 'mtp-buy-btn--a' : 'mtp-buy-btn--b'}`}
                                     style={{ '--bc': def.color } as React.CSSProperties}
                                     onClick={() => buy(def, ctDef, duration, secDuration, barrier, priceBarrier, stake, bulkMode, bulkCount, symbolValue, symbol)}
                                     disabled={!authorized}>
-                                    <span className='mtp-buy-btn__top'>
+                                    {/* Left: icon + label */}
+                                    <span className='mtp-buy-btn__left'>
                                         <span className='mtp-buy-btn__icon'>{def.icon}</span>
                                         <span className='mtp-buy-btn__label'>{def.label}</span>
                                     </span>
-                                    <span className='mtp-buy-btn__payout'>
+                                    {/* Right: payout % */}
+                                    <span className='mtp-buy-btn__right'>
                                         {payoutLoading
                                             ? <span className='mtp-buy-btn__pct'>…</span>
                                             : pct != null

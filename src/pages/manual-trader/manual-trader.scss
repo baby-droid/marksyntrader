@@ -684,21 +684,28 @@
 .mtp-digit-grid {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  gap: 0.3rem;
-  margin-bottom: 0.3rem;
+  gap: 0.22rem;
+  margin-bottom: 0.22rem;
 }
 .mtp-dg-btn {
-  height: 34px;
-  border-radius: 0.4rem;
-  background: #fff;
-  border: 1.5px solid #cbd5e1;
-  color: #1e293b;
-  font-size: 0.92rem;
-  font-weight: 800;
+  height: 26px;
+  border-radius: 0.35rem;
+  background: rgba(255,255,255,0.07);
+  border: 1.5px solid rgba(203,213,225,0.25);
+  color: #94a3b8;
+  font-size: 0.8rem;
+  font-weight: 700;
   cursor: pointer;
-  transition: all 0.14s;
-  &:hover { border-color: #3b82f6; color: #1d4ed8; background: #eff6ff; }
-  &.active { background: #1e40af; border-color: #1e40af; color: #fff; }
+  transition: all 0.12s;
+  font-family: 'Roboto Mono', 'Courier New', monospace;
+  font-variant-numeric: tabular-nums;
+  &:hover { border-color: rgba(59,130,246,0.5); color: #60a5fa; background: rgba(59,130,246,0.1); }
+  &.active {
+    background: #1e40af;
+    border-color: #3b82f6;
+    color: #fff;
+    box-shadow: 0 0 6px rgba(59,130,246,0.4);
+  }
 }
 
 /* Price barrier row */
@@ -840,69 +847,109 @@
 
 /* Buy block */
 .mtp-buy-block {
-  padding: 0.35rem 0.8rem 0;
+  padding: 0.3rem 0.8rem 0;
 }
 
-/* Buy buttons — column layout so payout sits centered inside */
-.mtp-buy-btn {
-  width: 75%;
-  align-self: center;
+/* Payout info row — sits above each buy button */
+.mtp-buy-payout-row {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
   gap: 0.3rem;
-  padding: 0.9rem 1rem;
-  border-radius: 0.7rem;
+  padding: 0 0.1rem 0.22rem;
+}
+.mtp-buy-payout-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.mtp-buy-payout-amt {
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: #e2e8f0;
+  font-variant-numeric: tabular-nums;
+  margin-right: auto;
+}
+.mtp-buy-payout-info {
+  font-size: 0.75rem;
+  color: #475569;
+  cursor: help;
+  line-height: 1;
+}
+
+/* Buy buttons — full-width row with label left, pct right (like reference image) */
+.mtp-buy-btn {
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.78rem 1.1rem 0.78rem 0.9rem;
+  border-radius: 0.6rem;
   border: none;
   cursor: pointer;
   font-family: inherit;
-  letter-spacing: 0.02em;
-  transition: all 0.15s;
+  letter-spacing: 0.01em;
+  transition: all 0.14s;
+  position: relative;
+  overflow: hidden;
+
+  /* Subtle right-chevron shape via clip-path pseudo */
+  &::after {
+    content: '';
+    position: absolute;
+    right: -1px;
+    top: 0;
+    bottom: 0;
+    width: 14px;
+    background: rgba(255,255,255,0.12);
+    clip-path: polygon(0 0, 100% 50%, 0 100%);
+  }
 
   &--a {
     background: var(--bc, #22c55e);
     color: #fff;
-    box-shadow: 0 4px 14px color-mix(in srgb, var(--bc, #22c55e) 40%, transparent);
-    &:hover:not(:disabled) {
-      filter: brightness(1.1);
-      transform: translateY(-1px);
-    }
+    box-shadow: 0 3px 12px color-mix(in srgb, var(--bc, #22c55e) 35%, transparent);
+    &:hover:not(:disabled) { filter: brightness(1.09); transform: translateY(-1px); }
   }
   &--b {
     background: var(--bc, #ef4444);
     color: #fff;
-    box-shadow: 0 4px 14px color-mix(in srgb, var(--bc, #ef4444) 40%, transparent);
-    &:hover:not(:disabled) {
-      filter: brightness(1.1);
-      transform: translateY(-1px);
-    }
+    box-shadow: 0 3px 12px color-mix(in srgb, var(--bc, #ef4444) 35%, transparent);
+    &:hover:not(:disabled) { filter: brightness(1.09); transform: translateY(-1px); }
   }
   &:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; }
 
-  /* Top row: icon + label */
-  &__top {
+  /* Left section: icon + label */
+  &__left {
     display: flex;
     align-items: center;
-    justify-content: center;
     gap: 0.5rem;
+    flex: 1;
   }
-  &__icon  { font-size: 1.1rem; }
-  &__label { font-size: 1.05rem; font-weight: 800; }
+  &__icon  { font-size: 1.05rem; line-height: 1; opacity: 0.92; }
+  &__label { font-size: 1.0rem; font-weight: 800; letter-spacing: 0.02em; }
 
-  /* Payout row — centered below label, always occupies space */
-  &__payout {
+  /* Right section: percentage */
+  &__right {
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-end;
+    flex-shrink: 0;
   }
   &__pct {
-    font-size: 0.95rem;
-    font-weight: 700;
-    opacity: 0.92;
+    font-size: 1.05rem;
+    font-weight: 900;
     letter-spacing: 0.01em;
+    font-variant-numeric: tabular-nums;
     &--empty { opacity: 0.45; }
   }
+
+  /* Legacy — kept for any stale references */
+  &__top    { display: none; }
+  &__payout { display: none; }
 }
 
 /* ─── API Request / Response Log ─── */
@@ -1316,13 +1363,13 @@
     font-variant-numeric: tabular-nums !important;
   }
 
-  /* Bigger Over/Under buy buttons on mobile */
+  /* Buy buttons on mobile — full width, keep row layout */
   .mtp-buy-btn {
-    padding: 0.8rem 1rem !important;
-    border-radius: 0.8rem !important;
+    padding: 0.75rem 0.9rem !important;
+    border-radius: 0.7rem !important;
   }
-  .mtp-buy-btn__label { font-size: 1.1rem !important; }
-  .mtp-buy-btn__pct   { font-size: 1rem !important; }
+  .mtp-buy-btn__label { font-size: 1.0rem !important; }
+  .mtp-buy-btn__pct   { font-size: 1.0rem !important; }
 }
 
 /* ─── Sound settings widget ─── */
