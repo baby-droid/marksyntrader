@@ -82,7 +82,8 @@ const Chart = observer(({ show_digits_stats }: { show_digits_stats: boolean }) =
     };
 
     if (!symbol || chartData.activeSymbols.length === 0) {
-        return <ChunkLoader message='' />;
+        // Return empty fragment instead of blocking loader — chart wrapper handles tick data
+        return <></>;
     }
 
     return (
@@ -98,7 +99,7 @@ const Chart = observer(({ show_digits_stats }: { show_digits_stats: boolean }) =
                 id={`dbot-${symbol}`}
                 key={`chart-${symbol}`}
                 barriers={barriers}
-                showLastDigitStats={show_digits_stats}
+                showLastDigitStats={false}
                 chartControlsWidgets={null}
                 enabledChartFooter={false}
                 stateChangeListener={handleStateChange}
