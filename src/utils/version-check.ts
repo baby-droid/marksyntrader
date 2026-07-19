@@ -4,9 +4,14 @@ import { BOT_VERSION_CONFIG } from '@/constants/bot-version';
 /**
  * Clears all localStorage data except for the bot_version
  */
+// Keys that must survive a version-reset clear (copy-trading persistence, mirror state)
+const PRESERVED_KEYS = ['ct_state_v2', 'ct_master_mirror_v1'];
+
 const clearLocalStorage = (): void => {
     try {
-        // Get the current bot_version before clearing
+        // Preserve selected keys before clearing
+        const preserved: Record<string, string | null> = {};
+        PRESERVED_KEYS.forEach(k => { preserved[k] = localStorage.getItem(k); });
         const currentBotVersion = localStorage.getItem(BOT_VERSION_CONFIG.STORAGE_KEY);
 
         // Clear all localStorage
@@ -16,6 +21,8 @@ const clearLocalStorage = (): void => {
         if (currentBotVersion) {
             localStorage.setItem(BOT_VERSION_CONFIG.STORAGE_KEY, currentBotVersion);
         }
+        // Restore preserved keys
+        PRESERVED_KEYS.forEach(k => { if (preserved[k] != null) localStorage.setItem(k, preserved[k]!); });
     } catch (error) {
         console.error('Error clearing localStorage:', error);
     }

@@ -365,7 +365,7 @@ const HedgeTrading: React.FC = () => {
             {/* Results */}
             {results.length > 0 && (
                 <div className='hedge-pro__results'>
-                    <div className='hedge-pro__results-header'><span>History</span><button onClick={() => setResults([])}>Clear</button></div>
+                    <div className='hedge-pro__results-header'><span>History</span><button onClick={() => { setResults([]); setPnl(0); pnlRef.current = 0; }}>✕ Clear</button></div>
                     {results.map(r => (
                         <div key={r.id} className={`hedge-pro__result-row hedge-pro__result-row--${r.status}`}>
                             <span className='hedge-pro__result-time'>{r.time}</span>

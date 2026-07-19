@@ -166,6 +166,9 @@ async function openOtpWebSocket(
 
 // ── Copy Engine ────────────────────────────────────────────────────────────
 
+const STORAGE_KEY  = 'ct_state_v2';
+const EXPIRE_MS    = 48 * 60 * 60 * 1000; // 48 hours
+
 class CopyEngine {
     private followers:      Follower[]            = [];
     private conns:          Map<string, FollowerConn> = new Map();
@@ -202,8 +205,57 @@ class CopyEngine {
     }
 
     getMode():            CopyMode { return this.mode; }
-    setMode(m: CopyMode): void     { this.mode = m; this.emit(); }
+    setMode(m: CopyMode): void     { this.mode = m; this.saveState(); this.emit(); }
     isRunning():          boolean  { return this.running; }
+
+    // ── Persistence ──────────────────────────────────────────────────────
+
+    saveState(): void {
+        try {
+            const payload = {
+                mode:    this.mode,
+                running: this.running,
+                expires: Date.now() + EXPIRE_MS,
+                followers: this.followers
+                    .filter(f => f.status === 'active' || f.status === 'pending')
+                    .map(f => ({ token: f.token, ratio: f.ratio })),
+            };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+        } catch { /* storage unavailable */ }
+    }
+
+    /** Call once on app mount to reconnect saved followers. */
+    async restoreState(): Promise<void> {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (!raw) return;
+            const state = JSON.parse(raw);
+            if (!state?.expires || Date.now() > state.expires) {
+                localStorage.removeItem(STORAGE_KEY);
+                return;
+            }
+            if (state.mode) this.mode = state.mode as CopyMode;
+            if (Array.isArray(state.followers)) {
+                for (const f of state.followers as { token: string; ratio: number }[]) {
+                    if (f.token && !this.followers.some(x => x.token === f.token)) {
+                        await this.addFollower(f.token, f.ratio ?? 1);
+                    }
+                }
+            }
+            // Auto-restart if copy trading was running
+            if (state.running) {
+                setTimeout(() => {
+                    if (!this.running && this.followers.some(x => x.status === 'active')) {
+                        this.start();
+                    }
+                }, 2500);
+            }
+        } catch { /* corrupted data — ignore */ }
+    }
+
+    clearState(): void {
+        try { localStorage.removeItem(STORAGE_KEY); } catch { /* noop */ }
+    }
 
     // ── WS send (req_id matching) ────────────────────────────────────────
 
@@ -384,6 +436,7 @@ class CopyEngine {
             await this.connectFollower(id);
 
             this.updateFollower(id, { status: 'active', lastError: undefined });
+            this.saveState();
 
             const typeLabel  = targetAccount.account_type === 'demo' ? '· demo' : '· real';
             const extraLabel = allAccounts.length > 1
@@ -441,6 +494,7 @@ class CopyEngine {
 
     setRatio(id: string, ratio: number): void {
         this.updateFollower(id, { ratio: Math.max(0.01, ratio) });
+        this.saveState();
     }
 
     removeFollower(id: string): void {
@@ -453,6 +507,7 @@ class CopyEngine {
             this.conns.delete(id);
         }
         this.followers = this.followers.filter(f => f.id !== id);
+        this.saveState();
         this.emit();
     }
 
@@ -467,6 +522,7 @@ class CopyEngine {
         this.running  = true;
         this.unsubBus = subscribeMasterTrades(sig => this.onMasterTrade(sig));
         this.log(`▶ Copy trading started (${this.modeLabel()}).`);
+        this.saveState();
         this.emit();
     }
 
@@ -476,6 +532,7 @@ class CopyEngine {
         this.unsubBus?.();
         this.unsubBus = null;
         this.log('⏸ Copy trading stopped.');
+        this.saveState();
         this.emit();
     }
 

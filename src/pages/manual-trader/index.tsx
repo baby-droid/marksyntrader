@@ -364,7 +364,7 @@ const DigitRow: React.FC<{
                                         : isCurrent
                                         ? '0 0 0 2.5px #000, 0 0 10px rgba(0,0,0,0.3)'
                                         : undefined,
-                                    transform: (isCurrent || isExit) ? 'scale(1.12)' : 'scale(1)',
+                                    transform: isExit ? 'scale(1.12)' : 'scale(1)',
                                 } as React.CSSProperties}
                             >
                                 {/* Text color: dark on white/plain circles, white on coloured */}
