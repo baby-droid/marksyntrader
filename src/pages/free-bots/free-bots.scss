@@ -127,19 +127,26 @@
     letter-spacing: 0.05em;
   }
 
-  /* ─── Grid — 4 per row, cards half the previous size ─── */
+  /* ─── Grid — 4 per row, each card half width of full container ─── */
   &__grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 0.8rem;
+    max-width: 50%;   /* 4 cards × half-width each */
 
     @media (max-width: 1400px) {
+      max-width: 55%;
       grid-template-columns: repeat(4, minmax(0, 1fr));
     }
     @media (max-width: 1024px) {
+      max-width: 100%;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+    @media (max-width: 768px) {
+      max-width: 100%;
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
-    @media (max-width: 640px) {
+    @media (max-width: 480px) {
       grid-template-columns: 1fr;
     }
   }
