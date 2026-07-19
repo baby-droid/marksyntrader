@@ -53,6 +53,43 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
     // Selected barrier — shared between overlay click and trade panel
     const [barrier, setBarrier] = useState(5);
 
+    // ── Win/Loss tracking for digit highlighting + chart flags ───────────────
+    const [lastTrade, setLastTrade] = useState<{ digit: number; won: boolean } | null>(null);
+    const [tradeFlags, setTradeFlags] = useState<Array<{ id: string; won: boolean; profit: number }>>([]);
+    // Each flag owns its own timer; the highlight has a separate timer so multiple
+    // rapid settlements don't cancel each other's removal timers.
+    const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const flagTimersRef     = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+    useEffect(() => {
+        const handleSettlement = (e: CustomEvent) => {
+            const { won, profit, exitDigit, barrier: tradedBarrier } = e.detail;
+            const digit = exitDigit ?? tradedBarrier;
+
+            // ── Digit-circle highlight (replaces any previous highlight) ──
+            if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+            setLastTrade({ digit, won });
+            highlightTimerRef.current = setTimeout(() => setLastTrade(null), 5000);
+
+            // ── Per-flag independent timer — each flag self-removes ──
+            const id = String(Date.now()) + Math.random();
+            setTradeFlags(prev => [...prev, { id, won, profit }]);
+            const t = setTimeout(() => {
+                setTradeFlags(prev => prev.filter(f => f.id !== id));
+                flagTimersRef.current.delete(id);
+            }, 5000);
+            flagTimersRef.current.set(id, t);
+        };
+
+        window.addEventListener('chart:trade-settled', handleSettlement as any);
+        return () => {
+            window.removeEventListener('chart:trade-settled', handleSettlement as any);
+            if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+            flagTimersRef.current.forEach(t => clearTimeout(t));
+            flagTimersRef.current.clear();
+        };
+    }, []);
+
     useEffect(() => {
         digitHistoryRef.current = [];
         prevPriceRef.current    = null;
@@ -117,8 +154,15 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
     return (
         <div style={{ display: 'grid', gridTemplateColumns: '75% 25%', width: '100%', height: '100%', overflow: 'hidden', background: '#fff' }}>
             {/* ─── Chart area with digit overlay ─── */}
-            <div style={{ position: 'relative', minWidth: 0, overflow: 'hidden' }}>
+            <div style={{ position: 'relative', minWidth: 0, overflow: 'hidden', paddingLeft: '1cm', paddingRight: '2cm' }}>
                 <Chart key={uniqueKey} show_digits_stats={false} />
+
+                {/* Win/Loss floating flags */}
+                {tradeFlags.map(flag => (
+                    <div key={flag.id} className={`chart-trade-flag chart-trade-flag--${flag.won ? 'win' : 'loss'}`}>
+                        &nbsp;{flag.won ? '+' : ''}{flag.profit.toFixed(2)} USD
+                    </div>
+                ))}
 
                 {/* Digit stats floating bar at bottom of chart */}
                 <div className='cdo' aria-label='Last Digit Statistics'>
@@ -136,6 +180,8 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                             const colorRank = getCircleColor(pct, sorted);
                             const isCurrent = currentDigit === d;
                             const isBarrier = barrier === d;
+                            const isWin     = lastTrade?.won === true  && lastTrade.digit === d;
+                            const isLoss    = lastTrade?.won === false && lastTrade.digit === d;
                             return (
                                 <div key={d} className='cdo__item' onClick={() => setBarrier(d)}>
                                     {isCurrent && <div className='cdo__triangle' />}
@@ -144,6 +190,8 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                                         `cdo__circle--${colorRank}`,
                                         isCurrent ? 'cdo__circle--current' : '',
                                         isBarrier ? 'cdo__circle--barrier' : '',
+                                        isWin     ? 'cdo__circle--win'     : '',
+                                        isLoss    ? 'cdo__circle--loss'    : '',
                                     ].filter(Boolean).join(' ')}>
                                         {d}
                                     </div>

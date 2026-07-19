@@ -150,6 +150,34 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             const contractId = buyRes?.buy?.contract_id;
             setResult({ ok: true, msg: `✅ Contract #${contractId} open` });
 
+            // ── Subscribe to contract settlement for digit highlighting + chart flags ──
+            try {
+                const settleSub = (api_base as any).api.subscribe({
+                    proposal_open_contract: 1,
+                    contract_id: Number(contractId),
+                    subscribe: 1,
+                });
+                settleSub.subscribe({
+                    next: (res: any) => {
+                        const poc = res?.proposal_open_contract;
+                        if (!poc) return;
+                        if (poc.status === 'won' || poc.status === 'lost') {
+                            const won = poc.status === 'won';
+                            const profit = Number(poc.profit ?? 0);
+                            const exitStr = poc.exit_tick_display_value
+                                ? String(poc.exit_tick_display_value).replace('.', '')
+                                : null;
+                            const exitDigit = exitStr ? parseInt(exitStr[exitStr.length - 1], 10) : null;
+                            window.dispatchEvent(new CustomEvent('chart:trade-settled', {
+                                detail: { won, profit, exitDigit, barrier, contractType },
+                            }));
+                            settleSub.unsubscribe?.();
+                        }
+                    },
+                    error: () => { try { settleSub.unsubscribe?.(); } catch { /* noop */ } },
+                });
+            } catch { /* non-fatal */ }
+
             // ── Publish to copy-trading engine ──────────────────────────────
             try {
                 publishMasterTrade({

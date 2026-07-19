@@ -69,23 +69,23 @@
     &__triangle {
         width: 0;
         height: 0;
-        border-left: 5px solid transparent;
-        border-right: 5px solid transparent;
-        border-top: 7px solid #f14343;
+        border-left: 8px solid transparent;
+        border-right: 8px solid transparent;
+        border-top: 12px solid #f14343;
         // Positioned above the circle
     }
 
     // ── Digit circle ─────────────────────────────────────────────────────
     &__circle {
-        width: 28px;
-        height: 28px;
+        width: 40px;
+        height: 40px;
         border-radius: 50%;
         border: 2px solid #d0d5dd;
         background: #fff;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 11px;
+        font-size: 13px;
         font-weight: 700;
         color: #555;
         transition: all 0.2s;
@@ -137,10 +137,30 @@
             color: #fff !important;
             box-shadow: 0 2px 10px rgba(47, 185, 191, 0.35);
         }
+
+        // Win highlight (green glow — last trade won on this digit)
+        &--win {
+            background: rgba(34, 197, 94, 0.25) !important;
+            border-color: #22c55e !important;
+            border-width: 3px !important;
+            color: #15803d !important;
+            box-shadow: 0 0 14px 4px rgba(34, 197, 94, 0.55);
+            animation: cdo-pulse-win 0.6s ease-out;
+        }
+
+        // Loss highlight (red glow — last trade lost on this digit)
+        &--loss {
+            background: rgba(239, 68, 68, 0.25) !important;
+            border-color: #ef4444 !important;
+            border-width: 3px !important;
+            color: #b91c1c !important;
+            box-shadow: 0 0 14px 4px rgba(239, 68, 68, 0.55);
+            animation: cdo-pulse-loss 0.6s ease-out;
+        }
     }
 
     &__pct {
-        font-size: 8px;
+        font-size: 9px;
         font-weight: 600;
         color: #999;
         font-variant-numeric: tabular-nums;
@@ -148,12 +168,65 @@
     }
 }
 
+@keyframes cdo-pulse-win {
+    0%   { transform: scale(1.3); box-shadow: 0 0 20px 8px rgba(34,197,94,0.7); }
+    100% { transform: scale(1);   box-shadow: 0 0 14px 4px rgba(34,197,94,0.55); }
+}
+@keyframes cdo-pulse-loss {
+    0%   { transform: scale(1.3); box-shadow: 0 0 20px 8px rgba(239,68,68,0.7); }
+    100% { transform: scale(1);   box-shadow: 0 0 14px 4px rgba(239,68,68,0.55); }
+}
+
+/* ── Trade flag floating in chart area ─────────────────────────────────────── */
+.chart-trade-flag {
+    position: absolute;
+    top: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px 6px 10px;
+    border-radius: 22px;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    z-index: 30;
+    pointer-events: none;
+    animation: chart-flag-in 0.35s cubic-bezier(.2,1.4,.4,1) both,
+               chart-flag-out 0.5s ease-in 4.5s both;
+    white-space: nowrap;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.18);
+
+    &--win {
+        background: linear-gradient(120deg, #22c55e 0%, #16a34a 100%);
+        color: #fff;
+        border: 2px solid rgba(255,255,255,0.3);
+        &::before { content: '🏁'; }
+    }
+    &--loss {
+        background: linear-gradient(120deg, #ef4444 0%, #dc2626 100%);
+        color: #fff;
+        border: 2px solid rgba(255,255,255,0.3);
+        &::before { content: '⚑'; }
+    }
+}
+
+@keyframes chart-flag-in {
+    from { opacity: 0; transform: translateX(-50%) translateY(-14px) scale(0.85); }
+    to   { opacity: 1; transform: translateX(-50%) translateY(0)     scale(1); }
+}
+@keyframes chart-flag-out {
+    from { opacity: 1; }
+    to   { opacity: 0; transform: translateX(-50%) translateY(-8px); }
+}
+
 @media (max-width: 768px) {
     .cdo {
         padding: 4px 6px 6px;
         gap: 3px;
 
-        &__circle { width: 22px; height: 22px; font-size: 9px; }
+        &__circle { width: 32px; height: 32px; font-size: 11px; }
         &__pct { font-size: 7px; }
         &__price-val { font-size: 11px; }
     }

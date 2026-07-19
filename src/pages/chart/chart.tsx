@@ -81,8 +81,9 @@ const Chart = observer(({ show_digits_stats }: { show_digits_stats: boolean }) =
         }
     };
 
-    if (!symbol || chartData.activeSymbols.length === 0) {
-        // Return empty fragment instead of blocking loader — chart wrapper handles tick data
+    // Render the chart immediately even if activeSymbols is still loading.
+    // SmartChart shows its own loading state; the wrapper handles tick data independently.
+    if (!symbol) {
         return <></>;
     }
 

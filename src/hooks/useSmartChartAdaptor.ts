@@ -45,14 +45,37 @@ interface UseSmartChartAdaptorReturn {
  * Handles adapter initialization, data fetching, and subscription management
  * with proper memoization and memory leak prevention
  */
+// ── LocalStorage cache helpers for instant chart load ─────────────────────────
+const CHART_CACHE_KEY = 'sc_chart_data_v2';
+const CHART_CACHE_TTL = 3_600_000; // 1 hour
+
+function readChartCache(): { activeSymbols: ActiveSymbols; tradingTimes: TradingTimesMap } | null {
+    try {
+        const raw = localStorage.getItem(CHART_CACHE_KEY);
+        if (!raw) return null;
+        const { data, ts } = JSON.parse(raw);
+        if (Date.now() - ts > CHART_CACHE_TTL) return null;
+        if (!Array.isArray(data?.activeSymbols) || data.activeSymbols.length === 0) return null;
+        return data;
+    } catch { return null; }
+}
+
+function writeChartCache(data: { activeSymbols: ActiveSymbols; tradingTimes: TradingTimesMap }) {
+    try {
+        localStorage.setItem(CHART_CACHE_KEY, JSON.stringify({ data, ts: Date.now() }));
+    } catch { /* quota exceeded — ignore */ }
+}
+
 export const useSmartChartAdaptor = (): UseSmartChartAdaptorReturn => {
     // State management
     const [adapter, setAdapter] = useState<SmartchartsChampionAdapter | null>(null);
     const [adapterInitialized, setAdapterInitialized] = useState(false);
+
+    // Pre-populate from localStorage cache so chart renders immediately
     const [chartData, setChartData] = useState<{
         activeSymbols: ActiveSymbols;
         tradingTimes: TradingTimesMap;
-    }>({
+    }>(() => readChartCache() ?? {
         activeSymbols: [] as ActiveSymbols,
         tradingTimes: {} as TradingTimesMap,
     });
@@ -132,10 +155,12 @@ export const useSmartChartAdaptor = (): UseSmartChartAdaptorReturn => {
                         return;
                     }
 
-                    setChartData({
+                    const freshData = {
                         activeSymbols: data.activeSymbols,
                         tradingTimes: data.tradingTimes,
-                    });
+                    };
+                    setChartData(freshData);
+                    writeChartCache(freshData);
                     setError(null);
                 }
             } catch (err) {
