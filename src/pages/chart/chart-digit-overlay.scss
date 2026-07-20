@@ -9,9 +9,6 @@
     display: flex;
     flex-direction: row;
     width: 100%;
-    /* Lock height to viewport so the layout never scrolls the outer page.
-       110px accounts for the app header + tab strip.
-       Adjust the constant if the app shell changes. */
     height: calc(100vh - 110px);
     max-height: calc(100vh - 110px);
     overflow: hidden;
@@ -24,13 +21,21 @@
     }
 }
 
-/* ── Left column: chart canvas + digit bar ───────────────────────────────── */
+/* ── Left column: chart canvas + digit bar ─────────────────────────────────
+   Chart takes 70% of the total width; right panel takes 30%.
+   Height: chart-inner gets flex:1 (~85%), digit bar gets its natural height.
+ */
 .cw-left {
-    flex: 1;
+    width: 70%;
+    flex-shrink: 0;
     min-width: 0;
     display: flex;
     flex-direction: column;
     overflow: hidden;
+
+    @media (max-width: 900px) {
+        width: 100%;
+    }
 }
 
 /* ── Chart area (fills all remaining height between market card and digit bar) */
@@ -56,10 +61,10 @@
     }
 }
 
-/* ── Right panel ─────────────────────────────────────────────────────────── */
+/* ── Right panel — 30% of total width ─────────────────────────────────────── */
 .cw-right-panel {
-    width: 319px;
-    min-width: 319px;
+    width: 30%;
+    min-width: 280px;
     flex-shrink: 0;
     border-left: 1px solid #e0e0e0;
     overflow-y: auto;
@@ -122,7 +127,7 @@
         &--hidden { visibility: hidden; }
     }
 
-    /* ── ② Body row: price chip + circles ───────────────────────────── */
+    /* ── ② Body row: price chip + right (triangle + circles) ────────── */
     &__body {
         display: flex;
         align-items: center;
@@ -161,6 +166,15 @@
         display: flex;
         align-items: center;
         justify-content: center;
+    }
+
+    /* Right section — wraps triangle-track + circles so triangle
+       aligns ONLY above the digits, not the price chip */
+    &__right {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
     }
 
     /* Circles row */
@@ -300,27 +314,49 @@
 @keyframes cdo-dot-pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.75)} }
 @keyframes cdo-fade-in   { from{opacity:0;transform:translateX(-5px)} to{opacity:1;transform:translateX(0)} }
 
-/* ── Win/Loss trade flag ──────────────────────────────────────────────────── */
+/* ── Win/Loss trade flag — pinned to right edge of chart like a chart marker */
 .chart-trade-flag {
     position: absolute;
-    transform: translateX(-50%);
+    right: 68px;
     display: flex;
     align-items: center;
     gap: 5px;
     padding: 4px 10px 4px 8px;
-    border-radius: 16px;
+    border-radius: 4px 16px 16px 4px;
     font-size: clamp(10px,0.75vw,12px);
     font-weight: 800;
     z-index: 30;
     pointer-events: none;
     animation: chart-flag-in 0.35s cubic-bezier(.2,1.4,.4,1) both, chart-flag-out 0.5s ease-in 59.5s both;
     white-space: nowrap;
-    box-shadow: 0 3px 12px rgba(0,0,0,0.15);
-    &--win  { background:linear-gradient(120deg,#00E676,#00C853); color:#003c1a; border:1px solid rgba(255,255,255,0.3); &::before{content:'🏁';margin-right:2px;} }
-    &--loss { background:linear-gradient(120deg,#FF3D57,#C62828); color:#fff;    border:1px solid rgba(255,255,255,0.3); &::before{content:'⚑';margin-right:2px;} }
+    box-shadow: 0 3px 12px rgba(0,0,0,0.18);
+    /* Pole/stem on the left side */
+    &::before {
+        content: '';
+        position: absolute;
+        left: -12px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 12px;
+        height: 2px;
+    }
+    &--win  {
+        background: linear-gradient(120deg,#00E676,#00C853);
+        color: #003c1a;
+        border: 1px solid rgba(255,255,255,0.3);
+        &::before { background: #00C853; }
+        &::after  { content: '✓ WIN'; }
+    }
+    &--loss {
+        background: linear-gradient(120deg,#FF3D57,#C62828);
+        color: #fff;
+        border: 1px solid rgba(255,255,255,0.3);
+        &::before { background: #C62828; }
+        &::after  { content: '✗ LOSS'; }
+    }
 }
-@keyframes chart-flag-in  { from{opacity:0;transform:translateX(-50%) translateY(-10px) scale(0.85)} to{opacity:1;transform:translateX(-50%) translateY(0) scale(1)} }
-@keyframes chart-flag-out { from{opacity:1} to{opacity:0;transform:translateX(-50%) translateY(-6px)} }
+@keyframes chart-flag-in  { from{opacity:0;transform:translateY(-10px) scale(0.85)} to{opacity:1;transform:translateY(0) scale(1)} }
+@keyframes chart-flag-out { from{opacity:1} to{opacity:0;transform:translateY(-6px)} }
 
 /* ── Mobile ───────────────────────────────────────────────────────────────── */
 @media (max-width: 767px) {

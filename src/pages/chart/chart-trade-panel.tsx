@@ -21,16 +21,17 @@ function symbolName(s: string) { return SYMBOL_NAMES[s] ?? s; }
 
 /* ── Trade type groups ────────────────────────────────────────────────────── */
 const TRADE_GROUPS = [
-    { id: 'over_under',   label: 'Over / Under',       icon: '↑↓', typeA: 'DIGITOVER',  typeB: 'DIGITUNDER',  needsBarrier: true,  durationUnit: 't', minDur: 1, maxDur: 10 },
-    { id: 'even_odd',     label: 'Even / Odd',          icon: '⚡', typeA: 'DIGITEVEN',  typeB: 'DIGITODD',    needsBarrier: false, durationUnit: 't', minDur: 1, maxDur: 10 },
-    { id: 'match_differ', label: 'Match / Differ',      icon: '🎯', typeA: 'DIGITMATCH', typeB: 'DIGITDIFF',   needsBarrier: true,  durationUnit: 't', minDur: 1, maxDur: 10 },
-    { id: 'rise_fall',    label: 'Rise / Fall',         icon: '📈', typeA: 'CALL',       typeB: 'PUT',         needsBarrier: false, durationUnit: 't', minDur: 1, maxDur: 10 },
-    { id: 'higher_lower', label: 'Higher / Lower',      icon: '📊', typeA: 'CALL',       typeB: 'PUT',         needsBarrier: false, durationUnit: 'm', minDur: 1, maxDur: 60 },
-    { id: 'asian',        label: 'Asian Up / Down',     icon: '🌏', typeA: 'ASIANU',     typeB: 'ASIAND',      needsBarrier: false, durationUnit: 't', minDur: 5, maxDur: 10 },
-    { id: 'touch',        label: 'Touch / No Touch',    icon: '✋', typeA: 'ONETOUCH',   typeB: 'NOTOUCH',     needsBarrier: false, durationUnit: 'm', minDur: 1, maxDur: 60 },
-    { id: 'reset',        label: 'Reset Call / Put',    icon: '🔄', typeA: 'RESETCALL',  typeB: 'RESETPUT',    needsBarrier: false, durationUnit: 't', minDur: 5, maxDur: 10 },
-    { id: 'highlow',      label: 'High / Low Tick',     icon: '🔝', typeA: 'TICKHIGH',   typeB: 'TICKLOW',     needsBarrier: false, durationUnit: 't', minDur: 5, maxDur: 10 },
-    { id: 'runhighlow',   label: 'Run High / Run Low',  icon: '🏃', typeA: 'RUNHIGH',    typeB: 'RUNLOW',      needsBarrier: false, durationUnit: 't', minDur: 1, maxDur: 10 },
+    { id: 'over_under',   label: 'Over / Under',       icon: '↑↓', typeA: 'DIGITOVER',  typeB: 'DIGITUNDER',  needsBarrier: true,  isAccumulator: false, durationUnit: 't', minDur: 1,  maxDur: 10  },
+    { id: 'even_odd',     label: 'Even / Odd',          icon: '⚡', typeA: 'DIGITEVEN',  typeB: 'DIGITODD',    needsBarrier: false, isAccumulator: false, durationUnit: 't', minDur: 1,  maxDur: 10  },
+    { id: 'match_differ', label: 'Match / Differ',      icon: '🎯', typeA: 'DIGITMATCH', typeB: 'DIGITDIFF',   needsBarrier: true,  isAccumulator: false, durationUnit: 't', minDur: 1,  maxDur: 10  },
+    { id: 'accumulator',  label: 'Accumulator',         icon: '📊', typeA: 'ACCU',       typeB: 'ACCU',        needsBarrier: false, isAccumulator: true,  durationUnit: 't', minDur: 1,  maxDur: 10  },
+    { id: 'rise_fall',    label: 'Rise / Fall',         icon: '📈', typeA: 'CALL',       typeB: 'PUT',         needsBarrier: false, isAccumulator: false, durationUnit: 't', minDur: 1,  maxDur: 10  },
+    { id: 'higher_lower', label: 'Higher / Lower',      icon: '📊', typeA: 'CALL',       typeB: 'PUT',         needsBarrier: false, isAccumulator: false, durationUnit: 'm', minDur: 1,  maxDur: 60  },
+    { id: 'asian',        label: 'Asian Up / Down',     icon: '🌏', typeA: 'ASIANU',     typeB: 'ASIAND',      needsBarrier: false, isAccumulator: false, durationUnit: 't', minDur: 5,  maxDur: 10  },
+    { id: 'touch',        label: 'Touch / No Touch',    icon: '✋', typeA: 'ONETOUCH',   typeB: 'NOTOUCH',     needsBarrier: false, isAccumulator: false, durationUnit: 'm', minDur: 1,  maxDur: 60  },
+    { id: 'reset',        label: 'Reset Call / Put',    icon: '🔄', typeA: 'RESETCALL',  typeB: 'RESETPUT',    needsBarrier: false, isAccumulator: false, durationUnit: 't', minDur: 5,  maxDur: 10  },
+    { id: 'highlow',      label: 'High / Low Tick',     icon: '🔝', typeA: 'TICKHIGH',   typeB: 'TICKLOW',     needsBarrier: false, isAccumulator: false, durationUnit: 't', minDur: 5,  maxDur: 10  },
+    { id: 'runhighlow',   label: 'Run High / Run Low',  icon: '🏃', typeA: 'RUNHIGH',    typeB: 'RUNLOW',      needsBarrier: false, isAccumulator: false, durationUnit: 't', minDur: 1,  maxDur: 10  },
 ];
 
 /* ── Account badge ────────────────────────────────────────────────────────── */
@@ -76,10 +77,12 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
     const [groupId, setGroupId]       = useState(TRADE_GROUPS[0].id);
     const group = TRADE_GROUPS.find(g => g.id === groupId) ?? TRADE_GROUPS[0];
 
-    const [ticks,     setTicks]       = useState(2);
-    const [stake,     setStake]       = useState(10.00);
+    const [ticks,      setTicks]      = useState(2);
+    const [stake,      setStake]      = useState(10.00);
+    const [growthRate, setGrowthRate] = useState(0.03); // Accumulator growth rate: 1%, 2%, 3%, 4%, 5%
     const [stakeMode, setStakeMode]   = useState<'stake' | 'payout'>('stake');
-    const [loading,   setLoading]     = useState<'over' | 'under' | null>(null);
+    const [loading,   setLoading]     = useState<'over' | 'under' | 'accu' | null>(null);
+    const [accumContractId, setAccumContractId] = useState<number | null>(null);
     const [result,    setResult]      = useState<{ ok: boolean; msg: string } | null>(null);
     const [displayCur, setDisplayCur] = useState(getDisplayCurrency());
 
@@ -127,6 +130,60 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
     }, [symbol, stake, ticks, barrier, group]);
 
     useEffect(() => { fetchPayouts(); }, [fetchPayouts]);
+
+    /* ── Accumulator buy ─────────────────────────────────────────────────── */
+    const buyAccumulator = useCallback(async () => {
+        if (loading) return;
+        const api = (api_base as any).api;
+        if (!api) { setResult({ ok: false, msg: '❌ Not connected' }); return; }
+        setLoading('accu');
+        setResult(null);
+        try {
+            const pr = await api.send({
+                proposal: 1, amount: stake, basis: 'stake',
+                contract_type: 'ACCU',
+                currency: getDisplayCurrency() || 'USD',
+                growth_rate: growthRate,
+                underlying_symbol: symbol,
+            });
+            if (pr?.error) throw new Error(pr.error.message);
+            const proposalId = pr?.proposal?.id;
+            const askPrice   = Number(pr?.proposal?.ask_price ?? stake);
+            if (!proposalId) throw new Error('Proposal failed');
+            const buyRes = await api.send({ buy: proposalId, price: askPrice });
+            if (buyRes?.error) throw new Error(buyRes.error.message);
+            const contractId = Number(buyRes?.buy?.contract_id);
+            setAccumContractId(contractId);
+            setResult({ ok: true, msg: `✅ Accumulator #${contractId} running` });
+        } catch (e: any) {
+            setResult({ ok: false, msg: `❌ ${e.message}` });
+        } finally {
+            setLoading(null);
+            setTimeout(() => setResult(null), 6000);
+        }
+    }, [loading, growthRate, stake, symbol]);
+
+    const sellAccumulator = useCallback(async () => {
+        if (!accumContractId || loading) return;
+        const api = (api_base as any).api;
+        if (!api) return;
+        setLoading('accu');
+        try {
+            const res = await api.send({ sell: accumContractId, price: 0 });
+            if (res?.error) throw new Error(res.error.message);
+            const profit = Number(res?.sell?.sold_for ?? 0) - stake;
+            window.dispatchEvent(new CustomEvent('chart:trade-settled', {
+                detail: { won: profit >= 0, profit, exitDigit: null, contractId: accumContractId },
+            }));
+            setAccumContractId(null);
+            setResult({ ok: profit >= 0, msg: `${profit >= 0 ? '✅ Sold' : '⚠ Sold'} +${res?.sell?.sold_for ?? 0}` });
+        } catch (e: any) {
+            setResult({ ok: false, msg: `❌ ${e.message}` });
+        } finally {
+            setLoading(null);
+            setTimeout(() => setResult(null), 4000);
+        }
+    }, [accumContractId, loading, stake]);
 
     /* ── Buy ─────────────────────────────────────────────────────────────── */
     const buy = useCallback(async (side: 'over' | 'under') => {
@@ -230,7 +287,35 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                 </select>
             </div>
 
+            {/* ── Accumulator growth rate ───────────────────────────── */}
+            {group.isAccumulator && (
+                <div className='ctp__section ctp__section--ticks'>
+                    <div className='ctp__section-label'>
+                        Growth Rate
+                        <span className='ctp__section-val'>{(growthRate * 100).toFixed(0)}%</span>
+                    </div>
+                    <div className='ctp__tick-row'>
+                        {[0.01, 0.02, 0.03, 0.04, 0.05].map(r => (
+                            <button
+                                key={r}
+                                className={`ctp__tick-btn${growthRate === r ? ' active' : ''}`}
+                                onClick={() => setGrowthRate(r)}
+                            >
+                                {(r * 100).toFixed(0)}%
+                            </button>
+                        ))}
+                    </div>
+                    {accumContractId && (
+                        <div className='ctp__accu-running'>
+                            <span className='ctp__accu-dot' />
+                            Accumulator #{accumContractId} running
+                        </div>
+                    )}
+                </div>
+            )}
+
             {/* ── Ticks / Duration ──────────────────────────────────── */}
+            {!group.isAccumulator && (
             <div className='ctp__section ctp__section--ticks'>
                 <div className='ctp__section-label'>
                     {group.durationUnit === 't' ? 'Ticks' : 'Minutes'}
@@ -264,6 +349,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                     </>
                 )}
             </div>
+            )}{/* /!group.isAccumulator ticks section */}
 
             {/* ── Last Digit Prediction ─────────────────────────────── */}
             {group.needsBarrier && (
@@ -327,53 +413,92 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                 <div className={`ctp__result ${result.ok ? 'ok' : 'err'}`}>{result.msg}</div>
             )}
 
-            {/* ── Over button ───────────────────────────────────────── */}
-            <div className='ctp__section ctp__section--over'>
-                <button
-                    className='ctp__buy-btn ctp__buy-btn--over'
-                    onClick={() => buy('over')}
-                    disabled={!!loading}
-                >
-                    <div className='ctp__buy-inner'>
-                        <div className='ctp__buy-top'>
-                            <span className='ctp__buy-arrow'>↑</span>
-                            <span className='ctp__buy-label'>{overLabel}</span>
-                            <span className='ctp__buy-pct'>
-                                {overPct != null ? `${overPct.toFixed(2)}%` : loading === 'over' ? '…' : '—'}
-                            </span>
+            {/* ── Accumulator buttons ───────────────────────────────── */}
+            {group.isAccumulator ? (
+                <div className='ctp__section ctp__section--over'>
+                    {!accumContractId ? (
+                        <button
+                            className='ctp__buy-btn ctp__buy-btn--over'
+                            onClick={buyAccumulator}
+                            disabled={!!loading}
+                        >
+                            <div className='ctp__buy-inner'>
+                                <div className='ctp__buy-top'>
+                                    <span className='ctp__buy-arrow'>📊</span>
+                                    <span className='ctp__buy-label'>Buy Accumulator</span>
+                                    <span className='ctp__buy-pct'>{(growthRate * 100).toFixed(0)}%/tick</span>
+                                </div>
+                                <div className='ctp__buy-sub'>Grows by {(growthRate * 100).toFixed(0)}% each tick · sell anytime</div>
+                            </div>
+                        </button>
+                    ) : (
+                        <button
+                            className='ctp__buy-btn ctp__buy-btn--accu-sell'
+                            onClick={sellAccumulator}
+                            disabled={!!loading}
+                        >
+                            <div className='ctp__buy-inner'>
+                                <div className='ctp__buy-top'>
+                                    <span className='ctp__buy-arrow'>💰</span>
+                                    <span className='ctp__buy-label'>Sell Now</span>
+                                    <span className='ctp__buy-pct'>#{accumContractId}</span>
+                                </div>
+                                <div className='ctp__buy-sub'>Take profit on your accumulator</div>
+                            </div>
+                        </button>
+                    )}
+                </div>
+            ) : (
+                <>
+                {/* ── Over button ─────────────────────────────────── */}
+                <div className='ctp__section ctp__section--over'>
+                    <button
+                        className='ctp__buy-btn ctp__buy-btn--over'
+                        onClick={() => buy('over')}
+                        disabled={!!loading}
+                    >
+                        <div className='ctp__buy-inner'>
+                            <div className='ctp__buy-top'>
+                                <span className='ctp__buy-arrow'>↑</span>
+                                <span className='ctp__buy-label'>{overLabel}</span>
+                                <span className='ctp__buy-pct'>
+                                    {overPct != null ? `${overPct.toFixed(2)}%` : loading === 'over' ? '…' : '—'}
+                                </span>
+                            </div>
+                            <div className='ctp__buy-sub'>
+                                {overPayout != null
+                                    ? `Payout ${fromUsd(overPayout).toFixed(2)} ${displayCur}`
+                                    : '\u00A0'}
+                            </div>
                         </div>
-                        <div className='ctp__buy-sub'>
-                            {overPayout != null
-                                ? `Payout ${fromUsd(overPayout).toFixed(2)} ${displayCur}`
-                                : '\u00A0'}
-                        </div>
-                    </div>
-                </button>
-            </div>
+                    </button>
+                </div>
 
-            {/* ── Under button ──────────────────────────────────────── */}
-            <div className='ctp__section ctp__section--under'>
-                <button
-                    className='ctp__buy-btn ctp__buy-btn--under'
-                    onClick={() => buy('under')}
-                    disabled={!!loading}
-                >
-                    <div className='ctp__buy-inner'>
-                        <div className='ctp__buy-top'>
-                            <span className='ctp__buy-arrow'>↓</span>
-                            <span className='ctp__buy-label'>{underLabel}</span>
-                            <span className='ctp__buy-pct'>
-                                {underPct != null ? `${underPct.toFixed(2)}%` : loading === 'under' ? '…' : '—'}
-                            </span>
+                {/* ── Under button ────────────────────────────────── */}
+                <div className='ctp__section ctp__section--under'>
+                    <button
+                        className='ctp__buy-btn ctp__buy-btn--under'
+                        onClick={() => buy('under')}
+                        disabled={!!loading}
+                    >
+                        <div className='ctp__buy-inner'>
+                            <div className='ctp__buy-top'>
+                                <span className='ctp__buy-arrow'>↓</span>
+                                <span className='ctp__buy-label'>{underLabel}</span>
+                                <span className='ctp__buy-pct'>
+                                    {underPct != null ? `${underPct.toFixed(2)}%` : loading === 'under' ? '…' : '—'}
+                                </span>
+                            </div>
+                            <div className='ctp__buy-sub'>
+                                {underPayout != null
+                                    ? `Payout ${fromUsd(underPayout).toFixed(2)} ${displayCur}`
+                                    : '\u00A0'}
+                            </div>
                         </div>
-                        <div className='ctp__buy-sub'>
-                            {underPayout != null
-                                ? `Payout ${fromUsd(underPayout).toFixed(2)} ${displayCur}`
-                                : '\u00A0'}
-                        </div>
-                    </div>
-                </button>
-            </div>
+                    </button>
+                </div>
+                </>
+            )}
 
         </div>
     );

@@ -284,16 +284,16 @@ const ContractDetailModal: React.FC<{ trade: any; info: any; cur: string; onClos
                         <span>Start time</span>
                         <strong>{fmtShort(trade.purchase_time)}</strong>
                     </div>
-                    {(info?.entry_tick || info?.entry_spot) && (
+                    {(info?.entry_tick_display_value || info?.entry_spot || info?.entry_spot_display_value) && (
                         <div className='rp__modal-row'>
                             <span>Entry spot</span>
-                            <strong>{info.entry_tick ?? info.entry_spot}</strong>
+                            <strong>{info.entry_tick_display_value ?? info.entry_spot_display_value ?? info.entry_spot}</strong>
                         </div>
                     )}
-                    {(info?.exit_tick || info?.exit_spot) && (
+                    {(info?.exit_tick_display_value || info?.exit_spot || info?.exit_spot_display_value) && (
                         <div className='rp__modal-row'>
                             <span>Exit spot</span>
-                            <strong>{info.exit_tick ?? info.exit_spot}</strong>
+                            <strong>{info.exit_tick_display_value ?? info.exit_spot_display_value ?? info.exit_spot}</strong>
                         </div>
                     )}
                     <div className='rp__modal-row'>
@@ -312,17 +312,21 @@ const ContractDetailModal: React.FC<{ trade: any; info: any; cur: string; onClos
                                    won={trade.pnl >= 0}
                                    tickCount={info?.tick_count ?? 0} />
                         <div className='rp__modal-spots'>
-                            {(info?.entry_tick || info?.entry_spot) && (
+                            {(info?.entry_tick_display_value || info?.entry_spot) && (
                                 <div className='rp__modal-spot-row'>
                                     <span className='rp__modal-spot-label'>Entry spot</span>
-                                    <span className='rp__modal-spot-val'>{info.entry_tick ?? info.entry_spot}</span>
+                                    <span className='rp__modal-spot-val'>
+                                        {info.entry_tick_display_value ?? info.entry_spot_display_value ?? info.entry_spot}
+                                    </span>
                                     {info?.entry_tick_time && <span className='rp__modal-spot-time'>{fmtShort(info.entry_tick_time)}</span>}
                                 </div>
                             )}
-                            {(info?.exit_tick || info?.exit_spot) && (
+                            {(info?.exit_tick_display_value || info?.exit_spot) && (
                                 <div className={`rp__modal-spot-row ${trade.pnl >= 0 ? 'win' : 'loss'}`}>
                                     <span className='rp__modal-spot-label'>Exit spot</span>
-                                    <span className='rp__modal-spot-val'>{info.exit_tick ?? info.exit_spot}</span>
+                                    <span className='rp__modal-spot-val'>
+                                        {info.exit_tick_display_value ?? info.exit_spot_display_value ?? info.exit_spot}
+                                    </span>
                                     {info?.exit_tick_time && <span className='rp__modal-spot-time'>{fmtShort(info.exit_tick_time)}</span>}
                                 </div>
                             )}

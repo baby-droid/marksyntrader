@@ -326,6 +326,29 @@
     &.err { background: rgba(255,61,87,0.08); color: #e02020; border: 1px solid rgba(255,61,87,0.2); }
 }
 
+/* ── Accumulator running notice ─────────────────────────────────────────────── */
+.ctp__accu-running {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    padding: 4px 8px;
+    background: rgba(0,200,83,0.08);
+    border: 1px solid rgba(0,200,83,0.25);
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #00a550;
+}
+.ctp__accu-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: #00C853;
+    flex-shrink: 0;
+    animation: ctp-accu-pulse 1s ease-in-out infinite;
+}
+@keyframes ctp-accu-pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
+
 /* ── Over / Under buttons ───────────────────────────────────────────────────── */
 .ctp__section--over,
 .ctp__section--under {
@@ -356,6 +379,12 @@
         background: linear-gradient(120deg, #FF3D57 0%, #C62828 100%);
         box-shadow: 0 2px 8px rgba(255,61,87,0.3);
         &:hover:not(:disabled) { filter: brightness(1.06); box-shadow: 0 4px 14px rgba(255,61,87,0.45); }
+    }
+    &--accu-sell {
+        background: linear-gradient(120deg, #FF9800 0%, #F57C00 100%);
+        box-shadow: 0 2px 8px rgba(255,152,0,0.3);
+        &:hover:not(:disabled) { filter: brightness(1.06); box-shadow: 0 4px 14px rgba(255,152,0,0.45); }
+        .ctp__buy-arrow, .ctp__buy-label, .ctp__buy-pct, .ctp__buy-sub { color: #fff; }
     }
 }
 

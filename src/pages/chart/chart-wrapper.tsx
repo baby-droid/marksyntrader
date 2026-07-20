@@ -250,9 +250,9 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                         <div
                             key={flag.id}
                             className={`chart-trade-flag chart-trade-flag--${flag.won ? 'win' : 'loss'}`}
-                            style={{ top: `${18 + i * 44}px`, left: '50%' }}
+                            style={{ top: `${28 + i * 52}px`, right: '68px' }}
                         >
-                            &nbsp;{flag.won ? '✓ WIN' : '✗ LOSS'}&nbsp;
+                            {flag.won ? '✓ WIN' : '✗ LOSS'}&nbsp;
                             {flag.won ? '+' : ''}{flag.profit.toFixed(2)}
                         </div>
                     ))}
@@ -261,15 +261,7 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                 {/* ── Digit circles bar ─────────────────────────────────── */}
                 <div className='cdo' aria-label='Last Digit Statistics'>
 
-                    {/* ① Triangle track — ▼ slides above circles */}
-                    <div className='cdo__triangle-track'>
-                        <div
-                            className={`cdo__triangle-pointer${currentDigit === null ? ' cdo__triangle-pointer--hidden' : ''}`}
-                            style={{ left: currentDigit !== null ? digitToPercent(currentDigit) : '-100px' }}
-                        />
-                    </div>
-
-                    {/* ② Circles row */}
+                    {/* Body row: price chip + right column (triangle + circles) */}
                     <div className='cdo__body'>
                         <div className='cdo__price'>
                             <span className='cdo__price-val'>
@@ -279,6 +271,17 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                                 <span className='cdo__price-digit'>{currentDigit}</span>
                             )}
                         </div>
+
+                        {/* ① Triangle track — ▼ slides above circles only (not over price chip) */}
+                        <div className='cdo__right'>
+                            <div className='cdo__triangle-track'>
+                                <div
+                                    className={`cdo__triangle-pointer${currentDigit === null ? ' cdo__triangle-pointer--hidden' : ''}`}
+                                    style={{ left: currentDigit !== null ? digitToPercent(currentDigit) : '-100px' }}
+                                />
+                            </div>
+
+                        {/* ② Circles row */}
                         <div className='cdo__circles'>
                             {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(d => {
                                 const pct       = pcts[d] ?? 0;
@@ -316,10 +319,11 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                                     </div>
                                 );
                             })}
-                        </div>
-                    </div>
-                </div>
-            </div>
+                        </div>{/* /cdo__circles */}
+                        </div>{/* /cdo__right */}
+                    </div>{/* /cdo__body */}
+                </div>{/* /cdo */}
+            </div>{/* /cw-left */}
 
             {/* ── RIGHT: trade panel ────────────────────────────────────── */}
             <div className='cw-right-panel'>
