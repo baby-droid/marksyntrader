@@ -5,7 +5,7 @@ import { BOT_VERSION_CONFIG } from '@/constants/bot-version';
  * Clears all localStorage data except for the bot_version
  */
 // Keys that must survive a version-reset clear (copy-trading persistence, mirror state)
-const PRESERVED_KEYS = ['ct_state_v2', 'ct_mirror_v2', 'ct_master_mirror_v1'];
+const PRESERVED_KEYS = ['ct_state_v2', 'ct_mirror_v2', 'ct_master_mirror_v1', 'sc_chart_data_v2'];
 
 const clearLocalStorage = (): void => {
     try {

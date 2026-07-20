@@ -27,22 +27,22 @@
     font-size: 13px;
     color: #0E0F11;
     background: #ffffff;
-    padding: 10px 0 10px 0;
+    padding: 5px 0 6px 0;
     box-sizing: border-box;
 }
 
 /* ── Section ────────────────────────────────────────────────────────────────── */
 .ctp__section {
-    padding: 0 12px;
-    margin-bottom: 8px;
+    padding: 0 10px;
+    margin-bottom: 5px;
     flex-shrink: 0;
 }
 
 .ctp__section-label {
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 600;
     color: #667085;
-    margin-bottom: 4px;
+    margin-bottom: 3px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -56,14 +56,14 @@
 
 /* ── Market section ────────────────────────────────────────────────────────── */
 .ctp__section--market {
-    margin-bottom: 8px;
+    margin-bottom: 5px;
 }
 
 .ctp__market-display {
     display: flex;
     align-items: center;
-    gap: 8px;
-    height: 44px;
+    gap: 6px;
+    height: 36px;
     border: 1px solid #e0e0e0;
     border-radius: 8px;
     padding: 0 10px;
@@ -95,12 +95,12 @@
 
 /* ── Contract type ──────────────────────────────────────────────────────────── */
 .ctp__section--contract {
-    margin-bottom: 8px;
+    margin-bottom: 5px;
 }
 
 .ctp__type-select {
     width: 100%;
-    height: 44px;
+    height: 36px;
     font-size: 13px;
     font-weight: 600;
     color: #0E0F11;
@@ -117,7 +117,7 @@
 
 /* ── Ticks ──────────────────────────────────────────────────────────────────── */
 .ctp__section--ticks {
-    margin-bottom: 8px;
+    margin-bottom: 5px;
 }
 
 .ctp__tick-row {
@@ -127,7 +127,7 @@
 
 .ctp__tick-btn {
     flex: 1;
-    height: 36px;
+    height: 30px;
     border-radius: 6px;
     border: 1px solid #e0e0e0;
     background: #f9f9f9;
@@ -177,7 +177,7 @@
 
 /* ── Last Digit Prediction ──────────────────────────────────────────────────── */
 .ctp__section--digit {
-    margin-bottom: 8px;
+    margin-bottom: 5px;
 }
 
 .ctp__digits { display: flex; flex-direction: column; gap: 4px; }
@@ -185,7 +185,7 @@
 
 .ctp__digit-btn {
     flex: 1;
-    height: 36px;
+    height: 30px;
     border-radius: 6px;
     border: 1px solid #e0e0e0;
     background: #f9f9f9;
@@ -206,7 +206,7 @@
 
 /* ── Stake ──────────────────────────────────────────────────────────────────── */
 .ctp__section--stake {
-    margin-bottom: 8px;
+    margin-bottom: 5px;
 }
 
 .ctp__stake-tabs {
@@ -241,8 +241,8 @@
 }
 
 .ctp__stake-adj {
-    width: 36px;
-    height: 40px;
+    width: 32px;
+    height: 34px;
     border-radius: 6px;
     border: 1px solid #e0e0e0;
     background: #fff;
@@ -263,7 +263,7 @@
     align-items: center;
     justify-content: center;
     gap: 4px;
-    height: 40px;
+    height: 34px;
     border: 1px solid #e0e0e0;
     border-radius: 6px;
     background: #fff;
@@ -299,7 +299,7 @@
 .ctp__preset {
     flex: 1;
     min-width: 0;
-    height: 36px;
+    height: 30px;
     border-radius: 6px;
     border: 1px solid #e0e0e0;
     background: #f9f9f9;
@@ -352,12 +352,12 @@
 /* ── Over / Under buttons ───────────────────────────────────────────────────── */
 .ctp__section--over,
 .ctp__section--under {
-    margin-bottom: 6px;
+    margin-bottom: 4px;
 }
 
 .ctp__buy-btn {
     width: 100%;
-    min-height: 52px;
+    min-height: 42px;
     border-radius: 10px;
     border: none;
     display: flex;
@@ -392,8 +392,8 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    padding: 7px 12px 6px;
-    gap: 2px;
+    padding: 5px 10px 4px;
+    gap: 1px;
 }
 
 .ctp__buy-top {

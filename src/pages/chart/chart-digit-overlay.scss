@@ -22,11 +22,11 @@
 }
 
 /* ── Left column: chart canvas + digit bar ─────────────────────────────────
-   Chart takes 70% of the total width; right panel takes 30%.
+   Chart takes 50% of the total width; right panel takes 50%.
    Height: chart-inner gets flex:1 (~85%), digit bar gets its natural height.
  */
 .cw-left {
-    width: 70%;
+    width: 50%;
     flex-shrink: 0;
     min-width: 0;
     display: flex;
@@ -61,9 +61,9 @@
     }
 }
 
-/* ── Right panel — 30% of total width ─────────────────────────────────────── */
+/* ── Right panel — 50% of total width ─────────────────────────────────────── */
 .cw-right-panel {
-    width: 30%;
+    width: 50%;
     min-width: 280px;
     flex-shrink: 0;
     border-left: 1px solid #e0e0e0;
@@ -96,11 +96,12 @@
     background: rgba(255, 255, 255, 0.98);
     border-top: 1.5px solid #e0e0e0;
     width: 100%;
+    margin-top: -2px; /* pull the digit bar up slightly */
 
     /* ── ① Triangle track — exactly the height of the triangle arrow ── */
     &__triangle-track {
         position: relative;
-        height: 9px;       /* matches border-top-width of the pointer */
+        height: 7px;       /* matches border-top-width of the pointer */
         width: 100%;
         flex-shrink: 0;
         overflow: visible; /* let the pointer bleed down onto circles */
@@ -132,7 +133,7 @@
         display: flex;
         align-items: center;
         width: 100%;
-        padding: 3px 2px 4px;
+        padding: 1px 2px 2px;
     }
 
     /* Price chip */
@@ -183,7 +184,8 @@
         flex: 1;
         justify-content: space-between;
         align-items: flex-start;
-        padding: 0 2px;
+        padding: 0 1px;
+        gap: 2px; /* half the previous implicit spacing */
     }
 
     /* Individual digit item */
@@ -214,8 +216,8 @@
 
     /* Digit circle */
     &__circle {
-        width: clamp(36px, 3.2vw, 48px);
-        height: clamp(36px, 3.2vw, 48px);
+        width: clamp(28px, 2.6vw, 38px);
+        height: clamp(28px, 2.6vw, 38px);
         border-radius: 50%;
         border: 2px solid #ccc;
         background: #f0f0f0;
