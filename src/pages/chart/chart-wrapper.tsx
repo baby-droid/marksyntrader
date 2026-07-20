@@ -329,6 +329,7 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
             <div className='cw-right-panel'>
                 <ChartTradePanel
                     symbol={symbol}
+                    onSymbolChange={(s) => chart_store.onSymbolChange(s)}
                     currentDigit={currentDigit}
                     currentPrice={currentPrice}
                     priceChange={priceChange}

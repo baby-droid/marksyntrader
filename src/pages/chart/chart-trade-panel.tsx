@@ -56,6 +56,7 @@ const AccountBadge: React.FC = () => {
 /* ── Props ─────────────────────────────────────────────────────────────────── */
 interface ChartTradePanelProps {
     symbol: string;
+    onSymbolChange?: (s: string) => void;
     currentDigit: number | null;
     currentPrice: number | null;
     priceChange: number;
@@ -67,6 +68,7 @@ interface ChartTradePanelProps {
 /* ════════════════════════════════════════════════════════════════════════════ */
 export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
     symbol,
+    onSymbolChange,
     currentDigit,
     currentPrice,
     priceChange,
@@ -74,6 +76,23 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
     barrier,
     onBarrierChange,
 }) => {
+    /* ── Active symbols list for market selector ──────────────────────── */
+    const [activeSymbols, setActiveSymbols] = React.useState<Array<{symbol: string; display_name: string}>>([]);
+    React.useEffect(() => {
+        const load = () => {
+            const syms = (api_base as any)?.active_symbols ?? [];
+            if (syms.length > 0) {
+                const list = syms.map((s: any) => ({
+                    symbol: s.symbol || s.underlying_symbol || '',
+                    display_name: s.display_name || s.symbol || '',
+                })).filter((s: any) => s.symbol);
+                setActiveSymbols(list);
+            }
+        };
+        load();
+        const id = setInterval(load, 1500);
+        return () => clearInterval(id);
+    }, []);
     const [groupId, setGroupId]       = useState(TRADE_GROUPS[0].id);
     const group = TRADE_GROUPS.find(g => g.id === groupId) ?? TRADE_GROUPS[0];
 
@@ -263,14 +282,25 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
     return (
         <div className='ctp'>
 
-            {/* ── Market selector (display only) ─────────────────────── */}
+            {/* ── Market selector (live — syncs SmartChart) ──────────── */}
             <div className='ctp__section ctp__section--market'>
-                <div className='ctp__section-label'>Market</div>
-                <div className='ctp__market-display'>
-                    <span className='ctp__market-icon'>V</span>
-                    <span className='ctp__market-name'>{symbolName(symbol)}</span>
+                <div className='ctp__section-label'>
+                    Market
                     <AccountBadge />
                 </div>
+                <select
+                    className='ctp__type-select ctp__type-select--market'
+                    value={symbol}
+                    onChange={e => onSymbolChange?.(e.target.value)}
+                    disabled={!onSymbolChange || activeSymbols.length === 0}
+                >
+                    {activeSymbols.length > 0
+                        ? activeSymbols.map(s => (
+                            <option key={s.symbol} value={s.symbol}>{s.display_name}</option>
+                          ))
+                        : <option value={symbol}>{symbolName(symbol)}</option>
+                    }
+                </select>
             </div>
 
             {/* ── Contract type ─────────────────────────────────────── */}
@@ -407,6 +437,9 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                     ))}
                 </div>
             </div>
+
+            {/* ── Spacer — pushes buttons toward the bottom ─────────── */}
+            <div className='ctp__spacer' />
 
             {/* ── Result feedback ───────────────────────────────────── */}
             {result && (

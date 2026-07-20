@@ -213,7 +213,11 @@ export const useSmartChartAdaptor = (): UseSmartChartAdaptorReturn => {
     const getQuotes: TGetQuotes = useCallback(
         async params => {
             if (!adapter) {
-                throw new Error('Adapter not initialized');
+                // Return empty history instead of throwing — lets SmartChart render without blocking
+                if (params.granularity === 0) {
+                    return { history: { prices: [], times: [] } };
+                }
+                return { candles: [] };
             }
 
             const result = await adapter.getQuotes({

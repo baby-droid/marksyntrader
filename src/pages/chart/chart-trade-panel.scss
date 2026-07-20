@@ -17,18 +17,21 @@
     &.real { background: rgba(0,165,80,0.1);   color: #00a550; }
 }
 
-/* ── CTP root ──────────────────────────────────────────────────────────────── */
+/* ── CTP root — card with rounded corners ──────────────────────────────────── */
 .ctp {
     display: flex;
     flex-direction: column;
     width: 100%;
-    height: 100%;
+    min-height: 100%;
     font-family: 'Inter', 'Poppins', sans-serif;
     font-size: 13px;
     color: #0E0F11;
     background: #ffffff;
-    padding: 5px 0 6px 0;
+    padding: 10px 0 10px 0;
     box-sizing: border-box;
+    border-radius: 14px;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.06);
+    overflow: hidden;
 }
 
 /* ── Section ────────────────────────────────────────────────────────────────── */
@@ -59,20 +62,28 @@
     margin-bottom: 5px;
 }
 
+.ctp__type-select--market {
+    font-weight: 700;
+    background: #f0f7ff;
+    border-color: #1E88FF;
+    color: #0e3a6e;
+    border-radius: 12px;
+}
+
 .ctp__market-display {
     display: flex;
     align-items: center;
     gap: 6px;
     height: 36px;
     border: 1px solid #e0e0e0;
-    border-radius: 8px;
+    border-radius: 12px;
     padding: 0 10px;
     background: #fafafa;
 }
 
 .ctp__market-icon {
     width: 22px; height: 22px;
-    border-radius: 4px;
+    border-radius: 6px;
     background: #1E88FF;
     color: #fff;
     font-size: 11px;
@@ -106,7 +117,7 @@
     color: #0E0F11;
     background: #fff;
     border: 1px solid #e0e0e0;
-    border-radius: 8px;
+    border-radius: 12px;
     padding: 0 10px;
     cursor: pointer;
     outline: none;
@@ -123,12 +134,15 @@
 .ctp__tick-row {
     display: flex;
     gap: 4px;
+    flex-wrap: wrap;
 }
 
 .ctp__tick-btn {
-    flex: 1;
+    flex: 0 0 auto;
+    min-width: 30px;
     height: 30px;
-    border-radius: 6px;
+    padding: 0 8px;
+    border-radius: 12px;
     border: 1px solid #e0e0e0;
     background: #f9f9f9;
     color: #0E0F11;
@@ -140,7 +154,6 @@
     align-items: center;
     justify-content: center;
     transition: all 0.1s;
-    min-width: 0;
     &:hover { border-color: #00C853; background: rgba(0,200,83,0.05); }
     &.active { background: #111827; border-color: #111827; color: #fff; }
 }
@@ -186,7 +199,7 @@
 .ctp__digit-btn {
     flex: 1;
     height: 30px;
-    border-radius: 6px;
+    border-radius: 12px;
     border: 1px solid #e0e0e0;
     background: #f9f9f9;
     color: #0E0F11;
@@ -241,9 +254,9 @@
 }
 
 .ctp__stake-adj {
-    width: 32px;
+    width: 34px;
     height: 34px;
-    border-radius: 6px;
+    border-radius: 10px;
     border: 1px solid #e0e0e0;
     background: #fff;
     color: #0E0F11;
@@ -265,7 +278,7 @@
     gap: 4px;
     height: 34px;
     border: 1px solid #e0e0e0;
-    border-radius: 6px;
+    border-radius: 10px;
     background: #fff;
     padding: 0 6px;
 }
@@ -300,7 +313,7 @@
     flex: 1;
     min-width: 0;
     height: 30px;
-    border-radius: 6px;
+    border-radius: 12px;
     border: 1px solid #e0e0e0;
     background: #f9f9f9;
     color: #0E0F11;
@@ -349,6 +362,12 @@
 }
 @keyframes ctp-accu-pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
 
+/* ── Spacer — pushes Over/Under toward bottom of the panel ─────────────────── */
+.ctp__spacer {
+    flex: 1;
+    min-height: 6px;
+}
+
 /* ── Over / Under buttons ───────────────────────────────────────────────────── */
 .ctp__section--over,
 .ctp__section--under {
@@ -357,8 +376,8 @@
 
 .ctp__buy-btn {
     width: 100%;
-    min-height: 42px;
-    border-radius: 10px;
+    min-height: 44px;
+    border-radius: 14px;
     border: none;
     display: flex;
     align-items: stretch;

@@ -119,7 +119,11 @@ const Chart = observer(({ show_digits_stats }: { show_digits_stats: boolean }) =
                 getQuotes={getQuotes}
                 subscribeQuotes={subscribeQuotes}
                 unsubscribeQuotes={unsubscribeQuotes}
-                chartData={{ activeSymbols: chartData.activeSymbols, tradingTimes: chartData.tradingTimes }}
+                chartData={
+                    chartData.activeSymbols.length > 0
+                        ? { activeSymbols: chartData.activeSymbols, tradingTimes: chartData.tradingTimes }
+                        : undefined
+                }
                 settings={settings}
                 symbol={symbol}
                 topWidgets={() => <ChartTitle onChange={onSymbolChange} />}
