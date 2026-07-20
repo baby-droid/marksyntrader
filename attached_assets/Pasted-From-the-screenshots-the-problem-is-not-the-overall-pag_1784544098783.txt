@@ -1,0 +1,492 @@
+From the screenshots, the problem is not the overall page width—it is the **vertical layout** of the right trading panel. At 100% browser zoom, the controls exceed the viewport height, so the action buttons ("Over" and "Under") are pushed below the fold. When you zoom to 67%, everything becomes visible because the browser is scaling the entire UI, not because the layout is better.
+
+A better solution is to redesign the panel so it fits within a 1920×1080 display at 100% zoom.
+
+# Recommended Right Panel
+
+Target width:
+
+```
+340px–360px
+```
+
+Maximum height:
+
+```
+100vh
+```
+
+Use:
+
+```
+display:flex;
+flex-direction:column;
+overflow:hidden;
+```
+
+instead of allowing the panel to grow indefinitely.
+
+---
+
+# Suggested Heights
+
+| Component             | Height |
+| --------------------- | ------ |
+| Header                | 48 px  |
+| Current Price         | 42 px  |
+| Tick Slider           | 60 px  |
+| Last Digit Prediction | 100 px |
+| Stake/Payout Tabs     | 42 px  |
+| Stake Input           | 52 px  |
+| Quick Stake Buttons   | 42 px  |
+| Spacer                | 8 px   |
+| Over Button           | 58 px  |
+| Gap                   | 10 px  |
+| Under Button          | 58 px  |
+
+Everything fits comfortably inside roughly:
+
+```
+520–560px
+```
+
+instead of the current ~700px.
+
+---
+
+# Reduce Vertical Padding
+
+Current spacing appears to be around:
+
+```
+24 px
+```
+
+Reduce to:
+
+```
+12 px
+```
+
+between sections.
+
+Example:
+
+```
+Price
+
+12px
+
+Ticks
+
+12px
+
+Digits
+
+12px
+
+Stake
+
+10px
+
+Buttons
+```
+
+instead of large empty gaps.
+
+---
+
+# Increase Digit Circle Size
+
+Current circles look approximately:
+
+```
+50 px
+```
+
+Increase to:
+
+```
+60 px
+```
+
+or
+
+```
+64 px
+```
+
+Recommended:
+
+```
+Width
+
+60px
+
+Height
+
+60px
+
+Border
+
+2px
+
+Font
+
+22px
+
+Probability
+
+13px
+```
+
+---
+
+# Space Between Circles
+
+Current spacing:
+
+```
+10 px
+```
+
+Recommended:
+
+```
+16 px
+```
+
+or
+
+```
+18 px
+```
+
+Layout:
+
+```
+○      ○      ○      ○      ○
+```
+
+instead of
+
+```
+○ ○ ○ ○ ○
+```
+
+This gives a cleaner, less crowded appearance.
+
+---
+
+# Bottom Digit Area
+
+Increase its height slightly.
+
+Current:
+
+```
+70 px
+```
+
+Recommended:
+
+```
+90 px
+```
+
+so the circles don't touch the chart.
+
+---
+
+# Brighter Colors
+
+## Green
+
+Current resembles:
+
+```
+#7CB342
+```
+
+Use:
+
+```
+#00E676
+```
+
+or
+
+```
+#00FF6A
+```
+
+Glow:
+
+```
+rgba(0,255,106,.35)
+```
+
+---
+
+## Red
+
+Current:
+
+```
+#D84343
+```
+
+Use:
+
+```
+#FF3D57
+```
+
+Glow:
+
+```
+rgba(255,61,87,.30)
+```
+
+---
+
+## Yellow
+
+Use:
+
+```
+#FFD600
+```
+
+Glow:
+
+```
+rgba(255,214,0,.35)
+```
+
+---
+
+## Blue
+
+Use:
+
+```
+#1E88FF
+```
+
+Glow:
+
+```
+rgba(30,136,255,.30)
+```
+
+---
+
+# Selected Circle
+
+Instead of only a border, add:
+
+```
+2px border
+
++
+
+Light shadow
+
++
+
+8% background tint
+```
+
+Example
+
+```
+background
+
+rgba(0,230,118,.08)
+
+border
+
+#00E676
+
+box-shadow
+
+0 0 14px rgba(0,230,118,.35)
+```
+
+---
+
+# Over / Under Buttons
+
+Current height:
+
+```
+72 px
+```
+
+Recommended:
+
+```
+56–60 px
+```
+
+Font:
+
+```
+20 px
+```
+
+Percentage:
+
+```
+24 px
+
+bold
+```
+
+Payout:
+
+```
+16 px
+```
+
+This saves space while remaining readable.
+
+---
+
+# Stake Buttons
+
+Current:
+
+```
+34 px
+```
+
+Increase to:
+
+```
+40 × 40
+```
+
+Spacing:
+
+```
+8 px
+```
+
+Radius:
+
+```
+10 px
+```
+
+---
+
+# Price Display
+
+Increase prominence:
+
+```
+Current
+
+16 px
+
+Recommended
+
+24 px
+
+Weight
+
+700
+```
+
+---
+
+# Slider
+
+Make the track more visible:
+
+```
+Height
+
+6 px
+
+Thumb
+
+16 px
+
+Active color
+
+#1E88FF
+```
+
+---
+
+# Responsive Scaling
+
+Avoid relying on browser zoom. Instead, use CSS with viewport-based sizing:
+
+```css
+html {
+    font-size: clamp(14px, 0.9vw, 16px);
+}
+
+.right-panel {
+    width: min(360px, 24vw);
+    height: 100vh;
+}
+
+.trade-button {
+    min-height: 58px;
+}
+
+.digit-circle {
+    width: clamp(56px, 3.2vw, 64px);
+    height: clamp(56px, 3.2vw, 64px);
+}
+```
+
+This lets the interface adapt between 1366×768, 1600×900, and 1920×1080 without needing browser zoom.
+
+---
+
+# Chart Layout
+
+Reserve more space for the chart:
+
+```
+Chart
+
+76%
+
+Right Panel
+
+24%
+```
+
+On a 1920 px display:
+
+```
+Chart
+
+≈1460 px
+
+Panel
+
+≈360 px
+```
+
+---
+
+## Recommended Design Summary
+
+* Right panel width: **350–360 px**
+* Right panel height: **100vh** with no overflow
+* Vertical spacing between sections: **10–12 px**
+* Digit circles: **60–64 px** diameter
+* Space between circles: **16–18 px**
+* Trade buttons: **58–60 px** high
+* Stake buttons: **40×40 px**
+* Use brighter accent colors: Green **#00E676**, Red **#FF3D57**, Yellow **#FFD600**, Blue **#1E88FF**
+* Add subtle glow and tinted backgrounds for active selections
+* Use responsive CSS (`clamp()`, `vw`, `vh`) instead of depending on browser zoom so that all controls remain visible at 100% zoom on standard desktop resolutions.

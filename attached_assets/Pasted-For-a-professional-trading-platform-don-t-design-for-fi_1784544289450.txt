@@ -1,0 +1,665 @@
+For a professional trading platform, don't design for fixed pixel sizes. Use a **responsive layout system** with breakpoints, flexible widths, and scalable components. This is how platforms like Deriv, TradingView, and Binance keep their interfaces usable across phones, tablets, laptops, ultrawide monitors, and 4K displays.
+
+---
+
+# 1. Responsive Breakpoints
+
+| Device           | Width       | Layout                    |
+| ---------------- | ----------- | ------------------------- |
+| Small Mobile     | 320–479px   | Single column             |
+| Mobile           | 480–767px   | Single column             |
+| Tablet Portrait  | 768–991px   | Chart + collapsible panel |
+| Tablet Landscape | 992–1199px  | 70/30 layout              |
+| Laptop           | 1200–1439px | 74/26 layout              |
+| Desktop          | 1440–1919px | 76/24 layout              |
+| Large Desktop    | 1920–2559px | 78/22 layout              |
+| 4K               | 2560px+     | Max-width centered layout |
+
+---
+
+# 2. Grid Layout
+
+Instead of absolute positioning:
+
+```text
++--------------------------------------------------------+
+|                       HEADER                           |
++-----------------------------+--------------------------+
+|                             |                          |
+|                             |                          |
+|         CHART               |     TRADING PANEL        |
+|                             |                          |
+|                             |                          |
++-----------------------------+--------------------------+
+|          DIGIT HISTORY / STATUS BAR                    |
++--------------------------------------------------------+
+```
+
+Desktop
+
+```text
+Chart
+
+75%
+
+Trading Panel
+
+25%
+```
+
+Tablet
+
+```text
+Chart
+
+70%
+
+Panel
+
+30%
+```
+
+Mobile
+
+```text
+Chart
+
+100%
+
+Panel
+
+100% (below chart)
+```
+
+---
+
+# 3. Responsive Widths
+
+Instead of
+
+```css
+width:360px;
+```
+
+use
+
+```css
+width:min(360px,25vw);
+min-width:280px;
+max-width:380px;
+```
+
+Chart
+
+```css
+flex:1;
+```
+
+---
+
+# 4. Responsive Font Sizes
+
+Instead of
+
+```css
+font-size:16px;
+```
+
+use
+
+```css
+font-size:clamp(14px,1vw,16px);
+```
+
+Examples
+
+| Element     | Size                   |
+| ----------- | ---------------------- |
+| Header      | clamp(18px,1.4vw,28px) |
+| Price       | clamp(18px,1.6vw,30px) |
+| Buttons     | clamp(16px,1vw,20px)   |
+| Digit       | clamp(18px,1.3vw,24px) |
+| Probability | clamp(10px,.8vw,13px)  |
+
+---
+
+# 5. Digit Circles
+
+Never fixed.
+
+Instead
+
+```css
+width:clamp(50px,3vw,64px);
+
+height:clamp(50px,3vw,64px);
+```
+
+Font
+
+```css
+clamp(18px,1.4vw,24px)
+```
+
+Spacing
+
+```css
+gap:clamp(8px,1vw,18px);
+```
+
+---
+
+# 6. Buttons
+
+Desktop
+
+```text
+360×58
+```
+
+Laptop
+
+```text
+330×56
+```
+
+Tablet
+
+```text
+300×54
+```
+
+Mobile
+
+```text
+100% width
+
+54px height
+```
+
+---
+
+# 7. Responsive Right Panel
+
+Desktop
+
+```text
+360 px
+```
+
+Laptop
+
+```text
+340 px
+```
+
+Tablet
+
+```text
+320 px
+```
+
+Mobile
+
+```text
+100%
+```
+
+---
+
+# 8. Panel Scroll
+
+Avoid page scrolling.
+
+Instead
+
+```css
+height:100vh;
+
+overflow-y:auto;
+```
+
+Only the panel scrolls.
+
+The chart stays fixed.
+
+---
+
+# 9. Chart Height
+
+Desktop
+
+```text
+78vh
+```
+
+Laptop
+
+```text
+72vh
+```
+
+Tablet
+
+```text
+60vh
+```
+
+Mobile
+
+```text
+45vh
+```
+
+---
+
+# 10. Mobile Layout
+
+Desktop
+
+```text
+Chart | Panel
+```
+
+Mobile
+
+```text
+Chart
+
+↓
+
+Digit History
+
+↓
+
+Trading Panel
+
+↓
+
+Transactions
+```
+
+Everything stacks vertically.
+
+---
+
+# 11. Collapsible Sections
+
+On phones
+
+Instead of always showing
+
+```text
+Ticks
+
+Prediction
+
+Stake
+
+Buttons
+```
+
+Use
+
+```text
+▼ Trading
+
+▼ Stake
+
+▼ History
+
+▼ Journal
+```
+
+Expandable panels.
+
+---
+
+# 12. Floating Trade Buttons
+
+Desktop
+
+```text
+Bottom
+```
+
+Mobile
+
+```text
+Sticky Bottom
+```
+
+```text
+-------------------------
+
+OVER
+
+UNDER
+
+-------------------------
+```
+
+Always visible.
+
+---
+
+# 13. Digit Area
+
+Desktop
+
+```text
+0 1 2 3 4 5 6 7 8 9
+```
+
+Tablet
+
+```text
+same
+```
+
+Phone
+
+Wrap automatically
+
+```text
+0 1 2 3 4
+
+5 6 7 8 9
+```
+
+---
+
+# 14. Zoom Controls
+
+Desktop
+
+```text
+Left side
+```
+
+Tablet
+
+```text
+Floating
+```
+
+Phone
+
+```text
+Bottom-left
+```
+
+---
+
+# 15. Minimum Touch Size
+
+Never smaller than
+
+```text
+44×44 px
+```
+
+Apple
+
+Google
+
+Microsoft
+
+all recommend this.
+
+---
+
+# 16. Responsive Margins
+
+Instead of
+
+```css
+margin:20px;
+```
+
+use
+
+```css
+margin:clamp(8px,1vw,20px);
+```
+
+Padding
+
+```css
+padding:clamp(10px,1vw,18px);
+```
+
+---
+
+# 17. Colors
+
+Use brighter modern colors.
+
+Green
+
+```text
+#00E676
+```
+
+Red
+
+```text
+#FF3D57
+```
+
+Blue
+
+```text
+#2196F3
+```
+
+Yellow
+
+```text
+#FFD600
+```
+
+Glow
+
+```css
+box-shadow:
+
+0 0 12px rgba(...)
+```
+
+---
+
+# 18. Auto Scaling
+
+Never use
+
+```css
+zoom:80%;
+```
+
+Instead
+
+```css
+transform:none;
+```
+
+Everything scales using
+
+```text
+vw
+
+vh
+
+clamp()
+
+flex
+
+grid
+```
+
+---
+
+# 19. Layout Example (1920×1080)
+
+```text
+Chart
+
+1470 px
+
+Trading Panel
+
+360 px
+
+Gap
+
+20 px
+```
+
+---
+
+# 20. Layout Example (1366×768)
+
+```text
+Chart
+
+1020 px
+
+Panel
+
+320 px
+```
+
+Buttons
+
+```text
+56 px
+```
+
+Digits
+
+```text
+54 px
+```
+
+---
+
+# 21. Layout Example (Tablet)
+
+```text
+Chart
+
+100%
+
+↓
+
+Trading Panel
+
+100%
+
+↓
+
+History
+
+100%
+```
+
+---
+
+# 22. Layout Example (Mobile)
+
+```text
+HEADER
+
+↓
+
+Chart
+
+45vh
+
+↓
+
+Digit Circles
+
+↓
+
+Prediction
+
+↓
+
+Stake
+
+↓
+
+Over Button
+
+↓
+
+Under Button
+
+↓
+
+Transactions
+
+↓
+
+Journal
+```
+
+---
+
+# 23. Media Query Settings
+
+```css
+/* Large Desktop */
+@media (min-width:1920px){
+    --panel-width:360px;
+    --digit-size:64px;
+    --button-height:60px;
+}
+
+/* Desktop */
+@media (1440px <= width < 1920px){
+    --panel-width:350px;
+    --digit-size:60px;
+    --button-height:58px;
+}
+
+/* Laptop */
+@media (1200px <= width < 1440px){
+    --panel-width:330px;
+    --digit-size:56px;
+    --button-height:56px;
+}
+
+/* Tablet */
+@media (768px <= width < 1200px){
+    --panel-width:300px;
+    --digit-size:52px;
+    --button-height:54px;
+}
+
+/* Mobile */
+@media (max-width:767px){
+    --panel-width:100%;
+    --digit-size:48px;
+    --button-height:52px;
+}
+```
+
+---
+
+# 24. Recommended UI Specification
+
+| Component    | Desktop | Laptop | Tablet | Mobile |
+| ------------ | ------- | ------ | ------ | ------ |
+| Chart        | 76%     | 74%    | 100%   | 100%   |
+| Right Panel  | 24%     | 26%    | 100%   | 100%   |
+| Digit Circle | 64px    | 56px   | 52px   | 48px   |
+| Digit Gap    | 18px    | 16px   | 12px   | 8px    |
+| Trade Button | 60px    | 58px   | 54px   | 52px   |
+| Header       | 72px    | 68px   | 60px   | 56px   |
+| Price Font   | 30px    | 26px   | 22px   | 20px   |
+| Body Font    | 16px    | 15px   | 14px   | 13px   |
+| Chart Height | 78vh    | 72vh   | 60vh   | 45vh   |
+
+This approach ensures the trading interface remains readable and fully functional from a 320 px-wide mobile screen to a 4K desktop without requiring browser zoom, while keeping the chart, trading controls, digit indicators, and action buttons consistently accessible.
