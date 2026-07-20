@@ -151,15 +151,15 @@
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 2px;
+        gap: 3px;
         flex-shrink: 0;
-        width: 48px;
+        width: 56px;
         border-right: 1px solid #eee;
-        padding-right: 4px;
-        margin-right: 2px;
+        padding-right: 5px;
+        margin-right: 3px;
     }
     &__price-val {
-        font-size: 8px;
+        font-size: 9px;
         font-weight: 800;
         color: #000;
         font-variant-numeric: tabular-nums;
@@ -167,11 +167,11 @@
         white-space: nowrap;
     }
     &__price-digit {
-        width: 16px; height: 16px;
+        width: 22px; height: 22px;
         border-radius: 50%;
         background: #1E88FF;
         color: #fff;
-        font-size: 9px;
+        font-size: 12px;
         font-weight: 900;
         display: flex;
         align-items: center;
@@ -225,15 +225,15 @@
 
     /* Digit circle */
     &__circle {
-        width: clamp(28px, 2.6vw, 38px);
-        height: clamp(28px, 2.6vw, 38px);
+        width: clamp(40px, 4.0vw, 54px);
+        height: clamp(40px, 4.0vw, 54px);
         border-radius: 50%;
-        border: 2px solid #ccc;
+        border: 2.5px solid #ccc;
         background: #f0f0f0;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: clamp(12px, 1.1vw, 18px);
+        font-size: clamp(16px, 1.8vw, 24px);
         font-weight: 900;
         color: #000;
         transition: transform 0.15s, box-shadow 0.15s;
@@ -286,7 +286,7 @@
 
     /* Percentage label */
     &__pct {
-        font-size: clamp(8px, 0.65vw, 11px);
+        font-size: clamp(9px, 0.85vw, 13px);
         font-weight: 900;
         color: #000;
         font-variant-numeric: tabular-nums;
@@ -325,49 +325,48 @@
 @keyframes cdo-dot-pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.75)} }
 @keyframes cdo-fade-in   { from{opacity:0;transform:translateX(-5px)} to{opacity:1;transform:translateX(0)} }
 
-/* ── Win/Loss trade flag — pinned to right edge of chart like a chart marker */
+/* ── Win/Loss trade flag — compact pill pinned near the price axis ──────────── */
 .chart-trade-flag {
     position: absolute;
-    right: 68px;
+    /* chart is 50% wide; price axis is ~55px from the right of .cw-chart-inner */
+    right: 6px;
     display: flex;
     align-items: center;
-    gap: 5px;
-    padding: 4px 10px 4px 8px;
-    border-radius: 4px 16px 16px 4px;
-    font-size: clamp(10px,0.75vw,12px);
+    gap: 3px;
+    padding: 3px 8px 3px 6px;
+    border-radius: 3px 10px 10px 3px;
+    font-size: 11px;
     font-weight: 800;
     z-index: 30;
     pointer-events: none;
-    animation: chart-flag-in 0.35s cubic-bezier(.2,1.4,.4,1) both, chart-flag-out 0.6s ease-in 4.8s both;
+    animation: chart-flag-in 0.3s cubic-bezier(.2,1.4,.4,1) both, chart-flag-out 0.5s ease-in 4.5s both;
     white-space: nowrap;
-    box-shadow: 0 3px 12px rgba(0,0,0,0.18);
-    /* Pole/stem on the left side */
+    box-shadow: 0 2px 8px rgba(0,0,0,0.22);
+    /* Stem connecting flag to chart price level */
     &::before {
         content: '';
         position: absolute;
-        left: -12px;
+        left: -8px;
         top: 50%;
         transform: translateY(-50%);
-        width: 12px;
+        width: 8px;
         height: 2px;
     }
     &--win  {
-        background: linear-gradient(120deg,#00E676,#00C853);
+        background: linear-gradient(110deg,#00E676,#00C853);
         color: #003c1a;
-        border: 1px solid rgba(255,255,255,0.3);
+        border: 1px solid rgba(255,255,255,0.25);
         &::before { background: #00C853; }
-        &::after  { content: '✓ WIN'; }
     }
     &--loss {
-        background: linear-gradient(120deg,#FF3D57,#C62828);
+        background: linear-gradient(110deg,#FF3D57,#C62828);
         color: #fff;
-        border: 1px solid rgba(255,255,255,0.3);
+        border: 1px solid rgba(255,255,255,0.2);
         &::before { background: #C62828; }
-        &::after  { content: '✗ LOSS'; }
     }
 }
-@keyframes chart-flag-in  { from{opacity:0;transform:translateY(-10px) scale(0.85)} to{opacity:1;transform:translateY(0) scale(1)} }
-@keyframes chart-flag-out { from{opacity:1} to{opacity:0;transform:translateY(-6px)} }
+@keyframes chart-flag-in  { from{opacity:0;transform:translateX(6px) scale(0.88)} to{opacity:1;transform:translateX(0) scale(1)} }
+@keyframes chart-flag-out { from{opacity:1} to{opacity:0;transform:translateX(4px)} }
 
 /* ── Mobile ───────────────────────────────────────────────────────────────── */
 @media (max-width: 767px) {

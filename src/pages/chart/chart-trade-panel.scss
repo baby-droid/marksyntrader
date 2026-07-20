@@ -17,11 +17,15 @@
     &.real { background: rgba(0,165,80,0.1);   color: #00a550; }
 }
 
-/* ── CTP root — card with rounded corners ──────────────────────────────────── */
+/* ── CTP root — half-width card, left-aligned in the right panel ────────────── */
+/* Setting width:50% here halves every section inside (market, contract, ticks,
+   digit prediction, stake, over/under) while keeping them all at the same LEFT
+   position. The right half of the right panel shows the panel background.     */
 .ctp {
     display: flex;
     flex-direction: column;
-    width: 100%;
+    width: 50%;
+    min-width: 210px;
     min-height: 100%;
     font-family: 'Inter', 'Poppins', sans-serif;
     font-size: 13px;
