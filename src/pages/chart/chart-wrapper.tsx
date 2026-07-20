@@ -15,13 +15,13 @@ interface ChartWrapperProps {
     show_digits_stats: boolean;
 }
 
-/* ── Color helper ─────────────────────────────────────────────────────────── */
+/* Color helper */
 function getCircleColor(pct: number, sorted: number[]): 'green' | 'blue' | 'yellow' | 'red' | 'default' {
     const unique = [...new Set(sorted)];
-    const max    = unique[unique.length - 1];
-    const min    = unique[0];
-    const max2   = unique.length >= 2 ? unique[unique.length - 2] : null;
-    const min2   = unique.length >= 3 ? unique[1] : null;
+    const max  = unique[unique.length - 1];
+    const min  = unique[0];
+    const max2 = unique.length >= 2 ? unique[unique.length - 2] : null;
+    const min2 = unique.length >= 3 ? unique[1] : null;
     if (pct === max)  return 'green';
     if (pct === min)  return 'red';
     if (max2 !== null && pct === max2) return 'blue';
@@ -34,32 +34,20 @@ function getLastDigit(price: number, ps: number): number {
     return parseInt(s[s.length - 1], 10);
 }
 
-/** Map a digit 0-9 to its percentage position in a 10-item space-between row */
-const digitToPercent = (d: number) => `${d * 10 + 5}%`;
-
-/* Symbol display name helper */
-const SYMBOL_NAMES: Record<string, string> = {
-    '1HZ100V': 'Volatility 100 (1s)',
-    '1HZ10V':  'Volatility 10 (1s)',
-    '1HZ25V':  'Volatility 25 (1s)',
-    '1HZ50V':  'Volatility 50 (1s)',
-    '1HZ75V':  'Volatility 75 (1s)',
-    'R_100':   'Volatility 100',
-    'R_10':    'Volatility 10',
-    'R_25':    'Volatility 25',
-    'R_50':    'Volatility 50',
-    'R_75':    'Volatility 75',
-};
-function symbolName(sym: string) { return SYMBOL_NAMES[sym] ?? sym; }
+/**
+ * Map digit 0-9 to horizontal % position in a 10-item space-between row.
+ * With flex:1 per item, each item occupies 10% of the container.
+ * Center of item i = (i * 10 + 5) %.
+ */
+const digitToPercent = (d: number): string => `${d * 10 + 5}%`;
 
 interface PendingTrade {
     id: string;
     totalTicks: number;
     countedTicks: number;
-    won?: boolean;
 }
 
-/* ══════════════════════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════════════════════════════ */
 const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWrapperProps) => {
     const { client, chart_store } = useStore();
     const symbol = chart_store?.symbol || '1HZ100V';
@@ -69,32 +57,32 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
         ? `${prefix}-${client.loginid}`
         : `${prefix}-${uuid}`;
 
-    /* ── Tick subscription ─────────────────────────────────────────────── */
-    const [currentDigit,  setCurrentDigit]  = useState<number | null>(null);
-    const [digitCounts,   setDigitCounts]   = useState<number[]>(new Array(10).fill(0));
-    const [pipSize,       setPipSize]       = useState(2);
-    const [currentPrice,  setCurrentPrice]  = useState<number | null>(null);
-    const [priceChange,   setPriceChange]   = useState(0);
+    /* Tick state */
+    const [currentDigit, setCurrentDigit]   = useState<number | null>(null);
+    const [digitCounts,  setDigitCounts]    = useState<number[]>(new Array(10).fill(0));
+    const [pipSize,      setPipSize]        = useState(2);
+    const [currentPrice, setCurrentPrice]   = useState<number | null>(null);
+    const [priceChange,  setPriceChange]    = useState(0);
     const digitHistoryRef = useRef<number[]>([]);
     const prevPriceRef    = useRef<number | null>(null);
     const pipSizeRef      = useRef(2);
 
-    /* ── Shared barrier (digit selection) ─────────────────────────────── */
+    /* Barrier (last digit prediction selection) */
     const [barrier, setBarrier] = useState(5);
 
-    /* ── Win/Loss tracking ────────────────────────────────────────────── */
+    /* Win/Loss */
     const [lastTrade, setLastTrade] = useState<{ digit: number; won: boolean } | null>(null);
     const [tradeFlags, setTradeFlags] = useState<Array<{ id: string; won: boolean; profit: number }>>([]);
     const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const flagTimersRef     = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
-    /* ── Pending trade tick counters ──────────────────────────────────── */
-    const [pendingTrades,    setPendingTrades]    = useState<PendingTrade[]>([]);
-    const pendingTradesRef                         = useRef<PendingTrade[]>([]);
-    const contractTickDigitsRef                    = useRef<Map<string, number[]>>(new Map());
+    /* Pending tick counters */
+    const [pendingTrades, setPendingTrades] = useState<PendingTrade[]>([]);
+    const pendingTradesRef      = useRef<PendingTrade[]>([]);
+    const contractTickDigitsRef = useRef<Map<string, number[]>>(new Map());
     const [tickDigitSnapshot, setTickDigitSnapshot] = useState<Map<string, number[]>>(new Map());
 
-    /* ── Trade event listeners ────────────────────────────────────────── */
+    /* Trade events */
     useEffect(() => {
         const handleStarted = (e: CustomEvent) => {
             const { contractId, ticks } = e.detail;
@@ -152,7 +140,7 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
         };
     }, []);
 
-    /* ── Tick subscription (reset when symbol changes) ────────────────── */
+    /* Tick subscription */
     useEffect(() => {
         digitHistoryRef.current = [];
         prevPriceRef.current    = null;
@@ -221,13 +209,12 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
         return () => { alive = false; sub?.unsubscribe?.(); };
     }, [symbol]);
 
-    /* ── Derived digit stats ──────────────────────────────────────────── */
+    /* Derived stats */
     const total  = Math.max(digitHistoryRef.current.length, 1);
     const pcts   = digitCounts.map(c => (c / total) * 100);
     const sorted = [...pcts].sort((a, b) => a - b);
-    const DIGIT_ORDER = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
-    /* Map digit → tick labels from active trades */
+    /* Per-digit tick labels */
     const digitTradeLabels = new Map<number, string[]>();
     tickDigitSnapshot.forEach((digits, tradeId) => {
         const pending = pendingTradesRef.current.find(t => t.id === tradeId);
@@ -235,45 +222,22 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
             const tickNum = idx + 1;
             const isLast  = pending ? tickNum === pending.totalTicks : true;
             const label   = isLast ? `T${tickNum}★` : `T${tickNum}`;
-            const arr     = digitTradeLabels.get(d) ?? [];
+            const arr = digitTradeLabels.get(d) ?? [];
             arr.push(label);
             digitTradeLabels.set(d, arr);
         });
     });
 
-    /* ── Triangle X position (0-9 → 5%,15%,25%…95% of circles row) ─── */
-    const triangleLeft = currentDigit !== null ? digitToPercent(currentDigit) : '-100px';
-
-    /* ══════════════════════════════════════════════════════════════════ */
     return (
         <div className='cw-root'>
 
-            {/* ── LEFT: chart area + digit bar ──────────────────────────── */}
+            {/* ── LEFT: SmartChart + digit bar ──────────────────────────── */}
             <div className='cw-left'>
 
-                {/* Market card */}
-                <div className='cw-market-card'>
-                    <div className='cw-market-card__icon'>V</div>
-                    <div>
-                        <div className='cw-market-card__name'>{symbolName(symbol)}</div>
-                        {currentPrice != null && (
-                            <div className='cw-market-card__sub'>
-                                {currentPrice.toFixed(pipSize)}
-                                {priceChange !== 0 && (
-                                    <span style={{ color: priceChange > 0 ? '#00C853' : '#FF3D57', marginLeft: 4, fontSize: 10, fontWeight: 700 }}>
-                                        {priceChange > 0 ? '▲' : '▼'}
-                                    </span>
-                                )}
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                {/* Chart canvas — fills remaining height */}
+                {/* Chart canvas — SmartChart renders its own market card inside */}
                 <div className='cw-chart-inner'>
                     <Chart key={uniqueKey} show_digits_stats={false} />
 
-                    {/* Tick counter badges */}
                     {pendingTrades.map((t, i) => (
                         <div key={t.id} className='cdo-tick-counter' style={{ top: `${18 + i * 44}px` }}>
                             <span className='cdo-tick-counter__dot' />
@@ -282,30 +246,30 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                         </div>
                     ))}
 
-                    {/* Win/Loss floating flags */}
                     {tradeFlags.map((flag, i) => (
                         <div
                             key={flag.id}
                             className={`chart-trade-flag chart-trade-flag--${flag.won ? 'win' : 'loss'}`}
                             style={{ top: `${18 + i * 44}px`, left: '50%' }}
                         >
-                            &nbsp;{flag.won ? '✓ WIN' : '✗ LOSS'}&nbsp;{flag.won ? '+' : ''}{flag.profit.toFixed(2)}
+                            &nbsp;{flag.won ? '✓ WIN' : '✗ LOSS'}&nbsp;
+                            {flag.won ? '+' : ''}{flag.profit.toFixed(2)}
                         </div>
                     ))}
                 </div>
 
-                {/* ── Digit circles section ──────────────────────────────── */}
+                {/* ── Digit circles bar ─────────────────────────────────── */}
                 <div className='cdo' aria-label='Last Digit Statistics'>
 
-                    {/* Triangle track: 12px reserved strip with single sliding pointer */}
+                    {/* ① Triangle track — ▼ slides above circles */}
                     <div className='cdo__triangle-track'>
                         <div
                             className={`cdo__triangle-pointer${currentDigit === null ? ' cdo__triangle-pointer--hidden' : ''}`}
-                            style={{ left: triangleLeft }}
+                            style={{ left: currentDigit !== null ? digitToPercent(currentDigit) : '-100px' }}
                         />
                     </div>
 
-                    {/* Circles row (price chip + 10 digit items) */}
+                    {/* ② Circles row */}
                     <div className='cdo__body'>
                         <div className='cdo__price'>
                             <span className='cdo__price-val'>
@@ -316,7 +280,7 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                             )}
                         </div>
                         <div className='cdo__circles'>
-                            {DIGIT_ORDER.map(d => {
+                            {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(d => {
                                 const pct       = pcts[d] ?? 0;
                                 const colorRank = getCircleColor(pct, sorted);
                                 const isCurrent = currentDigit === d;
@@ -328,12 +292,7 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                                 const isFinalT  = tLabels.some(l => l.includes('★'));
 
                                 return (
-                                    <div
-                                        key={d}
-                                        className='cdo__item'
-                                        onClick={() => setBarrier(d)}
-                                    >
-                                        {/* T1/T2 tick label */}
+                                    <div key={d} className='cdo__item' onClick={() => setBarrier(d)}>
                                         {hasT ? (
                                             <div className={`cdo__tlabel${isFinalT ? ' cdo__tlabel--final' : ''}`}>
                                                 {tLabels.map(l => l.replace('★', '')).join(' ')}
@@ -341,8 +300,6 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                                         ) : (
                                             <div className='cdo__tlabel cdo__tlabel--hidden' />
                                         )}
-
-                                        {/* Digit circle */}
                                         <div className={[
                                             'cdo__circle',
                                             `cdo__circle--${colorRank}`,
@@ -355,17 +312,14 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                                         ].filter(Boolean).join(' ')}>
                                             {d}
                                         </div>
-
-                                        {/* Percentage */}
                                         <span className='cdo__pct'>{pct.toFixed(1)}%</span>
                                     </div>
                                 );
                             })}
                         </div>
                     </div>
-                </div>{/* /cdo */}
-
-            </div>{/* /cw-left */}
+                </div>
+            </div>
 
             {/* ── RIGHT: trade panel ────────────────────────────────────── */}
             <div className='cw-right-panel'>

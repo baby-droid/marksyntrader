@@ -1,9 +1,10 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   Chart Trade Panel — RIGHT side panel (319px wide)
-   Spec: section gap 12px, panel padding 16px, 26px top/bottom unused margins
+   Chart Trade Panel — right-side panel, fits everything in one viewport
+   Target: all sections visible without scrolling the outer page.
+   Right panel is independently scrollable if the viewport is very short.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Account badge (shared) ─────────────────────────────────────────────── */
+/* ── Account badge ─────────────────────────────────────────────────────────── */
 .ctp-acct-badge {
     display: inline-block;
     padding: 2px 7px;
@@ -16,73 +17,61 @@
     &.real { background: rgba(0,165,80,0.1);   color: #00a550; }
 }
 
-/* ── CTP root ────────────────────────────────────────────────────────────── */
+/* ── CTP root ──────────────────────────────────────────────────────────────── */
 .ctp {
     display: flex;
     flex-direction: column;
     width: 100%;
     height: 100%;
     font-family: 'Inter', 'Poppins', sans-serif;
-    font-size: 14px;
+    font-size: 13px;
     color: #0E0F11;
     background: #ffffff;
-    /* 26px top/bottom unused as per spec */
-    padding: 26px 0 26px 0;
+    padding: 10px 0 10px 0;
     box-sizing: border-box;
-    overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: #ddd transparent;
-    &::-webkit-scrollbar { width: 4px; }
-    &::-webkit-scrollbar-thumb { background: #ddd; border-radius: 4px; }
 }
 
-/* ── Section base ────────────────────────────────────────────────────────── */
+/* ── Section ────────────────────────────────────────────────────────────────── */
 .ctp__section {
-    padding: 0 16px;
-    margin-bottom: 12px; /* section-gap: 12px */
+    padding: 0 12px;
+    margin-bottom: 8px;
     flex-shrink: 0;
 }
 
 .ctp__section-label {
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
     color: #667085;
-    margin-bottom: 6px;
+    margin-bottom: 4px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    letter-spacing: 0.01em;
 }
 
 .ctp__section-val {
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 900;
     color: #111827;
 }
 
-/* ── Market section (height ~56px) ─────────────────────────────────────── */
+/* ── Market section ────────────────────────────────────────────────────────── */
 .ctp__section--market {
-    height: 56px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    margin-bottom: 12px;
-    .ctp__section-label { margin-bottom: 4px; }
+    margin-bottom: 8px;
 }
 
 .ctp__market-display {
     display: flex;
     align-items: center;
     gap: 8px;
-    height: 48px;
-    border: 1px solid #E8ECC0;
+    height: 44px;
+    border: 1px solid #e0e0e0;
     border-radius: 8px;
     padding: 0 10px;
     background: #fafafa;
 }
 
 .ctp__market-icon {
-    width: 24px; height: 24px;
+    width: 22px; height: 22px;
     border-radius: 4px;
     background: #1E88FF;
     color: #fff;
@@ -104,48 +93,46 @@
     text-overflow: ellipsis;
 }
 
-/* ── Contract type section (height ~56px) ──────────────────────────────── */
+/* ── Contract type ──────────────────────────────────────────────────────────── */
 .ctp__section--contract {
-    margin-bottom: 12px;
+    margin-bottom: 8px;
 }
 
 .ctp__type-select {
     width: 100%;
-    height: 48px;
-    font-size: 14px;
+    height: 44px;
+    font-size: 13px;
     font-weight: 600;
     color: #0E0F11;
     background: #fff;
-    border: 1px solid #E8ECC0;
+    border: 1px solid #e0e0e0;
     border-radius: 8px;
     padding: 0 10px;
     cursor: pointer;
     outline: none;
     font-family: inherit;
     appearance: auto;
-    transition: border-color 0.15s;
     &:focus { border-color: #00C853; }
 }
 
-/* ── Ticks section (height ~72px) ──────────────────────────────────────── */
+/* ── Ticks ──────────────────────────────────────────────────────────────────── */
 .ctp__section--ticks {
-    margin-bottom: 12px;
+    margin-bottom: 8px;
 }
 
 .ctp__tick-row {
     display: flex;
-    gap: 6px;
-    flex-wrap: nowrap;
+    gap: 4px;
 }
 
 .ctp__tick-btn {
     flex: 1;
-    height: 44px;
-    border-radius: 8px;
-    border: 1px solid #E8ECC0;
+    height: 36px;
+    border-radius: 6px;
+    border: 1px solid #e0e0e0;
     background: #f9f9f9;
     color: #0E0F11;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 700;
     cursor: pointer;
     font-family: inherit;
@@ -154,7 +141,6 @@
     justify-content: center;
     transition: all 0.1s;
     min-width: 0;
-
     &:hover { border-color: #00C853; background: rgba(0,200,83,0.05); }
     &.active { background: #111827; border-color: #111827; color: #fff; }
 }
@@ -168,7 +154,7 @@
     background: #e0e0e0;
     outline: none;
     cursor: pointer;
-    margin-bottom: 4px;
+    margin-bottom: 3px;
     &::-webkit-slider-thumb {
         -webkit-appearance: none;
         width: 14px; height: 14px;
@@ -189,20 +175,19 @@
     span.active { color: #00C853; font-weight: 900; }
 }
 
-/* ── Last digit prediction (height ~88+px) ─────────────────────────────── */
+/* ── Last Digit Prediction ──────────────────────────────────────────────────── */
 .ctp__section--digit {
-    margin-bottom: 12px;
+    margin-bottom: 8px;
 }
 
-.ctp__digits { display: flex; flex-direction: column; gap: 6px; }
-
-.ctp__digits-row { display: flex; gap: 6px; }
+.ctp__digits { display: flex; flex-direction: column; gap: 4px; }
+.ctp__digits-row { display: flex; gap: 4px; }
 
 .ctp__digit-btn {
     flex: 1;
-    height: 40px;
-    border-radius: 8px;
-    border: 1px solid #E8ECC0;
+    height: 36px;
+    border-radius: 6px;
+    border: 1px solid #e0e0e0;
     background: #f9f9f9;
     color: #0E0F11;
     font-size: 14px;
@@ -214,59 +199,52 @@
     justify-content: center;
     transition: all 0.1s;
     min-width: 0;
-
     &:hover  { border-color: #667085; background: #f0f0f0; }
     &.active { background: #1E88FF; border-color: #1E88FF; color: #fff; }
     &.current { box-shadow: 0 0 0 2px rgba(30,136,255,0.4); }
-    &.active.current { background: #1E88FF; border-color: #1E88FF; }
 }
 
-/* ── Stake section ─────────────────────────────────────────────────────── */
+/* ── Stake ──────────────────────────────────────────────────────────────────── */
 .ctp__section--stake {
-    margin-bottom: 12px;
+    margin-bottom: 8px;
 }
 
 .ctp__stake-tabs {
     display: flex;
-    gap: 0;
     background: #f3f4f6;
-    border-radius: 8px;
-    padding: 3px;
-    margin-bottom: 8px;
+    border-radius: 6px;
+    padding: 2px;
+    margin-bottom: 6px;
 }
 
 .ctp__stake-tab {
     flex: 1;
-    padding: 6px;
+    padding: 5px;
     border: none;
-    border-radius: 6px;
+    border-radius: 5px;
     background: transparent;
     color: #9ca3af;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 700;
     cursor: pointer;
     font-family: inherit;
     text-align: center;
     transition: all 0.15s;
-    &.active {
-        background: #fff;
-        color: #0E0F11;
-        box-shadow: 0 1px 4px rgba(0,0,0,.1);
-    }
+    &.active { background: #fff; color: #0E0F11; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
 }
 
 .ctp__stake-ctrl {
     display: flex;
     align-items: center;
     gap: 6px;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
 }
 
 .ctp__stake-adj {
-    width: 40px;
-    height: 44px;
-    border-radius: 8px;
-    border: 1px solid #E8ECC0;
+    width: 36px;
+    height: 40px;
+    border-radius: 6px;
+    border: 1px solid #e0e0e0;
     background: #fff;
     color: #0E0F11;
     font-size: 18px;
@@ -276,7 +254,6 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    transition: border-color 0.1s;
     &:hover { border-color: #00C853; color: #00C853; }
 }
 
@@ -285,19 +262,19 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 5px;
-    height: 44px;
-    border: 1px solid #E8ECC0;
-    border-radius: 8px;
+    gap: 4px;
+    height: 40px;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
     background: #fff;
-    padding: 0 8px;
+    padding: 0 6px;
 }
 
 .ctp__stake-inp {
-    width: 60px;
+    width: 54px;
     border: none;
     background: transparent;
-    font-size: 20px;
+    font-size: 18px;
     font-weight: 900;
     color: #0E0F11;
     text-align: center;
@@ -309,25 +286,25 @@
 }
 
 .ctp__stake-cur {
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 700;
     color: #667085;
 }
 
 .ctp__stake-presets {
     display: flex;
-    gap: 6px;
+    gap: 4px;
 }
 
 .ctp__preset {
     flex: 1;
     min-width: 0;
-    height: 40px;
-    border-radius: 8px;
-    border: 1px solid #E8ECC0;
+    height: 36px;
+    border-radius: 6px;
+    border: 1px solid #e0e0e0;
     background: #f9f9f9;
     color: #0E0F11;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 700;
     cursor: pointer;
     font-family: inherit;
@@ -337,27 +314,27 @@
     &.active { background: #111827; border-color: #111827; color: #fff; }
 }
 
-/* ── Result feedback ────────────────────────────────────────────────────── */
+/* ── Result feedback ────────────────────────────────────────────────────────── */
 .ctp__result {
-    margin: 0 16px 8px;
-    padding: 6px 10px;
-    border-radius: 6px;
-    font-size: 12px;
+    margin: 0 12px 6px;
+    padding: 5px 8px;
+    border-radius: 5px;
+    font-size: 11px;
     font-weight: 700;
     flex-shrink: 0;
     &.ok  { background: rgba(0,200,83,0.08);  color: #00a550; border: 1px solid rgba(0,200,83,0.2); }
     &.err { background: rgba(255,61,87,0.08); color: #e02020; border: 1px solid rgba(255,61,87,0.2); }
 }
 
-/* ── Over / Under buy buttons (height 56px each) ───────────────────────── */
+/* ── Over / Under buttons ───────────────────────────────────────────────────── */
 .ctp__section--over,
 .ctp__section--under {
-    margin-bottom: 8px;
+    margin-bottom: 6px;
 }
 
 .ctp__buy-btn {
     width: 100%;
-    min-height: 56px;
+    min-height: 52px;
     border-radius: 10px;
     border: none;
     display: flex;
@@ -367,19 +344,18 @@
     font-family: inherit;
     transition: filter 0.15s, box-shadow 0.15s;
     overflow: hidden;
-    position: relative;
 
     &:disabled { opacity: 0.6; cursor: not-allowed; }
 
     &--over {
         background: linear-gradient(120deg, #00C853 0%, #00E676 100%);
-        box-shadow: 0 2px 10px rgba(0,200,83,0.3);
-        &:hover:not(:disabled) { filter: brightness(1.06); box-shadow: 0 4px 16px rgba(0,230,118,0.45); }
+        box-shadow: 0 2px 8px rgba(0,200,83,0.3);
+        &:hover:not(:disabled) { filter: brightness(1.06); box-shadow: 0 4px 14px rgba(0,230,118,0.45); }
     }
     &--under {
         background: linear-gradient(120deg, #FF3D57 0%, #C62828 100%);
-        box-shadow: 0 2px 10px rgba(255,61,87,0.3);
-        &:hover:not(:disabled) { filter: brightness(1.06); box-shadow: 0 4px 16px rgba(255,61,87,0.45); }
+        box-shadow: 0 2px 8px rgba(255,61,87,0.3);
+        &:hover:not(:disabled) { filter: brightness(1.06); box-shadow: 0 4px 14px rgba(255,61,87,0.45); }
     }
 }
 
@@ -387,7 +363,7 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    padding: 8px 14px 7px;
+    padding: 7px 12px 6px;
     gap: 2px;
 }
 
@@ -397,12 +373,6 @@
     gap: 6px;
 }
 
-.ctp__buy-arrow {
-    font-size: 16px;
-    line-height: 1;
-    flex-shrink: 0;
-    /* green btn → dark text, red btn → white text handled by parent color */
-}
 .ctp__buy-btn--over  .ctp__buy-arrow,
 .ctp__buy-btn--over  .ctp__buy-label,
 .ctp__buy-btn--over  .ctp__buy-pct,
@@ -413,17 +383,7 @@
 .ctp__buy-btn--under .ctp__buy-pct,
 .ctp__buy-btn--under .ctp__buy-sub  { color: #fff; }
 
-.ctp__buy-label { flex: 1; font-size: 16px; font-weight: 900; letter-spacing: 0.01em; text-align: left; }
-.ctp__buy-pct   { font-size: 18px; font-weight: 900; font-variant-numeric: tabular-nums; flex-shrink: 0; }
-.ctp__buy-sub   { font-size: 11px; font-weight: 600; opacity: 0.85; text-align: left; }
-
-/* ── Mobile ──────────────────────────────────────────────────────────────── */
-@media (max-width: 900px) {
-    .ctp {
-        padding: 12px 0;
-        overflow-y: visible;
-    }
-    .ctp__buy-btn { min-height: 52px; }
-    .ctp__tick-btn { height: 38px; font-size: 13px; }
-    .ctp__digit-btn { height: 36px; font-size: 13px; }
-}
+.ctp__buy-arrow { font-size: 15px; line-height: 1; flex-shrink: 0; }
+.ctp__buy-label { flex: 1; font-size: 15px; font-weight: 900; letter-spacing: 0.01em; text-align: left; }
+.ctp__buy-pct   { font-size: 17px; font-weight: 900; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.ctp__buy-sub   { font-size: 10px; font-weight: 600; opacity: 0.85; text-align: left; }
