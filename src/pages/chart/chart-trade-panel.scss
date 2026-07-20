@@ -25,12 +25,12 @@
 
     // ── Header hint ───────────────────────────────────────────────────
     &__header {
-        padding: 8px 16px 6px;
+        padding: 4px 10px 3px;
         border-bottom: 1px solid #f0f0f0;
     }
 
     &__header-hint {
-        font-size: 10px;
+        font-size: 9px;
         color: #b7b7b7;
         letter-spacing: 0.04em;
     }
@@ -40,19 +40,19 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 8px 12px;
+        padding: 4px 8px;
         border-bottom: 1px solid #f0f0f0;
         background: #fafafa;
     }
 
     &__type-nav-btn {
-        width: 28px;
-        height: 28px;
+        width: 22px;
+        height: 22px;
         border: 1px solid #e8e8e8;
-        border-radius: 6px;
+        border-radius: 5px;
         background: #fff;
         color: #555;
-        font-size: 16px;
+        font-size: 14px;
         font-weight: 600;
         cursor: pointer;
         display: flex;
@@ -65,14 +65,14 @@
     &__type-nav-label {
         display: flex;
         align-items: center;
-        gap: 6px;
-        font-size: 13px;
+        gap: 4px;
+        font-size: 11px;
         font-weight: 700;
         color: #222;
     }
 
     &__type-nav-icon {
-        font-size: 14px;
+        font-size: 12px;
     }
 
     // ── Price row ─────────────────────────────────────────────────────
@@ -80,49 +80,49 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 6px 16px 8px;
+        padding: 3px 10px 4px;
         border-bottom: 1px solid #f0f0f0;
     }
 
     &__price-val {
-        font-size: 15px;
+        font-size: 12px;
         font-weight: 700;
         color: #222;
         font-variant-numeric: tabular-nums;
         display: flex;
         align-items: center;
-        gap: 6px;
+        gap: 4px;
     }
 
     &__price-chg {
-        font-size: 11px;
+        font-size: 9px;
         font-weight: 600;
-        padding: 1px 5px;
-        border-radius: 4px;
+        padding: 1px 4px;
+        border-radius: 3px;
         &.up { color: #00a550; background: rgba(0,165,80,0.1); }
         &.dn { color: #f14343; background: rgba(241,67,67,0.1); }
     }
 
     // ── Generic section ──────────────────────────────────────────────
     &__section {
-        padding: 10px 16px;
+        padding: 5px 10px;
         border-bottom: 1px solid #f0f0f0;
     }
 
     &__section-label {
-        font-size: 10px;
+        font-size: 9px;
         font-weight: 700;
         color: #b7b7b7;
         text-transform: uppercase;
         letter-spacing: 0.08em;
-        margin-bottom: 7px;
+        margin-bottom: 4px;
         display: flex;
         align-items: center;
         justify-content: space-between;
     }
 
     &__section-val {
-        font-size: 12px;
+        font-size: 10px;
         font-weight: 700;
         color: #2fb9bf;
         text-transform: none;
@@ -134,17 +134,17 @@
         width: 100%;
         -webkit-appearance: none;
         appearance: none;
-        height: 5px;
+        height: 4px;
         border-radius: 999px;
         background: #e4e4e4;
         outline: none;
         cursor: pointer;
-        margin-bottom: 5px;
+        margin-bottom: 3px;
 
         &::-webkit-slider-thumb {
             -webkit-appearance: none;
-            width: 16px;
-            height: 16px;
+            width: 13px;
+            height: 13px;
             border-radius: 50%;
             background: #c6cbd2;
             border: 2px solid #fff;
@@ -158,7 +158,7 @@
     &__slider-marks {
         display: flex;
         justify-content: space-between;
-        font-size: 8px;
+        font-size: 7px;
         color: #c6cbd2;
         font-weight: 600;
         span.active { color: #2fb9bf; font-weight: 800; }
@@ -168,17 +168,17 @@
     &__digits {
         display: flex;
         flex-wrap: wrap;
-        gap: 4px;
+        gap: 3px;
     }
 
     &__digit-btn {
-        width: 30px;
-        height: 30px;
-        border-radius: 7px;
+        width: 24px;
+        height: 24px;
+        border-radius: 5px;
         border: 1px solid #e8e8e8;
         background: #f8f9fa;
         color: #555;
-        font-size: 12px;
+        font-size: 10px;
         font-weight: 700;
         cursor: pointer;
         font-family: inherit;
@@ -204,19 +204,19 @@
     &__stake-tabs {
         display: flex;
         background: #f4f5f7;
-        border-radius: 8px;
+        border-radius: 6px;
         padding: 2px;
-        margin-bottom: 8px;
+        margin-bottom: 5px;
     }
 
     &__stake-tab {
         flex: 1;
-        padding: 5px;
+        padding: 3px;
         border: none;
-        border-radius: 6px;
+        border-radius: 4px;
         background: transparent;
         color: #b7b7b7;
-        font-size: 11px;
+        font-size: 9px;
         font-weight: 600;
         cursor: pointer;
         font-family: inherit;
@@ -231,21 +231,21 @@
     &__stake-ctrl {
         display: flex;
         align-items: center;
-        gap: 6px;
+        gap: 4px;
         background: #f4f5f7;
-        border-radius: 8px;
-        padding: 4px;
-        margin-bottom: 6px;
+        border-radius: 6px;
+        padding: 3px;
+        margin-bottom: 4px;
     }
 
     &__stake-adj {
-        width: 28px;
-        height: 28px;
-        border-radius: 6px;
+        width: 22px;
+        height: 22px;
+        border-radius: 5px;
         border: 1px solid #e8e8e8;
         background: #fff;
         color: #555;
-        font-size: 16px;
+        font-size: 13px;
         cursor: pointer;
         display: flex;
         align-items: center;
@@ -254,7 +254,7 @@
         &:hover { border-color: #2fb9bf; color: #2fb9bf; }
 
         &--reset {
-            font-size: 13px;
+            font-size: 11px;
             color: #aaa;
         }
     }
@@ -264,14 +264,14 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 3px;
+        gap: 2px;
     }
 
     &__stake-inp {
-        width: 55px;
+        width: 45px;
         border: none;
         background: transparent;
-        font-size: 15px;
+        font-size: 13px;
         font-weight: 700;
         color: #222;
         text-align: center;
@@ -283,24 +283,24 @@
     }
 
     &__stake-cur {
-        font-size: 10px;
+        font-size: 9px;
         font-weight: 700;
         color: #b7b7b7;
     }
 
     &__stake-presets {
         display: flex;
-        gap: 4px;
+        gap: 3px;
         flex-wrap: wrap;
     }
 
     &__preset {
-        padding: 3px 8px;
-        border-radius: 5px;
+        padding: 2px 6px;
+        border-radius: 4px;
         border: 1px solid #e8e8e8;
         background: #f8f9fa;
         color: #888;
-        font-size: 10px;
+        font-size: 9px;
         font-weight: 600;
         cursor: pointer;
         font-family: inherit;
@@ -314,10 +314,10 @@
 
     // ── Result feedback ───────────────────────────────────────────────
     &__result {
-        margin: 0 16px 4px;
-        padding: 6px 10px;
-        border-radius: 6px;
-        font-size: 11px;
+        margin: 0 10px 3px;
+        padding: 4px 8px;
+        border-radius: 5px;
+        font-size: 10px;
         font-weight: 600;
         &.ok  { background: rgba(47,185,191,0.08); color: #00a550; border: 1px solid rgba(47,185,191,0.2); }
         &.err { background: rgba(241,67,67,0.08);  color: #f14343; border: 1px solid rgba(241,67,67,0.2); }
@@ -325,54 +325,54 @@
 
     // ── Buy buttons with payout ───────────────────────────────────────
     &__buy-row {
-        padding: 10px 14px 12px;
+        padding: 6px 10px 8px;
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 5px;
         flex-shrink: 0;
     }
 
     &__buy-block {
         display: flex;
         flex-direction: column;
-        gap: 3px;
+        gap: 2px;
     }
 
     &__payout-line {
-        font-size: 10.5px;
+        font-size: 9px;
         font-weight: 600;
         color: #888;
         display: flex;
         align-items: center;
-        gap: 4px;
+        gap: 3px;
         padding: 0 2px;
     }
 
     &__payout-info {
-        width: 14px;
-        height: 14px;
+        width: 12px;
+        height: 12px;
         border-radius: 50%;
         border: 1px solid #ccc;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        font-size: 8px;
+        font-size: 7px;
         color: #aaa;
         cursor: help;
     }
 
     &__buy-btn {
         width: 100%;
-        height: 56px;
-        border-radius: 10px;
+        height: 40px;
+        border-radius: 8px;
         border: none;
         display: flex;
         align-items: center;
-        gap: 10px;
-        padding: 0 16px;
+        gap: 7px;
+        padding: 0 10px;
         cursor: pointer;
         font-family: inherit;
-        font-size: 16px;
+        font-size: 13px;
         font-weight: 800;
         color: #fff;
         transition: all 0.2s;
@@ -385,7 +385,7 @@
             background: linear-gradient(120deg, #2fb9bf 0%, #1ea8ae 100%);
             &:hover:not(:disabled) {
                 filter: brightness(1.07);
-                box-shadow: 0 4px 20px rgba(47,185,191,0.4);
+                box-shadow: 0 3px 14px rgba(47,185,191,0.4);
             }
         }
 
@@ -393,13 +393,13 @@
             background: linear-gradient(120deg, #f14343 0%, #d42a2a 100%);
             &:hover:not(:disabled) {
                 filter: brightness(1.07);
-                box-shadow: 0 4px 20px rgba(241,67,67,0.35);
+                box-shadow: 0 3px 14px rgba(241,67,67,0.35);
             }
         }
     }
 
     &__buy-arrow {
-        font-size: 18px;
+        font-size: 14px;
         line-height: 1;
     }
 
@@ -411,7 +411,7 @@
 
     // Payout % displayed on the right of the button
     &__buy-pct {
-        font-size: 15px;
+        font-size: 12px;
         font-weight: 900;
         letter-spacing: -0.01em;
         opacity: 0.95;
