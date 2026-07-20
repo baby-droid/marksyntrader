@@ -4,11 +4,18 @@ import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import { publishMasterTrade, getMasterSource } from '@/utils/trade-bus';
 
+/* ── All Deriv contract trade groups (digit + directional + touch) ── */
 const TRADE_GROUPS = [
-    { id: 'over_under',   label: 'Over / Under',   typeA: 'DIGITOVER',  typeB: 'DIGITUNDER',  needsBarrier: true  },
-    { id: 'even_odd',     label: 'Even / Odd',      typeA: 'DIGITEVEN',  typeB: 'DIGITODD',    needsBarrier: false },
-    { id: 'match_differ', label: 'Match / Differ',  typeA: 'DIGITMATCH', typeB: 'DIGITDIFF',   needsBarrier: true  },
-    { id: 'rise_fall',    label: 'Rise / Fall',     typeA: 'CALL',       typeB: 'PUT',         needsBarrier: false },
+    { id: 'over_under',   label: 'Over / Under',      icon: '↑↓', typeA: 'DIGITOVER',  typeB: 'DIGITUNDER',  needsBarrier: true,  durationUnit: 't', minDur: 1, maxDur: 10 },
+    { id: 'even_odd',     label: 'Even / Odd',         icon: '⚡', typeA: 'DIGITEVEN',  typeB: 'DIGITODD',    needsBarrier: false, durationUnit: 't', minDur: 1, maxDur: 10 },
+    { id: 'match_differ', label: 'Match / Differ',     icon: '🎯', typeA: 'DIGITMATCH', typeB: 'DIGITDIFF',   needsBarrier: true,  durationUnit: 't', minDur: 1, maxDur: 10 },
+    { id: 'rise_fall',    label: 'Rise / Fall',        icon: '📈', typeA: 'CALL',       typeB: 'PUT',         needsBarrier: false, durationUnit: 't', minDur: 1, maxDur: 10 },
+    { id: 'higher_lower', label: 'Higher / Lower',     icon: '📊', typeA: 'CALL',       typeB: 'PUT',         needsBarrier: false, durationUnit: 'm', minDur: 1, maxDur: 60 },
+    { id: 'asian',        label: 'Asian Up / Down',    icon: '🌏', typeA: 'ASIANU',     typeB: 'ASIAND',      needsBarrier: false, durationUnit: 't', minDur: 5, maxDur: 10 },
+    { id: 'touch',        label: 'Touch / No Touch',   icon: '✋', typeA: 'ONETOUCH',   typeB: 'NOTOUCH',     needsBarrier: false, durationUnit: 'm', minDur: 1, maxDur: 60 },
+    { id: 'reset',        label: 'Reset Call / Put',   icon: '🔄', typeA: 'RESETCALL',  typeB: 'RESETPUT',    needsBarrier: false, durationUnit: 't', minDur: 5, maxDur: 10 },
+    { id: 'highlow',      label: 'High Tick / Low Tick', icon: '🔝', typeA: 'TICKHIGH',  typeB: 'TICKLOW',    needsBarrier: false, durationUnit: 't', minDur: 5, maxDur: 10 },
+    { id: 'runhighlow',   label: 'Run High / Run Low', icon: '🏃', typeA: 'RUNHIGH',    typeB: 'RUNLOW',      needsBarrier: false, durationUnit: 't', minDur: 1, maxDur: 10 },
 ];
 
 /* ─── Account badge ─── */
@@ -49,16 +56,16 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
     barrier,
     onBarrierChange,
 }) => {
-    const groupIndex = useRef(0);
-    const [group, setGroup]       = useState(TRADE_GROUPS[0]);
-    const [ticks, setTicks]       = useState(5);
-    const [stake, setStake]       = useState(10.00);
+    const [groupId, setGroupId]     = useState(TRADE_GROUPS[0].id);
+    const group = TRADE_GROUPS.find(g => g.id === groupId) ?? TRADE_GROUPS[0];
+
+    const [ticks, setTicks]         = useState(5);
+    const [stake, setStake]         = useState(10.00);
     const [stakeMode, setStakeMode] = useState<'stake' | 'payout'>('stake');
-    const [loading, setLoading]   = useState<'over' | 'under' | null>(null);
-    const [result, setResult]     = useState<{ ok: boolean; msg: string } | null>(null);
+    const [loading, setLoading]     = useState<'over' | 'under' | null>(null);
+    const [result, setResult]       = useState<{ ok: boolean; msg: string } | null>(null);
     const [displayCur, setDisplayCur] = useState(getDisplayCurrency());
 
-    // Live payout amounts from proposal API
     const [overPayout,  setOverPayout]  = useState<number | null>(null);
     const [underPayout, setUnderPayout] = useState<number | null>(null);
     const [overPct,     setOverPct]     = useState<number | null>(null);
@@ -67,17 +74,11 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
 
     useEffect(() => subscribeCurrency(() => setDisplayCur(getDisplayCurrency())), []);
 
-    // Navigate through trade groups
-    const prevGroup = () => {
-        groupIndex.current = (groupIndex.current - 1 + TRADE_GROUPS.length) % TRADE_GROUPS.length;
-        setGroup(TRADE_GROUPS[groupIndex.current]);
-    };
-    const nextGroup = () => {
-        groupIndex.current = (groupIndex.current + 1) % TRADE_GROUPS.length;
-        setGroup(TRADE_GROUPS[groupIndex.current]);
-    };
+    // Clamp ticks to group limits when group changes
+    useEffect(() => {
+        setTicks(t => Math.min(Math.max(t, group.minDur), group.maxDur));
+    }, [group]);
 
-    // ── Fetch live payout from Deriv proposal API ─────────────────────────────
     const fetchPayouts = useCallback(() => {
         if (payoutTimerRef.current) clearTimeout(payoutTimerRef.current);
         payoutTimerRef.current = setTimeout(async () => {
@@ -90,7 +91,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                 basis:    'stake',
                 currency: getDisplayCurrency() || 'USD',
                 duration: ticks,
-                duration_unit: 't',
+                duration_unit: group.durationUnit,
                 underlying_symbol: symbol,
             };
             if (group.needsBarrier) base.barrier = String(barrier);
@@ -110,7 +111,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                 setOverPayout(null); setUnderPayout(null);
                 setOverPct(null);   setUnderPct(null);
             }
-        }, 600); // debounce 600 ms
+        }, 600);
     }, [symbol, stake, ticks, barrier, group]);
 
     useEffect(() => { fetchPayouts(); }, [fetchPayouts]);
@@ -133,7 +134,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                 contract_type: contractType,
                 currency: getDisplayCurrency() || 'USD',
                 duration: ticks,
-                duration_unit: 't',
+                duration_unit: group.durationUnit,
                 underlying_symbol: symbol,
             };
             if (group.needsBarrier) proposalReq.barrier = String(barrier);
@@ -148,9 +149,14 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             if (buyRes?.error) throw new Error(buyRes.error.message);
 
             const contractId = buyRes?.buy?.contract_id;
-            setResult({ ok: true, msg: `✅ Contract #${contractId} open` });
+            setResult({ ok: true, msg: `✅ #${contractId} open` });
 
-            // ── Subscribe to contract settlement for digit highlighting + chart flags ──
+            // Emit tick counter start event
+            window.dispatchEvent(new CustomEvent('chart:trade-started', {
+                detail: { contractId: Number(contractId), ticks },
+            }));
+
+            // Subscribe to contract settlement
             try {
                 const settleSub = (api_base as any).api.subscribe({
                     proposal_open_contract: 1,
@@ -162,14 +168,14 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                         const poc = res?.proposal_open_contract;
                         if (!poc) return;
                         if (poc.status === 'won' || poc.status === 'lost') {
-                            const won = poc.status === 'won';
+                            const won    = poc.status === 'won';
                             const profit = Number(poc.profit ?? 0);
                             const exitStr = poc.exit_tick_display_value
                                 ? String(poc.exit_tick_display_value).replace('.', '')
                                 : null;
                             const exitDigit = exitStr ? parseInt(exitStr[exitStr.length - 1], 10) : null;
                             window.dispatchEvent(new CustomEvent('chart:trade-settled', {
-                                detail: { won, profit, exitDigit, barrier, contractType },
+                                detail: { won, profit, exitDigit, barrier, contractType, contractId: Number(contractId) },
                             }));
                             settleSub.unsubscribe?.();
                         }
@@ -178,20 +184,20 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                 });
             } catch { /* non-fatal */ }
 
-            // ── Publish to copy-trading engine ──────────────────────────────
+            // Publish to copy-trading engine
             try {
                 publishMasterTrade({
                     symbol,
                     contract_type: contractType,
                     stake,
                     duration:      ticks,
-                    duration_unit: 't',
+                    duration_unit: group.durationUnit,
                     ...(group.needsBarrier ? { barrier: String(barrier) } : {}),
                     source:      getMasterSource(),
                     time:        Date.now(),
                     contract_id: Number(contractId),
                 });
-            } catch { /* never block trade on copy error */ }
+            } catch { /* never block trade */ }
         } catch (e: any) {
             setResult({ ok: false, msg: `❌ ${e.message}` });
         } finally {
@@ -200,28 +206,27 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
         }
     }, [loading, group, barrier, ticks, stake, symbol]);
 
-    // ── Label helpers ─────────────────────────────────────────────────────────
-    const overLabel  = group.id === 'over_under' ? 'Over'    : group.id === 'rise_fall' ? 'Rise'  : group.id === 'even_odd' ? 'Even'  : 'Matches';
-    const underLabel = group.id === 'over_under' ? 'Under'   : group.id === 'rise_fall' ? 'Fall'  : group.id === 'even_odd' ? 'Odd'   : 'Differs';
+    const overLabel  = group.id === 'over_under' ? 'Over'  : group.id === 'rise_fall' || group.id === 'higher_lower' ? 'Rise'   : group.id === 'even_odd' ? 'Even'  : group.id === 'asian' ? 'Asian Up'    : group.id === 'touch' ? 'Touch'    : group.id === 'reset' ? 'Reset ↑' : group.id === 'highlow' ? 'High Tick'  : group.id === 'runhighlow' ? 'Run High' : 'Matches';
+    const underLabel = group.id === 'over_under' ? 'Under' : group.id === 'rise_fall' || group.id === 'higher_lower' ? 'Fall'   : group.id === 'even_odd' ? 'Odd'   : group.id === 'asian' ? 'Asian Down'  : group.id === 'touch' ? 'No Touch' : group.id === 'reset' ? 'Reset ↓' : group.id === 'highlow' ? 'Low Tick'   : group.id === 'runhighlow' ? 'Run Low'  : 'Differs';
+
+    // Digit layout: row 1 = [0,1,2,3,4], row 2 = [9,8,7,6,5]
+    const digitRows = [[0, 1, 2, 3, 4], [9, 8, 7, 6, 5]];
 
     return (
         <div className='ctp'>
 
-            {/* ── Header ── */}
-            <div className='ctp__header'>
-                <span className='ctp__header-hint'>Learn about this trade type</span>
-            </div>
-
-            {/* ── Trade Type Navigator ── */}
-            <div className='ctp__type-nav'>
-                <button className='ctp__type-nav-btn' onClick={prevGroup}>‹</button>
-                <div className='ctp__type-nav-label'>
-                    <span className='ctp__type-nav-icon'>
-                        {group.id === 'over_under' ? '↑↓' : group.id === 'rise_fall' ? '📈' : group.id === 'even_odd' ? '⚡' : '🎯'}
-                    </span>
-                    {group.label}
-                </div>
-                <button className='ctp__type-nav-btn' onClick={nextGroup}>›</button>
+            {/* ── Trade Type Dropdown ── */}
+            <div className='ctp__type-select-wrap'>
+                <label className='ctp__type-label'>{group.icon} {group.label}</label>
+                <select
+                    className='ctp__type-select'
+                    value={groupId}
+                    onChange={e => setGroupId(e.target.value)}
+                >
+                    {TRADE_GROUPS.map(g => (
+                        <option key={g.id} value={g.id}>{g.icon} {g.label}</option>
+                    ))}
+                </select>
             </div>
 
             {/* ── Account + Price Row ── */}
@@ -240,23 +245,25 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             {/* ── Tick Duration ── */}
             <div className='ctp__section'>
                 <div className='ctp__section-label'>
-                    Ticks
-                    <span className='ctp__section-val'>{ticks} tick{ticks !== 1 ? 's' : ''}</span>
+                    {group.durationUnit === 't' ? 'Ticks' : 'Minutes'}
+                    <span className='ctp__section-val'>{ticks} {group.durationUnit === 't' ? 'tick' : 'min'}{ticks !== 1 ? 's' : ''}</span>
                 </div>
                 <input
-                    type='range' min={1} max={10} step={1}
+                    type='range' min={group.minDur} max={group.maxDur} step={1}
                     value={ticks}
                     onChange={e => setTicks(Number(e.target.value))}
                     className='ctp__slider'
                 />
                 <div className='ctp__slider-marks'>
-                    {[1,2,3,4,5,6,7,8,9,10].map(n => (
+                    {Array.from({ length: group.maxDur - group.minDur + 1 }, (_, i) => group.minDur + i)
+                        .filter((_, i, arr) => arr.length <= 10 || i % Math.ceil(arr.length / 10) === 0 || i === arr.length - 1)
+                        .map(n => (
                         <span key={n} className={ticks === n ? 'active' : ''}>{n}</span>
                     ))}
                 </div>
             </div>
 
-            {/* ── Last Digit Prediction ── */}
+            {/* ── Last Digit Prediction (2-row layout: [0-4] top, [9-5] bottom) ── */}
             {group.needsBarrier && (
                 <div className='ctp__section'>
                     <div className='ctp__section-label'>
@@ -264,18 +271,22 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                         <span className='ctp__section-val'>{barrier}</span>
                     </div>
                     <div className='ctp__digits'>
-                        {[0,1,2,3,4,5,6,7,8,9].map(d => (
-                            <button
-                                key={d}
-                                className={[
-                                    'ctp__digit-btn',
-                                    barrier === d  ? 'active'  : '',
-                                    currentDigit === d ? 'current' : '',
-                                ].filter(Boolean).join(' ')}
-                                onClick={() => onBarrierChange(d)}
-                            >
-                                {d}
-                            </button>
+                        {digitRows.map((row, ri) => (
+                            <div key={ri} className='ctp__digits-row'>
+                                {row.map(d => (
+                                    <button
+                                        key={d}
+                                        className={[
+                                            'ctp__digit-btn',
+                                            barrier === d  ? 'active'  : '',
+                                            currentDigit === d ? 'current' : '',
+                                        ].filter(Boolean).join(' ')}
+                                        onClick={() => onBarrierChange(d)}
+                                    >
+                                        {d}
+                                    </button>
+                                ))}
+                            </div>
                         ))}
                     </div>
                 </div>
@@ -315,9 +326,8 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                 <div className={`ctp__result ${result.ok ? 'ok' : 'err'}`}>{result.msg}</div>
             )}
 
-            {/* ── Buy Buttons with Payout Amounts ── */}
+            {/* ── Buy Buttons ── */}
             <div className='ctp__buy-row'>
-                {/* Over */}
                 <div className='ctp__buy-block'>
                     <div className='ctp__payout-line'>
                         Payout {overPayout != null
@@ -338,7 +348,6 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                     </button>
                 </div>
 
-                {/* Under */}
                 <div className='ctp__buy-block'>
                     <div className='ctp__payout-line'>
                         Payout {underPayout != null

@@ -1,0 +1,326 @@
+Yes. What you're seeing is not a static marker—it's an **anchored chart object** attached to a specific candle/tick. As new ticks arrive, the chart scrolls left, and the flag moves with the historical data until it expires.
+
+## Deriv's behavior
+
+When a contract settles:
+
+```
+BUY
+      ↓
+Settlement Tick
+      ↓
+Evaluate WIN/LOSS
+      ↓
+Create Flag
+      ↓
+Anchor to Settlement Tick
+      ↓
+Move Left with Chart
+      ↓
+Remove after 60 seconds
+```
+
+The flag is **not redrawn every frame**. It stays attached to the tick where the contract ended.
+
+---
+
+# Flag Object
+
+```ts
+interface TradeFlag {
+    id: string;
+
+    contractId: string;
+
+    timestamp: number;
+
+    tickIndex: number;
+
+    price: number;
+
+    digit: number;
+
+    contractType: "OVER" | "UNDER" | "ODD" | "EVEN" | "MATCHES" | "DIFFERS";
+
+    barrier: number;
+
+    result: "WIN" | "LOSS";
+
+    createdAt: Date.now();
+
+    expiresAt: Date.now() + 60000;
+}
+```
+
+---
+
+# Creating the flag
+
+When settlement occurs:
+
+```ts
+const flag = {
+
+    tickIndex,
+
+    price: settlementPrice,
+
+    digit: settlementDigit,
+
+    result,
+
+    createdAt: Date.now(),
+
+    expiresAt: Date.now()+60000
+}
+
+flags.push(flag)
+```
+
+---
+
+# Rendering
+
+Every chart render:
+
+```ts
+flags.forEach(flag=>{
+
+drawFlag(
+
+flag.tickIndex,
+
+flag.price,
+
+flag.result
+
+)
+
+})
+```
+
+---
+
+# Automatic movement
+
+The chart continuously shifts left.
+
+Example:
+
+```
+Tick 120
+
+........F............
+
+Tick121
+
+.......F.............
+
+Tick122
+
+......F..............
+
+Tick123
+
+.....F...............
+
+Tick124
+
+....F................
+```
+
+The flag remains fixed to the historical data, so as the newest tick is added on the right, everything—including the flag—moves left.
+
+---
+
+# Auto remove after one minute
+
+Every render:
+
+```ts
+const now = Date.now()
+
+flags = flags.filter(f=>
+
+now < f.expiresAt
+
+)
+```
+
+or
+
+```ts
+setInterval(()=>{
+
+const now = Date.now()
+
+flags = flags.filter(
+
+f=>now-f.createdAt<60000
+
+)
+
+},1000)
+```
+
+After 60 seconds:
+
+```
+Flag disappears
+
+History remains
+
+Journal remains
+```
+
+---
+
+# Win flag
+
+```
+🏁
+
+Green
+
+Number
+
+Barrier
+
+Digit
+```
+
+Example
+
+```
+🏁
+
+WIN
+
+Over 2
+
+Digit 8
+```
+
+---
+
+# Loss flag
+
+```
+🏁
+
+Red
+
+LOSS
+
+Over 2
+
+Digit 1
+```
+
+---
+
+# Multiple contracts
+
+```
+Time →
+
+🏁
+
+🏁
+
+🏁
+
+🏁
+
+🏁
+```
+
+Every contract creates its own flag.
+
+Each flag expires independently after one minute.
+
+---
+
+# Hover behavior
+
+When the user hovers over the flag, show a tooltip like:
+
+```
+Contract
+
+Over 2
+
+Duration
+
+1 Tick
+
+Digit
+
+8
+
+Barrier
+
+2
+
+Result
+
+WIN
+
+Profit
+
++$7.60
+
+Time
+
+11:56:31
+```
+
+---
+
+# Complete lifecycle
+
+```
+User clicks BUY
+      │
+      ▼
+Create pending trade
+      │
+      ▼
+Draw blue countdown line
+      │
+      ▼
+Count ticks (0/1 → 1/1)
+      │
+      ▼
+Settlement
+      │
+      ▼
+Extract last digit
+      │
+      ▼
+Evaluate contract
+      │
+      ├── WIN → Green flag
+      │
+      └── LOSS → Red flag
+      │
+      ▼
+Highlight winning/losing digit
+      │
+      ▼
+Save to Transactions
+      │
+      ▼
+Save to Journal
+      │
+      ▼
+Flag stays on chart for 60 seconds
+      │
+      ▼
+Flag scrolls left with the chart
+      │
+      ▼
+Flag expires and is removed
+```
+
+This design reproduces the behavior shown in your screenshots: the flag is anchored to the settlement tick, scrolls left naturally as new ticks arrive, remains visible for about one minute, and then is automatically removed while the completed trade stays available in the transaction history and journal.

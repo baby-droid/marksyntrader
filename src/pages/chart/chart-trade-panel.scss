@@ -23,56 +23,38 @@
         &.real { background: rgba(0,165,80,0.1);   color: #00a550; }
     }
 
-    // ── Header hint ───────────────────────────────────────────────────
-    &__header {
-        padding: 4px 10px 3px;
-        border-bottom: 1px solid #f0f0f0;
-    }
-
-    &__header-hint {
-        font-size: 9px;
-        color: #b7b7b7;
-        letter-spacing: 0.04em;
-    }
-
-    // ── Trade type navigator ──────────────────────────────────────────
-    &__type-nav {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 4px 8px;
+    // ── Trade type dropdown ───────────────────────────────────────────
+    &__type-select-wrap {
+        padding: 5px 8px 4px;
         border-bottom: 1px solid #f0f0f0;
         background: #fafafa;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
     }
 
-    &__type-nav-btn {
-        width: 22px;
-        height: 22px;
-        border: 1px solid #e8e8e8;
-        border-radius: 5px;
-        background: #fff;
-        color: #555;
-        font-size: 14px;
-        font-weight: 600;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: all 0.15s;
-        &:hover { border-color: #2fb9bf; color: #2fb9bf; }
+    &__type-label {
+        font-size: 9px;
+        font-weight: 700;
+        color: #888;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
     }
 
-    &__type-nav-label {
-        display: flex;
-        align-items: center;
-        gap: 4px;
+    &__type-select {
+        width: 100%;
         font-size: 11px;
         font-weight: 700;
         color: #222;
-    }
-
-    &__type-nav-icon {
-        font-size: 12px;
+        background: #fff;
+        border: 1px solid #dde3ea;
+        border-radius: 5px;
+        padding: 3px 5px;
+        cursor: pointer;
+        outline: none;
+        font-family: inherit;
+        appearance: auto;
+        &:focus { border-color: #2fb9bf; }
     }
 
     // ── Price row ─────────────────────────────────────────────────────
@@ -164,21 +146,26 @@
         span.active { color: #2fb9bf; font-weight: 800; }
     }
 
-    // ── Digit prediction buttons ──────────────────────────────────────
+    // ── Digit prediction buttons (2-row: [0-4] / [9-5]) ─────────────
     &__digits {
         display: flex;
-        flex-wrap: wrap;
+        flex-direction: column;
+        gap: 3px;
+    }
+
+    &__digits-row {
+        display: flex;
         gap: 3px;
     }
 
     &__digit-btn {
-        width: 24px;
-        height: 24px;
-        border-radius: 5px;
+        flex: 1;
+        height: 22px;
+        border-radius: 4px;
         border: 1px solid #e8e8e8;
         background: #f8f9fa;
         color: #555;
-        font-size: 10px;
+        font-size: 9px;
         font-weight: 700;
         cursor: pointer;
         font-family: inherit;
@@ -186,17 +173,20 @@
         align-items: center;
         justify-content: center;
         transition: all 0.15s;
+        min-width: 0;
 
-        &:hover { border-color: #2fb9bf; color: #2fb9bf; }
+        &:hover { border-color: #555; color: #222; }
         &.active {
-            background: #dde3ea;
-            border: 2px solid #b5bec8;
-            color: #222;
+            background: rgba(0,0,0,0.07);
+            border: 1.5px solid rgba(0,0,0,0.28);
+            color: #111;
+            font-weight: 800;
         }
-        &.current { box-shadow: 0 0 0 2px #2fb9bf; }
+        &.current { box-shadow: 0 0 0 2px rgba(47,185,191,0.6); }
         &.active.current {
-            background: rgba(47,185,191,0.15);
-            border-color: #2fb9bf;
+            background: rgba(0,0,0,0.07);
+            border-color: rgba(0,0,0,0.28);
+            box-shadow: 0 0 0 2px rgba(47,185,191,0.6);
         }
     }
 
@@ -326,6 +316,7 @@
     // ── Buy buttons with payout ───────────────────────────────────────
     &__buy-row {
         padding: 6px 10px 8px;
+        padding-top: calc(6px + 1.5cm);   // push buttons 1.5 cm below settings
         display: flex;
         flex-direction: column;
         gap: 5px;
