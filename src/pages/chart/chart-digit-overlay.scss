@@ -1,6 +1,6 @@
 /* ── Chart Digit Overlay (cdo) ───────────────────────────────────────────── */
 
-// ── Responsive layout wrapper for chart + trade panel ────────────────────────
+// ── Responsive layout wrapper ─────────────────────────────────────────────────
 .cw-layout {
     display: grid;
     grid-template-columns: 82% 18%;
@@ -14,24 +14,24 @@
     @media (max-width: 767px)  { grid-template-columns: 1fr; grid-template-rows: 45vh 1fr; }
 }
 
-// ── Chart inner area — flex column so digit bar has its own row ───────────────
+// ── Chart inner area — flex:1 so it shrinks to leave room for digit bar ───────
 .cw-chart-inner {
     flex: 1;
     min-height: 0;
     position: relative;
-    padding-left: 0.5cm;
-    padding-right: 0.2cm;
+    padding-left: 0.4cm;
+    padding-right: 0.15cm;
     overflow: hidden;
 }
 
+// ── Digit bar ─────────────────────────────────────────────────────────────────
 .cdo {
-    // Removed absolute positioning — now a flex row at bottom of chart column
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     gap: 0;
-    padding: clamp(4px, 0.5vh, 7px) clamp(3px, 0.3vw, 6px) clamp(3px, 0.4vh, 6px);
+    padding: 0 clamp(2px, 0.25vw, 4px) 3px;
     background: rgba(255, 255, 255, 0.98);
-    border-top: 2px solid #e0e0e0;
+    border-top: 1.5px solid #e0e0e0;
     flex-shrink: 0;
 
     // ── Current price chip ──────────────────────────────────────────────
@@ -39,13 +39,13 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 3px;
+        gap: 2px;
         flex-shrink: 0;
-        margin-right: clamp(2px, 0.3vw, 5px);
+        margin-right: 2px;
     }
 
     &__price-val {
-        font-size: clamp(9px, 0.7vw, 12px);
+        font-size: clamp(8px, 0.65vw, 11px);
         font-weight: 800;
         color: #000;
         font-variant-numeric: tabular-nums;
@@ -54,12 +54,12 @@
     }
 
     &__price-digit {
-        width: clamp(16px, 1.2vw, 22px);
-        height: clamp(16px, 1.2vw, 22px);
+        width: clamp(14px, 1.1vw, 18px);
+        height: clamp(14px, 1.1vw, 18px);
         border-radius: 50%;
         background: #1E88FF;
         color: #fff;
-        font-size: clamp(8px, 0.65vw, 11px);
+        font-size: clamp(7px, 0.6vw, 10px);
         font-weight: 900;
         display: flex;
         align-items: center;
@@ -80,71 +80,43 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 1px;
+        gap: 0;
         cursor: pointer;
         user-select: none;
         min-width: 0;
         flex: 1;
-        position: relative;
+        padding-bottom: 0;
     }
 
-    // ── T-label row above triangle ───────────────────────────────────────
+    // ── T-label row ──────────────────────────────────────────────────────
     &__tlabel {
-        font-size: clamp(8px, 0.55vw, 10px);
+        font-size: clamp(7px, 0.5vw, 9px);
         font-weight: 900;
         color: #1E88FF;
-        letter-spacing: 0.02em;
-        height: 12px;
-        line-height: 12px;
+        height: 11px;
+        line-height: 11px;
         white-space: nowrap;
         text-align: center;
-        min-width: 0;
         animation: cdo-tlabel-in 0.2s ease-out;
 
         &--final {
             color: #FFD600;
-            text-shadow: 0 0 6px rgba(255, 214, 0, 0.6);
+            text-shadow: 0 0 5px rgba(255,214,0,0.7);
         }
 
-        &--hidden {
-            visibility: hidden;
-            pointer-events: none;
-        }
+        &--hidden { visibility: hidden; pointer-events: none; }
     }
 
-    // ── Circle+Triangle wrapper ──────────────────────────────────────────
-    &__circle-wrap {
-        position: relative;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-
-    // ── Triangle pointer — floats ON TOP of circle, red + white ring ──────
+    // ── Triangle — flex item above circle, RED with white drop-shadow ring ──
     &__triangle {
-        position: absolute;
-        top: -6px;
-        left: 50%;
-        transform: translateX(-50%);
-        z-index: 5;
-        // Red downward triangle
         width: 0; height: 0;
-        border-left: clamp(8px, 0.7vw, 12px) solid transparent;
-        border-right: clamp(8px, 0.7vw, 12px) solid transparent;
-        border-top: clamp(10px, 0.9vw, 16px) solid #FF1744;
-        filter: drop-shadow(0 0 0 3px #fff);
-
-        // White outer ring (larger white triangle behind)
-        &::before {
-            content: '';
-            position: absolute;
-            top: clamp(-14px, -1.1vw, -20px);
-            left: clamp(-11px, -0.9vw, -15px);
-            border-left: clamp(11px, 0.95vw, 15px) solid transparent;
-            border-right: clamp(11px, 0.95vw, 15px) solid transparent;
-            border-top: clamp(14px, 1.1vw, 20px) solid rgba(255, 255, 255, 0.95);
-            z-index: -1;
-        }
+        border-left: clamp(5px, 0.45vw, 8px) solid transparent;
+        border-right: clamp(5px, 0.45vw, 8px) solid transparent;
+        border-top: clamp(7px, 0.6vw, 10px) solid #FF1744;
+        flex-shrink: 0;
+        margin-bottom: 2px;
+        // White outer ring via multi-layer drop-shadow on the triangle shape
+        filter: drop-shadow(0 0 2px #fff) drop-shadow(0 0 2px #fff) drop-shadow(0 0 1px rgba(255,255,255,0.9));
     }
 
     &__triangle--hidden {
@@ -152,120 +124,76 @@
         pointer-events: none;
     }
 
-    // ── Digit circle — 2× size, solid bright colors, BLACK numbers ────────
-    &__circle {
-        width: clamp(68px, 5.2vw, 92px);
-        height: clamp(68px, 5.2vw, 92px);
-        border-radius: 50%;
-        border: 3px solid #ccc;
-        background: #f5f5f5;
+    // ── Circle wrapper ─────────────────────────────────────────────────────
+    &__circle-wrap {
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: clamp(22px, 1.8vw, 32px);
+    }
+
+    // ── Digit circle ────────────────────────────────────────────────────
+    &__circle {
+        width: clamp(48px, 4vw, 66px);
+        height: clamp(48px, 4vw, 66px);
+        border-radius: 50%;
+        border: 2.5px solid #ccc;
+        background: #f0f0f0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: clamp(16px, 1.4vw, 22px);
         font-weight: 900;
         color: #000;
         transition: transform 0.15s, box-shadow 0.15s;
         flex-shrink: 0;
 
-        // Highest % → vivid solid green
-        &--green {
-            background: #00E676;
-            border-color: #00B248;
-            color: #000;
-            font-weight: 900;
-            box-shadow: 0 0 12px rgba(0, 230, 118, 0.6);
-        }
+        &--green  { background: #00E676; border-color: #00B248; color: #000; font-weight: 900; box-shadow: 0 0 10px rgba(0,230,118,0.55); }
+        &--red    { background: #FF3D57; border-color: #C62828; color: #000; font-weight: 900; box-shadow: 0 0 10px rgba(255,61,87,0.55); }
+        &--blue   { background: #1E88FF; border-color: #0056b3; color: #000; font-weight: 900; box-shadow: 0 0 10px rgba(30,136,255,0.55); }
+        &--yellow { background: #FFD600; border-color: #c6a800; color: #000; font-weight: 900; box-shadow: 0 0 10px rgba(255,214,0,0.55); }
+        &--default { border-color: #bbb; background: #f0f0f0; color: #000; }
 
-        // Lowest % → vivid solid red
-        &--red {
-            background: #FF3D57;
-            border-color: #C62828;
-            color: #000;
-            font-weight: 900;
-            box-shadow: 0 0 12px rgba(255, 61, 87, 0.6);
-        }
-
-        // 2nd highest % → vivid solid blue
-        &--blue {
-            background: #1E88FF;
-            border-color: #0056b3;
-            color: #000;
-            font-weight: 900;
-            box-shadow: 0 0 12px rgba(30, 136, 255, 0.6);
-        }
-
-        // 2nd lowest % → vivid solid amber/yellow
-        &--yellow {
-            background: #FFD600;
-            border-color: #c6a800;
-            color: #000;
-            font-weight: 900;
-            box-shadow: 0 0 12px rgba(255, 214, 0, 0.6);
-        }
-
-        // Default
-        &--default {
-            border-color: #bbb;
-            background: #f0f0f0;
-            color: #000;
-        }
-
-        // Current digit — blue ring highlight
         &--current {
-            box-shadow: 0 0 0 3px #fff, 0 0 0 5px rgba(30, 136, 255, 0.7);
-            transform: scale(1.10);
+            box-shadow: 0 0 0 2.5px #fff, 0 0 0 4px rgba(30,136,255,0.7);
+            transform: scale(1.08);
         }
-
-        // User-selected barrier
         &--barrier {
-            background: rgba(0, 0, 0, 0.10) !important;
-            border-color: rgba(0, 0, 0, 0.40) !important;
+            background: rgba(0,0,0,0.1) !important;
+            border-color: rgba(0,0,0,0.4) !important;
             color: #000 !important;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
         }
-
-        // Active trade tick (T1, T2, not final) — blue pulse ring
         &--tick-active {
             border-color: #1E88FF !important;
             background: #64B5F6 !important;
-            box-shadow: 0 0 0 2px #fff, 0 0 0 4px rgba(30, 136, 255, 0.6),
-                        0 0 16px rgba(30, 136, 255, 0.4) !important;
+            box-shadow: 0 0 0 2px #fff, 0 0 0 3.5px rgba(30,136,255,0.6) !important;
             animation: cdo-tick-pulse 0.8s ease-out;
             color: #000 !important;
         }
-
-        // Final tick (settlement tick) — gold ring
         &--tick-final {
             border-color: #FFD600 !important;
             background: #FFE57F !important;
-            box-shadow: 0 0 14px rgba(255, 214, 0, 0.6) !important;
             color: #000 !important;
         }
-
-        // Win highlight — vivid green
         &--win {
             background: #00E676 !important;
             border-color: #00B248 !important;
-            border-width: 4px !important;
+            border-width: 3px !important;
             color: #000 !important;
-            box-shadow: 0 0 24px 8px rgba(0, 230, 118, 0.65) !important;
+            box-shadow: 0 0 20px 6px rgba(0,230,118,0.7) !important;
             animation: cdo-pulse-win 0.7s ease-out;
         }
-
-        // Loss highlight — vivid red
         &--loss {
             background: #FF3D57 !important;
             border-color: #C62828 !important;
-            border-width: 4px !important;
+            border-width: 3px !important;
             color: #000 !important;
-            box-shadow: 0 0 24px 8px rgba(255, 61, 87, 0.65) !important;
+            box-shadow: 0 0 20px 6px rgba(255,61,87,0.7) !important;
             animation: cdo-pulse-loss 0.7s ease-out;
         }
     }
 
     &__pct {
-        font-size: clamp(9px, 0.65vw, 12px);
+        font-size: clamp(8px, 0.6vw, 11px);
         font-weight: 900;
         color: #000;
         font-variant-numeric: tabular-nums;
@@ -274,128 +202,67 @@
     }
 }
 
-@keyframes cdo-pulse-win {
-    0%   { transform: scale(1.35); box-shadow: 0 0 30px 14px rgba(0, 230, 118, 0.85); }
-    100% { transform: scale(1);    box-shadow: 0 0 24px 8px rgba(0, 230, 118, 0.65); }
-}
-@keyframes cdo-pulse-loss {
-    0%   { transform: scale(1.35); box-shadow: 0 0 30px 14px rgba(255, 61, 87, 0.8); }
-    100% { transform: scale(1);    box-shadow: 0 0 24px 8px rgba(255, 61, 87, 0.65); }
-}
-@keyframes cdo-tick-pulse {
-    0%   { transform: scale(1.2); box-shadow: 0 0 20px 8px rgba(30, 136, 255, 0.7); }
-    100% { transform: scale(1);   box-shadow: 0 0 16px rgba(30, 136, 255, 0.4); }
-}
-@keyframes cdo-tlabel-in {
-    from { opacity: 0; transform: translateY(-4px); }
-    to   { opacity: 1; transform: translateY(0); }
-}
+@keyframes cdo-pulse-win  { 0% { transform:scale(1.3); } 100% { transform:scale(1); } }
+@keyframes cdo-pulse-loss { 0% { transform:scale(1.3); } 100% { transform:scale(1); } }
+@keyframes cdo-tick-pulse { 0% { transform:scale(1.15); } 100% { transform:scale(1); } }
+@keyframes cdo-tlabel-in  { from { opacity:0; transform:translateY(-3px); } to { opacity:1; transform:translateY(0); } }
 
-/* ── Tick counter badge (shows during active contracts) ────────────────────── */
+/* ── Tick counter badge ──────────────────────────────────────────────────────── */
 .cdo-tick-counter {
     position: absolute;
-    left: 16px;
+    left: 12px;
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 4px 12px 4px 8px;
-    background: rgba(30, 136, 255, 0.92);
-    border-radius: 20px;
+    gap: 5px;
+    padding: 3px 10px 3px 7px;
+    background: rgba(30,136,255,0.92);
+    border-radius: 16px;
     color: #fff;
-    font-size: clamp(10px, 0.75vw, 13px);
+    font-size: clamp(9px, 0.7vw, 12px);
     font-weight: 700;
     z-index: 31;
     pointer-events: none;
-    box-shadow: 0 2px 10px rgba(30, 136, 255, 0.4);
+    box-shadow: 0 2px 8px rgba(30,136,255,0.4);
     animation: cdo-fade-in 0.2s ease;
 
-    &__dot {
-        width: 7px; height: 7px;
-        border-radius: 50%;
-        background: #93c5fd;
-        animation: cdo-dot-pulse 1s ease-in-out infinite;
-        flex-shrink: 0;
-    }
-
-    &__count {
-        font-size: clamp(11px, 0.85vw, 14px);
-        font-weight: 900;
-        letter-spacing: 0.04em;
-    }
-
-    &__label {
-        font-size: clamp(8px, 0.6vw, 11px);
-        font-weight: 600;
-        opacity: 0.8;
-        letter-spacing: 0.06em;
-    }
+    &__dot { width:6px; height:6px; border-radius:50%; background:#93c5fd; animation:cdo-dot-pulse 1s ease-in-out infinite; flex-shrink:0; }
+    &__count { font-size:clamp(10px,0.8vw,13px); font-weight:900; }
+    &__label { font-size:clamp(7px,0.55vw,10px); font-weight:600; opacity:0.8; }
 }
+@keyframes cdo-dot-pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.75)} }
+@keyframes cdo-fade-in   { from{opacity:0;transform:translateX(-5px)} to{opacity:1;transform:translateX(0)} }
 
-@keyframes cdo-dot-pulse {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50%       { opacity: 0.4; transform: scale(0.75); }
-}
-@keyframes cdo-fade-in {
-    from { opacity: 0; transform: translateX(-6px); }
-    to   { opacity: 1; transform: translateX(0); }
-}
-
-/* ── Trade flag floating in chart area ─────────────────────────────────────── */
+/* ── Win/Loss trade flag ─────────────────────────────────────────────────────── */
 .chart-trade-flag {
     position: absolute;
     transform: translateX(-50%);
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 5px 12px 5px 9px;
-    border-radius: 20px;
-    font-size: clamp(11px, 0.8vw, 13px);
+    gap: 5px;
+    padding: 4px 10px 4px 8px;
+    border-radius: 16px;
+    font-size: clamp(10px,0.75vw,12px);
     font-weight: 800;
-    letter-spacing: 0.02em;
     z-index: 30;
     pointer-events: none;
-    animation: chart-flag-in 0.35s cubic-bezier(.2,1.4,.4,1) both,
-               chart-flag-out 0.5s ease-in 59.5s both;
+    animation: chart-flag-in 0.35s cubic-bezier(.2,1.4,.4,1) both, chart-flag-out 0.5s ease-in 59.5s both;
     white-space: nowrap;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+    box-shadow: 0 3px 12px rgba(0,0,0,0.15);
 
-    &--win {
-        background: linear-gradient(120deg, #00E676 0%, #00C853 100%);
-        color: #003c1a;
-        border: 1.5px solid rgba(255,255,255,0.3);
-        box-shadow: 0 4px 16px rgba(0, 230, 118, 0.45);
-        &::before { content: '🏁'; margin-right: 2px; }
-    }
-    &--loss {
-        background: linear-gradient(120deg, #FF3D57 0%, #C62828 100%);
-        color: #fff;
-        border: 1.5px solid rgba(255,255,255,0.3);
-        box-shadow: 0 4px 16px rgba(255, 61, 87, 0.4);
-        &::before { content: '⚑'; margin-right: 2px; }
-    }
+    &--win  { background:linear-gradient(120deg,#00E676,#00C853); color:#003c1a; border:1px solid rgba(255,255,255,0.3); &::before{content:'🏁';margin-right:2px;} }
+    &--loss { background:linear-gradient(120deg,#FF3D57,#C62828); color:#fff;    border:1px solid rgba(255,255,255,0.3); &::before{content:'⚑';margin-right:2px;} }
 }
+@keyframes chart-flag-in  { from{opacity:0;transform:translateX(-50%) translateY(-10px) scale(0.85)} to{opacity:1;transform:translateX(-50%) translateY(0) scale(1)} }
+@keyframes chart-flag-out { from{opacity:1} to{opacity:0;transform:translateX(-50%) translateY(-6px)} }
 
-@keyframes chart-flag-in {
-    from { opacity: 0; transform: translateX(-50%) translateY(-12px) scale(0.85); }
-    to   { opacity: 1; transform: translateX(-50%) translateY(0)      scale(1); }
-}
-@keyframes chart-flag-out {
-    from { opacity: 1; }
-    to   { opacity: 0; transform: translateX(-50%) translateY(-8px); }
-}
-
-/* ── Mobile overrides ──────────────────────────────────────────────────────── */
+/* ── Mobile ──────────────────────────────────────────────────────────────────── */
 @media (max-width: 767px) {
     .cdo {
-        padding: 2px 3px 3px;
-
-        &__circle { width: 44px; height: 44px; font-size: 14px; }
-        &__pct { font-size: 8px; }
-        &__price-val { font-size: 9px; }
-        &__triangle {
-            border-left-width: 6px; border-right-width: 6px; border-top-width: 8px;
-            &::before { border-left-width: 8px; border-right-width: 8px; border-top-width: 11px; top: -12px; left: -8px; }
-        }
-        &__tlabel { font-size: 7px; height: 10px; line-height: 10px; }
+        padding: 1px 2px 2px;
+        &__circle { width:34px; height:34px; font-size:12px; }
+        &__pct    { font-size:7px; }
+        &__price-val { font-size:8px; }
+        &__triangle { border-left-width:4px; border-right-width:4px; border-top-width:6px; }
+        &__tlabel   { font-size:6px; height:9px; line-height:9px; }
     }
 }
