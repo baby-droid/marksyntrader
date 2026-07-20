@@ -195,9 +195,9 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
     const DIGIT_ORDER = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
     return (
-        <div style={{ display: 'grid', gridTemplateColumns: '65% 35%', width: '100%', height: '100%', overflow: 'hidden', background: '#fff' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '68% 32%', width: '100%', height: '100%', overflow: 'hidden', background: '#fff' }}>
             {/* ─── Chart area ─── */}
-            <div style={{ position: 'relative', minWidth: 0, overflow: 'hidden', paddingLeft: '0.6cm', paddingRight: '0.2cm' }}>
+            <div style={{ position: 'relative', minWidth: 0, overflow: 'hidden', paddingLeft: '1cm', paddingRight: '0.4cm' }}>
                 <Chart key={uniqueKey} show_digits_stats={false} />
 
                 {/* Tick counter badges for running contracts */}
@@ -258,7 +258,7 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
             </div>
 
             {/* ─── Trading panel ─── */}
-            <div style={{ minWidth: 0, overflow: 'hidden auto', borderLeft: '1px solid #e8e8e8' }}>
+            <div style={{ minWidth: 0, overflow: 'hidden auto', borderLeft: '1px solid #e8e8e8', display: 'flex', flexDirection: 'column' }}>
                 <ChartTradePanel
                     symbol={symbol}
                     currentDigit={currentDigit}
