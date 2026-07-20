@@ -315,12 +315,12 @@
 
     // ── Buy buttons with payout ───────────────────────────────────────
     &__buy-row {
-        padding: 6px 10px 8px;
-        padding-top: calc(6px + 1.5cm);   // push buttons 1.5 cm below settings
+        padding: 5px 8px 8px;
         display: flex;
         flex-direction: column;
-        gap: 5px;
+        gap: 4px;
         flex-shrink: 0;
+        margin-top: auto;   // push to bottom of flex column only if space permits
     }
 
     &__buy-block {

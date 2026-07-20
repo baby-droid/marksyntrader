@@ -195,9 +195,9 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
     const DIGIT_ORDER = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
     return (
-        <div style={{ display: 'grid', gridTemplateColumns: '76% 24%', width: '100%', height: '100%', overflow: 'hidden', background: '#fff' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '65% 35%', width: '100%', height: '100%', overflow: 'hidden', background: '#fff' }}>
             {/* ─── Chart area ─── */}
-            <div style={{ position: 'relative', minWidth: 0, overflow: 'hidden', paddingLeft: '2cm', paddingRight: '1cm' }}>
+            <div style={{ position: 'relative', minWidth: 0, overflow: 'hidden', paddingLeft: '0.6cm', paddingRight: '0.2cm' }}>
                 <Chart key={uniqueKey} show_digits_stats={false} />
 
                 {/* Tick counter badges for running contracts */}
