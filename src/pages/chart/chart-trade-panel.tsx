@@ -4,20 +4,36 @@ import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import { publishMasterTrade, getMasterSource } from '@/utils/trade-bus';
 
-/* ── Trade groups ── */
+/* ── Symbol display names ─────────────────────────────────────────────────── */
+const SYMBOL_NAMES: Record<string, string> = {
+    '1HZ100V': 'Volatility 100 (1s) Index',
+    '1HZ10V':  'Volatility 10 (1s) Index',
+    '1HZ25V':  'Volatility 25 (1s) Index',
+    '1HZ50V':  'Volatility 50 (1s) Index',
+    '1HZ75V':  'Volatility 75 (1s) Index',
+    'R_100':   'Volatility 100 Index',
+    'R_10':    'Volatility 10 Index',
+    'R_25':    'Volatility 25 Index',
+    'R_50':    'Volatility 50 Index',
+    'R_75':    'Volatility 75 Index',
+};
+function symbolName(s: string) { return SYMBOL_NAMES[s] ?? s; }
+
+/* ── Trade type groups ────────────────────────────────────────────────────── */
 const TRADE_GROUPS = [
-    { id: 'over_under',   label: 'Over / Under',        icon: '↑↓', typeA: 'DIGITOVER',  typeB: 'DIGITUNDER',  needsBarrier: true,  durationUnit: 't', minDur: 1, maxDur: 10 },
-    { id: 'even_odd',     label: 'Even / Odd',           icon: '⚡', typeA: 'DIGITEVEN',  typeB: 'DIGITODD',    needsBarrier: false, durationUnit: 't', minDur: 1, maxDur: 10 },
-    { id: 'match_differ', label: 'Match / Differ',       icon: '🎯', typeA: 'DIGITMATCH', typeB: 'DIGITDIFF',   needsBarrier: true,  durationUnit: 't', minDur: 1, maxDur: 10 },
-    { id: 'rise_fall',    label: 'Rise / Fall',          icon: '📈', typeA: 'CALL',       typeB: 'PUT',         needsBarrier: false, durationUnit: 't', minDur: 1, maxDur: 10 },
-    { id: 'higher_lower', label: 'Higher / Lower',       icon: '📊', typeA: 'CALL',       typeB: 'PUT',         needsBarrier: false, durationUnit: 'm', minDur: 1, maxDur: 60 },
-    { id: 'asian',        label: 'Asian Up / Down',      icon: '🌏', typeA: 'ASIANU',     typeB: 'ASIAND',      needsBarrier: false, durationUnit: 't', minDur: 5, maxDur: 10 },
-    { id: 'touch',        label: 'Touch / No Touch',     icon: '✋', typeA: 'ONETOUCH',   typeB: 'NOTOUCH',     needsBarrier: false, durationUnit: 'm', minDur: 1, maxDur: 60 },
-    { id: 'reset',        label: 'Reset Call / Put',     icon: '🔄', typeA: 'RESETCALL',  typeB: 'RESETPUT',    needsBarrier: false, durationUnit: 't', minDur: 5, maxDur: 10 },
-    { id: 'highlow',      label: 'High / Low Tick',      icon: '🔝', typeA: 'TICKHIGH',   typeB: 'TICKLOW',     needsBarrier: false, durationUnit: 't', minDur: 5, maxDur: 10 },
-    { id: 'runhighlow',   label: 'Run High / Run Low',   icon: '🏃', typeA: 'RUNHIGH',    typeB: 'RUNLOW',      needsBarrier: false, durationUnit: 't', minDur: 1, maxDur: 10 },
+    { id: 'over_under',   label: 'Over / Under',       icon: '↑↓', typeA: 'DIGITOVER',  typeB: 'DIGITUNDER',  needsBarrier: true,  durationUnit: 't', minDur: 1, maxDur: 10 },
+    { id: 'even_odd',     label: 'Even / Odd',          icon: '⚡', typeA: 'DIGITEVEN',  typeB: 'DIGITODD',    needsBarrier: false, durationUnit: 't', minDur: 1, maxDur: 10 },
+    { id: 'match_differ', label: 'Match / Differ',      icon: '🎯', typeA: 'DIGITMATCH', typeB: 'DIGITDIFF',   needsBarrier: true,  durationUnit: 't', minDur: 1, maxDur: 10 },
+    { id: 'rise_fall',    label: 'Rise / Fall',         icon: '📈', typeA: 'CALL',       typeB: 'PUT',         needsBarrier: false, durationUnit: 't', minDur: 1, maxDur: 10 },
+    { id: 'higher_lower', label: 'Higher / Lower',      icon: '📊', typeA: 'CALL',       typeB: 'PUT',         needsBarrier: false, durationUnit: 'm', minDur: 1, maxDur: 60 },
+    { id: 'asian',        label: 'Asian Up / Down',     icon: '🌏', typeA: 'ASIANU',     typeB: 'ASIAND',      needsBarrier: false, durationUnit: 't', minDur: 5, maxDur: 10 },
+    { id: 'touch',        label: 'Touch / No Touch',    icon: '✋', typeA: 'ONETOUCH',   typeB: 'NOTOUCH',     needsBarrier: false, durationUnit: 'm', minDur: 1, maxDur: 60 },
+    { id: 'reset',        label: 'Reset Call / Put',    icon: '🔄', typeA: 'RESETCALL',  typeB: 'RESETPUT',    needsBarrier: false, durationUnit: 't', minDur: 5, maxDur: 10 },
+    { id: 'highlow',      label: 'High / Low Tick',     icon: '🔝', typeA: 'TICKHIGH',   typeB: 'TICKLOW',     needsBarrier: false, durationUnit: 't', minDur: 5, maxDur: 10 },
+    { id: 'runhighlow',   label: 'Run High / Run Low',  icon: '🏃', typeA: 'RUNHIGH',    typeB: 'RUNLOW',      needsBarrier: false, durationUnit: 't', minDur: 1, maxDur: 10 },
 ];
 
+/* ── Account badge ────────────────────────────────────────────────────────── */
 const AccountBadge: React.FC = () => {
     const [isDemo, setIsDemo] = React.useState(false);
     React.useEffect(() => {
@@ -36,6 +52,7 @@ const AccountBadge: React.FC = () => {
     );
 };
 
+/* ── Props ─────────────────────────────────────────────────────────────────── */
 interface ChartTradePanelProps {
     symbol: string;
     currentDigit: number | null;
@@ -46,6 +63,7 @@ interface ChartTradePanelProps {
     onBarrierChange: (d: number) => void;
 }
 
+/* ════════════════════════════════════════════════════════════════════════════ */
 export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
     symbol,
     currentDigit,
@@ -55,14 +73,14 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
     barrier,
     onBarrierChange,
 }) => {
-    const [groupId, setGroupId]     = useState(TRADE_GROUPS[0].id);
+    const [groupId, setGroupId]       = useState(TRADE_GROUPS[0].id);
     const group = TRADE_GROUPS.find(g => g.id === groupId) ?? TRADE_GROUPS[0];
 
-    const [ticks, setTicks]         = useState(5);
-    const [stake, setStake]         = useState(10.00);
-    const [stakeMode, setStakeMode] = useState<'stake' | 'payout'>('stake');
-    const [loading, setLoading]     = useState<'over' | 'under' | null>(null);
-    const [result, setResult]       = useState<{ ok: boolean; msg: string } | null>(null);
+    const [ticks,     setTicks]       = useState(2);
+    const [stake,     setStake]       = useState(10.00);
+    const [stakeMode, setStakeMode]   = useState<'stake' | 'payout'>('stake');
+    const [loading,   setLoading]     = useState<'over' | 'under' | null>(null);
+    const [result,    setResult]      = useState<{ ok: boolean; msg: string } | null>(null);
     const [displayCur, setDisplayCur] = useState(getDisplayCurrency());
 
     const [overPayout,  setOverPayout]  = useState<number | null>(null);
@@ -77,18 +95,16 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
         setTicks(t => Math.min(Math.max(t, group.minDur), group.maxDur));
     }, [group]);
 
+    /* ── Payout fetch (600ms debounce) ──────────────────────────────────── */
     const fetchPayouts = useCallback(() => {
         if (payoutTimerRef.current) clearTimeout(payoutTimerRef.current);
         payoutTimerRef.current = setTimeout(async () => {
             const api = (api_base as any).api;
             if (!api || !symbol) return;
             const base: any = {
-                proposal: 1,
-                amount:   stake,
-                basis:    'stake',
+                proposal: 1, amount: stake, basis: 'stake',
                 currency: getDisplayCurrency() || 'USD',
-                duration: ticks,
-                duration_unit: group.durationUnit,
+                duration: ticks, duration_unit: group.durationUnit,
                 underlying_symbol: symbol,
             };
             if (group.needsBarrier) base.barrier = String(barrier);
@@ -112,6 +128,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
 
     useEffect(() => { fetchPayouts(); }, [fetchPayouts]);
 
+    /* ── Buy ─────────────────────────────────────────────────────────────── */
     const buy = useCallback(async (side: 'over' | 'under') => {
         if (loading) return;
         const api = (api_base as any).api;
@@ -136,25 +153,22 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             const buyRes = await api.send({ buy: proposalId, price: askPrice });
             if (buyRes?.error) throw new Error(buyRes.error.message);
             const contractId = buyRes?.buy?.contract_id;
-            setResult({ ok: true, msg: `✅ #${contractId} open` });
+            setResult({ ok: true, msg: `✅ #${contractId}` });
             window.dispatchEvent(new CustomEvent('chart:trade-started', {
                 detail: { contractId: Number(contractId), ticks },
             }));
             try {
                 const settleSub = (api_base as any).api.subscribe({
-                    proposal_open_contract: 1,
-                    contract_id: Number(contractId),
-                    subscribe: 1,
+                    proposal_open_contract: 1, contract_id: Number(contractId), subscribe: 1,
                 });
                 settleSub.subscribe({
                     next: (res: any) => {
                         const poc = res?.proposal_open_contract;
                         if (!poc) return;
                         if (poc.status === 'won' || poc.status === 'lost') {
-                            const won    = poc.status === 'won';
-                            const profit = Number(poc.profit ?? 0);
-                            const exitStr = poc.exit_tick_display_value
-                                ? String(poc.exit_tick_display_value).replace('.', '') : null;
+                            const won       = poc.status === 'won';
+                            const profit    = Number(poc.profit ?? 0);
+                            const exitStr   = poc.exit_tick_display_value ? String(poc.exit_tick_display_value).replace('.', '') : null;
                             const exitDigit = exitStr ? parseInt(exitStr[exitStr.length - 1], 10) : null;
                             window.dispatchEvent(new CustomEvent('chart:trade-settled', {
                                 detail: { won, profit, exitDigit, barrier, contractType, contractId: Number(contractId) },
@@ -172,7 +186,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                     ...(group.needsBarrier ? { barrier: String(barrier) } : {}),
                     source: getMasterSource(), time: Date.now(), contract_id: Number(contractId),
                 });
-            } catch { /* never block trade */ }
+            } catch { /* never block */ }
         } catch (e: any) {
             setResult({ ok: false, msg: `❌ ${e.message}` });
         } finally {
@@ -181,195 +195,186 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
         }
     }, [loading, group, barrier, ticks, stake, symbol]);
 
-    /* Label helpers */
-    const overLabel  = group.id === 'over_under' ? 'Over'   : group.id === 'rise_fall' || group.id === 'higher_lower' ? 'Rise'    : group.id === 'even_odd' ? 'Even'  : group.id === 'asian' ? 'Asian Up'   : group.id === 'touch' ? 'Touch'    : group.id === 'reset' ? 'Reset ↑' : group.id === 'highlow' ? 'High Tick'  : group.id === 'runhighlow' ? 'Run High' : 'Matches';
-    const underLabel = group.id === 'over_under' ? 'Under'  : group.id === 'rise_fall' || group.id === 'higher_lower' ? 'Fall'    : group.id === 'even_odd' ? 'Odd'   : group.id === 'asian' ? 'Asian Down' : group.id === 'touch' ? 'No Touch' : group.id === 'reset' ? 'Reset ↓' : group.id === 'highlow' ? 'Low Tick'   : group.id === 'runhighlow' ? 'Run Low'  : 'Differs';
+    /* ── Label helpers ───────────────────────────────────────────────────── */
+    const overLabel  = group.id === 'over_under' ? 'Over'   : group.id === 'even_odd' ? 'Even'  : group.id === 'asian' ? 'Asian Up'   : group.id === 'touch' ? 'Touch'    : group.id === 'reset' ? 'Reset ↑' : group.id === 'highlow' ? 'High Tick'  : group.id === 'runhighlow' ? 'Run High' : group.id === 'match_differ' ? 'Matches' : 'Rise';
+    const underLabel = group.id === 'over_under' ? 'Under'  : group.id === 'even_odd' ? 'Odd'   : group.id === 'asian' ? 'Asian Down' : group.id === 'touch' ? 'No Touch' : group.id === 'reset' ? 'Reset ↓' : group.id === 'highlow' ? 'Low Tick'   : group.id === 'runhighlow' ? 'Run Low'  : group.id === 'match_differ' ? 'Differs' : 'Fall';
 
     const digitRows = [[0, 1, 2, 3, 4], [9, 8, 7, 6, 5]];
+    const tickButtons = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].filter(n => n >= group.minDur && n <= group.maxDur);
 
+    /* ════════════════════════════════════════════════════════════════════ */
     return (
         <div className='ctp'>
 
-            {/* ── 1. HEADER: dropdown + price ──────────────────────────────── */}
-            <div className='ctp__header'>
-                {/* Contract type selector */}
-                <div className='ctp__type-row'>
-                    <select
-                        className='ctp__type-select'
-                        value={groupId}
-                        onChange={e => setGroupId(e.target.value)}
-                    >
-                        {TRADE_GROUPS.map(g => (
-                            <option key={g.id} value={g.id}>{g.icon} {g.label}</option>
-                        ))}
-                    </select>
-                </div>
-
-                {/* Live price + account badge */}
-                <div className='ctp__price-row'>
-                    <span className='ctp__price-val'>
-                        {currentPrice != null ? currentPrice.toFixed(pipSize) : '—'}
-                        {priceChange !== 0 && (
-                            <span className={`ctp__price-chg ${priceChange > 0 ? 'up' : 'dn'}`}>
-                                {priceChange > 0 ? '▲' : '▼'} {Math.abs(priceChange).toFixed(pipSize)}
-                            </span>
-                        )}
-                    </span>
+            {/* ── Market selector (display only) ─────────────────────── */}
+            <div className='ctp__section ctp__section--market'>
+                <div className='ctp__section-label'>Market</div>
+                <div className='ctp__market-display'>
+                    <span className='ctp__market-icon'>V</span>
+                    <span className='ctp__market-name'>{symbolName(symbol)}</span>
                     <AccountBadge />
                 </div>
             </div>
 
-            {/* ── 2. BUY BUTTONS — most prominent, right below the header ─── */}
-            <div className='ctp__buy-section'>
-                {/* Over */}
-                <div className='ctp__buy-block'>
-                    <div className='ctp__payout-line'>
-                        Payout&nbsp;{overPayout != null
-                            ? `${fromUsd(overPayout).toFixed(2)} ${displayCur}` : '—'}
-                        <span className='ctp__payout-info'>ℹ</span>
-                    </div>
-                    <button
-                        className='ctp__buy-btn ctp__buy-btn--over'
-                        onClick={() => buy('over')}
-                        disabled={!!loading}
-                    >
-                        <span className='ctp__buy-arrow'>↑</span>
-                        <span className='ctp__buy-label'>{overLabel}</span>
-                        <span className='ctp__buy-pct'>
-                            {overPct != null ? `${overPct.toFixed(2)}%` : loading === 'over' ? '…' : '—'}
-                        </span>
-                    </button>
-                </div>
-
-                {/* Under */}
-                <div className='ctp__buy-block'>
-                    <div className='ctp__payout-line'>
-                        Payout&nbsp;{underPayout != null
-                            ? `${fromUsd(underPayout).toFixed(2)} ${displayCur}` : '—'}
-                        <span className='ctp__payout-info'>ℹ</span>
-                    </div>
-                    <button
-                        className='ctp__buy-btn ctp__buy-btn--under'
-                        onClick={() => buy('under')}
-                        disabled={!!loading}
-                    >
-                        <span className='ctp__buy-arrow'>↓</span>
-                        <span className='ctp__buy-label'>{underLabel}</span>
-                        <span className='ctp__buy-pct'>
-                            {underPct != null ? `${underPct.toFixed(2)}%` : loading === 'under' ? '…' : '—'}
-                        </span>
-                    </button>
-                </div>
-
-                {/* Result feedback */}
-                {result && (
-                    <div className={`ctp__result ${result.ok ? 'ok' : 'err'}`}>{result.msg}</div>
-                )}
+            {/* ── Contract type ─────────────────────────────────────── */}
+            <div className='ctp__section ctp__section--contract'>
+                <div className='ctp__section-label'>Contract Type</div>
+                <select
+                    className='ctp__type-select'
+                    value={groupId}
+                    onChange={e => setGroupId(e.target.value)}
+                >
+                    {TRADE_GROUPS.map(g => (
+                        <option key={g.id} value={g.id}>{g.icon} {g.label}</option>
+                    ))}
+                </select>
             </div>
 
-            {/* ── 3. CONFIGURATION — ticks, digit prediction, stake ────────── */}
-            <div className='ctp__config'>
-
-                {/* Ticks / Duration */}
-                <div className='ctp__section'>
-                    <div className='ctp__section-label'>
-                        {group.durationUnit === 't' ? 'Ticks' : 'Minutes'}
-                        <span className='ctp__section-val'>{ticks}{group.durationUnit === 't' ? 't' : 'm'}</span>
-                    </div>
-                    {group.durationUnit === 't' ? (
-                        <div className='ctp__tick-rows'>
-                            {[[1,2,3,4,5],[6,7,8,9,10]].map((row, ri) => (
-                                <div key={ri} className='ctp__tick-row'>
-                                    {row.filter(n => n >= group.minDur && n <= group.maxDur).map(n => (
-                                        <button
-                                            key={n}
-                                            className={`ctp__tick-btn${ticks === n ? ' active' : ''}`}
-                                            onClick={() => setTicks(n)}
-                                        >
-                                            {n}
-                                        </button>
-                                    ))}
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <>
-                            <input
-                                type='range' min={group.minDur} max={group.maxDur} step={1}
-                                value={ticks}
-                                onChange={e => setTicks(Number(e.target.value))}
-                                className='ctp__slider'
-                            />
-                            <div className='ctp__slider-marks'>
-                                {Array.from({ length: group.maxDur - group.minDur + 1 }, (_, i) => group.minDur + i)
-                                    .filter((_, i, arr) => arr.length <= 10 || i % Math.ceil(arr.length / 10) === 0 || i === arr.length - 1)
-                                    .map(n => (
-                                    <span key={n} className={ticks === n ? 'active' : ''}>{n}</span>
-                                ))}
-                            </div>
-                        </>
-                    )}
+            {/* ── Ticks / Duration ──────────────────────────────────── */}
+            <div className='ctp__section ctp__section--ticks'>
+                <div className='ctp__section-label'>
+                    {group.durationUnit === 't' ? 'Ticks' : 'Minutes'}
+                    <span className='ctp__section-val'>{ticks}{group.durationUnit === 't' ? ' Ticks' : 'm'}</span>
                 </div>
-
-                {/* Last Digit Prediction */}
-                {group.needsBarrier && (
-                    <div className='ctp__section'>
-                        <div className='ctp__section-label'>
-                            Last Digit Prediction
-                            <span className='ctp__section-val'>{barrier}</span>
-                        </div>
-                        <div className='ctp__digits'>
-                            {digitRows.map((row, ri) => (
-                                <div key={ri} className='ctp__digits-row'>
-                                    {row.map(d => (
-                                        <button
-                                            key={d}
-                                            className={[
-                                                'ctp__digit-btn',
-                                                barrier === d     ? 'active'  : '',
-                                                currentDigit === d ? 'current' : '',
-                                            ].filter(Boolean).join(' ')}
-                                            onClick={() => onBarrierChange(d)}
-                                        >
-                                            {d}
-                                        </button>
-                                    ))}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {/* Stake */}
-                <div className='ctp__section ctp__section--last'>
-                    <div className='ctp__stake-tabs'>
-                        <button className={`ctp__stake-tab${stakeMode === 'stake' ? ' active' : ''}`} onClick={() => setStakeMode('stake')}>Stake</button>
-                        <button className={`ctp__stake-tab${stakeMode === 'payout' ? ' active' : ''}`} onClick={() => setStakeMode('payout')}>Payout</button>
-                    </div>
-                    <div className='ctp__stake-ctrl'>
-                        <button className='ctp__stake-adj' onClick={() => setStake(s => Math.max(0.35, parseFloat((s - 1).toFixed(2))))}>−</button>
-                        <div className='ctp__stake-mid'>
-                            <input
-                                className='ctp__stake-inp'
-                                type='number' min={0.35} step={1}
-                                value={stake}
-                                onChange={e => setStake(parseFloat(e.target.value) || 0.35)}
-                            />
-                            <span className='ctp__stake-cur'>{displayCur}</span>
-                        </div>
-                        <button className='ctp__stake-adj' onClick={() => setStake(s => parseFloat((s + 1).toFixed(2)))}>+</button>
-                        <button className='ctp__stake-adj ctp__stake-adj--reset' onClick={() => setStake(1)}>‹</button>
-                    </div>
-                    <div className='ctp__stake-presets'>
-                        {[1, 2, 5, 10, 50].map(p => (
-                            <button key={p} className={`ctp__preset${stake === p ? ' active' : ''}`} onClick={() => setStake(p)}>
-                                {p}
+                {group.durationUnit === 't' ? (
+                    <div className='ctp__tick-row'>
+                        {tickButtons.map(n => (
+                            <button
+                                key={n}
+                                className={`ctp__tick-btn${ticks === n ? ' active' : ''}`}
+                                onClick={() => setTicks(n)}
+                            >
+                                {n}
                             </button>
                         ))}
                     </div>
-                </div>
+                ) : (
+                    <>
+                        <input
+                            type='range' min={group.minDur} max={group.maxDur} step={1}
+                            value={ticks}
+                            onChange={e => setTicks(Number(e.target.value))}
+                            className='ctp__slider'
+                        />
+                        <div className='ctp__slider-marks'>
+                            {[group.minDur, Math.round((group.minDur + group.maxDur) / 2), group.maxDur].map(n => (
+                                <span key={n} className={ticks === n ? 'active' : ''}>{n}</span>
+                            ))}
+                        </div>
+                    </>
+                )}
+            </div>
 
-            </div>{/* /ctp__config */}
+            {/* ── Last Digit Prediction ─────────────────────────────── */}
+            {group.needsBarrier && (
+                <div className='ctp__section ctp__section--digit'>
+                    <div className='ctp__section-label'>
+                        Last Digit Prediction
+                        <span className='ctp__section-val'>{barrier}</span>
+                    </div>
+                    <div className='ctp__digits'>
+                        {digitRows.map((row, ri) => (
+                            <div key={ri} className='ctp__digits-row'>
+                                {row.map(d => (
+                                    <button
+                                        key={d}
+                                        className={[
+                                            'ctp__digit-btn',
+                                            barrier === d     ? 'active'  : '',
+                                            currentDigit === d ? 'current' : '',
+                                        ].filter(Boolean).join(' ')}
+                                        onClick={() => onBarrierChange(d)}
+                                    >
+                                        {d}
+                                    </button>
+                                ))}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* ── Stake ─────────────────────────────────────────────── */}
+            <div className='ctp__section ctp__section--stake'>
+                <div className='ctp__stake-tabs'>
+                    <button className={`ctp__stake-tab${stakeMode === 'stake' ? ' active' : ''}`} onClick={() => setStakeMode('stake')}>Stake</button>
+                    <button className={`ctp__stake-tab${stakeMode === 'payout' ? ' active' : ''}`} onClick={() => setStakeMode('payout')}>Payout</button>
+                </div>
+                <div className='ctp__stake-ctrl'>
+                    <button className='ctp__stake-adj' onClick={() => setStake(s => Math.max(0.35, parseFloat((s - 1).toFixed(2))))}>−</button>
+                    <div className='ctp__stake-mid'>
+                        <input
+                            className='ctp__stake-inp'
+                            type='number' min={0.35} step={1}
+                            value={stake}
+                            onChange={e => setStake(parseFloat(e.target.value) || 0.35)}
+                        />
+                        <span className='ctp__stake-cur'>{displayCur}</span>
+                    </div>
+                    <button className='ctp__stake-adj' onClick={() => setStake(s => parseFloat((s + 1).toFixed(2)))}>+</button>
+                </div>
+                <div className='ctp__stake-presets'>
+                    {[0.35, 1, 2, 10, 50].map(p => (
+                        <button key={p} className={`ctp__preset${stake === p ? ' active' : ''}`} onClick={() => setStake(p)}>
+                            {p === 0.35 ? '0.35' : p}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            {/* ── Result feedback ───────────────────────────────────── */}
+            {result && (
+                <div className={`ctp__result ${result.ok ? 'ok' : 'err'}`}>{result.msg}</div>
+            )}
+
+            {/* ── Over button ───────────────────────────────────────── */}
+            <div className='ctp__section ctp__section--over'>
+                <button
+                    className='ctp__buy-btn ctp__buy-btn--over'
+                    onClick={() => buy('over')}
+                    disabled={!!loading}
+                >
+                    <div className='ctp__buy-inner'>
+                        <div className='ctp__buy-top'>
+                            <span className='ctp__buy-arrow'>↑</span>
+                            <span className='ctp__buy-label'>{overLabel}</span>
+                            <span className='ctp__buy-pct'>
+                                {overPct != null ? `${overPct.toFixed(2)}%` : loading === 'over' ? '…' : '—'}
+                            </span>
+                        </div>
+                        <div className='ctp__buy-sub'>
+                            {overPayout != null
+                                ? `Payout ${fromUsd(overPayout).toFixed(2)} ${displayCur}`
+                                : '\u00A0'}
+                        </div>
+                    </div>
+                </button>
+            </div>
+
+            {/* ── Under button ──────────────────────────────────────── */}
+            <div className='ctp__section ctp__section--under'>
+                <button
+                    className='ctp__buy-btn ctp__buy-btn--under'
+                    onClick={() => buy('under')}
+                    disabled={!!loading}
+                >
+                    <div className='ctp__buy-inner'>
+                        <div className='ctp__buy-top'>
+                            <span className='ctp__buy-arrow'>↓</span>
+                            <span className='ctp__buy-label'>{underLabel}</span>
+                            <span className='ctp__buy-pct'>
+                                {underPct != null ? `${underPct.toFixed(2)}%` : loading === 'under' ? '…' : '—'}
+                            </span>
+                        </div>
+                        <div className='ctp__buy-sub'>
+                            {underPayout != null
+                                ? `Payout ${fromUsd(underPayout).toFixed(2)} ${displayCur}`
+                                : '\u00A0'}
+                        </div>
+                    </div>
+                </button>
+            </div>
+
         </div>
     );
 };
