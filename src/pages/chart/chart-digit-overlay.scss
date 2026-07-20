@@ -352,13 +352,14 @@
 /* ── Win/Loss trade flag — compact pill pinned near the price axis ──────────── */
 .chart-trade-flag {
     position: absolute;
-    /* chart is 50% wide; price axis is ~55px from the right of .cw-chart-inner */
-    right: 6px;
+    right: 72px;           /* sits just left of the price axis */
+    width: fit-content;    /* never stretches — only as wide as the text */
+    max-width: 140px;
     display: flex;
     align-items: center;
     gap: 3px;
-    padding: 3px 8px 3px 6px;
-    border-radius: 3px 10px 10px 3px;
+    padding: 4px 10px 4px 8px;
+    border-radius: 4px 12px 12px 4px;
     font-size: 11px;
     font-weight: 800;
     z-index: 30;

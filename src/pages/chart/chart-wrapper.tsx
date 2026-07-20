@@ -250,7 +250,7 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                         <div
                             key={flag.id}
                             className={`chart-trade-flag chart-trade-flag--${flag.won ? 'win' : 'loss'}`}
-                            style={{ top: `${28 + i * 52}px`, right: '68px' }}
+                            style={{ top: `calc(42% + ${i * 48}px)` }}
                         >
                             {flag.won ? '✓ WIN' : '✗ LOSS'}&nbsp;
                             {flag.won ? '+' : ''}{flag.profit.toFixed(2)}
