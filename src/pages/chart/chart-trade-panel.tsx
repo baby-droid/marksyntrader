@@ -143,6 +143,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
 
     const [ticks,      setTicks]      = useState(2);
     const [stake,      setStake]      = useState(10.00);
+    const [stakeRaw,   setStakeRaw]   = useState('10');   // raw string for the input — can be empty
     const [growthRate, setGrowthRate] = useState(0.03); // Accumulator growth rate: 1%, 2%, 3%, 4%, 5%
     const [stakeMode, setStakeMode]   = useState<'stake' | 'payout'>('stake');
     const [loading,   setLoading]     = useState<'over' | 'under' | 'accu' | null>(null);
@@ -462,28 +463,41 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                     <button className={`ctp__stake-tab${stakeMode === 'payout' ? ' active' : ''}`} onClick={() => setStakeMode('payout')}>Payout</button>
                 </div>
                 <div className='ctp__stake-ctrl'>
-                    <button className='ctp__stake-adj' onClick={() => setStake(s => Math.max(0.35, parseFloat((s - 1).toFixed(2))))}>−</button>
+                    <button className='ctp__stake-adj' onClick={() => {
+                        const next = parseFloat(Math.max(0.35, stake - 1).toFixed(2));
+                        setStake(next); setStakeRaw(String(next));
+                    }}>−</button>
                     <div className='ctp__stake-mid'>
                         <input
                             className='ctp__stake-inp'
-                            type='number' min={0.35} step={0.01}
-                            value={stake}
+                            type='text'
+                            inputMode='decimal'
+                            value={stakeRaw}
                             onFocus={e => e.target.select()}
                             onChange={e => {
-                                const v = parseFloat(e.target.value);
-                                if (!isNaN(v)) setStake(v);
-                                else if (e.target.value === '' || e.target.value === '-') setStake(0);
+                                const raw = e.target.value;
+                                // Allow empty string and any partial number while typing
+                                if (raw === '' || /^-?\d*\.?\d*$/.test(raw)) {
+                                    setStakeRaw(raw);
+                                    const v = parseFloat(raw);
+                                    if (!isNaN(v)) setStake(v);
+                                }
                             }}
-                            onBlur={e => {
-                                const v = parseFloat(e.target.value);
-                                setStake(isNaN(v) || v < 0.35 ? 0.35 : parseFloat(v.toFixed(2)));
+                            onBlur={() => {
+                                const v = parseFloat(stakeRaw);
+                                const clamped = isNaN(v) || v < 0.35 ? 0.35 : parseFloat(v.toFixed(2));
+                                setStake(clamped);
+                                setStakeRaw(String(clamped));
                             }}
                         />
                         <span className='ctp__stake-cur'>{displayCur}</span>
                     </div>
-                    <button className='ctp__stake-adj' onClick={() => setStake(s => parseFloat((s + 1).toFixed(2)))}>+</button>
+                    <button className='ctp__stake-adj' onClick={() => {
+                        const next = parseFloat((stake + 1).toFixed(2));
+                        setStake(next); setStakeRaw(String(next));
+                    }}>+</button>
                 </div>
-                {/* Preset quick-select chips — click to apply, click active to deselect */}
+                {/* Preset quick-select chips — click to apply, click active to clear */}
                 <div className='ctp__stake-presets'>
                     {[0.35, 1, 2, 10, 50].map(p => {
                         const isActive = stake === p;
@@ -491,7 +505,10 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                             <button
                                 key={p}
                                 className={`ctp__preset${isActive ? ' active' : ''}`}
-                                onClick={() => isActive ? setStake(0.35) : setStake(p)}
+                                onClick={() => {
+                                    const next = isActive ? 0.35 : p;
+                                    setStake(next); setStakeRaw(String(next));
+                                }}
                                 title={isActive ? 'Click to clear preset' : `Set stake to ${p}`}
                             >
                                 {p === 0.35 ? '0.35' : p}
