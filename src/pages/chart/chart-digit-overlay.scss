@@ -352,21 +352,20 @@
 /* ── Win/Loss trade flag — compact pill pinned near the price axis ──────────── */
 .chart-trade-flag {
     position: absolute;
-    right: 72px;           /* sits just left of the price axis */
-    width: fit-content;    /* never stretches — only as wide as the text */
-    max-width: 140px;
-    display: flex;
+    /* Upper-right quadrant of the chart, clear of the price axis */
+    right: 80px;
+    display: inline-flex;   /* ← inline-flex collapses to content width; flex stretches full-width */
     align-items: center;
-    gap: 3px;
-    padding: 4px 10px 4px 8px;
-    border-radius: 4px 12px 12px 4px;
+    gap: 4px;
+    padding: 5px 12px 5px 10px;
+    border-radius: 4px 14px 14px 4px;
     font-size: 11px;
     font-weight: 800;
     z-index: 30;
     pointer-events: none;
     animation: chart-flag-in 0.3s cubic-bezier(.2,1.4,.4,1) both, chart-flag-out 0.5s ease-in 4.5s both;
     white-space: nowrap;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.22);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.25);
     /* Stem connecting flag to chart price level */
     &::before {
         content: '';
