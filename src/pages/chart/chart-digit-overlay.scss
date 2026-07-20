@@ -43,15 +43,15 @@
     flex: 1;
     min-height: 0;
     position: relative;
-    overflow: visible; /* allow SmartChart dropdowns / title menus to escape */
+    overflow: visible; /* allow SmartChart dropdowns to escape into the page */
 
-    /* Force SmartChart to respect its container, not the viewport */
+    /* SmartChart wrapper — visible so its internal dropdowns are not clipped */
     .dashboard__chart-wrapper {
         width: 100% !important;
         height: 100% !important;
         max-width: 100% !important;
         position: relative !important;
-        overflow: hidden !important; /* clip only the chart canvas, not floating menus */
+        overflow: visible !important; /* must be visible so title dropdown floats above canvas */
     }
 
     /* SmartChart root canvas containers */
@@ -60,10 +60,34 @@
         max-width: 100% !important;
     }
 
-    /* Ensure SmartChart's own dropdown menus float above everything */
-    .sc-chart-title, .stx-chart-panel, .chartTitleWrapper {
+    /* ── SmartChart ChartTitle dropdown z-index fix ─────────────────────────
+       The canvas lives inside .ciq-chart-area and paints on top of everything
+       at its natural stacking order. We lift the title and its dropdown ABOVE
+       the canvas so the symbol-selector popup renders in front of the chart.  */
+
+    /* Title bar — needs to sit above the canvas */
+    .cq-chart-title {
+        position: relative !important;
+        z-index: 500 !important;
         overflow: visible !important;
-        z-index: 100;
+    }
+
+    /* The animated dropdown list that appears when clicking the title */
+    .cq-menu-dropdown,
+    .cq-menu-dropdown-enter-active,
+    .cq-menu-dropdown-enter-done,
+    .cq-modal-dropdown {
+        z-index: 9999 !important;
+        position: relative !important;
+        overflow: visible !important;
+    }
+
+    /* Any top-widgets / toolbar row SmartChart renders above the chart */
+    .sc-chart__head,
+    .cq-chart-title-wrapper {
+        position: relative !important;
+        z-index: 300 !important;
+        overflow: visible !important;
     }
 }
 

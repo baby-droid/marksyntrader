@@ -438,9 +438,6 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                 </div>
             </div>
 
-            {/* ── Spacer — pushes buttons toward the bottom ─────────── */}
-            <div className='ctp__spacer' />
-
             {/* ── Result feedback ───────────────────────────────────── */}
             {result && (
                 <div className={`ctp__result ${result.ok ? 'ok' : 'err'}`}>{result.msg}</div>

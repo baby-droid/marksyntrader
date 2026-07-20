@@ -18,12 +18,14 @@
 }
 
 /* ── CTP root — half-width card, left-aligned in the right panel ────────────── */
-/* Setting width:50% here halves every section inside (market, contract, ticks,
-   digit prediction, stake, over/under) while keeping them all at the same LEFT
-   position. The right half of the right panel shows the panel background.     */
+/* width:50% halves every section (market, contract, ticks, digit, stake,
+   over/under) while keeping them left-aligned. justify-content:space-between
+   distributes the empty space evenly between ALL sections so nothing is
+   cramped at the top and the large gap before the buttons disappears.          */
 .ctp {
     display: flex;
     flex-direction: column;
+    justify-content: space-between;
     width: 50%;
     min-width: 210px;
     min-height: 100%;
@@ -31,17 +33,17 @@
     font-size: 13px;
     color: #0E0F11;
     background: #ffffff;
-    padding: 10px 0 10px 0;
+    padding: 10px 0;
     box-sizing: border-box;
     border-radius: 14px;
     box-shadow: 0 2px 16px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.06);
     overflow: hidden;
 }
 
-/* ── Section ────────────────────────────────────────────────────────────────── */
+/* ── Section — no margin-bottom; space-between on .ctp handles all gaps ──────── */
 .ctp__section {
     padding: 0 10px;
-    margin-bottom: 5px;
+    margin-bottom: 0;
     flex-shrink: 0;
 }
 
@@ -365,12 +367,6 @@
     animation: ctp-accu-pulse 1s ease-in-out infinite;
 }
 @keyframes ctp-accu-pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
-
-/* ── Spacer — pushes Over/Under toward bottom of the panel ─────────────────── */
-.ctp__spacer {
-    flex: 1;
-    min-height: 6px;
-}
 
 /* ── Over / Under buttons ───────────────────────────────────────────────────── */
 .ctp__section--over,
