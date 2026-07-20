@@ -51,10 +51,130 @@ function getTypeIcon(type: string) {
 
 async function fetchContractInfo(contract_id: number): Promise<any> {
     try {
-        const res = await (api_base.api.send as any)({ contract_info: contract_id });
-        return res?.contract_info ?? null;
+        // Use proposal_open_contract (works for both open and settled contracts)
+        // It returns tick_stream, entry_tick, exit_tick, tick_count, barrier, etc.
+        const res = await (api_base.api.send as any)({
+            proposal_open_contract: 1,
+            contract_id,
+        });
+        const poc = res?.proposal_open_contract ?? res?.contract_info ?? null;
+        return poc;
     } catch { return null; }
 }
+
+/* ── SVG tick chart — mirrors Deriv contract details design ── */
+interface TickDatum { epoch: number; tick: number; tick_display_value?: string; }
+
+const TickChart: React.FC<{
+    tickStream: TickDatum[];
+    entryTick: number | string | null | undefined;
+    exitTick:  number | string | null | undefined;
+    won: boolean;
+    tickCount: number;
+}> = ({ tickStream, entryTick, exitTick, won, tickCount }) => {
+    if (!tickStream || tickStream.length === 0) {
+        // Fallback: numbered circles only (no price data)
+        if (!tickCount) return (
+            <div className='rp__tick-empty'>
+                <span>📊</span> Settlement tick data not available for this contract.
+            </div>
+        );
+        return (
+            <div className='rp__tick-circles'>
+                {Array.from({ length: tickCount }, (_, i) => (
+                    <div key={i} className={`rp__tick-circle ${i === tickCount - 1 ? (won ? 'win' : 'loss') : ''}`}>
+                        <span>{i + 1}</span>
+                    </div>
+                ))}
+            </div>
+        );
+    }
+
+    // SVG line chart
+    const W = 420, H = 160, PAD = 28;
+    const prices  = tickStream.map(t => Number(t.tick));
+    const epochs  = tickStream.map(t => Number(t.epoch));
+    const minP    = Math.min(...prices);
+    const maxP    = Math.max(...prices);
+    const range   = maxP - minP || 1;
+    const n       = tickStream.length;
+
+    const xOf = (i: number) => PAD + (i / Math.max(n - 1, 1)) * (W - PAD * 2);
+    const yOf = (p: number) => PAD + (1 - (p - minP) / range) * (H - PAD * 2);
+
+    const polyline = tickStream.map((t, i) => `${xOf(i).toFixed(1)},${yOf(Number(t.tick)).toFixed(1)}`).join(' ');
+    const fillPath = `M${xOf(0).toFixed(1)},${yOf(Number(tickStream[0].tick)).toFixed(1)} ` +
+        tickStream.map((t, i) => `L${xOf(i).toFixed(1)},${yOf(Number(t.tick)).toFixed(1)}`).join(' ') +
+        ` L${xOf(n - 1).toFixed(1)},${H - PAD} L${xOf(0).toFixed(1)},${H - PAD} Z`;
+
+    const exitColor = won ? '#00E676' : '#FF3D57';
+    const fmtTime   = (epoch: number) => {
+        const d = new Date(epoch * 1000);
+        return `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}:${d.getSeconds().toString().padStart(2,'0')}`;
+    };
+
+    return (
+        <div className='rp__tick-chart'>
+            <svg viewBox={`0 0 ${W} ${H}`} width='100%' style={{ overflow: 'visible' }}>
+                <defs>
+                    <linearGradient id='rp-fill-grad' x1='0' y1='0' x2='0' y2='1'>
+                        <stop offset='0%'   stopColor={won ? '#00E676' : '#FF3D57'} stopOpacity='0.18' />
+                        <stop offset='100%' stopColor={won ? '#00E676' : '#FF3D57'} stopOpacity='0.0'  />
+                    </linearGradient>
+                </defs>
+
+                {/* Filled area under line */}
+                <path d={fillPath} fill='url(#rp-fill-grad)' />
+
+                {/* Line */}
+                <polyline points={polyline} fill='none' stroke='#aac' strokeWidth='1.5' />
+
+                {/* Tick dots + labels */}
+                {tickStream.map((t, i) => {
+                    const x   = xOf(i);
+                    const y   = yOf(Number(t.tick));
+                    const isLast = i === n - 1;
+                    const dotR   = isLast ? 5 : 3.5;
+                    const color  = isLast ? exitColor : '#1E88FF';
+                    const dv     = t.tick_display_value ?? t.tick;
+                    return (
+                        <g key={i}>
+                            {/* Price bubble above dot */}
+                            <rect x={x - 26} y={y - 28} width={52} height={16} rx={4}
+                                fill={isLast ? exitColor : '#e8f0fe'} opacity={isLast ? 1 : 0.9} />
+                            <text x={x} y={y - 17} textAnchor='middle'
+                                fontSize='9' fill={isLast ? '#fff' : '#1a1a2e'} fontWeight='700'>
+                                {dv}
+                            </text>
+                            {/* Time below x-axis */}
+                            <text x={x} y={H - 4} textAnchor='middle' fontSize='8' fill='#aaa'>
+                                {fmtTime(Number(t.epoch))}
+                            </text>
+                            {/* Numbered dot */}
+                            <circle cx={x} cy={y} r={dotR} fill={color} stroke='#fff' strokeWidth='1.5'
+                                filter={isLast ? `drop-shadow(0 0 4px ${exitColor})` : undefined} />
+                            {/* Tick number inside */}
+                            <text x={x} y={y + 3.5} textAnchor='middle' fontSize='7' fill='#fff' fontWeight='900'>
+                                {i + 1}
+                            </text>
+                        </g>
+                    );
+                })}
+
+                {/* Dashed entry vertical line */}
+                {n > 0 && (
+                    <line x1={xOf(0)} y1={PAD - 8} x2={xOf(0)} y2={H - PAD}
+                        stroke='#bbb' strokeWidth='1' strokeDasharray='3,3' />
+                )}
+                {/* Dashed exit vertical line */}
+                {n > 1 && (
+                    <line x1={xOf(n - 1)} y1={PAD - 8} x2={xOf(n - 1)} y2={H - PAD}
+                        stroke={exitColor} strokeWidth='1.5' strokeDasharray='3,3' />
+                )}
+            </svg>
+        </div>
+    );
+};
 
 const SIDEBAR_ITEMS = [
     { id: 'open',      label: 'Open positions', icon: '⏳' },
@@ -147,30 +267,28 @@ const ContractDetailModal: React.FC<{ trade: any; info: any; cur: string; onClos
                     </div>
                 </div>
 
-                {/* Right mini-chart placeholder (tick visualizer) */}
+                {/* Right: Tick chart + settlement data */}
                 <div className='rp__modal-chart'>
                     <div className='rp__modal-chart-inner'>
                         <div className='rp__modal-chart-label'>Settlement Ticks</div>
-                        <div className='rp__modal-ticks'>
-                            {info?.tick_count ? Array.from({ length: info.tick_count }, (_, i) => (
-                                <div key={i} className={`rp__modal-tick ${i === (info.tick_count - 1) ? (trade.pnl >= 0 ? 'win' : 'loss') : ''}`}>
-                                    <span className='rp__modal-tick-num'>{i + 1}</span>
-                                </div>
-                            )) : (
-                                <div className='rp__modal-tick-empty'>Tick data not available</div>
-                            )}
-                        </div>
+                        <TickChart tickStream={info?.tick_stream ?? []}
+                                   entryTick={info?.entry_tick ?? info?.entry_spot}
+                                   exitTick={info?.exit_tick   ?? info?.exit_spot}
+                                   won={trade.pnl >= 0}
+                                   tickCount={info?.tick_count ?? 0} />
                         <div className='rp__modal-spots'>
                             {(info?.entry_tick || info?.entry_spot) && (
                                 <div className='rp__modal-spot-row'>
-                                    <span className='rp__modal-spot-label'>Entry</span>
+                                    <span className='rp__modal-spot-label'>Entry spot</span>
                                     <span className='rp__modal-spot-val'>{info.entry_tick ?? info.entry_spot}</span>
+                                    {info?.entry_tick_time && <span className='rp__modal-spot-time'>{fmtShort(info.entry_tick_time)}</span>}
                                 </div>
                             )}
                             {(info?.exit_tick || info?.exit_spot) && (
                                 <div className={`rp__modal-spot-row ${trade.pnl >= 0 ? 'win' : 'loss'}`}>
-                                    <span className='rp__modal-spot-label'>Exit</span>
+                                    <span className='rp__modal-spot-label'>Exit spot</span>
                                     <span className='rp__modal-spot-val'>{info.exit_tick ?? info.exit_spot}</span>
+                                    {info?.exit_tick_time && <span className='rp__modal-spot-time'>{fmtShort(info.exit_tick_time)}</span>}
                                 </div>
                             )}
                         </div>

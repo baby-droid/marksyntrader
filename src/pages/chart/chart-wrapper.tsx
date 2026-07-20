@@ -70,6 +70,11 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
     const [pendingTrades, setPendingTrades] = useState<PendingTrade[]>([]);
     const pendingTradesRef = useRef<PendingTrade[]>([]);
 
+    // ── Per-trade tick-digit history: tradeId → [T1digit, T2digit, …] ────────
+    // Used to show "T1", "T2" labels above the digit circles during execution.
+    const contractTickDigitsRef = useRef<Map<string, number[]>>(new Map());
+    const [tickDigitSnapshot, setTickDigitSnapshot] = useState<Map<string, number[]>>(new Map());
+
     useEffect(() => {
         const handleStarted = (e: CustomEvent) => {
             const { contractId, ticks } = e.detail;
@@ -78,8 +83,10 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                 totalTicks: ticks,
                 countedTicks: 0,
             };
+            contractTickDigitsRef.current.set(String(contractId), []);
             pendingTradesRef.current = [...pendingTradesRef.current, trade];
             setPendingTrades([...pendingTradesRef.current]);
+            setTickDigitSnapshot(new Map(contractTickDigitsRef.current));
         };
 
         const handleSettlement = (e: CustomEvent) => {
@@ -90,10 +97,22 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
             if (contractId != null) {
                 pendingTradesRef.current = pendingTradesRef.current.filter(t => t.id !== String(contractId));
                 setPendingTrades([...pendingTradesRef.current]);
+                // Clear tick digit map after a short delay (keep visible during fade)
+                setTimeout(() => {
+                    contractTickDigitsRef.current.delete(String(contractId));
+                    setTickDigitSnapshot(new Map(contractTickDigitsRef.current));
+                }, 5100);
             } else {
                 // Remove the oldest pending trade
+                const removed = pendingTradesRef.current[0];
                 pendingTradesRef.current = pendingTradesRef.current.slice(1);
                 setPendingTrades([...pendingTradesRef.current]);
+                if (removed) {
+                    setTimeout(() => {
+                        contractTickDigitsRef.current.delete(removed.id);
+                        setTickDigitSnapshot(new Map(contractTickDigitsRef.current));
+                    }, 5100);
+                }
             }
 
             // Digit-circle highlight
@@ -172,13 +191,19 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                 digitHistoryRef.current.forEach(x => counts[x]++);
                 setDigitCounts([...counts]);
 
-                // Increment tick counter for pending trades
+                // Increment tick counter for pending trades + record the digit for each tick
                 if (pendingTradesRef.current.length > 0) {
-                    pendingTradesRef.current = pendingTradesRef.current.map(t => ({
-                        ...t,
-                        countedTicks: Math.min(t.countedTicks + 1, t.totalTicks),
-                    }));
+                    pendingTradesRef.current = pendingTradesRef.current.map(t => {
+                        if (t.countedTicks < t.totalTicks) {
+                            // Record this tick's digit
+                            const arr = contractTickDigitsRef.current.get(t.id) ?? [];
+                            arr.push(d);
+                            contractTickDigitsRef.current.set(t.id, arr);
+                        }
+                        return { ...t, countedTicks: Math.min(t.countedTicks + 1, t.totalTicks) };
+                    });
                     setPendingTrades([...pendingTradesRef.current]);
+                    setTickDigitSnapshot(new Map(contractTickDigitsRef.current));
                 }
             },
             error: () => {},
@@ -194,10 +219,26 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
     // Digit display order: 0-9 left to right
     const DIGIT_ORDER = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
+    // Build a map: digit → list of "Tn" labels from active trades
+    // e.g. digit 3 might have ["T1"] if the first contract tick had last-digit 3
+    const digitTradeLabels = new Map<number, string[]>();
+    tickDigitSnapshot.forEach((digits, tradeId) => {
+        const pending = pendingTradesRef.current.find(t => t.id === tradeId);
+        const isFinalTick = pending ? pending.countedTicks >= pending.totalTicks : true;
+        digits.forEach((d, idx) => {
+            const tickNum = idx + 1;
+            const isLast  = pending ? tickNum === pending.totalTicks : isFinalTick;
+            const label   = isLast ? `T${tickNum}★` : `T${tickNum}`;
+            const arr = digitTradeLabels.get(d) ?? [];
+            arr.push(label);
+            digitTradeLabels.set(d, arr);
+        });
+    });
+
     return (
-        <div style={{ display: 'grid', gridTemplateColumns: '68% 32%', width: '100%', height: '100%', overflow: 'hidden', background: '#fff' }}>
+        <div className='cw-layout'>
             {/* ─── Chart area ─── */}
-            <div style={{ position: 'relative', minWidth: 0, overflow: 'hidden', paddingLeft: '1cm', paddingRight: '0.4cm' }}>
+            <div style={{ position: 'relative', minWidth: 0, overflow: 'hidden', paddingLeft: '0.8cm', paddingRight: '0.3cm' }}>
                 <Chart key={uniqueKey} show_digits_stats={false} />
 
                 {/* Tick counter badges for running contracts */}
@@ -229,23 +270,36 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                     </div>
                     <div className='cdo__circles'>
                         {DIGIT_ORDER.map(d => {
-                            const pct       = pcts[d] ?? 0;
-                            const colorRank = getCircleColor(pct, sorted);
-                            const isCurrent = currentDigit === d;
-                            const isBarrier = barrier === d;
-                            const isWin     = lastTrade?.won === true  && lastTrade.digit === d;
-                            const isLoss    = lastTrade?.won === false && lastTrade.digit === d;
+                            const pct        = pcts[d] ?? 0;
+                            const colorRank  = getCircleColor(pct, sorted);
+                            const isCurrent  = currentDigit === d;
+                            const isBarrier  = barrier === d;
+                            const isWin      = lastTrade?.won === true  && lastTrade.digit === d;
+                            const isLoss     = lastTrade?.won === false && lastTrade.digit === d;
+                            const tLabels    = digitTradeLabels.get(d) ?? [];
+                            const hasT       = tLabels.length > 0;
+                            const isFinalT   = tLabels.some(l => l.includes('★'));
                             return (
                                 <div key={d} className='cdo__item' onClick={() => setBarrier(d)}>
-                                    {/* Always reserve triangle space to prevent layout shift */}
+                                    {/* T-label row: shows T1/T2/… above the triangle during active trades */}
+                                    {hasT ? (
+                                        <div className={`cdo__tlabel${isFinalT ? ' cdo__tlabel--final' : ''}`}>
+                                            {tLabels.map(l => l.replace('★', '')).join(' ')}
+                                        </div>
+                                    ) : (
+                                        <div className='cdo__tlabel cdo__tlabel--hidden' />
+                                    )}
+                                    {/* Triangle pointer — follows live market digit */}
                                     <div className={`cdo__triangle${isCurrent ? '' : ' cdo__triangle--hidden'}`} />
                                     <div className={[
                                         'cdo__circle',
                                         `cdo__circle--${colorRank}`,
                                         isCurrent ? 'cdo__circle--current' : '',
                                         isBarrier ? 'cdo__circle--barrier' : '',
-                                        isWin     ? 'cdo__circle--win'     : '',
-                                        isLoss    ? 'cdo__circle--loss'    : '',
+                                        isWin      ? 'cdo__circle--win'    : '',
+                                        isLoss     ? 'cdo__circle--loss'   : '',
+                                        hasT && !isFinalT ? 'cdo__circle--tick-active' : '',
+                                        hasT && isFinalT  ? (isWin ? 'cdo__circle--win' : isLoss ? 'cdo__circle--loss' : 'cdo__circle--tick-final') : '',
                                     ].filter(Boolean).join(' ')}>
                                         {d}
                                     </div>

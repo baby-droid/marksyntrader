@@ -1,14 +1,26 @@
 /* ─── Chart Trade Panel ─── */
 
+// CSS custom properties — override per breakpoint
+:root {
+    --ctp-panel-w: min(360px, 25vw);
+    --ctp-btn-h:   58px;
+    --ctp-digit-sz: 22px;
+    @media (max-width: 1439px) { --ctp-btn-h: 56px; }
+    @media (max-width: 1199px) { --ctp-panel-w: min(340px, 30vw); --ctp-btn-h: 54px; }
+    @media (max-width: 767px)  { --ctp-panel-w: 100%; --ctp-btn-h: 52px; }
+}
+
 .ctp {
     width: 100%;
     height: 100%;
     display: flex;
     flex-direction: column;
     font-family: 'Inter', sans-serif;
-    font-size: 13px;
+    font-size: clamp(12px, 0.85vw, 14px);
     color: #222;
     background: #fff;
+    overflow-y: auto;
+    overflow-x: hidden;
 
     // ── Account badge ──────────────────────────────────────────────────
     &-acct-badge, .ctp-acct-badge {
@@ -373,24 +385,30 @@
         &:disabled { opacity: 0.6; cursor: not-allowed; }
 
         &--over {
-            background: linear-gradient(120deg, #2fb9bf 0%, #1ea8ae 100%);
+            background: linear-gradient(120deg, #00C853 0%, #00E676 100%);
+            color: #003c1a;
+            font-weight: 900;
+            box-shadow: 0 2px 10px rgba(0, 200, 83, 0.35);
             &:hover:not(:disabled) {
-                filter: brightness(1.07);
-                box-shadow: 0 3px 14px rgba(47,185,191,0.4);
+                filter: brightness(1.06);
+                box-shadow: 0 4px 18px rgba(0, 230, 118, 0.5);
             }
         }
 
         &--under {
-            background: linear-gradient(120deg, #f14343 0%, #d42a2a 100%);
+            background: linear-gradient(120deg, #FF3D57 0%, #C62828 100%);
+            color: #fff;
+            font-weight: 900;
+            box-shadow: 0 2px 10px rgba(255, 61, 87, 0.35);
             &:hover:not(:disabled) {
-                filter: brightness(1.07);
-                box-shadow: 0 3px 14px rgba(241,67,67,0.35);
+                filter: brightness(1.06);
+                box-shadow: 0 4px 18px rgba(255, 61, 87, 0.5);
             }
         }
     }
 
     &__buy-arrow {
-        font-size: 14px;
+        font-size: clamp(12px, 1vw, 16px);
         line-height: 1;
     }
 
