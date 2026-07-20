@@ -6,18 +6,63 @@ import { publishMasterTrade, getMasterSource } from '@/utils/trade-bus';
 
 /* ── Symbol display names ─────────────────────────────────────────────────── */
 const SYMBOL_NAMES: Record<string, string> = {
-    '1HZ100V': 'Volatility 100 (1s) Index',
     '1HZ10V':  'Volatility 10 (1s) Index',
     '1HZ25V':  'Volatility 25 (1s) Index',
     '1HZ50V':  'Volatility 50 (1s) Index',
     '1HZ75V':  'Volatility 75 (1s) Index',
-    'R_100':   'Volatility 100 Index',
+    '1HZ100V': 'Volatility 100 (1s) Index',
     'R_10':    'Volatility 10 Index',
     'R_25':    'Volatility 25 Index',
     'R_50':    'Volatility 50 Index',
     'R_75':    'Volatility 75 Index',
+    'R_100':   'Volatility 100 Index',
 };
 function symbolName(s: string) { return SYMBOL_NAMES[s] ?? s; }
+
+/**
+ * Sort market symbols in canonical order:
+ * 1) Volatility 1s (1HZ*) — lowest to highest
+ * 2) Volatility plain (R_*) — lowest to highest
+ * 3) Bear Market
+ * 4) Bull Market
+ * 5) Jump indices (JD*)
+ * 6) Crash indices
+ * 7) Boom indices
+ * 8) Step indices (STP*)
+ * 9) Range Break (RB*)
+ * 10) Everything else alphabetically
+ */
+function marketGroupOrder(sym: string): number {
+    const s = sym.toUpperCase();
+    if (/^1HZ/.test(s))   return 0;
+    if (/^R_/.test(s))    return 1;
+    if (/BEAR/.test(s))   return 2;
+    if (/BULL/.test(s))   return 3;
+    if (/^JD/.test(s))    return 4;
+    if (/CRASH/.test(s))  return 5;
+    if (/BOOM/.test(s))   return 6;
+    if (/^STP/.test(s))   return 7;
+    if (/^RB/.test(s))    return 8;
+    return 9;
+}
+
+/** Extract the numeric part for secondary sort within a group (e.g. "10", "25", "100"). */
+function marketNumericKey(sym: string): number {
+    const m = sym.match(/\d+/);
+    return m ? parseInt(m[0], 10) : 0;
+}
+
+function sortActiveSymbols(list: Array<{symbol: string; display_name: string}>) {
+    return [...list].sort((a, b) => {
+        const ga = marketGroupOrder(a.symbol);
+        const gb = marketGroupOrder(b.symbol);
+        if (ga !== gb) return ga - gb;
+        const na = marketNumericKey(a.symbol);
+        const nb = marketNumericKey(b.symbol);
+        if (na !== nb) return na - nb;
+        return a.display_name.localeCompare(b.display_name);
+    });
+}
 
 /* ── Trade type groups ────────────────────────────────────────────────────── */
 const TRADE_GROUPS = [
@@ -86,7 +131,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                     symbol: s.symbol || s.underlying_symbol || '',
                     display_name: s.display_name || s.symbol || '',
                 })).filter((s: any) => s.symbol);
-                setActiveSymbols(list);
+                setActiveSymbols(sortActiveSymbols(list));
             }
         };
         load();
@@ -421,20 +466,39 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                     <div className='ctp__stake-mid'>
                         <input
                             className='ctp__stake-inp'
-                            type='number' min={0.35} step={1}
+                            type='number' min={0.35} step={0.01}
                             value={stake}
-                            onChange={e => setStake(parseFloat(e.target.value) || 0.35)}
+                            onFocus={e => e.target.select()}
+                            onChange={e => {
+                                const v = parseFloat(e.target.value);
+                                if (!isNaN(v)) setStake(v);
+                                else if (e.target.value === '' || e.target.value === '-') setStake(0);
+                            }}
+                            onBlur={e => {
+                                const v = parseFloat(e.target.value);
+                                setStake(isNaN(v) || v < 0.35 ? 0.35 : parseFloat(v.toFixed(2)));
+                            }}
                         />
                         <span className='ctp__stake-cur'>{displayCur}</span>
                     </div>
                     <button className='ctp__stake-adj' onClick={() => setStake(s => parseFloat((s + 1).toFixed(2)))}>+</button>
                 </div>
+                {/* Preset quick-select chips — click to apply, click active to deselect */}
                 <div className='ctp__stake-presets'>
-                    {[0.35, 1, 2, 10, 50].map(p => (
-                        <button key={p} className={`ctp__preset${stake === p ? ' active' : ''}`} onClick={() => setStake(p)}>
-                            {p === 0.35 ? '0.35' : p}
-                        </button>
-                    ))}
+                    {[0.35, 1, 2, 10, 50].map(p => {
+                        const isActive = stake === p;
+                        return (
+                            <button
+                                key={p}
+                                className={`ctp__preset${isActive ? ' active' : ''}`}
+                                onClick={() => isActive ? setStake(0.35) : setStake(p)}
+                                title={isActive ? 'Click to clear preset' : `Set stake to ${p}`}
+                            >
+                                {p === 0.35 ? '0.35' : p}
+                                {isActive && <span className='ctp__preset-x'>✕</span>}
+                            </button>
+                        );
+                    })}
                 </div>
             </div>
 

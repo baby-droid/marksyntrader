@@ -284,18 +284,35 @@ const ContractDetailModal: React.FC<{ trade: any; info: any; cur: string; onClos
                         <span>Start time</span>
                         <strong>{fmtShort(trade.purchase_time)}</strong>
                     </div>
-                    {(info?.entry_tick_display_value || info?.entry_spot || info?.entry_spot_display_value) && (
-                        <div className='rp__modal-row'>
-                            <span>Entry spot</span>
-                            <strong>{info.entry_tick_display_value ?? info.entry_spot_display_value ?? info.entry_spot}</strong>
-                        </div>
-                    )}
-                    {(info?.exit_tick_display_value || info?.exit_spot || info?.exit_spot_display_value) && (
-                        <div className='rp__modal-row'>
-                            <span>Exit spot</span>
-                            <strong>{info.exit_tick_display_value ?? info.exit_spot_display_value ?? info.exit_spot}</strong>
-                        </div>
-                    )}
+                    {/* Entry spot — full price, last digit highlighted */}
+                    {(info?.entry_tick_display_value || info?.entry_spot || info?.entry_spot_display_value) && (() => {
+                        const raw = String(info.entry_tick_display_value ?? info.entry_spot_display_value ?? info.entry_spot ?? '');
+                        const body = raw.slice(0, -1);
+                        const lastDigit = raw.slice(-1);
+                        return (
+                            <div className='rp__modal-row'>
+                                <span>Entry spot</span>
+                                <strong className='rp__entry-spot'>
+                                    <span className='rp__entry-spot-body'>{body}</span>
+                                    <span className='rp__entry-spot-digit'>{lastDigit}</span>
+                                </strong>
+                            </div>
+                        );
+                    })()}
+                    {(info?.exit_tick_display_value || info?.exit_spot || info?.exit_spot_display_value) && (() => {
+                        const raw = String(info.exit_tick_display_value ?? info.exit_spot_display_value ?? info.exit_spot ?? '');
+                        const body = raw.slice(0, -1);
+                        const lastDigit = raw.slice(-1);
+                        return (
+                            <div className='rp__modal-row'>
+                                <span>Exit spot</span>
+                                <strong className={`rp__entry-spot ${trade.pnl >= 0 ? 'win' : 'loss'}`}>
+                                    <span className='rp__entry-spot-body'>{body}</span>
+                                    <span className='rp__entry-spot-digit'>{lastDigit}</span>
+                                </strong>
+                            </div>
+                        );
+                    })()}
                     <div className='rp__modal-row'>
                         <span>Exit time</span>
                         <strong>{fmtShort(trade.sell_time)}</strong>
@@ -312,24 +329,33 @@ const ContractDetailModal: React.FC<{ trade: any; info: any; cur: string; onClos
                                    won={trade.pnl >= 0}
                                    tickCount={info?.tick_count ?? 0} />
                         <div className='rp__modal-spots'>
-                            {(info?.entry_tick_display_value || info?.entry_spot) && (
-                                <div className='rp__modal-spot-row'>
-                                    <span className='rp__modal-spot-label'>Entry spot</span>
-                                    <span className='rp__modal-spot-val'>
-                                        {info.entry_tick_display_value ?? info.entry_spot_display_value ?? info.entry_spot}
-                                    </span>
-                                    {info?.entry_tick_time && <span className='rp__modal-spot-time'>{fmtShort(info.entry_tick_time)}</span>}
-                                </div>
-                            )}
-                            {(info?.exit_tick_display_value || info?.exit_spot) && (
-                                <div className={`rp__modal-spot-row ${trade.pnl >= 0 ? 'win' : 'loss'}`}>
-                                    <span className='rp__modal-spot-label'>Exit spot</span>
-                                    <span className='rp__modal-spot-val'>
-                                        {info.exit_tick_display_value ?? info.exit_spot_display_value ?? info.exit_spot}
-                                    </span>
-                                    {info?.exit_tick_time && <span className='rp__modal-spot-time'>{fmtShort(info.exit_tick_time)}</span>}
-                                </div>
-                            )}
+                            {(info?.entry_tick_display_value || info?.entry_spot) && (() => {
+                                const raw = String(info.entry_tick_display_value ?? info.entry_spot_display_value ?? info.entry_spot ?? '');
+                                return (
+                                    <div className='rp__modal-spot-row'>
+                                        <span className='rp__modal-spot-label'>Entry spot</span>
+                                        <span className='rp__modal-spot-val rp__entry-spot'>
+                                            <span className='rp__entry-spot-body'>{raw.slice(0, -1)}</span>
+                                            <span className='rp__entry-spot-digit'>{raw.slice(-1)}</span>
+                                        </span>
+                                        {info?.entry_tick_time && <span className='rp__modal-spot-time'>{fmtShort(info.entry_tick_time)}</span>}
+                                    </div>
+                                );
+                            })()}
+                            {(info?.exit_tick_display_value || info?.exit_spot) && (() => {
+                                const raw = String(info.exit_tick_display_value ?? info.exit_spot_display_value ?? info.exit_spot ?? '');
+                                const won = trade.pnl >= 0;
+                                return (
+                                    <div className={`rp__modal-spot-row ${won ? 'win' : 'loss'}`}>
+                                        <span className='rp__modal-spot-label'>Exit spot</span>
+                                        <span className={`rp__modal-spot-val rp__entry-spot ${won ? 'win' : 'loss'}`}>
+                                            <span className='rp__entry-spot-body'>{raw.slice(0, -1)}</span>
+                                            <span className='rp__entry-spot-digit'>{raw.slice(-1)}</span>
+                                        </span>
+                                        {info?.exit_tick_time && <span className='rp__modal-spot-time'>{fmtShort(info.exit_tick_time)}</span>}
+                                    </div>
+                                );
+                            })()}
                         </div>
                     </div>
                 </div>
@@ -405,20 +431,22 @@ const Reports = observer(() => {
 
             const res = await (api_base.api.send as any)(params);
             if (res?.statement?.transactions) {
-                const sells = res.statement.transactions.filter((t: any) => t.action_type === 'sell');
-                setStatementRows(sells.map((t: any) => ({
+                // Show ALL action types: sell, buy, transfer, withdrawal, deposit
+                const rows = res.statement.transactions.map((t: any) => ({
                     transaction_id: t.transaction_id,
                     contract_id:    t.contract_id,
-                    action_type:    t.action_type,
+                    action_type:    t.action_type,   // sell | buy | transfer | withdrawal | deposit
                     amount:         parseFloat(t.amount || '0'),
                     balance_after:  parseFloat(t.balance_after || '0'),
                     longcode:       t.longcode  || '',
                     shortcode:      t.shortcode || '',
+                    referrer_type:  t.referrer_type  || '',
                     purchase_time:  t.purchase_time,
                     sell_time:      t.sell_time,
                     pnl:            parseFloat(t.amount || '0'),
                     contract_type:  extractType(t.shortcode || ''),
-                })));
+                }));
+                setStatementRows(rows);
             }
         } catch (e) { console.error('Statement error', e); }
         finally { setIsLoading(false); }
@@ -628,6 +656,9 @@ const Reports = observer(() => {
                                 <span className='rp__filter-icon'>📅</span>
                                 <input type='date' value={dateTo} onChange={e => setDateTo(e.target.value)} className='rp__date-input' />
                             </div>
+                            <select className='rp__limit-select' value={limit} onChange={e => setLimit(Number(e.target.value))}>
+                                {[25,50,100,200].map(n => <option key={n} value={n}>Last {n}</option>)}
+                            </select>
                             <button className='rp__refresh-btn' onClick={() => fetchStatement(limit)} disabled={isLoading}>
                                 {isLoading ? '⏳' : '🔄'} Refresh
                             </button>
@@ -636,10 +667,10 @@ const Reports = observer(() => {
                             <table className='rp__table'>
                                 <thead>
                                     <tr>
-                                        <th>Type</th>
+                                        <th>Action</th>
                                         <th>Ref. ID</th>
                                         <th>Currency</th>
-                                        <th>Buy time</th>
+                                        <th>Date &amp; Time</th>
                                         <th>Amount</th>
                                         <th>Balance after</th>
                                     </tr>
@@ -647,18 +678,45 @@ const Reports = observer(() => {
                                 <tbody>
                                     {isLoading && <tr><td colSpan={6} className='rp__table-msg'>Loading…</td></tr>}
                                     {!isLoading && statementRows.length === 0 && (
-                                        <tr><td colSpan={6} className='rp__table-msg'>No data</td></tr>
+                                        <tr><td colSpan={6} className='rp__table-msg'>No statement data found.</td></tr>
                                     )}
-                                    {statementRows.map(s => (
-                                        <tr key={s.transaction_id} className={s.pnl >= 0 ? 'won' : 'lost'}>
-                                            <td><span className='rp__type-label'>{s.contract_type}</span></td>
-                                            <td className='rp__refid'>{s.contract_id}</td>
-                                            <td><span className='rp__cur-badge'>{cur}</span></td>
-                                            <td className='rp__time'>{fmtShort(s.purchase_time)}</td>
-                                            <td className={`rp__pnl ${s.pnl >= 0 ? 'pos' : 'neg'}`}>{fmtPnl(s.pnl)}</td>
-                                            <td>{s.balance_after.toFixed(2)}</td>
-                                        </tr>
-                                    ))}
+                                    {statementRows.map(s => {
+                                        const act = (s.action_type || '').toLowerCase();
+                                        const isDeposit    = act === 'deposit';
+                                        const isWithdrawal = act === 'withdrawal';
+                                        const isTransfer   = act === 'transfer';
+                                        const isTrade      = act === 'sell' || act === 'buy';
+                                        const rowClass = isDeposit ? 'stmt-deposit'
+                                            : isWithdrawal ? 'stmt-withdrawal'
+                                            : isTransfer   ? 'stmt-transfer'
+                                            : s.pnl >= 0   ? 'won' : 'lost';
+                                        const actionIcon = isDeposit ? '⬇ Deposit'
+                                            : isWithdrawal ? '⬆ Withdrawal'
+                                            : isTransfer   ? '⇄ Transfer'
+                                            : act === 'buy' ? `${getTypeIcon(s.contract_type)} Buy · ${s.contract_type}`
+                                            : `${getTypeIcon(s.contract_type)} ${s.contract_type}`;
+                                        const amtClass = s.amount >= 0 ? 'pos' : 'neg';
+                                        const dateTs = s.sell_time || s.purchase_time;
+                                        return (
+                                            <tr
+                                                key={s.transaction_id}
+                                                className={`rp__stmt-row ${rowClass}`}
+                                                onClick={() => isTrade && s.contract_id ? setSelectedTrade(s) : undefined}
+                                                style={{ cursor: isTrade && s.contract_id ? 'pointer' : 'default' }}
+                                            >
+                                                <td>
+                                                    <div className='rp__stmt-action'>
+                                                        <span className={`rp__stmt-badge rp__stmt-badge--${act}`}>{actionIcon}</span>
+                                                    </div>
+                                                </td>
+                                                <td className='rp__refid'>{s.transaction_id}</td>
+                                                <td><span className='rp__cur-badge'>{cur}</span></td>
+                                                <td className='rp__time'>{fmtShort(dateTs)}</td>
+                                                <td className={`rp__pnl ${amtClass}`}>{s.amount >= 0 ? '+' : ''}{s.amount.toFixed(2)}</td>
+                                                <td>{s.balance_after.toFixed(2)}</td>
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>

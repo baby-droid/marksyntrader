@@ -594,6 +594,60 @@
     &__modal-spot-val   { font-size: 1.3rem; font-weight: 700; color: #222; font-variant-numeric: tabular-nums; }
 }
 
+/* ── Statement action badges ──────────────────────────────────────────────── */
+.rp {
+    &__stmt-row {
+        &.stmt-deposit    { background: rgba(22,163,74,0.04); }
+        &.stmt-withdrawal { background: rgba(220,38,38,0.04); }
+        &.stmt-transfer   { background: rgba(59,130,246,0.04); }
+    }
+
+    &__stmt-action {
+        display: flex;
+        align-items: center;
+    }
+
+    &__stmt-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.28rem 0.75rem;
+        border-radius: 2rem;
+        font-size: 1.05rem;
+        font-weight: 700;
+        white-space: nowrap;
+
+        &--deposit    { background: rgba(22,163,74,0.12);  color: #16a34a; border: 1px solid rgba(22,163,74,0.25); }
+        &--withdrawal { background: rgba(220,38,38,0.10);  color: #dc2626; border: 1px solid rgba(220,38,38,0.2); }
+        &--transfer   { background: rgba(59,130,246,0.10); color: #2563eb; border: 1px solid rgba(59,130,246,0.2); }
+        &--sell       { background: rgba(0,0,0,0.05);      color: #374151; border: 1px solid rgba(0,0,0,0.1); }
+        &--buy        { background: rgba(0,0,0,0.05);      color: #374151; border: 1px solid rgba(0,0,0,0.1); }
+    }
+
+    /* ── Entry / exit spot — last digit highlighted ───────────────────── */
+    &__entry-spot {
+        display: inline-flex;
+        align-items: baseline;
+        font-variant-numeric: tabular-nums;
+        gap: 0;
+
+        &.win  .rp__entry-spot-digit { color: #16a34a; }
+        &.loss .rp__entry-spot-digit { color: #dc2626; }
+    }
+
+    &__entry-spot-body {
+        font-size: inherit;
+        color: inherit;
+    }
+
+    &__entry-spot-digit {
+        font-size: 1.25em;
+        font-weight: 900;
+        color: #1e40af;
+        letter-spacing: -0.01em;
+    }
+}
+
 /* ── Mobile ── */
 @media (max-width: 680px) {
     .rp {

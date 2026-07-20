@@ -328,9 +328,25 @@
     cursor: pointer;
     font-family: inherit;
     text-align: center;
-    transition: all 0.1s;
-    &:hover  { border-color: #00C853; color: #00C853; }
-    &.active { background: #111827; border-color: #111827; color: #fff; }
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    position: relative;
+    &:hover  { border-color: #00C853; color: #00C853; background: rgba(0,200,83,0.05); }
+    &.active {
+        background: #111827; border-color: #111827; color: #fff;
+        &:hover { background: #2d3748; border-color: #2d3748; }
+    }
+}
+
+/* X indicator on active preset — clicking deselects it */
+.ctp__preset-x {
+    font-size: 9px;
+    opacity: 0.7;
+    line-height: 1;
+    margin-left: 1px;
 }
 
 /* ── Result feedback ────────────────────────────────────────────────────────── */
