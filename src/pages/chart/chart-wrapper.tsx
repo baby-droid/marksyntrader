@@ -125,7 +125,7 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
             const t = setTimeout(() => {
                 setTradeFlags(prev => prev.filter(f => f.id !== id));
                 flagTimersRef.current.delete(id);
-            }, 60000);
+            }, 5500);
             flagTimersRef.current.set(id, t);
         };
 
