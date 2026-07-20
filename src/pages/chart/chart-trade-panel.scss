@@ -1,13 +1,9 @@
 /* ─── Chart Trade Panel ─── */
 
-// CSS custom properties — override per breakpoint
 :root {
-    --ctp-panel-w: min(360px, 25vw);
-    --ctp-btn-h:   58px;
-    --ctp-digit-sz: 22px;
-    @media (max-width: 1439px) { --ctp-btn-h: 56px; }
-    @media (max-width: 1199px) { --ctp-panel-w: min(340px, 30vw); --ctp-btn-h: 54px; }
-    @media (max-width: 767px)  { --ctp-panel-w: 100%; --ctp-btn-h: 52px; }
+    --ctp-btn-h:   52px;
+    @media (max-width: 1439px) { --ctp-btn-h: 50px; }
+    @media (max-width: 767px)  { --ctp-btn-h: 48px; }
 }
 
 .ctp {
@@ -16,8 +12,8 @@
     display: flex;
     flex-direction: column;
     font-family: 'Inter', sans-serif;
-    font-size: clamp(12px, 0.85vw, 14px);
-    color: #222;
+    font-size: clamp(11px, 0.9vw, 14px);
+    color: #000;
     background: #fff;
     overflow-y: auto;
     overflow-x: hidden;
@@ -25,20 +21,20 @@
     // ── Account badge ──────────────────────────────────────────────────
     &-acct-badge, .ctp-acct-badge {
         display: inline-block;
-        padding: 2px 8px;
-        border-radius: 12px;
+        padding: 2px 7px;
+        border-radius: 10px;
         font-size: 10px;
-        font-weight: 700;
+        font-weight: 800;
         letter-spacing: 0.06em;
         flex-shrink: 0;
-        &.demo { background: rgba(30,100,220,0.1); color: #1e64dc; }
-        &.real { background: rgba(0,165,80,0.1);   color: #00a550; }
+        &.demo { background: rgba(30,100,220,0.12); color: #1e64dc; }
+        &.real { background: rgba(0,165,80,0.12);   color: #00a550; }
     }
 
     // ── Trade type dropdown ───────────────────────────────────────────
     &__type-select-wrap {
-        padding: 5px 8px 4px;
-        border-bottom: 1px solid #f0f0f0;
+        padding: 4px 6px 3px;
+        border-bottom: 1px solid #e8e8e8;
         background: #fafafa;
         display: flex;
         flex-direction: column;
@@ -46,9 +42,9 @@
     }
 
     &__type-label {
-        font-size: 9px;
-        font-weight: 700;
-        color: #888;
+        font-size: 10px;
+        font-weight: 800;
+        color: #000;
         text-transform: uppercase;
         letter-spacing: 0.07em;
     }
@@ -56,12 +52,12 @@
     &__type-select {
         width: 100%;
         font-size: 11px;
-        font-weight: 700;
-        color: #222;
+        font-weight: 800;
+        color: #000;
         background: #fff;
-        border: 1px solid #dde3ea;
+        border: 1px solid #ccc;
         border-radius: 5px;
-        padding: 3px 5px;
+        padding: 3px 4px;
         cursor: pointer;
         outline: none;
         font-family: inherit;
@@ -74,14 +70,14 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 3px 10px 4px;
-        border-bottom: 1px solid #f0f0f0;
+        padding: 3px 8px 3px;
+        border-bottom: 1px solid #ececec;
     }
 
     &__price-val {
-        font-size: 12px;
-        font-weight: 700;
-        color: #222;
+        font-size: clamp(13px, 1vw, 16px);
+        font-weight: 900;
+        color: #000;
         font-variant-numeric: tabular-nums;
         display: flex;
         align-items: center;
@@ -89,8 +85,8 @@
     }
 
     &__price-chg {
-        font-size: 9px;
-        font-weight: 600;
+        font-size: 10px;
+        font-weight: 700;
         padding: 1px 4px;
         border-radius: 3px;
         &.up { color: #00a550; background: rgba(0,165,80,0.1); }
@@ -99,16 +95,16 @@
 
     // ── Generic section ──────────────────────────────────────────────
     &__section {
-        padding: 5px 10px;
-        border-bottom: 1px solid #f0f0f0;
+        padding: 5px 7px 4px;
+        border-bottom: 1px solid #ececec;
     }
 
     &__section-label {
-        font-size: 9px;
-        font-weight: 700;
-        color: #b7b7b7;
+        font-size: 10px;
+        font-weight: 900;
+        color: #000;
         text-transform: uppercase;
-        letter-spacing: 0.08em;
+        letter-spacing: 0.07em;
         margin-bottom: 4px;
         display: flex;
         align-items: center;
@@ -116,8 +112,8 @@
     }
 
     &__section-val {
-        font-size: 10px;
-        font-weight: 700;
+        font-size: 12px;
+        font-weight: 900;
         color: #2fb9bf;
         text-transform: none;
         letter-spacing: 0;
@@ -130,124 +126,165 @@
         appearance: none;
         height: 4px;
         border-radius: 999px;
-        background: #e4e4e4;
+        background: #e0e0e0;
         outline: none;
         cursor: pointer;
-        margin-bottom: 3px;
+        margin-bottom: 4px;
+        display: none; // hidden — replaced by tick button rows
 
         &::-webkit-slider-thumb {
             -webkit-appearance: none;
-            width: 13px;
-            height: 13px;
+            width: 14px; height: 14px;
             border-radius: 50%;
-            background: #c6cbd2;
+            background: #2fb9bf;
             border: 2px solid #fff;
-            box-shadow: 0 1px 4px rgba(0,0,0,.15);
+            box-shadow: 0 1px 4px rgba(0,0,0,.2);
             cursor: pointer;
-            transition: background 0.15s;
         }
-        &:hover::-webkit-slider-thumb { background: #2fb9bf; }
     }
 
-    &__slider-marks {
-        display: flex;
-        justify-content: space-between;
-        font-size: 7px;
-        color: #c6cbd2;
-        font-weight: 600;
-        span.active { color: #2fb9bf; font-weight: 800; }
-    }
-
-    // ── Digit prediction buttons (2-row: [0-4] / [9-5]) ─────────────
-    &__digits {
+    // ── Tick number rows (1-5 / 6-10) ────────────────────────────────
+    &__tick-rows {
         display: flex;
         flex-direction: column;
         gap: 3px;
     }
 
-    &__digits-row {
+    &__tick-row {
         display: flex;
-        gap: 3px;
+        gap: 2px;
     }
 
-    &__digit-btn {
+    &__tick-btn {
         flex: 1;
-        height: 22px;
-        border-radius: 4px;
-        border: 1px solid #e8e8e8;
-        background: #f8f9fa;
-        color: #555;
-        font-size: 9px;
-        font-weight: 700;
+        height: clamp(24px, 2vw, 32px);
+        border-radius: 5px;
+        border: 1.5px solid #d0d0d0;
+        background: #f5f5f5;
+        color: #000;
+        font-size: clamp(12px, 1vw, 16px);
+        font-weight: 900;
         cursor: pointer;
         font-family: inherit;
         display: flex;
         align-items: center;
         justify-content: center;
-        transition: all 0.15s;
+        transition: all 0.12s;
         min-width: 0;
 
-        &:hover { border-color: #555; color: #222; }
+        &:hover { border-color: #2fb9bf; background: #e8f9fa; }
+
         &.active {
-            background: rgba(0,0,0,0.07);
-            border: 1.5px solid rgba(0,0,0,0.28);
-            color: #111;
-            font-weight: 800;
-        }
-        &.current { box-shadow: 0 0 0 2px rgba(47,185,191,0.6); }
-        &.active.current {
-            background: rgba(0,0,0,0.07);
-            border-color: rgba(0,0,0,0.28);
-            box-shadow: 0 0 0 2px rgba(47,185,191,0.6);
+            background: #000;
+            border-color: #000;
+            color: #fff;
+            font-weight: 900;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.25);
         }
     }
 
-    // ── Stake panel ───────────────────────────────────────────────────
+    // ── Digit prediction buttons — narrowed to 50%, bigger bold black ──
+    &__digits {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        width: 100%;
+        max-width: 90%;
+        margin: 0 auto;
+    }
+
+    &__digits-row {
+        display: flex;
+        gap: 2px;
+    }
+
+    &__digit-btn {
+        flex: 1;
+        height: clamp(26px, 2.1vw, 34px);
+        border-radius: 5px;
+        border: 1.5px solid #ccc;
+        background: #f5f5f5;
+        color: #000;
+        font-size: clamp(13px, 1.1vw, 18px);
+        font-weight: 900;
+        cursor: pointer;
+        font-family: inherit;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.12s;
+        min-width: 0;
+
+        &:hover { border-color: #555; background: #ebebeb; }
+
+        &.active {
+            background: #111;
+            border: 2px solid #111;
+            color: #fff;
+            font-weight: 900;
+        }
+        &.current { box-shadow: 0 0 0 2.5px rgba(47,185,191,0.7); }
+        &.active.current {
+            background: #111;
+            border-color: #111;
+            box-shadow: 0 0 0 2.5px rgba(47,185,191,0.7);
+        }
+    }
+
+    // ── Stake panel — narrowed to 90%, big bold black ──────────────────
     &__stake-tabs {
         display: flex;
-        background: #f4f5f7;
+        background: #efefef;
         border-radius: 6px;
         padding: 2px;
-        margin-bottom: 5px;
+        margin-bottom: 4px;
+        max-width: 90%;
+        margin-left: auto;
+        margin-right: auto;
     }
 
     &__stake-tab {
         flex: 1;
-        padding: 3px;
+        padding: 4px 3px;
         border: none;
         border-radius: 4px;
         background: transparent;
-        color: #b7b7b7;
-        font-size: 9px;
-        font-weight: 600;
+        color: #888;
+        font-size: clamp(10px, 0.85vw, 13px);
+        font-weight: 800;
         cursor: pointer;
         font-family: inherit;
-        transition: all 0.15s;
+        transition: all 0.12s;
         &.active {
             background: #fff;
-            color: #222;
-            box-shadow: 0 1px 4px rgba(0,0,0,.1);
+            color: #000;
+            font-weight: 900;
+            box-shadow: 0 1px 4px rgba(0,0,0,.12);
         }
     }
 
     &__stake-ctrl {
         display: flex;
         align-items: center;
-        gap: 4px;
-        background: #f4f5f7;
+        gap: 3px;
+        background: #f0f0f0;
         border-radius: 6px;
-        padding: 3px;
+        padding: 3px 4px;
         margin-bottom: 4px;
+        max-width: 90%;
+        margin-left: auto;
+        margin-right: auto;
     }
 
     &__stake-adj {
-        width: 22px;
-        height: 22px;
+        width: clamp(22px, 1.8vw, 28px);
+        height: clamp(22px, 1.8vw, 28px);
         border-radius: 5px;
-        border: 1px solid #e8e8e8;
+        border: 1.5px solid #ccc;
         background: #fff;
-        color: #555;
-        font-size: 13px;
+        color: #000;
+        font-size: 15px;
+        font-weight: 900;
         cursor: pointer;
         display: flex;
         align-items: center;
@@ -256,8 +293,8 @@
         &:hover { border-color: #2fb9bf; color: #2fb9bf; }
 
         &--reset {
-            font-size: 11px;
-            color: #aaa;
+            font-size: 12px;
+            color: #666;
         }
     }
 
@@ -270,12 +307,12 @@
     }
 
     &__stake-inp {
-        width: 45px;
+        width: 50px;
         border: none;
         background: transparent;
-        font-size: 13px;
-        font-weight: 700;
-        color: #222;
+        font-size: clamp(14px, 1.1vw, 18px);
+        font-weight: 900;
+        color: #000;
         text-align: center;
         outline: none;
         font-family: inherit;
@@ -285,54 +322,59 @@
     }
 
     &__stake-cur {
-        font-size: 9px;
-        font-weight: 700;
-        color: #b7b7b7;
+        font-size: 10px;
+        font-weight: 800;
+        color: #444;
     }
 
     &__stake-presets {
         display: flex;
-        gap: 3px;
+        gap: 2px;
         flex-wrap: wrap;
+        max-width: 90%;
+        margin: 0 auto 2px;
     }
 
     &__preset {
-        padding: 2px 6px;
+        flex: 1;
+        min-width: 0;
+        padding: 3px 4px;
         border-radius: 4px;
-        border: 1px solid #e8e8e8;
-        background: #f8f9fa;
-        color: #888;
-        font-size: 9px;
-        font-weight: 600;
+        border: 1.5px solid #ccc;
+        background: #f5f5f5;
+        color: #000;
+        font-size: clamp(11px, 0.9vw, 14px);
+        font-weight: 900;
         cursor: pointer;
         font-family: inherit;
+        text-align: center;
         &:hover { border-color: #2fb9bf; color: #2fb9bf; }
         &.active {
-            background: rgba(47,185,191,0.1);
-            border-color: #2fb9bf;
-            color: #2fb9bf;
+            background: #000;
+            border-color: #000;
+            color: #fff;
         }
     }
 
     // ── Result feedback ───────────────────────────────────────────────
     &__result {
-        margin: 0 10px 3px;
-        padding: 4px 8px;
+        margin: 0 6px 3px;
+        padding: 4px 7px;
         border-radius: 5px;
-        font-size: 10px;
-        font-weight: 600;
-        &.ok  { background: rgba(47,185,191,0.08); color: #00a550; border: 1px solid rgba(47,185,191,0.2); }
-        &.err { background: rgba(241,67,67,0.08);  color: #f14343; border: 1px solid rgba(241,67,67,0.2); }
+        font-size: clamp(10px, 0.85vw, 13px);
+        font-weight: 700;
+        &.ok  { background: rgba(47,185,191,0.09); color: #00a550; border: 1px solid rgba(47,185,191,0.2); }
+        &.err { background: rgba(241,67,67,0.09);  color: #f14343; border: 1px solid rgba(241,67,67,0.2); }
     }
 
     // ── Buy buttons with payout ───────────────────────────────────────
     &__buy-row {
-        padding: 5px 8px 8px;
+        padding: 5px 6px 8px;
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: 5px;
         flex-shrink: 0;
-        margin-top: auto;   // push to bottom of flex column only if space permits
+        margin-top: auto;
     }
 
     &__buy-block {
@@ -342,9 +384,9 @@
     }
 
     &__payout-line {
-        font-size: 9px;
-        font-weight: 600;
-        color: #888;
+        font-size: clamp(10px, 0.8vw, 13px);
+        font-weight: 800;
+        color: #000;
         display: flex;
         align-items: center;
         gap: 3px;
@@ -352,33 +394,31 @@
     }
 
     &__payout-info {
-        width: 12px;
-        height: 12px;
+        width: 13px; height: 13px;
         border-radius: 50%;
-        border: 1px solid #ccc;
+        border: 1.5px solid #999;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        font-size: 7px;
-        color: #aaa;
+        font-size: 8px;
+        color: #666;
         cursor: help;
     }
 
     &__buy-btn {
         width: 100%;
-        height: 40px;
+        height: var(--ctp-btn-h);
         border-radius: 8px;
         border: none;
         display: flex;
         align-items: center;
-        gap: 7px;
+        gap: 6px;
         padding: 0 10px;
         cursor: pointer;
         font-family: inherit;
-        font-size: 13px;
-        font-weight: 800;
-        color: #fff;
-        transition: all 0.2s;
+        font-size: clamp(14px, 1.1vw, 17px);
+        font-weight: 900;
+        transition: all 0.18s;
         position: relative;
         overflow: hidden;
 
@@ -387,28 +427,26 @@
         &--over {
             background: linear-gradient(120deg, #00C853 0%, #00E676 100%);
             color: #003c1a;
-            font-weight: 900;
-            box-shadow: 0 2px 10px rgba(0, 200, 83, 0.35);
+            box-shadow: 0 2px 12px rgba(0, 200, 83, 0.4);
             &:hover:not(:disabled) {
                 filter: brightness(1.06);
-                box-shadow: 0 4px 18px rgba(0, 230, 118, 0.5);
+                box-shadow: 0 4px 20px rgba(0, 230, 118, 0.55);
             }
         }
 
         &--under {
             background: linear-gradient(120deg, #FF3D57 0%, #C62828 100%);
             color: #fff;
-            font-weight: 900;
-            box-shadow: 0 2px 10px rgba(255, 61, 87, 0.35);
+            box-shadow: 0 2px 12px rgba(255, 61, 87, 0.4);
             &:hover:not(:disabled) {
                 filter: brightness(1.06);
-                box-shadow: 0 4px 18px rgba(255, 61, 87, 0.5);
+                box-shadow: 0 4px 20px rgba(255, 61, 87, 0.55);
             }
         }
     }
 
     &__buy-arrow {
-        font-size: clamp(12px, 1vw, 16px);
+        font-size: clamp(13px, 1.1vw, 17px);
         line-height: 1;
     }
 
@@ -416,14 +454,14 @@
         flex: 1;
         letter-spacing: 0.02em;
         text-align: left;
+        font-weight: 900;
     }
 
-    // Payout % displayed on the right of the button
     &__buy-pct {
-        font-size: 12px;
+        font-size: clamp(12px, 1vw, 15px);
         font-weight: 900;
         letter-spacing: -0.01em;
-        opacity: 0.95;
+        opacity: 0.96;
         white-space: nowrap;
     }
 
@@ -437,9 +475,9 @@
     .ctp {
         font-size: 12px;
 
-        &__buy-btn { height: 46px; font-size: 14px; }
+        &__buy-btn { height: 48px; font-size: 14px; }
         &__buy-pct { font-size: 13px; }
-        &__section { padding: 8px 12px; }
-        &__buy-row { padding: 8px 10px 10px; }
+        &__section  { padding: 6px 8px; }
+        &__buy-row  { padding: 8px 8px 10px; }
     }
 }

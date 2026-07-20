@@ -237,28 +237,31 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
 
     return (
         <div className='cw-layout'>
-            {/* ─── Chart area ─── */}
-            <div style={{ position: 'relative', minWidth: 0, overflow: 'hidden', paddingLeft: '0.8cm', paddingRight: '0.3cm' }}>
-                <Chart key={uniqueKey} show_digits_stats={false} />
+            {/* ─── Chart area — flex column: chart fills top, digit bar at bottom ─── */}
+            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden', height: '100%' }}>
+                {/* Chart canvas — takes all space above the digit bar */}
+                <div className='cw-chart-inner'>
+                    <Chart key={uniqueKey} show_digits_stats={false} />
 
-                {/* Tick counter badges for running contracts */}
-                {pendingTrades.map((t, i) => (
-                    <div key={t.id} className='cdo-tick-counter' style={{ top: `${18 + i * 44}px` }}>
-                        <span className='cdo-tick-counter__dot' />
-                        <span className='cdo-tick-counter__count'>{t.countedTicks}/{t.totalTicks}</span>
-                        <span className='cdo-tick-counter__label'>ticks</span>
-                    </div>
-                ))}
+                    {/* Tick counter badges for running contracts */}
+                    {pendingTrades.map((t, i) => (
+                        <div key={t.id} className='cdo-tick-counter' style={{ top: `${18 + i * 44}px` }}>
+                            <span className='cdo-tick-counter__dot' />
+                            <span className='cdo-tick-counter__count'>{t.countedTicks}/{t.totalTicks}</span>
+                            <span className='cdo-tick-counter__label'>ticks</span>
+                        </div>
+                    ))}
 
-                {/* Win/Loss floating flags */}
-                {tradeFlags.map((flag, i) => (
-                    <div key={flag.id} className={`chart-trade-flag chart-trade-flag--${flag.won ? 'win' : 'loss'}`}
-                        style={{ top: `${18 + i * 44}px`, left: '50%' }}>
-                        &nbsp;{flag.won ? '✓ WIN' : '✗ LOSS'}&nbsp;{flag.won ? '+' : ''}{flag.profit.toFixed(2)}
-                    </div>
-                ))}
+                    {/* Win/Loss floating flags */}
+                    {tradeFlags.map((flag, i) => (
+                        <div key={flag.id} className={`chart-trade-flag chart-trade-flag--${flag.won ? 'win' : 'loss'}`}
+                            style={{ top: `${18 + i * 44}px`, left: '50%' }}>
+                            &nbsp;{flag.won ? '✓ WIN' : '✗ LOSS'}&nbsp;{flag.won ? '+' : ''}{flag.profit.toFixed(2)}
+                        </div>
+                    ))}
+                </div>
 
-                {/* Digit stats bar at bottom */}
+                {/* Digit stats bar — own row, never overlaps the chart */}
                 <div className='cdo' aria-label='Last Digit Statistics'>
                     <div className='cdo__price'>
                         <span className='cdo__price-val'>
@@ -289,19 +292,21 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                                     ) : (
                                         <div className='cdo__tlabel cdo__tlabel--hidden' />
                                     )}
-                                    {/* Triangle pointer — follows live market digit */}
-                                    <div className={`cdo__triangle${isCurrent ? '' : ' cdo__triangle--hidden'}`} />
-                                    <div className={[
-                                        'cdo__circle',
-                                        `cdo__circle--${colorRank}`,
-                                        isCurrent ? 'cdo__circle--current' : '',
-                                        isBarrier ? 'cdo__circle--barrier' : '',
-                                        isWin      ? 'cdo__circle--win'    : '',
-                                        isLoss     ? 'cdo__circle--loss'   : '',
-                                        hasT && !isFinalT ? 'cdo__circle--tick-active' : '',
-                                        hasT && isFinalT  ? (isWin ? 'cdo__circle--win' : isLoss ? 'cdo__circle--loss' : 'cdo__circle--tick-final') : '',
-                                    ].filter(Boolean).join(' ')}>
-                                        {d}
+                                    {/* Circle + triangle wrapper: triangle floats ON TOP of circle */}
+                                    <div className='cdo__circle-wrap'>
+                                        <div className={`cdo__triangle${isCurrent ? '' : ' cdo__triangle--hidden'}`} />
+                                        <div className={[
+                                            'cdo__circle',
+                                            `cdo__circle--${colorRank}`,
+                                            isCurrent ? 'cdo__circle--current' : '',
+                                            isBarrier ? 'cdo__circle--barrier' : '',
+                                            isWin      ? 'cdo__circle--win'    : '',
+                                            isLoss     ? 'cdo__circle--loss'   : '',
+                                            hasT && !isFinalT ? 'cdo__circle--tick-active' : '',
+                                            hasT && isFinalT  ? (isWin ? 'cdo__circle--win' : isLoss ? 'cdo__circle--loss' : 'cdo__circle--tick-final') : '',
+                                        ].filter(Boolean).join(' ')}>
+                                            {d}
+                                        </div>
                                     </div>
                                     <span className='cdo__pct'>{pct.toFixed(1)}%</span>
                                 </div>

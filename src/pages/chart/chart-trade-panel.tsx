@@ -248,19 +248,42 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                     {group.durationUnit === 't' ? 'Ticks' : 'Minutes'}
                     <span className='ctp__section-val'>{ticks} {group.durationUnit === 't' ? 'tick' : 'min'}{ticks !== 1 ? 's' : ''}</span>
                 </div>
-                <input
-                    type='range' min={group.minDur} max={group.maxDur} step={1}
-                    value={ticks}
-                    onChange={e => setTicks(Number(e.target.value))}
-                    className='ctp__slider'
-                />
-                <div className='ctp__slider-marks'>
-                    {Array.from({ length: group.maxDur - group.minDur + 1 }, (_, i) => group.minDur + i)
-                        .filter((_, i, arr) => arr.length <= 10 || i % Math.ceil(arr.length / 10) === 0 || i === arr.length - 1)
-                        .map(n => (
-                        <span key={n} className={ticks === n ? 'active' : ''}>{n}</span>
-                    ))}
-                </div>
+                {group.durationUnit === 't' ? (
+                    /* Two-row tick buttons: [1-5] then [6-10] */
+                    <div className='ctp__tick-rows'>
+                        {[[1,2,3,4,5],[6,7,8,9,10]].map((row, ri) => (
+                            <div key={ri} className='ctp__tick-row'>
+                                {row.filter(n => n >= group.minDur && n <= group.maxDur).map(n => (
+                                    <button
+                                        key={n}
+                                        className={`ctp__tick-btn${ticks === n ? ' active' : ''}`}
+                                        onClick={() => setTicks(n)}
+                                    >
+                                        {n}
+                                    </button>
+                                ))}
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    /* Minutes: keep slider */
+                    <>
+                        <input
+                            type='range' min={group.minDur} max={group.maxDur} step={1}
+                            value={ticks}
+                            onChange={e => setTicks(Number(e.target.value))}
+                            className='ctp__slider'
+                            style={{ display: 'block' }}
+                        />
+                        <div className='ctp__slider-marks'>
+                            {Array.from({ length: group.maxDur - group.minDur + 1 }, (_, i) => group.minDur + i)
+                                .filter((_, i, arr) => arr.length <= 10 || i % Math.ceil(arr.length / 10) === 0 || i === arr.length - 1)
+                                .map(n => (
+                                <span key={n} className={ticks === n ? 'active' : ''}>{n}</span>
+                            ))}
+                        </div>
+                    </>
+                )}
             </div>
 
             {/* ── Last Digit Prediction (2-row layout: [0-4] top, [9-5] bottom) ── */}

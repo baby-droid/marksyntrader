@@ -49,15 +49,50 @@ function getTypeIcon(type: string) {
     return '◆';
 }
 
-async function fetchContractInfo(contract_id: number): Promise<any> {
+async function fetchContractInfo(contract_id: number, underlying?: string, dateStart?: number, dateExpiry?: number): Promise<any> {
     try {
-        // Use proposal_open_contract (works for both open and settled contracts)
-        // It returns tick_stream, entry_tick, exit_tick, tick_count, barrier, etc.
+        // Use proposal_open_contract — returns tick_stream, entry/exit ticks, barrier, etc.
         const res = await (api_base.api.send as any)({
             proposal_open_contract: 1,
             contract_id,
         });
         const poc = res?.proposal_open_contract ?? res?.contract_info ?? null;
+        if (!poc) return null;
+
+        // ── Fallback: fetch tick_stream via ticks_history if empty ──────────────
+        // Affects 1s markets (V100(1s) etc.) and plain-index markets where
+        // proposal_open_contract does not populate tick_stream for settled contracts.
+        const hasTicks = poc.tick_stream && poc.tick_stream.length > 0;
+        if (!hasTicks) {
+            const sym    = poc.underlying_symbol || underlying;
+            const tStart = poc.entry_tick_time   || poc.date_start   || dateStart;
+            const tEnd   = poc.exit_tick_time    || poc.date_expiry  || dateExpiry;
+            if (sym && tStart && tEnd) {
+                try {
+                    const hist = await (api_base.api.send as any)({
+                        ticks_history: sym,
+                        start:         Math.max(1, tStart - 2),   // 2 s before entry so we capture entry tick
+                        end:           tEnd + 5,                   // 5 s after exit to capture exit tick
+                        style:         'ticks',
+                        count:         100,                        // enough for any digit contract
+                    });
+                    if (hist?.history?.prices?.length && hist?.history?.times?.length) {
+                        const prices: number[] = hist.history.prices;
+                        const times:  number[] = hist.history.times;
+                        // Filter to contract window only (entry → exit inclusive)
+                        const stream = prices
+                            .map((p: number, i: number) => ({
+                                tick:               p,
+                                tick_display_value: String(p),
+                                epoch:              times[i],
+                            }))
+                            .filter((t: any) => t.epoch >= tStart && t.epoch <= tEnd + 2);
+                        if (stream.length > 0) poc.tick_stream = stream;
+                    }
+                } catch { /* non-fatal — keep poc without tick_stream */ }
+            }
+        }
+
         return poc;
     } catch { return null; }
 }
@@ -343,7 +378,10 @@ const Reports = observer(() => {
                 const ids = rows.slice(0, 30).map((t: any) => t.contract_id).filter(Boolean);
                 const missing = ids.filter((id: number) => !infoCache.current[id]);
                 if (missing.length > 0) {
-                    const infos = await Promise.allSettled(missing.map(fetchContractInfo));
+                    const infos = await Promise.allSettled(missing.map((id: number) => {
+                        const tr = rows.find((r: any) => r.contract_id === id);
+                        return fetchContractInfo(id, tr?.underlying, tr?.purchase_time, tr?.sell_time);
+                    }));
                     infos.forEach((r, i) => {
                         if (r.status === 'fulfilled' && r.value) infoCache.current[missing[i]] = r.value;
                     });
