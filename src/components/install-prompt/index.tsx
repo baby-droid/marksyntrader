@@ -59,8 +59,12 @@ const InstallPrompt: React.FC = () => {
             setVisible(false);
         });
 
-        // Show popup after a short delay on every load
-        // (user can close it; it comes back on next refresh)
+        // Show popup after a short delay — but respect a 6-hour cooldown
+        // so users who dismiss are not immediately re-prompted on refresh.
+        const dismissed = Number(localStorage.getItem('install_dismissed_at') ?? 0);
+        const SIX_HOURS = 6 * 60 * 60 * 1000;
+        if (Date.now() - dismissed < SIX_HOURS) return; // still in cooldown
+
         timerRef.current = setTimeout(() => {
             setVisible(true);
         }, 1800);
@@ -81,7 +85,11 @@ const InstallPrompt: React.FC = () => {
         setVisible(false);
     };
 
-    const handleClose = () => setVisible(false);
+    const handleClose = () => {
+        // Suppress for 6 hours after the user dismisses
+        try { localStorage.setItem('install_dismissed_at', String(Date.now())); } catch { /* ignore */ }
+        setVisible(false);
+    };
 
     if (installed || !visible) return null;
 

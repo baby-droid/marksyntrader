@@ -131,6 +131,42 @@
         border-color: rgba(234,179,8,0.4);
         box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 20px rgba(234,179,8,0.1);
     }
+
+    /* ── Mobile: keep it compact — no extra vertical stretch ── */
+    @media (max-width: 767px) {
+        padding: 4px 7px;
+        gap: 5px;
+        border-radius: 40px;
+
+        &__info {
+            gap: 3px;
+        }
+
+        &__status {
+            font-size: 8px;
+        }
+
+        &__btn {
+            width: 26px;
+            height: 26px;
+            font-size: 12px;
+        }
+
+        &__collapse {
+            width: 16px;
+            height: 16px;
+            font-size: 7px;
+        }
+
+        &__drag-handle {
+            font-size: 12px;
+        }
+
+        /* Hide the speed control on mobile to reduce width/height further */
+        &__speed {
+            display: none;
+        }
+    }
 }
 
 @keyframes blink-status {

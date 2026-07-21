@@ -93,6 +93,32 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
             setTickDigitSnapshot(new Map(contractTickDigitsRef.current));
         };
 
+        // ── Authoritative tick update from proposal_open_contract ──────────────
+        // tick_stream[0] is always the FIRST tick AFTER entry (what Deriv calls
+        // "tick 1"). This works correctly for all index types — Volatility plain,
+        // Volatility 1s, Bear/Bull, Jump, Boom, Crash, Step, Range Break.
+        const handleTradeTick = (e: CustomEvent) => {
+            const { contractId, tickStream, totalTicks } = e.detail;
+            const id = String(contractId);
+
+            // Extract last digits from the authoritative tick_display_value field
+            const digits: number[] = (tickStream as any[]).map((t: any) => {
+                const dv: string = t.tick_display_value ?? String(t.tick ?? '');
+                const clean = dv.replace('.', '');
+                return parseInt(clean[clean.length - 1] ?? '0', 10);
+            });
+
+            contractTickDigitsRef.current.set(id, digits);
+            setTickDigitSnapshot(new Map(contractTickDigitsRef.current));
+
+            pendingTradesRef.current = pendingTradesRef.current.map(t =>
+                t.id === id
+                    ? { ...t, countedTicks: digits.length, totalTicks: totalTicks ?? t.totalTicks }
+                    : t
+            );
+            setPendingTrades([...pendingTradesRef.current]);
+        };
+
         const handleSettlement = (e: CustomEvent) => {
             const { won, profit, exitDigit, barrier: tradedBarrier, contractId } = e.detail;
             const digit = exitDigit ?? tradedBarrier;
@@ -130,9 +156,11 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
         };
 
         window.addEventListener('chart:trade-started', handleStarted as any);
+        window.addEventListener('chart:trade-tick',    handleTradeTick as any);
         window.addEventListener('chart:trade-settled', handleSettlement as any);
         return () => {
             window.removeEventListener('chart:trade-started', handleStarted as any);
+            window.removeEventListener('chart:trade-tick',    handleTradeTick as any);
             window.removeEventListener('chart:trade-settled', handleSettlement as any);
             if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
             flagTimersRef.current.forEach(t => clearTimeout(t));
@@ -303,6 +331,7 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
     });
 
     return (
+        <div className='cw-scroll-wrapper'>
         <div className='cw-root'>
 
             {/* ── LEFT: SmartChart + digit bar ──────────────────────────── */}
@@ -320,14 +349,29 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                         </div>
                     ))}
 
+                    {/* Win/Loss flags — pennant shape, horizontally centered */}
                     {tradeFlags.map((flag, i) => (
                         <div
                             key={flag.id}
                             className={`chart-trade-flag chart-trade-flag--${flag.won ? 'win' : 'loss'}`}
-                            style={{ top: `${14 + i * 36}px` }}
+                            style={{ top: `calc(35% + ${i * 46}px)` }}
                         >
-                            {flag.won ? '✓ WIN' : '✗ LOSS'}&nbsp;
-                            {flag.won ? '+' : ''}{flag.profit.toFixed(2)}
+                            {/* Pole */}
+                            <div className='chart-trade-flag__pole' />
+                            {/* Banner / pennant */}
+                            <div className='chart-trade-flag__banner'>
+                                <div className='chart-trade-flag__top'>
+                                    <span className='chart-trade-flag__emoji'>
+                                        {flag.won ? '🎉' : '💔'}
+                                    </span>
+                                    <span className='chart-trade-flag__label'>
+                                        {flag.won ? 'WIN' : 'LOSS'}
+                                    </span>
+                                </div>
+                                <div className='chart-trade-flag__amount'>
+                                    {flag.won ? '+' : ''}{flag.profit.toFixed(2)}
+                                </div>
+                            </div>
                         </div>
                     ))}
                 </div>
@@ -413,6 +457,7 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                 />
             </div>
 
+        </div>
         </div>
     );
 });

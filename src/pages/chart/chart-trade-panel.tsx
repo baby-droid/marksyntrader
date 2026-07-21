@@ -304,6 +304,24 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                     next: (res: any) => {
                         const poc = res?.proposal_open_contract;
                         if (!poc) return;
+
+                        // ── Authoritative tick stream update ──────────────────────────────
+                        // The POC tick_stream is the ground truth for which ticks have
+                        // elapsed inside the contract — it starts at the first tick AFTER
+                        // the entry tick (exactly what Deriv.com shows as "tick 1").
+                        // Dispatching this bypasses the local race-condition counter and
+                        // works correctly for all index types (Volatility, Bear, Bull, Jump,
+                        // Boom, Crash, Step, Range Break).
+                        if (Array.isArray(poc.tick_stream) && poc.tick_stream.length > 0) {
+                            window.dispatchEvent(new CustomEvent('chart:trade-tick', {
+                                detail: {
+                                    contractId: Number(contractId),
+                                    tickStream: poc.tick_stream,   // [{epoch, tick, tick_display_value}]
+                                    totalTicks: ticks,
+                                },
+                            }));
+                        }
+
                         if (poc.status === 'won' || poc.status === 'lost') {
                             const won       = poc.status === 'won';
                             const profit    = Number(poc.profit ?? 0);

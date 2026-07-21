@@ -4,8 +4,25 @@
    Height: locked to viewport so nothing scrolls off-screen
    ══════════════════════════════════════════════════════════════════════════ */
 
+/* ── Horizontal-scroll wrapper — lets the whole layout (chart + digits + panel)
+   scroll left/right on narrow screens. The scroll bar appears at the bottom. */
+.cw-scroll-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: visible;
+    /* Custom scrollbar — thin, styled to match the dark theme */
+    scrollbar-width: thin;
+    scrollbar-color: rgba(30,136,255,0.5) rgba(0,0,0,0.1);
+    &::-webkit-scrollbar          { height: 6px; }
+    &::-webkit-scrollbar-track    { background: rgba(0,0,0,0.08); border-radius: 4px; }
+    &::-webkit-scrollbar-thumb    { background: rgba(30,136,255,0.45); border-radius: 4px; }
+    &::-webkit-scrollbar-thumb:hover { background: rgba(30,136,255,0.7); }
+}
+
 /* ── Root container ──────────────────────────────────────────────────────── */
 .cw-root {
+    /* Minimum width so the scroll wrapper always has content to scroll to */
+    min-width: 900px;
     display: flex;
     flex-direction: row;
     width: 100%;
@@ -349,48 +366,92 @@
 @keyframes cdo-dot-pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.75)} }
 @keyframes cdo-fade-in   { from{opacity:0;transform:translateX(-5px)} to{opacity:1;transform:translateX(0)} }
 
-/* ── Win/Loss trade flag — compact pill pinned near the price axis ──────────── */
+/* ── Win / Loss trade flag — pennant on a pole, horizontally centered ──────── */
 .chart-trade-flag {
     position: absolute;
-    /* Upper-right quadrant of the chart, clear of the price axis */
-    right: 80px;
-    display: inline-flex;   /* ← inline-flex collapses to content width; flex stretches full-width */
-    align-items: center;
-    gap: 4px;
-    padding: 5px 12px 5px 10px;
-    border-radius: 4px 14px 14px 4px;
-    font-size: 11px;
-    font-weight: 800;
+    /* Center the whole flag (pole + banner) in the chart canvas */
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 0;
     z-index: 30;
     pointer-events: none;
-    animation: chart-flag-in 0.3s cubic-bezier(.2,1.4,.4,1) both, chart-flag-out 0.5s ease-in 4.5s both;
-    white-space: nowrap;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.25);
-    /* Stem connecting flag to chart price level */
-    &::before {
-        content: '';
-        position: absolute;
-        left: -8px;
-        top: 50%;
-        transform: translateY(-50%);
-        width: 8px;
-        height: 2px;
+    animation: chart-flag-in 0.32s cubic-bezier(.2,1.5,.4,1) both,
+               chart-flag-out 0.4s ease-in 4.5s both;
+
+    /* ── Vertical pole — matches banner height (1 cm ≈ 38 px) ─── */
+    &__pole {
+        width: 3px;
+        height: 38px;   /* same as banner height */
+        border-radius: 3px;
+        flex-shrink: 0;
     }
-    &--win  {
-        background: linear-gradient(110deg,#00E676,#00C853);
-        color: #003c1a;
-        border: 1px solid rgba(255,255,255,0.25);
-        &::before { background: #00C853; }
+
+    /* ── Pennant banner — exactly 2 cm wide × 1 cm tall ───────────
+       1 cm ≈ 37.8 px  |  2 cm ≈ 75.6 px
+       Banner occupies the 2 cm; pole is 3 px wide (negligible).     */
+    &__banner {
+        display: inline-flex;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: center;
+        gap: 1px;
+        /* Fixed physical size */
+        width:  75px;   /* ~2 cm */
+        height: 38px;   /* ~1 cm */
+        padding: 3px 18px 3px 7px; /* right padding makes room for triangle tip */
+        white-space: nowrap;
+        overflow: hidden;
+        line-height: 1;
+        /* Pennant triangle: right side tapers to a sharp point */
+        clip-path: polygon(0 0, 80% 0, 100% 50%, 80% 100%, 0 100%);
+        box-shadow: 2px 2px 6px rgba(0,0,0,0.38);
+        flex-shrink: 0;
     }
+
+    /* Top row: emoji + WIN/LOSS */
+    &__top {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+    }
+    &__emoji  { font-size: 10px; line-height: 1; flex-shrink: 0; }
+    &__label  { font-size: 8px;  font-weight: 900; letter-spacing: 0.03em; flex-shrink: 0; }
+
+    /* Bottom row: profit amount */
+    &__amount { font-size: 8px;  font-weight: 800; opacity: 0.95; line-height: 1; }
+
+    /* ── Win — emerald green ───────────────────────────────────── */
+    &--win {
+        .chart-trade-flag__pole   { background: #00C853; box-shadow: 0 0 6px rgba(0,200,83,0.6); }
+        .chart-trade-flag__banner {
+            background: linear-gradient(100deg, #00E676 0%, #00C853 60%, #00A844 100%);
+            color: #003818;
+            text-shadow: 0 1px 0 rgba(255,255,255,0.25);
+        }
+    }
+
+    /* ── Loss — crimson red ────────────────────────────────────── */
     &--loss {
-        background: linear-gradient(110deg,#FF3D57,#C62828);
-        color: #fff;
-        border: 1px solid rgba(255,255,255,0.2);
-        &::before { background: #C62828; }
+        .chart-trade-flag__pole   { background: #E53935; box-shadow: 0 0 6px rgba(229,57,53,0.6); }
+        .chart-trade-flag__banner {
+            background: linear-gradient(100deg, #FF5252 0%, #E53935 60%, #C62828 100%);
+            color: #fff;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+        }
     }
 }
-@keyframes chart-flag-in  { from{opacity:0;transform:translateX(6px) scale(0.88)} to{opacity:1;transform:translateX(0) scale(1)} }
-@keyframes chart-flag-out { from{opacity:1} to{opacity:0;transform:translateX(4px)} }
+
+@keyframes chart-flag-in {
+    from { opacity:0; transform: translateX(-50%) scale(0.80) translateY(-6px); }
+    to   { opacity:1; transform: translateX(-50%) scale(1)    translateY(0); }
+}
+@keyframes chart-flag-out {
+    from { opacity:1; transform: translateX(-50%) scale(1); }
+    to   { opacity:0; transform: translateX(-50%) scale(0.85) translateY(-4px); }
+}
 
 /* ════════════════════════════════════════════════════════════════
    RESPONSIVE BREAKPOINTS
@@ -423,8 +484,13 @@
         &__triangle-track { height: 9px; }
     }
 
-    /* Trade flag: keep inside chart */
-    .chart-trade-flag { font-size: 10px; padding: 2px 7px 2px 5px; }
+    /* Trade flag: shrink banner text slightly on tablets */
+    .chart-trade-flag {
+        &__banner { font-size: 10px; padding: 4px 16px 4px 6px; max-width: 130px; }
+        &__icon   { font-size: 11px; }
+        &__label  { font-size: 10px; }
+        &__amount { font-size: 9px; }
+    }
 }
 
 /* ── 767 px — phone / tablet portrait ──────────────────────────── */
@@ -465,11 +531,13 @@
         &__triangle-track { height: 7px; }
     }
 
-    /* Win/loss flag — smaller on mobile */
+    /* Win/loss flag — compact pennant on mobile */
     .chart-trade-flag {
-        font-size: 9px;
-        padding: 2px 6px 2px 4px;
-        right: 4px;
+        &__pole   { height: 40px; width: 2px; }
+        &__banner { font-size: 9px; padding: 3px 14px 3px 5px; max-width: 110px; gap: 3px; }
+        &__icon   { font-size: 10px; }
+        &__label  { font-size: 9px; }
+        &__amount { font-size: 8px; }
     }
 }
 
