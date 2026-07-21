@@ -101,29 +101,50 @@ export const useSmartChartAdaptor = (): UseSmartChartAdaptorReturn => {
         };
     }, []);
 
-    // Initialize adapter - runs once when chart_api.api is available
+    // Initialize adapter — polls until chart_api.api is ready, then builds once.
+    // The original guard (!adapterInitialized && chart_api.api) only ran when the
+    // effect first fired. If chart_api.api was null at mount time the effect never
+    // retried, leaving SmartChart in a permanent "Retrieving Chart Data" state.
     useEffect(() => {
-        if (!adapterInitialized && chart_api.api) {
+        if (adapterInitialized) return;
+        let cancelled = false;
+
+        const tryInit = () => {
+            if (cancelled) return;
+            if (!chart_api.api) {
+                // API not ready yet — retry in 500 ms
+                retryTimeoutRef.current = setTimeout(tryInit, 500);
+                return;
+            }
             try {
-                const transport = createTransport();
-                const services = createServices();
+                const transport       = createTransport();
+                const services        = createServices();
                 const championAdapter = buildSmartchartsChampionAdapter(transport, services, {
-                    debug: true,
+                    debug: false,
                     subscriptionTimeout: 30000,
                 });
-
-                if (isMountedRef.current) {
+                if (isMountedRef.current && !cancelled) {
                     setAdapter(championAdapter);
                     setAdapterInitialized(true);
                     setError(null);
                 }
             } catch (err) {
-                if (isMountedRef.current) {
-                    setError(err instanceof Error ? err : new Error('Failed to initialize adapter'));
-                    setIsLoading(false);
+                if (isMountedRef.current && !cancelled) {
+                    // Build failed — retry in 1 s
+                    retryTimeoutRef.current = setTimeout(tryInit, 1000);
                 }
             }
-        }
+        };
+
+        tryInit();
+
+        return () => {
+            cancelled = true;
+            if (retryTimeoutRef.current) {
+                clearTimeout(retryTimeoutRef.current);
+                retryTimeoutRef.current = null;
+            }
+        };
     }, [adapterInitialized]);
 
     // Load chart data when adapter is initialized

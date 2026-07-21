@@ -140,7 +140,18 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
         };
     }, []);
 
-    /* Tick subscription */
+    /* ── Tick subscription — real-time + accurate digit stats ──────────────
+     *  Design:
+     *  1. Subscribe to live ticks FIRST so pip_size comes from the authoritative
+     *     Deriv field (tick.pip_size), not from fragile string-length detection.
+     *  2. Only after the first live tick (pip_size known) load 1000 history ticks
+     *     and compute digits from that pip_size. Deduplicate history vs live
+     *     stream using epoch timestamps so no tick is counted twice.
+     *  3. Track the server-side subscription_id and send an explicit `forget`
+     *     on cleanup — RxJS local unsubscribe alone does NOT cancel the server
+     *     subscription, causing stale data after symbol changes.
+     *  4. If api_base.api is not ready yet, retry every 500 ms.
+     * ─────────────────────────────────────────────────────────────────────── */
     useEffect(() => {
         digitHistoryRef.current = [];
         prevPriceRef.current    = null;
@@ -149,64 +160,127 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
         setCurrentPrice(null);
         setPriceChange(0);
 
-        if (!api_base?.api || !symbol) return;
-        let alive = true;
+        let alive            = true;
+        let subscriptionId: string | null = null;
+        let historyLoaded    = false;
+        // Epochs received from the live stream before history arrives — used to
+        // skip duplicate ticks that appear in both the history batch and the stream.
+        const liveEpochs = new Set<number>();
+        let liveDigitsBuffer: number[] = [];   // live digits before history is ready
+        let rxSub: { unsubscribe: () => void } | null = null;
+        let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
-        (api_base.api as any).send({
-            ticks_history: symbol, count: 1000, end: 'latest', style: 'ticks',
-        }).then((res: any) => {
+        const startSub = () => {
             if (!alive) return;
-            const prices: number[] = res?.history?.prices ?? [];
-            if (prices.length > 0) {
-                const sampleStr = String(prices[0]);
-                const dotIdx    = sampleStr.indexOf('.');
-                const ps        = dotIdx === -1 ? 0 : sampleStr.length - dotIdx - 1;
-                setPipSize(ps); pipSizeRef.current = ps;
-                const digits = prices.map((p: number) => getLastDigit(p, ps));
-                digitHistoryRef.current = digits;
-                const counts = new Array(10).fill(0);
-                digits.forEach((d: number) => counts[d]++);
-                setDigitCounts([...counts]);
+            if (!(api_base as any)?.api) {
+                // API not ready — retry in 500 ms
+                retryTimer = setTimeout(startSub, 500);
+                return;
             }
-        }).catch(() => {});
 
-        const sub = (api_base.api as any).subscribe({ ticks: symbol, subscribe: 1 });
-        sub.subscribe({
-            next: (res: any) => {
-                if (!alive) return;
-                const tick = res?.tick;
-                if (!tick) return;
-                const price = Number(tick.quote);
-                const ps    = tick.pip_size ?? pipSizeRef.current;
-                pipSizeRef.current = ps;
-                setPipSize(ps);
-                setCurrentPrice(price);
-                if (prevPriceRef.current !== null) setPriceChange(price - prevPriceRef.current);
-                prevPriceRef.current = price;
-                const d = getLastDigit(price, ps);
-                setCurrentDigit(d);
-                digitHistoryRef.current = [...digitHistoryRef.current.slice(-999), d];
-                const counts = new Array(10).fill(0);
-                digitHistoryRef.current.forEach(x => counts[x]++);
-                setDigitCounts([...counts]);
+            const observable = (api_base.api as any).subscribe({ ticks: symbol, subscribe: 1 });
+            rxSub = observable.subscribe({
+                next: (res: any) => {
+                    if (!alive) return;
+                    const tick = res?.tick;
+                    if (!tick) return;
 
-                if (pendingTradesRef.current.length > 0) {
-                    pendingTradesRef.current = pendingTradesRef.current.map(t => {
-                        if (t.countedTicks < t.totalTicks) {
-                            const arr = contractTickDigitsRef.current.get(t.id) ?? [];
-                            arr.push(d);
-                            contractTickDigitsRef.current.set(t.id, arr);
+                    // Grab server subscription_id once (for explicit forget on cleanup)
+                    if (!subscriptionId && res.subscription?.id) {
+                        subscriptionId = res.subscription.id;
+                    }
+
+                    const price = Number(tick.quote);
+                    const epoch = Number(tick.epoch ?? 0);
+                    // Use authoritative pip_size from the live feed
+                    const ps    = tick.pip_size ?? pipSizeRef.current;
+                    pipSizeRef.current = ps;
+                    setPipSize(ps);
+                    setCurrentPrice(price);
+                    if (prevPriceRef.current !== null) setPriceChange(price - prevPriceRef.current);
+                    prevPriceRef.current = price;
+                    const d = getLastDigit(price, ps);
+                    setCurrentDigit(d);
+
+                    if (!historyLoaded) {
+                        // History fetch not done yet — buffer live ticks
+                        liveEpochs.add(epoch);
+                        liveDigitsBuffer.push(d);
+
+                        // Kick off history fetch on the FIRST live tick so pip_size is set
+                        if (liveDigitsBuffer.length === 1) {
+                            ;(api_base.api as any).send({
+                                ticks_history: symbol, count: 1000, end: 'latest', style: 'ticks',
+                            }).then((hRes: any) => {
+                                if (!alive) return;
+                                const prices: number[] = hRes?.history?.prices ?? [];
+                                const times: number[]  = hRes?.history?.times  ?? [];
+                                // Use the authoritative pip_size we already have from the live tick
+                                const usedPs = pipSizeRef.current;
+                                // Skip history ticks whose epochs were already received live
+                                const filteredPrices: number[] = [];
+                                prices.forEach((p: number, i: number) => {
+                                    if (!liveEpochs.has(times[i])) filteredPrices.push(p);
+                                });
+                                const histDigits = filteredPrices.map((p: number) => getLastDigit(p, usedPs));
+                                // Merge: history first, then buffered live ticks
+                                digitHistoryRef.current = [...histDigits, ...liveDigitsBuffer].slice(-1000);
+                                historyLoaded = true;
+                                const counts = new Array(10).fill(0);
+                                digitHistoryRef.current.forEach((x: number) => counts[x]++);
+                                setDigitCounts([...counts]);
+                            }).catch(() => {
+                                // History failed — still mark loaded so live stream is used alone
+                                historyLoaded = true;
+                                digitHistoryRef.current = [...liveDigitsBuffer];
+                                const counts = new Array(10).fill(0);
+                                digitHistoryRef.current.forEach((x: number) => counts[x]++);
+                                setDigitCounts([...counts]);
+                            });
                         }
-                        return { ...t, countedTicks: Math.min(t.countedTicks + 1, t.totalTicks) };
-                    });
-                    setPendingTrades([...pendingTradesRef.current]);
-                    setTickDigitSnapshot(new Map(contractTickDigitsRef.current));
-                }
-            },
-            error: () => {},
-        });
+                    } else {
+                        // Normal path: append live tick, keep last 1000
+                        digitHistoryRef.current = [...digitHistoryRef.current.slice(-999), d];
+                        const counts = new Array(10).fill(0);
+                        digitHistoryRef.current.forEach((x: number) => counts[x]++);
+                        setDigitCounts([...counts]);
+                    }
 
-        return () => { alive = false; sub?.unsubscribe?.(); };
+                    // Update pending trade tick-counters
+                    if (pendingTradesRef.current.length > 0) {
+                        pendingTradesRef.current = pendingTradesRef.current.map(t => {
+                            if (t.countedTicks < t.totalTicks) {
+                                const arr = contractTickDigitsRef.current.get(t.id) ?? [];
+                                arr.push(d);
+                                contractTickDigitsRef.current.set(t.id, arr);
+                            }
+                            return { ...t, countedTicks: Math.min(t.countedTicks + 1, t.totalTicks) };
+                        });
+                        setPendingTrades([...pendingTradesRef.current]);
+                        setTickDigitSnapshot(new Map(contractTickDigitsRef.current));
+                    }
+                },
+                error: () => {
+                    // On error, retry subscription after 2 s
+                    if (!alive) return;
+                    retryTimer = setTimeout(startSub, 2000);
+                },
+            });
+        };
+
+        startSub();
+
+        return () => {
+            alive = false;
+            if (retryTimer) clearTimeout(retryTimer);
+            rxSub?.unsubscribe?.();
+            // Explicitly forget the server-side subscription so Deriv stops sending ticks
+            if (subscriptionId) {
+                try {
+                    (api_base.api as any)?.send({ forget: subscriptionId }).catch(() => {});
+                } catch { /* noop */ }
+            }
+        };
     }, [symbol]);
 
     /* Derived stats */

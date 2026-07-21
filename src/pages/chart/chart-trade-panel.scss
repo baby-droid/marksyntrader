@@ -451,3 +451,73 @@
 .ctp__buy-label { flex: 1; font-size: 15px; font-weight: 900; letter-spacing: 0.01em; text-align: left; }
 .ctp__buy-pct   { font-size: 17px; font-weight: 900; font-variant-numeric: tabular-nums; flex-shrink: 0; }
 .ctp__buy-sub   { font-size: 10px; font-weight: 600; opacity: 0.85; text-align: left; }
+
+/* ════════════════════════════════════════════════════════════════
+   RESPONSIVE — Trade panel card & right column
+   ════════════════════════════════════════════════════════════════ */
+
+/* ── 1024 px: tablet / small laptop — narrow the card a bit ─────── */
+@media (max-width: 1024px) {
+    .ctp {
+        width: 60%;          /* slightly wider on 40% right column */
+        min-width: 180px;
+    }
+}
+
+/* ── 767 px: phone / portrait tablet — full-width card ─────────── */
+@media (max-width: 767px) {
+    /* Right panel + card go full-width, stacked under the chart */
+    .cw-right-inner {
+        padding: 8px 0 0;
+    }
+
+    .ctp {
+        width: 100%;
+        min-width: 0;
+        min-height: 0;
+        border-radius: 10px;
+        padding: 8px 0;
+    }
+
+    /* Tighten up sections so everything fits without scrolling */
+    .ctp__section    { padding: 0 8px; }
+    .ctp__section-label { font-size: 9px; margin-bottom: 2px; }
+
+    /* Tick buttons: smaller */
+    .ctp__tick-btn   { height: 26px; font-size: 12px; min-width: 26px; padding: 0 6px; border-radius: 10px; }
+
+    /* Digit buttons: slightly smaller */
+    .ctp__digit-btn  { height: 26px; font-size: 13px; border-radius: 10px; }
+
+    /* Stake row */
+    .ctp__stake-adj  { width: 30px; height: 30px; font-size: 16px; border-radius: 8px; }
+    .ctp__stake-mid  { height: 30px; }
+    .ctp__stake-inp  { font-size: 16px; width: 50px; }
+
+    /* Buy buttons */
+    .ctp__buy-btn    { min-height: 40px; border-radius: 12px; }
+    .ctp__buy-label  { font-size: 14px; }
+    .ctp__buy-pct    { font-size: 15px; }
+    .ctp__buy-sub    { font-size: 9px; }
+
+    /* Result feedback */
+    .ctp__result { margin: 0 8px 4px; padding: 4px 7px; font-size: 10px; }
+}
+
+/* ── 480 px: small phones — extra compaction ────────────────────── */
+@media (max-width: 480px) {
+    .ctp {
+        border-radius: 8px;
+        padding: 6px 0;
+    }
+
+    .ctp__section       { padding: 0 6px; }
+    .ctp__tick-btn      { height: 24px; font-size: 11px; min-width: 22px; padding: 0 4px; }
+    .ctp__digit-btn     { height: 24px; font-size: 12px; }
+    .ctp__stake-adj     { width: 28px; height: 28px; font-size: 15px; }
+    .ctp__stake-inp     { font-size: 14px; width: 46px; }
+    .ctp__stake-mid     { height: 28px; }
+    .ctp__buy-btn       { min-height: 38px; }
+    .ctp__buy-label     { font-size: 13px; }
+    .ctp__buy-pct       { font-size: 14px; }
+}

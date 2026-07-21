@@ -272,6 +272,23 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             const proposalId = pr?.proposal?.id;
             const askPrice   = Number(pr?.proposal?.ask_price ?? stake);
             if (!proposalId) throw new Error('Proposal failed');
+            // ── PRE-SIGNAL (copy-trading timing fix) ──────────────────────────
+            // Publish before sending the buy so the copy engine fires the follower's
+            // buy simultaneously with ours, not 1-2 ticks late.
+            // No contract_id → engine uses the pre-signal (fingerprint) path.
+            // After buy completes we publish again WITH contract_id so the
+            // engine registers it in mirroredContracts, blocking the transaction-
+            // backup path from placing a duplicate purchase.
+            try {
+                publishMasterTrade({
+                    symbol, contract_type: contractType, stake,
+                    duration: ticks, duration_unit: group.durationUnit,
+                    ...(group.needsBarrier ? { barrier: String(barrier) } : {}),
+                    source: getMasterSource(), time: Date.now(),
+                    // contract_id intentionally omitted → pre-signal path
+                });
+            } catch { /* never block trade */ }
+
             const buyRes = await api.send({ buy: proposalId, price: askPrice });
             if (buyRes?.error) throw new Error(buyRes.error.message);
             const contractId = buyRes?.buy?.contract_id;
@@ -301,13 +318,17 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                     error: () => { try { settleSub.unsubscribe?.(); } catch { /* noop */ } },
                 });
             } catch { /* non-fatal */ }
+            // POST-SIGNAL with contract_id — registers in mirroredContracts so the
+            // transaction-backup path is blocked from duplicating the follower buy.
             try {
-                publishMasterTrade({
-                    symbol, contract_type: contractType, stake,
-                    duration: ticks, duration_unit: group.durationUnit,
-                    ...(group.needsBarrier ? { barrier: String(barrier) } : {}),
-                    source: getMasterSource(), time: Date.now(), contract_id: Number(contractId),
-                });
+                if (contractId) {
+                    publishMasterTrade({
+                        symbol, contract_type: contractType, stake,
+                        duration: ticks, duration_unit: group.durationUnit,
+                        ...(group.needsBarrier ? { barrier: String(barrier) } : {}),
+                        source: getMasterSource(), time: Date.now(), contract_id: Number(contractId),
+                    });
+                }
             } catch { /* never block */ }
         } catch (e: any) {
             setResult({ ok: false, msg: `❌ ${e.message}` });

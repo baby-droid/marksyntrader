@@ -392,14 +392,93 @@
 @keyframes chart-flag-in  { from{opacity:0;transform:translateX(6px) scale(0.88)} to{opacity:1;transform:translateX(0) scale(1)} }
 @keyframes chart-flag-out { from{opacity:1} to{opacity:0;transform:translateX(4px)} }
 
-/* ── Mobile ───────────────────────────────────────────────────────────────── */
-@media (max-width: 767px) {
+/* ════════════════════════════════════════════════════════════════
+   RESPONSIVE BREAKPOINTS
+   1440px+  : default (50/50 split)
+   ≤ 1280px : slight digit circle reduction
+   ≤ 1024px : tablet — 60/40 split, smaller circles
+   ≤ 767px  : phone  — stack vertically, full-width panel, compact circles
+   ════════════════════════════════════════════════════════════════ */
+
+/* ── 1280 px — large laptop / monitor: slight circle shrink ─────── */
+@media (max-width: 1280px) {
     .cdo {
-        &__circle         { width:30px;height:30px;font-size:11px; }
-        &__pct            { font-size:7px; }
-        &__price-val      { font-size:8px; }
-        &__triangle-pointer { border-left-width:4px;border-right-width:4px;border-top-width:7px; }
-        &__tlabel         { font-size:6px; }
-        &__triangle-track { height:7px; }
+        &__circle         { width: clamp(34px, 3.5vw, 44px); height: clamp(34px, 3.5vw, 44px); font-size: clamp(11px, 1.1vw, 14px); }
+        &__pct            { font-size: clamp(7px, 0.7vw, 9px); }
+    }
+}
+
+/* ── 1024 px — tablet landscape / small laptop ──────────────────── */
+@media (max-width: 1024px) {
+    /* Switch to 60/40 so chart stays usable */
+    .cw-left  { width: 60%; }
+    .cw-right { width: 40%; }
+
+    .cdo {
+        &__circle         { width: clamp(30px, 3vw, 38px); height: clamp(30px, 3vw, 38px); font-size: clamp(10px, 1vw, 13px); }
+        &__pct            { font-size: clamp(6px, 0.65vw, 8px); }
+        &__price-val      { font-size: 10px; }
+        &__triangle-pointer { border-left-width: 6px; border-right-width: 6px; border-top-width: 9px; }
+        &__tlabel         { font-size: 7px; }
+        &__triangle-track { height: 9px; }
+    }
+
+    /* Trade flag: keep inside chart */
+    .chart-trade-flag { font-size: 10px; padding: 2px 7px 2px 5px; }
+}
+
+/* ── 767 px — phone / tablet portrait ──────────────────────────── */
+@media (max-width: 767px) {
+    /* ── Root: stack chart above panel ──────────────────────────── */
+    .cw-root {
+        flex-direction: column;
+        height: auto;
+        max-height: none;
+        overflow: visible;
+    }
+
+    /* ── Left column: chart takes full width + fixed height ──────── */
+    .cw-left {
+        width: 100%;
+        flex-shrink: 0;
+        height: 55vw;      /* ~55% of viewport width — keeps chart visible */
+        min-height: 240px;
+        max-height: 360px;
+    }
+
+    /* ── Right column: full width under the chart ────────────────── */
+    .cw-right {
+        width: 100%;
+        flex-shrink: 0;
+        min-height: 0;
+        overflow: visible;
+        padding: 0 8px 12px;
+    }
+
+    /* Digit stat circles — compact for narrow screens */
+    .cdo {
+        &__circle         { width: 28px; height: 28px; font-size: 10px; }
+        &__pct            { font-size: 6.5px; }
+        &__price-val      { font-size: 8px; }
+        &__triangle-pointer { border-left-width: 4px; border-right-width: 4px; border-top-width: 7px; }
+        &__tlabel         { font-size: 6px; }
+        &__triangle-track { height: 7px; }
+    }
+
+    /* Win/loss flag — smaller on mobile */
+    .chart-trade-flag {
+        font-size: 9px;
+        padding: 2px 6px 2px 4px;
+        right: 4px;
+    }
+}
+
+/* ── 480 px — small phones ──────────────────────────────────────── */
+@media (max-width: 480px) {
+    .cw-left { height: 60vw; min-height: 200px; max-height: 280px; }
+
+    .cdo {
+        &__circle { width: 24px; height: 24px; font-size: 9px; }
+        &__pct    { font-size: 5.5px; }
     }
 }
