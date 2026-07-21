@@ -198,13 +198,56 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
         let rxSub: { unsubscribe: () => void } | null = null;
         let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
+        // ── Digit-count helper: O(1) incremental update ────────────────────
+        // Maintains a running tally so we never loop 1000 items per tick.
+        const applyDigit = (d: number) => {
+            // Drop the oldest digit if the window is full
+            const evicted = digitHistoryRef.current.length >= 1000
+                ? digitHistoryRef.current[0] : null;
+            digitHistoryRef.current = digitHistoryRef.current.length >= 1000
+                ? [...digitHistoryRef.current.slice(1), d]
+                : [...digitHistoryRef.current, d];
+            setDigitCounts(prev => {
+                const next = [...prev];
+                if (evicted !== null) next[evicted] = Math.max(0, next[evicted] - 1);
+                next[d]++;
+                return next;
+            });
+        };
+
+        // ── Watchdog: if no tick arrives within 20 s, the stream has gone
+        //   silent (WebSocket drop / server-side forget). Tear down and
+        //   resubscribe so the page stays live without a manual refresh.
+        let watchdog: ReturnType<typeof setTimeout> | null = null;
+        const WATCHDOG_MS = 20_000;
+        const resetWatchdog = () => {
+            if (watchdog) clearTimeout(watchdog);
+            watchdog = setTimeout(() => {
+                if (!alive) return;
+                rxSub?.unsubscribe?.();
+                rxSub = null;
+                startSub();          // silent resubscribe
+            }, WATCHDOG_MS);
+        };
+
+        const teardownSub = () => {
+            if (watchdog) { clearTimeout(watchdog); watchdog = null; }
+            rxSub?.unsubscribe?.();
+            rxSub = null;
+            if (subscriptionId) {
+                try { (api_base.api as any)?.send({ forget: subscriptionId }).catch(() => {}); } catch { /* noop */ }
+                subscriptionId = null;
+            }
+        };
+
         const startSub = () => {
             if (!alive) return;
             if (!(api_base as any)?.api) {
-                // API not ready — retry in 500 ms
-                retryTimer = setTimeout(startSub, 500);
+                retryTimer = setTimeout(startSub, 300);
                 return;
             }
+
+            teardownSub();   // clean up any previous sub before creating a new one
 
             const observable = (api_base.api as any).subscribe({ ticks: symbol, subscribe: 1 });
             rxSub = observable.subscribe({
@@ -213,14 +256,15 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                     const tick = res?.tick;
                     if (!tick) return;
 
-                    // Grab server subscription_id once (for explicit forget on cleanup)
+                    resetWatchdog();   // we got a tick — restart the silence timer
+
+                    // Capture subscription id for explicit server-side forget on cleanup
                     if (!subscriptionId && res.subscription?.id) {
                         subscriptionId = res.subscription.id;
                     }
 
                     const price = Number(tick.quote);
                     const epoch = Number(tick.epoch ?? 0);
-                    // Use authoritative pip_size from the live feed
                     const ps    = tick.pip_size ?? pipSizeRef.current;
                     pipSizeRef.current = ps;
                     setPipSize(ps);
@@ -231,11 +275,13 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                     setCurrentDigit(d);
 
                     if (!historyLoaded) {
-                        // History fetch not done yet — buffer live ticks
+                        // Buffer live ticks — but ALSO update the digit bar immediately
+                        // so stats are never frozen while waiting for the history batch.
                         liveEpochs.add(epoch);
                         liveDigitsBuffer.push(d);
+                        applyDigit(d);
 
-                        // Kick off history fetch on the FIRST live tick so pip_size is set
+                        // Kick off history fetch on the FIRST live tick (pip_size is set)
                         if (liveDigitsBuffer.length === 1) {
                             ;(api_base.api as any).send({
                                 ticks_history: symbol, count: 1000, end: 'latest', style: 'ticks',
@@ -243,22 +289,20 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                                 if (!alive) return;
                                 const prices: number[] = hRes?.history?.prices ?? [];
                                 const times: number[]  = hRes?.history?.times  ?? [];
-                                // Use the authoritative pip_size we already have from the live tick
                                 const usedPs = pipSizeRef.current;
-                                // Skip history ticks whose epochs were already received live
                                 const filteredPrices: number[] = [];
                                 prices.forEach((p: number, i: number) => {
                                     if (!liveEpochs.has(times[i])) filteredPrices.push(p);
                                 });
                                 const histDigits = filteredPrices.map((p: number) => getLastDigit(p, usedPs));
-                                // Merge: history first, then buffered live ticks
+                                // Replace the live-only buffer with the full merged history
                                 digitHistoryRef.current = [...histDigits, ...liveDigitsBuffer].slice(-1000);
                                 historyLoaded = true;
+                                // Rebuild counts once from the authoritative merged set
                                 const counts = new Array(10).fill(0);
                                 digitHistoryRef.current.forEach((x: number) => counts[x]++);
                                 setDigitCounts([...counts]);
                             }).catch(() => {
-                                // History failed — still mark loaded so live stream is used alone
                                 historyLoaded = true;
                                 digitHistoryRef.current = [...liveDigitsBuffer];
                                 const counts = new Array(10).fill(0);
@@ -267,14 +311,11 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                             });
                         }
                     } else {
-                        // Normal path: append live tick, keep last 1000
-                        digitHistoryRef.current = [...digitHistoryRef.current.slice(-999), d];
-                        const counts = new Array(10).fill(0);
-                        digitHistoryRef.current.forEach((x: number) => counts[x]++);
-                        setDigitCounts([...counts]);
+                        // Normal real-time path — O(1) incremental update
+                        applyDigit(d);
                     }
 
-                    // Update pending trade tick-counters
+                    // Update pending trade tick-counters (fallback path; POC is authoritative)
                     if (pendingTradesRef.current.length > 0) {
                         pendingTradesRef.current = pendingTradesRef.current.map(t => {
                             if (t.countedTicks < t.totalTicks) {
@@ -289,25 +330,28 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                     }
                 },
                 error: () => {
-                    // On error, retry subscription after 2 s
                     if (!alive) return;
-                    retryTimer = setTimeout(startSub, 2000);
+                    // Fast retry — don't leave a 2 s gap in the stream
+                    retryTimer = setTimeout(startSub, 100);
                 },
             });
+
+            resetWatchdog();  // arm watchdog immediately after subscribe
         };
 
         startSub();
 
+        // Re-subscribe when the browser comes back online or the tab regains focus
+        const handleReconnect = () => { if (alive && !rxSub) startSub(); };
+        window.addEventListener('online',           handleReconnect);
+        window.addEventListener('visibilitychange', handleReconnect);
+
         return () => {
             alive = false;
             if (retryTimer) clearTimeout(retryTimer);
-            rxSub?.unsubscribe?.();
-            // Explicitly forget the server-side subscription so Deriv stops sending ticks
-            if (subscriptionId) {
-                try {
-                    (api_base.api as any)?.send({ forget: subscriptionId }).catch(() => {});
-                } catch { /* noop */ }
-            }
+            window.removeEventListener('online',           handleReconnect);
+            window.removeEventListener('visibilitychange', handleReconnect);
+            teardownSub();
         };
     }, [symbol]);
 
