@@ -6,11 +6,18 @@
 
 /* ── Horizontal-scroll wrapper — lets the whole layout (chart + digits + panel)
    scroll left/right on narrow screens. The scroll bar appears at the bottom. */
+/* ── Horizontal-scroll wrapper ───────────────────────────────────────────────
+   Thin shell — only purpose is overflow-x: auto so the chart+panel can scroll
+   sideways on narrow screens. NO height set here: cw-root carries its own
+   absolute viewport height, so SmartChart's ResizeObserver always sees a
+   non-zero container regardless of what the parent tab div's height is.
+   overflow-y MUST be hidden (not visible/auto): CSS spec forces overflow-y to
+   'auto' whenever overflow-x is non-visible, which would add a vertical scroll
+   bar and interfere with SmartChart's layout.                                  */
 .cw-scroll-wrapper {
     width: 100%;
     overflow-x: auto;
-    overflow-y: visible;
-    /* Custom scrollbar — thin, styled to match the dark theme */
+    overflow-y: hidden;
     scrollbar-width: thin;
     scrollbar-color: rgba(30,136,255,0.5) rgba(0,0,0,0.1);
     &::-webkit-scrollbar          { height: 6px; }
@@ -21,11 +28,12 @@
 
 /* ── Root container ──────────────────────────────────────────────────────── */
 .cw-root {
-    /* Minimum width so the scroll wrapper always has content to scroll to */
     min-width: 900px;
     display: flex;
     flex-direction: row;
     width: 100%;
+    /* Absolute viewport height — does NOT rely on any parent having a height.
+       SmartChart's ResizeObserver uses this as its reference size. */
     height: calc(100vh - 110px);
     max-height: calc(100vh - 110px);
     overflow: hidden;
