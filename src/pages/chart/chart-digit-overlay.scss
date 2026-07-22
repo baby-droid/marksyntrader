@@ -4,12 +4,10 @@
    Height: locked to viewport so nothing scrolls off-screen
    ══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Horizontal-scroll wrapper — lets the whole layout (chart + digits + panel)
-   scroll left/right on narrow screens. The scroll bar appears at the bottom. */
 /* ── Horizontal-scroll wrapper ───────────────────────────────────────────────
    Thin shell — only purpose is overflow-x: auto so the chart+panel can scroll
    sideways on narrow screens. NO height set here: cw-root carries its own
-   absolute viewport height, so SmartChart's ResizeObserver always sees a
+   absolute viewport height so SmartChart's ResizeObserver always sees a
    non-zero container regardless of what the parent tab div's height is.
    overflow-y MUST be hidden (not visible/auto): CSS spec forces overflow-y to
    'auto' whenever overflow-x is non-visible, which would add a vertical scroll
