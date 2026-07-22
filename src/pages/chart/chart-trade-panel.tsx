@@ -121,10 +121,13 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
     barrier,
     onBarrierChange,
 }) => {
-    /* ── Active symbols list for market selector ──────────────────────── */
+    /* ── Active symbols list for market selector ──────────────────────────
+       Load once on mount, then re-read whenever api_base populates the list
+       (api_base fires 'active_symbols_updated' after authorize). No polling —
+       polling every 1500 ms hammers the WebSocket and competes with live ticks. */
     const [activeSymbols, setActiveSymbols] = React.useState<Array<{symbol: string; display_name: string}>>([]);
     React.useEffect(() => {
-        const load = () => {
+        const build = () => {
             const syms = (api_base as any)?.active_symbols ?? [];
             if (syms.length > 0) {
                 const list = syms.map((s: any) => ({
@@ -132,11 +135,26 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                     display_name: s.display_name || s.symbol || '',
                 })).filter((s: any) => s.symbol);
                 setActiveSymbols(sortActiveSymbols(list));
+                return true;
             }
+            return false;
         };
-        load();
-        const id = setInterval(load, 1500);
-        return () => clearInterval(id);
+
+        if (!build()) {
+            // Not ready yet — poll briefly until data arrives, then stop
+            let attempts = 0;
+            const probe = setInterval(() => {
+                attempts++;
+                if (build() || attempts >= 20) clearInterval(probe);
+            }, 400);
+            // Also listen for the event api_base fires after authorize
+            const onUpdate = () => { build(); };
+            window.addEventListener('active_symbols_updated', onUpdate);
+            return () => { clearInterval(probe); window.removeEventListener('active_symbols_updated', onUpdate); };
+        }
+        const onUpdate = () => build();
+        window.addEventListener('active_symbols_updated', onUpdate);
+        return () => window.removeEventListener('active_symbols_updated', onUpdate);
     }, []);
     const [groupId, setGroupId]       = useState(TRADE_GROUPS[0].id);
     const group = TRADE_GROUPS.find(g => g.id === groupId) ?? TRADE_GROUPS[0];
@@ -297,26 +315,43 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                 detail: { contractId: Number(contractId), ticks },
             }));
             try {
+                const cid = Number(contractId);
                 const settleSub = (api_base as any).api.subscribe({
-                    proposal_open_contract: 1, contract_id: Number(contractId), subscribe: 1,
+                    proposal_open_contract: 1, contract_id: cid, subscribe: 1,
                 });
+                // Track the server-side subscription id so we can send an explicit
+                // `forget` when the contract settles — merely calling .unsubscribe()
+                // on the local RxJS observable does NOT cancel the stream server-side,
+                // causing dead POC subscriptions to accumulate and compete with the
+                // live tick stream for WebSocket bandwidth.
+                let pocSubId: string | null = null;
+
+                const forgetPoc = () => {
+                    try { settleSub.unsubscribe?.(); } catch { /* noop */ }
+                    if (pocSubId) {
+                        try { (api_base as any).api?.send({ forget: pocSubId }).catch(() => {}); } catch { /* noop */ }
+                        pocSubId = null;
+                    }
+                };
+
                 settleSub.subscribe({
                     next: (res: any) => {
                         const poc = res?.proposal_open_contract;
                         if (!poc) return;
 
-                        // ── Authoritative tick stream update ──────────────────────────────
-                        // The POC tick_stream is the ground truth for which ticks have
-                        // elapsed inside the contract — it starts at the first tick AFTER
-                        // the entry tick (exactly what Deriv.com shows as "tick 1").
-                        // Dispatching this bypasses the local race-condition counter and
-                        // works correctly for all index types (Volatility, Bear, Bull, Jump,
-                        // Boom, Crash, Step, Range Break).
+                        // Capture subscription id on first response
+                        if (!pocSubId && res.subscription?.id) pocSubId = res.subscription.id;
+
+                        // ── Authoritative tick stream ─────────────────────────────────────
+                        // POC tick_stream starts at the first tick AFTER the entry tick —
+                        // exactly what Deriv.com shows as "Tick 1". Works for all market
+                        // types: Volatility, Volatility 1s, Bear/Bull, Jump, Boom/Crash,
+                        // Step, Range Break.
                         if (Array.isArray(poc.tick_stream) && poc.tick_stream.length > 0) {
                             window.dispatchEvent(new CustomEvent('chart:trade-tick', {
                                 detail: {
-                                    contractId: Number(contractId),
-                                    tickStream: poc.tick_stream,   // [{epoch, tick, tick_display_value}]
+                                    contractId: cid,
+                                    tickStream: poc.tick_stream,
                                     totalTicks: ticks,
                                 },
                             }));
@@ -325,15 +360,17 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                         if (poc.status === 'won' || poc.status === 'lost') {
                             const won       = poc.status === 'won';
                             const profit    = Number(poc.profit ?? 0);
-                            const exitStr   = poc.exit_tick_display_value ? String(poc.exit_tick_display_value).replace('.', '') : null;
-                            const exitDigit = exitStr ? parseInt(exitStr[exitStr.length - 1], 10) : null;
+                            const exitStr   = poc.exit_tick_display_value
+                                ? String(poc.exit_tick_display_value).replace('.', '') : null;
+                            const exitDigit = exitStr
+                                ? parseInt(exitStr[exitStr.length - 1], 10) : null;
                             window.dispatchEvent(new CustomEvent('chart:trade-settled', {
-                                detail: { won, profit, exitDigit, barrier, contractType, contractId: Number(contractId) },
+                                detail: { won, profit, exitDigit, barrier, contractType, contractId: cid },
                             }));
-                            settleSub.unsubscribe?.();
+                            forgetPoc();   // cancel server stream immediately on settlement
                         }
                     },
-                    error: () => { try { settleSub.unsubscribe?.(); } catch { /* noop */ } },
+                    error: () => forgetPoc(),
                 });
             } catch { /* non-fatal */ }
             // POST-SIGNAL with contract_id — registers in mirroredContracts so the

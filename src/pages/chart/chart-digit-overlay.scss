@@ -366,91 +366,85 @@
 @keyframes cdo-dot-pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.75)} }
 @keyframes cdo-fade-in   { from{opacity:0;transform:translateX(-5px)} to{opacity:1;transform:translateX(0)} }
 
-/* ── Win / Loss trade flag — pennant on a pole, horizontally centered ──────── */
+/* ── Win / Loss trade flag — compact pennant, right side of SmartChart ──────── *
+ *  Positioned near the right edge of the chart canvas (clear of the price-axis  *
+ *  labels), vertically around the centre of the chart.                           *
+ *  Horizontal size is kept to ≈ 1 cm (38 px banner) — half of the previous 2 cm.*
+ * ─────────────────────────────────────────────────────────────────────────────── */
 .chart-trade-flag {
     position: absolute;
-    /* Center the whole flag (pole + banner) in the chart canvas */
-    left: 50%;
-    transform: translateX(-50%);
+    /* Right side of chart, clear of SmartChart's price-axis labels (~60 px wide) */
+    right: 68px;
+    /* No left/transform centering — anchored to the right */
     display: flex;
     flex-direction: row;
-    align-items: flex-start;
+    align-items: center;
     gap: 0;
     z-index: 30;
     pointer-events: none;
-    animation: chart-flag-in 0.32s cubic-bezier(.2,1.5,.4,1) both,
-               chart-flag-out 0.4s ease-in 4.5s both;
+    animation: chart-flag-in  0.30s cubic-bezier(.2,1.5,.4,1) both,
+               chart-flag-out 0.40s ease-in 4.5s both;
 
-    /* ── Vertical pole — matches banner height (1 cm ≈ 38 px) ─── */
+    /* ── Vertical pole ─────────────────────────────────────────── */
     &__pole {
         width: 3px;
-        height: 38px;   /* same as banner height */
+        height: 38px;
         border-radius: 3px;
         flex-shrink: 0;
     }
 
-    /* ── Pennant banner — exactly 2 cm wide × 1 cm tall ───────────
-       1 cm ≈ 37.8 px  |  2 cm ≈ 75.6 px
-       Banner occupies the 2 cm; pole is 3 px wide (negligible).     */
+    /* ── Pennant banner — ~1 cm (38 px) wide × 38 px tall ─────────
+       Tip points RIGHT (toward the price axis / chart edge).
+       Single-row layout: emoji + amount side by side.              */
     &__banner {
         display: inline-flex;
-        flex-direction: column;
-        align-items: flex-start;
-        justify-content: center;
-        gap: 1px;
-        /* Fixed physical size */
-        width:  75px;   /* ~2 cm */
-        height: 38px;   /* ~1 cm */
-        padding: 3px 18px 3px 7px; /* right padding makes room for triangle tip */
+        flex-direction: row;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 2px;
+        width:  40px;   /* ≈ 1 cm — half of the previous 75 px */
+        height: 38px;
+        padding: 0 14px 0 5px; /* right pad opens space for the pennant tip */
         white-space: nowrap;
         overflow: hidden;
         line-height: 1;
-        /* Pennant triangle: right side tapers to a sharp point */
-        clip-path: polygon(0 0, 80% 0, 100% 50%, 80% 100%, 0 100%);
-        box-shadow: 2px 2px 6px rgba(0,0,0,0.38);
+        /* Tip points right — matches right-side pole position */
+        clip-path: polygon(0 0, 75% 0, 100% 50%, 75% 100%, 0 100%);
+        box-shadow: 2px 2px 6px rgba(0,0,0,0.4);
         flex-shrink: 0;
     }
 
-    /* Top row: emoji + WIN/LOSS */
-    &__top {
-        display: flex;
-        align-items: center;
-        gap: 2px;
-    }
-    &__emoji  { font-size: 10px; line-height: 1; flex-shrink: 0; }
-    &__label  { font-size: 8px;  font-weight: 900; letter-spacing: 0.03em; flex-shrink: 0; }
+    &__emoji  { font-size: 11px; line-height: 1; flex-shrink: 0; }
+    &__amount { font-size: 7px;  font-weight: 900; opacity: 0.97; line-height: 1; }
 
-    /* Bottom row: profit amount */
-    &__amount { font-size: 8px;  font-weight: 800; opacity: 0.95; line-height: 1; }
-
-    /* ── Win — emerald green ───────────────────────────────────── */
+    /* ── Win — emerald ─────────────────────────────────────────── */
     &--win {
-        .chart-trade-flag__pole   { background: #00C853; box-shadow: 0 0 6px rgba(0,200,83,0.6); }
+        .chart-trade-flag__pole   { background: #00C853; box-shadow: 0 0 6px rgba(0,200,83,0.7); }
         .chart-trade-flag__banner {
-            background: linear-gradient(100deg, #00E676 0%, #00C853 60%, #00A844 100%);
-            color: #003818;
-            text-shadow: 0 1px 0 rgba(255,255,255,0.25);
+            background: linear-gradient(105deg, #00E676 0%, #00C853 55%, #009c3e 100%);
+            color: #002a12;
+            text-shadow: 0 1px 0 rgba(255,255,255,0.3);
         }
     }
 
-    /* ── Loss — crimson red ────────────────────────────────────── */
+    /* ── Loss — crimson ────────────────────────────────────────── */
     &--loss {
-        .chart-trade-flag__pole   { background: #E53935; box-shadow: 0 0 6px rgba(229,57,53,0.6); }
+        .chart-trade-flag__pole   { background: #E53935; box-shadow: 0 0 6px rgba(229,57,53,0.7); }
         .chart-trade-flag__banner {
-            background: linear-gradient(100deg, #FF5252 0%, #E53935 60%, #C62828 100%);
+            background: linear-gradient(105deg, #FF5252 0%, #E53935 55%, #b71c1c 100%);
             color: #fff;
-            text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+            text-shadow: 0 1px 2px rgba(0,0,0,0.35);
         }
     }
 }
 
-@keyframes chart-flag-in {
-    from { opacity:0; transform: translateX(-50%) scale(0.80) translateY(-6px); }
-    to   { opacity:1; transform: translateX(-50%) scale(1)    translateY(0); }
+@keyframes chart-flag-in  {
+    from { opacity: 0; transform: scale(0.78) translateX(8px); }
+    to   { opacity: 1; transform: scale(1)    translateX(0); }
 }
 @keyframes chart-flag-out {
-    from { opacity:1; transform: translateX(-50%) scale(1); }
-    to   { opacity:0; transform: translateX(-50%) scale(0.85) translateY(-4px); }
+    from { opacity: 1; transform: scale(1); }
+    to   { opacity: 0; transform: scale(0.82) translateX(6px); }
 }
 
 /* ════════════════════════════════════════════════════════════════

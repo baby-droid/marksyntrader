@@ -393,28 +393,19 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                         </div>
                     ))}
 
-                    {/* Win/Loss flags — pennant shape, horizontally centered */}
+                    {/* Win/Loss flags — compact pennant, right side of chart near centre */}
                     {tradeFlags.map((flag, i) => (
                         <div
                             key={flag.id}
                             className={`chart-trade-flag chart-trade-flag--${flag.won ? 'win' : 'loss'}`}
-                            style={{ top: `calc(35% + ${i * 46}px)` }}
+                            style={{ top: `calc(38% + ${i * 44}px)` }}
                         >
-                            {/* Pole */}
                             <div className='chart-trade-flag__pole' />
-                            {/* Banner / pennant */}
                             <div className='chart-trade-flag__banner'>
-                                <div className='chart-trade-flag__top'>
-                                    <span className='chart-trade-flag__emoji'>
-                                        {flag.won ? '🎉' : '💔'}
-                                    </span>
-                                    <span className='chart-trade-flag__label'>
-                                        {flag.won ? 'WIN' : 'LOSS'}
-                                    </span>
-                                </div>
-                                <div className='chart-trade-flag__amount'>
+                                <span className='chart-trade-flag__emoji'>{flag.won ? '🎉' : '💔'}</span>
+                                <span className='chart-trade-flag__amount'>
                                     {flag.won ? '+' : ''}{flag.profit.toFixed(2)}
-                                </div>
+                                </span>
                             </div>
                         </div>
                     ))}
