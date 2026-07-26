@@ -39,3 +39,4 @@
 - [Chart digit accuracy](chart-digit-accuracy.md) — use tick.pip_size from first live tick (not string-length); deduplicate history vs live by epoch Set; send `forget: subscriptionId` on cleanup (RxJS unsubscribe alone does not stop server stream).
 - [Copy-trading timing](copy-trading-timing.md) — publish pre-signal (no contract_id) BEFORE the buy so follower enters on the same tick; post-signal with contract_id registers mirroredContracts to block the backup path.
 - [SmartChart adapter init](smartchart-adapter-init.md) — adapter init effect must poll/retry until chart_api.api is ready; `chart_api.api` not in dep array so effect never re-runs if null on mount.
+- [Authenticated market data panels](authenticated-market-data-panels.md) — AI scanner and digit widgets must use api_base's authenticated session with retry/cleanup after token login, not hard-coded public WebSockets.

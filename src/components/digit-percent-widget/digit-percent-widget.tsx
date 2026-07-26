@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { api_base } from '@/external/bot-skeleton';
+import { CONNECTION_STATUS } from '@/external/bot-skeleton/services/api/observables/connection-status-stream';
+import { useApiBase } from '@/hooks/useApiBase';
 import './digit-percent-widget.scss';
-
-const APP_ID = (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_DERIV_APP_ID) || '36300';
 
 const MARKETS: { value: string; label: string; pipSize: number }[] = [
     { value: 'R_10',      label: 'Volatility 10 Index',       pipSize: 3 },
@@ -102,6 +103,7 @@ function computeStreamStats(ticks: number[], threshold: number) {
 }
 
 const DigitPercentWidget: React.FC = () => {
+    const { connectionStatus } = useApiBase();
     const [open, setOpen] = useState(false);
     const [symbol, setSymbol] = useState(() => {
         try { return localStorage.getItem('digit_widget_market') || 'R_100'; } catch { return 'R_100'; }
@@ -115,7 +117,8 @@ const DigitPercentWidget: React.FC = () => {
     const [darkMode, setDarkMode] = useState(() => {
         try { return localStorage.getItem('digit_widget_dark') === '1'; } catch { return false; }
     });
-    const wsRef    = useRef<WebSocket | null>(null);
+    const tickSubscriptionRef = useRef<any>(null);
+    const tickSubscriptionIdRef = useRef<string | null>(null);
     // Resolve current market first so pipSizeRef can use it for its initial value
     const currentMarket = MARKETS.find(m => m.value === symbol) ?? MARKETS[0];
     // pip_size starts from our static table; the live stream overrides it authoritatively
@@ -173,39 +176,45 @@ const DigitPercentWidget: React.FC = () => {
 
     useEffect(() => {
         if (!open) return;
-        wsRef.current?.close();
+        tickSubscriptionRef.current?.unsubscribe?.();
+        tickSubscriptionRef.current = null;
+        if (tickSubscriptionIdRef.current && api_base.api) {
+            (api_base.api as any).send({ forget: tickSubscriptionIdRef.current }).catch(() => {});
+            tickSubscriptionIdRef.current = null;
+        }
         setTicks([]);
         setCurrentDigit(null);
         setCurrentPrice(null);
-
-        const wsUrl = `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`;
-        const ws = new WebSocket(wsUrl);
-        wsRef.current = ws;
 
         // Reset state for this new subscription
         pipSizeRef.current = currentMarket.pipSize;
         rawHistoryRef.current = [];
         pipSizeConfirmedRef.current = false;
 
-        ws.onopen = () => {
-            ws.send(JSON.stringify({
+        let cancelled = false;
+        let retryTimer: ReturnType<typeof setTimeout> | null = null;
+        const start = async () => {
+            if (cancelled) return;
+            const api = api_base.api as any;
+            if (!api || connectionStatus !== CONNECTION_STATUS.OPENED) {
+                retryTimer = setTimeout(start, 350);
+                return;
+            }
+
+            try {
+                // Fetch history through the same API instance that is authorized by
+                // the app. The response is returned directly by DerivAPIBasic.send().
+                const historyResponse = await api.send({
                 ticks_history: symbol,
                 count: tickCount,
                 end: 'latest',
                 style: 'ticks',
-                subscribe: 1,
-            }));
-        };
-
-        ws.onmessage = e => {
-            try {
-                const data = JSON.parse(e.data);
+                });
+                if (cancelled) return;
+                const data = historyResponse;
                 if (data.error) {
                     console.warn('[DigitWidget] WS error:', data.error.message);
-                    return;
-                }
-
-                if (data.history?.prices && Array.isArray(data.history.prices)) {
+                } else if (data.history?.prices && Array.isArray(data.history.prices)) {
                     // History batch arrives first — store raw prices.
                     // We do NOT compute digits yet because the API pip_size hasn't
                     // been confirmed. Processing with the wrong pip_size is what
@@ -225,10 +234,25 @@ const DigitPercentWidget: React.FC = () => {
                         rawHistoryRef.current = [];
                     }
                     // else: wait for live tick pip_size below
+                }
 
-                } else if (data.tick) {
+                // Subscribe only after the history request is complete. This avoids
+                // mixing stale ticks from a previous market into the new baseline.
+                const tickStream = api.subscribe({ ticks: symbol, subscribe: 1 });
+                tickSubscriptionRef.current = tickStream?.subscribe?.((message: any) => {
+                    if (cancelled) return;
+                    const tickData = message?.data ?? message;
+                    if (tickData?.subscription?.id) {
+                        tickSubscriptionIdRef.current = String(tickData.subscription.id);
+                    }
+                    if (tickData?.error) {
+                        console.warn('[DigitWidget] tick subscription error:', tickData.error.message);
+                        return;
+                    }
+                    if (tickData?.tick) {
+                        const data = tickData;
                     // Live tick — this is the authoritative pip_size source.
-                    if (data.tick.pip_size != null) {
+                        if (data.tick.pip_size != null) {
                         const confirmedPs = Number(data.tick.pip_size);
 
                         if (!pipSizeConfirmedRef.current) {
@@ -250,28 +274,36 @@ const DigitPercentWidget: React.FC = () => {
                             // Subsequent ticks — update pip_size in case API changes it
                             pipSizeRef.current = confirmedPs;
                         }
-                    }
+                        }
 
-                    const ps = pipSizeRef.current;
-                    const quote = Number(data.tick.quote);
-                    const digit = getLastDigit(quote, ps);
-                    setCurrentDigit(digit);
-                    setCurrentPrice(quote.toFixed(ps));
-                    setTicks(prev => [...prev.slice(-(tickCount - 1)), digit]);
-                }
+                        const ps = pipSizeRef.current;
+                        const quote = Number(data.tick.quote);
+                        const digit = getLastDigit(quote, ps);
+                        setCurrentDigit(digit);
+                        setCurrentPrice(quote.toFixed(ps));
+                        setTicks(prev => [...prev.slice(-(tickCount - 1)), digit]);
+                    }
+                });
             } catch (err) {
-                console.warn('[DigitWidget] parse error', err);
+                if (!cancelled) {
+                    console.warn('[DigitWidget] authenticated market data error:', err);
+                    retryTimer = setTimeout(start, 700);
+                }
             }
         };
+        start();
 
-        ws.onerror = err => console.warn('[DigitWidget] WS error', err);
-
-        return () => { ws.close(); };
-    }, [open, symbol, tickCount]); // eslint-disable-line react-hooks/exhaustive-deps
-
-    useEffect(() => {
-        return () => { wsRef.current?.close(); };
-    }, []);
+        return () => {
+            cancelled = true;
+            if (retryTimer) clearTimeout(retryTimer);
+            tickSubscriptionRef.current?.unsubscribe?.();
+            tickSubscriptionRef.current = null;
+            if (tickSubscriptionIdRef.current && api_base.api) {
+                (api_base.api as any).send({ forget: tickSubscriptionIdRef.current }).catch(() => {});
+                tickSubscriptionIdRef.current = null;
+            }
+        };
+    }, [open, symbol, tickCount, connectionStatus]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const stats: TDigitStat[] = Array.from({ length: 10 }, (_, d) => {
         const count = ticks.filter(t => t === d).length;

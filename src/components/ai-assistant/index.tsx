@@ -8,6 +8,9 @@ import { useDerivTrading } from '@/hooks/useDerivTrading';
 import { buildKillerXml, KillerContract } from '@/utils/killer-bot';
 import { getExecutionSpeed } from '@/utils/execution-speed';
 import { observer as globalObserver } from '@/external/bot-skeleton';
+import { api_base } from '@/external/bot-skeleton';
+import { CONNECTION_STATUS } from '@/external/bot-skeleton/services/api/observables/connection-status-stream';
+import { useApiBase } from '@/hooks/useApiBase';
 import { isEnded } from '@/components/shared';
 import './ai-assistant.scss';
 
@@ -555,6 +558,7 @@ const DEFAULT_SIGNAL: Signal = {
 
 const AIAssistant: React.FC = () => {
     const { dashboard, load_modal, run_panel } = useStore() as any;
+    const { connectionStatus } = useApiBase();
     const { currency: accountCurrency } = useDerivTrading();
     // useDerivTrade rides the app's existing authenticated connection — same login, no separate token
     const derivTrade = useDerivTrade();
@@ -604,7 +608,8 @@ const AIAssistant: React.FC = () => {
     // T007: antenna on/off toggle + live last-digit readout for the currently tracked market
     const [antennaOn, setAntennaOn] = useState(true);
     const [liveDigit, setLiveDigit] = useState<number | null>(null);
-    const antennaWsRef = useRef<WebSocket | null>(null);
+    const antennaSubscriptionRef = useRef<any>(null);
+    const antennaSubscriptionIdRef = useRef<string | null>(null);
 
     // Dark/light theme toggle — persisted to localStorage, defaults to dark
     const [aiThemeDark, setAiThemeDark] = useState<boolean>(() => {
@@ -637,24 +642,53 @@ const AIAssistant: React.FC = () => {
 
     // Antenna: live last-digit stream for whichever symbol the AI is currently tracking (best signal, or first scan target)
     useEffect(() => {
-        if (antennaWsRef.current) { try { antennaWsRef.current.close(); } catch { } antennaWsRef.current = null; }
+        antennaSubscriptionRef.current?.unsubscribe?.();
+        antennaSubscriptionRef.current = null;
+        if (antennaSubscriptionIdRef.current && api_base.api) {
+            (api_base.api as any).send({ forget: antennaSubscriptionIdRef.current }).catch(() => {});
+            antennaSubscriptionIdRef.current = null;
+        }
         setLiveDigit(null);
         if (!antennaOn) return;
         const symbol = best?.symbol ?? SCAN_SYMBOLS[0]?.symbol;
         if (!symbol) return;
-        const ws = new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
-        antennaWsRef.current = ws;
-        ws.onopen = () => ws.send(JSON.stringify({ ticks: symbol, subscribe: 1 }));
-        ws.onmessage = e => {
-            const d = JSON.parse(e.data);
-            const quote = d.tick?.quote;
-            if (typeof quote === 'number') {
-                const s = quote.toFixed(quote < 10 ? 4 : 2).replace('.', '');
-                setLiveDigit(parseInt(s[s.length - 1], 10));
+        let cancelled = false;
+        let retryTimer: ReturnType<typeof setTimeout> | null = null;
+        const start = () => {
+            if (cancelled) return;
+            const api = api_base.api as any;
+            if (!api || connectionStatus !== CONNECTION_STATUS.OPENED) {
+                retryTimer = setTimeout(start, 350);
+                return;
+            }
+            try {
+                const stream = api.subscribe({ ticks: symbol, subscribe: 1 });
+                antennaSubscriptionRef.current = stream?.subscribe?.((message: any) => {
+                    const d = message?.data ?? message;
+                    if (d?.subscription?.id) antennaSubscriptionIdRef.current = String(d.subscription.id);
+                    const quote = d?.tick?.quote;
+                    if (!cancelled && typeof quote === 'number') {
+                        const pipSize = Number(d.tick.pip_size ?? (quote < 10 ? 4 : 2));
+                        const s = quote.toFixed(pipSize);
+                        setLiveDigit(parseInt(s[s.length - 1], 10));
+                    }
+                });
+            } catch {
+                retryTimer = setTimeout(start, 700);
             }
         };
-        return () => { try { ws.close(); } catch { } };
-    }, [antennaOn, best?.symbol]);
+        start();
+        return () => {
+            cancelled = true;
+            if (retryTimer) clearTimeout(retryTimer);
+            antennaSubscriptionRef.current?.unsubscribe?.();
+            antennaSubscriptionRef.current = null;
+            if (antennaSubscriptionIdRef.current && api_base.api) {
+                (api_base.api as any).send({ forget: antennaSubscriptionIdRef.current }).catch(() => {});
+                antennaSubscriptionIdRef.current = null;
+            }
+        };
+    }, [antennaOn, best?.symbol, connectionStatus]);
 
     // AI always operates in USD — no display-currency conversion here.
     const fmtProfit = (usd: number) => `${usd >= 0 ? '+' : ''}${usd.toFixed(2)} USD`;
@@ -719,7 +753,7 @@ const AIAssistant: React.FC = () => {
         wsRefs.current = [];
         setScanning(false);
         setScanProgress('');
-        scanDoneRef.current = false;
+        scanDoneRef.current = true;
     }, []);
 
     const recompute = useCallback(() => {
@@ -736,6 +770,11 @@ const AIAssistant: React.FC = () => {
 
     const startScan = useCallback(() => {
         stopScan();
+        const api = api_base.api as any;
+        if (!api || connectionStatus !== CONNECTION_STATUS.OPENED) {
+            setScanProgress('Waiting for the Deriv account connection…');
+            return;
+        }
         freqRef.current.clear();
         setBest(null); setAllSignals([]); setScannedCount(0);
         setScanning(true); scanDoneRef.current = false;
@@ -747,35 +786,46 @@ const AIAssistant: React.FC = () => {
             if (idx >= SCAN_SYMBOLS.length || scanDoneRef.current) { setScanning(false); setScanProgress(`Scan complete — ${SCAN_SYMBOLS.length} markets`); return; }
             const { symbol, label } = SCAN_SYMBOLS[idx];
             setScanProgress(`Scanning ${label}... (${idx + 1}/${SCAN_SYMBOLS.length})`);
-            const ws = new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
-            wsRefs.current.push(ws);
             let received = false;
-            ws.onopen = () => ws.send(JSON.stringify({ ticks_history: symbol, count: 500, end: 'latest', style: 'ticks' }));
-            ws.onmessage = e => {
-                if (received) return;
-                const d = JSON.parse(e.data);
-                const freq = freqRef.current.get(symbol);
-                if (!freq) return;
-                if (d.history?.prices) {
-                    received = true;
-                    const prices = d.history.prices as number[];
-                    freq.prices = prices.slice(-500);
-                    freq.ticks = prices.map((p: number) => { const s = p.toFixed(2).replace('.', ''); return parseInt(s[s.length - 1], 10); });
-                    freq.total = freq.ticks.length;
-                    const counts = new Array(10).fill(0);
-                    freq.ticks.forEach(t => counts[t]++);
-                    freq.pcts = counts.map(c => freq.total > 0 ? (c / freq.total) * 100 : 10);
-                    recompute();
-                    try { ws.close(); } catch { }
-                    idx++; setTimeout(scanNext, 80);
+            const scanMarket = async () => {
+                try {
+                    const d = await api.send({ ticks_history: symbol, count: 500, end: 'latest', style: 'ticks' });
+                    if (received || scanDoneRef.current) return;
+                    const freq = freqRef.current.get(symbol);
+                    if (!freq) return;
+                    if (d?.history?.prices) {
+                        received = true;
+                        const prices = d.history.prices as number[];
+                        freq.prices = prices.slice(-500);
+                        const pipSize = Number(api_base.pip_sizes?.[symbol] ?? 2);
+                        freq.ticks = prices.map((p: number) => {
+                            const s = p.toFixed(pipSize);
+                            return parseInt(s[s.length - 1], 10);
+                        });
+                        freq.total = freq.ticks.length;
+                        const counts = new Array(10).fill(0);
+                        freq.ticks.forEach(t => counts[t]++);
+                        freq.pcts = counts.map(c => freq.total > 0 ? (c / freq.total) * 100 : 10);
+                        recompute();
+                        idx++;
+                        setTimeout(scanNext, 80);
+                    } else {
+                        received = true;
+                        idx++;
+                        setTimeout(scanNext, 80);
+                    }
+                } catch {
+                    if (!received) {
+                        received = true;
+                        idx++;
+                        setTimeout(scanNext, 80);
+                    }
                 }
-                if (d.error) { received = true; try { ws.close(); } catch { } idx++; setTimeout(scanNext, 80); }
             };
-            ws.onerror = () => { if (!received) { received = true; idx++; setTimeout(scanNext, 80); } };
-            setTimeout(() => { if (!received) { received = true; try { ws.close(); } catch { } idx++; scanNext(); } }, 5000);
+            scanMarket();
         };
         scanNext();
-    }, [recompute, stopScan]);
+    }, [connectionStatus, recompute, stopScan]);
 
     useEffect(() => { if (!scanning) recompute(); }, [contractType, predictionDigit]);
     useEffect(() => () => { stopScan(); scanDoneRef.current = true; runRef.current = false; }, [stopScan]);
