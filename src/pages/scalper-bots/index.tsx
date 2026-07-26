@@ -145,34 +145,95 @@ const COND_DEFAULTS = {
 let sbCondSeq = 0;
 const newCondition = (bot: TScalperBot): StrategyCondition => {
     if (bot.contractType === 'DIGITOVER') {
-        return { ...COND_DEFAULTS, id: `cond_${++sbCondSeq}`, algorithm: 'LDP', strict: true, ifLast: 2, digitsIs: 'UNDER', digitValue: bot.prediction ?? 5, recoveryLimit: 1 };
+        return { ...COND_DEFAULTS, id: `cond_${++sbCondSeq}`, algorithm: 'LDP', strict: true, ifLast: defaultStrategyWindow(bot, 'LDP'), digitsIs: defaultStrategyPredicate(bot, 'LDP'), digitValue: bot.prediction ?? 5, recoveryLimit: 1 };
     }
     if (bot.contractType === 'DIGITUNDER') {
-        return { ...COND_DEFAULTS, id: `cond_${++sbCondSeq}`, algorithm: 'LDP', strict: true, ifLast: 2, digitsIs: 'OVER', digitValue: bot.prediction ?? 5, recoveryLimit: 1 };
+        return { ...COND_DEFAULTS, id: `cond_${++sbCondSeq}`, algorithm: 'LDP', strict: true, ifLast: defaultStrategyWindow(bot, 'LDP'), digitsIs: defaultStrategyPredicate(bot, 'LDP'), digitValue: bot.prediction ?? 5, recoveryLimit: 1 };
     }
     if (bot.contractType === 'DIGITMATCH') {
-        return { ...COND_DEFAULTS, id: `cond_${++sbCondSeq}`, algorithm: 'LDP', strict: true, ifLast: 2, digitsIs: 'DIFFERS', digitValue: bot.prediction ?? 5, recoveryLimit: 1 };
+        return { ...COND_DEFAULTS, id: `cond_${++sbCondSeq}`, algorithm: 'LDP', strict: true, ifLast: defaultStrategyWindow(bot, 'LDP'), digitsIs: defaultStrategyPredicate(bot, 'LDP'), digitValue: bot.prediction ?? 5, recoveryLimit: 1 };
     }
     if (bot.contractType === 'DIGITDIFF') {
-        return { ...COND_DEFAULTS, id: `cond_${++sbCondSeq}`, algorithm: 'LDP', strict: true, ifLast: 2, digitsIs: 'MATCHES', digitValue: bot.prediction ?? 5, recoveryLimit: 1 };
+        return { ...COND_DEFAULTS, id: `cond_${++sbCondSeq}`, algorithm: 'LDP', strict: true, ifLast: defaultStrategyWindow(bot, 'LDP'), digitsIs: defaultStrategyPredicate(bot, 'LDP'), digitValue: bot.prediction ?? 5, recoveryLimit: 1 };
     }
     if (bot.contractType === 'CALL') {
-        return { ...COND_DEFAULTS, id: `cond_${++sbCondSeq}`, algorithm: 'LDP', strict: true, ifLast: 3, digitsIs: 'ONLY DOWNS', digitValue: 5, recoveryLimit: 1 };
+        return { ...COND_DEFAULTS, id: `cond_${++sbCondSeq}`, algorithm: 'LDP', strict: true, ifLast: defaultStrategyWindow(bot, 'LDP'), digitsIs: defaultStrategyPredicate(bot, 'LDP'), digitValue: 5, recoveryLimit: 1 };
     }
     if (bot.contractType === 'PUT') {
-        return { ...COND_DEFAULTS, id: `cond_${++sbCondSeq}`, algorithm: 'LDP', strict: true, ifLast: 3, digitsIs: 'ONLY UPS', digitValue: 5, recoveryLimit: 1 };
+        return { ...COND_DEFAULTS, id: `cond_${++sbCondSeq}`, algorithm: 'LDP', strict: true, ifLast: defaultStrategyWindow(bot, 'LDP'), digitsIs: defaultStrategyPredicate(bot, 'LDP'), digitValue: 5, recoveryLimit: 1 };
     }
     return {
         ...COND_DEFAULTS,
         id: `cond_${++sbCondSeq}`,
         algorithm: 'LDP',
         strict: true,
-        ifLast: 3,
-        digitsIs: bot.contractType === 'DIGITEVEN' ? 'ODD' : 'EVEN',
+        ifLast: defaultStrategyWindow(bot, 'LDP'),
+        digitsIs: defaultStrategyPredicate(bot, 'LDP'),
         digitValue: 5,
         recoveryLimit: 1,
     };
 };
+
+/* LDP describes the opposing run that must happen before entry.
+   NDP describes the next/newest digit that confirms the contract side.
+   Keep these defaults derived from the bot contract so adding an NDP row
+   cannot silently inherit the LDP opposition predicate. */
+function defaultStrategyPredicate(bot: TScalperBot, phase: 'LDP' | 'NDP'): DigitsIsType {
+    if (phase === 'NDP') {
+        switch (bot.contractType) {
+            case 'DIGITEVEN':  return 'EVEN';
+            case 'DIGITODD':   return 'ODD';
+            case 'DIGITOVER':  return 'OVER';
+            case 'DIGITUNDER': return 'UNDER';
+            case 'DIGITMATCH': return 'MATCHES';
+            case 'DIGITDIFF':  return 'DIFFERS';
+            case 'CALL':       return 'RISE';
+            case 'PUT':        return 'FALL';
+            default:           return 'EVEN';
+        }
+    }
+
+    switch (bot.contractType) {
+        case 'DIGITEVEN':  return 'ODD';
+        case 'DIGITODD':   return 'EVEN';
+        case 'DIGITOVER':  return 'UNDER';
+        case 'DIGITUNDER': return 'OVER';
+        case 'DIGITMATCH': return 'DIFFERS';
+        case 'DIGITDIFF':  return 'MATCHES';
+        case 'CALL':       return 'ONLY DOWNS';
+        case 'PUT':        return 'ONLY UPS';
+        default:           return 'EVEN';
+    }
+}
+
+function defaultStrategyWindow(bot: TScalperBot, phase: 'LDP' | 'NDP'): number {
+    if (phase === 'NDP') return 1;
+    return ['DIGITOVER', 'DIGITUNDER', 'DIGITMATCH', 'DIGITDIFF'].includes(bot.contractType) ? 2 : 3;
+}
+
+function algorithmChangeDefaults(
+    bot: TScalperBot,
+    algorithm: AlgorithmType,
+    current: StrategyCondition,
+): Partial<StrategyCondition> {
+    if (algorithm === 'NDP') {
+        return {
+            ifLast: 1,
+            recoveryLimit: 1,
+            digitsIs: defaultStrategyPredicate(bot, 'NDP'),
+            digitValue: bot.prediction ?? current.digitValue,
+        };
+    }
+    if (algorithm === 'LDP') {
+        return {
+            ifLast: defaultStrategyWindow(bot, 'LDP'),
+            recoveryLimit: 1,
+            digitsIs: defaultStrategyPredicate(bot, 'LDP'),
+            digitValue: bot.prediction ?? current.digitValue,
+        };
+    }
+    return {};
+}
 
 let sbGroupSeq = 0;
 const newOrGroup = (bot: TScalperBot): StrategyOrGroup => ({
@@ -452,11 +513,21 @@ function evaluateSingleCondition(
         case 'NDP':
         default: {
             if (cond.strict) {
-                let prev: number | null = null;
+                /* NDP is evaluated against the newest ticks, but directional
+                   predicates still need the tick immediately before that
+                   window. For the normal one-tick NDP window this makes
+                   RISE/FALL and ONLY UPS/DOWNS meaningful instead of allowing
+                   every first digit through because prev was null. */
+                let prev: number | null = cond.algorithm === 'NDP'
+                    ? (digits[n] ?? null)
+                    : null;
                 for (const d of recent) { if (!matchFn(d, prev)) return false; prev = d; }
                 return true;
             } else {
-                let count = 0, prev: number | null = null;
+                let count = 0;
+                let prev: number | null = cond.algorithm === 'NDP'
+                    ? (digits[n] ?? null)
+                    : null;
                 for (const d of recent) { if (matchFn(d, prev)) count++; prev = d; }
                 return count > recent.length / 2;
             }
@@ -655,7 +726,7 @@ function describeBuyAction(contractType: string, prediction: number | null): str
 function ndpWindowFor(g: StrategyOrGroup, inRecovery: boolean): number {
     return g.conditions
         .filter(c => c.algorithm === 'NDP')
-        .reduce((sum, c) => sum + Math.max(1, inRecovery ? (c.recoveryLimit ?? 1) : c.ifLast), 0);
+        .reduce((max, c) => Math.max(max, Math.max(1, inRecovery ? (c.recoveryLimit ?? 1) : c.ifLast)), 0);
 }
 function offsetFor(cond: StrategyCondition, ndpWindow: number): number {
     return cond.algorithm !== 'NDP' ? ndpWindow : 0;
@@ -2166,7 +2237,13 @@ const BotDetail: React.FC<{
                                                     <div className='sb-field'>
                                                         <label>Algorithm</label>
                                                         <select value={cond.algorithm}
-                                                            onChange={e => conditionSet(g.id, cond.id, { algorithm: e.target.value as AlgorithmType })}
+                                                            onChange={e => {
+                                                                const algorithm = e.target.value as AlgorithmType;
+                                                                conditionSet(g.id, cond.id, {
+                                                                    algorithm,
+                                                                    ...algorithmChangeDefaults(bot, algorithm, cond),
+                                                                });
+                                                            }}
                                                             disabled={running}>
                                                             {ALGORITHM_OPTIONS.map(a => <option key={a} value={a}>{a}</option>)}
                                                         </select>

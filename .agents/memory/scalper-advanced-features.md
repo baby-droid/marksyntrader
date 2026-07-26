@@ -4,12 +4,10 @@ description: NDP next-digit prediction, VPS mode auto-restart, 3-contract multip
 ---
 
 ## NDP (Next Digit Prediction)
-- `checkNDP(digits, prices, contractType, prediction, ndpConfig)` in `index.tsx` after `getLastDigit`.
-- NdpConfig: `{ enabled, ldpWindow (older digits confirming streak), ndpWindow (newest digits for reversal) }`.
-- Default: `{ enabled: false, ldpWindow: 7, ndpWindow: 2 }`.
-- Wired in `startBot` scan loop: `entry = checkEntry(...) && checkNDP(...)`.
-- UI accordion "🔮 NDP — Next Digit Prediction" in the settings sidebar.
-- Per contract type: OVER/UNDER/EVEN/ODD/MATCH/DIFF/CALL/PUT all have specific LDP+NDP logic.
+- NDP is implemented as a per-condition algorithm in Strategy Logic, not as a separate global `NdpConfig` gate or standalone `checkNDP()` call.
+- Put LDP and NDP in the same OR group for a two-phase signal: LDP checks the older opposing run, and NDP checks the newest contract-side confirmation. NDP's window length determines how far back the LDP window is offset; multiple NDP rows use the largest window.
+- Defaults are contract-aware: Even/Odd uses opposing parity then target parity; Over/Under uses opposing barrier side then target barrier side. NDP defaults to one confirming digit.
+- Recovery still shortens each condition's required window through its Recovery Limit without changing the contract type or barrier.
 
 **Why:** Secondary confirmation layer — LDP fires first (streak of opposite digits), NDP checks reversal has started.
 
