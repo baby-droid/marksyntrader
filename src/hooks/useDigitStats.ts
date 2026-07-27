@@ -76,6 +76,31 @@ export function useDigitStats(initialSymbol = 'R_10'): UseDigitStatsReturn {
     setIsConnected(false);
     let cancelled = false;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
+    let messageSubscription: any = null;
+
+    const clearWatchdog = () => {
+      if (watchdogTimer) {
+        clearTimeout(watchdogTimer);
+        watchdogTimer = null;
+      }
+    };
+
+    const armWatchdog = () => {
+      clearWatchdog();
+      watchdogTimer = setTimeout(() => {
+        if (cancelled) return;
+        tickSubscriptionRef.current?.unsubscribe?.();
+        tickSubscriptionRef.current = null;
+        messageSubscription?.unsubscribe?.();
+        messageSubscription = null;
+        if (tickSubscriptionIdRef.current && api_base.api) {
+          (api_base.api as any).send({ forget: tickSubscriptionIdRef.current }).catch(() => {});
+          tickSubscriptionIdRef.current = null;
+        }
+        retryTimer = setTimeout(start, 100);
+      }, 20_000);
+    };
 
     const start = async () => {
       if (cancelled) return;
@@ -95,14 +120,18 @@ export function useDigitStats(initialSymbol = 'R_10'): UseDigitStatsReturn {
         setLastTicks(prices.slice(-50));
         }
 
-        const tickStream = api.subscribe({ ticks: sym, subscribe: 1 });
-        tickSubscriptionRef.current = tickStream?.subscribe?.((message: any) => {
+        // Listen on the authenticated API's message bus before subscribing.
+        // DerivAPIBasic.subscribe() can stop forwarding after a reconnect;
+        // the shared message bus lets us identify and recover the exact stream.
+        messageSubscription = api.onMessage?.()?.subscribe?.(({ data: message }: any) => {
           if (cancelled || sym !== symbolRef.current) return;
           const data = message?.data ?? message;
+          if (tickSubscriptionIdRef.current && data?.subscription?.id &&
+              String(data.subscription.id) !== String(tickSubscriptionIdRef.current)) return;
           if (data?.subscription?.id) tickSubscriptionIdRef.current = String(data.subscription.id);
           if (data?.error) return;
           if (data?.tick?.quote != null) {
-        setIsConnected(true);
+          setIsConnected(true);
           const p = Number(data.tick.quote);
           if (!isFinite(p)) return;
 
@@ -116,8 +145,16 @@ export function useDigitStats(initialSymbol = 'R_10'): UseDigitStatsReturn {
           setLastTicks(prev => [...prev, p].slice(-50));
           if (!isNaN(d)) setLastDigit(d);
           setDigits(computeDigits(tickHistory.current, pipSize));
+          armWatchdog();
           }
         });
+        const subscriptionResponse = await api.send({ ticks: sym, subscribe: 1 });
+        if (cancelled) return;
+        if (subscriptionResponse?.error) throw new Error(subscriptionResponse.error.message || 'Tick subscription failed');
+        if (subscriptionResponse?.subscription?.id) {
+          tickSubscriptionIdRef.current = String(subscriptionResponse.subscription.id);
+        }
+        armWatchdog();
       } catch (_) {
         if (!cancelled) retryTimer = setTimeout(start, 700);
       }
@@ -126,8 +163,11 @@ export function useDigitStats(initialSymbol = 'R_10'): UseDigitStatsReturn {
     return () => {
       cancelled = true;
       if (retryTimer) clearTimeout(retryTimer);
+      clearWatchdog();
       tickSubscriptionRef.current?.unsubscribe?.();
       tickSubscriptionRef.current = null;
+      messageSubscription?.unsubscribe?.();
+      messageSubscription = null;
       if (tickSubscriptionIdRef.current && api_base.api) {
         (api_base.api as any).send({ forget: tickSubscriptionIdRef.current }).catch(() => {});
         tickSubscriptionIdRef.current = null;

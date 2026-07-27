@@ -193,6 +193,27 @@ const DigitPercentWidget: React.FC = () => {
 
         let cancelled = false;
         let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
+    let messageSubscription: any = null;
+    const clearWatchdog = () => {
+        if (watchdogTimer) {
+            clearTimeout(watchdogTimer);
+            watchdogTimer = null;
+        }
+    };
+    const armWatchdog = () => {
+        clearWatchdog();
+        watchdogTimer = setTimeout(() => {
+            if (cancelled) return;
+            messageSubscription?.unsubscribe?.();
+            messageSubscription = null;
+            if (tickSubscriptionIdRef.current && api_base.api) {
+                (api_base.api as any).send({ forget: tickSubscriptionIdRef.current }).catch(() => {});
+                tickSubscriptionIdRef.current = null;
+            }
+            retryTimer = setTimeout(start, 100);
+        }, 20_000);
+    };
         const start = async () => {
             if (cancelled) return;
             const api = api_base.api as any;
@@ -238,10 +259,14 @@ const DigitPercentWidget: React.FC = () => {
 
                 // Subscribe only after the history request is complete. This avoids
                 // mixing stale ticks from a previous market into the new baseline.
-                const tickStream = api.subscribe({ ticks: symbol, subscribe: 1 });
-                tickSubscriptionRef.current = tickStream?.subscribe?.((message: any) => {
+                // Subscribe through the shared authenticated message bus. This
+                // survives market changes and reconnects more reliably than a
+                // one-shot RxJS subscribe() observer.
+                messageSubscription = api.onMessage?.()?.subscribe?.(({ data: message }: any) => {
                     if (cancelled) return;
                     const tickData = message?.data ?? message;
+                    if (tickSubscriptionIdRef.current && tickData?.subscription?.id &&
+                        String(tickData.subscription.id) !== String(tickSubscriptionIdRef.current)) return;
                     if (tickData?.subscription?.id) {
                         tickSubscriptionIdRef.current = String(tickData.subscription.id);
                     }
@@ -282,8 +307,16 @@ const DigitPercentWidget: React.FC = () => {
                         setCurrentDigit(digit);
                         setCurrentPrice(quote.toFixed(ps));
                         setTicks(prev => [...prev.slice(-(tickCount - 1)), digit]);
+                        armWatchdog();
                     }
                 });
+                const subscriptionResponse = await api.send({ ticks: symbol, subscribe: 1 });
+                if (cancelled) return;
+                if (subscriptionResponse?.error) throw new Error(subscriptionResponse.error.message || 'Tick subscription failed');
+                if (subscriptionResponse?.subscription?.id) {
+                    tickSubscriptionIdRef.current = String(subscriptionResponse.subscription.id);
+                }
+                armWatchdog();
             } catch (err) {
                 if (!cancelled) {
                     console.warn('[DigitWidget] authenticated market data error:', err);
@@ -296,8 +329,11 @@ const DigitPercentWidget: React.FC = () => {
         return () => {
             cancelled = true;
             if (retryTimer) clearTimeout(retryTimer);
+            clearWatchdog();
             tickSubscriptionRef.current?.unsubscribe?.();
             tickSubscriptionRef.current = null;
+            messageSubscription?.unsubscribe?.();
+            messageSubscription = null;
             if (tickSubscriptionIdRef.current && api_base.api) {
                 (api_base.api as any).send({ forget: tickSubscriptionIdRef.current }).catch(() => {});
                 tickSubscriptionIdRef.current = null;
