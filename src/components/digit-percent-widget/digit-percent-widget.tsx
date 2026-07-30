@@ -217,7 +217,7 @@ const DigitPercentWidget: React.FC = () => {
         const start = async () => {
             if (cancelled) return;
             const api = api_base.api as any;
-            if (!api || connectionStatus !== CONNECTION_STATUS.OPENED) {
+            if (!api) {
                 retryTimer = setTimeout(start, 350);
                 return;
             }
@@ -339,7 +339,7 @@ const DigitPercentWidget: React.FC = () => {
                 tickSubscriptionIdRef.current = null;
             }
         };
-    }, [open, symbol, tickCount, connectionStatus]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [open, symbol, tickCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const stats: TDigitStat[] = Array.from({ length: 10 }, (_, d) => {
         const count = ticks.filter(t => t === d).length;

@@ -173,7 +173,8 @@
         border-left:  6px solid transparent;
         border-right: 6px solid transparent;
         border-top:   9px solid #FF1744;  /* tip points DOWN, sits right on circle */
-        transition: left 0.22s ease;
+        transition: left 0.18s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        will-change: left;
         z-index: 10;
         pointer-events: none;
         filter:
@@ -513,22 +514,25 @@
     }
 
     /* ── Right column: full width under the chart ────────────────── */
-    .cw-right {
+    .cw-right,
+    .cw-right-panel {
         width: 100%;
         flex-shrink: 0;
         min-height: 0;
         overflow: visible;
-        padding: 0 8px 12px;
+        border-left: none;
+        border-top: 1px solid #e0e0e0;
+        padding: 6px;
     }
 
-    /* Digit stat circles — compact for narrow screens */
+    /* Digit stat circles — bigger on mobile to match Deriv reference */
     .cdo {
-        &__circle         { width: 28px; height: 28px; font-size: 10px; }
-        &__pct            { font-size: 6.5px; }
+        &__circle         { width: 32px; height: 32px; font-size: 12px; }
+        &__pct            { font-size: 7px; }
         &__price-val      { font-size: 8px; }
-        &__triangle-pointer { border-left-width: 4px; border-right-width: 4px; border-top-width: 7px; }
+        &__triangle-pointer { border-left-width: 5px; border-right-width: 5px; border-top-width: 8px; }
         &__tlabel         { font-size: 6px; }
-        &__triangle-track { height: 7px; }
+        &__triangle-track { height: 8px; }
     }
 
     /* Win/loss flag — compact pennant on mobile */

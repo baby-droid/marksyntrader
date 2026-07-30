@@ -29,6 +29,12 @@
     width: 50%;
     min-width: 210px;
     min-height: 100%;
+
+    @media (max-width: 767px) {
+        width: 100%;
+        min-width: 0;
+        min-height: auto;
+    }
     font-family: 'Inter', 'Poppins', sans-serif;
     font-size: 13px;
     color: #0E0F11;
@@ -383,6 +389,77 @@
     animation: ctp-accu-pulse 1s ease-in-out infinite;
 }
 @keyframes ctp-accu-pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
+
+/* ── Accumulator Take Profit section ───────────────────────────────────────── */
+.ctp__accu-tp-section {
+    padding: 0 10px;
+    margin-bottom: 5px;
+}
+
+.ctp__accu-tp-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+}
+
+.ctp__accu-tp-label {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #0E0F11;
+    cursor: pointer;
+    user-select: none;
+}
+
+.ctp__accu-tp-check {
+    width: 16px;
+    height: 16px;
+    accent-color: #00C853;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.ctp__info-icon {
+    font-size: 14px;
+    color: #9ca3af;
+    cursor: help;
+    flex-shrink: 0;
+    &:hover { color: #6b7280; }
+}
+
+.ctp__accu-tp-ctrl {
+    margin-bottom: 6px;
+}
+
+/* ── Accumulator max payout / ticks info ────────────────────────────────────── */
+.ctp__accu-info {
+    border-top: 1px solid #f0f0f0;
+    padding-top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.ctp__accu-info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+}
+
+.ctp__accu-info-key {
+    color: #6b7280;
+    font-weight: 500;
+}
+
+.ctp__accu-info-val {
+    font-weight: 800;
+    color: #0E0F11;
+    font-variant-numeric: tabular-nums;
+}
 
 /* ── Over / Under buttons ───────────────────────────────────────────────────── */
 .ctp__section--over,

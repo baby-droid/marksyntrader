@@ -105,12 +105,12 @@ export function useDigitStats(initialSymbol = 'R_10'): UseDigitStatsReturn {
     const start = async () => {
       if (cancelled) return;
       const api = api_base.api as any;
-      if (!api || connectionStatus !== CONNECTION_STATUS.OPENED) {
+      if (!api) {
         retryTimer = setTimeout(start, 350);
         return;
       }
       try {
-        const data = await api.send({ ticks_history: sym, count: 500, end: 'latest', style: 'ticks' });
+        const data = await api.send({ ticks_history: sym, count: 1000, end: 'latest', style: 'ticks' });
         if (cancelled || sym !== symbolRef.current) return;
         if (data?.error) throw new Error(data.error.message || 'History request failed');
         if (data.history?.prices) {
@@ -118,6 +118,8 @@ export function useDigitStats(initialSymbol = 'R_10'): UseDigitStatsReturn {
         tickHistory.current = prices.slice(-HISTORY_SIZE);
         setCurrentPrice(prices[prices.length - 1]);
         setLastTicks(prices.slice(-50));
+        // Show digit stats immediately from history — don't wait for first live tick
+        setDigits(computeDigits(prices, pipSizeRef.current));
         }
 
         // Listen on the authenticated API's message bus before subscribing.
@@ -173,11 +175,11 @@ export function useDigitStats(initialSymbol = 'R_10'): UseDigitStatsReturn {
         tickSubscriptionIdRef.current = null;
       }
     };
-  }, [computeDigits, connectionStatus]);
+  }, [computeDigits]);
 
   useEffect(() => {
     return subscribe(symbol);
-  }, [symbol, subscribe, connectionStatus]);
+  }, [symbol, subscribe]);
 
   return { digits, lastDigit, currentPrice, lastTicks, symbol, setSymbol, isConnected };
 }

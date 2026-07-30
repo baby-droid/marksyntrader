@@ -803,8 +803,8 @@ function patchXmlContent(xml: string, market?: string, duration?: number): strin
     }
 }
 
-function getLastDigit(q: number): number {
-    const s = q.toFixed(2).replace('.', '');
+function getLastDigit(q: number, pipSize = 2): number {
+    const s = Number(q).toFixed(pipSize).replace('.', '');
     return parseInt(s[s.length - 1], 10);
 }
 
@@ -1307,7 +1307,8 @@ const BotDetail: React.FC<{
         priceWindowRef.current = [];
         setDigitDisplay([]);
         const unsub = derivTrade.subscribeTicks(market, tick => {
-            const d = tick.digit != null ? tick.digit : getLastDigit(tick.quote);
+            const ps = tick.pip_size ?? 2;
+            const d = tick.digit != null ? tick.digit : getLastDigit(tick.quote, ps);
             digitWindowRef.current = [d, ...digitWindowRef.current].slice(0, 50);
             // Also track raw prices for Rise/Fall momentum detection
             if (tick.quote != null) {

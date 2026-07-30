@@ -81,7 +81,7 @@ interface MarketRowProps {
 const MarketRow: React.FC<MarketRowProps> = ({ symbol, label, collapsed, onToggle, onTradeSelect }) => {
     const { digits, lastDigit, currentPrice, isConnected } = useDigitStats(symbol);
 
-    // Rolling 1000-tick history
+    // Rolling live-tick history (grows as live ticks arrive)
     const [history, setHistory] = useState<number[]>([]);
     const [priceHistory, setPriceHistory] = useState<number[]>([]); // for Rise/Fall
 
@@ -96,14 +96,24 @@ const MarketRow: React.FC<MarketRowProps> = ({ symbol, label, collapsed, onToggl
         if (!isNaN(n)) setPriceHistory(prev => [...prev.slice(-199), n]);
     }, [currentPrice]);
 
-    // Digit stats from history (1000 ticks)
+    // Digit stats — use hook's pre-seeded 1000-tick data until we have enough
+    // live ticks locally. The hook now computes digits immediately on history
+    // load (1000 ticks), so we get accurate data right away without waiting.
     const stats = useMemo(() => {
+        if (history.length < 30 && digits && digits.length === 10) {
+            // Hook already has 1000-tick history — use it directly
+            return Array.from({ length: 10 }, (_, d) => ({
+                digit: d,
+                count: Math.round((digits[d] ?? 0) * 10), // approximate from pct
+                pct: digits[d] ?? 0,
+            }));
+        }
         const total = history.length || 1;
         return Array.from({ length: 10 }, (_, d) => {
             const count = history.filter(h => h === d).length;
             return { digit: d, count, pct: (count / total) * 100 };
         });
-    }, [history]);
+    }, [history, digits]);
 
     const pcts = stats.map(s => s.pct);
     const bgs  = getDigitBg(pcts);

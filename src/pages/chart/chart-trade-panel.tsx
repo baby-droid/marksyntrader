@@ -169,6 +169,14 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
     const [result,    setResult]      = useState<{ ok: boolean; msg: string } | null>(null);
     const [displayCur, setDisplayCur] = useState(getDisplayCurrency());
 
+    // Accumulator-specific extras
+    const [accumTakeProfitEnabled, setAccumTakeProfitEnabled] = useState(false);
+    const [accumTakeProfit,        setAccumTakeProfit]        = useState(100);
+    const [accumTakeProfitRaw,     setAccumTakeProfitRaw]     = useState('100');
+    const [accumMaxPayout, setAccumMaxPayout] = useState<number | null>(null);
+    const [accumMaxTicks,  setAccumMaxTicks]  = useState<number | null>(null);
+    const accumProposalTimerRef = useRef<any>(null);
+
     const [overPayout,  setOverPayout]  = useState<number | null>(null);
     const [underPayout, setUnderPayout] = useState<number | null>(null);
     const [overPct,     setOverPct]     = useState<number | null>(null);
@@ -214,6 +222,30 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
 
     useEffect(() => { fetchPayouts(); }, [fetchPayouts]);
 
+    /* ── Accumulator proposal — fetch max_payout, max_ticks ─────────────── */
+    useEffect(() => {
+        if (!group.isAccumulator || !symbol) return;
+        if (accumProposalTimerRef.current) clearTimeout(accumProposalTimerRef.current);
+        accumProposalTimerRef.current = setTimeout(async () => {
+            const api = (api_base as any).api;
+            if (!api) return;
+            try {
+                const pr = await api.send({
+                    proposal: 1, amount: stake, basis: 'stake',
+                    contract_type: 'ACCU',
+                    currency: getDisplayCurrency() || 'USD',
+                    growth_rate: growthRate,
+                    underlying_symbol: symbol,
+                });
+                if (pr?.proposal) {
+                    setAccumMaxPayout(pr.proposal.max_payout != null ? Number(pr.proposal.max_payout) : null);
+                    setAccumMaxTicks(pr.proposal.max_ticks != null ? Number(pr.proposal.max_ticks) : null);
+                }
+            } catch { /* non-fatal */ }
+        }, 600);
+        return () => { if (accumProposalTimerRef.current) clearTimeout(accumProposalTimerRef.current); };
+    }, [group.isAccumulator, symbol, growthRate, stake]);
+
     /* ── Accumulator buy ─────────────────────────────────────────────────── */
     const buyAccumulator = useCallback(async () => {
         if (loading) return;
@@ -222,13 +254,17 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
         setLoading('accu');
         setResult(null);
         try {
-            const pr = await api.send({
+            const proposalReq: any = {
                 proposal: 1, amount: stake, basis: 'stake',
                 contract_type: 'ACCU',
                 currency: getDisplayCurrency() || 'USD',
                 growth_rate: growthRate,
                 underlying_symbol: symbol,
-            });
+            };
+            if (accumTakeProfitEnabled && accumTakeProfit > 0) {
+                proposalReq.limit_order = { take_profit: accumTakeProfit };
+            }
+            const pr = await api.send(proposalReq);
             if (pr?.error) throw new Error(pr.error.message);
             const proposalId = pr?.proposal?.id;
             const askPrice   = Number(pr?.proposal?.ask_price ?? stake);
@@ -244,7 +280,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             setLoading(null);
             setTimeout(() => setResult(null), 6000);
         }
-    }, [loading, growthRate, stake, symbol]);
+    }, [loading, growthRate, stake, symbol, accumTakeProfitEnabled, accumTakeProfit]);
 
     const sellAccumulator = useCallback(async () => {
         if (!accumContractId || loading) return;
@@ -461,6 +497,76 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                         <div className='ctp__accu-running'>
                             <span className='ctp__accu-dot' />
                             Accumulator #{accumContractId} running
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* ── Accumulator Take Profit + info row ───────────────── */}
+            {group.isAccumulator && (
+                <div className='ctp__section ctp__accu-tp-section'>
+                    <div className='ctp__accu-tp-row'>
+                        <label className='ctp__accu-tp-label'>
+                            <input
+                                type='checkbox'
+                                className='ctp__accu-tp-check'
+                                checked={accumTakeProfitEnabled}
+                                onChange={e => setAccumTakeProfitEnabled(e.target.checked)}
+                                disabled={!!accumContractId}
+                            />
+                            <span>Take profit</span>
+                        </label>
+                        <span className='ctp__info-icon' title='Automatically sell when your profit reaches this amount'>ⓘ</span>
+                    </div>
+                    {accumTakeProfitEnabled && !accumContractId && (
+                        <div className='ctp__stake-ctrl ctp__accu-tp-ctrl'>
+                            <button className='ctp__stake-adj' onClick={() => {
+                                const next = Math.max(1, parseFloat((accumTakeProfit - 10).toFixed(2)));
+                                setAccumTakeProfit(next); setAccumTakeProfitRaw(String(next));
+                            }}>−</button>
+                            <div className='ctp__stake-mid'>
+                                <input
+                                    className='ctp__stake-inp'
+                                    type='text'
+                                    inputMode='decimal'
+                                    value={accumTakeProfitRaw}
+                                    onFocus={e => e.target.select()}
+                                    onChange={e => {
+                                        const raw = e.target.value;
+                                        if (raw === '' || /^\d*\.?\d*$/.test(raw)) {
+                                            setAccumTakeProfitRaw(raw);
+                                            const v = parseFloat(raw);
+                                            if (!isNaN(v) && v > 0) setAccumTakeProfit(v);
+                                        }
+                                    }}
+                                    onBlur={() => {
+                                        const v = parseFloat(accumTakeProfitRaw);
+                                        const c = isNaN(v) || v < 1 ? 1 : parseFloat(v.toFixed(2));
+                                        setAccumTakeProfit(c); setAccumTakeProfitRaw(String(c));
+                                    }}
+                                />
+                                <span className='ctp__stake-cur'>{displayCur}</span>
+                            </div>
+                            <button className='ctp__stake-adj' onClick={() => {
+                                const next = parseFloat((accumTakeProfit + 10).toFixed(2));
+                                setAccumTakeProfit(next); setAccumTakeProfitRaw(String(next));
+                            }}>+</button>
+                        </div>
+                    )}
+                    {(accumMaxPayout != null || accumMaxTicks != null) && (
+                        <div className='ctp__accu-info'>
+                            {accumMaxPayout != null && (
+                                <div className='ctp__accu-info-row'>
+                                    <span className='ctp__accu-info-key'>Max. payout</span>
+                                    <span className='ctp__accu-info-val'>{fromUsd(accumMaxPayout).toFixed(2)} {displayCur}</span>
+                                </div>
+                            )}
+                            {accumMaxTicks != null && (
+                                <div className='ctp__accu-info-row'>
+                                    <span className='ctp__accu-info-key'>Max. ticks</span>
+                                    <span className='ctp__accu-info-val'>{accumMaxTicks} ticks</span>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
