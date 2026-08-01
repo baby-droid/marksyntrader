@@ -153,40 +153,46 @@
     padding: 0 4px;
 }
 
-/* ── Triangle pointer row — always-present slot above each circle row ─────── */
+/* ── Triangle pointer rows ────────────────────────────────────────────────── */
 .mcv-digits__pointer-row {
     position: relative;
     width: 100%;
-    height: 16px;      /* enough room for the ▼ tip */
+    height: 16px;
     overflow: visible;
     flex-shrink: 0;
 
-    &--top    { margin: 6px 0 0; }   /* space above top row */
-    &--bottom { /* gap between rows handles spacing */ }
+    /* sits just above the top row */
+    &--top    { margin: 6px 0 0; }
+    /* sits just below the bottom row */
+    &--bottom { margin: 0; }
 }
 
-/* Persistent gap between the two digit rows — the bottom-digit triangle lives here */
-.mcv-digits__gap {
-    position: relative;
-    width: 100%;
-    height: 20px;
-    flex-shrink: 0;
-    overflow: visible;
-}
-
+/* Base triangle — shared transition */
 .mcv-digits__triangle {
     position: absolute;
-    bottom: 0;             /* tip of ▼ sits at the bottom edge, touching the circle below */
     transform: translateX(-50%);
     width: 0;
     height: 0;
     border-left:  9px solid transparent;
     border-right: 9px solid transparent;
-    border-top:   13px solid #e74c3c;  /* ▼ pointing DOWN toward the circle */
-    border-bottom: none;
     transition: left 0.18s cubic-bezier(0.25, 0.46, 0.45, 0.94);
     will-change: left;
-    filter: drop-shadow(0 2px 4px rgba(231,76,60,0.5));
+
+    /* ▼ pointing DOWN — for digits 0-4, appears above top row */
+    &--down {
+        bottom: 0;                         /* tip at bottom → points at circles below */
+        border-top:    13px solid #e74c3c;
+        border-bottom: none;
+        filter: drop-shadow(0 2px 4px rgba(231,76,60,0.5));
+    }
+
+    /* ▲ pointing UP — for digits 5-9, appears below bottom row */
+    &--up {
+        top: 0;                            /* tip at top → points at circles above */
+        border-bottom: 13px solid #e74c3c;
+        border-top:    none;
+        filter: drop-shadow(0 -2px 4px rgba(231,76,60,0.5));
+    }
 }
 
 /* ── Individual digit circle ────────────────────────────────────────────── */
@@ -207,10 +213,11 @@
 }
 
 .mcv-circle__pct {
-    font-size: 9px;
-    font-weight: 700;
-    color: #374151;
-    line-height: 1;
+    font-size: 12px;
+    font-weight: 900;
+    color: #000;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
 
     &--barrier { color: #0e3348; font-weight: 900; }
 }

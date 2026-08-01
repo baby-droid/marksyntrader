@@ -577,11 +577,11 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
 
             {/* ── Digit circles ─────────────────────────────────────────── */}
             <div className='mcv-digits'>
-                {/* Triangle ABOVE top row — ▼ pointing down at digit 0-4 */}
+                {/* Triangle ABOVE top row — ▼ pointing DOWN at digit 0-4 */}
                 <div className='mcv-digits__pointer-row mcv-digits__pointer-row--top'>
                     {currentDigit !== null && triangleRow === 'top' && (
                         <div
-                            className='mcv-digits__triangle'
+                            className='mcv-digits__triangle mcv-digits__triangle--down'
                             style={{ left: triangleLeft }}
                         />
                     )}
@@ -590,18 +590,18 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                 {/* Top row (0-4) */}
                 {renderRow(ROW_TOP, false)}
 
-                {/* Persistent gap between rows — triangle sits here for digits 5-9 */}
-                <div className='mcv-digits__gap'>
+                {/* Bottom row (5-9) */}
+                {renderRow(ROW_BOTTOM, true)}
+
+                {/* Triangle BELOW bottom row — ▲ pointing UP at digit 5-9 */}
+                <div className='mcv-digits__pointer-row mcv-digits__pointer-row--bottom'>
                     {currentDigit !== null && triangleRow === 'bottom' && (
                         <div
-                            className='mcv-digits__triangle'
+                            className='mcv-digits__triangle mcv-digits__triangle--up'
                             style={{ left: triangleLeft }}
                         />
                     )}
                 </div>
-
-                {/* Bottom row (5-9) */}
-                {renderRow(ROW_BOTTOM, true)}
             </div>
 
             {/* ── Market navigation arrows ───────────────────────────────── */}
