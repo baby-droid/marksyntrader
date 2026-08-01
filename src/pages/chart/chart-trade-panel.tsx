@@ -330,13 +330,11 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
         }
     }, [accumContractId, loading, stake]);
 
-    /* ── Market type helpers ──────────────────────────────────────────────── */
-    // 1s indices (1HZ*) and Jump indices (JD*) emit one extra "feed" tick
-    // immediately after contract open — it must be skipped so the first genuine
-    // determination tick is labelled T1.
-    // Plain Volatility (R_*) and Bear/Bull do NOT exhibit this; their first
-    // post-entry tick is already T1.
-    const is1sOrJumpMarket = /^1HZ/i.test(symbol) || /^JD/i.test(symbol);
+    /* ── Market type (informational) ─────────────────────────────────────── */
+    // Entry-tick stripping is now uniform: epoch > entry_tick_time removes the
+    // spot-at-purchase tick for every market type. No per-market slice needed.
+    const is1sMarket   = /^1HZ/i.test(symbol);
+    const isJumpMarket = /^JD/i.test(symbol);
 
     /* ── Buy ─────────────────────────────────────────────────────────────── */
     const buy = useCallback(async (side: 'over' | 'under') => {
@@ -443,19 +441,15 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
 
                         if (Array.isArray(poc.tick_stream) && poc.tick_stream.length > 0) {
                             // ── Entry-tick stripping ──────────────────────────────────────
-                            // Strip ticks at or before entry_tick_time (the "spot at
-                            // purchase" that Deriv sometimes includes in tick_stream[0]).
-                            // For 1s (1HZ*) and Jump (JD*) markets Deriv emits one extra
-                            // "feed" tick immediately after entry — skip it so T1 labels
-                            // the first genuine determination tick.
+                            // Deriv includes the "spot at purchase" tick in tick_stream[0]
+                            // with epoch === entry_tick_time for all market types (plain
+                            // Volatility, 1s, Bear/Bull, Jump, Boom/Crash/Step/RB).
+                            // Filter it out so T1 always labels the first genuine
+                            // determination tick. One filter = one skip for every market.
                             const entryTime: number = poc.entry_tick_time ?? 0;
-                            let postEntryStream = entryTime
+                            const postEntryStream = entryTime
                                 ? (poc.tick_stream as any[]).filter((t: any) => t.epoch > entryTime)
                                 : [...(poc.tick_stream as any[])];
-
-                            if (is1sOrJumpMarket && postEntryStream.length > 0) {
-                                postEntryStream = postEntryStream.slice(1);
-                            }
 
                             if (postEntryStream.length > 0) {
                                 window.dispatchEvent(new CustomEvent('chart:trade-tick', {
@@ -501,7 +495,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             setLoading(null);
             setTimeout(() => setResult(null), 4000);
         }
-    }, [loading, group, barrier, ticks, stake, symbol, is1sOrJumpMarket, warmProposalCache]);
+    }, [loading, group, barrier, ticks, stake, symbol, warmProposalCache]);
 
     /* ── Label helpers ───────────────────────────────────────────────────── */
     const overLabel  = group.id === 'over_under' ? 'Over'   : group.id === 'even_odd' ? 'Even'  : group.id === 'asian' ? 'Asian Up'   : group.id === 'touch' ? 'Touch'    : group.id === 'reset' ? 'Reset ↑' : group.id === 'highlow' ? 'High Tick'  : group.id === 'runhighlow' ? 'Run High' : group.id === 'match_differ' ? 'Matches' : 'Rise';

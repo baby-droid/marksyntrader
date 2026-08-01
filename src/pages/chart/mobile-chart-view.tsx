@@ -45,11 +45,12 @@ interface DigitCircleProps {
     isWin: boolean;
     isLoss: boolean;
     tickLabels: string[];
+    labelBelow?: boolean;  // true for bottom row (5-9): label appears below circle
     onClick: () => void;
 }
 
 const DigitCircle: React.FC<DigitCircleProps> = ({
-    digit, pct, rank, isBarrier, isCurrent, isWin, isLoss, tickLabels, onClick,
+    digit, pct, rank, isBarrier, isCurrent, isWin, isLoss, tickLabels, labelBelow = false, onClick,
 }) => {
     const SIZE   = 76;
     const CX     = SIZE / 2;
@@ -70,13 +71,20 @@ const DigitCircle: React.FC<DigitCircleProps> = ({
     const hasT    = tickLabels.length > 0;
     const isFinal = tickLabels.some(l => l.includes('★'));
 
+    const labelEl = hasT ? (
+        <div className={[
+            'mcv-circle__tlabel',
+            isFinal   ? 'mcv-circle__tlabel--final' : '',
+            labelBelow ? 'mcv-circle__tlabel--below' : '',
+        ].filter(Boolean).join(' ')}>
+            {tickLabels.map(l => l.replace('★', '')).join(' ')}
+        </div>
+    ) : null;
+
     return (
         <div className='mcv-circle' onClick={onClick}>
-            {hasT && (
-                <div className={`mcv-circle__tlabel${isFinal ? ' mcv-circle__tlabel--final' : ''}`}>
-                    {tickLabels.map(l => l.replace('★', '')).join(' ')}
-                </div>
-            )}
+            {/* Label ABOVE for top row (0–4), BELOW for bottom row (5–9) */}
+            {!labelBelow && labelEl}
             <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
                 {/* Solid fill circle */}
                 <circle cx={CX} cy={CX} r={R} fill={fillColor} stroke={ringStroke} strokeWidth={SW} />
@@ -93,6 +101,7 @@ const DigitCircle: React.FC<DigitCircleProps> = ({
             <div className={`mcv-circle__pct${isBarrier ? ' mcv-circle__pct--barrier' : ''}`}>
                 {pct.toFixed(1)}%
             </div>
+            {labelBelow && labelEl}
         </div>
     );
 };
@@ -378,13 +387,13 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
         return () => { if (payoutTimerRef.current) clearTimeout(payoutTimerRef.current); };
     }, [warmProposalCache]);
 
-    /* ── Market type helpers ──────────────────────────────────────────────── */
-    // 1s indices (1HZ*) and Jump indices (JD*) emit an extra tick right at
-    // contract open that acts as the "spot at entry" — it must be skipped so
-    // that the first genuine determination tick is labelled T1.
-    // Plain Volatility (R_*) and Bear/Bull markets do NOT exhibit this — their
-    // first post-entry tick is already T1.
-    const is1sOrJumpMarket = /^1HZ/i.test(symbol) || /^JD/i.test(symbol);
+    /* ── Market type (informational) ─────────────────────────────────────── */
+    // Deriv's entry-tick stripping (epoch > entry_tick_time) is uniform across
+    // all market types. The previous per-market .slice(1) caused a double-skip
+    // for 1s/Jump markets and has been removed. All markets use one filter.
+    // Keeping this constant for potential future market-specific UI (e.g. labels).
+    const is1sMarket   = /^1HZ/i.test(symbol);
+    const isJumpMarket = /^JD/i.test(symbol);
 
     /* ── Buy ──────────────────────────────────────────────────────────────── */
     const buy = useCallback(async (side: 'over' | 'under') => {
@@ -491,20 +500,16 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                         if (!pocSubId && res.subscription?.id) pocSubId = res.subscription.id;
                         if (Array.isArray(poc.tick_stream) && poc.tick_stream.length > 0) {
                             // ── Entry-tick stripping ──────────────────────────────────────
-                            // Strip any tick at or before entry_tick_time — for all markets
-                            // this removes the "spot at purchase" tick that Deriv sometimes
-                            // includes as tick_stream[0].
-                            // For 1s (1HZ*) and Jump (JD*) markets Deriv emits one additional
-                            // "first feed" tick immediately after entry that is NOT a
-                            // determination tick. Skip it so T1 labels the first real tick.
+                            // Deriv includes the "spot at purchase" tick in tick_stream[0]
+                            // with epoch === entry_tick_time for all market types (plain
+                            // Volatility, 1s, Bear/Bull, Jump, Boom/Crash/Step/RB).
+                            // Filter it out so T1 always labels the first genuine
+                            // determination tick, regardless of market type.
+                            // One filter = one skip for every market — no extra slice.
                             const entryTime: number = poc.entry_tick_time ?? 0;
-                            let postEntryStream = entryTime
+                            const postEntryStream = entryTime
                                 ? (poc.tick_stream as any[]).filter((t: any) => t.epoch > entryTime)
                                 : [...(poc.tick_stream as any[])];
-
-                            if (is1sOrJumpMarket && postEntryStream.length > 0) {
-                                postEntryStream = postEntryStream.slice(1);
-                            }
 
                             if (postEntryStream.length > 0) {
                                 window.dispatchEvent(new CustomEvent('chart:trade-tick', {
@@ -543,7 +548,7 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
             setLoading(null);
             setTimeout(() => setResult(null), 4000);
         }
-    }, [loading, group, barrier, ticks, stake, symbol, is1sOrJumpMarket, warmProposalCache]);
+    }, [loading, group, barrier, ticks, stake, symbol, warmProposalCache]);
 
     /* ── Derived state ────────────────────────────────────────────────────── */
     const OVER_LABELS: Record<string, string>  = { over_under: 'Over', even_odd: 'Even', match_differ: 'Matches', asian: 'Asian Up', touch: 'Touch', run_high_low: 'Run High', reset: 'Reset Call', ends_between: 'Ends In', stays_between: 'Stays Between' };
@@ -610,6 +615,7 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                         isWin={isWin}
                         isLoss={isLoss}
                         tickLabels={tLabels}
+                        labelBelow={isBottom}
                         onClick={() => onBarrierChange(d)}
                     />
                 );
