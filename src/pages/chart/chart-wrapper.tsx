@@ -466,21 +466,21 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                         </div>
                     ))}
 
-                    {/* Win/Loss popup notifications over chart */}
+                    {/* Win/Loss full-width bar — centred vertically on the SmartChart */}
                     {tradeFlags.map((flag, i) => (
                         <div
                             key={flag.id}
                             className={`chart-trade-flag chart-trade-flag--${flag.won ? 'win' : 'loss'}`}
-                            style={{ top: `calc(30% + ${i * 52}px)` }}
+                            style={{ top: `calc(50% + ${i * 48}px - ${(tradeFlags.length - 1) * 24}px)` }}
                         >
-                            <div className='chart-trade-flag__banner'>
-                                <span className='chart-trade-flag__emoji'>{flag.won ? '🎉' : '💔'}</span>
-                                <span className='chart-trade-flag__amount'>
-                                    {flag.won
-                                        ? `Profit +${Math.abs(flag.profit).toFixed(2)}`
-                                        : `Loss −${Math.abs(flag.profit).toFixed(2)}`}
-                                </span>
-                            </div>
+                            <span className='chart-trade-flag__label'>
+                                {flag.won ? 'Profit' : 'Loss'}
+                            </span>
+                            <span className='chart-trade-flag__amount'>
+                                {flag.won
+                                    ? `+${Math.abs(flag.profit).toFixed(2)}`
+                                    : `−${Math.abs(flag.profit).toFixed(2)}`}
+                            </span>
                         </div>
                     ))}
                 </div>
