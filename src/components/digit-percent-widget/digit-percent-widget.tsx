@@ -117,6 +117,13 @@ const DigitPercentWidget: React.FC = () => {
     const [darkMode, setDarkMode] = useState(() => {
         try { return localStorage.getItem('digit_widget_dark') === '1'; } catch { return false; }
     });
+    // AI analyser tick count — adjustable 5–100, default 50
+    const [aiTickCount, setAiTickCount] = useState(() => {
+        try { return parseInt(localStorage.getItem('digit_widget_ai_ticks') || '50', 10) || 50; } catch { return 50; }
+    });
+    const [aiTickInput, setAiTickInput] = useState(() => {
+        try { return localStorage.getItem('digit_widget_ai_ticks') || '50'; } catch { return '50'; }
+    });
     const tickSubscriptionRef = useRef<any>(null);
     const tickSubscriptionIdRef = useRef<string | null>(null);
     // Resolve current market first so pipSizeRef can use it for its initial value
@@ -630,33 +637,76 @@ const DigitPercentWidget: React.FC = () => {
 
                     {/* ── AI Contract Type Analyser ─────────────────────── */}
                     {ticks.length >= 20 && (() => {
-                        const last50 = ticks.slice(-50);
-                        const n = last50.length;
-                        const evenCount  = last50.filter(d => d % 2 === 0).length;
-                        const oddCount   = n - evenCount;
-                        const evenPct    = (evenCount / n * 100);
-                        const oddPct     = (oddCount  / n * 100);
-                        const freq       = Array.from({ length: 10 }, (_, i) => last50.filter(d => d === i).length);
-                        const minDigit   = freq.indexOf(Math.min(...freq));
-                        const maxDigit   = freq.indexOf(Math.max(...freq));
-                        const overCount  = last50.filter(d => d > threshold).length;
-                        const underCount = last50.filter(d => d < threshold).length;
+                        const aiTicks   = Math.min(Math.max(aiTickCount, 5), Math.min(100, ticks.length));
+                        const lastN     = ticks.slice(-aiTicks);
+                        const n         = lastN.length;
+                        const evenCount = lastN.filter(d => d % 2 === 0).length;
+                        const oddCount  = n - evenCount;
+                        const evenPct   = (evenCount / n * 100);
+                        const oddPct    = (oddCount  / n * 100);
+                        const freq      = Array.from({ length: 10 }, (_, i) => lastN.filter(d => d === i).length);
+                        const minDigit  = freq.indexOf(Math.min(...freq));
+                        const maxDigit  = freq.indexOf(Math.max(...freq));
+                        const overCount  = lastN.filter(d => d > threshold).length;
+                        const underCount = lastN.filter(d => d < threshold).length;
                         const overPct    = (overCount  / n * 100);
                         const underPct   = (underCount / n * 100);
+
+                        // Rise / Fall — based on recent price direction streaks
+                        const recentPrices = rawHistoryRef.current.slice(-aiTicks);
+                        let riseCount = 0, fallCount = 0;
+                        for (let i = 1; i < recentPrices.length; i++) {
+                            if (recentPrices[i] > recentPrices[i - 1]) riseCount++;
+                            else if (recentPrices[i] < recentPrices[i - 1]) fallCount++;
+                        }
+                        const priceMoves = riseCount + fallCount || 1;
+                        const risePct  = riseCount / priceMoves * 100;
+                        const fallPct  = fallCount / priceMoves * 100;
+
+                        // High Tick / Low Tick — last tick vs window
+                        const windowHigh = recentPrices.length > 0 ? Math.max(...recentPrices) : 0;
+                        const windowLow  = recentPrices.length > 0 ? Math.min(...recentPrices) : 0;
+                        const lastPrice  = recentPrices[recentPrices.length - 1] ?? 0;
+                        const priceRange = windowHigh - windowLow || 1;
+                        const highTickScore = ((lastPrice - windowLow) / priceRange) * 100;
+                        const lowTickScore  = ((windowHigh - lastPrice) / priceRange) * 100;
+
+                        // Only Ups / Only Downs — streak detection
+                        let upsStreak = 0, downsStreak = 0, curUpRun = 0, curDownRun = 0;
+                        for (let i = 1; i < recentPrices.length; i++) {
+                            if (recentPrices[i] > recentPrices[i - 1]) { curUpRun++; curDownRun = 0; }
+                            else if (recentPrices[i] < recentPrices[i - 1]) { curDownRun++; curUpRun = 0; }
+                            upsStreak   = Math.max(upsStreak, curUpRun);
+                            downsStreak = Math.max(downsStreak, curDownRun);
+                        }
+                        const onlyUpsScore   = Math.min(100, (upsStreak / (n * 0.3)) * 100);
+                        const onlyDownsScore = Math.min(100, (downsStreak / (n * 0.3)) * 100);
 
                         // Score each contract type
                         const scores: { contract: string; score: number; reason: string; tag: string }[] = [
                             {
+                                contract: '↑ Rise (Call)',
+                                score: risePct,
+                                reason: `${riseCount}/${priceMoves} price moves upward`,
+                                tag: risePct > 55 ? '✅ BULLISH' : risePct < 40 ? '❌ BEARISH' : '⚠ NEUTRAL',
+                            },
+                            {
+                                contract: '↓ Fall (Put)',
+                                score: fallPct,
+                                reason: `${fallCount}/${priceMoves} price moves downward`,
+                                tag: fallPct > 55 ? '✅ BEARISH' : fallPct < 40 ? '❌ BULLISH' : '⚠ NEUTRAL',
+                            },
+                            {
                                 contract: 'Even',
                                 score: evenPct,
-                                reason: `Even dominates at ${evenPct.toFixed(0)}%`,
-                                tag: evenPct > oddPct ? '✅ BULLISH' : '⚠ WEAK',
+                                reason: `${evenCount}/${n} digits even`,
+                                tag: evenPct > oddPct ? '✅ DOMINANT' : '⚠ WEAK',
                             },
                             {
                                 contract: 'Odd',
                                 score: oddPct,
-                                reason: `Odd dominates at ${oddPct.toFixed(0)}%`,
-                                tag: oddPct > evenPct ? '✅ BULLISH' : '⚠ WEAK',
+                                reason: `${oddCount}/${n} digits odd`,
+                                tag: oddPct > evenPct ? '✅ DOMINANT' : '⚠ WEAK',
                             },
                             {
                                 contract: `Over ${threshold}`,
@@ -673,14 +723,38 @@ const DigitPercentWidget: React.FC = () => {
                             {
                                 contract: `Differs (≠${minDigit})`,
                                 score: (1 - freq[minDigit] / n) * 100,
-                                reason: `Digit ${minDigit} appears least (${freq[minDigit]} times)`,
+                                reason: `Digit ${minDigit} appears least (${freq[minDigit]}×)`,
                                 tag: freq[minDigit] < n * 0.07 ? '✅ RARE' : '⚠ COMMON',
                             },
                             {
                                 contract: `Matches (=${maxDigit})`,
                                 score: freq[maxDigit] / n * 100,
-                                reason: `Digit ${maxDigit} appears most (${freq[maxDigit]} times)`,
+                                reason: `Digit ${maxDigit} appears most (${freq[maxDigit]}×)`,
                                 tag: freq[maxDigit] > n * 0.14 ? '✅ HOT' : '⚠ NORMAL',
+                            },
+                            {
+                                contract: '🔺 High Tick',
+                                score: highTickScore,
+                                reason: `Last price near window high (${(highTickScore).toFixed(0)}%)`,
+                                tag: highTickScore > 70 ? '✅ NEAR HIGH' : highTickScore < 30 ? '❌ FAR' : '⚠ MID',
+                            },
+                            {
+                                contract: '🔻 Low Tick',
+                                score: lowTickScore,
+                                reason: `Last price near window low (${(lowTickScore).toFixed(0)}%)`,
+                                tag: lowTickScore > 70 ? '✅ NEAR LOW' : lowTickScore < 30 ? '❌ FAR' : '⚠ MID',
+                            },
+                            {
+                                contract: '📈 Only Ups',
+                                score: onlyUpsScore,
+                                reason: `Max up-streak: ${upsStreak} consecutive rises`,
+                                tag: upsStreak >= 4 ? '✅ STRONG' : upsStreak >= 2 ? '⚠ POSSIBLE' : '❌ WEAK',
+                            },
+                            {
+                                contract: '📉 Only Downs',
+                                score: onlyDownsScore,
+                                reason: `Max down-streak: ${downsStreak} consecutive falls`,
+                                tag: downsStreak >= 4 ? '✅ STRONG' : downsStreak >= 2 ? '⚠ POSSIBLE' : '❌ WEAK',
                             },
                         ];
                         scores.sort((a, b) => b.score - a.score);
@@ -696,12 +770,40 @@ const DigitPercentWidget: React.FC = () => {
                             }}>
                                 <div style={{
                                     display: 'flex', alignItems: 'center', gap: '6px',
-                                    marginBottom: '10px', fontSize: '12px', fontWeight: 700,
+                                    marginBottom: '8px', fontSize: '12px', fontWeight: 700,
                                     color: darkMode ? '#a78bfa' : '#7b3fe4',
                                 }}>
                                     🤖 AI Contract Type Analyser
-                                    <span style={{ marginLeft: 'auto', fontSize: '10px', color: darkMode ? '#64748b' : '#9ca3af' }}>
-                                        Last {n} ticks • {currentMarket.label}
+                                    {/* Adjustable AI tick count */}
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: 'auto' }}>
+                                        <span style={{ fontSize: '10px', color: darkMode ? '#64748b' : '#9ca3af', fontWeight: 400 }}>Ticks:</span>
+                                        <input
+                                            type='number'
+                                            min={5} max={100}
+                                            value={aiTickInput}
+                                            onChange={e => setAiTickInput(e.target.value)}
+                                            onBlur={() => {
+                                                const v = Math.min(100, Math.max(5, parseInt(aiTickInput, 10) || 50));
+                                                setAiTickCount(v);
+                                                setAiTickInput(String(v));
+                                                try { localStorage.setItem('digit_widget_ai_ticks', String(v)); } catch {}
+                                            }}
+                                            onKeyDown={e => {
+                                                if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                                            }}
+                                            style={{
+                                                width: '44px', padding: '1px 4px',
+                                                fontSize: '11px', textAlign: 'center',
+                                                background: darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+                                                border: `1px solid ${darkMode ? '#334155' : '#d1d5db'}`,
+                                                borderRadius: '4px',
+                                                color: darkMode ? '#e2e8f0' : '#374151',
+                                                outline: 'none',
+                                            }}
+                                        />
+                                    </span>
+                                    <span style={{ fontSize: '10px', color: darkMode ? '#64748b' : '#9ca3af', fontWeight: 400, marginLeft: '4px' }}>
+                                        {n} used • {currentMarket.label}
                                     </span>
                                 </div>
                                 {/* Best recommendation */}

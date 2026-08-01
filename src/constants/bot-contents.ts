@@ -27,6 +27,7 @@ export const DBOT_TABS: TDashboardTabIndex = Object.freeze({
     BULK_TRADE: 12,
     ANALYSIS: 13,
     TUTORIAL: 14,
+    TRADING_SOFTWARE: 15,
     // BOT_BUILDER is an alias for the Bot Builder tab (AHMED_LEARNING). It must stay
     // equal to AHMED_LEARNING's index — the Tabs component renders nothing when
     // active_tab doesn't match any child index, so a standalone sentinel value here
@@ -52,6 +53,7 @@ export const TAB_IDS = [
     'id-report',
     'id-bulk-trade',
     'id-tutorials',
+    'id-trading-software',
 ];
 
 export const DEBOUNCE_INTERVAL_TIME = 500;

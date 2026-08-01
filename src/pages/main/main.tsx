@@ -50,7 +50,8 @@ import './main.scss';
 const ChartWrapper   = lazy(() => import('../chart/chart-wrapper'));
 const Tutorial       = lazy(() => import('../tutorials'));
 const FreeBots       = lazy(() => import('../free-bots'));
-const DCircles       = lazy(() => import('../d-circles'));
+const DCircles       = lazy(() => import('../dcircles'));
+const TradingSoftware = lazy(() => import('../trading-software'));
 const SpeedLab       = lazy(() => import('../speed-lab'));
 const ProHedge       = lazy(() => import('../hedge-trading'));
 const ManualTrader   = lazy(() => import('../manual-trader'));
@@ -108,6 +109,7 @@ const AppWrapper = observer(() => {
         'bulk_trade',       // 12
         'analysis',         // 13
         'tutorial',         // 14
+        'trading_software', // 15
     ];
 
     const { isDesktop } = useDevice();
@@ -447,6 +449,19 @@ const AppWrapper = observer(() => {
                                 </div>
                             </div>
 
+                            {/* 14 — Trading Software */}
+                            <div
+                                label={mkIcon(
+                                    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='2' y='3' width='20' height='14' rx='2'/><line x1='8' y1='21' x2='16' y2='21'/><line x1='12' y1='17' x2='12' y2='21'/></svg>,
+                                    'Trading Software'
+                                )}
+                                id='id-trading-software'
+                            >
+                                <Suspense fallback={tabLoader('Loading Trading Software...')}>
+                                    <TradingSoftware />
+                                </Suspense>
+                            </div>
+
                         </Tabs>
                         {!isDesktop && right_tab_shadow && <span className='tabs-shadow tabs-shadow--right' />}
                     </div>
@@ -454,7 +469,7 @@ const AppWrapper = observer(() => {
             </div>
 
             {/* Floating panels — hide bot runner on chart & manual-trader tabs */}
-            {active_tab !== 7 && active_tab !== 8 && <FloatingRunButton />}
+            {active_tab !== 7 && active_tab !== 8 && active_tab !== 15 && <FloatingRunButton />}
             <WhatsAppFloat />
 
             <DesktopWrapper>

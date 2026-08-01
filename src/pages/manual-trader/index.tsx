@@ -1167,7 +1167,8 @@ const ManualTrader: React.FC = () => {
                         <div className='mtp-section'>
                             <div className='mtp-section__label'>Ticks</div>
                             {/* 1-10 small circle selectors */}
-                            <div className='mtp-tick-circles'>
+                            {/* Desktop: circle dot selectors */}
+                            <div className='mtp-tick-circles mtp-tick-circles--desktop'>
                                 {[1,2,3,4,5,6,7,8,9,10].map(n => (
                                     <button
                                         key={n}
@@ -1178,6 +1179,16 @@ const ManualTrader: React.FC = () => {
                                         {n}
                                     </button>
                                 ))}
+                            </div>
+                            {/* Mobile: compact number input */}
+                            <div className='mtp-tick-circles--mobile'>
+                                <NumberField
+                                    className='mtp-dur-inp'
+                                    min={1}
+                                    max={10}
+                                    value={duration}
+                                    onCommit={n => setDuration(n)}
+                                />
                             </div>
                             <div className='mtp-dur-label'>{duration} Tick{duration > 1 ? 's' : ''}</div>
                         </div>

@@ -654,6 +654,20 @@
   flex-wrap: wrap;
   margin-bottom: 0.25rem;
 }
+/* Desktop: show circles; Mobile: hide circles, show number input */
+.mtp-tick-circles--desktop {
+  display: flex;
+  align-items: center;
+  gap: 0.22rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.25rem;
+  @media (max-width: 768px) { display: none; }
+}
+.mtp-tick-circles--mobile {
+  display: none;
+  margin-bottom: 0.25rem;
+  @media (max-width: 768px) { display: flex; }
+}
 .mtp-tick-dot {
   width: 28px;
   height: 28px;

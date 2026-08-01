@@ -186,69 +186,32 @@ const SpeedLab = observer(() => {
             ...(withBarrier ? { barrier: bar } : {}),
         });
 
-        // Crazy mode: fire-and-forget with very high in-flight cap for maximum throughput
-        let inFlight = 0;
-        const CRAZY_MAX = 50; // increased from 12 — saturate the API pipeline
-
-        const fireAndForget = (curStake: number) => {
-            inFlight++;
-            derivTradeRef.current.buyContract(
-                buildParams(curStake),
-                settled => {
-                    inFlight = Math.max(0, inFlight - 1);
-                    if (runRef.current || settled.profit !== 0)
-                        applyResult(settled.profit ?? 0, curStake, speed, settled);
-                }
-            ).catch(err => {
-                inFlight = Math.max(0, inFlight - 1);
-                const msg = err?.message || err?.error?.message || 'Buy error';
-                logEntry(`❌ ${msg}`);
-            });
-        };
+        // All modes are sequential: buy → await settlement → delay → next trade.
+        // Normal = 200ms post-settlement delay, Crazy = 50ms, Turbo = 0ms.
+        const POST_DELAY = speed === 'turbo' ? 0 : speed === 'crazy' ? 50 : 200;
 
         while (runRef.current) {
             const curStake = currentStakeRef.current;
             try {
-                if (speed === 'turbo') {
-                    // Turbo: zero-delay fire-and-forget — maximum throughput, no cap
+                // Sequential buy: wait for full contract settlement before continuing
+                const { profit, extra } = await new Promise<{ profit: number; extra?: any }>(resolve => {
+                    const bail = setTimeout(() => { logEntry('⏱ Settlement timeout'); resolve({ profit: 0 }); }, 15000);
                     derivTradeRef.current.buyContract(
                         buildParams(curStake),
-                        settled => {
-                            if (runRef.current || settled.profit !== 0)
-                                applyResult(settled.profit ?? 0, curStake, speed, settled);
-                        }
-                    ).catch(err => {
-                        const msg = err?.message || err?.error?.message || 'Buy error';
+                        settled => { clearTimeout(bail); resolve({ profit: settled.profit ?? 0, extra: settled }); }
+                    ).then(result => {
+                        if (!result?.contract_id) { clearTimeout(bail); resolve({ profit: 0 }); }
+                    }).catch(err => {
+                        clearTimeout(bail);
+                        const msg = err?.message || err?.error?.message || 'Buy failed';
                         logEntry(`❌ ${msg}`);
+                        resolve({ profit: 0 });
                     });
-                    // No await — loop fires immediately for next contract
-                } else if (speed === 'crazy') {
-                    // Crazy: pipelined fire-and-forget with high cap — over 100% speed
-                    if (inFlight >= CRAZY_MAX) {
-                        await new Promise(r => setTimeout(r, 0));
-                        continue;
-                    }
-                    fireAndForget(curStake);
-                    // No await — loop immediately for next fire
-                } else {
-                    // Normal: sequential — buy then wait for full settlement
-                    const { profit, extra } = await new Promise<{ profit: number; extra?: any }>(resolve => {
-                        const bail = setTimeout(() => { logEntry('⏱ Settlement timeout'); resolve({ profit: 0 }); }, 15000);
-                        derivTradeRef.current.buyContract(
-                            buildParams(curStake),
-                            settled => { clearTimeout(bail); resolve({ profit: settled.profit ?? 0, extra: settled }); }
-                        ).then(result => {
-                            if (!result?.contract_id) { clearTimeout(bail); resolve({ profit: 0 }); }
-                        }).catch(err => {
-                            clearTimeout(bail);
-                            const msg = err?.message || err?.error?.message || 'Buy failed';
-                            logEntry(`❌ ${msg}`);
-                            resolve({ profit: 0 });
-                        });
-                    });
-                    if (!runRef.current) break;
-                    applyResult(profit, curStake, speed, extra);
-                }
+                });
+                if (!runRef.current) break;
+                applyResult(profit, curStake, speed, extra);
+                // Inter-trade delay: Normal=200ms, Crazy=50ms, Turbo=0ms
+                if (POST_DELAY > 0) await new Promise(r => setTimeout(r, POST_DELAY));
             } catch (e: any) {
                 logEntry(`❌ ${e?.message || 'Unknown error'}`);
                 await new Promise(r => setTimeout(r, 300));
