@@ -319,21 +319,40 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
     const pocLastTickCountRef = useRef<Map<number, number>>(new Map());
 
     /* ── Win/Loss toast notification ──────────────────────────────────────── */
-    const [tradeToast, setTradeToast] = useState<{ won: boolean; profit: number } | null>(null);
-    const toastTimerRef = useRef<any>(null);
+    // Queue-based: every settled trade gets its own popup; rapid trades don't
+    // cancel each other.  toastKey forces React to unmount+remount the element
+    // on each new entry so the CSS animation always replays from frame 0.
+    const [tradeToast, setTradeToast]   = useState<{ won: boolean; profit: number } | null>(null);
+    const [toastKey,   setToastKey]     = useState(0);
+    const toastQueueRef  = useRef<Array<{ won: boolean; profit: number }>>([]);
+    const toastBusyRef   = useRef(false);
+    const toastTimerRef  = useRef<any>(null);
+
+    const showNextToast = useCallback(() => {
+        if (toastQueueRef.current.length === 0) { toastBusyRef.current = false; return; }
+        const next = toastQueueRef.current.shift()!;
+        toastBusyRef.current = true;
+        setToastKey(k => k + 1);   // forces remount → animation restarts
+        setTradeToast(next);
+        toastTimerRef.current = setTimeout(() => {
+            setTradeToast(null);
+            // small gap between consecutive toasts
+            setTimeout(showNextToast, 220);
+        }, 4000);
+    }, []);
+
     useEffect(() => {
         const handleSettled = (e: CustomEvent) => {
             const { won, profit } = e.detail;
-            if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-            setTradeToast({ won, profit });
-            toastTimerRef.current = setTimeout(() => setTradeToast(null), 4000);
+            toastQueueRef.current.push({ won, profit });
+            if (!toastBusyRef.current) showNextToast();
         };
         window.addEventListener('chart:trade-settled', handleSettled as any);
         return () => {
             window.removeEventListener('chart:trade-settled', handleSettled as any);
             if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
         };
-    }, []);
+    }, [showNextToast]);
 
     /* ── Sheet visibility ─────────────────────────────────────────────────── */
     const [showTypeSheet,     setShowTypeSheet]     = useState(false);
