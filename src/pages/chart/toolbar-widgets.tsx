@@ -16,24 +16,21 @@ const ToolbarWidgets = ({ updateChartType, updateGranularity, position, isDeskto
 
     return (
         <ToolbarWidget position={validPosition || (isMobile ? 'bottom' : null)}>
+            {/* Chart type selector — always visible */}
             <ChartMode portalNodeId='modal_root' onChartType={updateChartType} onGranularity={updateGranularity} />
-            {isDesktop && (
-                <>
-                    <StudyLegend portalNodeId='modal_root' searchInputClassName='data-hj-whitelist' />
-                    <Views
-                        portalNodeId='modal_root'
-                        onChartType={updateChartType}
-                        onGranularity={updateGranularity}
-                        searchInputClassName='data-hj-whitelist'
-                    />
-                </>
-            )}
+            {/* Indicators / studies — always visible */}
+            <StudyLegend portalNodeId='modal_root' searchInputClassName='data-hj-whitelist' />
+            {/* Saved views */}
+            <Views
+                portalNodeId='modal_root'
+                onChartType={updateChartType}
+                onGranularity={updateGranularity}
+                searchInputClassName='data-hj-whitelist'
+            />
+            {/* Drawing tools — always visible */}
             <DrawTools portalNodeId='modal_root' />
-            {isDesktop && (
-                <>
-                    <Share portalNodeId='modal_root' />
-                </>
-            )}
+            {/* Download / Share — always visible */}
+            <Share portalNodeId='modal_root' />
         </ToolbarWidget>
     );
 };

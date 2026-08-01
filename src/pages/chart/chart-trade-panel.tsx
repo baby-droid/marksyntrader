@@ -576,8 +576,8 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             {!group.isAccumulator && (
             <div className='ctp__section ctp__section--ticks'>
                 <div className='ctp__section-label'>
-                    {group.durationUnit === 't' ? 'Ticks' : 'Minutes'}
-                    <span className='ctp__section-val'>{ticks}{group.durationUnit === 't' ? ' Ticks' : 'm'}</span>
+                    {group.durationUnit === 't' ? '⏱ Ticks (Duration)' : '⏱ Minutes (Duration)'}
+                    <span className='ctp__section-val'>{ticks}{group.durationUnit === 't' ? 't' : 'm'}</span>
                 </div>
                 {group.durationUnit === 't' ? (
                     <div className='ctp__tick-row'>
@@ -613,8 +613,8 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             {group.needsBarrier && (
                 <div className='ctp__section ctp__section--digit'>
                     <div className='ctp__section-label'>
-                        Last Digit Prediction
-                        <span className='ctp__section-val'>{barrier}</span>
+                        🎯 Last Digit Prediction
+                        <span className='ctp__section-val'>Selected: {barrier}</span>
                     </div>
                     <div className='ctp__digits'>
                         {digitRows.map((row, ri) => (
@@ -640,6 +640,10 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
 
             {/* ── Stake ─────────────────────────────────────────────── */}
             <div className='ctp__section ctp__section--stake'>
+                <div className='ctp__section-label'>
+                    💰 Stake Amount
+                    <span className='ctp__section-val'>{stakeRaw || '0'} {displayCur}</span>
+                </div>
                 <div className='ctp__stake-tabs'>
                     <button className={`ctp__stake-tab${stakeMode === 'stake' ? ' active' : ''}`} onClick={() => setStakeMode('stake')}>Stake</button>
                     <button className={`ctp__stake-tab${stakeMode === 'payout' ? ' active' : ''}`} onClick={() => setStakeMode('payout')}>Payout</button>

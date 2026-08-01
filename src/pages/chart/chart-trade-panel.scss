@@ -205,18 +205,18 @@
     margin-bottom: 5px;
 }
 
-.ctp__digits { display: flex; flex-direction: column; gap: 4px; }
-.ctp__digits-row { display: flex; gap: 4px; }
+.ctp__digits { display: flex; flex-direction: column; gap: 3px; }
+.ctp__digits-row { display: flex; gap: 3px; }
 
 .ctp__digit-btn {
     flex: 1;
-    height: 30px;
-    border-radius: 12px;
+    height: 22px;          /* half the previous 30px → compact horizontal boxes */
+    border-radius: 8px;
     border: 1px solid #e0e0e0;
     background: #f9f9f9;
     color: #0E0F11;
-    font-size: 14px;
-    font-weight: 700;
+    font-size: 12px;
+    font-weight: 900;
     cursor: pointer;
     font-family: inherit;
     display: flex;

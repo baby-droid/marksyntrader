@@ -453,8 +453,8 @@ const AppWrapper = observer(() => {
                 </div>
             </div>
 
-            {/* Floating panels */}
-            <FloatingRunButton />
+            {/* Floating panels — hide bot runner on chart & manual-trader tabs */}
+            {active_tab !== 7 && active_tab !== 8 && <FloatingRunButton />}
             <WhatsAppFloat />
 
             <DesktopWrapper>

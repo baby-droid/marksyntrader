@@ -21,16 +21,14 @@ const TRADE_GROUPS = [
     { id: 'touch',        label: 'Touch / No Touch',   icon: '✋', typeA: 'ONETOUCH',   typeB: 'NOTOUCH',     needsBarrier: false, isAccumulator: false, durationUnit: 'm', minDur: 1, maxDur: 60 },
 ];
 
-/* ── SVG digit circle with arc progress ─────────────────────────────────────
- * isBarrier (user's selected prediction) → dark navy fill
- * arc color is rank-based: green/teal/gray/orange/red                        */
-function getArcColor(rank: string): string {
+/* ── Rank-based solid fill colors (like desktop cdo__circle) ─────────────── */
+function getRankFill(rank: string): { fill: string; text: string; ring: string } {
     switch (rank) {
-        case 'green':  return '#22c55e';
-        case 'blue':   return '#00c2c7';
-        case 'yellow': return '#f59e0b';
-        case 'red':    return '#ef4444';
-        default:       return '#c8d8e4';
+        case 'green':  return { fill: '#00E676', text: '#000', ring: '#00B248' };
+        case 'blue':   return { fill: '#1E88FF', text: '#000', ring: '#0056b3' };
+        case 'yellow': return { fill: '#FFD600', text: '#000', ring: '#c6a800' };
+        case 'red':    return { fill: '#FF3D57', text: '#000', ring: '#C62828' };
+        default:       return { fill: '#f0f0f0', text: '#000', ring: '#ccc' };
     }
 }
 
@@ -49,20 +47,21 @@ interface DigitCircleProps {
 const DigitCircle: React.FC<DigitCircleProps> = ({
     digit, pct, rank, isBarrier, isCurrent, isWin, isLoss, tickLabels, onClick,
 }) => {
-    const SIZE   = 52;
+    const SIZE   = 62;
     const CX     = SIZE / 2;
-    const R      = 20;
-    const SW     = 2.8;  // strokeWidth
+    const R      = 24;
+    const SW     = 3.2;
     const CIRC   = 2 * Math.PI * R;
     const arcLen = (pct / 100) * CIRC;
 
-    const fillColor   = isBarrier ? '#0e3348'
-                      : isWin     ? '#dcfce7'
-                      : isLoss    ? '#fee2e2'
-                      : '#fff';
-    const textColor   = isBarrier ? '#fff' : '#1f2937';
-    const arcColor    = isBarrier ? 'none' : getArcColor(rank);
-    const ringStroke  = isBarrier ? '#0e3348' : '#e5e7eb';
+    const rankColors = getRankFill(rank);
+    // Solid background: colored for ranked, white for default; barrier = dark navy
+    const fillColor = isBarrier ? '#0e3348'
+                    : isWin     ? '#00E676'
+                    : isLoss    ? '#FF3D57'
+                    : rankColors.fill;
+    const ringStroke = isBarrier ? '#0e3348' : rankColors.ring;
+    const textColor  = isBarrier ? '#fff' : '#000';
 
     const hasT    = tickLabels.length > 0;
     const isFinal = tickLabels.some(l => l.includes('★'));
@@ -75,25 +74,13 @@ const DigitCircle: React.FC<DigitCircleProps> = ({
                 </div>
             )}
             <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
-                {/* Track ring */}
+                {/* Solid fill circle */}
                 <circle cx={CX} cy={CX} r={R} fill={fillColor} stroke={ringStroke} strokeWidth={SW} />
-                {/* Progress arc */}
-                {!isBarrier && (
-                    <circle
-                        cx={CX} cy={CX} r={R}
-                        fill='none'
-                        stroke={arcColor}
-                        strokeWidth={SW}
-                        strokeLinecap='round'
-                        strokeDasharray={`${arcLen} ${CIRC}`}
-                        transform={`rotate(-90 ${CX} ${CX})`}
-                    />
-                )}
-                {/* Digit label */}
+                {/* Digit label — bold black */}
                 <text
-                    x={CX} y={CX - 1}
+                    x={CX} y={CX + 1}
                     textAnchor='middle' dominantBaseline='middle'
-                    fontSize='14' fontWeight='700'
+                    fontSize='17' fontWeight='900'
                     fill={textColor}
                 >
                     {digit}
@@ -301,6 +288,23 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
     const [underPayout, setUnderPayout] = useState<number | null>(null);
     const payoutTimerRef = useRef<any>(null);
 
+    /* ── Win/Loss toast notification ──────────────────────────────────────── */
+    const [tradeToast, setTradeToast] = useState<{ won: boolean; profit: number } | null>(null);
+    const toastTimerRef = useRef<any>(null);
+    useEffect(() => {
+        const handleSettled = (e: CustomEvent) => {
+            const { won, profit } = e.detail;
+            if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+            setTradeToast({ won, profit });
+            toastTimerRef.current = setTimeout(() => setTradeToast(null), 4000);
+        };
+        window.addEventListener('chart:trade-settled', handleSettled as any);
+        return () => {
+            window.removeEventListener('chart:trade-settled', handleSettled as any);
+            if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+        };
+    }, []);
+
     /* ── Sheet visibility ─────────────────────────────────────────────────── */
     const [showTypeSheet,     setShowTypeSheet]     = useState(false);
     const [showMarketSheet,   setShowMarketSheet]   = useState(false);
@@ -464,8 +468,9 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
     // trianglePos: 0-4 column index within the row
     const triangleRow = currentDigit !== null && currentDigit >= 5 ? 'bottom' : 'top';
     const triangleCol = currentDigit !== null ? (currentDigit % 5) : null;
-    // Left % within the row: col * 20 + 10  (each of 5 items = 20%, center at +10%)
-    const triangleLeft = triangleCol !== null ? `${triangleCol * 20 + 10}%` : '-100px';
+    // Left % within the row: col * 20 + 10 (each of 5 items = 20%, center at +10%)
+    // Adjusted to better center on larger circles
+    const triangleLeft = triangleCol !== null ? `${triangleCol * 20 + 10}%` : '-200px';
 
     /* ── Current pending trade info ───────────────────────────────────────── */
     const activeTrade = pendingTrades[0] ?? null;
@@ -512,6 +517,18 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
 
     return (
         <div className='mcv'>
+            {/* ── Win/Loss toast notification ────────────────────────────── */}
+            {tradeToast && (
+                <div className={`mcv-toast mcv-toast--${tradeToast.won ? 'win' : 'loss'}`}>
+                    <span className='mcv-toast__icon'>{tradeToast.won ? '🎉' : '💔'}</span>
+                    <span className='mcv-toast__msg'>
+                        {tradeToast.won
+                            ? `Profit Won +${Math.abs(tradeToast.profit).toFixed(2)} ${displayCur}`
+                            : `Loss −${Math.abs(tradeToast.profit).toFixed(2)} ${displayCur}`}
+                    </span>
+                </div>
+            )}
+
             {/* ── Market header ──────────────────────────────────────────── */}
             <div className='mcv__header' onClick={() => setShowMarketSheet(true)}>
                 <div className='mcv__market-icon'>

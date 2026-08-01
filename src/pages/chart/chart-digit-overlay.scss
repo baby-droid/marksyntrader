@@ -273,24 +273,24 @@
 
     /* Digit circle */
     &__circle {
-        width: clamp(40px, 4.0vw, 54px);
-        height: clamp(40px, 4.0vw, 54px);
+        width: clamp(44px, 4.4vw, 58px);
+        height: clamp(44px, 4.4vw, 58px);
         border-radius: 50%;
         border: 2.5px solid #ccc;
         background: #f0f0f0;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: clamp(16px, 1.8vw, 24px);
+        font-size: clamp(17px, 1.9vw, 25px);
         font-weight: 900;
         color: #000;
         transition: transform 0.15s, box-shadow 0.15s;
         flex-shrink: 0;
 
-        &--green   { background:#00E676; border-color:#00B248; color:#000; box-shadow:0 0 8px rgba(0,230,118,0.55); }
-        &--red     { background:#FF3D57; border-color:#C62828; color:#000; box-shadow:0 0 8px rgba(255,61,87,0.55); }
-        &--blue    { background:#1E88FF; border-color:#0056b3; color:#000; box-shadow:0 0 8px rgba(30,136,255,0.55); }
-        &--yellow  { background:#FFD600; border-color:#c6a800; color:#000; box-shadow:0 0 8px rgba(255,214,0,0.55); }
+        &--green   { background:#00E676; border-color:#00B248; color:#000 !important; box-shadow:0 0 8px rgba(0,230,118,0.55); }
+        &--red     { background:#FF3D57; border-color:#C62828; color:#000 !important; box-shadow:0 0 8px rgba(255,61,87,0.55); }
+        &--blue    { background:#1E88FF; border-color:#0056b3; color:#000 !important; box-shadow:0 0 8px rgba(30,136,255,0.55); }
+        &--yellow  { background:#FFD600; border-color:#c6a800; color:#000 !important; box-shadow:0 0 8px rgba(255,214,0,0.55); }
         &--default { border-color:#bbb; background:#f0f0f0; color:#000; }
 
         &--current {
@@ -373,74 +373,61 @@
 @keyframes cdo-dot-pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.75)} }
 @keyframes cdo-fade-in   { from{opacity:0;transform:translateX(-5px)} to{opacity:1;transform:translateX(0)} }
 
-/* ── Win / Loss trade flag — compact pennant, right side of SmartChart ──────── *
- *  Positioned near the right edge of the chart canvas (clear of the price-axis  *
- *  labels), vertically around the centre of the chart.                           *
- *  Horizontal size is kept to ≈ 1 cm (38 px banner) — half of the previous 2 cm.*
- * ─────────────────────────────────────────────────────────────────────────────── */
+/* ── Win / Loss trade notification popup — positioned over chart ─────────── */
 .chart-trade-flag {
     position: absolute;
-    /* Right side of chart, clear of SmartChart's price-axis labels (~60 px wide) */
-    right: 68px;
-    /* No left/transform centering — anchored to the right */
+    right: 72px;
     display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: 0;
+    flex-direction: column;
     z-index: 30;
     pointer-events: none;
+    min-width: 130px;
     animation: chart-flag-in  0.30s cubic-bezier(.2,1.5,.4,1) both,
-               chart-flag-out 0.40s ease-in 4.5s both;
+               chart-flag-out 0.40s ease-in 4.8s both;
 
-    /* ── Vertical pole ─────────────────────────────────────────── */
-    &__pole {
-        width: 3px;
-        height: 38px;
-        border-radius: 3px;
-        flex-shrink: 0;
-    }
+    /* Hide pole for the new popup style */
+    &__pole { display: none; }
 
-    /* ── Pennant banner — ~1 cm (38 px) wide × 38 px tall ─────────
-       Tip points RIGHT (toward the price axis / chart edge).
-       Single-row layout: emoji + amount side by side.              */
+    /* Rounded pill popup */
     &__banner {
         display: inline-flex;
         flex-direction: row;
         align-items: center;
-        justify-content: flex-start;
-        gap: 2px;
-        width:  40px;   /* ≈ 1 cm — half of the previous 75 px */
-        height: 38px;
-        padding: 0 14px 0 5px; /* right pad opens space for the pennant tip */
+        justify-content: center;
+        gap: 6px;
+        padding: 8px 14px;
+        border-radius: 24px;
+        font-size: 13px;
+        font-weight: 800;
         white-space: nowrap;
-        overflow: hidden;
-        line-height: 1;
-        /* Tip points right — matches right-side pole position */
-        clip-path: polygon(0 0, 75% 0, 100% 50%, 75% 100%, 0 100%);
-        box-shadow: 2px 2px 6px rgba(0,0,0,0.4);
-        flex-shrink: 0;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+        clip-path: none;
+        min-width: 120px;
+        width: auto;
+        height: auto;
+        line-height: 1.2;
     }
 
-    &__emoji  { font-size: 11px; line-height: 1; flex-shrink: 0; }
-    &__amount { font-size: 7px;  font-weight: 900; opacity: 0.97; line-height: 1; }
+    &__emoji  { font-size: 15px; line-height: 1; flex-shrink: 0; }
+    &__amount { font-size: 14px; font-weight: 900; line-height: 1; }
 
     /* ── Win — emerald ─────────────────────────────────────────── */
     &--win {
-        .chart-trade-flag__pole   { background: #00C853; box-shadow: 0 0 6px rgba(0,200,83,0.7); }
         .chart-trade-flag__banner {
-            background: linear-gradient(105deg, #00E676 0%, #00C853 55%, #009c3e 100%);
-            color: #002a12;
-            text-shadow: 0 1px 0 rgba(255,255,255,0.3);
+            background: #00C853;
+            color: #fff;
+            border: 2px solid #00a042;
+            box-shadow: 0 4px 20px rgba(0,200,83,0.5);
         }
     }
 
     /* ── Loss — crimson ────────────────────────────────────────── */
     &--loss {
-        .chart-trade-flag__pole   { background: #E53935; box-shadow: 0 0 6px rgba(229,57,53,0.7); }
         .chart-trade-flag__banner {
-            background: linear-gradient(105deg, #FF5252 0%, #E53935 55%, #b71c1c 100%);
+            background: #E53935;
             color: #fff;
-            text-shadow: 0 1px 2px rgba(0,0,0,0.35);
+            border: 2px solid #b71c1c;
+            box-shadow: 0 4px 20px rgba(229,57,53,0.5);
         }
     }
 }

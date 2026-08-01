@@ -257,66 +257,54 @@ const DigitPercentWidget: React.FC = () => {
                     // else: wait for live tick pip_size below
                 }
 
-                // Subscribe only after the history request is complete. This avoids
-                // mixing stale ticks from a previous market into the new baseline.
-                // Subscribe through the shared authenticated message bus. This
-                // survives market changes and reconnects more reliably than a
-                // one-shot RxJS subscribe() observer.
-                messageSubscription = api.onMessage?.()?.subscribe?.(({ data: message }: any) => {
-                    if (cancelled) return;
-                    const tickData = message?.data ?? message;
-                    if (tickSubscriptionIdRef.current && tickData?.subscription?.id &&
-                        String(tickData.subscription.id) !== String(tickSubscriptionIdRef.current)) return;
-                    if (tickData?.subscription?.id) {
-                        tickSubscriptionIdRef.current = String(tickData.subscription.id);
-                    }
-                    if (tickData?.error) {
-                        console.warn('[DigitWidget] tick subscription error:', tickData.error.message);
-                        return;
-                    }
-                    if (tickData?.tick) {
-                        const data = tickData;
-                    // Live tick — this is the authoritative pip_size source.
-                        if (data.tick.pip_size != null) {
-                        const confirmedPs = Number(data.tick.pip_size);
+                // Subscribe via RxJS observable — same robust pattern as chart-wrapper.tsx.
+                // This is more reliable than api.onMessage which can miss messages on
+                // some API versions.
+                const tickObservable = api.subscribe({ ticks: symbol, subscribe: 1 });
+                messageSubscription = tickObservable.subscribe({
+                    next: (res: any) => {
+                        if (cancelled) return;
+                        // Capture server-side subscription id for explicit forget on cleanup
+                        if (!tickSubscriptionIdRef.current && res?.subscription?.id) {
+                            tickSubscriptionIdRef.current = String(res.subscription.id);
+                        }
+                        const tick = res?.tick;
+                        if (!tick) return;
 
-                        if (!pipSizeConfirmedRef.current) {
-                            // First live tick: confirm pip_size and retroactively
-                            // recompute any history that was stored with the wrong default.
-                            pipSizeRef.current = confirmedPs;
-                            pipSizeConfirmedRef.current = true;
-
-                            const stored = rawHistoryRef.current;
-                            if (stored.length > 0) {
-                                const digits = stored.map(p => getLastDigit(p, confirmedPs));
-                                setTicks(digits);
-                                if (digits.length > 0) setCurrentDigit(digits[digits.length - 1]);
-                                const last = stored[stored.length - 1];
-                                if (last != null) setCurrentPrice(last.toFixed(confirmedPs));
-                                rawHistoryRef.current = [];
+                        // Live tick — authoritative pip_size source
+                        if (tick.pip_size != null) {
+                            const confirmedPs = Number(tick.pip_size);
+                            if (!pipSizeConfirmedRef.current) {
+                                // First live tick: confirm pip_size and retroactively
+                                // recompute history stored with the wrong static default.
+                                pipSizeRef.current = confirmedPs;
+                                pipSizeConfirmedRef.current = true;
+                                const stored = rawHistoryRef.current;
+                                if (stored.length > 0) {
+                                    const digits = stored.map((p: number) => getLastDigit(p, confirmedPs));
+                                    setTicks(digits);
+                                    if (digits.length > 0) setCurrentDigit(digits[digits.length - 1]);
+                                    const last = stored[stored.length - 1];
+                                    if (last != null) setCurrentPrice(last.toFixed(confirmedPs));
+                                    rawHistoryRef.current = [];
+                                }
+                            } else {
+                                pipSizeRef.current = confirmedPs;
                             }
-                        } else {
-                            // Subsequent ticks — update pip_size in case API changes it
-                            pipSizeRef.current = confirmedPs;
-                        }
                         }
 
-                        const ps = pipSizeRef.current;
-                        const quote = Number(data.tick.quote);
+                        const ps    = pipSizeRef.current;
+                        const quote = Number(tick.quote);
                         const digit = getLastDigit(quote, ps);
                         setCurrentDigit(digit);
                         setCurrentPrice(quote.toFixed(ps));
                         setTicks(prev => [...prev.slice(-(tickCount - 1)), digit]);
                         armWatchdog();
-                    }
+                    },
+                    error: () => {
+                        if (!cancelled) retryTimer = setTimeout(start, 500);
+                    },
                 });
-                const subscriptionResponse = await api.send({ ticks: symbol, subscribe: 1 });
-                if (cancelled) return;
-                if (subscriptionResponse?.error) throw new Error(subscriptionResponse.error.message || 'Tick subscription failed');
-                if (subscriptionResponse?.subscription?.id) {
-                    tickSubscriptionIdRef.current = String(subscriptionResponse.subscription.id);
-                }
-                armWatchdog();
             } catch (err) {
                 if (!cancelled) {
                     console.warn('[DigitWidget] authenticated market data error:', err);

@@ -100,11 +100,46 @@
     vertical-align: middle;
 }
 
+/* ── Win/Loss toast notification ────────────────────────────────────────── */
+.mcv-toast {
+    position: fixed;
+    top: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 20px;
+    border-radius: 28px;
+    font-size: 15px;
+    font-weight: 800;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.25);
+    animation: mcv-toast-in 0.3s cubic-bezier(0.2,1.5,0.4,1) both,
+               mcv-toast-out 0.3s ease-in 3.5s both;
+    pointer-events: none;
+    white-space: nowrap;
+
+    &--win  { background: #00C853; color: #fff; border: 2px solid #00a042; }
+    &--loss { background: #E53935; color: #fff; border: 2px solid #b71c1c; }
+}
+.mcv-toast__icon { font-size: 18px; }
+.mcv-toast__msg  { font-size: 14px; font-weight: 800; }
+
+@keyframes mcv-toast-in  {
+    from { opacity: 0; transform: translateX(-50%) translateY(-14px) scale(0.88); }
+    to   { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}
+@keyframes mcv-toast-out {
+    from { opacity: 1; }
+    to   { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+}
+
 /* ── Digit circles area ─────────────────────────────────────────────────── */
 .mcv-digits {
     display: flex;
     flex-direction: column;
-    padding: 18px 8px 0;
+    padding: 12px 8px 0;
     gap: 0;
     background: #fff;
     position: relative;
@@ -122,11 +157,11 @@
 .mcv-digits__pointer-row {
     position: relative;
     width: 100%;
-    height: 16px;
+    height: 18px;
     overflow: visible;
 
-    &--top    { margin: 2px 0 0; }
-    &--bottom { margin: 2px 0 0; }
+    &--top    { margin: 3px 0 0; }
+    &--bottom { margin: 3px 0 0; }
 }
 
 .mcv-digits__triangle {
@@ -135,12 +170,12 @@
     transform: translateX(-50%);
     width: 0;
     height: 0;
-    border-left:  7px solid transparent;
-    border-right: 7px solid transparent;
-    border-bottom: 10px solid #e74c3c;   /* ▲ pointing UP */
-    transition: left 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    border-left:  9px solid transparent;
+    border-right: 9px solid transparent;
+    border-bottom: 13px solid #e74c3c;   /* ▲ pointing UP at the circle above */
+    transition: left 0.18s cubic-bezier(0.25, 0.46, 0.45, 0.94);
     will-change: left;
-    filter: drop-shadow(0 1px 2px rgba(231,76,60,0.4));
+    filter: drop-shadow(0 1px 3px rgba(231,76,60,0.5));
 }
 
 /* ── Individual digit circle ────────────────────────────────────────────── */
@@ -161,12 +196,12 @@
 }
 
 .mcv-circle__pct {
-    font-size: 10px;
-    font-weight: 600;
-    color: #6b7280;
+    font-size: 9px;
+    font-weight: 700;
+    color: #374151;
     line-height: 1;
 
-    &--barrier { color: #0e3348; font-weight: 800; }
+    &--barrier { color: #0e3348; font-weight: 900; }
 }
 
 .mcv-circle__tlabel {
@@ -364,8 +399,8 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 8px;
-    padding: 10px 12px 14px;
-    margin-top: auto;
+    padding: 8px 12px 10px;
+    margin-top: 4px;   /* was 'auto' — caused big empty gap; now close to stake row */
 }
 
 .mcv-panel__buy {
