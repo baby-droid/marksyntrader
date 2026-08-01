@@ -311,6 +311,12 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
         underAsk: number;
         expiry: number;
     } | null>(null);
+    // Tracks the last tick-count dispatched per contract so we never fire a
+    // chart:trade-tick event with the same or fewer ticks than before.
+    // Deriv POC fires on every state change, not just new ticks — this ref
+    // prevents redundant/stale dispatches that trigger race overwrites in the
+    // wrapper. Keyed by numeric contractId.
+    const pocLastTickCountRef = useRef<Map<number, number>>(new Map());
 
     /* ── Win/Loss toast notification ──────────────────────────────────────── */
     const [tradeToast, setTradeToast] = useState<{ won: boolean; profit: number } | null>(null);

@@ -103,9 +103,17 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
         };
 
         // ── Authoritative tick update from proposal_open_contract ──────────────
-        // tick_stream[0] is always the FIRST tick AFTER entry (what Deriv calls
-        // "tick 1"). This works correctly for all index types — Volatility plain,
-        // Volatility 1s, Bear/Bull, Jump, Boom, Crash, Step, Range Break.
+        // Deriv's POC subscription sends a message on EVERY state change (price
+        // update, status change, new tick). Each message carries the FULL
+        // cumulative tick_stream from entry. This means:
+        //   • Many consecutive POC messages may carry the same tick_stream length
+        //     (price changed but no new settlement tick yet).
+        //   • WebSocket delivery order is not guaranteed under load — an older
+        //     message with 2 ticks can arrive AFTER a newer one with 3 ticks.
+        //
+        // Monotonic guard: only accept the update if the incoming stream is at
+        // least as long as what we already have. This discards stale/short
+        // duplicates and prevents previously shown T-labels from disappearing.
         const handleTradeTick = (e: CustomEvent) => {
             const { contractId, tickStream, totalTicks } = e.detail;
             const id = String(contractId);
@@ -116,6 +124,18 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                 const clean = dv.replace('.', '');
                 return parseInt(clean[clean.length - 1] ?? '0', 10);
             });
+
+            // Monotonic guard — discard if this stream is shorter than what we
+            // already have (stale out-of-order delivery from WebSocket).
+            const currentLen = contractTickDigitsRef.current.get(id)?.length ?? 0;
+            if (digits.length < currentLen) return;
+
+            // No-op guard — skip React state churn if nothing actually changed.
+            if (digits.length === currentLen) {
+                // Still update totalTicks if it changed (contract duration adjust)
+                const existing = pendingTradesRef.current.find(t => t.id === id);
+                if (!existing || existing.totalTicks === (totalTicks ?? existing.totalTicks)) return;
+            }
 
             contractTickDigitsRef.current.set(id, digits);
             setTickDigitSnapshot(new Map(contractTickDigitsRef.current));
