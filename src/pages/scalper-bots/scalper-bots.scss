@@ -919,6 +919,18 @@
   &.hack   { color: #334155; }
   &.entry  { color: #00c8ff; font-weight: 700; }
   &.switch { color: #8b5cf6; }
+  /* Live tick digit stream — dim cyan, appears every tick */
+  &.tick   {
+    color: #14b8a6;
+    font-size: 0.75rem;
+    opacity: 0.85;
+    letter-spacing: 0.02em;
+  }
+  /* STREAM digest — every 3 ticks, shows full recent digit window */
+  &.scan.stream {
+    color: #06b6d4;
+    font-weight: 600;
+  }
 }
 
 /* ════════════════════════════════════════════════════

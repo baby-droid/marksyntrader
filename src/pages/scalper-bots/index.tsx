@@ -660,11 +660,14 @@ function describeConditionFired(
 
     switch (cond.algorithm) {
         case 'LDP': {
-            const digitStr = window.length ? `[${window.join(',')}]` : '[…]';
+            const digitStr = window.length ? `[${window.join(', ')}]` : '[…]';
             const modeNote = inRecovery
-                ? ` ← recovery limit (${cond.recoveryLimit} digit${cond.recoveryLimit > 1 ? 's' : ''})`
-                : ` (${cond.ifLast} digits)`;
-            return `${tag} last ${reqCount} digit${reqCount > 1 ? 's' : ''} are ${cond.digitsIs}${modeNote}: ${digitStr}`;
+                ? ` (recovery: ${cond.recoveryLimit} digit${cond.recoveryLimit > 1 ? 's' : ''})`
+                : '';
+            const mfn2 = buildMatchFn(cond);
+            const matchCount = window.filter((d, i) => mfn2(d, i > 0 ? window[i-1] : null)).length;
+            const total2 = window.length || reqCount;
+            return `${tag} LDP: ${reqCount} digit${reqCount > 1 ? 's' : ''} ${cond.strict ? 'ALL' : `${matchCount}/${total2}`} ${cond.digitsIs}${cond.digitValue !== undefined && ['OVER','UNDER','MATCHES','DIFFERS'].includes(cond.digitsIs) ? ` ${cond.digitValue}` : ''}${modeNote}: ${digitStr} ✓`;
         }
         case 'Market Percentage': {
             const recent = digits.slice(0, cond.ifLast);
@@ -685,11 +688,14 @@ function describeConditionFired(
             return `${tag} Entry Point (${cond.sensitivity ?? 'medium'} sensitivity): ${n}-tick reversal pressure from ${cond.digitsIs} [${window.join(',')}]`;
         }
         case 'NDP': {
-            const digitStr = window.length ? `[${window.join(',')}]` : '[…]';
+            const digitStr = window.length ? `[${window.join(', ')}]` : '[…]';
             const modeNote = inRecovery
-                ? ` ← recovery limit (${cond.recoveryLimit} digit${cond.recoveryLimit > 1 ? 's' : ''})`
-                : ` (${cond.ifLast} digits)`;
-            return `${tag} NDP: next ${reqCount} digit${reqCount > 1 ? 's' : ''} are ${cond.digitsIs}${modeNote}: ${digitStr}`;
+                ? ` (recovery: ${cond.recoveryLimit} digit${cond.recoveryLimit > 1 ? 's' : ''})`
+                : '';
+            const mfn3 = buildMatchFn(cond);
+            const matchCount2 = window.filter((d, i) => mfn3(d, i > 0 ? window[i-1] : null)).length;
+            const total3 = window.length || reqCount;
+            return `${tag} NDP: ${reqCount} digit${reqCount > 1 ? 's' : ''} ${cond.strict ? 'ALL' : `${matchCount2}/${total3}`} ${cond.digitsIs}${cond.digitValue !== undefined && ['OVER','UNDER','MATCHES','DIFFERS'].includes(cond.digitsIs) ? ` ${cond.digitValue}` : ''}${modeNote}: ${digitStr} ✓`;
         }
         default: return `${tag} condition matched`;
     }
