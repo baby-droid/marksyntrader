@@ -6,6 +6,7 @@ import { useStore } from '@/hooks/useStore';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import Chart from './chart';
 import { ChartTradePanel } from './chart-trade-panel';
+import MobileChartView from './mobile-chart-view';
 import './chart.scss';
 import './chart-trade-panel.scss';
 import './chart-digit-overlay.scss';
@@ -51,6 +52,14 @@ interface PendingTrade {
 const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWrapperProps) => {
     const { client, chart_store } = useStore();
     const symbol = chart_store?.symbol || '1HZ100V';
+
+    /* ── Mobile breakpoint detection ─────────────────────────────────────── */
+    const [isMobileView, setIsMobileView] = useState(() => window.innerWidth <= 767);
+    useEffect(() => {
+        const onResize = () => setIsMobileView(window.innerWidth <= 767);
+        window.addEventListener('resize', onResize);
+        return () => window.removeEventListener('resize', onResize);
+    }, []);
 
     const [uuid] = useState(uuidv4());
     const uniqueKey = client.loginid
@@ -373,6 +382,35 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
             digitTradeLabels.set(d, arr);
         });
     });
+
+    /* ── Mobile view: Deriv-style full-screen trade UI ────────────────────── */
+    if (isMobileView) {
+        const activeSymbols: Array<{ symbol: string; display_name: string }> =
+            Array.isArray((api_base as any)?.active_symbols)
+                ? (api_base as any).active_symbols.map((s: any) => ({
+                      symbol: s.symbol ?? s.underlying_symbol ?? '',
+                      display_name: s.display_name ?? s.symbol ?? '',
+                  })).filter((s: any) => s.symbol)
+                : [];
+        return (
+            <MobileChartView
+                symbol={symbol}
+                onSymbolChange={(s) => chart_store.onSymbolChange(s)}
+                currentDigit={currentDigit}
+                currentPrice={currentPrice}
+                priceChange={priceChange}
+                pipSize={pipSize}
+                pcts={pcts}
+                sorted={sorted}
+                barrier={barrier}
+                onBarrierChange={setBarrier}
+                pendingTrades={pendingTrades}
+                tickDigitSnapshot={tickDigitSnapshot}
+                lastTrade={lastTrade}
+                activeSymbols={activeSymbols}
+            />
+        );
+    }
 
     return (
         <div className='cw-scroll-wrapper'>

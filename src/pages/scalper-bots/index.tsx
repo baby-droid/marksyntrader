@@ -908,10 +908,14 @@ const BotDetail: React.FC<{
 }> = ({ bot, derivTrade, onBack, onLoadXml, onLoadAndRun, onPreloadXml }) => {
     const store = useStore();
 
-    /* ── Fast Execution toggle ── skip condition scan, fire immediately on first tick */
-    const [fastExec, setFastExec] = useState(false);
-    const fastExecRef = useRef(false);
+    /* ── Execution speed mode: 'off' | 'fast' | 'ultra' ──
+       off   = Balanced: use checkEntry() / strategy logic (default)
+       fast  = Fast: bypass scan, fire on first available tick
+       ultra = Ultra Fast: zero-latency, fire the instant a tick arrives, no wait */
+    const [fastExec, setFastExec] = useState<'off' | 'fast' | 'ultra'>('off');
+    const fastExecRef = useRef<'off' | 'fast' | 'ultra'>('off');
     useEffect(() => { fastExecRef.current = fastExec; }, [fastExec]);
+    const cycleSpeed = () => setFastExec(m => m === 'off' ? 'fast' : m === 'fast' ? 'ultra' : 'off');
 
     /* Patch the already-loaded Blockly workspace's market/stake/martingale-size/
        prediction fields WITHOUT reloading the XML from disk — this keeps the
@@ -1110,7 +1114,7 @@ const BotDetail: React.FC<{
                 if (cid != null) { if (seen.has(cid)) return; seen.add(cid); }
                 const profit = applyCommission(Number(contract.profit) || 0);
                 const won = profit > 0;
-                const exitDigit = contract.exit_tick != null ? getLastDigit(Number(contract.exit_tick)) : null;
+                const exitDigit = contract.exit_tick != null ? getLastDigit(Number(contract.exit_tick), Number(contract.pip_size ?? 2)) : null;
                 cycleProfit = +(cycleProfit + profit).toFixed(2);
                 params.sessionPnlRef.current = +(params.sessionPnlRef.current + profit).toFixed(2);
                 consLoss = won ? 0 : consLoss + 1;
@@ -1317,6 +1321,14 @@ const BotDetail: React.FC<{
             setDigitDisplay(prev => [d, ...prev].slice(0, 20));
             // ✅ Reset stall timer on every real tick — prevents false-fire watchdog
             lastTickAtRef.current = Date.now();
+            // ⚡ Log the live digit stream to terminal on every tick (accurate, from pip_size)
+            if (running) {
+                const price = tick.quote != null ? Number(tick.quote).toFixed(ps) : '?';
+                setTerminal(prev => [
+                    { t: ts(), msg: `TICK: ${price}  →  digit [${d}]`, kind: 'tick' },
+                    ...prev,
+                ].slice(0, 300));
+            }
             // ⚡ Wake the scan loop instantly on every new tick
             if (tickSignalRef.current) { tickSignalRef.current(); tickSignalRef.current = null; }
         });
@@ -1338,7 +1350,7 @@ const BotDetail: React.FC<{
             if (multiUnsubsRef.current.has(market)) return;
             multiWindowsRef.current.set(market, []);
             const unsub = derivTrade.subscribeTicks(market, tick => {
-                const d = tick.digit != null ? tick.digit : getLastDigit(tick.quote);
+                const d = tick.digit != null ? tick.digit : getLastDigit(tick.quote, tick.pip_size ?? 2);
                 const win = [d, ...(multiWindowsRef.current.get(market) || [])].slice(0, 50);
                 multiWindowsRef.current.set(market, win);
                 if (!readyMarketRef.current) {
@@ -1575,9 +1587,13 @@ const BotDetail: React.FC<{
                             entry = true;
                             break;
                         }
-                    } else if (fastExecRef.current && digitWindowRef.current.length >= 1) {
-                        /* ⚡ FAST EXECUTION — bypass strategy scan, fire on the very first tick */
-                        addLog('⚡ FAST_EXEC: immediate entry (scan bypassed)', 'entry');
+                    } else if (fastExecRef.current === 'ultra' && digitWindowRef.current.length >= 1) {
+                        /* ⚡ ULTRA FAST — zero-latency, fire immediately on very first tick, no scan at all */
+                        addLog('⚡⚡ ULTRA_FAST: zero-latency entry — fired on tick arrival', 'entry');
+                        entry = true;
+                    } else if (fastExecRef.current === 'fast' && digitWindowRef.current.length >= 1) {
+                        /* ⚡ FAST — bypass strategy scan, fire on first tick (original fast behaviour) */
+                        addLog('⚡ FAST_EXEC: scan bypassed — immediate entry on first tick', 'entry');
                         entry = true;
                     } else {
                         entry = checkEntry(digitWindowRef.current, bot.contractType, bot.prediction, priceWindowRef.current);
@@ -1586,9 +1602,9 @@ const BotDetail: React.FC<{
 
                     if (!entry) {
                         /* Periodic status messages — kept light so they don't flood the log */
-                        if (scanTick % 6 === 1) {
-                            const recent = digitWindowRef.current.slice(0, 10).join(' ');
-                            addLog(`ANALYZING_DIGIT_PATTERN: [${recent || '...'}]`, 'scan');
+                        if (scanTick % 3 === 1) {
+                            const recent = digitWindowRef.current.slice(0, 20).join(', ');
+                            addLog(`STREAM: ${recent || '...'}  ← latest left`, 'scan');
                         }
                         if (scanTick % 12 === 5) {
                             addLog(HACK_SCAN_MSGS[Math.floor(Math.random() * HACK_SCAN_MSGS.length)], 'hack');
@@ -2020,11 +2036,17 @@ const BotDetail: React.FC<{
                                 {derivTrade.authorized ? '▶ RUN' : '○ Connecting...'}
                             </button>
                             <button
-                                className={`sb-detail__fast-btn ${fastExec ? 'active' : ''}`}
-                                onClick={() => setFastExec(f => !f)}
-                                title='Fast Execution: bypass entry scan, fire instantly on first tick'
+                                className={`sb-detail__fast-btn sb-detail__fast-btn--${fastExec}`}
+                                onClick={cycleSpeed}
+                                title={
+                                    fastExec === 'off'   ? 'Balanced: uses strategy scan / checkEntry logic (click for Fast)' :
+                                    fastExec === 'fast'  ? 'Fast: bypass scan, fire on first tick (click for Ultra Fast)' :
+                                                           'Ultra Fast: zero-latency, fires the instant a tick arrives (click to reset)'
+                                }
                             >
-                                ⚡ {fastExec ? 'FAST ON' : 'FAST'}
+                                {fastExec === 'off'   && '⚙ BALANCED'}
+                                {fastExec === 'fast'  && '⚡ FAST'}
+                                {fastExec === 'ultra' && '⚡⚡ ULTRA'}
                             </button>
                         </>
                     ) : (

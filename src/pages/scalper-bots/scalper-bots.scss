@@ -252,17 +252,33 @@
     &:hover:not(:disabled) { background: #f3f4f6; }
     &:disabled { opacity: 0.5; cursor: not-allowed; }
   }
-  /* ⚡ Fast Execution toggle — appears next to RUN button when bot is stopped */
+  /* ⚡ Execution speed button — cycles Balanced → Fast → Ultra Fast */
   &__fast-btn {
-    padding: 0.4rem 0.8rem; border-radius: 0.45rem;
+    padding: 0.4rem 0.85rem; border-radius: 0.45rem;
     border: 1px solid #d1d5db; background: #f9fafb; color: #374151;
     font-size: 0.82rem; font-weight: 800; cursor: pointer; font-family: inherit;
-    transition: all 0.14s;
+    transition: all 0.14s; white-space: nowrap;
     &:hover { background: #fef3c7; border-color: #f59e0b; color: #92400e; }
-    &.active {
+    /* Balanced (default) */
+    &--off {
+      background: #f1f5f9; border-color: #cbd5e1; color: #475569;
+    }
+    /* Fast mode */
+    &--fast {
       background: linear-gradient(135deg, #f59e0b, #d97706);
       border-color: #d97706; color: #fff;
       box-shadow: 0 0 8px rgba(245,158,11,0.35);
+    }
+    /* Ultra Fast mode */
+    &--ultra {
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      border-color: #dc2626; color: #fff;
+      box-shadow: 0 0 10px rgba(239,68,68,0.45);
+      animation: ultra-pulse 1s ease-in-out infinite;
+    }
+    @keyframes ultra-pulse {
+      0%, 100% { box-shadow: 0 0 10px rgba(239,68,68,0.45); }
+      50%       { box-shadow: 0 0 18px rgba(239,68,68,0.75); }
     }
   }
 
