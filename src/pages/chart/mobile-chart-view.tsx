@@ -12,13 +12,17 @@ import './mobile-chart-view.scss';
 
 /* ── Shared trade-group definitions (same as ChartTradePanel) ─────────────── */
 const TRADE_GROUPS = [
-    { id: 'over_under',   label: 'Over / Under',      icon: '↑↓', typeA: 'DIGITOVER',  typeB: 'DIGITUNDER',  needsBarrier: true,  isAccumulator: false, durationUnit: 't', minDur: 1, maxDur: 10 },
-    { id: 'even_odd',     label: 'Even / Odd',         icon: '⚡', typeA: 'DIGITEVEN',  typeB: 'DIGITODD',    needsBarrier: false, isAccumulator: false, durationUnit: 't', minDur: 1, maxDur: 10 },
-    { id: 'match_differ', label: 'Match / Differ',     icon: '🎯', typeA: 'DIGITMATCH', typeB: 'DIGITDIFF',   needsBarrier: true,  isAccumulator: false, durationUnit: 't', minDur: 1, maxDur: 10 },
-    { id: 'rise_fall',    label: 'Rise / Fall',        icon: '📈', typeA: 'CALL',       typeB: 'PUT',         needsBarrier: false, isAccumulator: false, durationUnit: 't', minDur: 1, maxDur: 10 },
-    { id: 'higher_lower', label: 'Higher / Lower',     icon: '📊', typeA: 'CALL',       typeB: 'PUT',         needsBarrier: false, isAccumulator: false, durationUnit: 'm', minDur: 1, maxDur: 60 },
-    { id: 'asian',        label: 'Asian Up / Down',    icon: '🌏', typeA: 'ASIANU',     typeB: 'ASIAND',      needsBarrier: false, isAccumulator: false, durationUnit: 't', minDur: 5, maxDur: 10 },
-    { id: 'touch',        label: 'Touch / No Touch',   icon: '✋', typeA: 'ONETOUCH',   typeB: 'NOTOUCH',     needsBarrier: false, isAccumulator: false, durationUnit: 'm', minDur: 1, maxDur: 60 },
+    { id: 'over_under',    label: 'Over / Under',           icon: '↑↓', typeA: 'DIGITOVER',   typeB: 'DIGITUNDER',  needsBarrier: true,  isAccumulator: false, durationUnit: 't', minDur: 1, maxDur: 10 },
+    { id: 'even_odd',      label: 'Even / Odd',              icon: '⚡', typeA: 'DIGITEVEN',   typeB: 'DIGITODD',    needsBarrier: false, isAccumulator: false, durationUnit: 't', minDur: 1, maxDur: 10 },
+    { id: 'match_differ',  label: 'Match / Differ',          icon: '🎯', typeA: 'DIGITMATCH',  typeB: 'DIGITDIFF',   needsBarrier: true,  isAccumulator: false, durationUnit: 't', minDur: 1, maxDur: 10 },
+    { id: 'rise_fall',     label: 'Rise / Fall',             icon: '📈', typeA: 'CALL',        typeB: 'PUT',         needsBarrier: false, isAccumulator: false, durationUnit: 't', minDur: 1, maxDur: 10 },
+    { id: 'higher_lower',  label: 'Higher / Lower',          icon: '📊', typeA: 'CALL',        typeB: 'PUT',         needsBarrier: false, isAccumulator: false, durationUnit: 'm', minDur: 1, maxDur: 60 },
+    { id: 'asian',         label: 'Asian Up / Down',         icon: '🌏', typeA: 'ASIANU',      typeB: 'ASIAND',      needsBarrier: false, isAccumulator: false, durationUnit: 't', minDur: 5, maxDur: 10 },
+    { id: 'touch',         label: 'Touch / No Touch',        icon: '✋', typeA: 'ONETOUCH',    typeB: 'NOTOUCH',     needsBarrier: false, isAccumulator: false, durationUnit: 'm', minDur: 1, maxDur: 60 },
+    { id: 'run_high_low',  label: 'Run High / Run Low',      icon: '🏃', typeA: 'RUNHIGH',     typeB: 'RUNLOW',      needsBarrier: false, isAccumulator: false, durationUnit: 't', minDur: 1, maxDur: 10 },
+    { id: 'reset',         label: 'Reset Call / Reset Put',  icon: '🔄', typeA: 'RESETCALL',   typeB: 'RESETPUT',    needsBarrier: false, isAccumulator: false, durationUnit: 't', minDur: 5, maxDur: 10 },
+    { id: 'ends_between',  label: 'Ends In / Ends Out',      icon: '📍', typeA: 'EXPIRYRANGE', typeB: 'EXPIRYMISS',  needsBarrier: false, isAccumulator: false, durationUnit: 'm', minDur: 1, maxDur: 60 },
+    { id: 'stays_between', label: 'Stays Between / Goes Out',icon: '🔒', typeA: 'RANGE',       typeB: 'UPORDOWN',    needsBarrier: false, isAccumulator: false, durationUnit: 'm', minDur: 1, maxDur: 60 },
 ];
 
 /* ── Rank-based solid fill colors (like desktop cdo__circle) ─────────────── */
@@ -281,6 +285,7 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
     const [groupIdx,    setGroupIdx]    = useState(0);
     const [ticks,       setTicks]       = useState(5);
     const [stake,       setStake]       = useState(10.00);
+    const [stakeRaw,    setStakeRaw]    = useState('10.00');
     const [displayCur,  setDisplayCur]  = useState(getDisplayCurrency());
     const [loading,     setLoading]     = useState<'over' | 'under' | null>(null);
     const [result,      setResult]      = useState<{ ok: boolean; msg: string } | null>(null);
@@ -446,8 +451,10 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
     }, [loading, group, barrier, ticks, stake, symbol]);
 
     /* ── Derived state ────────────────────────────────────────────────────── */
-    const overLabel  = group.id === 'over_under' ? 'Over'   : group.id === 'even_odd' ? 'Even'   : group.id === 'match_differ' ? 'Matches' : group.id === 'asian' ? 'Asian Up' : group.id === 'touch' ? 'Touch' : 'Rise';
-    const underLabel = group.id === 'over_under' ? 'Under'  : group.id === 'even_odd' ? 'Odd'    : group.id === 'match_differ' ? 'Differs' : group.id === 'asian' ? 'Asian Down' : group.id === 'touch' ? 'No Touch' : 'Fall';
+    const OVER_LABELS: Record<string, string>  = { over_under: 'Over', even_odd: 'Even', match_differ: 'Matches', asian: 'Asian Up', touch: 'Touch', run_high_low: 'Run High', reset: 'Reset Call', ends_between: 'Ends In', stays_between: 'Stays Between' };
+    const UNDER_LABELS: Record<string, string> = { over_under: 'Under', even_odd: 'Odd', match_differ: 'Differs', asian: 'Asian Down', touch: 'No Touch', run_high_low: 'Run Low', reset: 'Reset Put', ends_between: 'Ends Out', stays_between: 'Goes Outside' };
+    const overLabel  = OVER_LABELS[group.id]  ?? 'Rise';
+    const underLabel = UNDER_LABELS[group.id] ?? 'Fall';
 
     /* ── Tick-label map (from active trades) ──────────────────────────────── */
     const digitTradeLabels = new Map<number, string[]>();
@@ -570,31 +577,31 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
 
             {/* ── Digit circles ─────────────────────────────────────────── */}
             <div className='mcv-digits'>
+                {/* Triangle ABOVE top row — ▼ pointing down at digit 0-4 */}
+                <div className='mcv-digits__pointer-row mcv-digits__pointer-row--top'>
+                    {currentDigit !== null && triangleRow === 'top' && (
+                        <div
+                            className='mcv-digits__triangle'
+                            style={{ left: triangleLeft }}
+                        />
+                    )}
+                </div>
+
                 {/* Top row (0-4) */}
                 {renderRow(ROW_TOP, false)}
 
-                {/* Triangle after top row when current digit is 0-4 */}
-                {currentDigit !== null && triangleRow === 'top' && (
-                    <div className='mcv-digits__pointer-row mcv-digits__pointer-row--top'>
+                {/* Persistent gap between rows — triangle sits here for digits 5-9 */}
+                <div className='mcv-digits__gap'>
+                    {currentDigit !== null && triangleRow === 'bottom' && (
                         <div
                             className='mcv-digits__triangle'
                             style={{ left: triangleLeft }}
                         />
-                    </div>
-                )}
+                    )}
+                </div>
 
                 {/* Bottom row (5-9) */}
                 {renderRow(ROW_BOTTOM, true)}
-
-                {/* Triangle after bottom row when current digit is 5-9 */}
-                {currentDigit !== null && triangleRow === 'bottom' && (
-                    <div className='mcv-digits__pointer-row mcv-digits__pointer-row--bottom'>
-                        <div
-                            className='mcv-digits__triangle'
-                            style={{ left: triangleLeft }}
-                        />
-                    </div>
-                )}
             </div>
 
             {/* ── Market navigation arrows ───────────────────────────────── */}
@@ -663,23 +670,39 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                     </div>
                 )}
 
-                {/* Duration / Amount / Stake summary row */}
+                {/* Duration / Stake summary row */}
                 <div className='mcv-panel__summary'>
                     <button className='mcv-panel__summary-item' onClick={() => setShowDurationSheet(true)}>
+                        <span className='mcv-panel__summary-lbl'>Duration</span>
                         <span className='mcv-panel__summary-val'>
                             {ticks} {group.durationUnit === 't' ? 'ticks' : 'min'}
                         </span>
                     </button>
                     <div className='mcv-panel__summary-sep' />
-                    <button className='mcv-panel__summary-item mcv-panel__summary-item--center' onClick={() => setShowAmountSheet(true)}>
-                        <span className='mcv-panel__summary-val mcv-panel__summary-val--bold'>
-                            {fromUsd(stake).toFixed(2)} {displayCur}
-                        </span>
-                    </button>
-                    <div className='mcv-panel__summary-sep' />
-                    <button className='mcv-panel__summary-item mcv-panel__summary-item--right' onClick={() => setShowAmountSheet(true)}>
+                    {/* Inline editable stake — always visible, no sheet needed */}
+                    <div className='mcv-panel__stake-inline'>
                         <span className='mcv-panel__summary-lbl'>Stake</span>
-                    </button>
+                        <input
+                            className='mcv-stake-input'
+                            type='number'
+                            inputMode='decimal'
+                            min={0.35}
+                            step={0.01}
+                            value={stakeRaw}
+                            onChange={e => {
+                                setStakeRaw(e.target.value);
+                                const v = parseFloat(e.target.value);
+                                if (!isNaN(v) && v >= 0.35) setStake(v);
+                            }}
+                            onBlur={() => {
+                                const v = parseFloat(stakeRaw);
+                                const clamped = Math.max(0.35, isNaN(v) ? 0.35 : v);
+                                setStake(clamped);
+                                setStakeRaw(clamped.toFixed(2));
+                            }}
+                        />
+                        <span className='mcv-panel__summary-lbl mcv-panel__summary-lbl--cur'>{displayCur}</span>
+                    </div>
                 </div>
 
                 {/* Result feedback */}

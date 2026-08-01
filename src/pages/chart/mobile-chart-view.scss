@@ -153,29 +153,40 @@
     padding: 0 4px;
 }
 
-/* ── Triangle pointer row ───────────────────────────────────────────────── */
+/* ── Triangle pointer row — always-present slot above each circle row ─────── */
 .mcv-digits__pointer-row {
     position: relative;
     width: 100%;
-    height: 18px;
+    height: 16px;      /* enough room for the ▼ tip */
     overflow: visible;
+    flex-shrink: 0;
 
-    &--top    { margin: 3px 0 0; }
-    &--bottom { margin: 3px 0 0; }
+    &--top    { margin: 6px 0 0; }   /* space above top row */
+    &--bottom { /* gap between rows handles spacing */ }
+}
+
+/* Persistent gap between the two digit rows — the bottom-digit triangle lives here */
+.mcv-digits__gap {
+    position: relative;
+    width: 100%;
+    height: 20px;
+    flex-shrink: 0;
+    overflow: visible;
 }
 
 .mcv-digits__triangle {
     position: absolute;
-    top: 2px;
+    bottom: 0;             /* tip of ▼ sits at the bottom edge, touching the circle below */
     transform: translateX(-50%);
     width: 0;
     height: 0;
     border-left:  9px solid transparent;
     border-right: 9px solid transparent;
-    border-bottom: 13px solid #e74c3c;   /* ▲ pointing UP at the circle above */
+    border-top:   13px solid #e74c3c;  /* ▼ pointing DOWN toward the circle */
+    border-bottom: none;
     transition: left 0.18s cubic-bezier(0.25, 0.46, 0.45, 0.94);
     will-change: left;
-    filter: drop-shadow(0 1px 3px rgba(231,76,60,0.5));
+    filter: drop-shadow(0 2px 4px rgba(231,76,60,0.5));
 }
 
 /* ── Individual digit circle ────────────────────────────────────────────── */
@@ -338,7 +349,7 @@
     &:active { background: #e5e7eb; }
 }
 
-/* ── Duration / Amount summary row ──────────────────────────────────────── */
+/* ── Duration / Stake summary row ────────────────────────────────────────── */
 .mcv-panel__summary {
     display: flex;
     align-items: stretch;
@@ -349,9 +360,11 @@
 .mcv-panel__summary-item {
     flex: 1;
     display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    padding: 12px 14px;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 2px;
+    padding: 10px 14px;
     background: none;
     border: none;
     cursor: pointer;
@@ -359,9 +372,6 @@
     transition: background 0.12s;
 
     &:active { background: #f9fafb; }
-
-    &--center { justify-content: center; }
-    &--right  { justify-content: flex-end; }
 }
 .mcv-panel__summary-sep {
     width: 1px;
@@ -370,15 +380,56 @@
 }
 .mcv-panel__summary-val {
     font-size: 14px;
-    font-weight: 600;
-    color: #374151;
+    font-weight: 700;
+    color: #111827;
 
-    &--bold { font-weight: 800; font-size: 15px; color: #111827; }
+    &--bold { font-weight: 800; font-size: 15px; }
 }
 .mcv-panel__summary-lbl {
-    font-size: 14px;
+    font-size: 11px;
     color: #9ca3af;
     font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+
+    &--cur { text-transform: none; letter-spacing: 0; font-size: 12px; margin-left: 3px; }
+}
+
+/* ── Inline stake section ────────────────────────────────────────────────── */
+.mcv-panel__stake-inline {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 12px;
+}
+
+/* Directly editable stake number input */
+.mcv-stake-input {
+    flex: 1;
+    min-width: 0;
+    max-width: 110px;
+    border: 1.5px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 6px 8px;
+    font-size: 16px;
+    font-weight: 800;
+    color: #111827;
+    background: #f9fafb;
+    font-family: inherit;
+    text-align: right;
+    outline: none;
+    transition: border-color 0.15s, background 0.15s;
+    -moz-appearance: textfield;  /* hide arrows FF */
+
+    &::-webkit-inner-spin-button,
+    &::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
+    &:focus {
+        border-color: #6366f1;
+        background: #fff;
+        box-shadow: 0 0 0 3px rgba(99,102,241,0.12);
+    }
 }
 
 /* ── Result feedback ─────────────────────────────────────────────────────── */
