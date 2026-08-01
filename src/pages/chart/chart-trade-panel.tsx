@@ -379,18 +379,27 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                         if (!pocSubId && res.subscription?.id) pocSubId = res.subscription.id;
 
                         // ── Authoritative tick stream ─────────────────────────────────────
-                        // POC tick_stream starts at the first tick AFTER the entry tick —
-                        // exactly what Deriv.com shows as "Tick 1". Works for all market
-                        // types: Volatility, Volatility 1s, Bear/Bull, Jump, Boom/Crash,
-                        // Step, Range Break.
+                        // Deriv's POC tick_stream behaviour varies by market: for plain
+                        // Volatility, Bear/Bull, and some 1s indices the entry spot tick
+                        // appears as tick_stream[0] (epoch === entry_tick_time). If we
+                        // pass it through, the first real tick gets labelled T2 instead of
+                        // T1, which is the intermittent skip the user reported.
+                        // Fix: strip any tick whose epoch equals (or precedes) the
+                        // entry_tick_time — only genuine post-entry ticks count.
                         if (Array.isArray(poc.tick_stream) && poc.tick_stream.length > 0) {
-                            window.dispatchEvent(new CustomEvent('chart:trade-tick', {
-                                detail: {
-                                    contractId: cid,
-                                    tickStream: poc.tick_stream,
-                                    totalTicks: ticks,
-                                },
-                            }));
+                            const entryTime: number = poc.entry_tick_time ?? 0;
+                            const postEntryStream = entryTime
+                                ? (poc.tick_stream as any[]).filter((t: any) => t.epoch > entryTime)
+                                : (poc.tick_stream as any[]);
+                            if (postEntryStream.length > 0) {
+                                window.dispatchEvent(new CustomEvent('chart:trade-tick', {
+                                    detail: {
+                                        contractId: cid,
+                                        tickStream: postEntryStream,
+                                        totalTicks: ticks,
+                                    },
+                                }));
+                            }
                         }
 
                         if (poc.status === 'won' || poc.status === 'lost') {

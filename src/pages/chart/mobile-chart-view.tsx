@@ -51,10 +51,10 @@ interface DigitCircleProps {
 const DigitCircle: React.FC<DigitCircleProps> = ({
     digit, pct, rank, isBarrier, isCurrent, isWin, isLoss, tickLabels, onClick,
 }) => {
-    const SIZE   = 62;
+    const SIZE   = 76;
     const CX     = SIZE / 2;
-    const R      = 24;
-    const SW     = 3.2;
+    const R      = 30;
+    const SW     = 3.5;
     const CIRC   = 2 * Math.PI * R;
     const arcLen = (pct / 100) * CIRC;
 
@@ -84,7 +84,7 @@ const DigitCircle: React.FC<DigitCircleProps> = ({
                 <text
                     x={CX} y={CX + 1}
                     textAnchor='middle' dominantBaseline='middle'
-                    fontSize='17' fontWeight='900'
+                    fontSize='22' fontWeight='900'
                     fill={textColor}
                 >
                     {digit}
@@ -413,9 +413,19 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                         if (!poc) return;
                         if (!pocSubId && res.subscription?.id) pocSubId = res.subscription.id;
                         if (Array.isArray(poc.tick_stream) && poc.tick_stream.length > 0) {
-                            window.dispatchEvent(new CustomEvent('chart:trade-tick', {
-                                detail: { contractId: cid, tickStream: poc.tick_stream, totalTicks: ticks },
-                            }));
+                            // Strip the entry tick if present — for Bear/Bull and plain index
+                            // markets poc.tick_stream[0].epoch === poc.entry_tick_time (the
+                            // spot at purchase). Including it shifts every label by one,
+                            // making T1 appear on the wrong digit intermittently.
+                            const entryTime: number = poc.entry_tick_time ?? 0;
+                            const postEntryStream = entryTime
+                                ? (poc.tick_stream as any[]).filter((t: any) => t.epoch > entryTime)
+                                : (poc.tick_stream as any[]);
+                            if (postEntryStream.length > 0) {
+                                window.dispatchEvent(new CustomEvent('chart:trade-tick', {
+                                    detail: { contractId: cid, tickStream: postEntryStream, totalTicks: ticks },
+                                }));
+                            }
                         }
                         if (poc.status === 'won' || poc.status === 'lost') {
                             const won    = poc.status === 'won';

@@ -139,7 +139,7 @@
 .mcv-digits {
     display: flex;
     flex-direction: column;
-    padding: 12px 8px 0;
+    padding: 18px 2px 0;
     gap: 0;
     background: #fff;
     position: relative;
@@ -150,19 +150,19 @@
     justify-content: space-around;
     align-items: flex-end;
     width: 100%;
-    padding: 0 4px;
+    padding: 0 2px;
 }
 
 /* ── Triangle pointer rows ────────────────────────────────────────────────── */
 .mcv-digits__pointer-row {
     position: relative;
     width: 100%;
-    height: 16px;
+    height: 20px;
     overflow: visible;
     flex-shrink: 0;
 
-    /* sits just above the top row */
-    &--top    { margin: 6px 0 0; }
+    /* sits just above the top row — extra top margin leaves room for T-labels */
+    &--top    { margin: 8px 0 0; }
     /* sits just below the bottom row */
     &--bottom { margin: 0; }
 }
@@ -173,25 +173,25 @@
     transform: translateX(-50%);
     width: 0;
     height: 0;
-    border-left:  9px solid transparent;
-    border-right: 9px solid transparent;
+    border-left:  11px solid transparent;
+    border-right: 11px solid transparent;
     transition: left 0.18s cubic-bezier(0.25, 0.46, 0.45, 0.94);
     will-change: left;
 
     /* ▼ pointing DOWN — for digits 0-4, appears above top row */
     &--down {
         bottom: 0;                         /* tip at bottom → points at circles below */
-        border-top:    13px solid #e74c3c;
+        border-top:    16px solid #e74c3c;
         border-bottom: none;
-        filter: drop-shadow(0 2px 4px rgba(231,76,60,0.5));
+        filter: drop-shadow(0 2px 5px rgba(231,76,60,0.55));
     }
 
     /* ▲ pointing UP — for digits 5-9, appears below bottom row */
     &--up {
         top: 0;                            /* tip at top → points at circles above */
-        border-bottom: 13px solid #e74c3c;
+        border-bottom: 16px solid #e74c3c;
         border-top:    none;
-        filter: drop-shadow(0 -2px 4px rgba(231,76,60,0.5));
+        filter: drop-shadow(0 -2px 5px rgba(231,76,60,0.55));
     }
 }
 
@@ -200,9 +200,9 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 2px;
+    gap: 3px;
     cursor: pointer;
-    padding: 2px;
+    padding: 2px 1px;
     border-radius: 8px;
     transition: background 0.12s;
     position: relative;
@@ -213,29 +213,30 @@
 }
 
 .mcv-circle__pct {
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 900;
     color: #000;
     line-height: 1.2;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.03em;
 
     &--barrier { color: #0e3348; font-weight: 900; }
 }
 
 .mcv-circle__tlabel {
     position: absolute;
-    top: -14px;
+    top: -18px;
     left: 50%;
     transform: translateX(-50%);
-    font-size: 8px;
-    font-weight: 700;
+    font-size: 9px;
+    font-weight: 800;
     color: #6366f1;
     white-space: nowrap;
-    background: rgba(99,102,241,0.08);
+    background: rgba(99,102,241,0.10);
     border-radius: 4px;
     padding: 1px 4px;
+    line-height: 1.4;
 
-    &--final { color: #f59e0b; background: rgba(245,158,11,0.12); }
+    &--final { color: #f59e0b; background: rgba(245,158,11,0.14); }
 }
 
 /* ── Navigation arrows ──────────────────────────────────────────────────── */
