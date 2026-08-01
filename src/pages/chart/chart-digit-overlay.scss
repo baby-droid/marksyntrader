@@ -373,15 +373,20 @@
 @keyframes cdo-dot-pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.75)} }
 @keyframes cdo-fade-in   { from{opacity:0;transform:translateX(-5px)} to{opacity:1;transform:translateX(0)} }
 
-/* ── Win / Loss trade notification popup — positioned over chart ─────────── */
+/* ── Win / Loss trade notification popup — centred inside the chart ─────── */
 .chart-trade-flag {
     position: absolute;
-    right: 72px;
+    /* Push toward chart centre — far enough from the right price-axis to be
+       fully visible, far enough from the left to avoid the Y-axis labels.    */
+    left: 50%;
+    transform: translateX(-50%);
+    right: auto;
     display: flex;
     flex-direction: column;
+    align-items: center;
     z-index: 30;
     pointer-events: none;
-    min-width: 130px;
+    min-width: 160px;
     animation: chart-flag-in  0.30s cubic-bezier(.2,1.5,.4,1) both,
                chart-flag-out 0.40s ease-in 4.8s both;
 
