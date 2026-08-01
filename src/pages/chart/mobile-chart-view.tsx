@@ -499,6 +499,13 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                         pocSubId = null;
                     }
                 };
+                // Per-contract dispatch guard (issue #2):
+                // Deriv sends a POC message on EVERY live price tick, not only when a
+                // new settlement tick lands. Without this, the same tick_stream fires
+                // dozens of chart:trade-tick events per real tick, causing redundant
+                // processing and potential race overwrites in chart-wrapper.
+                let lastDispatchedLen = 0;
+
                 settleSub.subscribe({
                     next: (res: any) => {
                         const poc = res?.proposal_open_contract;
@@ -511,13 +518,22 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                             // Volatility, 1s, Bear/Bull, Jump, Boom/Crash/Step/RB).
                             // Filter it out so T1 always labels the first genuine
                             // determination tick, regardless of market type.
-                            // One filter = one skip for every market — no extra slice.
+                            //
+                            // Issue #3 fix — entry_tick_time = 0 fallback:
+                            // On the first POC response entry_tick_time may be 0/absent.
+                            // Old fallback passed the raw stream, potentially including the
+                            // entry spot as T1. New fallback: slice to at most `ticks`
+                            // elements from the end — the contract produces exactly `ticks`
+                            // post-entry ticks so any leading entry spot is excluded.
                             const entryTime: number = poc.entry_tick_time ?? 0;
+                            const rawStream = poc.tick_stream as any[];
                             const postEntryStream = entryTime
-                                ? (poc.tick_stream as any[]).filter((t: any) => t.epoch > entryTime)
-                                : [...(poc.tick_stream as any[])];
+                                ? rawStream.filter((t: any) => t.epoch > entryTime)
+                                : rawStream.slice(Math.max(0, rawStream.length - ticks));
 
-                            if (postEntryStream.length > 0) {
+                            // Only dispatch when there are genuinely new ticks (issue #2)
+                            if (postEntryStream.length > 0 && postEntryStream.length > lastDispatchedLen) {
+                                lastDispatchedLen = postEntryStream.length;
                                 window.dispatchEvent(new CustomEvent('chart:trade-tick', {
                                     detail: { contractId: cid, tickStream: postEntryStream, totalTicks: ticks },
                                 }));
