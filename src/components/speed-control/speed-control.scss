@@ -2,6 +2,7 @@
     display: flex;
     align-items: center;
     gap: 0.4rem;
+    position: relative;
 
     &__group {
         display: inline-flex;
@@ -47,8 +48,7 @@
         }
     }
 
-    /* ⚡ Fast — always has a vivid visible background so users can see
-       at a glance whether it's on or off. Active = electric purple glow. */
+    /* ⚡ Fast — event-driven zero-latency execution toggle */
     &__fast {
         border: none;
         border-radius: 1rem;
@@ -59,7 +59,6 @@
         transition: all 0.15s ease;
         white-space: nowrap;
         line-height: 1.3;
-        /* Inactive state: muted purple so it's visible but not dominant */
         background: rgba(124, 58, 237, 0.18);
         color: #a78bfa;
         border: 1px solid rgba(124, 58, 237, 0.3);
@@ -74,6 +73,110 @@
             border-color: transparent;
             background: linear-gradient(135deg, #7c3aed, #06b6d4);
             box-shadow: 0 0 10px rgba(124, 58, 237, 0.55);
+            animation: fast-pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes fast-pulse {
+            0%, 100% { box-shadow: 0 0 10px rgba(124, 58, 237, 0.55); }
+            50%       { box-shadow: 0 0 18px rgba(6, 182, 212, 0.65); }
+        }
+    }
+
+    /* Diagnostics ms badge */
+    &__diag-wrap {
+        position: relative;
+    }
+
+    &__diag-btn {
+        border: none;
+        background: rgba(6, 182, 212, 0.15);
+        color: #06b6d4;
+        border-radius: 0.8rem;
+        padding: 0.18rem 0.45rem;
+        font-size: 0.72rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: background 0.15s;
+        font-family: monospace;
+        border: 1px solid rgba(6, 182, 212, 0.3);
+        white-space: nowrap;
+
+        &:hover { background: rgba(6, 182, 212, 0.25); }
+    }
+
+    /* Diagnostics floating panel */
+    &__diag-panel {
+        position: absolute;
+        top: calc(100% + 6px);
+        right: 0;
+        z-index: 9999;
+        background: #0f172a;
+        border: 1px solid rgba(6, 182, 212, 0.35);
+        border-radius: 0.75rem;
+        padding: 0.9rem 1rem;
+        width: 270px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.55);
+        color: #e2e8f0;
+        font-size: 0.8rem;
+    }
+
+    &__diag-title {
+        font-weight: 700;
+        font-size: 0.82rem;
+        color: #06b6d4;
+        margin-bottom: 0.4rem;
+        letter-spacing: 0.02em;
+    }
+
+    &__diag-status {
+        font-size: 0.78rem;
+        font-weight: 600;
+        margin-bottom: 0.55rem;
+    }
+
+    &__diag-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 0.6rem;
+
+        td {
+            padding: 0.22rem 0;
+            font-size: 0.78rem;
+            &:first-child { color: #94a3b8; }
+            &:last-child  { text-align: right; font-family: monospace; font-weight: 700; color: #a78bfa; }
+        }
+    }
+
+    &__diag-total {
+        td {
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            padding-top: 0.3rem;
+            font-weight: 700;
+            &:first-child { color: #e2e8f0; }
+            &:last-child  { color: #06b6d4; }
+        }
+    }
+
+    &__diag-note {
+        font-size: 0.68rem;
+        color: #475569;
+        margin-bottom: 0.55rem;
+        line-height: 1.4;
+    }
+
+    &__diag-features {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.3rem;
+
+        span {
+            background: rgba(6, 182, 212, 0.1);
+            border: 1px solid rgba(6, 182, 212, 0.2);
+            border-radius: 0.4rem;
+            padding: 0.12rem 0.4rem;
+            font-size: 0.65rem;
+            color: #67e8f9;
+            font-weight: 600;
         }
     }
 
@@ -86,6 +189,10 @@
         .speed-control__fast {
             padding: 0.18rem 0.55rem;
             font-size: 0.78rem;
+        }
+        .speed-control__diag-btn {
+            font-size: 0.68rem;
+            padding: 0.15rem 0.4rem;
         }
     }
 }

@@ -1254,8 +1254,10 @@ const ManualTrader: React.FC = () => {
                         <div className='mtp-section__label'>Stake</div>
                         <div className='mtp-stake-wrap'>
                             <div className='mtp-stake-row'>
-                                <button className='mtp-stake-adj'
-                                    onClick={() => setStake(s => Math.max(0.35, parseFloat(s) - 0.5).toFixed(2))}>
+                                {/* Fine-grained ±0.01 buttons */}
+                                <button className='mtp-stake-adj mtp-stake-adj--fine'
+                                    onClick={() => setStake(s => Math.max(0.35, parseFloat(s) - 0.01).toFixed(2))}
+                                    title='−0.01'>
                                     −
                                 </button>
                                 <div className='mtp-stake-mid'>
@@ -1264,8 +1266,9 @@ const ManualTrader: React.FC = () => {
                                         onChange={e => setStake(e.target.value)} />
                                     <span className='mtp-stake-cur'>{currency || 'USD'}</span>
                                 </div>
-                                <button className='mtp-stake-adj'
-                                    onClick={() => setStake(s => (parseFloat(s) + 0.5).toFixed(2))}>
+                                <button className='mtp-stake-adj mtp-stake-adj--fine'
+                                    onClick={() => setStake(s => (parseFloat(s) + 0.01).toFixed(2))}
+                                    title='+0.01'>
                                     +
                                 </button>
                             </div>

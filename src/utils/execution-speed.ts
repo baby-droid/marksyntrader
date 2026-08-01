@@ -133,3 +133,55 @@ export const subscribeFastExecution = (fn: (enabled: boolean) => void): (() => v
         fastExecListeners.delete(fn);
     };
 };
+
+/* ─── Latency metrics for Fast mode diagnostics ──────────────────────────
+   Tracks: tick arrival → strategy eval → purchase dispatch → response.
+   All timestamps are performance.now() for sub-millisecond precision.
+   The diagnostics panel in SpeedControl reads these via subscribeMetrics(). */
+
+export interface ExecutionMetrics {
+    tickToEval:     number | null;  // ms: tick arrival → strategy evaluation
+    evalToBuy:      number | null;  // ms: strategy eval → purchase request sent
+    buyToResponse:  number | null;  // ms: purchase sent → Deriv response
+    totalLatency:   number | null;  // ms: tick arrival → full execution
+    lastUpdated:    number;         // performance.now() when last refreshed
+}
+
+const EMPTY_METRICS: ExecutionMetrics = {
+    tickToEval: null, evalToBuy: null,
+    buyToResponse: null, totalLatency: null,
+    lastUpdated: 0,
+};
+
+let metrics: ExecutionMetrics = { ...EMPTY_METRICS };
+const metricsListeners = new Set<(m: ExecutionMetrics) => void>();
+
+/** Record a phase transition. `phase` is which latency slot to update. */
+export const recordPhase = (
+    phase: 'tickToEval' | 'evalToBuy' | 'buyToResponse',
+    ms: number,
+): void => {
+    metrics = {
+        ...metrics,
+        [phase]: ms,
+        totalLatency: (metrics.tickToEval ?? 0) + (metrics.evalToBuy ?? 0) + (metrics.buyToResponse ?? 0) + (phase === 'buyToResponse' ? 0 : 0),
+        lastUpdated: performance.now(),
+    };
+    // Recompute total
+    if (metrics.tickToEval != null && metrics.evalToBuy != null && metrics.buyToResponse != null) {
+        metrics.totalLatency = metrics.tickToEval + metrics.evalToBuy + metrics.buyToResponse;
+    }
+    metricsListeners.forEach(fn => fn({ ...metrics }));
+};
+
+export const getMetrics = (): ExecutionMetrics => ({ ...metrics });
+
+export const subscribeMetrics = (fn: (m: ExecutionMetrics) => void): (() => void) => {
+    metricsListeners.add(fn);
+    return () => metricsListeners.delete(fn);
+};
+
+export const resetMetrics = (): void => {
+    metrics = { ...EMPTY_METRICS };
+    metricsListeners.forEach(fn => fn({ ...metrics }));
+};

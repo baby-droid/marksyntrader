@@ -371,8 +371,10 @@ const RunPanel = observer(() => {
     const { total_payout, total_profit, total_stake, won_contracts, lost_contracts, number_of_runs } = statistics;
     const { BOT_BUILDER, CHART, AHMED_LEARNING, MANUAL_TRADER, BULK_TRADE, AUTO_TRADES } = DBOT_TABS;
 
-    // On mobile, hide the run panel entirely on pages that have their own trade UI
-    const HIDE_ON_MOBILE = [MANUAL_TRADER, BULK_TRADE, AUTO_TRADES];
+    // On mobile, hide the run panel (Summary/Transactions/Journal) on pages
+    // that have their own full-screen trade UI — Charts and Manual Trader use
+    // MobileChartView which already contains everything the user needs.
+    const HIDE_ON_MOBILE = [MANUAL_TRADER, BULK_TRADE, AUTO_TRADES, CHART];
     const hide_on_mobile = !isDesktop && HIDE_ON_MOBILE.includes(active_tab);
 
     React.useEffect(() => {
