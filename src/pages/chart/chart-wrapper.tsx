@@ -385,12 +385,27 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
 
     /* ── Mobile view: Deriv-style full-screen trade UI ────────────────────── */
     if (isMobileView) {
+        /** Sort: Bear → Bull → Volatility plain → 1s Volatility → Jump → Boom → Crash → Step → others */
+        const getMobileMarketPriority = (sym: string): number => {
+            if (sym === 'RDBEAR')                              return 0;
+            if (sym === 'RDBULL')                              return 1;
+            if (/^R_\d/.test(sym))                             return 2;
+            if (/^1HZ/.test(sym))                              return 3;
+            if (/^JD/.test(sym))                               return 4;
+            if (/^BOOM/.test(sym))                             return 5;
+            if (/^CRASH/.test(sym))                            return 6;
+            if (sym === 'stpRNG')                              return 7;
+            return 8;
+        };
         const activeSymbols: Array<{ symbol: string; display_name: string }> =
             Array.isArray((api_base as any)?.active_symbols)
                 ? (api_base as any).active_symbols.map((s: any) => ({
                       symbol: s.symbol ?? s.underlying_symbol ?? '',
                       display_name: s.display_name ?? s.symbol ?? '',
                   })).filter((s: any) => s.symbol)
+                  .sort((a: any, b: any) =>
+                      getMobileMarketPriority(a.symbol) - getMobileMarketPriority(b.symbol)
+                  )
                 : [];
         return (
             <MobileChartView
