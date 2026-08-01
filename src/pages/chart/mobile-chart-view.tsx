@@ -292,6 +292,16 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
     const [overPayout,  setOverPayout]  = useState<number | null>(null);
     const [underPayout, setUnderPayout] = useState<number | null>(null);
     const payoutTimerRef = useRef<any>(null);
+    // Cached proposal IDs from the last payout-fetch — reused on buy to skip the
+    // extra proposal round-trip and execute instantly on the current tick.
+    const cachedProposalRef = useRef<{
+        key: string;
+        overId: string | null;
+        overAsk: number;
+        underId: string | null;
+        underAsk: number;
+        expiry: number;
+    } | null>(null);
 
     /* ── Win/Loss toast notification ──────────────────────────────────────── */
     const [tradeToast, setTradeToast] = useState<{ won: boolean; profit: number } | null>(null);
@@ -324,33 +334,57 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
     }, [group]);
 
     /* ── Payout fetch ─────────────────────────────────────────────────────── */
+    // Also caches proposal IDs so the buy button can execute instantly
+    // without a second round-trip to the server.
+    const warmProposalCache = useCallback(async () => {
+        const api = (api_base as any).api;
+        if (!api || !symbol) return;
+        const base: any = {
+            proposal: 1, amount: stake, basis: 'stake',
+            currency: getDisplayCurrency() || 'USD',
+            duration: ticks, duration_unit: group.durationUnit,
+            underlying_symbol: symbol,
+        };
+        if (group.needsBarrier) base.barrier = String(barrier);
+        try {
+            const [aRes, bRes] = await Promise.all([
+                api.send({ ...base, contract_type: group.typeA }),
+                api.send({ ...base, contract_type: group.typeB }),
+            ]);
+            const aP = Number(aRes?.proposal?.payout ?? 0);
+            const bP = Number(bRes?.proposal?.payout ?? 0);
+            setOverPayout(aP > 0 ? aP : null);
+            setUnderPayout(bP > 0 ? bP : null);
+            // Cache proposal IDs for instant buy (valid ~30s; we use 25s)
+            const cacheKey = `${group.id}|${barrier}|${ticks}|${stake}|${symbol}`;
+            if (aRes?.proposal?.id || bRes?.proposal?.id) {
+                cachedProposalRef.current = {
+                    key:      cacheKey,
+                    overId:   aRes?.proposal?.id   ?? null,
+                    overAsk:  Number(aRes?.proposal?.ask_price  ?? stake),
+                    underId:  bRes?.proposal?.id   ?? null,
+                    underAsk: Number(bRes?.proposal?.ask_price ?? stake),
+                    expiry:   Date.now() + 25000,
+                };
+            }
+        } catch {
+            setOverPayout(null); setUnderPayout(null);
+        }
+    }, [symbol, stake, ticks, barrier, group]);
+
     useEffect(() => {
         if (payoutTimerRef.current) clearTimeout(payoutTimerRef.current);
-        payoutTimerRef.current = setTimeout(async () => {
-            const api = (api_base as any).api;
-            if (!api || !symbol) return;
-            const base: any = {
-                proposal: 1, amount: stake, basis: 'stake',
-                currency: getDisplayCurrency() || 'USD',
-                duration: ticks, duration_unit: group.durationUnit,
-                underlying_symbol: symbol,
-            };
-            if (group.needsBarrier) base.barrier = String(barrier);
-            try {
-                const [aRes, bRes] = await Promise.all([
-                    api.send({ ...base, contract_type: group.typeA }),
-                    api.send({ ...base, contract_type: group.typeB }),
-                ]);
-                const aP = Number(aRes?.proposal?.payout ?? 0);
-                const bP = Number(bRes?.proposal?.payout ?? 0);
-                setOverPayout(aP > 0 ? aP : null);
-                setUnderPayout(bP > 0 ? bP : null);
-            } catch {
-                setOverPayout(null); setUnderPayout(null);
-            }
-        }, 600);
+        payoutTimerRef.current = setTimeout(warmProposalCache, 600);
         return () => { if (payoutTimerRef.current) clearTimeout(payoutTimerRef.current); };
-    }, [symbol, stake, ticks, barrier, group]);
+    }, [warmProposalCache]);
+
+    /* ── Market type helpers ──────────────────────────────────────────────── */
+    // 1s indices (1HZ*) and Jump indices (JD*) emit an extra tick right at
+    // contract open that acts as the "spot at entry" — it must be skipped so
+    // that the first genuine determination tick is labelled T1.
+    // Plain Volatility (R_*) and Bear/Bull markets do NOT exhibit this — their
+    // first post-entry tick is already T1.
+    const is1sOrJumpMarket = /^1HZ/i.test(symbol) || /^JD/i.test(symbol);
 
     /* ── Buy ──────────────────────────────────────────────────────────────── */
     const buy = useCallback(async (side: 'over' | 'under') => {
@@ -360,7 +394,9 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
         setLoading(side);
         setResult(null);
         const contractType = side === 'over' ? group.typeA : group.typeB;
-        try {
+
+        // Helper to build a fresh proposal request
+        const buildProposalReq = () => {
             const req: any = {
                 proposal: 1, amount: stake, basis: 'stake',
                 contract_type: contractType,
@@ -369,11 +405,39 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                 underlying_symbol: symbol,
             };
             if (group.needsBarrier) req.barrier = String(barrier);
-            const pr = await api.send(req);
-            if (pr?.error) throw new Error(pr.error.message);
-            const proposalId = pr?.proposal?.id;
-            const askPrice   = Number(pr?.proposal?.ask_price ?? stake);
-            if (!proposalId) throw new Error('Proposal failed');
+            return req;
+        };
+
+        try {
+            // ── Fast-path: reuse cached proposal to skip one round-trip ────────
+            // The payout-fetch effect pre-fetches proposals after every parameter
+            // change (barrier, ticks, stake, symbol). Reusing that ID means the
+            // buy message hits the server on the very next WebSocket frame — no
+            // extra proposal latency — so the contract enters on the current tick.
+            const cacheKey = `${group.id}|${barrier}|${ticks}|${stake}|${symbol}`;
+            const cached   = cachedProposalRef.current;
+            let proposalId: string | null = null;
+            let askPrice:   number        = stake;
+            let usedCache                 = false;
+
+            if (cached?.key === cacheKey && cached.expiry > Date.now()) {
+                proposalId = side === 'over' ? cached.overId : cached.underId;
+                askPrice   = side === 'over' ? cached.overAsk : cached.underAsk;
+                if (proposalId) {
+                    // Consume: proposal IDs are one-time-use on Deriv
+                    cachedProposalRef.current = null;
+                    usedCache = true;
+                }
+            }
+
+            // Cache miss or expired — fetch fresh proposal
+            if (!proposalId) {
+                const pr = await api.send(buildProposalReq());
+                if (pr?.error) throw new Error(pr.error.message);
+                proposalId = pr?.proposal?.id ?? null;
+                askPrice   = Number(pr?.proposal?.ask_price ?? stake);
+                if (!proposalId) throw new Error('Proposal failed');
+            }
 
             // PRE-signal for copy trading (before buy so follower gets same tick)
             try {
@@ -385,13 +449,26 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                 });
             } catch { /* non-fatal */ }
 
-            const buyRes = await api.send({ buy: proposalId, price: askPrice });
+            let buyRes = await api.send({ buy: proposalId, price: askPrice });
+            // If the cached proposal expired between fetch and now, retry once
+            if (buyRes?.error && usedCache) {
+                const pr = await api.send(buildProposalReq());
+                if (pr?.error) throw new Error(pr.error.message);
+                proposalId = pr?.proposal?.id ?? null;
+                askPrice   = Number(pr?.proposal?.ask_price ?? stake);
+                if (!proposalId) throw new Error('Proposal failed (retry)');
+                buyRes = await api.send({ buy: proposalId, price: askPrice });
+            }
             if (buyRes?.error) throw new Error(buyRes.error.message);
+
             const contractId = buyRes?.buy?.contract_id;
             setResult({ ok: true, msg: `✅ #${contractId}` });
             window.dispatchEvent(new CustomEvent('chart:trade-started', {
                 detail: { contractId: Number(contractId), ticks },
             }));
+
+            // Re-warm the proposal cache immediately so the next buy is also instant
+            warmProposalCache();
 
             // Subscribe POC for settlement
             try {
@@ -413,14 +490,22 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                         if (!poc) return;
                         if (!pocSubId && res.subscription?.id) pocSubId = res.subscription.id;
                         if (Array.isArray(poc.tick_stream) && poc.tick_stream.length > 0) {
-                            // Strip the entry tick if present — for Bear/Bull and plain index
-                            // markets poc.tick_stream[0].epoch === poc.entry_tick_time (the
-                            // spot at purchase). Including it shifts every label by one,
-                            // making T1 appear on the wrong digit intermittently.
+                            // ── Entry-tick stripping ──────────────────────────────────────
+                            // Strip any tick at or before entry_tick_time — for all markets
+                            // this removes the "spot at purchase" tick that Deriv sometimes
+                            // includes as tick_stream[0].
+                            // For 1s (1HZ*) and Jump (JD*) markets Deriv emits one additional
+                            // "first feed" tick immediately after entry that is NOT a
+                            // determination tick. Skip it so T1 labels the first real tick.
                             const entryTime: number = poc.entry_tick_time ?? 0;
-                            const postEntryStream = entryTime
+                            let postEntryStream = entryTime
                                 ? (poc.tick_stream as any[]).filter((t: any) => t.epoch > entryTime)
-                                : (poc.tick_stream as any[]);
+                                : [...(poc.tick_stream as any[])];
+
+                            if (is1sOrJumpMarket && postEntryStream.length > 0) {
+                                postEntryStream = postEntryStream.slice(1);
+                            }
+
                             if (postEntryStream.length > 0) {
                                 window.dispatchEvent(new CustomEvent('chart:trade-tick', {
                                     detail: { contractId: cid, tickStream: postEntryStream, totalTicks: ticks },
@@ -458,7 +543,7 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
             setLoading(null);
             setTimeout(() => setResult(null), 4000);
         }
-    }, [loading, group, barrier, ticks, stake, symbol]);
+    }, [loading, group, barrier, ticks, stake, symbol, is1sOrJumpMarket, warmProposalCache]);
 
     /* ── Derived state ────────────────────────────────────────────────────── */
     const OVER_LABELS: Record<string, string>  = { over_under: 'Over', even_odd: 'Even', match_differ: 'Matches', asian: 'Asian Up', touch: 'Touch', run_high_low: 'Run High', reset: 'Reset Call', ends_between: 'Ends In', stays_between: 'Stays Between' };
