@@ -1322,7 +1322,7 @@ const BotDetail: React.FC<{
             // ✅ Reset stall timer on every real tick — prevents false-fire watchdog
             lastTickAtRef.current = Date.now();
             // ⚡ Log the live digit stream to terminal on every tick (accurate, from pip_size)
-            if (running) {
+            if (!stopRef.current) {
                 const price = tick.quote != null ? Number(tick.quote).toFixed(ps) : '?';
                 setTerminal(prev => [
                     { t: ts(), msg: `TICK: ${price}  →  digit [${d}]`, kind: 'tick' },
