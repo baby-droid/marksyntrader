@@ -7,6 +7,23 @@ import { api_base } from '@/external/bot-skeleton';
 import './free-bots.scss';
 
 const FREE_BOTS = [
+  // ── New signature bots (August 2026) ─────────────────────────────────────
+  {
+    id: 'ahmed-cycle-master',
+    name: 'Ahmed Cycle Master — 8-Phase Multi-Strategy',
+    description: '🔄 SIGNATURE BOT — Trades 8 strategies in rotation: Even→Over1→Under8→Over3→Under6→Differs→Rise→Odd. Auto-recovery on 3+ losses. Martingale 2x. TP $5 / SL $20.',
+    category: 'Cycle', market: 'V50 1s', type: 'Multi-Strategy', prediction: 'AUTO',
+    xmlFile: '/bots/ahmed-cycle-master.xml',
+    badge: 'CYCLE 🔄', badgeColor: '#a78bfa', icon: '🔄', winRate: '~65%',
+  },
+  {
+    id: 'ahmed-pattern-scanner',
+    name: 'Ahmed Pattern Scanner — Smart Even/Odd Entry',
+    description: '🧠 AI PATTERN BOT — Reads last digit patterns: 3 consecutive Odds → buys Even, 3 Evens → buys Odd. Smart contrarian logic. Martingale 2x. Auto-invert on 5 losses. TP $5 / SL $20.',
+    category: 'Even/Odd', market: 'V25 1s', type: 'DIGITEVEN/DIGITODD', prediction: 'PATTERN',
+    xmlFile: '/bots/ahmed-pattern-scanner.xml',
+    badge: 'SCAN 🧠', badgeColor: '#34d399', icon: '🧠', winRate: '~55%',
+  },
   // ── From latest uploads (July 2026) ──────────────────────────────────────
   {
     id: 'ahmed-under-dt-oppo-killer',

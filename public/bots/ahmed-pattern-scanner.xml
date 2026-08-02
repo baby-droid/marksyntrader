@@ -1,0 +1,628 @@
+<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
+  <variables>
+    <variable id="PS_stake">stake</variable>
+    <variable id="PS_init_stake">initial_stake</variable>
+    <variable id="PS_martingale">Martingale</variable>
+    <variable id="PS_consOdds">consecutiveOdds</variable>
+    <variable id="PS_consEvens">consecutiveEvens</variable>
+    <variable id="PS_lastDigit">lastDigit</variable>
+    <variable id="PS_buyType">buyType</variable>
+    <variable id="PS_totalprofit">totalprofit</variable>
+    <variable id="PS_totalloss">totalloss</variable>
+    <variable id="PS_lossStreak">lossStreak</variable>
+    <variable id="PS_text">text</variable>
+  </variables>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       TRADE DEFINITION
+       Market: V25 1s  Type: Even/Odd  1 tick
+       Pattern logic: track last digit → 3 consecutive odds → buy EVEN
+                                        → 3 consecutive evens → buy ODD
+       Fallback: last digit odd → buy EVEN (contra), even → buy ODD
+       Martingale 2x on loss, reset on win.
+       ═══════════════════════════════════════════════════════════════ -->
+  <block type="trade_definition" id="PS_trade_def" deletable="false" x="0" y="60">
+    <statement name="TRADE_OPTIONS">
+      <block type="trade_definition_market" id="PS_mkt" deletable="false" movable="false">
+        <field name="MARKET_LIST">synthetic_index</field>
+        <field name="SUBMARKET_LIST">random_index</field>
+        <field name="SYMBOL_LIST">1HZ25V</field>
+        <next>
+          <block type="trade_definition_tradetype" id="PS_ttype" deletable="false" movable="false">
+            <field name="TRADETYPECAT_LIST">digits</field>
+            <field name="TRADETYPE_LIST">evenodd</field>
+            <next>
+              <block type="trade_definition_contracttype" id="PS_ctype" deletable="false" movable="false">
+                <field name="TYPE_LIST">both</field>
+                <next>
+                  <block type="trade_definition_candleinterval" id="PS_candle" deletable="false" movable="false">
+                    <field name="CANDLEINTERVAL_LIST">60</field>
+                    <next>
+                      <block type="trade_definition_restartbuysell" id="PS_restart" deletable="false" movable="false">
+                        <field name="TIME_MACHINE_ENABLED">FALSE</field>
+                        <next>
+                          <block type="trade_definition_restartonerror" id="PS_err" deletable="false" movable="false">
+                            <field name="RESTARTONERROR">TRUE</field>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+
+    <!-- ── INITIALIZATION ──────────────────────────────────────────── -->
+    <statement name="INITIALIZATION">
+      <block type="variables_set" id="PS_set_stake">
+        <field name="VAR" id="PS_stake">stake</field>
+        <value name="VALUE">
+          <block type="math_number" id="PS_n_stake"><field name="NUM">0.50</field></block>
+        </value>
+        <next>
+          <block type="variables_set" id="PS_set_init">
+            <field name="VAR" id="PS_init_stake">initial_stake</field>
+            <value name="VALUE">
+              <block type="math_number" id="PS_n_init"><field name="NUM">0.50</field></block>
+            </value>
+            <next>
+              <block type="variables_set" id="PS_set_mg">
+                <field name="VAR" id="PS_martingale">Martingale</field>
+                <value name="VALUE">
+                  <block type="math_number" id="PS_n_mg"><field name="NUM">2.0</field></block>
+                </value>
+                <next>
+                  <block type="variables_set" id="PS_set_odds">
+                    <field name="VAR" id="PS_consOdds">consecutiveOdds</field>
+                    <value name="VALUE">
+                      <block type="math_number" id="PS_n_odds"><field name="NUM">0</field></block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="PS_set_evens">
+                        <field name="VAR" id="PS_consEvens">consecutiveEvens</field>
+                        <value name="VALUE">
+                          <block type="math_number" id="PS_n_evens"><field name="NUM">0</field></block>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="PS_set_last">
+                            <field name="VAR" id="PS_lastDigit">lastDigit</field>
+                            <value name="VALUE">
+                              <block type="math_number" id="PS_n_last"><field name="NUM">0</field></block>
+                            </value>
+                            <next>
+                              <block type="variables_set" id="PS_set_buy">
+                                <field name="VAR" id="PS_buyType">buyType</field>
+                                <value name="VALUE">
+                                  <block type="math_number" id="PS_n_buy"><field name="NUM">1</field></block>
+                                </value>
+                                <next>
+                                  <block type="variables_set" id="PS_set_tp">
+                                    <field name="VAR" id="PS_totalprofit">totalprofit</field>
+                                    <value name="VALUE">
+                                      <block type="math_number" id="PS_n_tp"><field name="NUM">5</field></block>
+                                    </value>
+                                    <next>
+                                      <block type="variables_set" id="PS_set_sl">
+                                        <field name="VAR" id="PS_totalloss">totalloss</field>
+                                        <value name="VALUE">
+                                          <block type="math_number" id="PS_n_sl"><field name="NUM">20</field></block>
+                                        </value>
+                                        <next>
+                                          <block type="variables_set" id="PS_set_ls">
+                                            <field name="VAR" id="PS_lossStreak">lossStreak</field>
+                                            <value name="VALUE">
+                                              <block type="math_number" id="PS_n_ls"><field name="NUM">0</field></block>
+                                            </value>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+
+    <!-- ── SUBMARKET — 1 tick, stake from variable ─────────────────── -->
+    <statement name="SUBMARKET">
+      <block type="trade_definition_tradeoptions" id="PS_trade_opts">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="false"></mutation>
+        <field name="DURATIONTYPE_LIST">t</field>
+        <value name="DURATION">
+          <shadow type="math_number_positive" id="PS_dur_shadow">
+            <field name="NUM">1</field>
+          </shadow>
+        </value>
+        <value name="AMOUNT">
+          <shadow type="math_number_positive" id="PS_amt_shadow">
+            <field name="NUM">0.35</field>
+          </shadow>
+          <block type="variables_get" id="PS_get_stake_sub">
+            <field name="VAR" id="PS_stake">stake</field>
+          </block>
+        </value>
+      </block>
+    </statement>
+  </block>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       BEFORE PURCHASE
+       Pattern decision logic:
+         1. Read lastDigit (last_digit block)
+         2. Determine odd/even via lastDigit % 2
+         3. Update consecutiveOdds / consecutiveEvens counts
+         4. Decide buyType:
+            - 3+ consecutive odds  → buyType=1 (EVEN — expecting reversal)
+            - 3+ consecutive evens → buyType=2 (ODD  — expecting reversal)
+            - Odd digit seen (streak < 3)   → buyType=2 (ODD, contrarian on small streak)
+            - Even digit seen (streak < 3)  → buyType=1 (EVEN, contrarian on small streak)
+         5. Execute purchase based on buyType
+       ═══════════════════════════════════════════════════════════════ -->
+  <block type="before_purchase" id="PS_before" deletable="false" x="0" y="886">
+    <statement name="BEFOREPURCHASE_STACK">
+
+      <!-- Step 1: Capture the last digit -->
+      <block type="variables_set" id="PS_capture_digit">
+        <field name="VAR" id="PS_lastDigit">lastDigit</field>
+        <value name="VALUE">
+          <block type="last_digit" id="PS_last_digit_block"></block>
+        </value>
+        <next>
+
+          <!-- Step 2: Check if lastDigit is ODD (lastDigit % 2 != 0) -->
+          <block type="controls_if" id="PS_odd_check">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+            <value name="IF0">
+              <!-- lastDigit % 2 == 1 → odd -->
+              <block type="logic_compare" id="PS_mod_cmp">
+                <field name="OP">EQ</field>
+                <value name="A">
+                  <block type="math_modulo" id="PS_modulo">
+                    <value name="DIVIDEND">
+                      <shadow type="math_number" id="PS_mod_div_s"><field name="NUM">0</field></shadow>
+                      <block type="variables_get" id="PS_mod_digit">
+                        <field name="VAR" id="PS_lastDigit">lastDigit</field>
+                      </block>
+                    </value>
+                    <value name="DIVISOR">
+                      <shadow type="math_number" id="PS_mod_2"><field name="NUM">2</field></shadow>
+                    </value>
+                  </block>
+                </value>
+                <value name="B">
+                  <block type="math_number" id="PS_cmp_1"><field name="NUM">1</field></block>
+                </value>
+              </block>
+            </value>
+
+            <!-- ODD DIGIT branch -->
+            <statement name="DO0">
+              <!-- Reset evenStreak, increment oddStreak -->
+              <block type="variables_set" id="PS_reset_evens_o">
+                <field name="VAR" id="PS_consEvens">consecutiveEvens</field>
+                <value name="VALUE">
+                  <block type="math_number" id="PS_re_zero"><field name="NUM">0</field></block>
+                </value>
+                <next>
+                  <block type="variables_set" id="PS_inc_odds">
+                    <field name="VAR" id="PS_consOdds">consecutiveOdds</field>
+                    <value name="VALUE">
+                      <block type="math_arithmetic" id="PS_odds_add">
+                        <field name="OP">ADD</field>
+                        <value name="A">
+                          <shadow type="math_number" id="PS_oa_a"><field name="NUM">1</field></shadow>
+                          <block type="variables_get" id="PS_oa_co">
+                            <field name="VAR" id="PS_consOdds">consecutiveOdds</field>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <shadow type="math_number" id="PS_oa_b"><field name="NUM">1</field></shadow>
+                        </value>
+                      </block>
+                    </value>
+                    <next>
+                      <!-- If 3+ consecutive odds → set buyType=1 (EVEN — reversal expected) -->
+                      <block type="controls_if" id="PS_odds_3check">
+                        <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                        <value name="IF0">
+                          <block type="logic_compare" id="PS_odds_3cmp">
+                            <field name="OP">GTE</field>
+                            <value name="A">
+                              <block type="variables_get" id="PS_o3_co">
+                                <field name="VAR" id="PS_consOdds">consecutiveOdds</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="math_number" id="PS_o3_n"><field name="NUM">3</field></block>
+                            </value>
+                          </block>
+                        </value>
+                        <statement name="DO0">
+                          <!-- 3+ odds → buy EVEN (strong reversal signal) -->
+                          <block type="variables_set" id="PS_set_buy1_strong">
+                            <field name="VAR" id="PS_buyType">buyType</field>
+                            <value name="VALUE">
+                              <block type="math_number" id="PS_bt_1s"><field name="NUM">1</field></block>
+                            </value>
+                          </block>
+                        </statement>
+                        <statement name="ELSE">
+                          <!-- &lt; 3 odds → buy ODD (contrarian, follow momentum) -->
+                          <block type="variables_set" id="PS_set_buy2_contra">
+                            <field name="VAR" id="PS_buyType">buyType</field>
+                            <value name="VALUE">
+                              <block type="math_number" id="PS_bt_2c"><field name="NUM">2</field></block>
+                            </value>
+                          </block>
+                        </statement>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </statement>
+
+            <!-- EVEN DIGIT branch -->
+            <statement name="ELSE">
+              <!-- Reset oddStreak, increment evenStreak -->
+              <block type="variables_set" id="PS_reset_odds_e">
+                <field name="VAR" id="PS_consOdds">consecutiveOdds</field>
+                <value name="VALUE">
+                  <block type="math_number" id="PS_ro_zero"><field name="NUM">0</field></block>
+                </value>
+                <next>
+                  <block type="variables_set" id="PS_inc_evens">
+                    <field name="VAR" id="PS_consEvens">consecutiveEvens</field>
+                    <value name="VALUE">
+                      <block type="math_arithmetic" id="PS_evens_add">
+                        <field name="OP">ADD</field>
+                        <value name="A">
+                          <shadow type="math_number" id="PS_ea_a"><field name="NUM">1</field></shadow>
+                          <block type="variables_get" id="PS_ea_ce">
+                            <field name="VAR" id="PS_consEvens">consecutiveEvens</field>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <shadow type="math_number" id="PS_ea_b"><field name="NUM">1</field></shadow>
+                        </value>
+                      </block>
+                    </value>
+                    <next>
+                      <!-- If 3+ consecutive evens → set buyType=2 (ODD — reversal expected) -->
+                      <block type="controls_if" id="PS_evens_3check">
+                        <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                        <value name="IF0">
+                          <block type="logic_compare" id="PS_evens_3cmp">
+                            <field name="OP">GTE</field>
+                            <value name="A">
+                              <block type="variables_get" id="PS_e3_ce">
+                                <field name="VAR" id="PS_consEvens">consecutiveEvens</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="math_number" id="PS_e3_n"><field name="NUM">3</field></block>
+                            </value>
+                          </block>
+                        </value>
+                        <statement name="DO0">
+                          <!-- 3+ evens → buy ODD (strong reversal signal) -->
+                          <block type="variables_set" id="PS_set_buy2_strong">
+                            <field name="VAR" id="PS_buyType">buyType</field>
+                            <value name="VALUE">
+                              <block type="math_number" id="PS_bt_2s"><field name="NUM">2</field></block>
+                            </value>
+                          </block>
+                        </statement>
+                        <statement name="ELSE">
+                          <!-- &lt; 3 evens → buy EVEN (contrarian, follow momentum) -->
+                          <block type="variables_set" id="PS_set_buy1_contra">
+                            <field name="VAR" id="PS_buyType">buyType</field>
+                            <value name="VALUE">
+                              <block type="math_number" id="PS_bt_1c"><field name="NUM">1</field></block>
+                            </value>
+                          </block>
+                        </statement>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </statement>
+          </block>
+        </next>
+      </block>
+
+      <!-- Step 3: Execute purchase based on buyType -->
+      <!-- buyType 1 = DIGITEVEN, buyType 2 = DIGITODD -->
+      <!-- Placed as a sibling after the if-block above via next chain -->
+    </statement>
+  </block>
+
+  <!-- ── Purchase decision block — separate before_purchase won't work;
+       we embed the final purchase INSIDE the pattern block via next chain.
+       The block below is a standalone before_purchase for the actual buy
+       (DBot runs all BEFOREPURCHASE_STACK statements in sequence) -->
+  <block type="before_purchase" id="PS_before_buy" deletable="false" x="500" y="886">
+    <statement name="BEFOREPURCHASE_STACK">
+      <block type="controls_if" id="PS_buy_if">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+        <value name="IF0">
+          <!-- buyType == 1 → DIGITEVEN -->
+          <block type="logic_compare" id="PS_buy_cmp1">
+            <field name="OP">EQ</field>
+            <value name="A">
+              <block type="variables_get" id="PS_buy_get1">
+                <field name="VAR" id="PS_buyType">buyType</field>
+              </block>
+            </value>
+            <value name="B">
+              <block type="math_number" id="PS_buy_n1"><field name="NUM">1</field></block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="purchase" id="PS_purchase_even">
+            <field name="PURCHASE_LIST">DIGITEVEN</field>
+          </block>
+        </statement>
+        <statement name="ELSE">
+          <block type="purchase" id="PS_purchase_odd">
+            <field name="PURCHASE_LIST">DIGITODD</field>
+          </block>
+        </statement>
+      </block>
+    </statement>
+  </block>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       AFTER PURCHASE — TP/SL, martingale, win/loss handling
+       On win: reset stake, clear streaks
+       On loss: 2x martingale, increment lossStreak
+                After 5 consecutive losses: invert the consecutive counters
+                (force the bot into the opposing signal)
+       ═══════════════════════════════════════════════════════════════ -->
+  <block type="after_purchase" id="PS_after" collapsed="false" x="1000" y="60">
+    <statement name="AFTERPURCHASE_STACK">
+
+      <!-- ── Take Profit check ──────────────────────────────────────── -->
+      <block type="controls_if" id="PS_ap_tp">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="1" else="1"></mutation>
+        <value name="IF0">
+          <block type="logic_compare" id="PS_tp_cmp">
+            <field name="OP">GTE</field>
+            <value name="A"><block type="total_profit" id="PS_tp_profit"></block></value>
+            <value name="B">
+              <block type="variables_get" id="PS_tp_get">
+                <field name="VAR" id="PS_totalprofit">totalprofit</field>
+              </block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="notify" id="PS_tp_notify">
+            <field name="NOTIFICATION_TYPE">info</field>
+            <field name="NOTIFICATION_SOUND">earned-money</field>
+            <value name="MESSAGE">
+              <shadow type="text" id="PS_tp_msg">
+                <field name="TEXT">🎉 Pattern Scanner — Take Profit hit! Stopping.</field>
+              </shadow>
+            </value>
+          </block>
+        </statement>
+
+        <!-- ── Stop Loss check ─────────────────────────────────────── -->
+        <value name="IF1">
+          <block type="logic_compare" id="PS_sl_cmp">
+            <field name="OP">LTE</field>
+            <value name="A"><block type="total_profit" id="PS_sl_profit"></block></value>
+            <value name="B">
+              <block type="math_single" id="PS_sl_neg">
+                <field name="OP">NEG</field>
+                <value name="NUM">
+                  <shadow type="math_number" id="PS_sl_shad"><field name="NUM">20</field></shadow>
+                  <block type="variables_get" id="PS_sl_get">
+                    <field name="VAR" id="PS_totalloss">totalloss</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO1">
+          <block type="notify" id="PS_sl_notify">
+            <field name="NOTIFICATION_TYPE">error</field>
+            <field name="NOTIFICATION_SOUND">error</field>
+            <value name="MESSAGE">
+              <shadow type="text" id="PS_sl_msg">
+                <field name="TEXT">🛑 Pattern Scanner — Stop Loss hit! Stopping.</field>
+              </shadow>
+            </value>
+          </block>
+        </statement>
+
+        <!-- ── Normal result handling ──────────────────────────────── -->
+        <statement name="ELSE">
+          <block type="controls_if" id="PS_win_if">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+            <value name="IF0">
+              <block type="contract_check_result" id="PS_win_chk">
+                <field name="CHECK_RESULT">win</field>
+              </block>
+            </value>
+
+            <!-- WIN: notify, reset stake, clear all streaks -->
+            <statement name="DO0">
+              <block type="notify" id="PS_win_notify">
+                <field name="NOTIFICATION_TYPE">info</field>
+                <field name="NOTIFICATION_SOUND">earned-money</field>
+                <value name="MESSAGE">
+                  <shadow type="text" id="PS_win_msg"><field name="TEXT">abc</field></shadow>
+                  <block type="contract_check_result" id="PS_win_res">
+                    <field name="CHECK_RESULT">win</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="variables_set" id="PS_win_reset_stake">
+                    <field name="VAR" id="PS_stake">stake</field>
+                    <value name="VALUE">
+                      <block type="variables_get" id="PS_win_get_init">
+                        <field name="VAR" id="PS_init_stake">initial_stake</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="PS_win_clear_ls">
+                        <field name="VAR" id="PS_lossStreak">lossStreak</field>
+                        <value name="VALUE">
+                          <block type="math_number" id="PS_win_ls_zero"><field name="NUM">0</field></block>
+                        </value>
+                        <next>
+                          <!-- On win, also clear the consecutive counters to restart scan -->
+                          <block type="variables_set" id="PS_win_clear_odds">
+                            <field name="VAR" id="PS_consOdds">consecutiveOdds</field>
+                            <value name="VALUE">
+                              <block type="math_number" id="PS_win_odds_zero"><field name="NUM">0</field></block>
+                            </value>
+                            <next>
+                              <block type="variables_set" id="PS_win_clear_evens">
+                                <field name="VAR" id="PS_consEvens">consecutiveEvens</field>
+                                <value name="VALUE">
+                                  <block type="math_number" id="PS_win_evens_zero"><field name="NUM">0</field></block>
+                                </value>
+                                <next>
+                                  <block type="trade_again" id="PS_win_ta"></block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </statement>
+
+            <!-- LOSS: notify, martingale stake, increment lossStreak -->
+            <statement name="ELSE">
+              <block type="notify" id="PS_loss_notify">
+                <field name="NOTIFICATION_TYPE">error</field>
+                <field name="NOTIFICATION_SOUND">error</field>
+                <value name="MESSAGE">
+                  <shadow type="text" id="PS_loss_msg"><field name="TEXT">abc</field></shadow>
+                  <block type="contract_check_result" id="PS_loss_res">
+                    <field name="CHECK_RESULT">loss</field>
+                  </block>
+                </value>
+                <next>
+                  <!-- Martingale: stake = stake * Martingale -->
+                  <block type="variables_set" id="PS_loss_mg">
+                    <field name="VAR" id="PS_stake">stake</field>
+                    <value name="VALUE">
+                      <block type="math_arithmetic" id="PS_mg_arith">
+                        <field name="OP">MULTIPLY</field>
+                        <value name="A">
+                          <shadow type="math_number" id="PS_mga_a"><field name="NUM">1</field></shadow>
+                          <block type="variables_get" id="PS_mga_stake">
+                            <field name="VAR" id="PS_stake">stake</field>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <shadow type="math_number" id="PS_mga_b"><field name="NUM">2</field></shadow>
+                          <block type="variables_get" id="PS_mga_mg">
+                            <field name="VAR" id="PS_martingale">Martingale</field>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                    <next>
+                      <!-- lossStreak++ -->
+                      <block type="variables_set" id="PS_loss_ls_inc">
+                        <field name="VAR" id="PS_lossStreak">lossStreak</field>
+                        <value name="VALUE">
+                          <block type="math_arithmetic" id="PS_ls_arith">
+                            <field name="OP">ADD</field>
+                            <value name="A">
+                              <shadow type="math_number" id="PS_lsa_a"><field name="NUM">1</field></shadow>
+                              <block type="variables_get" id="PS_lsa_ls">
+                                <field name="VAR" id="PS_lossStreak">lossStreak</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <shadow type="math_number" id="PS_lsa_b"><field name="NUM">1</field></shadow>
+                            </value>
+                          </block>
+                        </value>
+                        <next>
+                          <!-- After 5 consecutive losses: invert signal by swapping counters.
+                               This forces a fresh pattern scan from the opposite side. -->
+                          <block type="controls_if" id="PS_invert_check">
+                            <value name="IF0">
+                              <block type="logic_compare" id="PS_invert_cmp">
+                                <field name="OP">GTE</field>
+                                <value name="A">
+                                  <block type="variables_get" id="PS_inv_ls">
+                                    <field name="VAR" id="PS_lossStreak">lossStreak</field>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <block type="math_number" id="PS_inv_n5"><field name="NUM">5</field></block>
+                                </value>
+                              </block>
+                            </value>
+                            <statement name="DO0">
+                              <!-- Invert: give consecutive counters high values to trigger reversal signal -->
+                              <block type="variables_set" id="PS_inv_odds">
+                                <field name="VAR" id="PS_consOdds">consecutiveOdds</field>
+                                <value name="VALUE">
+                                  <block type="math_number" id="PS_inv_odds_n"><field name="NUM">3</field></block>
+                                </value>
+                                <next>
+                                  <block type="variables_set" id="PS_inv_evens">
+                                    <field name="VAR" id="PS_consEvens">consecutiveEvens</field>
+                                    <value name="VALUE">
+                                      <block type="math_number" id="PS_inv_evens_n"><field name="NUM">0</field></block>
+                                    </value>
+                                    <next>
+                                      <block type="variables_set" id="PS_inv_ls_reset">
+                                        <field name="VAR" id="PS_lossStreak">lossStreak</field>
+                                        <value name="VALUE">
+                                          <block type="math_number" id="PS_inv_ls_zero"><field name="NUM">0</field></block>
+                                        </value>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </statement>
+                            <next>
+                              <block type="trade_again" id="PS_loss_ta"></block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </statement>
+          </block>
+        </statement>
+      </block>
+    </statement>
+  </block>
+</xml>
