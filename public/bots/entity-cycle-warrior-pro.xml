@@ -1,0 +1,362 @@
+<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
+  <variables>
+    <variable id="ewcp_stake">stake</variable>
+    <variable id="ewcp_init">initial_stake</variable>
+    <variable id="ewcp_mart">martingale</variable>
+    <variable id="ewcp_phase">cycle_phase</variable>
+    <variable id="ewcp_lstreak">loss_streak</variable>
+    <variable id="ewcp_tp">take_profit</variable>
+    <variable id="ewcp_sl">stop_loss</variable>
+    <variable id="ewcp_profit">session_profit</variable>
+  </variables>
+
+  <!-- ═══════════════════════════════════════════════════════════════════
+       ENTITY CYCLE WARRIOR PRO — Trade Definition
+       Cycles: DIGITEVEN → DIGITODD → DIGITDIFF → back to DIGITEVEN
+       3 consecutive losses in any phase → advance to next phase
+       Martingale 2.2x on every loss | Reset on win | TP $5 / SL $50
+  ═══════════════════════════════════════════════════════════════════ -->
+  <block type="trade_definition" id="ewcp_def" deletable="false" x="0" y="60">
+    <statement name="TRADE_OPTIONS">
+      <block type="trade_definition_market" id="ewcp_mkt" deletable="false" movable="false">
+        <field name="MARKET_LIST">synthetic_index</field>
+        <field name="SUBMARKET_LIST">random_index</field>
+        <field name="SYMBOL_LIST">1HZ75V</field>
+        <next>
+          <block type="trade_definition_tradetype" id="ewcp_tt" deletable="false" movable="false">
+            <field name="TRADETYPECAT_LIST">digits</field>
+            <field name="TRADETYPE_LIST">evenodd</field>
+            <next>
+              <block type="trade_definition_contracttype" id="ewcp_ct" deletable="false" movable="false">
+                <field name="TYPE_LIST">DIGITEVEN</field>
+                <next>
+                  <block type="trade_definition_duration" id="ewcp_dur" deletable="false" movable="false">
+                    <field name="DURATIONTYPE_LIST">t</field>
+                    <value name="DURATION">
+                      <shadow type="math_number_positive" id="ewcp_dur_v">
+                        <field name="NUM">1</field>
+                      </shadow>
+                    </value>
+                    <next>
+                      <block type="trade_definition_candleinterval" id="ewcp_ci" deletable="false" movable="false">
+                        <field name="CANDLEINTERVAL_LIST">60</field>
+                        <next>
+                          <block type="trade_definition_restartbuysell" id="ewcp_rbs" deletable="false" movable="false">
+                            <field name="TIME_MACHINE_ENABLED">FALSE</field>
+                            <next>
+                              <block type="trade_definition_restartonerror" id="ewcp_roe" deletable="false" movable="false">
+                                <field name="RESTARTONERROR">TRUE</field>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="INITIALIZATION">
+      <!-- stake = 0.50 -->
+      <block type="variables_set" id="ewcp_i1">
+        <field name="VAR" id="ewcp_stake">stake</field>
+        <value name="VALUE">
+          <block type="math_number" id="ewcp_i1v"><field name="NUM">0.5</field></block>
+        </value>
+        <next>
+          <!-- initial_stake = 0.50 -->
+          <block type="variables_set" id="ewcp_i2">
+            <field name="VAR" id="ewcp_init">initial_stake</field>
+            <value name="VALUE">
+              <block type="math_number" id="ewcp_i2v"><field name="NUM">0.5</field></block>
+            </value>
+            <next>
+              <!-- martingale = 2.2 -->
+              <block type="variables_set" id="ewcp_i3">
+                <field name="VAR" id="ewcp_mart">martingale</field>
+                <value name="VALUE">
+                  <block type="math_number" id="ewcp_i3v"><field name="NUM">2.2</field></block>
+                </value>
+                <next>
+                  <!-- cycle_phase = 0 (0=EVEN, 1=ODD, 2=DIFFER) -->
+                  <block type="variables_set" id="ewcp_i4">
+                    <field name="VAR" id="ewcp_phase">cycle_phase</field>
+                    <value name="VALUE">
+                      <block type="math_number" id="ewcp_i4v"><field name="NUM">0</field></block>
+                    </value>
+                    <next>
+                      <!-- loss_streak = 0 -->
+                      <block type="variables_set" id="ewcp_i5">
+                        <field name="VAR" id="ewcp_lstreak">loss_streak</field>
+                        <value name="VALUE">
+                          <block type="math_number" id="ewcp_i5v"><field name="NUM">0</field></block>
+                        </value>
+                        <next>
+                          <!-- take_profit = 5 -->
+                          <block type="variables_set" id="ewcp_i6">
+                            <field name="VAR" id="ewcp_tp">take_profit</field>
+                            <value name="VALUE">
+                              <block type="math_number" id="ewcp_i6v"><field name="NUM">5</field></block>
+                            </value>
+                            <next>
+                              <!-- stop_loss = 50 -->
+                              <block type="variables_set" id="ewcp_i7">
+                                <field name="VAR" id="ewcp_sl">stop_loss</field>
+                                <value name="VALUE">
+                                  <block type="math_number" id="ewcp_i7v"><field name="NUM">50</field></block>
+                                </value>
+                                <next>
+                                  <!-- session_profit = 0 -->
+                                  <block type="variables_set" id="ewcp_i8">
+                                    <field name="VAR" id="ewcp_profit">session_profit</field>
+                                    <value name="VALUE">
+                                      <block type="math_number" id="ewcp_i8v"><field name="NUM">0</field></block>
+                                    </value>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+
+  <!-- ═══ BEFORE PURCHASE — Choose contract type based on cycle_phase ═══ -->
+  <block type="before_purchase" id="ewcp_bp" collapsed="false" deletable="false" x="0" y="600">
+    <statement name="BEFOREPURCHASE_STACK">
+      <block type="controls_if" id="ewcp_bp_if">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="1" else="1"></mutation>
+        <!-- IF cycle_phase == 0: buy DIGITEVEN -->
+        <value name="IF0">
+          <block type="logic_compare" id="ewcp_bp_cmp0">
+            <field name="OP">EQ</field>
+            <value name="A">
+              <block type="variables_get" id="ewcp_bp_g0"><field name="VAR" id="ewcp_phase">cycle_phase</field></block>
+            </value>
+            <value name="B">
+              <block type="math_number" id="ewcp_bp_n0"><field name="NUM">0</field></block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="timeout" id="ewcp_bp_t0">
+            <statement name="TIMEOUTSTACK">
+              <block type="purchase" id="ewcp_bp_p0">
+                <field name="PURCHASE_LIST">DIGITEVEN</field>
+              </block>
+            </statement>
+            <value name="SECONDS">
+              <block type="math_number" id="ewcp_bp_t0v"><field name="NUM">-0.00001</field></block>
+            </value>
+          </block>
+        </statement>
+        <!-- ELSEIF cycle_phase == 1: buy DIGITODD -->
+        <value name="IF1">
+          <block type="logic_compare" id="ewcp_bp_cmp1">
+            <field name="OP">EQ</field>
+            <value name="A">
+              <block type="variables_get" id="ewcp_bp_g1"><field name="VAR" id="ewcp_phase">cycle_phase</field></block>
+            </value>
+            <value name="B">
+              <block type="math_number" id="ewcp_bp_n1"><field name="NUM">1</field></block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO1">
+          <block type="timeout" id="ewcp_bp_t1">
+            <statement name="TIMEOUTSTACK">
+              <block type="purchase" id="ewcp_bp_p1">
+                <field name="PURCHASE_LIST">DIGITODD</field>
+              </block>
+            </statement>
+            <value name="SECONDS">
+              <block type="math_number" id="ewcp_bp_t1v"><field name="NUM">-0.00001</field></block>
+            </value>
+          </block>
+        </statement>
+        <!-- ELSE cycle_phase == 2: buy DIGITDIFF (recovery) -->
+        <statement name="ELSE">
+          <block type="timeout" id="ewcp_bp_t2">
+            <statement name="TIMEOUTSTACK">
+              <block type="purchase" id="ewcp_bp_p2">
+                <field name="PURCHASE_LIST">DIGITDIFF</field>
+              </block>
+            </statement>
+            <value name="SECONDS">
+              <block type="math_number" id="ewcp_bp_t2v"><field name="NUM">-0.00001</field></block>
+            </value>
+          </block>
+        </statement>
+      </block>
+    </statement>
+  </block>
+
+  <!-- ═══ AFTER PURCHASE — Martingale, phase cycling, TP/SL guard ═══ -->
+  <block type="after_purchase" id="ewcp_ap" collapsed="false" deletable="false" x="0" y="920">
+    <statement name="AFTERPURCHASE_STACK">
+      <block type="controls_if" id="ewcp_ap_if">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+        <!-- IF WIN -->
+        <value name="IF0">
+          <block type="contract_check_result" id="ewcp_ap_win">
+            <field name="CHECK_RESULT">win</field>
+          </block>
+        </value>
+        <statement name="DO0">
+          <!-- reset stake to initial -->
+          <block type="variables_set" id="ewcp_ap_w1">
+            <field name="VAR" id="ewcp_stake">stake</field>
+            <value name="VALUE">
+              <block type="variables_get" id="ewcp_ap_w1v"><field name="VAR" id="ewcp_init">initial_stake</field></block>
+            </value>
+            <next>
+              <!-- reset loss_streak -->
+              <block type="variables_set" id="ewcp_ap_w2">
+                <field name="VAR" id="ewcp_lstreak">loss_streak</field>
+                <value name="VALUE">
+                  <block type="math_number" id="ewcp_ap_w2v"><field name="NUM">0</field></block>
+                </value>
+                <next>
+                  <!-- advance phase: if phase < 2 → phase+1 else phase=0 -->
+                  <block type="controls_if" id="ewcp_ap_wphase">
+                    <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                    <value name="IF0">
+                      <block type="logic_compare" id="ewcp_ap_wphase_cmp">
+                        <field name="OP">LT</field>
+                        <value name="A">
+                          <block type="variables_get" id="ewcp_ap_wphase_g"><field name="VAR" id="ewcp_phase">cycle_phase</field></block>
+                        </value>
+                        <value name="B">
+                          <block type="math_number" id="ewcp_ap_wphase_n"><field name="NUM">2</field></block>
+                        </value>
+                      </block>
+                    </value>
+                    <statement name="DO0">
+                      <block type="math_change" id="ewcp_ap_wphase_inc">
+                        <field name="VAR" id="ewcp_phase">cycle_phase</field>
+                        <value name="DELTA">
+                          <shadow type="math_number" id="ewcp_ap_wphase_inc_v"><field name="NUM">1</field></shadow>
+                        </value>
+                      </block>
+                    </statement>
+                    <statement name="ELSE">
+                      <block type="variables_set" id="ewcp_ap_wphase_reset">
+                        <field name="VAR" id="ewcp_phase">cycle_phase</field>
+                        <value name="VALUE">
+                          <block type="math_number" id="ewcp_ap_wphase_reset_v"><field name="NUM">0</field></block>
+                        </value>
+                      </block>
+                    </statement>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </statement>
+        <!-- ELSE (LOSS) -->
+        <statement name="ELSE">
+          <!-- stake *= martingale -->
+          <block type="variables_set" id="ewcp_ap_l1">
+            <field name="VAR" id="ewcp_stake">stake</field>
+            <value name="VALUE">
+              <block type="math_arithmetic" id="ewcp_ap_l1_arith">
+                <field name="OP">MULTIPLY</field>
+                <value name="A">
+                  <shadow type="math_number" id="ewcp_ap_l1_a_s"><field name="NUM">1</field></shadow>
+                  <block type="variables_get" id="ewcp_ap_l1_a"><field name="VAR" id="ewcp_stake">stake</field></block>
+                </value>
+                <value name="B">
+                  <shadow type="math_number" id="ewcp_ap_l1_b_s"><field name="NUM">1</field></shadow>
+                  <block type="variables_get" id="ewcp_ap_l1_b"><field name="VAR" id="ewcp_mart">martingale</field></block>
+                </value>
+              </block>
+            </value>
+            <next>
+              <!-- loss_streak++ -->
+              <block type="math_change" id="ewcp_ap_l2">
+                <field name="VAR" id="ewcp_lstreak">loss_streak</field>
+                <value name="DELTA">
+                  <shadow type="math_number" id="ewcp_ap_l2_v"><field name="NUM">1</field></shadow>
+                </value>
+                <next>
+                  <!-- if loss_streak >= 3: advance phase and reset streak -->
+                  <block type="controls_if" id="ewcp_ap_l3">
+                    <value name="IF0">
+                      <block type="logic_compare" id="ewcp_ap_l3_cmp">
+                        <field name="OP">GTE</field>
+                        <value name="A">
+                          <block type="variables_get" id="ewcp_ap_l3_g"><field name="VAR" id="ewcp_lstreak">loss_streak</field></block>
+                        </value>
+                        <value name="B">
+                          <block type="math_number" id="ewcp_ap_l3_n"><field name="NUM">3</field></block>
+                        </value>
+                      </block>
+                    </value>
+                    <statement name="DO0">
+                      <!-- advance phase -->
+                      <block type="controls_if" id="ewcp_ap_l3_phase">
+                        <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                        <value name="IF0">
+                          <block type="logic_compare" id="ewcp_ap_l3_phase_cmp">
+                            <field name="OP">LT</field>
+                            <value name="A">
+                              <block type="variables_get" id="ewcp_ap_l3_phase_g"><field name="VAR" id="ewcp_phase">cycle_phase</field></block>
+                            </value>
+                            <value name="B">
+                              <block type="math_number" id="ewcp_ap_l3_phase_n"><field name="NUM">2</field></block>
+                            </value>
+                          </block>
+                        </value>
+                        <statement name="DO0">
+                          <block type="math_change" id="ewcp_ap_l3_phase_inc">
+                            <field name="VAR" id="ewcp_phase">cycle_phase</field>
+                            <value name="DELTA">
+                              <shadow type="math_number" id="ewcp_ap_l3_phase_inc_v"><field name="NUM">1</field></shadow>
+                            </value>
+                          </block>
+                        </statement>
+                        <statement name="ELSE">
+                          <block type="variables_set" id="ewcp_ap_l3_phase_reset">
+                            <field name="VAR" id="ewcp_phase">cycle_phase</field>
+                            <value name="VALUE">
+                              <block type="math_number" id="ewcp_ap_l3_phase_reset_v"><field name="NUM">0</field></block>
+                            </value>
+                          </block>
+                        </statement>
+                      </block>
+                      <next>
+                        <!-- reset loss_streak after phase switch -->
+                        <block type="variables_set" id="ewcp_ap_l3_streak_reset">
+                          <field name="VAR" id="ewcp_lstreak">loss_streak</field>
+                          <value name="VALUE">
+                            <block type="math_number" id="ewcp_ap_l3_sr_v"><field name="NUM">0</field></block>
+                          </value>
+                        </block>
+                      </next>
+                    </statement>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </statement>
+      </block>
+      <next>
+        <block type="trade_again" id="ewcp_ta"></block>
+      </next>
+    </statement>
+  </block>
+</xml>
