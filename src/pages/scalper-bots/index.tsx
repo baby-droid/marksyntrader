@@ -1091,7 +1091,7 @@ const BotDetail: React.FC<{
         ultraTurbo?: boolean;
         onSettled: (info: { profit: number; won: boolean; market: string; buyPrice: number; exitDigit: number | null; consLoss: number }) => void;
         onLog: (msg: string, kind?: string) => void;
-    }): Promise<{ forceStopped: boolean; reason: 'tp' | 'sl' | 'loss_limit' | null; cycleProfit: number; consLoss: number; lastWon: boolean }> => {
+    }): Promise<{ forceStopped: boolean; reason: 'tp' | 'sl' | 'loss_limit' | null; cycleProfit: number; consLoss: number; lastWon: boolean; retryNextCycle?: boolean }> => {
         return new Promise(resolve => { (async () => {
             const rp: any = store?.run_panel;
             if (!rp?.onRunButtonClick) { resolve({ forceStopped: false, reason: null, cycleProfit: 0, consLoss: params.priorConsLoss || 0, lastWon: true }); return; }
@@ -1116,6 +1116,22 @@ const BotDetail: React.FC<{
                 await new Promise(r => setTimeout(r, 20));
             }
 
+            /* ── Guard: engine still tearing down after timeout ──
+               If api_base.is_stopping is still true after teardownMax, calling
+               onRunButtonClick now would silently no-op (runBot() bails while
+               is_stopping is set). No contract would ever fire, the 45 s stall
+               timer would resolve with lastWon=true (phantom win since seen.size===0),
+               and the outer loop would break — killing the martingale chain and
+               making the stop button appear unresponsive for 45 s.
+               Fix: abort this cycle immediately and return retryNextCycle=true so
+               the outer loop skips martingale escalation and retries on the next
+               iteration until the engine is free. */
+            if (api_base.is_stopping) {
+                params.onLog('⚠ ENGINE_BUSY — previous bot still tearing down, retrying...', 'hack');
+                resolve({ forceStopped: false, reason: null, cycleProfit: 0, consLoss: params.priorConsLoss || 0, lastWon: false, retryNextCycle: true });
+                return;
+            }
+
             /* ── Drain any residual bot.stop from the previous cycle ──
                api_base.is_stopping can flip to false a few ms BEFORE the final
                bot.stop event fires. Without this gap the new cycle's onStop
@@ -1123,8 +1139,9 @@ const BotDetail: React.FC<{
                it catches it immediately, resolves the cycle with lastWon=true
                (no contract settled yet) and the outer loop breaks on a
                false "win", stopping the bot after every loss.
-               Keeping this tiny: 60 ms normal, 25 ms ultra/turbo. */
-            const drainMs = params.ultraTurbo ? 25 : 60;
+               50 ms for ultra/turbo (increased from 25 ms for more reliable drain),
+               60 ms normal. */
+            const drainMs = params.ultraTurbo ? 50 : 60;
             await new Promise(r => setTimeout(r, drainMs));
 
             patchWorkspaceParams({
@@ -1211,14 +1228,26 @@ const BotDetail: React.FC<{
 
             Promise.resolve(rp.onRunButtonClick()).catch(err => onError(err));
 
-            /* Stall guard — if neither bot.contract nor bot.stop fires within 45 s the
-               trade is hung (network issue, Blockly not ready, etc.). Force-resolve so
-               the scan loop is not frozen permanently. */
+            /* Stall guard — if neither bot.contract nor bot.stop fires within the
+               timeout the trade is hung (network issue, Blockly not ready, etc.).
+               Force-resolve so the scan loop is not frozen permanently.
+               Ultra Turbo: 10 s (trades should fire in < 1 s; 10 s catches real hangs
+               without the 45 s freeze that made the stop button look unresponsive).
+               Normal: 45 s (generous for slow connections / large Blockly workspaces).
+               IMPORTANT: when no contract settled (seen.size === 0), resolve with
+               lastWon=false so the outer loop retries / continues martingale instead
+               of treating the no-op as a phantom win and breaking out of the loop. */
+            const stallMs = params.ultraTurbo ? 10_000 : 45_000;
             stallTimer = setTimeout(() => {
-                params.onLog('⚠ TRADE_STALL — no trade response in 45 s, aborting cycle.', 'error');
+                params.onLog(`⚠ TRADE_STALL — no trade response in ${params.ultraTurbo ? '10' : '45'}s, aborting cycle.`, 'error');
                 try { rp.onStopButtonClick?.(); } catch {}
+                if (seen.size === 0) {
+                    // No contract was ever placed — don't count as a win.
+                    // The outer loop will retry (or stop cleanly if stopRef is set).
+                    lastWon = false;
+                }
                 setTimeout(finish, 1500); // give bot.stop one last chance to fire cleanly
-            }, 45_000);
+            }, stallMs);
         })(); });
     }, [store, patchWorkspaceParams]);
 
@@ -1875,6 +1904,16 @@ const BotDetail: React.FC<{
                    The XML bot NEVER runs its own trade_again on a loss — it is force-stopped
                    by onContract above so the terminal can re-scan and control the next entry. */
                 if (!cycle.lastWon) {
+                    /* ── Engine-busy retry (Ultra Turbo teardown race) ──
+                       runXmlBotCycle returned retryNextCycle=true because api_base.is_stopping
+                       was still set when we tried to fire the next trade. No contract was placed,
+                       so DO NOT escalate martingale, log a loss, or do a market switch. Just
+                       sleep briefly and retry — the engine will be free within a few hundred ms. */
+                    if (cycle.retryNextCycle) {
+                        await new Promise(r => setTimeout(r, ultraTurboRef.current ? 80 : 200));
+                        continue;
+                    }
+
                     if (!cycle.forceStopped) {
                         /* Single loss (not a guard stop) — update counters from cycle */
                         consLossRef.current = cycle.consLoss;
