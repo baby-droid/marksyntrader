@@ -1,0 +1,562 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
+
+  <!-- ═══════════════════════════════════════════════════════════════════
+       AHMED AUTO EVEN — DIGITEVEN Smart Entry Bot
+       ─────────────────────────────────────────────────────────────────
+       ENTRY POINT 1 (Signal 1 — Streak Reversal):
+         Tracks consecutive ODD digits on every tick.
+         When 3+ ODD digits in a row are followed by the FIRST EVEN digit
+         → market is reversing → BUY DIGITEVEN (stake: real stake / martingale)
+
+       ENTRY POINT 2 (Signal 2 — Low Odd Digit):
+         Last digit is 1 or 3 (lowest-value odd digits — lowest odd % range)
+         → strong odd-to-even reversion pattern → BUY DIGITEVEN
+
+       SCAN MODE (no signal): buys with minimum scan_stake (0.35) to keep
+         the bot engine alive while watching for the next entry signal.
+
+       Risk Management:
+         Martingale 2x on every REAL trade loss.
+         Scan trade loss resets stake to initial (no martingale chain).
+         Take Profit: $5 session gain → bot stops.
+         Stop Loss:  $50 session loss → bot stops.
+         Market: Volatility 25 Index 1s (V25 1s — 1HZ25V)
+  ═══════════════════════════════════════════════════════════════════ -->
+
+  <variables>
+    <variable id="aaev_stake">stake</variable>
+    <variable id="aaev_init">initial_stake</variable>
+    <variable id="aaev_scan">scan_stake</variable>
+    <variable id="aaev_mart">martingale</variable>
+    <variable id="aaev_tp">take_profit</variable>
+    <variable id="aaev_sl">stop_loss</variable>
+    <variable id="aaev_pnl">session_profit</variable>
+    <variable id="aaev_codd">cons_odd</variable>
+    <variable id="aaev_cevn">cons_even</variable>
+    <variable id="aaev_last">last_digit</variable>
+    <variable id="aaev_sig">signal_type</variable>
+    <variable id="aaev_real">is_real_trade</variable>
+  </variables>
+
+  <!-- ══════════════════ TICK ANALYSIS ════════════════════════════════
+       Runs on EVERY live tick. Reads the last digit, updates consecutive
+       counters, and arms signal_type when an entry condition fires.
+  ══════════════════════════════════════════════════════════════════ -->
+  <block type="tick_analysis" id="aaev_ta" x="0" y="0">
+    <statement name="TICKANALYSIS_STACK">
+
+      <!-- 1. Store current last digit -->
+      <block type="variables_set" id="aaev_ta_ld">
+        <field name="VAR" id="aaev_last">last_digit</field>
+        <value name="VALUE">
+          <block type="last_digit" id="aaev_ta_ldv"></block>
+        </value>
+        <next>
+
+          <!-- 2. Branch: EVEN digit or ODD digit? -->
+          <block type="controls_if" id="aaev_ta_parity">
+            <mutation else="1"></mutation>
+
+            <!-- Condition: digit ∈ {0,2,4,6,8} → EVEN -->
+            <value name="IF0">
+              <block type="logic_operation" id="aaev_ie1"><field name="OP">OR</field>
+                <value name="A">
+                  <block type="logic_compare" id="aaev_ie_eq0"><field name="OP">EQ</field>
+                    <value name="A"><block type="variables_get" id="aaev_ie_a0"><field name="VAR" id="aaev_last">last_digit</field></block></value>
+                    <value name="B"><block type="math_number" id="aaev_ie_b0"><field name="NUM">0</field></block></value>
+                  </block>
+                </value>
+                <value name="B">
+                  <block type="logic_operation" id="aaev_ie2"><field name="OP">OR</field>
+                    <value name="A">
+                      <block type="logic_compare" id="aaev_ie_eq2"><field name="OP">EQ</field>
+                        <value name="A"><block type="variables_get" id="aaev_ie_a2"><field name="VAR" id="aaev_last">last_digit</field></block></value>
+                        <value name="B"><block type="math_number" id="aaev_ie_b2"><field name="NUM">2</field></block></value>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <block type="logic_operation" id="aaev_ie3"><field name="OP">OR</field>
+                        <value name="A">
+                          <block type="logic_compare" id="aaev_ie_eq4"><field name="OP">EQ</field>
+                            <value name="A"><block type="variables_get" id="aaev_ie_a4"><field name="VAR" id="aaev_last">last_digit</field></block></value>
+                            <value name="B"><block type="math_number" id="aaev_ie_b4"><field name="NUM">4</field></block></value>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <block type="logic_operation" id="aaev_ie4"><field name="OP">OR</field>
+                            <value name="A">
+                              <block type="logic_compare" id="aaev_ie_eq6"><field name="OP">EQ</field>
+                                <value name="A"><block type="variables_get" id="aaev_ie_a6"><field name="VAR" id="aaev_last">last_digit</field></block></value>
+                                <value name="B"><block type="math_number" id="aaev_ie_b6"><field name="NUM">6</field></block></value>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="logic_compare" id="aaev_ie_eq8"><field name="OP">EQ</field>
+                                <value name="A"><block type="variables_get" id="aaev_ie_a8"><field name="VAR" id="aaev_last">last_digit</field></block></value>
+                                <value name="B"><block type="math_number" id="aaev_ie_b8"><field name="NUM">8</field></block></value>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+              </block>
+            </value>
+
+            <!-- ── EVEN digit branch ── -->
+            <statement name="DO0">
+              <!-- Entry 1: if cons_odd was ≥3 before this even digit → streak reversed! -->
+              <block type="controls_if" id="aaev_ta_e1check">
+                <value name="IF0">
+                  <block type="logic_compare" id="aaev_ta_e1cmp"><field name="OP">GTE</field>
+                    <value name="A"><block type="variables_get" id="aaev_ta_e1a"><field name="VAR" id="aaev_codd">cons_odd</field></block></value>
+                    <value name="B"><block type="math_number" id="aaev_ta_e1b"><field name="NUM">3</field></block></value>
+                  </block>
+                </value>
+                <statement name="DO0">
+                  <block type="variables_set" id="aaev_ta_sig1">
+                    <field name="VAR" id="aaev_sig">signal_type</field>
+                    <value name="VALUE"><block type="math_number" id="aaev_ta_sig1v"><field name="NUM">1</field></block></value>
+                    <next>
+                      <block type="text_print" id="aaev_ta_n1">
+                        <value name="TEXT">
+                          <block type="text_join" id="aaev_ta_n1j">
+                            <mutation items="3"></mutation>
+                            <value name="ADD0"><block type="text" id="aaev_ta_n1a"><field name="TEXT">✅ EVEN ENTRY 1 — ODD streak (</field></block></value>
+                            <value name="ADD1"><block type="variables_get" id="aaev_ta_n1b"><field name="VAR" id="aaev_codd">cons_odd</field></block></value>
+                            <value name="ADD2"><block type="text" id="aaev_ta_n1c"><field name="TEXT">) reversed by EVEN digit → BUYING DIGITEVEN</field></block></value>
+                          </block>
+                        </value>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+                <next>
+                  <!-- Update counters for EVEN digit -->
+                  <block type="variables_set" id="aaev_ta_cevn_inc">
+                    <field name="VAR" id="aaev_cevn">cons_even</field>
+                    <value name="VALUE">
+                      <block type="math_arithmetic" id="aaev_ta_cevn_add"><field name="OP">ADD</field>
+                        <value name="A"><shadow type="math_number" id="aaev_ta_cevn_as"><field name="NUM">1</field></shadow><block type="variables_get" id="aaev_ta_cevn_ag"><field name="VAR" id="aaev_cevn">cons_even</field></block></value>
+                        <value name="B"><shadow type="math_number" id="aaev_ta_cevn_bs"><field name="NUM">1</field></shadow><block type="math_number" id="aaev_ta_cevn_bv"><field name="NUM">1</field></block></value>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="aaev_ta_codd_rst">
+                        <field name="VAR" id="aaev_codd">cons_odd</field>
+                        <value name="VALUE"><block type="math_number" id="aaev_ta_codd_rstv"><field name="NUM">0</field></block></value>
+                        <next>
+                          <block type="text_print" id="aaev_ta_escan">
+                            <value name="TEXT">
+                              <block type="text_join" id="aaev_ta_escanJ">
+                                <mutation items="4"></mutation>
+                                <value name="ADD0"><block type="text" id="aaev_ta_esa"><field name="TEXT">🔍 digit=</field></block></value>
+                                <value name="ADD1"><block type="variables_get" id="aaev_ta_esb"><field name="VAR" id="aaev_last">last_digit</field></block></value>
+                                <value name="ADD2"><block type="text" id="aaev_ta_esc"><field name="TEXT"> [EVEN] cons_odd=</field></block></value>
+                                <value name="ADD3"><block type="variables_get" id="aaev_ta_esd"><field name="VAR" id="aaev_codd">cons_odd</field></block></value>
+                              </block>
+                            </value>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </statement>
+
+            <!-- ── ODD digit branch (ELSE) ── -->
+            <statement name="ELSE">
+              <!-- Update counters for ODD digit -->
+              <block type="variables_set" id="aaev_ta_codd_inc">
+                <field name="VAR" id="aaev_codd">cons_odd</field>
+                <value name="VALUE">
+                  <block type="math_arithmetic" id="aaev_ta_codd_add"><field name="OP">ADD</field>
+                    <value name="A"><shadow type="math_number" id="aaev_ta_codd_as"><field name="NUM">1</field></shadow><block type="variables_get" id="aaev_ta_codd_ag"><field name="VAR" id="aaev_codd">cons_odd</field></block></value>
+                    <value name="B"><shadow type="math_number" id="aaev_ta_codd_bs"><field name="NUM">1</field></shadow><block type="math_number" id="aaev_ta_codd_bv"><field name="NUM">1</field></block></value>
+                  </block>
+                </value>
+                <next>
+                  <block type="variables_set" id="aaev_ta_cevn_rst">
+                    <field name="VAR" id="aaev_cevn">cons_even</field>
+                    <value name="VALUE"><block type="math_number" id="aaev_ta_cevn_rstv"><field name="NUM">0</field></block></value>
+                    <next>
+                      <!-- Entry 2: low-value odd digit (1 or 3) → arm signal if none active -->
+                      <block type="controls_if" id="aaev_ta_e2guard">
+                        <value name="IF0">
+                          <block type="logic_compare" id="aaev_ta_e2sig0"><field name="OP">EQ</field>
+                            <value name="A"><block type="variables_get" id="aaev_ta_e2siga"><field name="VAR" id="aaev_sig">signal_type</field></block></value>
+                            <value name="B"><block type="math_number" id="aaev_ta_e2sigb"><field name="NUM">0</field></block></value>
+                          </block>
+                        </value>
+                        <statement name="DO0">
+                          <block type="controls_if" id="aaev_ta_e2dig">
+                            <!-- digit == 1 OR digit == 3 -->
+                            <value name="IF0">
+                              <block type="logic_operation" id="aaev_ta_e2or"><field name="OP">OR</field>
+                                <value name="A">
+                                  <block type="logic_compare" id="aaev_ta_e2eq1"><field name="OP">EQ</field>
+                                    <value name="A"><block type="variables_get" id="aaev_ta_e2a1"><field name="VAR" id="aaev_last">last_digit</field></block></value>
+                                    <value name="B"><block type="math_number" id="aaev_ta_e2b1"><field name="NUM">1</field></block></value>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <block type="logic_compare" id="aaev_ta_e2eq3"><field name="OP">EQ</field>
+                                    <value name="A"><block type="variables_get" id="aaev_ta_e2a3"><field name="VAR" id="aaev_last">last_digit</field></block></value>
+                                    <value name="B"><block type="math_number" id="aaev_ta_e2b3"><field name="NUM">3</field></block></value>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                            <statement name="DO0">
+                              <block type="variables_set" id="aaev_ta_e2set">
+                                <field name="VAR" id="aaev_sig">signal_type</field>
+                                <value name="VALUE"><block type="math_number" id="aaev_ta_e2setv"><field name="NUM">2</field></block></value>
+                                <next>
+                                  <block type="text_print" id="aaev_ta_e2n">
+                                    <value name="TEXT">
+                                      <block type="text_join" id="aaev_ta_e2nJ">
+                                        <mutation items="3"></mutation>
+                                        <value name="ADD0"><block type="text" id="aaev_ta_e2na"><field name="TEXT">🎯 EVEN ENTRY 2 — Low odd digit (</field></block></value>
+                                        <value name="ADD1"><block type="variables_get" id="aaev_ta_e2nb"><field name="VAR" id="aaev_last">last_digit</field></block></value>
+                                        <value name="ADD2"><block type="text" id="aaev_ta_e2nc"><field name="TEXT">) → BUYING DIGITEVEN</field></block></value>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </next>
+                              </block>
+                            </statement>
+                          </block>
+                        </statement>
+                        <next>
+                          <block type="text_print" id="aaev_ta_oscan">
+                            <value name="TEXT">
+                              <block type="text_join" id="aaev_ta_oscanJ">
+                                <mutation items="4"></mutation>
+                                <value name="ADD0"><block type="text" id="aaev_ta_osa"><field name="TEXT">🔍 digit=</field></block></value>
+                                <value name="ADD1"><block type="variables_get" id="aaev_ta_osb"><field name="VAR" id="aaev_last">last_digit</field></block></value>
+                                <value name="ADD2"><block type="text" id="aaev_ta_osc"><field name="TEXT"> [ODD]  cons_odd=</field></block></value>
+                                <value name="ADD3"><block type="variables_get" id="aaev_ta_osd"><field name="VAR" id="aaev_codd">cons_odd</field></block></value>
+                              </block>
+                            </value>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </statement>
+
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+
+  <!-- ══════════════════ TRADE DEFINITION ══════════════════════════════ -->
+  <block type="trade_definition" id="aaev_def" deletable="false" x="0" y="700">
+    <statement name="TRADE_OPTIONS">
+      <block type="trade_definition_market" id="aaev_mkt" deletable="false" movable="false">
+        <field name="MARKET_LIST">synthetic_index</field>
+        <field name="SUBMARKET_LIST">random_index</field>
+        <field name="SYMBOL_LIST">1HZ25V</field>
+        <next>
+          <block type="trade_definition_tradetype" id="aaev_tt" deletable="false" movable="false">
+            <field name="TRADETYPECAT_LIST">digits</field>
+            <field name="TRADETYPE_LIST">evenodd</field>
+            <next>
+              <block type="trade_definition_contracttype" id="aaev_ct" deletable="false" movable="false">
+                <field name="TYPE_LIST">DIGITEVEN</field>
+                <next>
+                  <block type="trade_definition_duration" id="aaev_dur" deletable="false" movable="false">
+                    <field name="DURATIONTYPE_LIST">t</field>
+                    <value name="DURATION">
+                      <shadow type="math_number_positive" id="aaev_durv"><field name="NUM">1</field></shadow>
+                    </value>
+                    <next>
+                      <block type="trade_definition_candleinterval" id="aaev_ci" deletable="false" movable="false">
+                        <field name="CANDLEINTERVAL_LIST">60</field>
+                        <next>
+                          <block type="trade_definition_restartbuysell" id="aaev_rbs" deletable="false" movable="false">
+                            <field name="TIME_MACHINE_ENABLED">FALSE</field>
+                            <next>
+                              <block type="trade_definition_restartonerror" id="aaev_roe" deletable="false" movable="false">
+                                <field name="RESTARTONERROR">TRUE</field>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="INITIALIZATION">
+      <block type="variables_set" id="aaev_i1"><field name="VAR" id="aaev_stake">stake</field>
+        <value name="VALUE"><block type="math_number" id="aaev_i1v"><field name="NUM">0.5</field></block></value>
+        <next><block type="variables_set" id="aaev_i2"><field name="VAR" id="aaev_init">initial_stake</field>
+          <value name="VALUE"><block type="math_number" id="aaev_i2v"><field name="NUM">0.5</field></block></value>
+          <next><block type="variables_set" id="aaev_i3"><field name="VAR" id="aaev_scan">scan_stake</field>
+            <value name="VALUE"><block type="math_number" id="aaev_i3v"><field name="NUM">0.35</field></block></value>
+            <next><block type="variables_set" id="aaev_i4"><field name="VAR" id="aaev_mart">martingale</field>
+              <value name="VALUE"><block type="math_number" id="aaev_i4v"><field name="NUM">2</field></block></value>
+              <next><block type="variables_set" id="aaev_i5"><field name="VAR" id="aaev_tp">take_profit</field>
+                <value name="VALUE"><block type="math_number" id="aaev_i5v"><field name="NUM">5</field></block></value>
+                <next><block type="variables_set" id="aaev_i6"><field name="VAR" id="aaev_sl">stop_loss</field>
+                  <value name="VALUE"><block type="math_number" id="aaev_i6v"><field name="NUM">50</field></block></value>
+                  <next><block type="variables_set" id="aaev_i7"><field name="VAR" id="aaev_pnl">session_profit</field>
+                    <value name="VALUE"><block type="math_number" id="aaev_i7v"><field name="NUM">0</field></block></value>
+                    <next><block type="variables_set" id="aaev_i8"><field name="VAR" id="aaev_codd">cons_odd</field>
+                      <value name="VALUE"><block type="math_number" id="aaev_i8v"><field name="NUM">0</field></block></value>
+                      <next><block type="variables_set" id="aaev_i9"><field name="VAR" id="aaev_cevn">cons_even</field>
+                        <value name="VALUE"><block type="math_number" id="aaev_i9v"><field name="NUM">0</field></block></value>
+                        <next><block type="variables_set" id="aaev_i10"><field name="VAR" id="aaev_last">last_digit</field>
+                          <value name="VALUE"><block type="math_number" id="aaev_i10v"><field name="NUM">0</field></block></value>
+                          <next><block type="variables_set" id="aaev_i11"><field name="VAR" id="aaev_sig">signal_type</field>
+                            <value name="VALUE"><block type="math_number" id="aaev_i11v"><field name="NUM">0</field></block></value>
+                            <next><block type="variables_set" id="aaev_i12"><field name="VAR" id="aaev_real">is_real_trade</field>
+                              <value name="VALUE"><block type="math_number" id="aaev_i12v"><field name="NUM">0</field></block></value>
+                              <next>
+                                <block type="text_print" id="aaev_i_notif">
+                                  <value name="TEXT"><block type="text" id="aaev_i_notifv"><field name="TEXT">🤖 AHMED AUTO EVEN started — watching V25 1s for ODD streak reversals + low odd digit signals (1,3). TP=$5 SL=$50 Martingale=2x</field></block></value>
+                                </block>
+                              </next>
+                            </block></next>
+                          </block></next>
+                        </block></next>
+                      </block></next>
+                    </block></next>
+                  </block></next>
+                </block></next>
+              </block></next>
+            </block></next>
+          </block></next>
+        </block>
+      </block>
+    </statement>
+  </block>
+
+  <!-- ══════════════════ BEFORE PURCHASE ════════════════════════════════
+       signal_type != 0 → real entry trade (consumes signal, full stake)
+       signal_type == 0 → scan trade (min scan_stake, keeps engine alive)
+  ═══════════════════════════════════════════════════════════════════ -->
+  <block type="before_purchase" id="aaev_bp" deletable="false" x="0" y="1400">
+    <statement name="BEFOREPURCHASE_STACK">
+      <block type="controls_if" id="aaev_bp_sig">
+        <mutation else="1"></mutation>
+        <!-- IF signal active (real trade) -->
+        <value name="IF0">
+          <block type="logic_compare" id="aaev_bp_sigcmp"><field name="OP">NEQ</field>
+            <value name="A"><block type="variables_get" id="aaev_bp_siga"><field name="VAR" id="aaev_sig">signal_type</field></block></value>
+            <value name="B"><block type="math_number" id="aaev_bp_sigb"><field name="NUM">0</field></block></value>
+          </block>
+        </value>
+        <statement name="DO0">
+          <!-- Mark as real trade, consume signal, notify, buy -->
+          <block type="variables_set" id="aaev_bp_rtset">
+            <field name="VAR" id="aaev_real">is_real_trade</field>
+            <value name="VALUE"><block type="math_number" id="aaev_bp_rtsetv"><field name="NUM">1</field></block></value>
+            <next>
+              <block type="variables_set" id="aaev_bp_sigrst">
+                <field name="VAR" id="aaev_sig">signal_type</field>
+                <value name="VALUE"><block type="math_number" id="aaev_bp_sigrstv"><field name="NUM">0</field></block></value>
+                <next>
+                  <block type="text_print" id="aaev_bp_rn">
+                    <value name="TEXT">
+                      <block type="text_join" id="aaev_bp_rnJ">
+                        <mutation items="2"></mutation>
+                        <value name="ADD0"><block type="text" id="aaev_bp_rna"><field name="TEXT">⚡ PURCHASE DIGITEVEN — real stake: </field></block></value>
+                        <value name="ADD1"><block type="variables_get" id="aaev_bp_rnb"><field name="VAR" id="aaev_stake">stake</field></block></value>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="timeout" id="aaev_bp_rt">
+                        <statement name="TIMEOUTSTACK">
+                          <block type="purchase" id="aaev_bp_rp"><field name="PURCHASE_LIST">DIGITEVEN</field></block>
+                        </statement>
+                        <value name="SECONDS"><block type="math_number" id="aaev_bp_rtv"><field name="NUM">-0.00001</field></block></value>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </statement>
+        <!-- ELSE: no signal → scan mode -->
+        <statement name="ELSE">
+          <block type="variables_set" id="aaev_bp_scanrt">
+            <field name="VAR" id="aaev_real">is_real_trade</field>
+            <value name="VALUE"><block type="math_number" id="aaev_bp_scanrtv"><field name="NUM">0</field></block></value>
+            <next>
+              <block type="variables_set" id="aaev_bp_scansk">
+                <field name="VAR" id="aaev_stake">stake</field>
+                <value name="VALUE"><block type="variables_get" id="aaev_bp_scanskg"><field name="VAR" id="aaev_scan">scan_stake</field></block></value>
+                <next>
+                  <block type="timeout" id="aaev_bp_scant">
+                    <statement name="TIMEOUTSTACK">
+                      <block type="purchase" id="aaev_bp_scanp"><field name="PURCHASE_LIST">DIGITEVEN</field></block>
+                    </statement>
+                    <value name="SECONDS"><block type="math_number" id="aaev_bp_scantv"><field name="NUM">-0.00001</field></block></value>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </statement>
+      </block>
+    </statement>
+  </block>
+
+  <!-- ══════════════════ AFTER PURCHASE ═════════════════════════════════
+       1. Update session_profit
+       2. TP / SL combined check → stop if hit (no trade_again)
+       3. Win: reset stake   |   Loss: martingale (real) or reset (scan)
+       4. Trade again (restart scan)
+  ═══════════════════════════════════════════════════════════════════ -->
+  <block type="after_purchase" id="aaev_ap" deletable="false" x="0" y="1900">
+    <statement name="AFTERPURCHASE_STACK">
+
+      <!-- 1. session_profit += contract profit -->
+      <block type="variables_set" id="aaev_ap_pnl">
+        <field name="VAR" id="aaev_pnl">session_profit</field>
+        <value name="VALUE">
+          <block type="math_arithmetic" id="aaev_ap_pnladd"><field name="OP">ADD</field>
+            <value name="A"><shadow type="math_number" id="aaev_ap_pnlas"><field name="NUM">1</field></shadow><block type="variables_get" id="aaev_ap_pnlag"><field name="VAR" id="aaev_pnl">session_profit</field></block></value>
+            <value name="B"><shadow type="math_number" id="aaev_ap_pnlbs"><field name="NUM">1</field></shadow><block type="read_details" id="aaev_ap_pnlrd"><field name="DETAIL_INDEX">4</field></block></value>
+          </block>
+        </value>
+        <next>
+
+          <!-- 2. TP or SL hit? -->
+          <block type="controls_if" id="aaev_ap_tpsl">
+            <mutation else="1"></mutation>
+            <value name="IF0">
+              <!-- session_profit >= take_profit  OR  session_profit <= -stop_loss -->
+              <block type="logic_operation" id="aaev_ap_tpslor"><field name="OP">OR</field>
+                <value name="A">
+                  <block type="logic_compare" id="aaev_ap_tp_cmp"><field name="OP">GTE</field>
+                    <value name="A"><block type="variables_get" id="aaev_ap_tp_a"><field name="VAR" id="aaev_pnl">session_profit</field></block></value>
+                    <value name="B"><block type="variables_get" id="aaev_ap_tp_b"><field name="VAR" id="aaev_tp">take_profit</field></block></value>
+                  </block>
+                </value>
+                <value name="B">
+                  <block type="logic_compare" id="aaev_ap_sl_cmp"><field name="OP">LTE</field>
+                    <value name="A"><block type="variables_get" id="aaev_ap_sl_a"><field name="VAR" id="aaev_pnl">session_profit</field></block></value>
+                    <value name="B">
+                      <block type="math_arithmetic" id="aaev_ap_sl_neg"><field name="OP">MULTIPLY</field>
+                        <value name="A"><shadow type="math_number" id="aaev_ap_sl_as"><field name="NUM">1</field></shadow><block type="variables_get" id="aaev_ap_sl_ag"><field name="VAR" id="aaev_sl">stop_loss</field></block></value>
+                        <value name="B"><shadow type="math_number" id="aaev_ap_sl_bs"><field name="NUM">1</field></shadow><block type="math_number" id="aaev_ap_sl_bv"><field name="NUM">-1</field></block></value>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <statement name="DO0">
+              <!-- TP/SL hit: notify and stop (no trade_again) -->
+              <block type="text_print" id="aaev_ap_stop_notif">
+                <value name="TEXT">
+                  <block type="text_join" id="aaev_ap_stop_notifJ">
+                    <mutation items="3"></mutation>
+                    <value name="ADD0"><block type="text" id="aaev_ap_sna"><field name="TEXT">🏁 AHMED AUTO EVEN — TP/SL reached. Session profit: </field></block></value>
+                    <value name="ADD1"><block type="variables_get" id="aaev_ap_snb"><field name="VAR" id="aaev_pnl">session_profit</field></block></value>
+                    <value name="ADD2"><block type="text" id="aaev_ap_snc"><field name="TEXT"> USD. Bot stopping.</field></block></value>
+                  </block>
+                </value>
+              </block>
+            </statement>
+
+            <!-- ELSE: continue trading -->
+            <statement name="ELSE">
+              <!-- 3. Win/loss stake management -->
+              <block type="controls_if" id="aaev_ap_winloss">
+                <mutation else="1"></mutation>
+                <!-- IF won -->
+                <value name="IF0">
+                  <block type="contract_check_result" id="aaev_ap_winck"><field name="CHECK_RESULT">win</field></block>
+                </value>
+                <statement name="DO0">
+                  <!-- Win: reset stake to initial -->
+                  <block type="variables_set" id="aaev_ap_win_rst">
+                    <field name="VAR" id="aaev_stake">stake</field>
+                    <value name="VALUE"><block type="variables_get" id="aaev_ap_win_rstg"><field name="VAR" id="aaev_init">initial_stake</field></block></value>
+                    <next>
+                      <block type="text_print" id="aaev_ap_win_n">
+                        <value name="TEXT">
+                          <block type="text_join" id="aaev_ap_win_nJ">
+                            <mutation items="3"></mutation>
+                            <value name="ADD0"><block type="text" id="aaev_ap_wna"><field name="TEXT">✅ WIN! Profit: </field></block></value>
+                            <value name="ADD1"><block type="read_details" id="aaev_ap_wnb"><field name="DETAIL_INDEX">4</field></block></value>
+                            <value name="ADD2"><block type="text" id="aaev_ap_wnc"><field name="TEXT"> | Session total: </field></block></value>
+                          </block>
+                        </value>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+                <!-- ELSE: loss -->
+                <statement name="ELSE">
+                  <block type="controls_if" id="aaev_ap_losstype">
+                    <mutation else="1"></mutation>
+                    <!-- Real trade loss → apply martingale -->
+                    <value name="IF0">
+                      <block type="logic_compare" id="aaev_ap_ltcmp"><field name="OP">EQ</field>
+                        <value name="A"><block type="variables_get" id="aaev_ap_lta"><field name="VAR" id="aaev_real">is_real_trade</field></block></value>
+                        <value name="B"><block type="math_number" id="aaev_ap_ltb"><field name="NUM">1</field></block></value>
+                      </block>
+                    </value>
+                    <statement name="DO0">
+                      <block type="variables_set" id="aaev_ap_mart">
+                        <field name="VAR" id="aaev_stake">stake</field>
+                        <value name="VALUE">
+                          <block type="math_arithmetic" id="aaev_ap_mart_mul"><field name="OP">MULTIPLY</field>
+                            <value name="A"><shadow type="math_number" id="aaev_ap_mart_as"><field name="NUM">1</field></shadow><block type="variables_get" id="aaev_ap_mart_ag"><field name="VAR" id="aaev_stake">stake</field></block></value>
+                            <value name="B"><shadow type="math_number" id="aaev_ap_mart_bs"><field name="NUM">1</field></shadow><block type="variables_get" id="aaev_ap_mart_bg"><field name="VAR" id="aaev_mart">martingale</field></block></value>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="text_print" id="aaev_ap_mart_n">
+                            <value name="TEXT">
+                              <block type="text_join" id="aaev_ap_mart_nJ">
+                                <mutation items="3"></mutation>
+                                <value name="ADD0"><block type="text" id="aaev_ap_mna"><field name="TEXT">❌ LOSS — Martingale → next stake: </field></block></value>
+                                <value name="ADD1"><block type="variables_get" id="aaev_ap_mnb"><field name="VAR" id="aaev_stake">stake</field></block></value>
+                                <value name="ADD2"><block type="text" id="aaev_ap_mnc"><field name="TEXT"> | Session: </field></block></value>
+                              </block>
+                            </value>
+                          </block>
+                        </next>
+                      </block>
+                    </statement>
+                    <!-- Scan trade loss → reset to initial (no martingale) -->
+                    <statement name="ELSE">
+                      <block type="variables_set" id="aaev_ap_scan_rst">
+                        <field name="VAR" id="aaev_stake">stake</field>
+                        <value name="VALUE"><block type="variables_get" id="aaev_ap_scan_rstg"><field name="VAR" id="aaev_init">initial_stake</field></block></value>
+                      </block>
+                    </statement>
+                  </block>
+                </statement>
+              </block>
+              <next>
+                <!-- 4. Trade again → restart scan -->
+                <block type="trade_again" id="aaev_ap_ta"></block>
+              </next>
+            </statement>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+
+</xml>

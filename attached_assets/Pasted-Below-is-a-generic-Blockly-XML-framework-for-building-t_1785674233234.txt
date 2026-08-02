@@ -1,0 +1,660 @@
+Below is a **generic Blockly/XML framework** for building trading workflows. It focuses on the **architecture, block system, compiler, and execution engine** rather than embedding any specific betting strategy.
+
+---
+
+# ENTITY Blockly XML Framework
+
+## Categories
+
+```text
+📥 Events
+📊 Market Data
+🔍 Scanner
+🧠 Signals
+🔀 Logic
+🔢 Variables
+🧮 Math
+⚙️ Risk
+📈 Orders
+🔔 Notifications
+📋 Logging
+🛠 Utilities
+📊 Statistics
+🧩 Custom Blocks
+```
+
+---
+
+# Event Blocks
+
+```text
+Application Started
+
+Connection Ready
+
+On Tick
+
+On Candle Close
+
+On Signal
+
+On Order Filled
+
+On Order Closed
+
+On Balance Update
+
+On Error
+```
+
+Green blocks
+
+These always begin execution.
+
+---
+
+# Market Blocks
+
+```text
+Current Price
+
+Current Tick
+
+Last Digit
+
+Bid
+
+Ask
+
+Spread
+
+Symbol
+
+Balance
+
+Open Positions
+
+Account Currency
+```
+
+Blue blocks
+
+Output values only.
+
+---
+
+# Scanner Blocks
+
+```text
+Scanner
+
+Rolling Window
+
+Frequency Counter
+
+Pattern Detector
+
+Threshold
+
+Market State
+
+Volatility State
+
+Signal Confidence
+
+Market Filter
+```
+
+Purple blocks.
+
+These only analyze.
+
+---
+
+# Signal Blocks
+
+```text
+Create Signal
+
+Validate Signal
+
+Signal Strength
+
+Signal Filter
+
+Confirm Signal
+
+Reject Signal
+
+Signal Output
+```
+
+---
+
+# Logic Blocks
+
+```text
+IF
+
+ELSE
+
+SWITCH
+
+AND
+
+OR
+
+NOT
+
+FOR
+
+WHILE
+
+BREAK
+
+RETURN
+```
+
+---
+
+# Variable Blocks
+
+```text
+Set Variable
+
+Get Variable
+
+Increment
+
+Reset
+
+Global Variable
+
+Local Variable
+```
+
+---
+
+# Math Blocks
+
+```text
++
+
+-
+
+×
+
+÷
+
+%
+
+Average
+
+Maximum
+
+Minimum
+
+Absolute
+
+Round
+
+Clamp
+```
+
+---
+
+# Risk Blocks
+
+```text
+Maximum Daily Loss
+
+Maximum Orders
+
+Position Size
+
+Take Profit
+
+Stop Loss
+
+Cooldown
+
+Trading Session
+
+Risk %
+
+Pause Trading
+
+Resume Trading
+```
+
+---
+
+# Order Blocks
+
+These are generic broker actions.
+
+```text
+Prepare Order
+
+Validate Order
+
+Submit Order
+
+Cancel Order
+
+Close Position
+
+Modify Position
+
+Wait For Confirmation
+```
+
+---
+
+# Notification Blocks
+
+```text
+Popup
+
+Desktop Alert
+
+Email
+
+Webhook
+
+Telegram
+
+Discord
+
+Push Notification
+
+Sound
+```
+
+---
+
+# Logging Blocks
+
+```text
+Console
+
+Journal
+
+CSV
+
+Database
+
+Performance Log
+
+Debug Log
+```
+
+---
+
+# Statistics Blocks
+
+```text
+Orders
+
+Wins
+
+Losses
+
+PnL
+
+Average Latency
+
+Win Rate
+
+Execution Time
+
+Memory Usage
+```
+
+---
+
+# Utility Blocks
+
+```text
+Delay
+
+Wait
+
+Timeout
+
+Timer
+
+Cache
+
+Load Config
+
+Save Config
+
+Retry
+
+Queue
+```
+
+---
+
+# Workspace Flow
+
+```text
+On Tick
+
+↓
+
+Market Data
+
+↓
+
+Scanner
+
+↓
+
+Signal
+
+↓
+
+Logic
+
+↓
+
+Risk
+
+↓
+
+Prepare Order
+
+↓
+
+Validate
+
+↓
+
+Submit
+
+↓
+
+Confirmation
+
+↓
+
+Statistics
+
+↓
+
+Notification
+
+↓
+
+Log
+```
+
+---
+
+# XML Example
+
+```xml
+<xml>
+
+<block type="on_tick">
+
+<next>
+
+<block type="scanner">
+
+<next>
+
+<block type="signal">
+
+<next>
+
+<block type="if">
+
+<next>
+
+<block type="risk">
+
+<next>
+
+<block type="prepare_order">
+
+<next>
+
+<block type="submit_order">
+
+</block>
+
+</next>
+
+</block>
+
+</next>
+
+</block>
+
+</next>
+
+</block>
+
+</next>
+
+</block>
+
+</xml>
+```
+
+---
+
+# Runtime
+
+```text
+Tick
+
+↓
+
+Dispatcher
+
+↓
+
+Scanner
+
+↓
+
+Signal
+
+↓
+
+Logic
+
+↓
+
+Risk
+
+↓
+
+Order Manager
+
+↓
+
+Broker API
+
+↓
+
+Response
+
+↓
+
+UI
+
+↓
+
+Statistics
+```
+
+---
+
+# Plugin API
+
+Every custom block registers
+
+```text
+ID
+
+Name
+
+Category
+
+Color
+
+Inputs
+
+Outputs
+
+Tooltip
+
+Compiler
+
+Runtime
+
+Serializer
+
+Validator
+
+Icon
+```
+
+---
+
+# Compiler
+
+```text
+Blockly
+
+↓
+
+XML
+
+↓
+
+Parser
+
+↓
+
+AST
+
+↓
+
+Optimizer
+
+↓
+
+Execution Graph
+
+↓
+
+Runtime
+```
+
+---
+
+# Runtime Queue
+
+```text
+Tick
+
+↓
+
+Queue
+
+↓
+
+Worker
+
+↓
+
+Execute
+
+↓
+
+API
+
+↓
+
+Result
+```
+
+---
+
+# Performance Monitor
+
+```text
+Tick Rate
+
+WebSocket Latency
+
+Execution Time
+
+Queue Length
+
+CPU
+
+Memory
+
+FPS
+
+API Response Time
+
+Reconnect Count
+```
+
+---
+
+# Folder Structure
+
+```text
+entity/
+
+core/
+
+runtime/
+
+compiler/
+
+parser/
+
+blocks/
+
+plugins/
+
+workspace/
+
+scanner/
+
+signals/
+
+risk/
+
+orders/
+
+notifications/
+
+statistics/
+
+storage/
+
+ui/
+
+performance/
+
+api/
+
+auth/
+
+utils/
+```
+
+---
+
+This architecture gives you a complete, extensible Blockly/XML system that can power a visual trading workflow builder. Developers can add new block types through the plugin API, serialize workspaces to XML, compile them into an execution graph, and run them through a modular runtime while keeping the broker integration, scanner, risk controls, logging, and UI cleanly separated. It is flexible enough to support many workflow types without hard-coding specific automated betting strategies.
