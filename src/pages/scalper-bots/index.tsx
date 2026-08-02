@@ -660,7 +660,8 @@ function describeConditionFired(
 
     switch (cond.algorithm) {
         case 'LDP': {
-            const digitStr = window.length ? `[${window.join(', ')}]` : '[…]';
+            // Reverse so the terminal shows oldest → newest (matching natural reading order)
+            const digitStr = window.length ? `[${[...window].reverse().join(', ')}]` : '[…]';
             const modeNote = inRecovery
                 ? ` (recovery: ${cond.recoveryLimit} digit${cond.recoveryLimit > 1 ? 's' : ''})`
                 : '';
@@ -688,14 +689,19 @@ function describeConditionFired(
             return `${tag} Entry Point (${cond.sensitivity ?? 'medium'} sensitivity): ${n}-tick reversal pressure from ${cond.digitsIs} [${window.join(',')}]`;
         }
         case 'NDP': {
-            const digitStr = window.length ? `[${window.join(', ')}]` : '[…]';
+            // Reverse so the terminal shows oldest → newest; window[0] is the
+            // most-recent digit (= "second" digit in a 2-window, oldest→newest view).
+            // That is the digit the trade is predicted to WIN on.
+            const winDigit = window.length ? window[0] : null;
+            const digitStr = window.length ? `[${[...window].reverse().join(', ')}]` : '[…]';
             const modeNote = inRecovery
                 ? ` (recovery: ${cond.recoveryLimit} digit${cond.recoveryLimit > 1 ? 's' : ''})`
                 : '';
             const mfn3 = buildMatchFn(cond);
             const matchCount2 = window.filter((d, i) => mfn3(d, i > 0 ? window[i-1] : null)).length;
             const total3 = window.length || reqCount;
-            return `${tag} NDP: ${reqCount} digit${reqCount > 1 ? 's' : ''} ${cond.strict ? 'ALL' : `${matchCount2}/${total3}`} ${cond.digitsIs}${cond.digitValue !== undefined && ['OVER','UNDER','MATCHES','DIFFERS'].includes(cond.digitsIs) ? ` ${cond.digitValue}` : ''}${modeNote}: ${digitStr} ✓`;
+            const winNote = winDigit !== null ? ` → WIN TARGET: digit ${winDigit}` : '';
+            return `${tag} NDP: ${reqCount} digit${reqCount > 1 ? 's' : ''} ${cond.strict ? 'ALL' : `${matchCount2}/${total3}`} ${cond.digitsIs}${cond.digitValue !== undefined && ['OVER','UNDER','MATCHES','DIFFERS'].includes(cond.digitsIs) ? ` ${cond.digitValue}` : ''}${modeNote}: ${digitStr}${winNote} ✓`;
         }
         default: return `${tag} condition matched`;
     }
@@ -1195,7 +1201,7 @@ const BotDetail: React.FC<{
 
     /* ── VPS Mode state ── */
     const [vpsEnabled, setVpsEnabled]     = useState(false);
-    const [vpsSettings, setVpsSettings]   = useState<VpsSettings>({ numRuns: 0, takeProfit: 0, stopLoss: 0 });
+    const [vpsSettings, setVpsSettings]   = useState<VpsSettings>({ numRuns: 0, takeProfit: 0, stopLoss: 0, maxConsecLosses: 0 });
     const [vpsRuns, setVpsRuns]           = useState(0);
     const [vpsPnl, setVpsPnl]             = useState(0);
     const [vpsDonePopup, setVpsDonePopup] = useState<{ reason: string; pnl: number; runs: number } | null>(null);

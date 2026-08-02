@@ -6,6 +6,7 @@ export interface VpsSettings {
     numRuns: number;      // 0 = unlimited
     takeProfit: number;
     stopLoss: number;
+    maxConsecLosses: number; // 0 = disabled; halts VPS when N losses in a row with no win
 }
 
 export interface VpsState {
@@ -58,6 +59,9 @@ const VpsMode: React.FC<VpsModeProps> = ({
     const doneRef                     = useRef(false);
     const lastReconnectAttemptRef     = useRef(0); // cooldown so we don't hammer reconnect every 10s
     const wasStalledRef               = useRef(false);
+    // Tracks how many consecutive runs ended in a loss (no win between them).
+    // Reset to 0 whenever a run ends with a non-negative P/L.
+    const consecLossesRef             = useRef(0);
 
     const ts = () => new Date().toLocaleTimeString('en', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
@@ -132,15 +136,32 @@ const VpsMode: React.FC<VpsModeProps> = ({
             const nextRuns = vpsRuns + 1;
             const pnl = vpsPnl + sessionPnlRef.current;
 
-            const tpHit = settings.takeProfit > 0 && pnl >= settings.takeProfit;
-            const slHit = settings.stopLoss > 0 && pnl <= -Math.abs(settings.stopLoss);
-            const runsHit = settings.numRuns > 0 && nextRuns > settings.numRuns;
+            /* ── Track consecutive losses: increment when run P/L < 0, reset on win ── */
+            if (sessionPnlRef.current < 0) {
+                consecLossesRef.current += 1;
+            } else {
+                consecLossesRef.current = 0;
+            }
 
-            if (tpHit || slHit || runsHit) {
+            const tpHit    = settings.takeProfit > 0 && pnl >= settings.takeProfit;
+            const slHit    = settings.stopLoss > 0 && pnl <= -Math.abs(settings.stopLoss);
+            const runsHit  = settings.numRuns > 0 && nextRuns > settings.numRuns;
+            const consecHit = settings.maxConsecLosses > 0 && consecLossesRef.current >= settings.maxConsecLosses;
+
+            if (tpHit || slHit || runsHit || consecHit) {
                 doneRef.current = true;
-                const reason = tpHit ? `Take Profit $${settings.takeProfit} reached` : slHit ? `Stop Loss -$${settings.stopLoss} hit` : `${settings.numRuns} runs completed`;
+                const reason = tpHit
+                    ? `Take Profit $${settings.takeProfit} reached`
+                    : slHit
+                    ? `Stop Loss -$${settings.stopLoss} hit`
+                    : consecHit
+                    ? `${settings.maxConsecLosses} consecutive losses — bot halted`
+                    : `${settings.numRuns} runs completed`;
                 addLog(`🏁 VPS_DONE: ${reason}`, 'stop');
                 addLog(`   Total P/L: ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)} USD over ${nextRuns - 1} runs`, 'info');
+                if (consecHit) {
+                    addLog(`🛑 CONSECUTIVE_LOSS_GUARD: ${consecLossesRef.current} losses in a row — all trades halted`, 'error');
+                }
                 onDone(reason);
                 return;
             }
@@ -148,7 +169,7 @@ const VpsMode: React.FC<VpsModeProps> = ({
             /* Schedule restart */
             restartPendingRef.current = true;
             const delay = 1500;
-            addLog(`🔄 VPS_AUTO_RESTART in ${delay / 1000}s (run #${nextRuns}${settings.numRuns > 0 ? '/' + settings.numRuns : ''})`, 'restart');
+            addLog(`🔄 VPS_AUTO_RESTART in ${delay / 1000}s (run #${nextRuns}${settings.numRuns > 0 ? '/' + settings.numRuns : ''}${settings.maxConsecLosses > 0 ? `  |  consec losses: ${consecLossesRef.current}/${settings.maxConsecLosses}` : ''})`, 'restart');
             setTimeout(() => {
                 restartPendingRef.current = false;
                 if (!doneRef.current && enabled) {
@@ -163,8 +184,9 @@ const VpsMode: React.FC<VpsModeProps> = ({
     useEffect(() => {
         if (enabled) {
             doneRef.current = false;
+            consecLossesRef.current = 0; // reset streak counter each time VPS is enabled
             addLog('🟢 VPS MODE: ACTIVATED', 'start');
-            addLog(`   Runs: ${settings.numRuns > 0 ? settings.numRuns : '∞'}  |  TP: $${settings.takeProfit}  |  SL: $${settings.stopLoss}`, 'info');
+            addLog(`   Runs: ${settings.numRuns > 0 ? settings.numRuns : '∞'}  |  TP: $${settings.takeProfit}  |  SL: $${settings.stopLoss}  |  Max Consec Losses: ${settings.maxConsecLosses > 0 ? settings.maxConsecLosses : '∞'}`, 'info');
         } else {
             addLog('🔴 VPS MODE: DEACTIVATED', 'stop');
         }
@@ -173,7 +195,7 @@ const VpsMode: React.FC<VpsModeProps> = ({
     const saveSettings = () => {
         onSettingsChange(settingsDraft);
         setShowSettings(false);
-        addLog(`⚙ VPS_SETTINGS updated — Runs:${settingsDraft.numRuns || '∞'} TP:$${settingsDraft.takeProfit} SL:$${settingsDraft.stopLoss}`, 'info');
+        addLog(`⚙ VPS_SETTINGS updated — Runs:${settingsDraft.numRuns || '∞'} TP:$${settingsDraft.takeProfit} SL:$${settingsDraft.stopLoss} MaxConsecLoss:${settingsDraft.maxConsecLosses || '∞'}`, 'info');
     };
 
     const StatusDot = ({ ok }: { ok: boolean }) => (
@@ -273,6 +295,14 @@ const VpsMode: React.FC<VpsModeProps> = ({
                             <label>Stop Loss ($) <span className='vps-hint'>(0 = disabled)</span></label>
                             <input type='number' min={0} step={1} value={settingsDraft.stopLoss}
                                 onChange={e => setSettingsDraft(v => ({ ...v, stopLoss: Math.max(0, parseFloat(e.target.value) || 0) }))} />
+                        </div>
+                        <div className='vps-settings-modal__field'>
+                            <label>Max Consecutive Losses <span className='vps-hint'>(0 = disabled)</span></label>
+                            <small className='vps-settings-modal__desc'>
+                                Stops the bot if this many trades in a row all lose with no win between them.
+                            </small>
+                            <input type='number' min={0} max={100} step={1} value={settingsDraft.maxConsecLosses ?? 0}
+                                onChange={e => setSettingsDraft(v => ({ ...v, maxConsecLosses: Math.max(0, parseInt(e.target.value) || 0) }))} />
                         </div>
                         <div className='vps-settings-modal__btns'>
                             <button className='vps-settings-modal__save' onClick={saveSettings}>Save</button>

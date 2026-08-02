@@ -151,6 +151,10 @@
       &:focus { border-color: rgba(99,102,241,0.5); }
     }
   }
+  &__desc {
+    font-size: 0.65rem; color: rgba(255,255,255,0.35); line-height: 1.4;
+    margin-top: -2px;
+  }
   &__btns { display: flex; gap: 8px; }
   &__save {
     flex: 1; padding: 8px; background: rgba(37,211,102,0.2); color: #22c55e;
