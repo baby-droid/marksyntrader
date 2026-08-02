@@ -3,6 +3,8 @@
     align-items: center;
     gap: 0.4rem;
     position: relative;
+    /* Shift the whole control 0.5 cm to the left to reclaim header space */
+    margin-left: -0.5cm;
 
     &__group {
         display: inline-flex;

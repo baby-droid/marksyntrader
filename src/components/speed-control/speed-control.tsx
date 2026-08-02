@@ -122,7 +122,6 @@ const SpeedControl: React.FC<TSpeedControl> = ({ className, compact }) => {
                 onClick={() => setFastExecutionEnabled(!fastExec)}
             >
                 ⚡ Fast
-                {fastExec && <span className='speed-control__fast-badge'>ACTIVE</span>}
             </button>
 
             {/* Diagnostics toggle — visible when Fast is enabled */}
