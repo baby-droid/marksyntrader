@@ -3,12 +3,16 @@ import {
     ExecutionSpeed,
     getExecutionSpeed,
     getMetrics,
+    getPingMs,
+    getTicksPerSec,
     isFastExecutionEnabled,
     setExecutionSpeed,
     setFastExecutionEnabled,
     subscribeExecutionSpeed,
     subscribeFastExecution,
     subscribeMetrics,
+    subscribePing,
+    subscribeTickRate,
     ExecutionMetrics,
 } from '@/utils/execution-speed';
 import './speed-control.scss';
@@ -29,16 +33,36 @@ function fmtMs(v: number | null): string {
     return v < 1 ? `<1ms` : `${v.toFixed(0)}ms`;
 }
 
+function pingColor(ms: number | null): string {
+    if (ms == null) return '#475569';
+    if (ms < 50)  return '#22c55e';
+    if (ms < 120) return '#eab308';
+    if (ms < 250) return '#f97316';
+    return '#ef4444';
+}
+
+function pingLabel(ms: number | null): string {
+    if (ms == null) return '⬤ Measuring…';
+    if (ms < 50)  return `⬤ ${ms}ms — Excellent`;
+    if (ms < 120) return `⬤ ${ms}ms — Good`;
+    if (ms < 250) return `⬤ ${ms}ms — Moderate`;
+    return `⬤ ${ms}ms — Slow`;
+}
+
 const SpeedControl: React.FC<TSpeedControl> = ({ className, compact }) => {
-    const [speed, setSpeed] = React.useState<ExecutionSpeed>(getExecutionSpeed());
+    const [speed,    setSpeed]    = React.useState<ExecutionSpeed>(getExecutionSpeed());
     const [fastExec, setFastExec] = React.useState<boolean>(isFastExecutionEnabled());
-    const [metrics, setMetrics] = React.useState<ExecutionMetrics>(getMetrics());
+    const [metrics,  setMetrics]  = React.useState<ExecutionMetrics>(getMetrics());
+    const [pingMs,   setPingMs]   = React.useState<number | null>(getPingMs());
+    const [ticksPs,  setTicksPs]  = React.useState<number>(getTicksPerSec());
     const [showDiag, setShowDiag] = React.useState(false);
     const diagRef = React.useRef<HTMLDivElement>(null);
 
     React.useEffect(() => subscribeExecutionSpeed(setSpeed), []);
     React.useEffect(() => subscribeFastExecution(setFastExec), []);
     React.useEffect(() => subscribeMetrics(setMetrics), []);
+    React.useEffect(() => subscribePing(setPingMs), []);
+    React.useEffect(() => subscribeTickRate(setTicksPs), []);
 
     /* Close diagnostics panel on outside click */
     React.useEffect(() => {
@@ -80,55 +104,69 @@ const SpeedControl: React.FC<TSpeedControl> = ({ className, compact }) => {
                 ))}
             </div>
 
-            {/* ⚡ Fast — event-driven zero-latency mode.
+            {/* ⚡ Fast — supersonic zero-latency execution toggle
                 When active, the engine:
-                  • Skips proposal round-trip → direct buy
-                  • Pre-validates all contract params on each tick
-                  • Defers all UI updates via rAF (async, never blocks trades)
-                  • Batches logging/stats after purchase dispatch
-                  • Maintains a single persistent WS connection with instant reconnect */}
+                  • Forces POST_DELAY = 0 across all speed tiers
+                  • Skips inter-contract delays in scalper / multi-contract runs
+                  • Reduces first-trade init wait from 800ms → 100ms
+                  • Records proposal + buy round-trip latency for diagnostics
+                  • Defers POC subscription to rAF so the trade path is unblocked
+                  • Monitors WS ping every 3s and tick rate in real-time */}
             <button
                 type='button'
-                title='Fast — single contracts at supersonic zero-delay speed. Pre-validates params, skips proposal, defers UI rendering. Click ⓘ for latency diagnostics.'
+                title={fastExec
+                    ? 'FAST MODE ACTIVE — zero inter-trade delay, async UI, live latency monitoring. Click to disable.'
+                    : 'Fast — supersonic zero-delay mode. Removes all artificial delays, defers UI updates, monitors WS latency.'}
                 aria-pressed={fastExec}
                 className={`speed-control__fast ${fastExec ? 'active' : ''}`}
                 onClick={() => setFastExecutionEnabled(!fastExec)}
             >
                 ⚡ Fast
+                {fastExec && <span className='speed-control__fast-badge'>ACTIVE</span>}
             </button>
 
-            {/* Diagnostics toggle — only visible when Fast is enabled */}
+            {/* Diagnostics toggle — visible when Fast is enabled */}
             {fastExec && (
                 <div className='speed-control__diag-wrap' ref={diagRef}>
                     <button
                         type='button'
                         className='speed-control__diag-btn'
-                        title='View execution latency metrics'
+                        title='View execution latency diagnostics'
                         onClick={() => setShowDiag(v => !v)}
                     >
-                        {totalMs != null ? `${totalMs.toFixed(0)}ms` : 'ⓘ'}
+                        {pingMs != null ? `${pingMs}ms` : totalMs != null ? `${totalMs.toFixed(0)}ms` : 'ⓘ'}
                     </button>
 
                     {showDiag && (
                         <div className='speed-control__diag-panel'>
+                            {/* Header */}
                             <div className='speed-control__diag-title'>
-                                ⚡ Fast Execution — Latency Diagnostics
+                                ⚡ FAST MODE ENABLED
                             </div>
+
+                            {/* WS Ping */}
+                            <div className='speed-control__diag-ping' style={{ color: pingColor(pingMs) }}>
+                                {pingLabel(pingMs)}
+                            </div>
+
+                            {/* Tick rate */}
+                            <div className='speed-control__diag-tickrate'>
+                                <span>Tick rate</span>
+                                <span>{ticksPs > 0 ? `${ticksPs} ticks/s` : '—'}</span>
+                            </div>
+
+                            {/* Internal latency */}
                             {totalLabel && (
                                 <div className='speed-control__diag-status'>{totalLabel}</div>
                             )}
                             <table className='speed-control__diag-table'>
                                 <tbody>
                                     <tr>
-                                        <td>Tick → Eval</td>
-                                        <td>{fmtMs(metrics.tickToEval)}</td>
-                                    </tr>
-                                    <tr>
-                                        <td>Eval → Buy</td>
+                                        <td>Proposal round-trip</td>
                                         <td>{fmtMs(metrics.evalToBuy)}</td>
                                     </tr>
                                     <tr>
-                                        <td>Buy → Response</td>
+                                        <td>Buy confirmation</td>
                                         <td>{fmtMs(metrics.buyToResponse)}</td>
                                     </tr>
                                     <tr className='speed-control__diag-total'>
@@ -137,15 +175,20 @@ const SpeedControl: React.FC<TSpeedControl> = ({ className, compact }) => {
                                     </tr>
                                 </tbody>
                             </table>
+
                             <div className='speed-control__diag-note'>
-                                Measures software-internal pipeline latency only.
-                                Network and broker latency are not included.
+                                Software-internal pipeline only.
+                                Network + broker latency shown as WS ping above.
                             </div>
+
+                            {/* Active optimisations checklist */}
                             <div className='speed-control__diag-features'>
-                                <span>✓ Persistent WebSocket</span>
-                                <span>✓ Direct buy (no proposal)</span>
-                                <span>✓ Async UI updates</span>
-                                <span>✓ Pre-validated params</span>
+                                <span>✓ Zero inter-trade delay</span>
+                                <span>✓ 100ms init (vs 800ms)</span>
+                                <span>✓ Async POC subscription</span>
+                                <span>✓ Latency metrics</span>
+                                <span>✓ Live WS ping monitor</span>
+                                <span>✓ Tick rate counter</span>
                             </div>
                         </div>
                     )}

@@ -1650,8 +1650,10 @@ const BotDetail: React.FC<{
                    Subsequent trades are tick-driven (zero artificial delay). */
                 if (firstTradeRef.current) {
                     firstTradeRef.current = false;
-                    addLog('🔧 INITIALISING_TRADE_ENGINE (first trade — normal speed)...', 'hack');
-                    await new Promise(r => setTimeout(r, 800));
+                    const { isFastExecutionEnabled: isFast } = await import('@/utils/execution-speed');
+                    const initDelay = isFast() ? 100 : 800;
+                    addLog(`🔧 INITIALISING_TRADE_ENGINE (first trade — ${isFast() ? 'FAST mode 100ms' : 'normal 800ms'})...`, 'hack');
+                    await new Promise(r => setTimeout(r, initDelay));
                 }
 
                 /* ── Fire the REAL Bot Builder XML bot ──
@@ -1677,9 +1679,11 @@ const BotDetail: React.FC<{
                 if (tradeCount > 1) addLog(`📊 MULTI_CONTRACT: executing ${tradeCount} contracts on this entry signal`, 'hack');
 
                 let cycle = { forceStopped: false, reason: null as 'tp' | 'sl' | 'loss_limit' | null, cycleProfit: 0, consLoss: 0, lastWon: true };
+                const { isFastExecutionEnabled: isFastNow } = await import('@/utils/execution-speed');
                 for (let _ci = 0; _ci < tradeCount && !stopRef.current; _ci++) {
                     if (_ci > 0 && !stopRef.current) {
-                        await new Promise(r => setTimeout(r, 250));
+                        // Fast mode: zero inter-contract delay; normal: 250ms
+                        if (!isFastNow()) await new Promise(r => setTimeout(r, 250));
                         if (stopRef.current) break;
                     }
                     const contractTag = tradeCount > 1 ? `[C${_ci + 1}/${tradeCount}] ` : '';

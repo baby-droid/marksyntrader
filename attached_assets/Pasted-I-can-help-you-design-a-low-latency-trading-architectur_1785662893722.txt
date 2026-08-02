@@ -1,0 +1,303 @@
+I can help you design a **low-latency trading architecture** and a **FAST mode** for your application, but I can't help create logic intended to overwhelm or circumvent a broker's execution model, such as guaranteeing extreme order rates or designing features whose purpose is to maximize rapid-fire order submission beyond normal API behavior.
+
+Below is a complete design prompt that focuses on **efficient, compliant, and low-latency execution**.
+
+---
+
+# FAST Button – System Design Prompt
+
+## Objective
+
+Create a premium execution mode called **FAST** that minimizes the application's internal processing latency while remaining fully compliant with the Deriv WebSocket API. The goal is to ensure that when a valid trading signal occurs, the application evaluates the signal and submits purchase requests with the lowest practical software-induced delay.
+
+---
+
+# FAST Button
+
+Display a dedicated button labeled
+
+```
+⚡ FAST
+```
+
+When activated:
+
+* Turn green
+* Show an ACTIVE indicator
+* Display "FAST MODE ENABLED"
+* Store the setting until disabled
+
+---
+
+# FAST Mode Pipeline
+
+```
+FAST Enabled
+      │
+      ▼
+Persistent WebSocket
+      │
+      ▼
+Tick Stream
+      │
+      ▼
+Message Dispatcher
+      │
+      ▼
+Strategy Engine
+      │
+      ▼
+Signal?
+      │
+      ├── No
+      │      │
+      │      ▼
+      │   Wait Next Tick
+      │
+      ▼
+Purchase Engine
+      │
+      ▼
+Submit Purchase Request
+      │
+      ▼
+Update UI + Logs
+```
+
+---
+
+# FAST Engine
+
+When FAST is enabled the engine should:
+
+* Use one persistent WebSocket
+* Never reconnect unnecessarily
+* Subscribe only once
+* Process every incoming tick immediately
+* Avoid polling loops
+* Avoid sleep timers
+* Avoid debounce delays
+* Use asynchronous processing
+* Keep latency measurements
+* Maintain cached settings in memory
+* Update only changed UI components
+
+---
+
+# Trading Engine
+
+For every incoming tick:
+
+```
+Receive Tick
+
+↓
+
+Validate Tick
+
+↓
+
+Update Memory
+
+↓
+
+Run Strategy
+
+↓
+
+Signal?
+
+↓
+
+Submit Purchase Request
+
+↓
+
+Wait For Next Tick
+```
+
+No blocking operations should occur before the purchase request is dispatched.
+
+---
+
+# Cached State
+
+Maintain only the data required for execution:
+
+```
+Current Tick
+
+Previous Tick
+
+Current Proposal
+
+Selected Market
+
+Stake
+
+Duration
+
+Barrier
+
+Contract Type
+
+Currency
+
+Balance
+
+Active Contract
+```
+
+Avoid repeated computation of unchanged values.
+
+---
+
+# Purchase Preparation
+
+Keep the following parameters preloaded:
+
+* Symbol
+* Contract type
+* Stake
+* Currency
+* Duration
+* User preferences
+
+This reduces work required when a trading signal occurs.
+
+---
+
+# Message Router
+
+Handle incoming WebSocket messages by type:
+
+* Tick updates
+* Proposal responses
+* Buy confirmations
+* Open contract updates
+* Balance updates
+* Transaction updates
+* Error messages
+
+Each handler should be independent so one message type cannot block another.
+
+---
+
+# UI Optimization
+
+Only update components that changed:
+
+* Tick display
+* Active contract
+* Balance
+* Transaction list
+* Statistics
+
+Batch visual updates using animation frames to reduce rendering overhead.
+
+---
+
+# Background Tasks
+
+Run these asynchronously after purchase submission:
+
+* Journal entries
+* Analytics
+* Trade history
+* Statistics
+* Logs
+
+They must not delay trading decisions.
+
+---
+
+# Diagnostics Panel
+
+Display:
+
+* WebSocket status
+* Ping latency
+* Tick timestamp
+* Strategy evaluation time
+* Purchase request creation time
+* Purchase confirmation time
+* Average internal latency
+* Orders submitted
+* Orders accepted
+* Orders rejected
+* Reconnect count
+
+---
+
+# Error Recovery
+
+If the connection drops:
+
+1. Detect disconnect.
+2. Reconnect automatically.
+3. Re-authenticate if required.
+4. Restore subscriptions.
+5. Synchronize state.
+6. Resume trading.
+
+---
+
+# Performance Targets
+
+Aim for:
+
+* Persistent WebSocket connection.
+* Event-driven processing.
+* Minimal internal latency between tick reception and request submission.
+* Efficient rendering with no unnecessary full-page updates.
+* Stable operation under sustained tick streams.
+
+---
+
+# Code Architecture
+
+```
+Application
+│
+├── WebSocket Manager
+│
+├── Authentication Manager
+│
+├── Tick Dispatcher
+│
+├── Strategy Engine
+│
+├── Purchase Manager
+│
+├── Proposal Manager
+│
+├── Contract Manager
+│
+├── Balance Manager
+│
+├── Transaction Manager
+│
+├── Journal Manager
+│
+├── Analytics Manager
+│
+├── Performance Monitor
+│
+└── User Interface
+```
+
+---
+
+# Design Principles
+
+The FAST mode should:
+
+* Minimize internal software latency.
+* Use an event-driven architecture.
+* Avoid unnecessary allocations and repeated calculations.
+* Isolate the execution engine from UI work.
+* Cache reusable state safely.
+* Respect the broker's API behavior, sequencing, and limits.
+* Remain deterministic, stable, and recover gracefully from network interruptions.
+
+This specification provides a solid blueprint for building a responsive trading engine without relying on unsupported assumptions about broker-side execution speed or API throughput.

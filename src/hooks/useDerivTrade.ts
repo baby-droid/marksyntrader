@@ -6,6 +6,14 @@ import {
     isAuthorized$,
 } from '@/external/bot-skeleton/services/api/observables/connection-status-stream';
 import { publishMasterTrade, getMasterSource } from '@/utils/trade-bus';
+import {
+    isFastExecutionEnabled,
+    recordPhase,
+    recordTick,
+    startPingMonitor,
+    stopPingMonitor,
+    setPingRestartHook,
+} from '@/utils/execution-speed';
 
 /**
  * Trading hook — rides on the SAME authenticated WebSocket connection the rest
@@ -84,12 +92,21 @@ export function useDerivTrade() {
             if (isAuth && !balanceSubscribedRef.current) {
                 balanceSubscribedRef.current = true;
                 (api_base.api?.send as unknown as ((data: unknown) => Promise<any>) | undefined)?.({ balance: 1, subscribe: 1 })?.catch(() => {});
+                // Start ping monitor once authenticated so Fast mode diagnostics are live
+                try {
+                    const sendFn = (msg: object) =>
+                        (api_base.api?.send as unknown as (d: unknown) => Promise<any>)(msg);
+                    startPingMonitor(sendFn);
+                    // Re-start with correct interval when Fast mode toggled
+                    setPingRestartHook(() => startPingMonitor(sendFn));
+                } catch { /* non-fatal */ }
             }
         });
         return () => {
             mountedRef.current = false;
             connSub.unsubscribe();
             authSub.unsubscribe();
+            stopPingMonitor();
         };
     }, []);
 
@@ -103,6 +120,7 @@ export function useDerivTrade() {
             }
 
             if (d.tick) {
+                recordTick(); // count tick for Fast mode tick-rate display
                 const q = d.tick.quote;
                 const ps = d.tick.pip_size ?? 2;
                 const tick: TickData = {
@@ -180,6 +198,7 @@ export function useDerivTrade() {
             const needsBarrier = NEEDS_BARRIER.has(String(contract_type).toUpperCase());
 
             // Step 1 — proposal (get an ask_price and a proposal ID)
+            const t0 = performance.now();
             const proposalReq: any = {
                 proposal: 1,
                 amount: stake,
@@ -208,6 +227,10 @@ export function useDerivTrade() {
             if (!proposalId) {
                 throw new Error('Proposal failed — no proposal ID returned');
             }
+            // Record proposal round-trip time as evalToBuy phase
+            if (isFastExecutionEnabled()) {
+                recordPhase('evalToBuy', Math.round(performance.now() - t0));
+            }
 
             // ── Publish copy-trade signal IN PARALLEL with master's buy ────
             // Firing the signal here (after proposal accepted, before buy confirmed)
@@ -230,6 +253,7 @@ export function useDerivTrade() {
             } catch { /* never let copy-trade errors affect the master trade */ }
 
             // Step 2 — buy using the proposal ID
+            const t1 = performance.now();
             let buyRes: any;
             try {
                 buyRes = await send({ buy: proposalId, price: askPrice });
@@ -239,6 +263,9 @@ export function useDerivTrade() {
             if (buyRes?.error) {
                 throw buyRes.error;
             }
+            if (isFastExecutionEnabled()) {
+                recordPhase('buyToResponse', Math.round(performance.now() - t1));
+            }
 
             const contract_id = Number(buyRes?.buy?.contract_id ?? 0);
             if (!contract_id) {
@@ -246,9 +273,17 @@ export function useDerivTrade() {
             }
 
             // Step 3 — subscribe to settlement notifications
+            // In Fast mode: subscribe is fire-and-forget (never blocks the caller)
             if (onSettled) {
                 pocCallbacksRef.current.set(contract_id, onSettled);
-                send({ proposal_open_contract: 1, contract_id, subscribe: 1 }).catch(() => {});
+                if (isFastExecutionEnabled()) {
+                    // Defer subscription message to rAF so the trade engine stays unblocked
+                    requestAnimationFrame(() => {
+                        send({ proposal_open_contract: 1, contract_id, subscribe: 1 }).catch(() => {});
+                    });
+                } else {
+                    send({ proposal_open_contract: 1, contract_id, subscribe: 1 }).catch(() => {});
+                }
             }
 
             return {

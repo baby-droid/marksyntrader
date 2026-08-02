@@ -185,3 +185,81 @@ export const resetMetrics = (): void => {
     metrics = { ...EMPTY_METRICS };
     metricsListeners.forEach(fn => fn({ ...metrics }));
 };
+
+/* ─── WS Ping Monitor ────────────────────────────────────────────────────────
+   Measures WebSocket round-trip latency when Fast mode is active.
+   Call startPingMonitor(sendFn) once after login; it auto-stops when Fast
+   is toggled off. Call stopPingMonitor() on logout / unmount.           ── */
+
+let pingMs: number | null = null;
+let ticksPerSec: number = 0;
+let pingIntervalId: ReturnType<typeof setInterval> | null = null;
+let tickRateIntervalId: ReturnType<typeof setInterval> | null = null;
+let tickCountInWindow = 0;
+
+const pingListeners   = new Set<(ms: number | null) => void>();
+const tickRateListeners = new Set<(tps: number) => void>();
+
+/** Record one live tick arrival (call on every incoming tick event). */
+export const recordTick = (): void => { tickCountInWindow++; };
+
+export const getPingMs = (): number | null => pingMs;
+export const getTicksPerSec = (): number => ticksPerSec;
+
+export const subscribePing = (fn: (ms: number | null) => void): (() => void) => {
+    pingListeners.add(fn);
+    return () => pingListeners.delete(fn);
+};
+
+export const subscribeTickRate = (fn: (tps: number) => void): (() => void) => {
+    tickRateListeners.add(fn);
+    return () => tickRateListeners.delete(fn);
+};
+
+/**
+ * Start the ping / tick-rate monitors.
+ * `sendFn` must be the app's authenticated api_base send function that
+ * accepts a `{ ping: 1 }` message and returns the Deriv pong response.
+ */
+export const startPingMonitor = (
+    sendFn: (msg: object) => Promise<any>,
+): void => {
+    stopPingMonitor(); // clear any previous session
+
+    // Ping every 3 s when Fast is enabled, 10 s otherwise
+    const interval = fastExecutionEnabled ? 3_000 : 10_000;
+
+    pingIntervalId = setInterval(async () => {
+        const t0 = performance.now();
+        try {
+            await sendFn({ ping: 1 });
+            const ms = Math.round(performance.now() - t0);
+            pingMs = ms;
+            pingListeners.forEach(fn => fn(ms));
+        } catch {
+            pingMs = null;
+            pingListeners.forEach(fn => fn(null));
+        }
+    }, interval);
+
+    // Tick rate: sample over 2-second windows
+    tickCountInWindow = 0;
+    tickRateIntervalId = setInterval(() => {
+        ticksPerSec = Math.round(tickCountInWindow / 2);
+        tickCountInWindow = 0;
+        tickRateListeners.forEach(fn => fn(ticksPerSec));
+    }, 2_000);
+};
+
+export const stopPingMonitor = (): void => {
+    if (pingIntervalId  != null) { clearInterval(pingIntervalId);   pingIntervalId   = null; }
+    if (tickRateIntervalId != null) { clearInterval(tickRateIntervalId); tickRateIntervalId = null; }
+    pingMs = null;
+    ticksPerSec = 0;
+};
+
+/* Re-start ping monitor at the correct frequency whenever Fast is toggled */
+let _pingRestartHook: ((enabled: boolean) => void) | null = null;
+export const setPingRestartHook = (fn: (enabled: boolean) => void): void => { _pingRestartHook = fn; };
+// Whenever Fast is toggled, inform the ping monitor so it restarts at the correct interval
+fastExecListeners.add((enabled) => { _pingRestartHook?.(enabled); });

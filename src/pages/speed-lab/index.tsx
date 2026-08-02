@@ -4,6 +4,7 @@ import { observer } from 'mobx-react-lite';
 import DigitCircles from '@/components/digit-circles';
 import { useDigitStats } from '@/hooks/useDigitStats';
 import { useDerivTrade } from '@/hooks/useDerivTrade';
+import { isFastExecutionEnabled, subscribeFastExecution } from '@/utils/execution-speed';
 import './speed-lab.scss';
 
 const AccountBadge: React.FC = () => {
@@ -188,7 +189,8 @@ const SpeedLab = observer(() => {
 
         // All modes are sequential: buy → await settlement → delay → next trade.
         // Normal = 200ms post-settlement delay, Crazy = 50ms, Turbo = 0ms.
-        const POST_DELAY = speed === 'turbo' ? 0 : speed === 'crazy' ? 50 : 200;
+        // Fast global mode: override to 0ms regardless of speed tier.
+        const POST_DELAY = isFastExecutionEnabled() ? 0 : speed === 'turbo' ? 0 : speed === 'crazy' ? 50 : 200;
 
         while (runRef.current) {
             const curStake = currentStakeRef.current;
