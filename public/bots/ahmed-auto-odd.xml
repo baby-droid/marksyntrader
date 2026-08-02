@@ -1,164 +1,69 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
 
-  <!-- ═══════════════════════════════════════════════════════════════════
-       AHMED AUTO ODD — DIGITODD Smart Entry Bot
-       ─────────────────────────────────────────────────────────────────
-       ENTRY POINT 1 (Signal 1 — Streak Reversal):
-         Tracks consecutive EVEN digits on every tick.
-         When 3+ EVEN digits in a row are followed by the FIRST ODD digit
-         → market is reversing → BUY DIGITODD (stake: real stake / martingale)
+  <!--
+    ═══════════════════════════════════════════════════════════════════════
+    AHMED AUTO ODD — Smart DIGITODD Entry Bot
+    ──────────────────────────────────────────────────────────────────────
+    ENTRY 1 (Streak Reversal): streak_threshold consecutive EVEN digits
+      → first ODD digit → BUY DIGITODD (real stake / martingale)
 
-       ENTRY POINT 2 (Signal 2 — Low Even Digit):
-         Last digit is 0 or 2 (lowest-value even digits — lowest even % range)
-         → strong even-to-odd reversion pattern → BUY DIGITODD
+    ENTRY 2 (Low Even Digit): last digit == entry_digit_1 OR entry_digit_2
+      (lowest-% even digits, default 0 and 2 — user editable)
+      → BUY DIGITODD (real stake / martingale)
 
-       SCAN MODE (no signal): buys with minimum scan_stake (0.35) to keep
-         the bot engine alive while watching for the next entry signal.
+    SCAN MODE: no signal → buy with scan_stake to track the next digit
 
-       Risk Management:
-         Martingale 2x on every REAL trade loss.
-         Scan trade loss resets stake to initial (no martingale chain).
-         Take Profit: $5 session gain → bot stops.
-         Stop Loss:  $50 session loss → bot stops.
-         Market: Volatility 25 Index 1s (V25 1s — 1HZ25V)
-  ═══════════════════════════════════════════════════════════════════ -->
+    RISK MANAGEMENT:
+      Martingale ×2 on every real-trade loss (resets on win).
+      Scan-trade loss: no martingale — stake stays at current level.
+      Take Profit: session_profit >= take_profit → bot stops.
+      Stop Loss:   session_profit <= −stop_loss → bot stops.
+      Market: Volatility 25 Index 1s (1HZ25V) | 1 tick
+    ═══════════════════════════════════════════════════════════════════════
+  -->
 
   <variables>
-    <variable id="aaod_stake">stake</variable>
-    <variable id="aaod_init">initial_stake</variable>
-    <variable id="aaod_scan">scan_stake</variable>
-    <variable id="aaod_mart">martingale</variable>
-    <variable id="aaod_tp">take_profit</variable>
-    <variable id="aaod_sl">stop_loss</variable>
-    <variable id="aaod_pnl">session_profit</variable>
-    <variable id="aaod_codd">cons_odd</variable>
-    <variable id="aaod_cevn">cons_even</variable>
-    <variable id="aaod_last">last_digit</variable>
-    <variable id="aaod_sig">signal_type</variable>
-    <variable id="aaod_real">is_real_trade</variable>
+    <variable id="aod_stake">stake</variable>
+    <variable id="aod_init">initial_stake</variable>
+    <variable id="aod_scan">scan_stake</variable>
+    <variable id="aod_ms">martingale_stake</variable>
+    <variable id="aod_mart">martingale</variable>
+    <variable id="aod_tp">take_profit</variable>
+    <variable id="aod_sl">stop_loss</variable>
+    <variable id="aod_pnl">session_profit</variable>
+    <variable id="aod_cev">cons_even</variable>
+    <variable id="aod_codd">cons_odd</variable>
+    <variable id="aod_real">is_real_trade</variable>
+    <variable id="aod_d1">entry_digit_1</variable>
+    <variable id="aod_d2">entry_digit_2</variable>
+    <variable id="aod_thr">streak_threshold</variable>
+    <variable id="aod_ld">last_digit</variable>
   </variables>
 
-  <!-- ══════════════════ TICK ANALYSIS ════════════════════════════════
-       Runs on EVERY live tick. Reads the last digit, updates consecutive
-       counters, and arms signal_type when an entry condition fires.
-  ══════════════════════════════════════════════════════════════════ -->
-  <block type="tick_analysis" id="aaod_ta" x="0" y="0">
-    <statement name="TICKANALYSIS_STACK">
-
-      <!-- 1. Store current last digit -->
-      <block type="variables_set" id="aaod_ta_ld">
-        <field name="VAR" id="aaod_last">last_digit</field>
-        <value name="VALUE">
-          <block type="last_digit" id="aaod_ta_ldv"></block>
-        </value>
+  <!-- ═══ TRADE DEFINITION ══════════════════════════════════════════════ -->
+  <block type="trade_definition" id="aod_def" deletable="false" x="0" y="60">
+    <statement name="TRADE_OPTIONS">
+      <block type="trade_definition_market" id="aod_mkt" deletable="false" movable="false">
+        <field name="MARKET_LIST">synthetic_index</field>
+        <field name="SUBMARKET_LIST">random_index</field>
+        <field name="SYMBOL_LIST">1HZ25V</field>
         <next>
-
-          <!-- 2. Branch: ODD digit or EVEN digit? -->
-          <block type="controls_if" id="aaod_ta_parity">
-            <mutation else="1"></mutation>
-
-            <!-- Condition: digit ∈ {1,3,5,7,9} → ODD -->
-            <value name="IF0">
-              <block type="logic_operation" id="aaod_io1"><field name="OP">OR</field>
-                <value name="A">
-                  <block type="logic_compare" id="aaod_io_eq1"><field name="OP">EQ</field>
-                    <value name="A"><block type="variables_get" id="aaod_io_a1"><field name="VAR" id="aaod_last">last_digit</field></block></value>
-                    <value name="B"><block type="math_number" id="aaod_io_b1"><field name="NUM">1</field></block></value>
-                  </block>
-                </value>
-                <value name="B">
-                  <block type="logic_operation" id="aaod_io2"><field name="OP">OR</field>
-                    <value name="A">
-                      <block type="logic_compare" id="aaod_io_eq3"><field name="OP">EQ</field>
-                        <value name="A"><block type="variables_get" id="aaod_io_a3"><field name="VAR" id="aaod_last">last_digit</field></block></value>
-                        <value name="B"><block type="math_number" id="aaod_io_b3"><field name="NUM">3</field></block></value>
-                      </block>
-                    </value>
-                    <value name="B">
-                      <block type="logic_operation" id="aaod_io3"><field name="OP">OR</field>
-                        <value name="A">
-                          <block type="logic_compare" id="aaod_io_eq5"><field name="OP">EQ</field>
-                            <value name="A"><block type="variables_get" id="aaod_io_a5"><field name="VAR" id="aaod_last">last_digit</field></block></value>
-                            <value name="B"><block type="math_number" id="aaod_io_b5"><field name="NUM">5</field></block></value>
-                          </block>
-                        </value>
-                        <value name="B">
-                          <block type="logic_operation" id="aaod_io4"><field name="OP">OR</field>
-                            <value name="A">
-                              <block type="logic_compare" id="aaod_io_eq7"><field name="OP">EQ</field>
-                                <value name="A"><block type="variables_get" id="aaod_io_a7"><field name="VAR" id="aaod_last">last_digit</field></block></value>
-                                <value name="B"><block type="math_number" id="aaod_io_b7"><field name="NUM">7</field></block></value>
-                              </block>
-                            </value>
-                            <value name="B">
-                              <block type="logic_compare" id="aaod_io_eq9"><field name="OP">EQ</field>
-                                <value name="A"><block type="variables_get" id="aaod_io_a9"><field name="VAR" id="aaod_last">last_digit</field></block></value>
-                                <value name="B"><block type="math_number" id="aaod_io_b9"><field name="NUM">9</field></block></value>
-                              </block>
-                            </value>
-                          </block>
-                        </value>
-                      </block>
-                    </value>
-                  </block>
-                </value>
-              </block>
-            </value>
-
-            <!-- ── ODD digit branch ── -->
-            <statement name="DO0">
-              <!-- Entry 1: if cons_even was ≥3 before this odd digit → streak reversed! -->
-              <block type="controls_if" id="aaod_ta_e1check">
-                <value name="IF0">
-                  <block type="logic_compare" id="aaod_ta_e1cmp"><field name="OP">GTE</field>
-                    <value name="A"><block type="variables_get" id="aaod_ta_e1a"><field name="VAR" id="aaod_cevn">cons_even</field></block></value>
-                    <value name="B"><block type="math_number" id="aaod_ta_e1b"><field name="NUM">3</field></block></value>
-                  </block>
-                </value>
-                <statement name="DO0">
-                  <block type="variables_set" id="aaod_ta_sig1">
-                    <field name="VAR" id="aaod_sig">signal_type</field>
-                    <value name="VALUE"><block type="math_number" id="aaod_ta_sig1v"><field name="NUM">1</field></block></value>
-                    <next>
-                      <block type="text_print" id="aaod_ta_n1">
-                        <value name="TEXT">
-                          <block type="text_join" id="aaod_ta_n1j">
-                            <mutation items="3"></mutation>
-                            <value name="ADD0"><block type="text" id="aaod_ta_n1a"><field name="TEXT">✅ ODD ENTRY 1 — EVEN streak (</field></block></value>
-                            <value name="ADD1"><block type="variables_get" id="aaod_ta_n1b"><field name="VAR" id="aaod_cevn">cons_even</field></block></value>
-                            <value name="ADD2"><block type="text" id="aaod_ta_n1c"><field name="TEXT">) reversed by ODD digit → BUYING DIGITODD</field></block></value>
-                          </block>
-                        </value>
-                      </block>
-                    </next>
-                  </block>
-                </statement>
+          <block type="trade_definition_tradetype" id="aod_tt" deletable="false" movable="false">
+            <field name="TRADETYPECAT_LIST">digits</field>
+            <field name="TRADETYPE_LIST">evenodd</field>
+            <next>
+              <block type="trade_definition_contracttype" id="aod_ct" deletable="false" movable="false">
+                <field name="TYPE_LIST">DIGITODD</field>
                 <next>
-                  <!-- Update counters for ODD digit -->
-                  <block type="variables_set" id="aaod_ta_codd_inc">
-                    <field name="VAR" id="aaod_codd">cons_odd</field>
-                    <value name="VALUE">
-                      <block type="math_arithmetic" id="aaod_ta_codd_add"><field name="OP">ADD</field>
-                        <value name="A"><shadow type="math_number" id="aaod_ta_codd_as"><field name="NUM">1</field></shadow><block type="variables_get" id="aaod_ta_codd_ag"><field name="VAR" id="aaod_codd">cons_odd</field></block></value>
-                        <value name="B"><shadow type="math_number" id="aaod_ta_codd_bs"><field name="NUM">1</field></shadow><block type="math_number" id="aaod_ta_codd_bv"><field name="NUM">1</field></block></value>
-                      </block>
-                    </value>
+                  <block type="trade_definition_candleinterval" id="aod_ci" deletable="false" movable="false">
+                    <field name="CANDLEINTERVAL_LIST">60</field>
                     <next>
-                      <block type="variables_set" id="aaod_ta_cevn_rst">
-                        <field name="VAR" id="aaod_cevn">cons_even</field>
-                        <value name="VALUE"><block type="math_number" id="aaod_ta_cevn_rstv"><field name="NUM">0</field></block></value>
+                      <block type="trade_definition_restartbuysell" id="aod_rbs" deletable="false" movable="false">
+                        <field name="TIME_MACHINE_ENABLED">FALSE</field>
                         <next>
-                          <block type="text_print" id="aaod_ta_oscan">
-                            <value name="TEXT">
-                              <block type="text_join" id="aaod_ta_oscanJ">
-                                <mutation items="4"></mutation>
-                                <value name="ADD0"><block type="text" id="aaod_ta_osa"><field name="TEXT">🔍 digit=</field></block></value>
-                                <value name="ADD1"><block type="variables_get" id="aaod_ta_osb"><field name="VAR" id="aaod_last">last_digit</field></block></value>
-                                <value name="ADD2"><block type="text" id="aaod_ta_osc"><field name="TEXT"> [ODD]  cons_even=</field></block></value>
-                                <value name="ADD3"><block type="variables_get" id="aaod_ta_osd"><field name="VAR" id="aaod_cevn">cons_even</field></block></value>
-                              </block>
-                            </value>
+                          <block type="trade_definition_restartonerror" id="aod_roe" deletable="false" movable="false">
+                            <field name="RESTARTONERROR">TRUE</field>
                           </block>
                         </next>
                       </block>
@@ -166,63 +71,289 @@
                   </block>
                 </next>
               </block>
-            </statement>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
 
-            <!-- ── EVEN digit branch (ELSE) ── -->
-            <statement name="ELSE">
-              <!-- Update counters for EVEN digit -->
-              <block type="variables_set" id="aaod_ta_cevn_inc">
-                <field name="VAR" id="aaod_cevn">cons_even</field>
-                <value name="VALUE">
-                  <block type="math_arithmetic" id="aaod_ta_cevn_add"><field name="OP">ADD</field>
-                    <value name="A"><shadow type="math_number" id="aaod_ta_cevn_as"><field name="NUM">1</field></shadow><block type="variables_get" id="aaod_ta_cevn_ag"><field name="VAR" id="aaod_cevn">cons_even</field></block></value>
-                    <value name="B"><shadow type="math_number" id="aaod_ta_cevn_bs"><field name="NUM">1</field></shadow><block type="math_number" id="aaod_ta_cevn_bv"><field name="NUM">1</field></block></value>
-                  </block>
-                </value>
+    <!-- ═══ INITIALIZATION — ★ USER-EDITABLE SETTINGS BELOW ★ ════════ -->
+    <statement name="INITIALIZATION">
+
+      <!-- ── Stake & Risk Settings (edit these) ────────────────────── -->
+      <block type="variables_set" id="aod_i_init">
+        <field name="VAR" id="aod_init">initial_stake</field>
+        <value name="VALUE"><block type="math_number" id="aod_i_init_v"><field name="NUM">0.35</field></block></value>
+        <next>
+          <block type="variables_set" id="aod_i_scan">
+            <field name="VAR" id="aod_scan">scan_stake</field>
+            <value name="VALUE"><block type="math_number" id="aod_i_scan_v"><field name="NUM">0.35</field></block></value>
+            <next>
+              <block type="variables_set" id="aod_i_mart">
+                <field name="VAR" id="aod_mart">martingale</field>
+                <value name="VALUE"><block type="math_number" id="aod_i_mart_v"><field name="NUM">2</field></block></value>
                 <next>
-                  <block type="variables_set" id="aaod_ta_codd_rst">
-                    <field name="VAR" id="aaod_codd">cons_odd</field>
-                    <value name="VALUE"><block type="math_number" id="aaod_ta_codd_rstv"><field name="NUM">0</field></block></value>
+                  <block type="variables_set" id="aod_i_tp">
+                    <field name="VAR" id="aod_tp">take_profit</field>
+                    <value name="VALUE"><block type="math_number" id="aod_i_tp_v"><field name="NUM">5</field></block></value>
                     <next>
-                      <!-- Entry 2: low-value even digit (0 or 2) → arm signal if none active -->
-                      <block type="controls_if" id="aaod_ta_e2guard">
-                        <value name="IF0">
-                          <block type="logic_compare" id="aaod_ta_e2sig0"><field name="OP">EQ</field>
-                            <value name="A"><block type="variables_get" id="aaod_ta_e2siga"><field name="VAR" id="aaod_sig">signal_type</field></block></value>
-                            <value name="B"><block type="math_number" id="aaod_ta_e2sigb"><field name="NUM">0</field></block></value>
+                      <block type="variables_set" id="aod_i_sl">
+                        <field name="VAR" id="aod_sl">stop_loss</field>
+                        <value name="VALUE"><block type="math_number" id="aod_i_sl_v"><field name="NUM">50</field></block></value>
+                        <next>
+
+                          <!-- ── Entry 1 — Even streak length (edit this) ──────── -->
+                          <block type="variables_set" id="aod_i_thr">
+                            <field name="VAR" id="aod_thr">streak_threshold</field>
+                            <value name="VALUE"><block type="math_number" id="aod_i_thr_v"><field name="NUM">3</field></block></value>
+                            <next>
+
+                              <!-- ── Entry 2 — Lowest even % digit (edit these) ── -->
+                              <block type="variables_set" id="aod_i_d1">
+                                <field name="VAR" id="aod_d1">entry_digit_1</field>
+                                <value name="VALUE"><block type="math_number" id="aod_i_d1_v"><field name="NUM">0</field></block></value>
+                                <next>
+                                  <block type="variables_set" id="aod_i_d2">
+                                    <field name="VAR" id="aod_d2">entry_digit_2</field>
+                                    <value name="VALUE"><block type="math_number" id="aod_i_d2_v"><field name="NUM">2</field></block></value>
+                                    <next>
+
+                                      <!-- ── Internal state — do not modify ── -->
+                                      <block type="variables_set" id="aod_i_stake" collapsed="true">
+                                        <field name="VAR" id="aod_stake">stake</field>
+                                        <value name="VALUE"><block type="variables_get" id="aod_i_sg"><field name="VAR" id="aod_init">initial_stake</field></block></value>
+                                        <next>
+                                          <block type="variables_set" id="aod_i_ms">
+                                            <field name="VAR" id="aod_ms">martingale_stake</field>
+                                            <value name="VALUE"><block type="variables_get" id="aod_i_msg"><field name="VAR" id="aod_init">initial_stake</field></block></value>
+                                            <next>
+                                              <block type="variables_set" id="aod_i_pnl">
+                                                <field name="VAR" id="aod_pnl">session_profit</field>
+                                                <value name="VALUE"><block type="math_number" id="aod_i_pnl_v"><field name="NUM">0</field></block></value>
+                                                <next>
+                                                  <block type="variables_set" id="aod_i_cev">
+                                                    <field name="VAR" id="aod_cev">cons_even</field>
+                                                    <value name="VALUE"><block type="math_number" id="aod_i_cev_v"><field name="NUM">0</field></block></value>
+                                                    <next>
+                                                      <block type="variables_set" id="aod_i_codd">
+                                                        <field name="VAR" id="aod_codd">cons_odd</field>
+                                                        <value name="VALUE"><block type="math_number" id="aod_i_codd_v"><field name="NUM">0</field></block></value>
+                                                        <next>
+                                                          <block type="variables_set" id="aod_i_real">
+                                                            <field name="VAR" id="aod_real">is_real_trade</field>
+                                                            <value name="VALUE"><block type="math_number" id="aod_i_real_v"><field name="NUM">0</field></block></value>
+                                                            <next>
+                                                              <block type="text_print" id="aod_i_notif">
+                                                                <value name="TEXT"><block type="text" id="aod_i_notif_t"><field name="TEXT">🟢 AHMED AUTO ODD started — scanning for entry signals...</field></block></value>
+                                                              </block>
+                                                            </next>
+                                                          </block>
+                                                        </next>
+                                                      </block>
+                                                    </next>
+                                                  </block>
+                                                </next>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+
+    <!-- ═══ TRADE OPTIONS ════════════════════════════════════════════ -->
+    <statement name="SUBMARKET">
+      <block type="trade_definition_tradeoptions" id="aod_opts" deletable="false" movable="false">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="false"></mutation>
+        <field name="DURATIONTYPE_LIST">t</field>
+        <value name="DURATION">
+          <shadow type="math_number_positive" id="aod_opts_dur"><field name="NUM">1</field></shadow>
+        </value>
+        <value name="AMOUNT">
+          <shadow type="math_number_positive" id="aod_opts_amt_s"><field name="NUM">0.35</field></shadow>
+          <block type="variables_get" id="aod_opts_amt"><field name="VAR" id="aod_stake">stake</field></block>
+        </value>
+      </block>
+    </statement>
+  </block>
+
+  <!-- ═══ BEFORE PURCHASE ══════════════════════════════════════════════ -->
+  <block type="before_purchase" id="aod_bp" deletable="false" x="0" y="680">
+    <statement name="BEFOREPURCHASE_STACK">
+
+      <!-- 1. Reset signal flag -->
+      <block type="variables_set" id="aod_bp_r">
+        <field name="VAR" id="aod_real">is_real_trade</field>
+        <value name="VALUE"><block type="math_number" id="aod_bp_r_v"><field name="NUM">0</field></block></value>
+        <next>
+
+          <!-- 2. Read last digit -->
+          <block type="variables_set" id="aod_bp_ld">
+            <field name="VAR" id="aod_ld">last_digit</field>
+            <value name="VALUE"><block type="last_digit" id="aod_bp_ldv"></block></value>
+            <next>
+
+              <!-- 3. Parity check + streak update + signal detection -->
+              <block type="controls_if" id="aod_bp_par">
+                <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+
+                <!-- Condition: digit ∈ {1,3,5,7,9} → ODD -->
+                <value name="IF0">
+                  <block type="logic_operation" id="aod_oor1"><field name="OP">OR</field>
+                    <value name="A">
+                      <block type="logic_compare" id="aod_o1"><field name="OP">EQ</field>
+                        <value name="A"><block type="variables_get" id="aod_o1a"><field name="VAR" id="aod_ld">last_digit</field></block></value>
+                        <value name="B"><block type="math_number" id="aod_o1b"><field name="NUM">1</field></block></value>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <block type="logic_operation" id="aod_oor2"><field name="OP">OR</field>
+                        <value name="A">
+                          <block type="logic_compare" id="aod_o3"><field name="OP">EQ</field>
+                            <value name="A"><block type="variables_get" id="aod_o3a"><field name="VAR" id="aod_ld">last_digit</field></block></value>
+                            <value name="B"><block type="math_number" id="aod_o3b"><field name="NUM">3</field></block></value>
                           </block>
                         </value>
-                        <statement name="DO0">
-                          <block type="controls_if" id="aaod_ta_e2dig">
-                            <!-- digit == 0 OR digit == 2 -->
-                            <value name="IF0">
-                              <block type="logic_operation" id="aaod_ta_e2or"><field name="OP">OR</field>
+                        <value name="B">
+                          <block type="logic_operation" id="aod_oor3"><field name="OP">OR</field>
+                            <value name="A">
+                              <block type="logic_compare" id="aod_o5"><field name="OP">EQ</field>
+                                <value name="A"><block type="variables_get" id="aod_o5a"><field name="VAR" id="aod_ld">last_digit</field></block></value>
+                                <value name="B"><block type="math_number" id="aod_o5b"><field name="NUM">5</field></block></value>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="logic_operation" id="aod_oor4"><field name="OP">OR</field>
                                 <value name="A">
-                                  <block type="logic_compare" id="aaod_ta_e2eq0"><field name="OP">EQ</field>
-                                    <value name="A"><block type="variables_get" id="aaod_ta_e2a0"><field name="VAR" id="aaod_last">last_digit</field></block></value>
-                                    <value name="B"><block type="math_number" id="aaod_ta_e2b0"><field name="NUM">0</field></block></value>
+                                  <block type="logic_compare" id="aod_o7"><field name="OP">EQ</field>
+                                    <value name="A"><block type="variables_get" id="aod_o7a"><field name="VAR" id="aod_ld">last_digit</field></block></value>
+                                    <value name="B"><block type="math_number" id="aod_o7b"><field name="NUM">7</field></block></value>
                                   </block>
                                 </value>
                                 <value name="B">
-                                  <block type="logic_compare" id="aaod_ta_e2eq2"><field name="OP">EQ</field>
-                                    <value name="A"><block type="variables_get" id="aaod_ta_e2a2"><field name="VAR" id="aaod_last">last_digit</field></block></value>
-                                    <value name="B"><block type="math_number" id="aaod_ta_e2b2"><field name="NUM">2</field></block></value>
+                                  <block type="logic_compare" id="aod_o9"><field name="OP">EQ</field>
+                                    <value name="A"><block type="variables_get" id="aod_o9a"><field name="VAR" id="aod_ld">last_digit</field></block></value>
+                                    <value name="B"><block type="math_number" id="aod_o9b"><field name="NUM">9</field></block></value>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+
+                <!-- DO0 — ODD digit: check signal 1 (was even streak?), update counters -->
+                <statement name="DO0">
+                  <!-- Signal 1: was there a long enough even streak? -->
+                  <block type="controls_if" id="aod_sig1">
+                    <value name="IF0">
+                      <block type="logic_compare" id="aod_sig1_cmp"><field name="OP">GTE</field>
+                        <value name="A"><block type="variables_get" id="aod_sig1_a"><field name="VAR" id="aod_cev">cons_even</field></block></value>
+                        <value name="B"><block type="variables_get" id="aod_sig1_b"><field name="VAR" id="aod_thr">streak_threshold</field></block></value>
+                      </block>
+                    </value>
+                    <statement name="DO0">
+                      <block type="variables_set" id="aod_sig1_set">
+                        <field name="VAR" id="aod_real">is_real_trade</field>
+                        <value name="VALUE"><block type="math_number" id="aod_sig1_v"><field name="NUM">1</field></block></value>
+                        <next>
+                          <block type="text_print" id="aod_sig1_n">
+                            <value name="TEXT">
+                              <block type="text_join" id="aod_sig1_nj"><mutation items="3"></mutation>
+                                <value name="ADD0"><block type="text" id="aod_s1a"><field name="TEXT">🎯 SIGNAL 1: </field></block></value>
+                                <value name="ADD1"><block type="variables_get" id="aod_s1b"><field name="VAR" id="aod_cev">cons_even</field></block></value>
+                                <value name="ADD2"><block type="text" id="aod_s1c"><field name="TEXT"> evens → ODD reversal → BUY DIGITODD ✅</field></block></value>
+                              </block>
+                            </value>
+                          </block>
+                        </next>
+                      </block>
+                    </statement>
+                    <!-- Reset even streak, increment odd streak -->
+                    <next>
+                      <block type="variables_set" id="aod_rev">
+                        <field name="VAR" id="aod_cev">cons_even</field>
+                        <value name="VALUE"><block type="math_number" id="aod_rev_v"><field name="NUM">0</field></block></value>
+                        <next>
+                          <block type="variables_set" id="aod_iodd">
+                            <field name="VAR" id="aod_codd">cons_odd</field>
+                            <value name="VALUE">
+                              <block type="math_arithmetic" id="aod_iodd_add"><field name="OP">ADD</field>
+                                <value name="A"><shadow type="math_number" id="aod_iodd_as"><field name="NUM">1</field></shadow><block type="variables_get" id="aod_iodd_ag"><field name="VAR" id="aod_codd">cons_odd</field></block></value>
+                                <value name="B"><shadow type="math_number" id="aod_iodd_b"><field name="NUM">1</field></shadow></value>
+                              </block>
+                            </value>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+
+                <!-- ELSE — EVEN digit: update counters, check signal 2 -->
+                <statement name="ELSE">
+                  <block type="variables_set" id="aod_rodd">
+                    <field name="VAR" id="aod_codd">cons_odd</field>
+                    <value name="VALUE"><block type="math_number" id="aod_rodd_v"><field name="NUM">0</field></block></value>
+                    <next>
+                      <block type="variables_set" id="aod_iev">
+                        <field name="VAR" id="aod_cev">cons_even</field>
+                        <value name="VALUE">
+                          <block type="math_arithmetic" id="aod_iev_add"><field name="OP">ADD</field>
+                            <value name="A"><shadow type="math_number" id="aod_iev_as"><field name="NUM">1</field></shadow><block type="variables_get" id="aod_iev_ag"><field name="VAR" id="aod_cev">cons_even</field></block></value>
+                            <value name="B"><shadow type="math_number" id="aod_iev_b"><field name="NUM">1</field></shadow></value>
+                          </block>
+                        </value>
+                        <next>
+                          <!-- Signal 2: digit == entry_digit_1 OR entry_digit_2 (low even %) -->
+                          <block type="controls_if" id="aod_sig2">
+                            <value name="IF0">
+                              <block type="logic_operation" id="aod_sig2_or"><field name="OP">OR</field>
+                                <value name="A">
+                                  <block type="logic_compare" id="aod_sig2_e1"><field name="OP">EQ</field>
+                                    <value name="A"><block type="variables_get" id="aod_sig2_a1"><field name="VAR" id="aod_ld">last_digit</field></block></value>
+                                    <value name="B"><block type="variables_get" id="aod_sig2_b1"><field name="VAR" id="aod_d1">entry_digit_1</field></block></value>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <block type="logic_compare" id="aod_sig2_e2"><field name="OP">EQ</field>
+                                    <value name="A"><block type="variables_get" id="aod_sig2_a2"><field name="VAR" id="aod_ld">last_digit</field></block></value>
+                                    <value name="B"><block type="variables_get" id="aod_sig2_b2"><field name="VAR" id="aod_d2">entry_digit_2</field></block></value>
                                   </block>
                                 </value>
                               </block>
                             </value>
                             <statement name="DO0">
-                              <block type="variables_set" id="aaod_ta_e2set">
-                                <field name="VAR" id="aaod_sig">signal_type</field>
-                                <value name="VALUE"><block type="math_number" id="aaod_ta_e2setv"><field name="NUM">2</field></block></value>
+                              <block type="variables_set" id="aod_sig2_set">
+                                <field name="VAR" id="aod_real">is_real_trade</field>
+                                <value name="VALUE"><block type="math_number" id="aod_sig2_v"><field name="NUM">1</field></block></value>
                                 <next>
-                                  <block type="text_print" id="aaod_ta_e2n">
+                                  <block type="text_print" id="aod_sig2_n">
                                     <value name="TEXT">
-                                      <block type="text_join" id="aaod_ta_e2nJ">
-                                        <mutation items="3"></mutation>
-                                        <value name="ADD0"><block type="text" id="aaod_ta_e2na"><field name="TEXT">🎯 ODD ENTRY 2 — Low even digit (</field></block></value>
-                                        <value name="ADD1"><block type="variables_get" id="aaod_ta_e2nb"><field name="VAR" id="aaod_last">last_digit</field></block></value>
-                                        <value name="ADD2"><block type="text" id="aaod_ta_e2nc"><field name="TEXT">) → BUYING DIGITODD</field></block></value>
+                                      <block type="text_join" id="aod_sig2_nj"><mutation items="3"></mutation>
+                                        <value name="ADD0"><block type="text" id="aod_s2a"><field name="TEXT">🎯 SIGNAL 2: Low even digit </field></block></value>
+                                        <value name="ADD1"><block type="variables_get" id="aod_s2b"><field name="VAR" id="aod_ld">last_digit</field></block></value>
+                                        <value name="ADD2"><block type="text" id="aod_s2c"><field name="TEXT"> → BUY DIGITODD ✅</field></block></value>
                                       </block>
                                     </value>
                                   </block>
@@ -230,332 +361,215 @@
                               </block>
                             </statement>
                           </block>
-                        </statement>
-                        <next>
-                          <block type="text_print" id="aaod_ta_escan">
-                            <value name="TEXT">
-                              <block type="text_join" id="aaod_ta_escanJ">
-                                <mutation items="4"></mutation>
-                                <value name="ADD0"><block type="text" id="aaod_ta_esa"><field name="TEXT">🔍 digit=</field></block></value>
-                                <value name="ADD1"><block type="variables_get" id="aaod_ta_esb"><field name="VAR" id="aaod_last">last_digit</field></block></value>
-                                <value name="ADD2"><block type="text" id="aaod_ta_esc"><field name="TEXT"> [EVEN] cons_even=</field></block></value>
-                                <value name="ADD3"><block type="variables_get" id="aaod_ta_esd"><field name="VAR" id="aaod_cevn">cons_even</field></block></value>
-                              </block>
-                            </value>
-                          </block>
                         </next>
-                      </block>
-                    </next>
-                  </block>
-                </next>
-              </block>
-            </statement>
-
-          </block>
-        </next>
-      </block>
-    </statement>
-  </block>
-
-  <!-- ══════════════════ TRADE DEFINITION ══════════════════════════════ -->
-  <block type="trade_definition" id="aaod_def" deletable="false" x="0" y="700">
-    <statement name="TRADE_OPTIONS">
-      <block type="trade_definition_market" id="aaod_mkt" deletable="false" movable="false">
-        <field name="MARKET_LIST">synthetic_index</field>
-        <field name="SUBMARKET_LIST">random_index</field>
-        <field name="SYMBOL_LIST">1HZ25V</field>
-        <next>
-          <block type="trade_definition_tradetype" id="aaod_tt" deletable="false" movable="false">
-            <field name="TRADETYPECAT_LIST">digits</field>
-            <field name="TRADETYPE_LIST">evenodd</field>
-            <next>
-              <block type="trade_definition_contracttype" id="aaod_ct" deletable="false" movable="false">
-                <field name="TYPE_LIST">DIGITODD</field>
-                <next>
-                  <block type="trade_definition_duration" id="aaod_dur" deletable="false" movable="false">
-                    <field name="DURATIONTYPE_LIST">t</field>
-                    <value name="DURATION">
-                      <shadow type="math_number_positive" id="aaod_durv"><field name="NUM">1</field></shadow>
-                    </value>
-                    <next>
-                      <block type="trade_definition_candleinterval" id="aaod_ci" deletable="false" movable="false">
-                        <field name="CANDLEINTERVAL_LIST">60</field>
-                        <next>
-                          <block type="trade_definition_restartbuysell" id="aaod_rbs" deletable="false" movable="false">
-                            <field name="TIME_MACHINE_ENABLED">FALSE</field>
-                            <next>
-                              <block type="trade_definition_restartonerror" id="aaod_roe" deletable="false" movable="false">
-                                <field name="RESTARTONERROR">TRUE</field>
-                              </block>
-                            </next>
-                          </block>
-                        </next>
-                      </block>
-                    </next>
-                  </block>
-                </next>
-              </block>
-            </next>
-          </block>
-        </next>
-      </block>
-    </statement>
-    <statement name="INITIALIZATION">
-      <block type="variables_set" id="aaod_i1"><field name="VAR" id="aaod_stake">stake</field>
-        <value name="VALUE"><block type="math_number" id="aaod_i1v"><field name="NUM">0.5</field></block></value>
-        <next><block type="variables_set" id="aaod_i2"><field name="VAR" id="aaod_init">initial_stake</field>
-          <value name="VALUE"><block type="math_number" id="aaod_i2v"><field name="NUM">0.5</field></block></value>
-          <next><block type="variables_set" id="aaod_i3"><field name="VAR" id="aaod_scan">scan_stake</field>
-            <value name="VALUE"><block type="math_number" id="aaod_i3v"><field name="NUM">0.35</field></block></value>
-            <next><block type="variables_set" id="aaod_i4"><field name="VAR" id="aaod_mart">martingale</field>
-              <value name="VALUE"><block type="math_number" id="aaod_i4v"><field name="NUM">2</field></block></value>
-              <next><block type="variables_set" id="aaod_i5"><field name="VAR" id="aaod_tp">take_profit</field>
-                <value name="VALUE"><block type="math_number" id="aaod_i5v"><field name="NUM">5</field></block></value>
-                <next><block type="variables_set" id="aaod_i6"><field name="VAR" id="aaod_sl">stop_loss</field>
-                  <value name="VALUE"><block type="math_number" id="aaod_i6v"><field name="NUM">50</field></block></value>
-                  <next><block type="variables_set" id="aaod_i7"><field name="VAR" id="aaod_pnl">session_profit</field>
-                    <value name="VALUE"><block type="math_number" id="aaod_i7v"><field name="NUM">0</field></block></value>
-                    <next><block type="variables_set" id="aaod_i8"><field name="VAR" id="aaod_codd">cons_odd</field>
-                      <value name="VALUE"><block type="math_number" id="aaod_i8v"><field name="NUM">0</field></block></value>
-                      <next><block type="variables_set" id="aaod_i9"><field name="VAR" id="aaod_cevn">cons_even</field>
-                        <value name="VALUE"><block type="math_number" id="aaod_i9v"><field name="NUM">0</field></block></value>
-                        <next><block type="variables_set" id="aaod_i10"><field name="VAR" id="aaod_last">last_digit</field>
-                          <value name="VALUE"><block type="math_number" id="aaod_i10v"><field name="NUM">0</field></block></value>
-                          <next><block type="variables_set" id="aaod_i11"><field name="VAR" id="aaod_sig">signal_type</field>
-                            <value name="VALUE"><block type="math_number" id="aaod_i11v"><field name="NUM">0</field></block></value>
-                            <next><block type="variables_set" id="aaod_i12"><field name="VAR" id="aaod_real">is_real_trade</field>
-                              <value name="VALUE"><block type="math_number" id="aaod_i12v"><field name="NUM">0</field></block></value>
-                              <next>
-                                <block type="text_print" id="aaod_i_notif">
-                                  <value name="TEXT"><block type="text" id="aaod_i_notifv"><field name="TEXT">🤖 AHMED AUTO ODD started — watching V25 1s for EVEN streak reversals + low even digit signals (0,2). TP=$5 SL=$50 Martingale=2x</field></block></value>
-                                </block>
-                              </next>
-                            </block></next>
-                          </block></next>
-                        </block></next>
-                      </block></next>
-                    </block></next>
-                  </block></next>
-                </block></next>
-              </block></next>
-            </block></next>
-          </block></next>
-        </block>
-      </block>
-    </statement>
-  </block>
-
-  <!-- ══════════════════ BEFORE PURCHASE ════════════════════════════════
-       signal_type != 0 → real entry trade (consumes signal, full stake)
-       signal_type == 0 → scan trade (min scan_stake, keeps engine alive)
-  ═══════════════════════════════════════════════════════════════════ -->
-  <block type="before_purchase" id="aaod_bp" deletable="false" x="0" y="1400">
-    <statement name="BEFOREPURCHASE_STACK">
-      <block type="controls_if" id="aaod_bp_sig">
-        <mutation else="1"></mutation>
-        <!-- IF signal active (real trade) -->
-        <value name="IF0">
-          <block type="logic_compare" id="aaod_bp_sigcmp"><field name="OP">NEQ</field>
-            <value name="A"><block type="variables_get" id="aaod_bp_siga"><field name="VAR" id="aaod_sig">signal_type</field></block></value>
-            <value name="B"><block type="math_number" id="aaod_bp_sigb"><field name="NUM">0</field></block></value>
-          </block>
-        </value>
-        <statement name="DO0">
-          <!-- Mark as real trade, consume signal, notify, buy -->
-          <block type="variables_set" id="aaod_bp_rtset">
-            <field name="VAR" id="aaod_real">is_real_trade</field>
-            <value name="VALUE"><block type="math_number" id="aaod_bp_rtsetv"><field name="NUM">1</field></block></value>
-            <next>
-              <block type="variables_set" id="aaod_bp_sigrst">
-                <field name="VAR" id="aaod_sig">signal_type</field>
-                <value name="VALUE"><block type="math_number" id="aaod_bp_sigrstv"><field name="NUM">0</field></block></value>
-                <next>
-                  <block type="text_print" id="aaod_bp_rn">
-                    <value name="TEXT">
-                      <block type="text_join" id="aaod_bp_rnJ">
-                        <mutation items="2"></mutation>
-                        <value name="ADD0"><block type="text" id="aaod_bp_rna"><field name="TEXT">⚡ PURCHASE DIGITODD — real stake: </field></block></value>
-                        <value name="ADD1"><block type="variables_get" id="aaod_bp_rnb"><field name="VAR" id="aaod_stake">stake</field></block></value>
-                      </block>
-                    </value>
-                    <next>
-                      <block type="timeout" id="aaod_bp_rt">
-                        <statement name="TIMEOUTSTACK">
-                          <block type="purchase" id="aaod_bp_rp"><field name="PURCHASE_LIST">DIGITODD</field></block>
-                        </statement>
-                        <value name="SECONDS"><block type="math_number" id="aaod_bp_rtv"><field name="NUM">-0.00001</field></block></value>
-                      </block>
-                    </next>
-                  </block>
-                </next>
-              </block>
-            </next>
-          </block>
-        </statement>
-        <!-- ELSE: no signal → scan mode -->
-        <statement name="ELSE">
-          <block type="variables_set" id="aaod_bp_scanrt">
-            <field name="VAR" id="aaod_real">is_real_trade</field>
-            <value name="VALUE"><block type="math_number" id="aaod_bp_scanrtv"><field name="NUM">0</field></block></value>
-            <next>
-              <block type="variables_set" id="aaod_bp_scansk">
-                <field name="VAR" id="aaod_stake">stake</field>
-                <value name="VALUE"><block type="variables_get" id="aaod_bp_scanskg"><field name="VAR" id="aaod_scan">scan_stake</field></block></value>
-                <next>
-                  <block type="timeout" id="aaod_bp_scant">
-                    <statement name="TIMEOUTSTACK">
-                      <block type="purchase" id="aaod_bp_scanp"><field name="PURCHASE_LIST">DIGITODD</field></block>
-                    </statement>
-                    <value name="SECONDS"><block type="math_number" id="aaod_bp_scantv"><field name="NUM">-0.00001</field></block></value>
-                  </block>
-                </next>
-              </block>
-            </next>
-          </block>
-        </statement>
-      </block>
-    </statement>
-  </block>
-
-  <!-- ══════════════════ AFTER PURCHASE ═════════════════════════════════
-       1. Update session_profit
-       2. TP / SL combined check → stop if hit (no trade_again)
-       3. Win: reset stake   |   Loss: martingale (real) or reset (scan)
-       4. Trade again (restart scan)
-  ═══════════════════════════════════════════════════════════════════ -->
-  <block type="after_purchase" id="aaod_ap" deletable="false" x="0" y="1900">
-    <statement name="AFTERPURCHASE_STACK">
-
-      <!-- 1. session_profit += contract profit -->
-      <block type="variables_set" id="aaod_ap_pnl">
-        <field name="VAR" id="aaod_pnl">session_profit</field>
-        <value name="VALUE">
-          <block type="math_arithmetic" id="aaod_ap_pnladd"><field name="OP">ADD</field>
-            <value name="A"><shadow type="math_number" id="aaod_ap_pnlas"><field name="NUM">1</field></shadow><block type="variables_get" id="aaod_ap_pnlag"><field name="VAR" id="aaod_pnl">session_profit</field></block></value>
-            <value name="B"><shadow type="math_number" id="aaod_ap_pnlbs"><field name="NUM">1</field></shadow><block type="read_details" id="aaod_ap_pnlrd"><field name="DETAIL_INDEX">4</field></block></value>
-          </block>
-        </value>
-        <next>
-
-          <!-- 2. TP or SL hit? -->
-          <block type="controls_if" id="aaod_ap_tpsl">
-            <mutation else="1"></mutation>
-            <value name="IF0">
-              <!-- session_profit >= take_profit  OR  session_profit <= -stop_loss -->
-              <block type="logic_operation" id="aaod_ap_tpslor"><field name="OP">OR</field>
-                <value name="A">
-                  <block type="logic_compare" id="aaod_ap_tp_cmp"><field name="OP">GTE</field>
-                    <value name="A"><block type="variables_get" id="aaod_ap_tp_a"><field name="VAR" id="aaod_pnl">session_profit</field></block></value>
-                    <value name="B"><block type="variables_get" id="aaod_ap_tp_b"><field name="VAR" id="aaod_tp">take_profit</field></block></value>
-                  </block>
-                </value>
-                <value name="B">
-                  <block type="logic_compare" id="aaod_ap_sl_cmp"><field name="OP">LTE</field>
-                    <value name="A"><block type="variables_get" id="aaod_ap_sl_a"><field name="VAR" id="aaod_pnl">session_profit</field></block></value>
-                    <value name="B">
-                      <block type="math_arithmetic" id="aaod_ap_sl_neg"><field name="OP">MULTIPLY</field>
-                        <value name="A"><shadow type="math_number" id="aaod_ap_sl_as"><field name="NUM">1</field></shadow><block type="variables_get" id="aaod_ap_sl_ag"><field name="VAR" id="aaod_sl">stop_loss</field></block></value>
-                        <value name="B"><shadow type="math_number" id="aaod_ap_sl_bs"><field name="NUM">1</field></shadow><block type="math_number" id="aaod_ap_sl_bv"><field name="NUM">-1</field></block></value>
-                      </block>
-                    </value>
-                  </block>
-                </value>
-              </block>
-            </value>
-            <statement name="DO0">
-              <!-- TP/SL hit: notify and stop (no trade_again) -->
-              <block type="text_print" id="aaod_ap_stop_notif">
-                <value name="TEXT">
-                  <block type="text_join" id="aaod_ap_stop_notifJ">
-                    <mutation items="3"></mutation>
-                    <value name="ADD0"><block type="text" id="aaod_ap_sna"><field name="TEXT">🏁 AHMED AUTO ODD — TP/SL reached. Session profit: </field></block></value>
-                    <value name="ADD1"><block type="variables_get" id="aaod_ap_snb"><field name="VAR" id="aaod_pnl">session_profit</field></block></value>
-                    <value name="ADD2"><block type="text" id="aaod_ap_snc"><field name="TEXT"> USD. Bot stopping.</field></block></value>
-                  </block>
-                </value>
-              </block>
-            </statement>
-
-            <!-- ELSE: continue trading -->
-            <statement name="ELSE">
-              <!-- 3. Win/loss stake management -->
-              <block type="controls_if" id="aaod_ap_winloss">
-                <mutation else="1"></mutation>
-                <!-- IF won -->
-                <value name="IF0">
-                  <block type="contract_check_result" id="aaod_ap_winck"><field name="CHECK_RESULT">win</field></block>
-                </value>
-                <statement name="DO0">
-                  <!-- Win: reset stake to initial -->
-                  <block type="variables_set" id="aaod_ap_win_rst">
-                    <field name="VAR" id="aaod_stake">stake</field>
-                    <value name="VALUE"><block type="variables_get" id="aaod_ap_win_rstg"><field name="VAR" id="aaod_init">initial_stake</field></block></value>
-                    <next>
-                      <block type="text_print" id="aaod_ap_win_n">
-                        <value name="TEXT">
-                          <block type="text_join" id="aaod_ap_win_nJ">
-                            <mutation items="3"></mutation>
-                            <value name="ADD0"><block type="text" id="aaod_ap_wna"><field name="TEXT">✅ WIN! Profit: </field></block></value>
-                            <value name="ADD1"><block type="read_details" id="aaod_ap_wnb"><field name="DETAIL_INDEX">4</field></block></value>
-                            <value name="ADD2"><block type="text" id="aaod_ap_wnc"><field name="TEXT"> | Session total: </field></block></value>
-                          </block>
-                        </value>
                       </block>
                     </next>
                   </block>
                 </statement>
-                <!-- ELSE: loss -->
-                <statement name="ELSE">
-                  <block type="controls_if" id="aaod_ap_losstype">
-                    <mutation else="1"></mutation>
-                    <!-- Real trade loss → apply martingale -->
+
+                <!-- 4. Set stake: real trade → martingale_stake, scan → scan_stake -->
+                <next>
+                  <block type="controls_if" id="aod_setstk">
+                    <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
                     <value name="IF0">
-                      <block type="logic_compare" id="aaod_ap_ltcmp"><field name="OP">EQ</field>
-                        <value name="A"><block type="variables_get" id="aaod_ap_lta"><field name="VAR" id="aaod_real">is_real_trade</field></block></value>
-                        <value name="B"><block type="math_number" id="aaod_ap_ltb"><field name="NUM">1</field></block></value>
+                      <block type="logic_compare" id="aod_setstk_cmp"><field name="OP">EQ</field>
+                        <value name="A"><block type="variables_get" id="aod_setstk_a"><field name="VAR" id="aod_real">is_real_trade</field></block></value>
+                        <value name="B"><block type="math_number" id="aod_setstk_b"><field name="NUM">1</field></block></value>
                       </block>
                     </value>
                     <statement name="DO0">
-                      <block type="variables_set" id="aaod_ap_mart">
-                        <field name="VAR" id="aaod_stake">stake</field>
-                        <value name="VALUE">
-                          <block type="math_arithmetic" id="aaod_ap_mart_mul"><field name="OP">MULTIPLY</field>
-                            <value name="A"><shadow type="math_number" id="aaod_ap_mart_as"><field name="NUM">1</field></shadow><block type="variables_get" id="aaod_ap_mart_ag"><field name="VAR" id="aaod_stake">stake</field></block></value>
-                            <value name="B"><shadow type="math_number" id="aaod_ap_mart_bs"><field name="NUM">1</field></shadow><block type="variables_get" id="aaod_ap_mart_bg"><field name="VAR" id="aaod_mart">martingale</field></block></value>
-                          </block>
-                        </value>
+                      <!-- Use martingale_stake for real trade -->
+                      <block type="variables_set" id="aod_stk_real">
+                        <field name="VAR" id="aod_stake">stake</field>
+                        <value name="VALUE"><block type="variables_get" id="aod_stk_real_g"><field name="VAR" id="aod_ms">martingale_stake</field></block></value>
                         <next>
-                          <block type="text_print" id="aaod_ap_mart_n">
+                          <block type="text_print" id="aod_stk_real_n">
                             <value name="TEXT">
-                              <block type="text_join" id="aaod_ap_mart_nJ">
-                                <mutation items="3"></mutation>
-                                <value name="ADD0"><block type="text" id="aaod_ap_mna"><field name="TEXT">❌ LOSS — Martingale → next stake: </field></block></value>
-                                <value name="ADD1"><block type="variables_get" id="aaod_ap_mnb"><field name="VAR" id="aaod_stake">stake</field></block></value>
-                                <value name="ADD2"><block type="text" id="aaod_ap_mnc"><field name="TEXT"> | Session: </field></block></value>
+                              <block type="text_join" id="aod_stk_real_nj"><mutation items="3"></mutation>
+                                <value name="ADD0"><block type="text" id="aod_rta"><field name="TEXT">⚡ REAL TRADE — Stake: $</field></block></value>
+                                <value name="ADD1"><block type="variables_get" id="aod_rtb"><field name="VAR" id="aod_ms">martingale_stake</field></block></value>
+                                <value name="ADD2"><block type="text" id="aod_rtc"><field name="TEXT"> | Even streak: </field></block></value>
                               </block>
                             </value>
                           </block>
                         </next>
                       </block>
                     </statement>
-                    <!-- Scan trade loss → reset to initial (no martingale) -->
                     <statement name="ELSE">
-                      <block type="variables_set" id="aaod_ap_scan_rst">
-                        <field name="VAR" id="aaod_stake">stake</field>
-                        <value name="VALUE"><block type="variables_get" id="aaod_ap_scan_rstg"><field name="VAR" id="aaod_init">initial_stake</field></block></value>
+                      <!-- Use scan_stake for scan trade -->
+                      <block type="variables_set" id="aod_stk_scan">
+                        <field name="VAR" id="aod_stake">stake</field>
+                        <value name="VALUE"><block type="variables_get" id="aod_stk_scan_g"><field name="VAR" id="aod_scan">scan_stake</field></block></value>
                       </block>
                     </statement>
+
+                    <!-- 5. Purchase -->
+                    <next>
+                      <block type="purchase" id="aod_pur">
+                        <field name="PURCHASE_LIST">DIGITODD</field>
+                      </block>
+                    </next>
                   </block>
-                </statement>
+                </next>
               </block>
-              <next>
-                <!-- 4. Trade again → restart scan -->
-                <block type="trade_again" id="aaod_ap_ta"></block>
-              </next>
-            </statement>
+
+            </next>
           </block>
         </next>
       </block>
+    </statement>
+  </block>
+
+  <!-- ═══ AFTER PURCHASE ════════════════════════════════════════════════ -->
+  <block type="after_purchase" id="aod_ap" deletable="false" x="0" y="1100">
+    <statement name="AFTERPURCHASE_STACK">
+
+      <!-- Win / Loss handler -->
+      <block type="controls_if" id="aod_ap_wl">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+        <value name="IF0">
+          <block type="contract_check_result" id="aod_ap_win"><field name="CHECK_RESULT">win</field></block>
+        </value>
+
+        <!-- WIN -->
+        <statement name="DO0">
+          <!-- session_profit += martingale_stake (approximate) -->
+          <block type="variables_set" id="aod_ap_w_pnl">
+            <field name="VAR" id="aod_pnl">session_profit</field>
+            <value name="VALUE">
+              <block type="math_arithmetic" id="aod_ap_w_pnl_add"><field name="OP">ADD</field>
+                <value name="A"><shadow type="math_number" id="aod_ap_w_pnl_as"><field name="NUM">0</field></shadow><block type="variables_get" id="aod_ap_w_pnl_ag"><field name="VAR" id="aod_pnl">session_profit</field></block></value>
+                <value name="B"><shadow type="math_number" id="aod_ap_w_pnl_bs"><field name="NUM">1</field></shadow><block type="variables_get" id="aod_ap_w_pnl_bg"><field name="VAR" id="aod_ms">martingale_stake</field></block></value>
+              </block>
+            </value>
+            <next>
+              <!-- Reset martingale_stake to initial -->
+              <block type="variables_set" id="aod_ap_w_rst">
+                <field name="VAR" id="aod_ms">martingale_stake</field>
+                <value name="VALUE"><block type="variables_get" id="aod_ap_w_rst_g"><field name="VAR" id="aod_init">initial_stake</field></block></value>
+                <next>
+                  <block type="text_print" id="aod_ap_w_n">
+                    <value name="TEXT">
+                      <block type="text_join" id="aod_ap_w_nj"><mutation items="3"></mutation>
+                        <value name="ADD0"><block type="text" id="aod_ap_wa"><field name="TEXT">✅ WIN! Stake reset. Session P&amp;L: $</field></block></value>
+                        <value name="ADD1"><block type="variables_get" id="aod_ap_wb"><field name="VAR" id="aod_pnl">session_profit</field></block></value>
+                        <value name="ADD2"><block type="text" id="aod_ap_wc"><field name="TEXT"> 🏆</field></block></value>
+                      </block>
+                    </value>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </statement>
+
+        <!-- LOSS -->
+        <statement name="ELSE">
+          <block type="controls_if" id="aod_ap_l_rt">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+            <value name="IF0">
+              <block type="logic_compare" id="aod_ap_l_cmp"><field name="OP">EQ</field>
+                <value name="A"><block type="variables_get" id="aod_ap_l_a"><field name="VAR" id="aod_real">is_real_trade</field></block></value>
+                <value name="B"><block type="math_number" id="aod_ap_l_b"><field name="NUM">1</field></block></value>
+              </block>
+            </value>
+            <!-- Real trade loss: apply martingale -->
+            <statement name="DO0">
+              <block type="variables_set" id="aod_ap_l_pnl">
+                <field name="VAR" id="aod_pnl">session_profit</field>
+                <value name="VALUE">
+                  <block type="math_arithmetic" id="aod_ap_l_pnl_sub"><field name="OP">MINUS</field>
+                    <value name="A"><shadow type="math_number" id="aod_ap_l_pnl_as"><field name="NUM">0</field></shadow><block type="variables_get" id="aod_ap_l_pnl_ag"><field name="VAR" id="aod_pnl">session_profit</field></block></value>
+                    <value name="B"><shadow type="math_number" id="aod_ap_l_pnl_bs"><field name="NUM">1</field></shadow><block type="variables_get" id="aod_ap_l_pnl_bg"><field name="VAR" id="aod_ms">martingale_stake</field></block></value>
+                  </block>
+                </value>
+                <next>
+                  <!-- martingale_stake *= martingale -->
+                  <block type="variables_set" id="aod_ap_l_mart">
+                    <field name="VAR" id="aod_ms">martingale_stake</field>
+                    <value name="VALUE">
+                      <block type="math_arithmetic" id="aod_ap_l_mart_mul"><field name="OP">MULTIPLY</field>
+                        <value name="A"><shadow type="math_number" id="aod_ap_l_mart_as"><field name="NUM">1</field></shadow><block type="variables_get" id="aod_ap_l_mart_ag"><field name="VAR" id="aod_ms">martingale_stake</field></block></value>
+                        <value name="B"><shadow type="math_number" id="aod_ap_l_mart_bs"><field name="NUM">2</field></shadow><block type="variables_get" id="aod_ap_l_mart_bg"><field name="VAR" id="aod_mart">martingale</field></block></value>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="text_print" id="aod_ap_l_n">
+                        <value name="TEXT">
+                          <block type="text_join" id="aod_ap_l_nj"><mutation items="3"></mutation>
+                            <value name="ADD0"><block type="text" id="aod_ap_la"><field name="TEXT">❌ LOSS — Martingale next: $</field></block></value>
+                            <value name="ADD1"><block type="variables_get" id="aod_ap_lb"><field name="VAR" id="aod_ms">martingale_stake</field></block></value>
+                            <value name="ADD2"><block type="text" id="aod_ap_lc"><field name="TEXT"> | Session: $</field></block></value>
+                          </block>
+                        </value>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </statement>
+            <!-- Scan trade loss: no martingale -->
+            <statement name="ELSE">
+              <block type="text_print" id="aod_ap_scan_l">
+                <value name="TEXT"><block type="text" id="aod_ap_scan_lt"><field name="TEXT">🔍 Scan trade — continuing scan...</field></block></value>
+              </block>
+            </statement>
+          </block>
+        </statement>
+      </block>
+
+      <!-- TP / SL check: only trade_again if limits not hit -->
+      <next>
+        <block type="controls_if" id="aod_ap_tpsl">
+          <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="1" else="1"></mutation>
+          <!-- TP hit? -->
+          <value name="IF0">
+            <block type="logic_compare" id="aod_ap_tp_cmp"><field name="OP">GTE</field>
+              <value name="A"><block type="variables_get" id="aod_ap_tp_a"><field name="VAR" id="aod_pnl">session_profit</field></block></value>
+              <value name="B"><block type="variables_get" id="aod_ap_tp_b"><field name="VAR" id="aod_tp">take_profit</field></block></value>
+            </block>
+          </value>
+          <statement name="DO0">
+            <block type="text_print" id="aod_tp_n">
+              <value name="TEXT">
+                <block type="text_join" id="aod_tp_nj"><mutation items="3"></mutation>
+                  <value name="ADD0"><block type="text" id="aod_tp_a"><field name="TEXT">🏁 TAKE PROFIT reached! Session: $</field></block></value>
+                  <value name="ADD1"><block type="variables_get" id="aod_tp_b"><field name="VAR" id="aod_pnl">session_profit</field></block></value>
+                  <value name="ADD2"><block type="text" id="aod_tp_c"><field name="TEXT"> — Bot stopped ✅</field></block></value>
+                </block>
+              </value>
+            </block>
+          </statement>
+          <!-- SL hit? -->
+          <value name="IF1">
+            <block type="logic_compare" id="aod_ap_sl_cmp"><field name="OP">LTE</field>
+              <value name="A"><block type="variables_get" id="aod_ap_sl_a"><field name="VAR" id="aod_pnl">session_profit</field></block></value>
+              <value name="B">
+                <block type="math_arithmetic" id="aod_ap_sl_neg"><field name="OP">MULTIPLY</field>
+                  <value name="A"><block type="math_number" id="aod_ap_sl_neg_a"><field name="NUM">-1</field></block></value>
+                  <value name="B"><block type="variables_get" id="aod_ap_sl_b"><field name="VAR" id="aod_sl">stop_loss</field></block></value>
+                </block>
+              </value>
+            </block>
+          </value>
+          <statement name="DO1">
+            <block type="text_print" id="aod_sl_n">
+              <value name="TEXT">
+                <block type="text_join" id="aod_sl_nj"><mutation items="3"></mutation>
+                  <value name="ADD0"><block type="text" id="aod_sl_a"><field name="TEXT">🛑 STOP LOSS hit! Session: $</field></block></value>
+                  <value name="ADD1"><block type="variables_get" id="aod_sl_b"><field name="VAR" id="aod_pnl">session_profit</field></block></value>
+                  <value name="ADD2"><block type="text" id="aod_sl_c"><field name="TEXT"> — Bot stopped ❌</field></block></value>
+                </block>
+              </value>
+            </block>
+          </statement>
+          <!-- Continue trading -->
+          <statement name="ELSE">
+            <block type="trade_again" id="aod_ta"></block>
+          </statement>
+        </block>
+      </next>
+
     </statement>
   </block>
 
