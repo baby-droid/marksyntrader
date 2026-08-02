@@ -1107,13 +1107,25 @@ const BotDetail: React.FC<{
                interpreter, and the freshly patched stake/martingale values never
                reach the actual trade (symptom: stake stays flat after a loss
                instead of escalating). Poll briefly until teardown settles.
-               ULTRA TURBO caps this at 300 ms — enough for normal teardown but
-               tight enough to catch the digit window before the next tick. */
+               ULTRA TURBO / ULTRA FAST caps this at 300 ms — enough for normal
+               teardown but tight enough to catch the digit window before the
+               next tick. */
             const teardownMax = params.ultraTurbo ? 300 : 3000;
             const teardownStart = Date.now();
             while (api_base.is_stopping && Date.now() - teardownStart < teardownMax) {
                 await new Promise(r => setTimeout(r, 20));
             }
+
+            /* ── Drain any residual bot.stop from the previous cycle ──
+               api_base.is_stopping can flip to false a few ms BEFORE the final
+               bot.stop event fires. Without this gap the new cycle's onStop
+               listener is registered while the old event is still in flight —
+               it catches it immediately, resolves the cycle with lastWon=true
+               (no contract settled yet) and the outer loop breaks on a
+               false "win", stopping the bot after every loss.
+               Keeping this tiny: 60 ms normal, 25 ms ultra/turbo. */
+            const drainMs = params.ultraTurbo ? 25 : 60;
+            await new Promise(r => setTimeout(r, drainMs));
 
             patchWorkspaceParams({
                 market: params.market, stake: params.stake,
@@ -1176,7 +1188,18 @@ const BotDetail: React.FC<{
                 }
                 // Win without guard: XML stops naturally → bot.stop → onStop → finish()
             };
-            const onStop = () => finish();
+            const onStop = () => {
+                /* Safety net: if bot.stop fires before ANY contract has settled in
+                   this cycle, it is almost certainly the previous cycle's residual
+                   event leaking through (the drain delay above catches most cases
+                   but not all under heavy GC / scheduler pressure). Ignoring it
+                   here prevents the outer loop from seeing lastWon=true with no
+                   trade and breaking on a phantom "win". The 45-second stall timer
+                   will catch genuine hangs where a trade was placed but never
+                   settled. */
+                if (seen.size === 0) return;
+                finish();
+            };
             const onError = (err: any) => {
                 params.onLog(`⚠ ${err?.message || err?.error?.message || 'Bot engine error — stopping cycle.'}`, 'error');
                 finish();
@@ -1693,13 +1716,13 @@ const BotDetail: React.FC<{
                    scan-wait phase so there is nothing left to initialise here. */
                 if (firstTradeRef.current) {
                     firstTradeRef.current = false;
-                    if (!ultraTurboRef.current) {
+                    if (!ultraTurboRef.current && fastExecRef.current !== 'ultra') {
                         const { isFastExecutionEnabled: isFast } = await import('@/utils/execution-speed');
                         const initDelay = isFast() ? 100 : 800;
                         addLog(`🔧 INITIALISING_TRADE_ENGINE (first trade — ${isFast() ? 'FAST mode 100ms' : 'normal 800ms'})...`, 'hack');
                         await new Promise(r => setTimeout(r, initDelay));
                     } else {
-                        addLog('⚡⚡⚡ ULTRA_TURBO: workspace pre-warmed — skipping init delay, firing NOW', 'entry');
+                        addLog('⚡ ULTRA: workspace pre-warmed — skipping init delay, firing NOW', 'entry');
                     }
                 }
 
@@ -1739,7 +1762,10 @@ const BotDetail: React.FC<{
                     cycle = await runXmlBotCycle({
                         market: curMarket, stake: curStake, martingale: slotMartingale(),
                         prediction: activeBarrier,
-                        ultraTurbo: ultraTurboRef.current,
+                        /* Ultra Fast (fastExec='ultra') gets the same 300ms teardown
+                           cap and drain-delay as Ultra Turbo — the whole point of
+                           the mode is zero latency between entry signal and buy. */
+                        ultraTurbo: ultraTurboRef.current || fastExecRef.current === 'ultra',
                         consecutiveLossLimit: effectiveLossLimit === Infinity ? Number.MAX_SAFE_INTEGER : effectiveLossLimit,
                         stopOnLoss: cfg.stopOnLoss || !!lastFiredGroupRef.current,
                         tpGuard: true, takeProfit: slotTakeProfit(), stopLoss: cfg.stopLoss,
@@ -1948,10 +1974,12 @@ const BotDetail: React.FC<{
                         }
                     }
 
-                    /* Small buffer between cycles — lets any lingering bot.stop event from the
-                       previous cycle drain before the new cycle registers its own listeners,
-                       preventing cross-cycle interference that would cause an immediate resolve. */
-                    await new Promise(r => setTimeout(r, 300));
+                    /* Buffer between loss cycles — gives lingering bot.stop events a
+                       chance to drain before the new cycle registers its listeners.
+                       The drain delay inside runXmlBotCycle handles most cases;
+                       this is the outer-loop safety gap.
+                       Ultra Turbo / Ultra Fast: shrink to 50 ms for max throughput. */
+                    await new Promise(r => setTimeout(r, ultraTurboRef.current || fastExecRef.current === 'ultra' ? 50 : 300));
                     continue;
                 }
 
