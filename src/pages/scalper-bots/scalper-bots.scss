@@ -252,6 +252,35 @@
     &:hover:not(:disabled) { background: #f3f4f6; }
     &:disabled { opacity: 0.5; cursor: not-allowed; }
   }
+  /* 🚀 ULTRA TURBO button — pre-warms workspace + eliminates all software delays */
+  &__ultra-turbo-btn {
+    padding: 0.4rem 0.9rem; border-radius: 0.45rem;
+    border: 1px solid #7c3aed; background: #f5f3ff; color: #5b21b6;
+    font-size: 0.82rem; font-weight: 900; cursor: pointer; font-family: inherit;
+    transition: all 0.14s; white-space: nowrap; letter-spacing: 0.01em;
+    &:hover { background: #ede9fe; border-color: #6d28d9; }
+    /* ULTRA TURBO ON — hyperspace pulse */
+    &--on {
+      background: linear-gradient(135deg, #7c3aed 0%, #c026d3 50%, #7c3aed 100%);
+      background-size: 200% 200%;
+      border-color: #c026d3; color: #fff;
+      box-shadow: 0 0 14px rgba(192,38,211,0.55), 0 0 4px rgba(124,58,237,0.6);
+      animation: ultra-turbo-hyperspace 0.8s ease-in-out infinite,
+                 ultra-turbo-shift 1.6s linear infinite;
+    }
+    @keyframes ultra-turbo-hyperspace {
+      0%, 100% { box-shadow: 0 0 14px rgba(192,38,211,0.55), 0 0 4px rgba(124,58,237,0.6); transform: scale(1); }
+      25%       { box-shadow: 0 0 22px rgba(192,38,211,0.9),  0 0 10px rgba(124,58,237,0.9); transform: scale(1.04); }
+      50%       { box-shadow: 0 0 30px rgba(192,38,211,1.0),  0 0 14px rgba(236,72,153,0.8); transform: scale(1.06); }
+      75%       { box-shadow: 0 0 22px rgba(192,38,211,0.9),  0 0 10px rgba(124,58,237,0.9); transform: scale(1.04); }
+    }
+    @keyframes ultra-turbo-shift {
+      0%   { background-position: 0% 50%; }
+      50%  { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+  }
+
   /* ⚡ Execution speed button — cycles Balanced → Fast → Ultra Fast */
   &__fast-btn {
     padding: 0.4rem 0.85rem; border-radius: 0.45rem;

@@ -929,6 +929,21 @@ const BotDetail: React.FC<{
     useEffect(() => { fastExecRef.current = fastExec; }, [fastExec]);
     const cycleSpeed = () => setFastExec(m => m === 'off' ? 'fast' : m === 'fast' ? 'ultra' : 'off');
 
+    /* ── ULTRA TURBO mode ──────────────────────────────────────────────────────
+       When ON, the scanner still respects NDP/LDP/strategy-logic conditions
+       (never fires blind) but eliminates EVERY artificial software delay between
+       "condition matched" and "Deriv API receives the buy request":
+         • Pre-warms the Bot Builder workspace on every tick BEFORE the condition
+           fires, so patchWorkspaceParams is already done when we need it.
+         • Skips the first-trade engine-init wait (0–800 ms saved).
+         • Skips all inter-contract delays.
+         • Cuts the is_stopping teardown poll to 300 ms max (was 3 s).
+       Result: the XML bot fires on the SAME tick whose digit triggered the NDP
+       window, maximising the chance of catching that exact digit. */
+    const [ultraTurbo, setUltraTurbo] = useState(false);
+    const ultraTurboRef = useRef(false);
+    useEffect(() => { ultraTurboRef.current = ultraTurbo; }, [ultraTurbo]);
+
     /* Patch the already-loaded Blockly workspace's market/stake/martingale-size/
        prediction fields WITHOUT reloading the XML from disk — this keeps the
        real Bot Builder bot in lock-step with the terminal's current run
@@ -1071,6 +1086,9 @@ const BotDetail: React.FC<{
            across cycles, market switches, and market-2 fallbacks instead of
            resetting to 0/1 every single trade. */
         priorConsLoss?: number;
+        /* ULTRA TURBO: when true, caps the is_stopping teardown poll at 300 ms
+           instead of 3 s so the buy fires the instant the interpreter is free. */
+        ultraTurbo?: boolean;
         onSettled: (info: { profit: number; won: boolean; market: string; buyPrice: number; exitDigit: number | null; consLoss: number }) => void;
         onLog: (msg: string, kind?: string) => void;
     }): Promise<{ forceStopped: boolean; reason: 'tp' | 'sl' | 'loss_limit' | null; cycleProfit: number; consLoss: number; lastWon: boolean }> => {
@@ -1088,10 +1106,13 @@ const BotDetail: React.FC<{
                api_base.is_stopping is still true, or reuses a not-yet-reset
                interpreter, and the freshly patched stake/martingale values never
                reach the actual trade (symptom: stake stays flat after a loss
-               instead of escalating). Poll briefly until teardown settles. */
+               instead of escalating). Poll briefly until teardown settles.
+               ULTRA TURBO caps this at 300 ms — enough for normal teardown but
+               tight enough to catch the digit window before the next tick. */
+            const teardownMax = params.ultraTurbo ? 300 : 3000;
             const teardownStart = Date.now();
-            while (api_base.is_stopping && Date.now() - teardownStart < 3000) {
-                await new Promise(r => setTimeout(r, 25));
+            while (api_base.is_stopping && Date.now() - teardownStart < teardownMax) {
+                await new Promise(r => setTimeout(r, 20));
             }
 
             patchWorkspaceParams({
@@ -1624,6 +1645,20 @@ const BotDetail: React.FC<{
                         if (scanTick % 15 === 9) {
                             addLog(`CONNECTION_SPEED: ${105 + Math.floor(Math.random() * 40)} Mbps`, 'hack');
                         }
+
+                        /* ⚡⚡⚡ ULTRA TURBO — pre-warm the Bot Builder workspace on every tick
+                           BEFORE the NDP/LDP condition fires. By the time the condition is met
+                           on the next tick, patchWorkspaceParams is already done and the XML bot
+                           can be fired with zero workspace-setup latency. */
+                        if (ultraTurboRef.current) {
+                            patchWorkspaceParams({
+                                market: curMarket,
+                                stake: curStake,
+                                martingale: slotMartingale(),
+                                prediction: slotBarrier(),
+                            });
+                        }
+
                         /* ⚡ Supersonic: wait for the next live tick instead of polling on a timer.
                            Falls back to 2 s max in case ticks stall (e.g. weekend / network). */
                         await new Promise<void>(resolve => {
@@ -1653,13 +1688,19 @@ const BotDetail: React.FC<{
                 } catch { /* non-fatal */ }
 
                 /* ── First trade: wait for workspace + feed to fully initialise ──
-                   Subsequent trades are tick-driven (zero artificial delay). */
+                   Subsequent trades are tick-driven (zero artificial delay).
+                   ULTRA TURBO: skip entirely — workspace was pre-warmed during the
+                   scan-wait phase so there is nothing left to initialise here. */
                 if (firstTradeRef.current) {
                     firstTradeRef.current = false;
-                    const { isFastExecutionEnabled: isFast } = await import('@/utils/execution-speed');
-                    const initDelay = isFast() ? 100 : 800;
-                    addLog(`🔧 INITIALISING_TRADE_ENGINE (first trade — ${isFast() ? 'FAST mode 100ms' : 'normal 800ms'})...`, 'hack');
-                    await new Promise(r => setTimeout(r, initDelay));
+                    if (!ultraTurboRef.current) {
+                        const { isFastExecutionEnabled: isFast } = await import('@/utils/execution-speed');
+                        const initDelay = isFast() ? 100 : 800;
+                        addLog(`🔧 INITIALISING_TRADE_ENGINE (first trade — ${isFast() ? 'FAST mode 100ms' : 'normal 800ms'})...`, 'hack');
+                        await new Promise(r => setTimeout(r, initDelay));
+                    } else {
+                        addLog('⚡⚡⚡ ULTRA_TURBO: workspace pre-warmed — skipping init delay, firing NOW', 'entry');
+                    }
                 }
 
                 /* ── Fire the REAL Bot Builder XML bot ──
@@ -1688,8 +1729,8 @@ const BotDetail: React.FC<{
                 const { isFastExecutionEnabled: isFastNow } = await import('@/utils/execution-speed');
                 for (let _ci = 0; _ci < tradeCount && !stopRef.current; _ci++) {
                     if (_ci > 0 && !stopRef.current) {
-                        // Fast mode: zero inter-contract delay; normal: 250ms
-                        if (!isFastNow()) await new Promise(r => setTimeout(r, 250));
+                        // ULTRA TURBO / Fast mode: zero inter-contract delay; normal: 250ms
+                        if (!ultraTurboRef.current && !isFastNow()) await new Promise(r => setTimeout(r, 250));
                         if (stopRef.current) break;
                     }
                     const contractTag = tradeCount > 1 ? `[C${_ci + 1}/${tradeCount}] ` : '';
@@ -1698,6 +1739,7 @@ const BotDetail: React.FC<{
                     cycle = await runXmlBotCycle({
                         market: curMarket, stake: curStake, martingale: slotMartingale(),
                         prediction: activeBarrier,
+                        ultraTurbo: ultraTurboRef.current,
                         consecutiveLossLimit: effectiveLossLimit === Infinity ? Number.MAX_SAFE_INTEGER : effectiveLossLimit,
                         stopOnLoss: cfg.stopOnLoss || !!lastFiredGroupRef.current,
                         tpGuard: true, takeProfit: slotTakeProfit(), stopLoss: cfg.stopLoss,
@@ -2050,6 +2092,17 @@ const BotDetail: React.FC<{
                         <>
                             <button className='sb-detail__start-btn' onClick={startBot} disabled={!derivTrade.authorized}>
                                 {derivTrade.authorized ? '▶ RUN' : '○ Connecting...'}
+                            </button>
+                            <button
+                                className={`sb-detail__ultra-turbo-btn${ultraTurbo ? ' sb-detail__ultra-turbo-btn--on' : ''}`}
+                                onClick={() => setUltraTurbo(v => !v)}
+                                title={
+                                    ultraTurbo
+                                        ? 'ULTRA TURBO ON — workspace pre-warmed each tick, zero init delay, 300ms teardown cap. Click to disable.'
+                                        : 'ULTRA TURBO OFF — enable to pre-warm workspace on every tick and eliminate all software delays between NDP condition and XML bot fire. Maximises chance of catching the exact NDP digit before next tick arrives.'
+                                }
+                            >
+                                {ultraTurbo ? '⚡⚡⚡ ULTRA TURBO' : '🚀 ULTRA TURBO'}
                             </button>
                             <button
                                 className={`sb-detail__fast-btn sb-detail__fast-btn--${fastExec}`}
