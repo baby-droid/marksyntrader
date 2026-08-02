@@ -127,8 +127,10 @@ export default class JournalStore {
 
     playAudio = (sound: string) => {
         if (sound !== config().lists.NOTIFICATION_SOUND[0][1]) {
-            const audio = document.getElementById(sound) as HTMLAudioElement;
-            audio.play();
+            const audio = document.getElementById(sound) as HTMLAudioElement | null;
+            // Guard: audio element may not exist in DOM (e.g. not yet mounted, wrong id)
+            // Without this check → "Cannot read properties of null (reading 'play')"
+            if (audio) audio.play().catch(() => { /* ignore autoplay policy errors */ });
         }
     };
 
