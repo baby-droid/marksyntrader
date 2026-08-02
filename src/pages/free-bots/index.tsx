@@ -7,6 +7,23 @@ import { api_base } from '@/external/bot-skeleton';
 import './free-bots.scss';
 
 const FREE_BOTS = [
+  // ── NEW signature bots — Omni Cycle Trader Pro & Smart Entry Pattern Pro V2 ─
+  {
+    id: 'omni-cycle-trader-pro',
+    name: 'Omni Cycle Trader Pro — 7-Phase Full Cycle',
+    description: '🔄 7-PHASE MASTER CYCLE — Even → Over → Under → Differs → Rise → Fall → Odd. Auto-recovery after 3 losses. Martingale 2×. TP $10 / SL $50. V75 1s.',
+    category: 'Cycle', market: 'V75 1s', type: 'Multi-Strategy', prediction: 'AUTO',
+    xmlFile: '/bots/omni-cycle-trader-pro.xml',
+    badge: 'OMNI 🔄', badgeColor: '#a78bfa', icon: '🔄', winRate: '~67%',
+  },
+  {
+    id: 'smart-entry-pattern-pro-v2',
+    name: 'Smart Entry Pattern Pro V2 — Advanced Scanner',
+    description: '🧠 FULL PATTERN BOT — 3 odds+1 even→EVEN, 3 evens+1 odd→ODD, Low-even→ODD, Low-odd→EVEN, High-9+streak→EVEN, High-8+streak→ODD. Scan mode. Martingale 2×. TP $5 / SL $50.',
+    category: 'Even/Odd', market: 'V25 1s', type: 'DIGITEVEN/DIGITODD', prediction: 'PATTERN',
+    xmlFile: '/bots/smart-entry-pattern-pro-v2.xml',
+    badge: 'SMART 🧠', badgeColor: '#34d399', icon: '🧠', winRate: '~60%',
+  },
   // ── New signature bots (August 2026) ─────────────────────────────────────
   {
     id: 'ahmed-cycle-master',
@@ -204,7 +221,7 @@ const FREE_BOTS = [
   },
 ];
 
-const CATEGORIES = ['All', 'Over/Under', 'Even/Odd'];
+const CATEGORIES = ['All', 'Cycle', 'Even/Odd', 'Over/Under'];
 
 // Market Killer Prime V1 — market rotation for Trade Restart
 const MKP_MARKETS = [

@@ -9,6 +9,7 @@ import { useStore } from '@/hooks/useStore';
 import { localize } from '@deriv-com/translations';
 import { useDevice } from '@deriv-com/ui';
 import { TBlocklyEvents } from 'Types';
+import AIScanner from '@/components/floating/AIScanner';
 import LoadModal from '../../components/load-modal';
 import SaveModal from '../dashboard/bot-list/save-modal';
 import BotBuilderTourHandler from '../tutorials/dbot-tours/bot-builder-tour';
@@ -22,6 +23,12 @@ const PALE_BLUE4 = '#add8e6';
 const PALE_BLUE5 = '#6cb4e4';
 
 const FREE_BOTS_LIST = [
+    // ── Signature bots (top of panel) ─────────────────────────────────────────
+    { id: 'omni-cycle-trader-pro', name: 'Omni Cycle Trader Pro', market: 'V75 1s', badge: 'CYCLE 🔄', badgeColor: '#a78bfa', xmlFile: '/bots/omni-cycle-trader-pro.xml', icon: '🔄' },
+    { id: 'smart-entry-pattern-pro-v2', name: 'Smart Entry Pattern Pro V2', market: 'V25 1s', badge: 'SMART 🧠', badgeColor: '#34d399', xmlFile: '/bots/smart-entry-pattern-pro-v2.xml', icon: '🧠' },
+    { id: 'ahmed-cycle-master', name: 'Ahmed Cycle Master', market: 'V50 1s', badge: 'CYCLE 🔄', badgeColor: '#a78bfa', xmlFile: '/bots/ahmed-cycle-master.xml', icon: '🔄' },
+    { id: 'ahmed-pattern-scanner', name: 'Ahmed Pattern Scanner', market: 'V25 1s', badge: 'SCAN 🧠', badgeColor: '#34d399', xmlFile: '/bots/ahmed-pattern-scanner.xml', icon: '🧠' },
+    // ── Standard library ──────────────────────────────────────────────────────
     { id: 'ahmed-syn-even-odd', name: 'Ahmed SYN Even/Odd v1.2', market: 'V25 1s', badge: 'AHMED ★', badgeColor: PALE_BLUE, xmlFile: '/bots/ahmed-syn-even-odd.xml', icon: '🤖' },
     { id: 'over1', name: 'AI Auto SYN Over 1', market: 'V50 1s', badge: 'HOT', badgeColor: PALE_BLUE2, xmlFile: '/bots/over1.xml', icon: '⚡' },
     { id: 'over2', name: 'AI Auto SYN Over 2', market: 'V50 1s', badge: 'HOT', badgeColor: PALE_BLUE3, xmlFile: '/bots/over2.xml', icon: '🎯' },
@@ -341,6 +348,7 @@ const BotBuilder = observer(() => {
     };
 
     const [showFreeBots, setShowFreeBots] = useState(false);
+    const [showScanner, setShowScanner] = useState(false);
     // When true, fire onRunButtonClick as soon as the panel finishes unmounting
     const pendingAutoRun = React.useRef(false);
 
@@ -476,7 +484,38 @@ const BotBuilder = observer(() => {
                         onLoadDone={handleBotLoadDone}
                     />
                 )}
+
+                {/* ── Scanner button — fixed to right side of builder, above Free Bots ── */}
+                {active_tab === 1 && !showFreeBots && (
+                    <button
+                        onClick={() => setShowScanner(s => !s)}
+                        title='AI Market Scanner — live digit frequency analysis + trading signals'
+                        style={{
+                            position: 'fixed',
+                            left: freeBotPos.x,
+                            top: freeBotPos.y + 46,
+                            zIndex: 120,
+                            background: showScanner
+                                ? 'linear-gradient(135deg,#059669,#047857)'
+                                : 'linear-gradient(135deg,rgba(16,185,129,0.9),rgba(5,150,105,0.9))',
+                            border: '1.5px solid rgba(52,211,153,0.5)',
+                            borderRadius: '8px',
+                            color: '#fff', fontSize: '12px', fontWeight: 700, padding: '7px 13px',
+                            cursor: 'pointer', touchAction: 'none',
+                            boxShadow: showScanner
+                                ? '0 0 12px rgba(52,211,153,0.6)'
+                                : '0 2px 10px rgba(0,0,0,0.4)',
+                            display: 'flex', alignItems: 'center', gap: '6px',
+                            userSelect: 'none',
+                            transition: 'all 0.2s',
+                        }}
+                    >
+                        🔍 <span>{showScanner ? 'Hide Scanner' : 'Scanner'}</span>
+                    </button>
+                )}
             </div>
+            {/* AI Scanner floating panel — shown when scanner button is active */}
+            {active_tab === 1 && showScanner && <AIScanner />}
             {active_tab === 1 && <BotBuilderTourHandler is_mobile={!isDesktop} />}
             {/* removed this outside from toolbar becuase it needs to loaded seperately without dependency */}
             <LoadModal />
