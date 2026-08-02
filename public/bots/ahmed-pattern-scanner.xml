@@ -262,11 +262,11 @@
                           </block>
                         </statement>
                         <statement name="ELSE">
-                          <!-- &lt; 3 odds → buy ODD (contrarian, follow momentum) -->
-                          <block type="variables_set" id="PS_set_buy2_contra">
+                          <!-- &lt; 3 odds → buy EVEN (contrarian against momentum) -->
+                          <block type="variables_set" id="PS_set_buy1_contra">
                             <field name="VAR" id="PS_buyType">buyType</field>
                             <value name="VALUE">
-                              <block type="math_number" id="PS_bt_2c"><field name="NUM">2</field></block>
+                              <block type="math_number" id="PS_bt_1c"><field name="NUM">1</field></block>
                             </value>
                           </block>
                         </statement>

@@ -136,7 +136,7 @@
     <!-- ── SUBMARKET — conditional trade options per cycle phase ──── -->
     <statement name="SUBMARKET">
       <block type="controls_if" id="CM_sub_if">
-        <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="3" else="1"></mutation>
+        <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="4" else="1"></mutation>
 
         <!-- Phase 2: DIGITOVER prediction 1 -->
         <value name="IF0">
@@ -302,7 +302,48 @@
           </block>
         </statement>
 
-        <!-- ELSE: Phase 1(EVEN), 6(DIFF no pred), 7(CALL), 8(ODD recovery) -->
+        <!-- Phase 6: DIGITDIFF prediction 5 — digit ≠ 5, ~90% win rate -->
+        <value name="IF4">
+          <block type="logic_compare" id="CM_if_step6">
+            <field name="OP">EQ</field>
+            <value name="A">
+              <block type="variables_get" id="CM_get_step_6a">
+                <field name="VAR" id="CM_cycleStep">cycleStep</field>
+              </block>
+            </value>
+            <value name="B">
+              <block type="math_number" id="CM_n6">
+                <field name="NUM">6</field>
+              </block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO4">
+          <block type="trade_definition_tradeoptions" id="CM_opts_diff5">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
+            <field name="DURATIONTYPE_LIST">t</field>
+            <value name="DURATION">
+              <shadow type="math_number_positive" id="CM_dur_diff5">
+                <field name="NUM">1</field>
+              </shadow>
+            </value>
+            <value name="AMOUNT">
+              <shadow type="math_number_positive" id="CM_amt_diff5s">
+                <field name="NUM">0.35</field>
+              </shadow>
+              <block type="variables_get" id="CM_get_stake_d5">
+                <field name="VAR" id="CM_stake">stake</field>
+              </block>
+            </value>
+            <value name="PREDICTION">
+              <shadow type="math_number" id="CM_pred_5">
+                <field name="NUM">5</field>
+              </shadow>
+            </value>
+          </block>
+        </statement>
+
+        <!-- ELSE: Phase 1(EVEN), 7(CALL), 8(ODD recovery) -->
         <statement name="ELSE">
           <block type="trade_definition_tradeoptions" id="CM_opts_default">
             <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="false"></mutation>

@@ -47,24 +47,14 @@
               <block type="trade_definition_contracttype" id="octp_ct" deletable="false" movable="false">
                 <field name="TYPE_LIST">DIGITEVEN</field>
                 <next>
-                  <block type="trade_definition_duration" id="octp_dur" deletable="false" movable="false">
-                    <field name="DURATIONTYPE_LIST">t</field>
-                    <value name="DURATION">
-                      <shadow type="math_number_positive" id="octp_dur_v">
-                        <field name="NUM">1</field>
-                      </shadow>
-                    </value>
+                  <block type="trade_definition_candleinterval" id="octp_ci" deletable="false" movable="false">
+                    <field name="CANDLEINTERVAL_LIST">60</field>
                     <next>
-                      <block type="trade_definition_candleinterval" id="octp_ci" deletable="false" movable="false">
-                        <field name="CANDLEINTERVAL_LIST">60</field>
+                      <block type="trade_definition_restartbuysell" id="octp_rbs" deletable="false" movable="false">
+                        <field name="TIME_MACHINE_ENABLED">FALSE</field>
                         <next>
-                          <block type="trade_definition_restartbuysell" id="octp_rbs" deletable="false" movable="false">
-                            <field name="TIME_MACHINE_ENABLED">FALSE</field>
-                            <next>
-                              <block type="trade_definition_restartonerror" id="octp_roe" deletable="false" movable="false">
-                                <field name="RESTARTONERROR">TRUE</field>
-                              </block>
-                            </next>
+                          <block type="trade_definition_restartonerror" id="octp_roe" deletable="false" movable="false">
+                            <field name="RESTARTONERROR">TRUE</field>
                           </block>
                         </next>
                       </block>
@@ -139,6 +129,100 @@
             </next>
           </block>
         </next>
+      </block>
+    </statement>
+
+    <!-- ── SUBMARKET — conditional trade options per phase ────────────── -->
+    <statement name="SUBMARKET">
+      <block type="controls_if" id="octp_sub_if">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="1" else="1"></mutation>
+
+        <!-- Phase 2 (DIGITOVER): prediction 2 — digit > 2, ~70% win rate -->
+        <value name="IF0">
+          <block type="logic_compare" id="octp_sub_cmp2">
+            <field name="OP">EQ</field>
+            <value name="A"><block type="variables_get" id="octp_sub_g2"><field name="VAR" id="octp_phase">cycle_phase</field></block></value>
+            <value name="B"><block type="math_number" id="octp_sub_n2"><field name="NUM">2</field></block></value>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="trade_definition_tradeoptions" id="octp_sub_over">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
+            <field name="DURATIONTYPE_LIST">t</field>
+            <value name="DURATION">
+              <shadow type="math_number_positive" id="octp_sub_over_dur">
+                <field name="NUM">1</field>
+              </shadow>
+            </value>
+            <value name="AMOUNT">
+              <shadow type="math_number_positive" id="octp_sub_over_amt_s">
+                <field name="NUM">0.35</field>
+              </shadow>
+              <block type="variables_get" id="octp_sub_over_amt">
+                <field name="VAR" id="octp_stake">stake</field>
+              </block>
+            </value>
+            <value name="PREDICTION">
+              <shadow type="math_number" id="octp_sub_over_pred">
+                <field name="NUM">2</field>
+              </shadow>
+            </value>
+          </block>
+        </statement>
+
+        <!-- Phase 3 (DIGITUNDER): prediction 7 — digit < 7, ~70% win rate -->
+        <value name="IF1">
+          <block type="logic_compare" id="octp_sub_cmp3">
+            <field name="OP">EQ</field>
+            <value name="A"><block type="variables_get" id="octp_sub_g3"><field name="VAR" id="octp_phase">cycle_phase</field></block></value>
+            <value name="B"><block type="math_number" id="octp_sub_n3"><field name="NUM">3</field></block></value>
+          </block>
+        </value>
+        <statement name="DO1">
+          <block type="trade_definition_tradeoptions" id="octp_sub_under">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
+            <field name="DURATIONTYPE_LIST">t</field>
+            <value name="DURATION">
+              <shadow type="math_number_positive" id="octp_sub_under_dur">
+                <field name="NUM">1</field>
+              </shadow>
+            </value>
+            <value name="AMOUNT">
+              <shadow type="math_number_positive" id="octp_sub_under_amt_s">
+                <field name="NUM">0.35</field>
+              </shadow>
+              <block type="variables_get" id="octp_sub_under_amt">
+                <field name="VAR" id="octp_stake">stake</field>
+              </block>
+            </value>
+            <value name="PREDICTION">
+              <shadow type="math_number" id="octp_sub_under_pred">
+                <field name="NUM">7</field>
+              </shadow>
+            </value>
+          </block>
+        </statement>
+
+        <!-- ELSE: Phases 0,1,4,5,6 — no prediction needed (EVEN, ODD, DIFF, CALL, PUT) -->
+        <statement name="ELSE">
+          <block type="trade_definition_tradeoptions" id="octp_sub_default">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="false"></mutation>
+            <field name="DURATIONTYPE_LIST">t</field>
+            <value name="DURATION">
+              <shadow type="math_number_positive" id="octp_sub_def_dur">
+                <field name="NUM">1</field>
+              </shadow>
+            </value>
+            <value name="AMOUNT">
+              <shadow type="math_number_positive" id="octp_sub_def_amt_s">
+                <field name="NUM">0.35</field>
+              </shadow>
+              <block type="variables_get" id="octp_sub_def_amt">
+                <field name="VAR" id="octp_stake">stake</field>
+              </block>
+            </value>
+          </block>
+        </statement>
       </block>
     </statement>
   </block>

@@ -53,24 +53,14 @@
               <block type="trade_definition_contracttype" id="sepp_ct" deletable="false" movable="false">
                 <field name="TYPE_LIST">DIGITEVEN</field>
                 <next>
-                  <block type="trade_definition_duration" id="sepp_dur" deletable="false" movable="false">
-                    <field name="DURATIONTYPE_LIST">t</field>
-                    <value name="DURATION">
-                      <shadow type="math_number_positive" id="sepp_dur_v">
-                        <field name="NUM">1</field>
-                      </shadow>
-                    </value>
+                  <block type="trade_definition_candleinterval" id="sepp_ci" deletable="false" movable="false">
+                    <field name="CANDLEINTERVAL_LIST">60</field>
                     <next>
-                      <block type="trade_definition_candleinterval" id="sepp_ci" deletable="false" movable="false">
-                        <field name="CANDLEINTERVAL_LIST">60</field>
+                      <block type="trade_definition_restartbuysell" id="sepp_rbs" deletable="false" movable="false">
+                        <field name="TIME_MACHINE_ENABLED">FALSE</field>
                         <next>
-                          <block type="trade_definition_restartbuysell" id="sepp_rbs" deletable="false" movable="false">
-                            <field name="TIME_MACHINE_ENABLED">FALSE</field>
-                            <next>
-                              <block type="trade_definition_restartonerror" id="sepp_roe" deletable="false" movable="false">
-                                <field name="RESTARTONERROR">TRUE</field>
-                              </block>
-                            </next>
+                          <block type="trade_definition_restartonerror" id="sepp_roe" deletable="false" movable="false">
+                            <field name="RESTARTONERROR">TRUE</field>
                           </block>
                         </next>
                       </block>
@@ -162,6 +152,26 @@
             </next>
           </block>
         </next>
+      </block>
+    </statement>
+
+    <statement name="SUBMARKET">
+      <block type="trade_definition_tradeoptions" id="sepp_tradeopts">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="false"></mutation>
+        <field name="DURATIONTYPE_LIST">t</field>
+        <value name="DURATION">
+          <shadow type="math_number_positive" id="sepp_dur_s">
+            <field name="NUM">1</field>
+          </shadow>
+        </value>
+        <value name="AMOUNT">
+          <shadow type="math_number_positive" id="sepp_amt_s">
+            <field name="NUM">0.35</field>
+          </shadow>
+          <block type="variables_get" id="sepp_get_stake_sub">
+            <field name="VAR" id="sepp_stake">stake</field>
+          </block>
+        </value>
       </block>
     </statement>
   </block>
