@@ -329,11 +329,11 @@
                           </block>
                         </statement>
                         <statement name="ELSE">
-                          <!-- &lt; 3 evens → buy EVEN (contrarian, follow momentum) -->
-                          <block type="variables_set" id="PS_set_buy1_contra">
+                          <!-- &lt; 3 evens → buy ODD (contrarian against momentum) -->
+                          <block type="variables_set" id="PS_set_buy2_contra">
                             <field name="VAR" id="PS_buyType">buyType</field>
                             <value name="VALUE">
-                              <block type="math_number" id="PS_bt_1c"><field name="NUM">1</field></block>
+                              <block type="math_number" id="PS_bt_2c"><field name="NUM">2</field></block>
                             </value>
                           </block>
                         </statement>
@@ -343,49 +343,40 @@
                 </next>
               </block>
             </statement>
+            <!-- Step 3: Execute purchase based on detected buyType (chained inline) -->
+            <next>
+              <block type="controls_if" id="PS_buy_if">
+                <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                <value name="IF0">
+                  <!-- buyType == 1 → DIGITEVEN -->
+                  <block type="logic_compare" id="PS_buy_cmp1">
+                    <field name="OP">EQ</field>
+                    <value name="A">
+                      <block type="variables_get" id="PS_buy_get1">
+                        <field name="VAR" id="PS_buyType">buyType</field>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <block type="math_number" id="PS_buy_n1"><field name="NUM">1</field></block>
+                    </value>
+                  </block>
+                </value>
+                <statement name="DO0">
+                  <block type="purchase" id="PS_purchase_even">
+                    <field name="PURCHASE_LIST">DIGITEVEN</field>
+                  </block>
+                </statement>
+                <statement name="ELSE">
+                  <block type="purchase" id="PS_purchase_odd">
+                    <field name="PURCHASE_LIST">DIGITODD</field>
+                  </block>
+                </statement>
+              </block>
+            </next>
           </block>
         </next>
       </block>
 
-      <!-- Step 3: Execute purchase based on buyType -->
-      <!-- buyType 1 = DIGITEVEN, buyType 2 = DIGITODD -->
-      <!-- Placed as a sibling after the if-block above via next chain -->
-    </statement>
-  </block>
-
-  <!-- ── Purchase decision block — separate before_purchase won't work;
-       we embed the final purchase INSIDE the pattern block via next chain.
-       The block below is a standalone before_purchase for the actual buy
-       (DBot runs all BEFOREPURCHASE_STACK statements in sequence) -->
-  <block type="before_purchase" id="PS_before_buy" deletable="false" x="500" y="886">
-    <statement name="BEFOREPURCHASE_STACK">
-      <block type="controls_if" id="PS_buy_if">
-        <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
-        <value name="IF0">
-          <!-- buyType == 1 → DIGITEVEN -->
-          <block type="logic_compare" id="PS_buy_cmp1">
-            <field name="OP">EQ</field>
-            <value name="A">
-              <block type="variables_get" id="PS_buy_get1">
-                <field name="VAR" id="PS_buyType">buyType</field>
-              </block>
-            </value>
-            <value name="B">
-              <block type="math_number" id="PS_buy_n1"><field name="NUM">1</field></block>
-            </value>
-          </block>
-        </value>
-        <statement name="DO0">
-          <block type="purchase" id="PS_purchase_even">
-            <field name="PURCHASE_LIST">DIGITEVEN</field>
-          </block>
-        </statement>
-        <statement name="ELSE">
-          <block type="purchase" id="PS_purchase_odd">
-            <field name="PURCHASE_LIST">DIGITODD</field>
-          </block>
-        </statement>
-      </block>
     </statement>
   </block>
 
