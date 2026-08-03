@@ -277,8 +277,10 @@
                         <field name="VAR" id="aev_real">is_real_trade</field>
                         <value name="VALUE"><block type="math_number" id="aev_sig1_v"><field name="NUM">1</field></block></value>
                         <next>
-                          <block type="text_print" id="aev_sig1_n">
-                            <value name="TEXT">
+                          <block type="notify" id="aev_sig1_n">
+                            <field name="NOTIFICATION_TYPE">info</field>
+                            <field name="NOTIFICATION_SOUND">ding</field>
+                            <value name="MESSAGE">
                               <block type="text_join" id="aev_sig1_nj"><mutation items="3"></mutation>
                                 <value name="ADD0"><block type="text" id="aev_s1a"><field name="TEXT">🎯 SIGNAL 1: </field></block></value>
                                 <value name="ADD1"><block type="variables_get" id="aev_s1b"><field name="VAR" id="aev_codd">cons_odd</field></block></value>
@@ -348,8 +350,10 @@
                                 <field name="VAR" id="aev_real">is_real_trade</field>
                                 <value name="VALUE"><block type="math_number" id="aev_sig2_v"><field name="NUM">1</field></block></value>
                                 <next>
-                                  <block type="text_print" id="aev_sig2_n">
-                                    <value name="TEXT">
+                                  <block type="notify" id="aev_sig2_n">
+                                    <field name="NOTIFICATION_TYPE">info</field>
+                                    <field name="NOTIFICATION_SOUND">ding</field>
+                                    <value name="MESSAGE">
                                       <block type="text_join" id="aev_sig2_nj"><mutation items="3"></mutation>
                                         <value name="ADD0"><block type="text" id="aev_s2a"><field name="TEXT">🎯 SIGNAL 2: Low odd digit </field></block></value>
                                         <value name="ADD1"><block type="variables_get" id="aev_s2b"><field name="VAR" id="aev_ld">last_digit</field></block></value>
@@ -448,8 +452,10 @@
                 <field name="VAR" id="aev_ms">martingale_stake</field>
                 <value name="VALUE"><block type="variables_get" id="aev_ap_w_rst_g"><field name="VAR" id="aev_init">initial_stake</field></block></value>
                 <next>
-                  <block type="text_print" id="aev_ap_w_n">
-                    <value name="TEXT">
+                  <block type="notify" id="aev_ap_w_n">
+                    <field name="NOTIFICATION_TYPE">success</field>
+                    <field name="NOTIFICATION_SOUND">earned-money</field>
+                    <value name="MESSAGE">
                       <block type="text_join" id="aev_ap_w_nj"><mutation items="3"></mutation>
                         <value name="ADD0"><block type="text" id="aev_ap_wa"><field name="TEXT">✅ WIN! Stake reset. Session P&amp;L: $</field></block></value>
                         <value name="ADD1"><block type="variables_get" id="aev_ap_wb"><field name="VAR" id="aev_pnl">session_profit</field></block></value>
@@ -494,8 +500,10 @@
                       </block>
                     </value>
                     <next>
-                      <block type="text_print" id="aev_ap_l_n">
-                        <value name="TEXT">
+                      <block type="notify" id="aev_ap_l_n">
+                        <field name="NOTIFICATION_TYPE">warning</field>
+                        <field name="NOTIFICATION_SOUND">error</field>
+                        <value name="MESSAGE">
                           <block type="text_join" id="aev_ap_l_nj"><mutation items="3"></mutation>
                             <value name="ADD0"><block type="text" id="aev_ap_la"><field name="TEXT">❌ LOSS — Martingale next: $</field></block></value>
                             <value name="ADD1"><block type="variables_get" id="aev_ap_lb"><field name="VAR" id="aev_ms">martingale_stake</field></block></value>
@@ -530,8 +538,10 @@
             </block>
           </value>
           <statement name="DO0">
-            <block type="text_print" id="aev_tp_n">
-              <value name="TEXT">
+            <block type="notify" id="aev_tp_n">
+              <field name="NOTIFICATION_TYPE">success</field>
+              <field name="NOTIFICATION_SOUND">earned-money</field>
+              <value name="MESSAGE">
                 <block type="text_join" id="aev_tp_nj"><mutation items="3"></mutation>
                   <value name="ADD0"><block type="text" id="aev_tp_a"><field name="TEXT">🏁 TAKE PROFIT reached! Session: $</field></block></value>
                   <value name="ADD1"><block type="variables_get" id="aev_tp_b"><field name="VAR" id="aev_pnl">session_profit</field></block></value>
@@ -553,8 +563,10 @@
             </block>
           </value>
           <statement name="DO1">
-            <block type="text_print" id="aev_sl_n">
-              <value name="TEXT">
+            <block type="notify" id="aev_sl_n">
+              <field name="NOTIFICATION_TYPE">danger</field>
+              <field name="NOTIFICATION_SOUND">error</field>
+              <value name="MESSAGE">
                 <block type="text_join" id="aev_sl_nj"><mutation items="3"></mutation>
                   <value name="ADD0"><block type="text" id="aev_sl_a"><field name="TEXT">🛑 STOP LOSS hit! Session: $</field></block></value>
                   <value name="ADD1"><block type="variables_get" id="aev_sl_b"><field name="VAR" id="aev_pnl">session_profit</field></block></value>

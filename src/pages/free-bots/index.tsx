@@ -7,6 +7,20 @@ import { api_base } from '@/external/bot-skeleton';
 import './free-bots.scss';
 
 const FREE_BOTS = [
+  {
+    id: 'ahmed-auto-even',
+    name: 'AHMED AUTO EVEN',
+    description: 'Smart DIGITEVEN bot — streak reversal + low-% odd digit entry, martingale, TP/SL',
+    category: 'even-odd',
+    xmlFile: '/bots/ahmed-auto-even.xml',
+  },
+  {
+    id: 'ahmed-auto-odd',
+    name: 'AHMED AUTO ODD',
+    description: 'Smart DIGITODD bot — streak reversal + low-% even digit entry, martingale, TP/SL',
+    category: 'even-odd',
+    xmlFile: '/bots/ahmed-auto-odd.xml',
+  },
   // ── NEW signature bots — Omni Cycle Trader Pro & Smart Entry Pattern Pro V2 ─
   {
     id: 'omni-cycle-trader-pro',

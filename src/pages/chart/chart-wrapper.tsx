@@ -348,19 +348,10 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                         applyDigit(d);
                     }
 
-                    // Update pending trade tick-counters (fallback path; POC is authoritative).
-                    // Only increment countedTicks here for the live display counter —
-                    // do NOT push to contractTickDigitsRef (digit circle labels) because
-                    // that causes double-counting on plain-index and Bear/Bull markets
-                    // where the POC also fires chart:trade-tick. The POC handleTradeTick
-                    // is the sole writer for contractTickDigitsRef.
-                    if (pendingTradesRef.current.length > 0) {
-                        pendingTradesRef.current = pendingTradesRef.current.map(t => ({
-                            ...t,
-                            countedTicks: Math.min(t.countedTicks + 1, t.totalTicks),
-                        }));
-                        setPendingTrades([...pendingTradesRef.current]);
-                    }
+                    // POC (proposal_open_contract) is the sole authority for countedTicks.
+                    // Do NOT increment countedTicks here — on fast markets (1s, Jump) the
+                    // live-tick path races ahead of POC, causing the counter to jump forward
+                    // then snap backwards when the authoritative POC value arrives.
                 },
                 error: () => {
                     if (!alive) return;

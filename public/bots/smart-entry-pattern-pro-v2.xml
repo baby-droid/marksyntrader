@@ -156,7 +156,7 @@
     </statement>
 
     <statement name="SUBMARKET">
-      <block type="trade_definition_tradeoptions" id="sepp_tradeopts">
+      <block type="trade_definition_tradeoptions" id="sepp_tradeopts" deletable="false" movable="false">
         <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="false"></mutation>
         <field name="DURATIONTYPE_LIST">t</field>
         <value name="DURATION">
