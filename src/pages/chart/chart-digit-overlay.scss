@@ -259,16 +259,25 @@
 
     /* T-label (tick count) */
     &__tlabel {
-        font-size: 7px;
+        font-size: 9px;
         font-weight: 900;
         color: #1E88FF;
-        height: 9px;
-        line-height: 9px;
+        height: 14px;
+        line-height: 14px;
         white-space: nowrap;
         text-align: center;
+        background: rgba(30, 136, 255, 0.12);
+        border-radius: 4px;
+        padding: 0 3px;
+        position: relative;
+        z-index: 15; /* sit above the triangle pointer (z-index: 10) */
         animation: cdo-tlabel-in 0.2s ease-out;
-        &--final { color: #FFD600; text-shadow: 0 0 5px rgba(255,214,0,0.7); }
-        &--hidden { visibility: hidden; pointer-events: none; }
+        &--final {
+            color: #b8860b;
+            background: rgba(255, 214, 0, 0.22);
+            text-shadow: none;
+        }
+        &--hidden { visibility: hidden; pointer-events: none; background: transparent; }
     }
 
     /* Digit circle */
@@ -470,7 +479,7 @@
         &__pct            { font-size: clamp(6px, 0.65vw, 8px); }
         &__price-val      { font-size: 10px; }
         &__triangle-pointer { border-left-width: 6px; border-right-width: 6px; border-top-width: 9px; }
-        &__tlabel         { font-size: 7px; }
+        &__tlabel         { font-size: 8px; height: 13px; line-height: 13px; }
         &__triangle-track { height: 9px; }
     }
 
