@@ -523,6 +523,10 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                 // new settlement tick lands. Without this, the same tick_stream fires
                 // dozens of chart:trade-tick events per real tick, causing redundant
                 // processing and potential race overwrites in chart-wrapper.
+                // savedEntryTime: locked in once POC provides a non-zero
+                // entry_tick_time. Prevents the old rawStream.slice() fallback
+                // from labelling the entry-spot tick as T1 on 1s markets.
+                let savedEntryTime = 0;
                 let lastDispatchedLen = 0;
 
                 settleSub.subscribe({
@@ -536,21 +540,27 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                             // with epoch === entry_tick_time for all market types (plain
                             // Volatility, 1s, Bear/Bull, Jump, Boom/Crash/Step/RB).
                             // Filter it out so T1 always labels the first genuine
-                            // determination tick, regardless of market type.
+                            // determination tick after entry.
                             //
-                            // Issue #3 fix — entry_tick_time = 0 fallback:
-                            // On the first POC response entry_tick_time may be 0/absent.
-                            // Old fallback passed the raw stream, potentially including the
-                            // entry spot as T1. New fallback: slice to at most `ticks`
-                            // elements from the end — the contract produces exactly `ticks`
-                            // post-entry ticks so any leading entry spot is excluded.
-                            const entryTime: number = poc.entry_tick_time ?? 0;
-                            const rawStream = poc.tick_stream as any[];
-                            const postEntryStream = entryTime
-                                ? rawStream.filter((t: any) => t.epoch > entryTime)
-                                : rawStream.slice(Math.max(0, rawStream.length - ticks));
+                            // FIX — lock in entry_tick_time on first non-zero occurrence:
+                            // On the first POC response entry_tick_time may be 0. The old
+                            // rawStream.slice() fallback included the entry spot as T1 on
+                            // 1s markets (1-tick contract → slice(0) returned entry spot).
+                            // Defer dispatching until savedEntryTime is set. entry_tick_time
+                            // arrives on the 2nd POC message (~1s) before 1s contract settles.
+                            const pocEntryTime: number = poc.entry_tick_time ?? 0;
+                            if (pocEntryTime > 0 && savedEntryTime === 0) {
+                                savedEntryTime = pocEntryTime;
+                            }
 
-                            // Only dispatch when there are genuinely new ticks (issue #2)
+                            const rawStream = poc.tick_stream as any[];
+                            // Use locked-in entry time. If not yet available, return empty
+                            // (defer) — do NOT fall back to rawStream.slice().
+                            const postEntryStream = savedEntryTime > 0
+                                ? rawStream.filter((t: any) => t.epoch > savedEntryTime)
+                                : [];
+
+                            // Only dispatch when there are genuinely new post-entry ticks
                             if (postEntryStream.length > 0 && postEntryStream.length > lastDispatchedLen) {
                                 lastDispatchedLen = postEntryStream.length;
                                 window.dispatchEvent(new CustomEvent('chart:trade-tick', {

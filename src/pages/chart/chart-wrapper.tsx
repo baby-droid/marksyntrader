@@ -46,6 +46,10 @@ interface PendingTrade {
     id: string;
     totalTicks: number;
     countedTicks: number;
+    /** True on the first live tick after purchase — that tick is the entry spot
+     *  and must NOT increment countedTicks (it should be "skipped"). Cleared
+     *  after the first tick is seen so subsequent ticks count normally. */
+    skipNextTick: boolean;
 }
 
 /* ════════════════════════════════════════════════════════════════════════════ */
