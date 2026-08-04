@@ -518,12 +518,11 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
 
                                 return (
                                     <div key={d} className='cdo__item' onClick={() => setBarrier(d)}>
-                                        {hasT ? (
+                                        {/* T-label badge — position:absolute, straddles the circle's top edge */}
+                                        {hasT && (
                                             <div className={`cdo__tlabel${isFinalT ? ' cdo__tlabel--final' : ''}`}>
                                                 {tLabels.map(l => l.replace('★', '')).join(' ')}
                                             </div>
-                                        ) : (
-                                            <div className='cdo__tlabel cdo__tlabel--hidden' />
                                         )}
                                         <div className={[
                                             'cdo__circle',
