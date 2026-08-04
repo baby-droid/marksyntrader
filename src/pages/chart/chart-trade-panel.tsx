@@ -445,7 +445,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                 // never fall back to the old rawStream.slice() path which was the
                 // root cause of 1s markets counting the entry-spot tick as T1.
                 let savedEntryTime = 0;
-                let lastDispatchedLen = 0;
+                let entryTimeDispatched = false; // fire chart:trade-entry exactly once
 
                 settleSub.subscribe({
                     next: (res: any) => {
@@ -454,50 +454,31 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
 
                         if (!pocSubId && res.subscription?.id) pocSubId = res.subscription.id;
 
-                        if (Array.isArray(poc.tick_stream) && poc.tick_stream.length > 0) {
-                            // ── Entry-tick stripping ──────────────────────────────────────
-                            // Deriv includes the "spot at purchase" tick in tick_stream[0]
-                            // with epoch === entry_tick_time for all market types (plain
-                            // Volatility, 1s, Bear/Bull, Jump, Boom/Crash/Step/RB).
-                            // Filter it out so T1 always labels the first genuine
-                            // determination tick after entry.
-                            //
-                            // FIX — lock in entry_tick_time on first non-zero occurrence:
-                            // On the very first POC response entry_tick_time may be 0.
-                            // The previous rawStream.slice() fallback accidentally included
-                            // the entry-spot tick as T1 on 1s markets (1 tick contract,
-                            // rawStream.length=1 → slice(0) returned the entry spot).
-                            // New approach: defer dispatching until entry_tick_time arrives;
-                            // never fall back to rawStream.slice() — this is safe because
-                            // for 1s markets the entry_tick_time arrives on the 2nd POC
-                            // message (within ~1s) and the contract hasn't settled yet.
+                        // ── Lock in entry_tick_time (Deriv API: epoch of the entry spot) ──
+                        // All market types (plain Volatility, 1s, Jump, Bear/Bull, Boom/Crash)
+                        // include the entry spot as tick_stream[0] with epoch == entry_tick_time.
+                        // T1 = first tick where epoch > entry_tick_time.
+                        // entry_tick_time may be 0 on the FIRST POC message (server timing);
+                        // if so, fall back to tick_stream[0].epoch (same value once set).
+                        if (savedEntryTime === 0) {
                             const pocEntryTime: number = poc.entry_tick_time ?? 0;
-                            if (pocEntryTime > 0 && savedEntryTime === 0) {
-                                // Prefer authoritative entry_tick_time from Deriv
+                            if (pocEntryTime > 0) {
                                 savedEntryTime = pocEntryTime;
-                            } else if (savedEntryTime === 0) {
-                                // entry_tick_time never arrived (0 on some markets/conditions).
-                                // Fall back: tick_stream[0] IS the entry spot on all market types.
-                                // Use its epoch so everything after it counts as T1, T2, …
+                            } else if (Array.isArray(poc.tick_stream) && poc.tick_stream.length > 0) {
                                 savedEntryTime = poc.tick_stream[0].epoch;
                             }
-
-                            const rawStream = poc.tick_stream as any[];
-                            // Filter: only ticks strictly AFTER the entry spot
-                            const postEntryStream = rawStream.filter((t: any) => t.epoch > savedEntryTime);
-
-                            // Only dispatch when there are genuinely new post-entry ticks
-                            if (postEntryStream.length > 0 && postEntryStream.length > lastDispatchedLen) {
-                                lastDispatchedLen = postEntryStream.length;
-                                window.dispatchEvent(new CustomEvent('chart:trade-tick', {
-                                    detail: {
-                                        contractId: cid,
-                                        tickStream: postEntryStream,
-                                        totalTicks: ticks,
-                                    },
+                            // Dispatch chart:trade-entry exactly once so chart-wrapper can
+                            // immediately anchor its live-tick buffer to the correct epoch.
+                            if (savedEntryTime > 0 && !entryTimeDispatched) {
+                                entryTimeDispatched = true;
+                                window.dispatchEvent(new CustomEvent('chart:trade-entry', {
+                                    detail: { contractId: cid, entryEpoch: savedEntryTime },
                                 }));
                             }
                         }
+
+                        // Settlement is handled below; tick labelling is now driven by
+                        // chart-wrapper's live-tick path (real-time, no API roundtrip).
 
                         if (poc.status === 'won' || poc.status === 'lost') {
                             const won       = poc.status === 'won';

@@ -46,10 +46,6 @@ interface PendingTrade {
     id: string;
     totalTicks: number;
     countedTicks: number;
-    /** True on the first live tick after purchase — that tick is the entry spot
-     *  and must NOT increment countedTicks (it should be "skipped"). Cleared
-     *  after the first tick is seen so subsequent ticks count normally. */
-    skipNextTick: boolean;
 }
 
 /* ════════════════════════════════════════════════════════════════════════════ */
@@ -95,80 +91,100 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
     const contractTickDigitsRef = useRef<Map<string, number[]>>(new Map());
     const [tickDigitSnapshot, setTickDigitSnapshot] = useState<Map<string, number[]>>(new Map());
 
+    // entryEpochRef: stores the authoritative entry_tick_time per contract once POC
+    // provides it.  0 = not yet known (POC hasn't arrived yet).
+    // tickBufferRef: accumulates live ticks (epoch+digit) received before the entry
+    // epoch is known, so we can retroactively assign T1, T2, … when it arrives.
+    const entryEpochRef = useRef<Map<string, number>>(new Map());
+    const tickBufferRef = useRef<Map<string, { epoch: number; digit: number }[]>>(new Map());
+
     /* Trade events */
     useEffect(() => {
+        // ── New trade purchased ────────────────────────────────────────────
         const handleStarted = (e: CustomEvent) => {
             const { contractId, ticks } = e.detail;
-            // skipNextTick=true: the very first live tick after purchase is the
-            // entry spot — it must not be counted as T1.
-            const trade: PendingTrade = {
-                id: String(contractId),
-                totalTicks: ticks,
-                countedTicks: 0,
-                skipNextTick: true,
-            };
-            contractTickDigitsRef.current.set(String(contractId), []);
-            pendingTradesRef.current = [...pendingTradesRef.current, trade];
+            const id = String(contractId);
+            contractTickDigitsRef.current.set(id, []);
+            entryEpochRef.current.set(id, 0);      // 0 = entry epoch not yet known
+            tickBufferRef.current.set(id, []);      // pre-entry live-tick buffer
+            pendingTradesRef.current = [...pendingTradesRef.current, { id, totalTicks: ticks, countedTicks: 0 }];
             setPendingTrades([...pendingTradesRef.current]);
             setTickDigitSnapshot(new Map(contractTickDigitsRef.current));
         };
 
-        // ── POC tick event — no longer drives T-labels (live tick does that
-        //   instantly). Kept only for totalTicks sync from POC metadata.
-        const handleTradeTick = (e: CustomEvent) => {
-            const { contractId, totalTicks } = e.detail;
-            if (totalTicks == null) return;
+        // ── Entry epoch received from POC (chart:trade-entry, fired once) ──
+        // This is the authoritative entry_tick_time from Deriv.  All market
+        // types: tick_stream[0].epoch === entry_tick_time.
+        // T1 = first live tick where epoch > entryEpoch.
+        const handleTradeEntry = (e: CustomEvent) => {
+            const { contractId, entryEpoch } = e.detail;
             const id = String(contractId);
-            const existing = pendingTradesRef.current.find(t => t.id === id);
-            if (!existing || existing.totalTicks === totalTicks) return;
-            pendingTradesRef.current = pendingTradesRef.current.map(t =>
-                t.id === id ? { ...t, totalTicks } : t
-            );
-            setPendingTrades([...pendingTradesRef.current]);
+            entryEpochRef.current.set(id, entryEpoch);
+
+            // Drain buffer: retroactively assign T-labels for any live ticks that
+            // arrived before we knew the entry epoch.
+            const buffer = tickBufferRef.current.get(id) ?? [];
+            tickBufferRef.current.delete(id);
+            const postEntry = buffer.filter(t => t.epoch > entryEpoch);
+            if (postEntry.length > 0) {
+                const trade = pendingTradesRef.current.find(t => t.id === id);
+                if (trade) {
+                    const digits = postEntry.map(t => t.digit).slice(0, trade.totalTicks);
+                    contractTickDigitsRef.current.set(id, digits);
+                    setTickDigitSnapshot(new Map(contractTickDigitsRef.current));
+                    pendingTradesRef.current = pendingTradesRef.current.map(t =>
+                        t.id === id ? { ...t, countedTicks: digits.length } : t
+                    );
+                    setPendingTrades([...pendingTradesRef.current]);
+                }
+            }
         };
 
+        // ── Contract settled ───────────────────────────────────────────────
         const handleSettlement = (e: CustomEvent) => {
             const { won, profit, exitDigit, barrier: tradedBarrier, contractId } = e.detail;
             const digit = exitDigit ?? tradedBarrier;
 
-            if (contractId != null) {
-                pendingTradesRef.current = pendingTradesRef.current.filter(t => t.id !== String(contractId));
-                setPendingTrades([...pendingTradesRef.current]);
+            const cleanupId = (id: string) => {
+                entryEpochRef.current.delete(id);
+                tickBufferRef.current.delete(id);
                 setTimeout(() => {
-                    contractTickDigitsRef.current.delete(String(contractId));
+                    contractTickDigitsRef.current.delete(id);
                     setTickDigitSnapshot(new Map(contractTickDigitsRef.current));
                 }, 5100);
+            };
+
+            if (contractId != null) {
+                const id = String(contractId);
+                pendingTradesRef.current = pendingTradesRef.current.filter(t => t.id !== id);
+                setPendingTrades([...pendingTradesRef.current]);
+                cleanupId(id);
             } else {
                 const removed = pendingTradesRef.current[0];
                 pendingTradesRef.current = pendingTradesRef.current.slice(1);
                 setPendingTrades([...pendingTradesRef.current]);
-                if (removed) {
-                    setTimeout(() => {
-                        contractTickDigitsRef.current.delete(removed.id);
-                        setTickDigitSnapshot(new Map(contractTickDigitsRef.current));
-                    }, 5100);
-                }
+                if (removed) cleanupId(removed.id);
             }
 
             if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
             setLastTrade({ digit, won });
             highlightTimerRef.current = setTimeout(() => setLastTrade(null), 5000);
 
-            const id = String(Date.now()) + Math.random();
-            setTradeFlags(prev => [...prev, { id, won, profit }]);
+            const flagId = String(Date.now()) + Math.random();
+            setTradeFlags(prev => [...prev, { id: flagId, won, profit }]);
             const t = setTimeout(() => {
-                setTradeFlags(prev => prev.filter(f => f.id !== id));
-                flagTimersRef.current.delete(id);
+                setTradeFlags(prev => prev.filter(f => f.id !== flagId));
+                flagTimersRef.current.delete(flagId);
             }, 5500);
-            flagTimersRef.current.set(id, t);
+            flagTimersRef.current.set(flagId, t);
         };
 
         window.addEventListener('chart:trade-started', handleStarted as any);
-        window.addEventListener('chart:trade-tick',    handleTradeTick as any);
+        window.addEventListener('chart:trade-entry',   handleTradeEntry as any);
         window.addEventListener('chart:trade-settled', handleSettlement as any);
         return () => {
             window.removeEventListener('chart:trade-started', handleStarted as any);
-            window.removeEventListener('chart:trade-tick',    handleTradeTick as any);
+            window.removeEventListener('chart:trade-entry',   handleTradeEntry as any);
             window.removeEventListener('chart:trade-settled', handleSettlement as any);
             if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
             flagTimersRef.current.forEach(t => clearTimeout(t));
@@ -323,18 +339,37 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                         applyDigit(d);
                     }
 
-                    // ── Live-tick T-label update (instant, no API roundtrip) ──────
-                    // Drive T-label circles directly from the live tick feed so labels
-                    // appear on the same frame as currentDigit updates — no POC lag.
-                    // Each pending trade has skipNextTick=true on the first tick after
-                    // purchase (the entry spot); we skip that one then count normally.
+                    // ── Live-tick T-label update (epoch-anchored, real-time) ──────
+                    // Architecture (from Deriv API docs):
+                    //   tick_stream[0].epoch === entry_tick_time  (the entry spot)
+                    //   T1 = first tick where epoch > entry_tick_time
+                    //   T2, T3, … follow in order
+                    // All market types (plain Volatility, 1s, Jump, Bear/Bull,
+                    // Boom/Crash) follow this same rule.
+                    //
+                    // entry_tick_time comes from POC (chart:trade-entry event).
+                    // Before it arrives we buffer live ticks; when it arrives the
+                    // buffer is drained (handleTradeEntry) and subsequent live ticks
+                    // update labels on the same frame as currentDigit — zero lag.
                     if (pendingTradesRef.current.length > 0) {
                         let digitMapChanged = false;
                         pendingTradesRef.current = pendingTradesRef.current.map(t => {
-                            if (t.skipNextTick) {
-                                // First tick = entry spot — don't count as T1
-                                return { ...t, skipNextTick: false };
+                            const entryEpoch = entryEpochRef.current.get(t.id) ?? 0;
+
+                            if (entryEpoch === 0) {
+                                // Entry epoch not yet known — buffer this tick so we can
+                                // retroactively assign labels once POC delivers entry_tick_time.
+                                const buf = tickBufferRef.current.get(t.id);
+                                if (buf) buf.push({ epoch, digit: d });
+                                return t;
                             }
+
+                            if (epoch <= entryEpoch) {
+                                // This is the entry spot or a stale tick before entry — skip.
+                                return t;
+                            }
+
+                            // epoch > entryEpoch → genuine T-tick, update instantly
                             const existing = contractTickDigitsRef.current.get(t.id) ?? [];
                             if (existing.length < t.totalTicks) {
                                 contractTickDigitsRef.current.set(t.id, [...existing, d]);
