@@ -45,12 +45,11 @@ interface DigitCircleProps {
     isWin: boolean;
     isLoss: boolean;
     tickLabels: string[];
-    labelBelow?: boolean;  // true for bottom row (5-9): label appears below circle
     onClick: () => void;
 }
 
 const DigitCircle: React.FC<DigitCircleProps> = ({
-    digit, pct, rank, isBarrier, isCurrent, isWin, isLoss, tickLabels, labelBelow = false, onClick,
+    digit, pct, rank, isBarrier, isCurrent, isWin, isLoss, tickLabels, onClick,
 }) => {
     const SIZE   = 76;
     const CX     = SIZE / 2;
@@ -71,20 +70,17 @@ const DigitCircle: React.FC<DigitCircleProps> = ({
     const hasT    = tickLabels.length > 0;
     const isFinal = tickLabels.some(l => l.includes('★'));
 
-    const labelEl = hasT ? (
-        <div className={[
-            'mcv-circle__tlabel',
-            isFinal   ? 'mcv-circle__tlabel--final' : '',
-            labelBelow ? 'mcv-circle__tlabel--below' : '',
-        ].filter(Boolean).join(' ')}>
-            {tickLabels.map(l => l.replace('★', '')).join(' ')}
-        </div>
-    ) : null;
-
     return (
         <div className='mcv-circle' onClick={onClick}>
-            {/* Label ABOVE for top row (0–4), BELOW for bottom row (5–9) */}
-            {!labelBelow && labelEl}
+            {/* T-label always floats ABOVE the circle for all rows */}
+            {hasT && (
+                <div className={[
+                    'mcv-circle__tlabel',
+                    isFinal ? 'mcv-circle__tlabel--final' : '',
+                ].filter(Boolean).join(' ')}>
+                    {tickLabels.map(l => l.replace('★', '')).join(' ')}
+                </div>
+            )}
             <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
                 {/* Solid fill circle */}
                 <circle cx={CX} cy={CX} r={R} fill={fillColor} stroke={ringStroke} strokeWidth={SW} />
@@ -101,7 +97,6 @@ const DigitCircle: React.FC<DigitCircleProps> = ({
             <div className={`mcv-circle__pct${isBarrier ? ' mcv-circle__pct--barrier' : ''}`}>
                 {pct.toFixed(1)}%
             </div>
-            {labelBelow && labelEl}
         </div>
     );
 };
@@ -550,15 +545,18 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                             // arrives on the 2nd POC message (~1s) before 1s contract settles.
                             const pocEntryTime: number = poc.entry_tick_time ?? 0;
                             if (pocEntryTime > 0 && savedEntryTime === 0) {
+                                // Prefer authoritative entry_tick_time from Deriv
                                 savedEntryTime = pocEntryTime;
+                            } else if (savedEntryTime === 0) {
+                                // entry_tick_time never arrived (0 on some markets/conditions).
+                                // Fall back: tick_stream[0] IS the entry spot on all market types.
+                                // Use its epoch so everything after it counts as T1, T2, …
+                                savedEntryTime = poc.tick_stream[0].epoch;
                             }
 
                             const rawStream = poc.tick_stream as any[];
-                            // Use locked-in entry time. If not yet available, return empty
-                            // (defer) — do NOT fall back to rawStream.slice().
-                            const postEntryStream = savedEntryTime > 0
-                                ? rawStream.filter((t: any) => t.epoch > savedEntryTime)
-                                : [];
+                            // Filter: only ticks strictly AFTER the entry spot
+                            const postEntryStream = rawStream.filter((t: any) => t.epoch > savedEntryTime);
 
                             // Only dispatch when there are genuinely new post-entry ticks
                             if (postEntryStream.length > 0 && postEntryStream.length > lastDispatchedLen) {
@@ -666,7 +664,6 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                         isWin={isWin}
                         isLoss={isLoss}
                         tickLabels={tLabels}
-                        labelBelow={isBottom}
                         onClick={() => onBarrierChange(d)}
                     />
                 );

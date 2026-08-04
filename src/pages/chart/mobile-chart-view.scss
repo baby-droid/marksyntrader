@@ -237,12 +237,6 @@
     line-height: 1.4;
     z-index: 2;
 
-    /* Bottom-row digits (5–9): label floats below the percentage text */
-    &--below {
-        top: auto;
-        bottom: -20px;
-    }
-
     &--final { color: #f59e0b; background: rgba(245,158,11,0.14); }
 }
 

@@ -473,16 +473,18 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                             // message (within ~1s) and the contract hasn't settled yet.
                             const pocEntryTime: number = poc.entry_tick_time ?? 0;
                             if (pocEntryTime > 0 && savedEntryTime === 0) {
+                                // Prefer authoritative entry_tick_time from Deriv
                                 savedEntryTime = pocEntryTime;
+                            } else if (savedEntryTime === 0) {
+                                // entry_tick_time never arrived (0 on some markets/conditions).
+                                // Fall back: tick_stream[0] IS the entry spot on all market types.
+                                // Use its epoch so everything after it counts as T1, T2, …
+                                savedEntryTime = poc.tick_stream[0].epoch;
                             }
 
                             const rawStream = poc.tick_stream as any[];
-                            // Use the locked-in entry time. If it hasn't arrived yet
-                            // (savedEntryTime === 0), return empty to defer — do NOT
-                            // use rawStream.slice() which can include the entry spot.
-                            const postEntryStream = savedEntryTime > 0
-                                ? rawStream.filter((t: any) => t.epoch > savedEntryTime)
-                                : [];
+                            // Filter: only ticks strictly AFTER the entry spot
+                            const postEntryStream = rawStream.filter((t: any) => t.epoch > savedEntryTime);
 
                             // Only dispatch when there are genuinely new post-entry ticks
                             if (postEntryStream.length > 0 && postEntryStream.length > lastDispatchedLen) {
