@@ -99,55 +99,30 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
     useEffect(() => {
         const handleStarted = (e: CustomEvent) => {
             const { contractId, ticks } = e.detail;
-            const trade: PendingTrade = { id: String(contractId), totalTicks: ticks, countedTicks: 0 };
+            // skipNextTick=true: the very first live tick after purchase is the
+            // entry spot — it must not be counted as T1.
+            const trade: PendingTrade = {
+                id: String(contractId),
+                totalTicks: ticks,
+                countedTicks: 0,
+                skipNextTick: true,
+            };
             contractTickDigitsRef.current.set(String(contractId), []);
             pendingTradesRef.current = [...pendingTradesRef.current, trade];
             setPendingTrades([...pendingTradesRef.current]);
             setTickDigitSnapshot(new Map(contractTickDigitsRef.current));
         };
 
-        // ── Authoritative tick update from proposal_open_contract ──────────────
-        // Deriv's POC subscription sends a message on EVERY state change (price
-        // update, status change, new tick). Each message carries the FULL
-        // cumulative tick_stream from entry. This means:
-        //   • Many consecutive POC messages may carry the same tick_stream length
-        //     (price changed but no new settlement tick yet).
-        //   • WebSocket delivery order is not guaranteed under load — an older
-        //     message with 2 ticks can arrive AFTER a newer one with 3 ticks.
-        //
-        // Monotonic guard: only accept the update if the incoming stream is at
-        // least as long as what we already have. This discards stale/short
-        // duplicates and prevents previously shown T-labels from disappearing.
+        // ── POC tick event — no longer drives T-labels (live tick does that
+        //   instantly). Kept only for totalTicks sync from POC metadata.
         const handleTradeTick = (e: CustomEvent) => {
-            const { contractId, tickStream, totalTicks } = e.detail;
+            const { contractId, totalTicks } = e.detail;
+            if (totalTicks == null) return;
             const id = String(contractId);
-
-            // Extract last digits from the authoritative tick_display_value field
-            const digits: number[] = (tickStream as any[]).map((t: any) => {
-                const dv: string = t.tick_display_value ?? String(t.tick ?? '');
-                const clean = dv.replace('.', '');
-                return parseInt(clean[clean.length - 1] ?? '0', 10);
-            });
-
-            // Monotonic guard — discard if this stream is shorter than what we
-            // already have (stale out-of-order delivery from WebSocket).
-            const currentLen = contractTickDigitsRef.current.get(id)?.length ?? 0;
-            if (digits.length < currentLen) return;
-
-            // No-op guard — skip React state churn if nothing actually changed.
-            if (digits.length === currentLen) {
-                // Still update totalTicks if it changed (contract duration adjust)
-                const existing = pendingTradesRef.current.find(t => t.id === id);
-                if (!existing || existing.totalTicks === (totalTicks ?? existing.totalTicks)) return;
-            }
-
-            contractTickDigitsRef.current.set(id, digits);
-            setTickDigitSnapshot(new Map(contractTickDigitsRef.current));
-
+            const existing = pendingTradesRef.current.find(t => t.id === id);
+            if (!existing || existing.totalTicks === totalTicks) return;
             pendingTradesRef.current = pendingTradesRef.current.map(t =>
-                t.id === id
-                    ? { ...t, countedTicks: digits.length, totalTicks: totalTicks ?? t.totalTicks }
-                    : t
+                t.id === id ? { ...t, totalTicks } : t
             );
             setPendingTrades([...pendingTradesRef.current]);
         };
@@ -348,17 +323,29 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                         applyDigit(d);
                     }
 
-                    // Update pending trade tick-counters (fallback path; POC is authoritative).
-                    // Only increment countedTicks here for the live display counter —
-                    // do NOT push to contractTickDigitsRef (digit circle labels) because
-                    // that causes double-counting on plain-index and Bear/Bull markets
-                    // where the POC also fires chart:trade-tick. The POC handleTradeTick
-                    // is the sole writer for contractTickDigitsRef.
+                    // ── Live-tick T-label update (instant, no API roundtrip) ──────
+                    // Drive T-label circles directly from the live tick feed so labels
+                    // appear on the same frame as currentDigit updates — no POC lag.
+                    // Each pending trade has skipNextTick=true on the first tick after
+                    // purchase (the entry spot); we skip that one then count normally.
                     if (pendingTradesRef.current.length > 0) {
-                        pendingTradesRef.current = pendingTradesRef.current.map(t => ({
-                            ...t,
-                            countedTicks: Math.min(t.countedTicks + 1, t.totalTicks),
-                        }));
+                        let digitMapChanged = false;
+                        pendingTradesRef.current = pendingTradesRef.current.map(t => {
+                            if (t.skipNextTick) {
+                                // First tick = entry spot — don't count as T1
+                                return { ...t, skipNextTick: false };
+                            }
+                            const existing = contractTickDigitsRef.current.get(t.id) ?? [];
+                            if (existing.length < t.totalTicks) {
+                                contractTickDigitsRef.current.set(t.id, [...existing, d]);
+                                digitMapChanged = true;
+                                return { ...t, countedTicks: existing.length + 1 };
+                            }
+                            return t;
+                        });
+                        if (digitMapChanged) {
+                            setTickDigitSnapshot(new Map(contractTickDigitsRef.current));
+                        }
                         setPendingTrades([...pendingTradesRef.current]);
                     }
                 },
