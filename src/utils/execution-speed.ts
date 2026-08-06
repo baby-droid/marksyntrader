@@ -36,7 +36,7 @@ export const SPEED_MAX_INFLIGHT: Record<ExecutionSpeed, number> = {
     crazy: 100,   // high pipeline depth
     turbo: 500,   // unlimited practical cap — saturate the API
 };
-const FAST_EXEC_MAX_INFLIGHT = 1000;
+const FAST_EXEC_MAX_INFLIGHT = 10_000;
 
 // Purchases fired per tick for each speed tier. Normal fires a single
 // purchase per tick (one contract at a time, as before). Crazy and Turbo
@@ -48,7 +48,7 @@ export const SPEED_PURCHASES_PER_TICK: Record<ExecutionSpeed, number> = {
     crazy: 5,
     turbo: 10,
 };
-const FAST_EXEC_PURCHASES_PER_TICK = 20;
+const FAST_EXEC_PURCHASES_PER_TICK = 50;
 
 const listeners = new Set<(speed: ExecutionSpeed) => void>();
 const fastExecListeners = new Set<(enabled: boolean) => void>();

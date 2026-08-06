@@ -197,7 +197,7 @@ const SpeedLab = observer(() => {
         const POST_DELAY = isFastExecutionEnabled() ? 0 : speed === 'turbo' ? 0 : speed === 'crazy' ? 50 : 200;
 
         // Fast Boost: concurrent batch size. Fast=20 concurrent, else sequential.
-        const BATCH = isFastExecutionEnabled() ? 20 : 1;
+        const BATCH = isFastExecutionEnabled() ? 50 : 1;
 
         while (runRef.current) {
             const curStake = currentStakeRef.current;

@@ -1,4 +1,4 @@
-import { getExecutionSpeed, getExecutionSpeedDelay, isFastExecutionEnabled, SPEED_PURCHASES_PER_TICK } from '../../../../../utils/execution-speed';
+import { getExecutionSpeed, getExecutionSpeedDelay, isFastExecutionEnabled, getPurchasesPerTick, SPEED_PURCHASES_PER_TICK } from '../../../../../utils/execution-speed';
 import { isBotPaused } from '../../../../../utils/bot-pause-flag';
 import { LogTypes } from '../../../constants/messages';
 import { api_base } from '../../api/api-base';
@@ -100,7 +100,9 @@ export default Engine =>
             // trade-again, martingale), the rest are independent side purchases
             // fired at the same instant for extra throughput.
             const speed = getExecutionSpeed();
-            const purchases_per_tick = SPEED_PURCHASES_PER_TICK[speed] ?? 1;
+            // Use the effective per-tick count so Fast Execution's 50 side
+            // purchases fire on top of whichever tier is active.
+            const purchases_per_tick = getPurchasesPerTick();
             if (purchases_per_tick > 1 && this.tradeOptions) {
                 for (let i = 0; i < purchases_per_tick - 1; i++) {
                     fireSidePurchase(this.tradeOptions, contract_type);
@@ -152,8 +154,10 @@ export default Engine =>
             // In Crazy/Turbo mode bypass the proposal-wait round-trip: use direct
             // buy parameters instead of a pre-fetched proposal ID. This eliminates
             // the proposal→wait→buy latency that was the main throughput bottleneck.
+            // Fast Execution bypasses the proposal round-trip just like Crazy/Turbo —
+            // the biggest single source of purchase latency.
             const useDirectBuy =
-                (speed === 'crazy' || speed === 'turbo' || speed === 'supersonic') &&
+                (isFastExecutionEnabled() || speed === 'crazy' || speed === 'turbo' || speed === 'supersonic') &&
                 !this.options.timeMachineEnabled;
 
             if (this.is_proposal_subscription_required && !useDirectBuy) {
