@@ -29,6 +29,8 @@ type TxRecord = {
     type: string; stake: number; barrier: number | null;
     result: 'won' | 'lost' | 'open';
     profit: number; exitDigit: number | null;
+    entrySpot?: number; // entry spot price (from contract.entry_spot)
+    exitSpot?: number;  // exit spot price (from contract.exit_tick)
     virtual?: boolean;  // true = simulated virtual-hook trade (no real money placed)
 };
 
@@ -1223,7 +1225,9 @@ const BotDetail: React.FC<{
                 consLoss = won ? 0 : consLoss + 1;
                 lastWon = won; // track result of most recent trade so outer loop knows win vs loss
 
-                params.onSettled({ profit, won, market: params.market, buyPrice: Number(contract.buy_price) || params.stake, exitDigit, consLoss });
+                const entrySpot = Number(contract.entry_spot ?? contract.entry_tick) || undefined;
+                const exitSpot  = Number(contract.exit_spot  ?? contract.exit_tick)  || undefined;
+                params.onSettled({ profit, won, market: params.market, buyPrice: Number(contract.buy_price) || params.stake, exitDigit, consLoss, entrySpot, exitSpot });
 
                 const tpHit = params.tpGuard && params.sessionPnlRef.current >= params.takeProfit;
                 const slHit = params.tpGuard && params.sessionPnlRef.current <= -Math.abs(params.stopLoss);
@@ -1362,10 +1366,14 @@ const BotDetail: React.FC<{
     useEffect(() => { setActiveMarket(cfg.market); }, [cfg.market]);
 
     const summary = useMemo(() => {
-        const won  = txList.filter(t => t.result === 'won').length;
-        const lost = txList.filter(t => t.result === 'lost').length;
-        const pnl  = txList.reduce((a, t) => a + t.profit, 0);
-        return { runs: txList.length, won, lost, pnl };
+        const real  = txList.filter(t => !t.virtual);
+        const won   = real.filter(t => t.result === 'won').length;
+        const lost  = real.filter(t => t.result === 'lost').length;
+        const pnl   = +real.reduce((a, t) => a + t.profit, 0).toFixed(2);
+        const totalStake  = +real.reduce((a, t) => a + t.stake, 0).toFixed(2);
+        const totalPayout = +(totalStake + pnl).toFixed(2);
+        const virtualCount = txList.filter(t => !!t.virtual).length;
+        return { runs: real.length, won, lost, pnl, totalStake, totalPayout, virtualCount };
     }, [txList]);
 
     const ts = () => new Date().toLocaleTimeString('en', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
