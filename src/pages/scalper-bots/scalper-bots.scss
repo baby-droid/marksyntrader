@@ -1166,6 +1166,126 @@
   }
 }
 
+/* ════════════════════════════════════════════════════
+   Virtual Hook — diagram + chip styles
+   ════════════════════════════════════════════════════ */
+
+.sb-vhook-diagram {
+  display: flex; align-items: center; gap: 0.35rem;
+  flex-wrap: wrap;
+  padding: 0.65rem 0.8rem;
+  background: rgba(168, 85, 247, 0.06);
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  border-radius: 0.6rem;
+  margin-bottom: 0.8rem;
+}
+
+.sb-vhook-chip {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  font-size: 0.72rem; font-weight: 800;
+  font-family: 'Orbitron', monospace;
+  letter-spacing: 0;
+
+  &--loss {
+    background: rgba(239, 68, 68, 0.18);
+    border: 1.5px solid rgba(239, 68, 68, 0.55);
+    color: #f87171;
+  }
+  &--win {
+    background: rgba(34, 197, 94, 0.15);
+    border: 1.5px solid rgba(34, 197, 94, 0.5);
+    color: #4ade80;
+  }
+  &--real {
+    background: rgba(168, 85, 247, 0.18);
+    border: 1.5px solid rgba(168, 85, 247, 0.55);
+    color: #c084fc;
+    width: auto; padding: 0 0.55rem;
+    border-radius: 1rem;
+    font-size: 0.65rem;
+  }
+}
+
+.sb-vhook-arrow {
+  color: #64748b;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+/* Purple hint variant */
+.sb-hint--purple {
+  background: rgba(168, 85, 247, 0.06);
+  border-left: 3px solid rgba(168, 85, 247, 0.4);
+  border-radius: 0 0.35rem 0.35rem 0;
+  padding: 0.55rem 0.75rem;
+  color: #c4b5fd;
+  margin-bottom: 0.75rem;
+  strong { color: #a855f7; }
+}
+
+/* ════════════════════════════════════════════════════
+   Stealth Mode — status pills
+   ════════════════════════════════════════════════════ */
+
+.sb-stealth-status {
+  display: flex; flex-wrap: wrap; gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+
+.sb-stealth-pill {
+  display: inline-flex; align-items: center;
+  padding: 0.22rem 0.65rem;
+  background: rgba(6, 182, 212, 0.1);
+  border: 1px solid rgba(6, 182, 212, 0.3);
+  border-radius: 2rem;
+  font-size: 0.72rem; font-weight: 700;
+  color: #22d3ee;
+  font-family: 'Share Tech Mono', monospace;
+}
+
+/* ════════════════════════════════════════════════════
+   Virtual transactions — row + badge styling
+   ════════════════════════════════════════════════════ */
+
+.sb-tx-virtual {
+  opacity: 0.78;
+  background: rgba(168, 85, 247, 0.04) !important;
+  border-left: 3px solid rgba(168, 85, 247, 0.35);
+
+  td { color: #94a3b8 !important; }
+}
+
+.sb-virtual-badge {
+  display: inline-flex; align-items: center;
+  padding: 0.1rem 0.42rem;
+  background: rgba(168, 85, 247, 0.18);
+  border: 1px solid rgba(168, 85, 247, 0.45);
+  border-radius: 0.3rem;
+  font-size: 0.6rem; font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #c084fc;
+  margin-right: 0.35rem;
+  font-family: 'Orbitron', monospace;
+  vertical-align: middle;
+}
+
+.sb-tx-virtual-stake s {
+  text-decoration: line-through;
+  opacity: 0.55;
+}
+
+.sb-result-virtual {
+  color: #a855f7 !important;
+  font-style: italic;
+}
+
+.sb-tx-virtual-pnl {
+  color: #94a3b8 !important;
+  font-style: italic;
+}
+
 .sb-ldp-item {
   display: flex; align-items: flex-start; gap: 0.5rem;
   color: #e2e8f0;

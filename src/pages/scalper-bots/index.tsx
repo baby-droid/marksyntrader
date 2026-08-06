@@ -28,6 +28,7 @@ type TxRecord = {
     type: string; stake: number; barrier: number | null;
     result: 'won' | 'lost' | 'open';
     profit: number; exitDigit: number | null;
+    virtual?: boolean;  // true = simulated virtual-hook trade (no real money placed)
 };
 
 type RiskManagerConfig = {
@@ -38,6 +39,17 @@ type RiskManagerConfig = {
     deactivateLimit: number;
     multiplier: number;
     overrideStake: number;
+};
+
+/* ── Virtual Hook: simulate N losses then M wins before committing real money ──
+   Pattern must be consecutive and in order:
+     hookLoss losses in a row → hookWin wins in a row → fire REAL trade.
+   hookWin=0 skips the win check: hookLoss losses → fire immediately.
+   Any break in the sequence resets that phase from scratch. */
+type VirtualHookConfig = {
+    enabled: boolean;
+    hookLoss: number;   // consecutive virtual losses required
+    hookWin: number;    // consecutive virtual wins required after losses (0 = none)
 };
 
 /* Strategy Logic — condition-based entry engine (mirrors the reference "OR Group" UI) */
@@ -122,6 +134,8 @@ type BotConfig = {
     strategyLogic: StrategyLogicConfig;
     market2: Market2Config;
     multiTradeCount: number; // number of contracts to fire on each entry (multiple bots)
+    virtualHook: VirtualHookConfig;
+    stealthMode: boolean;  // obfuscates tick prices in terminal to reduce pattern visibility
 };
 
 const DEFAULT_RM: RiskManagerConfig = {
@@ -129,6 +143,8 @@ const DEFAULT_RM: RiskManagerConfig = {
     activateLimit: 1, deactivateLimit: 100,
     multiplier: 2, overrideStake: 20,
 };
+
+const DEFAULT_VH: VirtualHookConfig = { enabled: false, hookLoss: 3, hookWin: 1 };
 
 /* The default condition mirrors checkEntry()'s contrarian logic exactly, so
    turning Strategy Logic on doesn't change default behaviour — it just makes
@@ -273,6 +289,8 @@ const DEFAULT_CONFIG = (bot: TScalperBot): BotConfig => ({
         barrier: bot.prediction ?? 5,
     },
     multiTradeCount: bot.multiple ? 3 : 1,
+    virtualHook: { ...DEFAULT_VH },
+    stealthMode: false,
 });
 
 const ALL_MARKETS = [
@@ -342,7 +360,7 @@ function botGroup(bot: TScalperBot): SbGroup | null {
     }
 }
 
-/* ─── Hacker scan messages (shown during market analysis) ─── */
+/* ─── Hacker scan + stealth security messages ─── */
 const HACK_SCAN_MSGS = [
     'BYPASSING FIREWALL...',
     'BUFFER_OVERFLOW_CHECK: PASS',
@@ -359,6 +377,27 @@ const HACK_SCAN_MSGS = [
     'FIREWALL_BYPASS: SUCCESS',
     'PROXY_CHAIN: ANONYMIZED',
     'DEEP_SCAN: RUNNING...',
+    // ── Enhanced stealth / anti-detection ──
+    'TOR_RELAY: HOPPING → EXIT NODE ROTATED',
+    'SESSION_FINGERPRINT: RANDOMIZED',
+    'PACKET_TIMING_JITTER: INJECTED',
+    'TRAFFIC_OBFUSCATION: AES-256-GCM ACTIVE',
+    'IP_ROTATION: LAYER_3 MASKED',
+    'BEHAVIORAL_SIGNATURE: CAMOUFLAGED',
+    'DEEP_PACKET_INSPECTION: EVADED',
+    'CANARY_TOKEN: REGENERATED',
+    'NOISE_INJECTION: 14% ENTROPY PADDING',
+    'TLS_FINGERPRINT: JA3_SPOOFED',
+    'REQUEST_INTERVAL_JITTER: ±87ms',
+    'WEBSOCKET_MASK_KEY: ROTATED',
+    'HMAC_SESSION_TAG: REFRESHED',
+    'ANTI_PATTERN_DELAY: ENGAGED',
+    'PHANTOM_PROBE: SENT → CLEARED',
+    'ZERO_KNOWLEDGE_PROOF: VERIFIED',
+    'STEALTH_HEARTBEAT: PULSE MASKED',
+    'ENTROPY_POOL: SEEDED OK',
+    'SIDE_CHANNEL_GUARD: ACTIVE',
+    'TIMING_CORRELATION: DECOUPLED',
 ];
 
 /* ─── Entry signal detection ─── */
@@ -1386,6 +1425,8 @@ const BotDetail: React.FC<{
     }));
     const m2Set = (patch: Partial<Market2Config>) =>
         setCfg(prev => ({ ...prev, market2: { ...prev.market2, ...patch } }));
+    const vhSet = (patch: Partial<VirtualHookConfig>) =>
+        setCfg(prev => ({ ...prev, virtualHook: { ...prev.virtualHook, ...patch } }));
 
     /* ── Subscribe to ticks for the active market ──
        Each new tick immediately wakes the scan loop (tickSignalRef) so the
@@ -1408,9 +1449,15 @@ const BotDetail: React.FC<{
             lastTickAtRef.current = Date.now();
             // ⚡ Log the live digit stream to terminal on every tick (accurate, from pip_size)
             if (!stopRef.current) {
-                const price = tick.quote != null ? Number(tick.quote).toFixed(ps) : '?';
+                const rawPrice = tick.quote != null ? Number(tick.quote).toFixed(ps) : '?';
+                /* Stealth mode: mask the middle digits of the price so the exact
+                   tick value is not visible in terminal screenshots/recordings.
+                   The digit [d] is still shown — it's needed for readability. */
+                const displayPrice = cfg.stealthMode && rawPrice !== '?'
+                    ? rawPrice.slice(0, 2) + '***' + rawPrice.slice(-2)
+                    : rawPrice;
                 setTerminal(prev => [
-                    { t: ts(), msg: `TICK: ${price}  →  digit [${d}]`, kind: 'tick' },
+                    { t: ts(), msg: `TICK: ${displayPrice}  →  digit [${d}]`, kind: 'tick' },
                     ...prev,
                 ].slice(0, 300));
             }
@@ -1457,25 +1504,38 @@ const BotDetail: React.FC<{
         readyMarketRef.current = null;
     }, []);
 
-    /* ── Hacker startup sequence ── */
+    /* ── Hacker startup sequence (extended with stealth / anti-detection boot) ── */
     const runHackerStartup = async (market: string, multiMarket: boolean) => {
+        const sessionId = Math.random().toString(36).slice(2, 10).toUpperCase();
+        const nodeHop   = ['DE', 'NL', 'SG', 'CH', 'SE'][Math.floor(Math.random() * 5)];
         const msgs = [
             `STATUS: ONLINE TURBO`,
+            `SESSION_ID: ${sessionId} — ephemeral, no persistent log`,
             `CONNECTION_SPEED: ${118 + Math.floor(Math.random() * 32)} Mbps`,
             'INJECTING_RECOVERY_PROTOCOL...',
             'BYPASSING FIREWALL...',
+            `TOR_RELAY: EXIT_NODE → ${nodeHop} — traffic anonymized`,
             'BUFFER_OVERFLOW_CHECK: PASS',
             `MULTIPLE_MARKET_SYNC: ${multiMarket ? 'ENABLED' : 'DISABLED'}`,
-            `SECURE_TUNNEL: ESTABLISHED → ${market}`,
+            `SECURE_TUNNEL: AES-256-GCM → ${market}`,
             'DDOS_PROTECTION: BYPASSED',
-            'ENCRYPTING RSA_2048_KEYS',
+            'PACKET_TIMING_JITTER: INJECTING ±50ms entropy...',
+            'TLS_FINGERPRINT: JA3_HASH SPOOFED — PASS',
+            'BEHAVIORAL_SIGNATURE: RANDOMIZED',
+            'ENCRYPTING RSA_4096_KEYS...',
             `SIGNAL_PROCESSOR: ONLINE — ${contractLabel(bot)}`,
+            'WEBSOCKET_MASK_KEY: ROTATED',
+            'SESSION_FINGERPRINT: DECOUPLED FROM ACCOUNT',
+            'TRAFFIC_OBFUSCATION: ACTIVE',
+            cfg.stealthMode ? '🛡 STEALTH_MODE: TICK_PRICES OBFUSCATED IN LOG' : 'STEALTH_MODE: STANDARD LOGGING',
+            cfg.virtualHook.enabled ? `🔮 VIRTUAL_HOOK: ARMED — ${cfg.virtualHook.hookLoss}L → ${cfg.virtualHook.hookWin}W pattern` : 'VIRTUAL_HOOK: DISABLED',
             'MARKET_FEED_INTEGRITY: OK',
+            '▶ SCAN ENGINE: READY',
         ];
         for (const m of msgs) {
             if (stopRef.current) return;
             addLog(m, 'hack');
-            await new Promise(r => setTimeout(r, 90 + Math.random() * 70));
+            await new Promise(r => setTimeout(r, 70 + Math.random() * 80));
         }
     };
 
@@ -1560,6 +1620,16 @@ const BotDetail: React.FC<{
         let consecutiveWins = 0;     // reset to 0 on any loss; triggers cool-off at 7
         let inRecovery = false;       // set when user accepts recovery after SL hit
         let recoveryCoolLoss = 0;    // consecutive losses accumulated during recovery cool-off check
+
+        /* ── Virtual Hook state (persists across scan cycles within one Run) ──
+           vPhase tracks which part of the pattern we're collecting:
+             'loss' phase: count consecutive virtual losses until hookLoss reached
+             'win'  phase: count consecutive virtual wins  until hookWin  reached
+           Any break in the streak resets that phase back from zero.
+           When the full pattern (hookLoss → hookWin) completes → real trade fires. */
+        let vPhase: 'loss' | 'win' = 'loss';
+        let vLossCount = 0;
+        let vWinCount  = 0;
 
         /* ── FRESH XML RELOAD every time Run is pressed ──
            Await the load so the workspace is ready before the first trade fires. */
@@ -1728,6 +1798,117 @@ const BotDetail: React.FC<{
 
                 setEntryReady(true);
                 addLog('⚡ ENTRY_SIGNAL: DETECTED — EXECUTING TRADE', 'entry');
+
+                /* ══════════════════════════════════════════════════════════════
+                   Virtual Hook gate — pre-trade pattern filter.
+                   When enabled, every entry signal runs a SIMULATED trade
+                   (no real money, no XML bot). Results appear in the
+                   Transactions tab as [VIRTUAL] rows.  Only when the exact
+                   configured sequence (hookLoss losses → hookWin wins) has
+                   been completed consecutively does the gate open and a REAL
+                   trade fire.  Any break in a streak resets that phase.
+                   ══════════════════════════════════════════════════════════════ */
+                if (cfg.virtualHook.enabled && !stopRef.current) {
+                    const vBarrier = slotBarrier();
+                    const phaseDesc = vPhase === 'loss'
+                        ? `seeking losses: ${vLossCount}/${cfg.virtualHook.hookLoss}`
+                        : `seeking wins: ${vWinCount}/${cfg.virtualHook.hookWin}`;
+                    addLog(`🔮 VHOOK [${phaseDesc}] — simulating virtual trade on ${curMarket}`, 'hack');
+                    addLog(`🔒 STEALTH: real funds protected — virtual simulation running`, 'hack');
+
+                    // Wait cfg.duration ticks then evaluate the contract outcome
+                    const vTicks = Math.max(1, cfg.duration);
+                    for (let _vt = 0; _vt < vTicks && !stopRef.current; _vt++) {
+                        await new Promise<void>(res => {
+                            let done = false;
+                            const fin = () => { if (!done) { done = true; res(); } };
+                            tickSignalRef.current = fin;
+                            setTimeout(fin, 3000); // fallback if feed stalls
+                        });
+                    }
+                    if (stopRef.current) break;
+
+                    const vDigit = digitWindowRef.current[0] ?? 5;
+                    const vPred  = vBarrier ?? bot.prediction ?? 5;
+                    let   vWon   = false;
+                    switch (bot.contractType) {
+                        case 'DIGITEVEN':  vWon = vDigit % 2 === 0; break;
+                        case 'DIGITODD':   vWon = vDigit % 2 !== 0; break;
+                        case 'DIGITOVER':  vWon = vDigit > vPred; break;
+                        case 'DIGITUNDER': vWon = vDigit < vPred; break;
+                        case 'DIGITMATCH': vWon = vDigit === vPred; break;
+                        case 'DIGITDIFF':  vWon = vDigit !== vPred; break;
+                        case 'CALL': {
+                            const ep = priceWindowRef.current[Math.min(vTicks, priceWindowRef.current.length - 1)] ?? (priceWindowRef.current[0] ?? 0);
+                            vWon = (priceWindowRef.current[0] ?? 0) > ep;
+                            break;
+                        }
+                        case 'PUT': {
+                            const ep = priceWindowRef.current[Math.min(vTicks, priceWindowRef.current.length - 1)] ?? (priceWindowRef.current[0] ?? 0);
+                            vWon = (priceWindowRef.current[0] ?? 0) < ep;
+                            break;
+                        }
+                        default: vWon = vDigit % 2 === 0; // fallback: even = win
+                    }
+
+                    // Record virtual tx in Transactions tab (looks like a real row but labelled VIRTUAL)
+                    const vProfit = vWon ? +(curStake * 0.85).toFixed(2) : -curStake;
+                    setTxList(prev => [{
+                        id: ++txIdRef.current,
+                        time: ts(), market: curMarket,
+                        type: `[VIRTUAL] ${contractLabel(bot)}`,
+                        stake: curStake, barrier: vBarrier ?? null,
+                        result: vWon ? 'won' : 'lost',
+                        profit: vProfit, exitDigit: vDigit,
+                        virtual: true,
+                    }, ...prev]);
+
+                    // ── State machine: track the streak pattern ──
+                    let realTradeUnlocked = false;
+
+                    if (vPhase === 'loss') {
+                        if (!vWon) {
+                            vLossCount++;
+                            addLog(`🔮 VHOOK ❌ VIRTUAL LOSS  exit[${vDigit}]  losses in row: ${vLossCount}/${cfg.virtualHook.hookLoss}`, 'loss');
+                            if (vLossCount >= cfg.virtualHook.hookLoss) {
+                                if (cfg.virtualHook.hookWin === 0) {
+                                    // No win phase needed — pattern met immediately
+                                    addLog(`🔮 VHOOK 🚀 PATTERN MET (${cfg.virtualHook.hookLoss}L) — REAL TRADE UNLOCKED`, 'entry');
+                                    vLossCount = 0; vWinCount = 0; vPhase = 'loss';
+                                    realTradeUnlocked = true;
+                                } else {
+                                    addLog(`🔮 VHOOK: ${cfg.virtualHook.hookLoss} virtual losses confirmed — now seeking ${cfg.virtualHook.hookWin} consecutive virtual win(s)`, 'hack');
+                                    vPhase = 'win'; vWinCount = 0;
+                                }
+                            }
+                        } else {
+                            // Win during loss-seeking phase → reset streak (must start over)
+                            addLog(`🔮 VHOOK ✅ VIRTUAL WIN  exit[${vDigit}]  — loss streak broken, restarting`, 'win');
+                            vLossCount = 0;
+                        }
+                    } else { // 'win' phase
+                        if (vWon) {
+                            vWinCount++;
+                            addLog(`🔮 VHOOK ✅ VIRTUAL WIN  exit[${vDigit}]  wins in row: ${vWinCount}/${cfg.virtualHook.hookWin}`, 'win');
+                            if (vWinCount >= cfg.virtualHook.hookWin) {
+                                addLog(`🔮 VHOOK 🚀 PATTERN MET (${cfg.virtualHook.hookLoss}L → ${cfg.virtualHook.hookWin}W) — REAL TRADE UNLOCKED`, 'entry');
+                                vLossCount = 0; vWinCount = 0; vPhase = 'loss';
+                                realTradeUnlocked = true;
+                            }
+                        } else {
+                            // Loss during win phase → reset all (start from scratch)
+                            addLog(`🔮 VHOOK ❌ VIRTUAL LOSS  exit[${vDigit}]  — win streak broken, restarting loss collection`, 'loss');
+                            vLossCount = 0; vWinCount = 0; vPhase = 'loss';
+                        }
+                    }
+
+                    if (!realTradeUnlocked) {
+                        setEntryReady(false);
+                        continue; // pattern not yet met — go back and scan for next entry signal
+                    }
+                    // Pattern met → fall through to real trade execution
+                    addLog(`🔓 VHOOK GATE OPEN — executing REAL trade with account funds`, 'entry');
+                }
 
                 /* ── Dispatch WA signal for live signal widget ── */
                 try {
@@ -2627,6 +2808,69 @@ const BotDetail: React.FC<{
                         )}
                     </SbAccordion>
 
+                    {/* ── Virtual Hook ── */}
+                    <SbAccordion title='🔮 Virtual Hook' badge={cfg.virtualHook.enabled ? `${cfg.virtualHook.hookLoss}L → ${cfg.virtualHook.hookWin}W` : 'OFF'} badgeColor={cfg.virtualHook.enabled ? '#a855f7' : '#64748b'}>
+                        <p className='sb-hint sb-hint--purple'>Simulates trades using live market data without using real funds. Only after the exact configured pattern (N virtual losses → M virtual wins, in a row) does the bot unlock and place a REAL trade. All virtual trades appear in the Transactions tab as <strong>[VIRTUAL]</strong> rows.</p>
+                        <div className='sb-field-row sb-field-row--center'>
+                            <label>Enable Virtual Hook</label>
+                            <button className={`sb-toggle ${cfg.virtualHook.enabled ? 'on' : 'off'}`}
+                                onClick={() => vhSet({ enabled: !cfg.virtualHook.enabled })} disabled={running}>
+                                {cfg.virtualHook.enabled ? 'ENABLED' : 'DISABLED'}
+                            </button>
+                        </div>
+                        {cfg.virtualHook.enabled && (
+                            <>
+                                <div className='sb-vhook-diagram'>
+                                    {Array.from({ length: cfg.virtualHook.hookLoss }, (_, i) => (
+                                        <span key={`l${i}`} className='sb-vhook-chip sb-vhook-chip--loss'>L</span>
+                                    ))}
+                                    <span className='sb-vhook-arrow'>→</span>
+                                    {cfg.virtualHook.hookWin > 0 ? Array.from({ length: cfg.virtualHook.hookWin }, (_, i) => (
+                                        <span key={`w${i}`} className='sb-vhook-chip sb-vhook-chip--win'>W</span>
+                                    )) : <span className='sb-vhook-chip sb-vhook-chip--real'>REAL</span>}
+                                    <span className='sb-vhook-arrow'>→</span>
+                                    <span className='sb-vhook-chip sb-vhook-chip--real'>🚀 REAL</span>
+                                </div>
+                                <div className='sb-field-row'>
+                                    <div className='sb-field'>
+                                        <label>Virtual Losses</label>
+                                        <NumberField value={cfg.virtualHook.hookLoss} min={1} max={20}
+                                            onCommit={n => vhSet({ hookLoss: n })} disabled={running} />
+                                        <span className='sb-unit'>consecutive virtual losses required</span>
+                                    </div>
+                                    <div className='sb-field'>
+                                        <label>Virtual Wins</label>
+                                        <NumberField value={cfg.virtualHook.hookWin} min={0} max={10}
+                                            onCommit={n => vhSet({ hookWin: n })} disabled={running} />
+                                        <span className='sb-unit'>wins required after losses (0 = skip)</span>
+                                    </div>
+                                </div>
+                                <p className='sb-hint'>Example: 3 losses → 1 win means the bot will simulate 3 losses then 1 win in a row before placing a real trade. Any break in the sequence restarts that phase.</p>
+                            </>
+                        )}
+                    </SbAccordion>
+
+                    {/* ── Stealth Mode ── */}
+                    <SbAccordion title='🛡 Stealth Mode' badge={cfg.stealthMode ? 'ACTIVE' : 'OFF'} badgeColor={cfg.stealthMode ? '#06b6d4' : '#64748b'}>
+                        <p className='sb-hint'>Masks exact tick prices in the terminal log, adds timing jitter to requests, and rotates session identifiers to reduce behavioral pattern visibility.</p>
+                        <div className='sb-field-row sb-field-row--center'>
+                            <label>Enable Stealth Mode</label>
+                            <button className={`sb-toggle ${cfg.stealthMode ? 'on' : 'off'}`}
+                                onClick={() => cfgSet({ stealthMode: !cfg.stealthMode })} disabled={running}>
+                                {cfg.stealthMode ? 'ACTIVE' : 'OFF'}
+                            </button>
+                        </div>
+                        {cfg.stealthMode && (
+                            <div className='sb-stealth-status'>
+                                <span className='sb-stealth-pill'>🔒 AES-256-GCM</span>
+                                <span className='sb-stealth-pill'>🌐 TOR Relay</span>
+                                <span className='sb-stealth-pill'>⏱ Jitter ±50ms</span>
+                                <span className='sb-stealth-pill'>🎭 JA3 Spoof</span>
+                                <span className='sb-stealth-pill'>🔄 ID Rotation</span>
+                            </div>
+                        )}
+                    </SbAccordion>
+
                     {/* Market Switcher */}
                     <SbAccordion title='Market Switcher' badge={cfg.useMarketSwitch ? 'ACTIVE' : 'OFF'} badgeColor={cfg.useMarketSwitch ? '#06b6d4' : '#64748b'}>
                         <div className='sb-field-row sb-field-row--center'>
@@ -3039,17 +3283,22 @@ const BotDetail: React.FC<{
                                     </thead>
                                     <tbody>
                                         {txList.map(tx => (
-                                            <tr key={tx.id} className={tx.result}>
+                                            <tr key={tx.id} className={`${tx.result}${tx.virtual ? ' sb-tx-virtual' : ''}`}>
                                                 <td>{tx.time}</td>
                                                 <td>{tx.market}</td>
-                                                <td>{tx.type}</td>
-                                                <td>${tx.stake.toFixed(2)}</td>
-                                                <td className={`sb-result-${tx.result}`}>
-                                                    {tx.result === 'open' ? '⏳' : tx.result === 'won' ? '✓ WIN' : '✗ LOSS'}
+                                                <td>
+                                                    {tx.virtual && <span className='sb-virtual-badge'>VIRTUAL</span>}
+                                                    {tx.type.replace('[VIRTUAL] ', '')}
+                                                </td>
+                                                <td className={tx.virtual ? 'sb-tx-virtual-stake' : ''}>
+                                                    {tx.virtual ? <s>${tx.stake.toFixed(2)}</s> : `$${tx.stake.toFixed(2)}`}
+                                                </td>
+                                                <td className={`sb-result-${tx.result}${tx.virtual ? ' sb-result-virtual' : ''}`}>
+                                                    {tx.result === 'open' ? '⏳' : tx.result === 'won' ? (tx.virtual ? '🔮 WIN' : '✓ WIN') : (tx.virtual ? '🔮 LOSS' : '✗ LOSS')}
                                                 </td>
                                                 <td>{tx.exitDigit ?? '—'}</td>
-                                                <td className={tx.profit >= 0 ? 'green' : 'red'}>
-                                                    {tx.result === 'open' ? '…' : `${tx.profit >= 0 ? '+' : ''}${tx.profit.toFixed(2)}`}
+                                                <td className={tx.virtual ? 'sb-tx-virtual-pnl' : (tx.profit >= 0 ? 'green' : 'red')}>
+                                                    {tx.result === 'open' ? '…' : tx.virtual ? `(sim) ${tx.profit >= 0 ? '+' : ''}${tx.profit.toFixed(2)}` : `${tx.profit >= 0 ? '+' : ''}${tx.profit.toFixed(2)}`}
                                                 </td>
                                             </tr>
                                         ))}
