@@ -2213,7 +2213,8 @@ const BotDetail: React.FC<{
                    Adds a small random delay (25-180 ms) before every real buy to break
                    any fixed-interval pattern that could be flagged by server-side
                    anomaly detection. Ultra Turbo skips this to preserve zero-latency. */
-                if (!ultraTurboRef.current && fastExecRef.current !== 'ultra') {
+                /* ⚡ FAST / ULTRA skip all anti-pattern jitter — zero-latency is the point */
+                if (!ultraTurboRef.current && fastExecRef.current === 'off') {
                     const jitter = 25 + Math.floor(Math.random() * 155);
                     if (cfg.stealthMode) addLog(`ANTI_PATTERN_DELAY: ${jitter}ms jitter injected`, 'hack');
                     await new Promise(r => setTimeout(r, jitter));
@@ -2225,13 +2226,14 @@ const BotDetail: React.FC<{
                    scan-wait phase so there is nothing left to initialise here. */
                 if (firstTradeRef.current) {
                     firstTradeRef.current = false;
-                    if (!ultraTurboRef.current && fastExecRef.current !== 'ultra') {
+                    /* ⚡ FAST / ULTRA: workspace pre-warmed — zero init delay */
+                    if (!ultraTurboRef.current && fastExecRef.current === 'off') {
                         const { isFastExecutionEnabled: isFast } = await import('@/utils/execution-speed');
                         const initDelay = isFast() ? 100 : 800;
                         addLog(`🔧 INITIALISING_TRADE_ENGINE (first trade — ${isFast() ? 'FAST mode 100ms' : 'normal 800ms'})...`, 'hack');
                         await new Promise(r => setTimeout(r, initDelay));
                     } else {
-                        addLog('⚡ ULTRA: workspace pre-warmed — skipping init delay, firing NOW', 'entry');
+                        addLog('⚡ FAST/ULTRA: workspace pre-warmed — skipping init delay, firing NOW', 'entry');
                     }
                 }
 
@@ -2261,8 +2263,8 @@ const BotDetail: React.FC<{
                 const { isFastExecutionEnabled: isFastNow } = await import('@/utils/execution-speed');
                 for (let _ci = 0; _ci < tradeCount && !stopRef.current; _ci++) {
                     if (_ci > 0 && !stopRef.current) {
-                        // ULTRA TURBO / Fast mode: zero inter-contract delay; normal: 250ms
-                        if (!ultraTurboRef.current && !isFastNow()) await new Promise(r => setTimeout(r, 250));
+                        // ULTRA TURBO / FAST mode: zero inter-contract delay; normal: 250ms
+                        if (!ultraTurboRef.current && fastExecRef.current === 'off' && !isFastNow()) await new Promise(r => setTimeout(r, 250));
                         if (stopRef.current) break;
                     }
                     const contractTag = tradeCount > 1 ? `[C${_ci + 1}/${tradeCount}] ` : '';
@@ -2274,7 +2276,8 @@ const BotDetail: React.FC<{
                         /* Ultra Fast (fastExec='ultra') gets the same 300ms teardown
                            cap and drain-delay as Ultra Turbo — the whole point of
                            the mode is zero latency between entry signal and buy. */
-                        ultraTurbo: ultraTurboRef.current || fastExecRef.current === 'ultra',
+                        /* ⚡ FAST gets the same zero-latency teardown/drain path as Ultra Turbo */
+                        ultraTurbo: ultraTurboRef.current || fastExecRef.current === 'ultra' || fastExecRef.current === 'fast',
                         consecutiveLossLimit: effectiveLossLimit === Infinity ? Number.MAX_SAFE_INTEGER : effectiveLossLimit,
                         stopOnLoss: cfg.stopOnLoss || !!lastFiredGroupRef.current,
                         tpGuard: true, takeProfit: slotTakeProfit(), stopLoss: cfg.stopLoss,
@@ -2515,8 +2518,7 @@ const BotDetail: React.FC<{
                        chance to drain before the new cycle registers its listeners.
                        Fast/UltraFast: 0-30 ms (VHR will wait 1 tick anyway on next iter).
                        Normal: 50 ms safety gap. */
-                    const lossBufferMs = ultraTurboRef.current || fastExecRef.current === 'ultra' ? 0
-                        : fastExecRef.current === 'fast' ? 30
+                    const lossBufferMs = ultraTurboRef.current || fastExecRef.current === 'ultra' || fastExecRef.current === 'fast' ? 0
                         : 50;
                     await new Promise(r => setTimeout(r, lossBufferMs));
                     continue;
