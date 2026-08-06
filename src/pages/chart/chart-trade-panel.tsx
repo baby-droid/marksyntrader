@@ -73,18 +73,18 @@ const DUR_UNIT_LABELS: Record<DurUnit, string> = {
 
 /** Quick-pick presets for each duration unit */
 const DUR_QUICK_PICKS: Record<DurUnit, number[]> = {
-    t: [1, 2, 4, 6, 8, 10],
+    t: [1, 2, 3, 4, 5, 6, 8, 10],
     s: [15, 30, 60, 120, 300, 600],
     m: [1, 2, 5, 10, 30, 60],
     h: [1, 2, 4, 8, 12, 24],
 };
 
-/** Min / Max for each unit (API limits) */
+/** Min / Max for each unit — matched to Deriv synthetic-index limits */
 const DUR_RANGE: Record<DurUnit, { min: number; max: number }> = {
-    t: { min: 1,  max: 10   },
+    t: { min: 1,  max: 10  },
     s: { min: 15, max: 3600 },
-    m: { min: 1,  max: 1440 },
-    h: { min: 1,  max: 24   },
+    m: { min: 1,  max: 60  },
+    h: { min: 1,  max: 24  },
 };
 
 /* ── Trade type groups ────────────────────────────────────────────────────── */
@@ -190,6 +190,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
     const [stakeRaw,   setStakeRaw]   = useState('10');   // raw string for the input — can be empty
     const [growthRate, setGrowthRate] = useState(0.03); // Accumulator growth rate: 1%, 2%, 3%, 4%, 5%
     const [stakeMode, setStakeMode]   = useState<'stake' | 'payout'>('stake');
+    const [allowEquals, setAllowEquals] = useState(false);
     const [loading,   setLoading]     = useState<'over' | 'under' | 'accu' | null>(null);
     const [accumContractId, setAccumContractId] = useState<number | null>(null);
     const [result,    setResult]      = useState<{ ok: boolean; msg: string } | null>(null);
@@ -231,6 +232,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             : DUR_RANGE[firstUnit];
         setTicks(range.min);
         setCustomDurRaw('');
+        setAllowEquals(false);
     }, [group.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
     /* ── Payout fetch (600ms debounce) — also warms the buy proposal cache ── */
@@ -239,6 +241,9 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
     const warmProposalCache = useCallback(async () => {
         const api = (api_base as any).api;
         if (!api || !symbol) return;
+        // Allow-equals switches CALL→CALLE and PUT→PUTE (Rise/Fall group only)
+        const effTypeA = (group.id === 'rise_fall' && allowEquals) ? 'CALLE' : group.typeA;
+        const effTypeB = (group.id === 'rise_fall' && allowEquals) ? 'PUTE'  : group.typeB;
         const base: any = {
             proposal: 1, amount: stake, basis: 'stake',
             currency: getDisplayCurrency() || 'USD',
@@ -248,8 +253,8 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
         if (group.needsBarrier) base.barrier = String(barrier);
         try {
             const [aRes, bRes] = await Promise.all([
-                api.send({ ...base, contract_type: group.typeA }),
-                api.send({ ...base, contract_type: group.typeB }),
+                api.send({ ...base, contract_type: effTypeA }),
+                api.send({ ...base, contract_type: effTypeB }),
             ]);
             const aPayout = Number(aRes?.proposal?.payout ?? 0);
             const bPayout = Number(bRes?.proposal?.payout ?? 0);
@@ -258,7 +263,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             setOverPct(aPayout > 0 ? ((aPayout - stake) / stake) * 100 : null);
             setUnderPct(bPayout > 0 ? ((bPayout - stake) / stake) * 100 : null);
             // Cache proposal IDs for instant buy (valid ~30s on Deriv; use 25s)
-            const cacheKey = `${group.id}|${barrier}|${ticks}|${durationUnit}|${stake}|${symbol}`;
+            const cacheKey = `${group.id}|${barrier}|${ticks}|${durationUnit}|${allowEquals}|${stake}|${symbol}`;
             if (aRes?.proposal?.id || bRes?.proposal?.id) {
                 cachedProposalRef.current = {
                     key:      cacheKey,
@@ -273,7 +278,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             setOverPayout(null); setUnderPayout(null);
             setOverPct(null);   setUnderPct(null);
         }
-    }, [symbol, stake, ticks, durationUnit, barrier, group]);
+    }, [symbol, stake, ticks, durationUnit, allowEquals, barrier, group]);
 
     const fetchPayouts = useCallback(() => {
         if (payoutTimerRef.current) clearTimeout(payoutTimerRef.current);
@@ -377,7 +382,10 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
         if (!api) { setResult({ ok: false, msg: '❌ Not connected' }); return; }
         setLoading(side);
         setResult(null);
-        const contractType = side === 'over' ? group.typeA : group.typeB;
+        // Allow-equals: CALL→CALLE, PUT→PUTE for Rise/Fall
+        const contractType = side === 'over'
+            ? (group.id === 'rise_fall' && allowEquals ? 'CALLE' : group.typeA)
+            : (group.id === 'rise_fall' && allowEquals ? 'PUTE'  : group.typeB);
 
         const buildProposalReq = () => {
             const req: any = {
@@ -397,7 +405,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             // change. Reusing the cached ID means the buy message hits the server
             // on the very next WebSocket frame — no extra proposal latency — so
             // the contract enters on the tick the user is currently watching.
-            const cacheKey = `${group.id}|${barrier}|${ticks}|${durationUnit}|${stake}|${symbol}`;
+            const cacheKey = `${group.id}|${barrier}|${ticks}|${durationUnit}|${allowEquals}|${stake}|${symbol}`;
             const cached   = cachedProposalRef.current;
             let proposalId: string | null = null;
             let askPrice:   number        = stake;
@@ -547,7 +555,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             setLoading(null);
             setTimeout(() => setResult(null), 4000);
         }
-    }, [loading, group, barrier, ticks, durationUnit, stake, symbol, warmProposalCache]);
+    }, [loading, group, allowEquals, barrier, ticks, durationUnit, stake, symbol, warmProposalCache]);
 
     /* ── Label helpers ───────────────────────────────────────────────────── */
     const overLabel  = group.id === 'over_under' ? 'Over'   : group.id === 'even_odd' ? 'Even'  : group.id === 'asian' ? 'Asian Up'   : group.id === 'touch' ? 'Touch'    : group.id === 'reset' ? 'Reset ↑' : group.id === 'highlow' ? 'High Tick'  : group.id === 'runhighlow' ? 'Run High' : group.id === 'match_differ' ? 'Matches' : 'Rise';
