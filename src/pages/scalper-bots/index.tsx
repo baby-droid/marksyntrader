@@ -141,6 +141,7 @@ type BotConfig = {
     useMarketSwitch: boolean;
     switchOnLosses: number;
     duration: number;
+    duration_unit: 't' | 's';
     stake: number;
     martingale: number;
     useStakeOverride: boolean;
@@ -285,6 +286,7 @@ const DEFAULT_CONFIG = (bot: TScalperBot): BotConfig => ({
     useMarketSwitch: false,
     switchOnLosses: 2,
     duration: 1,
+    duration_unit: 't',
     stake: 0.35,
     martingale: 2,
     useStakeOverride: false,
@@ -317,40 +319,62 @@ const DEFAULT_CONFIG = (bot: TScalperBot): BotConfig => ({
 });
 
 const ALL_MARKETS = [
-    // Volatility 1-second
+    // ── Volatility 1-second (fastest — 1s ticks) ──
     { label: 'V10 (1s)',    value: '1HZ10V'    },
     { label: 'V25 (1s)',    value: '1HZ25V'    },
     { label: 'V50 (1s)',    value: '1HZ50V'    },
     { label: 'V75 (1s)',    value: '1HZ75V'    },
     { label: 'V100 (1s)',   value: '1HZ100V'   },
-    // Volatility
+    { label: 'V150 (1s)',   value: '1HZ150V'   },
+    { label: 'V200 (1s)',   value: '1HZ200V'   },
+    { label: 'V250 (1s)',   value: '1HZ250V'   },
+    // ── Volatility (standard) ──
     { label: 'V10',         value: 'R_10'      },
     { label: 'V25',         value: 'R_25'      },
     { label: 'V50',         value: 'R_50'      },
     { label: 'V75',         value: 'R_75'      },
     { label: 'V100',        value: 'R_100'     },
-    // Daily Reset (Bear & Bull)
+    // ── Daily Reset (Bear & Bull) ──
     { label: 'Bear Market', value: 'RDBEAR'    },
     { label: 'Bull Market', value: 'RDBULL'    },
-    // Jump
+    // ── Jump ──
     { label: 'Jump 10',     value: 'JD10'      },
     { label: 'Jump 25',     value: 'JD25'      },
     { label: 'Jump 50',     value: 'JD50'      },
     { label: 'Jump 75',     value: 'JD75'      },
     { label: 'Jump 100',    value: 'JD100'     },
-    // Boom
+    { label: 'Jump 150',    value: 'JD150'     },
+    { label: 'Jump 200',    value: 'JD200'     },
+    // ── Boom ──
     { label: 'Boom 300',    value: 'BOOM300N'  },
     { label: 'Boom 500',    value: 'BOOM500'   },
+    { label: 'Boom 600',    value: 'BOOM600'   },
     { label: 'Boom 1000',   value: 'BOOM1000'  },
-    // Crash
+    // ── Crash ──
     { label: 'Crash 300',   value: 'CRASH300N' },
     { label: 'Crash 500',   value: 'CRASH500'  },
+    { label: 'Crash 600',   value: 'CRASH600'  },
     { label: 'Crash 1000',  value: 'CRASH1000' },
-    // Step
+    // ── Step ──
     { label: 'Step Index',  value: 'STPX'      },
-    // Range Break
+    // ── Range Break ──
     { label: 'Range 100',   value: 'RB100'     },
     { label: 'Range 200',   value: 'RB200'     },
+];
+
+/* ── Duration presets — 1s on top, then ticks ascending ── */
+const DURATION_OPTIONS: { label: string; value: number; unit: 't' | 's' }[] = [
+    { label: '1s',   value: 1,  unit: 's' },
+    { label: '1t',   value: 1,  unit: 't' },
+    { label: '2t',   value: 2,  unit: 't' },
+    { label: '3t',   value: 3,  unit: 't' },
+    { label: '4t',   value: 4,  unit: 't' },
+    { label: '5t',   value: 5,  unit: 't' },
+    { label: '7t',   value: 7,  unit: 't' },
+    { label: '10t',  value: 10, unit: 't' },
+    { label: '15t',  value: 15, unit: 't' },
+    { label: '30t',  value: 30, unit: 't' },
+    { label: '90t',  value: 90, unit: 't' },
 ];
 
 const SCALPER_BOTS: TScalperBot[] = manifest as TScalperBot[];
@@ -848,7 +872,7 @@ function symbolToSubmarket(sym: string): string {
    Uses regex replacement instead of DOMParser+XMLSerializer to avoid
    namespace attributes (xmlns="...") being injected by XMLSerializer,
    which corrupt the Blockly XML format and cause silent load failures. */
-function patchXmlContent(xml: string, market?: string, duration?: number): string {
+function patchXmlContent(xml: string, market?: string, duration?: number, duration_unit?: 't' | 's'): string {
     try {
         let out = xml;
         if (market) {
@@ -864,8 +888,13 @@ function patchXmlContent(xml: string, market?: string, duration?: number): strin
             );
         }
         if (duration != null) {
-            // The duration NUM field inside trade_definition_tradeoptions > DURATION value
-            // We locate it by replacing the first occurrence of NUM after the DURATION value tag
+            // Patch DURATIONTYPE_LIST (t = ticks, s = seconds)
+            const unit = duration_unit ?? 't';
+            out = out.replace(
+                /(<field name="DURATIONTYPE_LIST">)[^<]*(<\/field>)/,
+                `$1${unit}$2`
+            );
+            // Patch the duration NUM value
             out = out.replace(
                 /(name="DURATION"[\s\S]*?<field name="NUM">)\d+(<\/field>)/,
                 `$1${duration}$2`
@@ -978,7 +1007,7 @@ const BotDetail: React.FC<{
     onBack: () => void;
     onLoadXml: (bot: TScalperBot) => Promise<void>;
     onLoadAndRun: (bot: TScalperBot) => Promise<void>;
-    onPreloadXml: (bot: TScalperBot, opts?: { market?: string; duration?: number }) => Promise<void>;
+    onPreloadXml: (bot: TScalperBot, opts?: { market?: string; duration?: number; duration_unit?: 't' | 's' }) => Promise<void>;
 }> = ({ bot, derivTrade, onBack, onLoadXml, onLoadAndRun, onPreloadXml }) => {
     const store = useStore();
 
@@ -1012,7 +1041,7 @@ const BotDetail: React.FC<{
        parameters right before it is triggered to buy. Contract type itself is
        never touched here — it stays locked to this bot's own strategy. */
     const patchWorkspaceParams = useCallback((patch: {
-        market?: string; stake?: number; martingale?: number; prediction?: number | null; duration?: number;
+        market?: string; stake?: number; martingale?: number; prediction?: number | null; duration?: number; duration_unit?: 't' | 's';
     }): boolean => {
         try {
             const B = (window as any).Blockly;
@@ -1093,7 +1122,8 @@ const BotDetail: React.FC<{
                 }
                 if (patch.duration != null && block.type === 'trade_definition_tradeoptions') {
                     try {
-                        block.getField('DURATIONTYPE_LIST')?.setValue('t');
+                        const dUnit = patch.duration_unit ?? 't';
+                        block.getField('DURATIONTYPE_LIST')?.setValue(dUnit);
                         const durInput = block.getInput?.('DURATION');
                         const durBlock = durInput?.connection?.targetBlock?.();
                         if (durBlock) { durBlock.getField('NUM')?.setValue(String(patch.duration)); changed = true; }
@@ -1681,8 +1711,8 @@ const BotDetail: React.FC<{
         /* ── FRESH XML RELOAD every time Run is pressed ──
            Await the load so the workspace is ready before the first trade fires. */
         addLog('📂 LOADING BOT STRATEGY...', 'hack');
-        try { await onPreloadXml(bot, { market: curMarket, duration: cfg.duration }); } catch { /* non-fatal */ }
-        patchWorkspaceParams({ duration: cfg.duration });
+        try { await onPreloadXml(bot, { market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit }); } catch { /* non-fatal */ }
+        patchWorkspaceParams({ duration: cfg.duration, duration_unit: cfg.duration_unit });
         // Re-apply market with staggered delays so it lands AFTER dbot's async
         // submarket onChange reloads the SYMBOL_LIST options (Bear/Bull/Jump need this).
         { const rm = curMarket; setTimeout(() => patchWorkspaceParams({ market: rm }), 500); setTimeout(() => patchWorkspaceParams({ market: rm }), 1100); }
@@ -1891,8 +1921,8 @@ const BotDetail: React.FC<{
                         lastFiredGroupRef.current = null;
                         subscribeMarket(curMarket);
                         addLog(`⏱ SCAN_TIMEOUT — no entry in 2 min | rotating → ${curMarket} | reloading XML...`, 'switch');
-                        try { await onPreloadXml(bot, { market: curMarket, duration: cfg.duration }); } catch { /* non-fatal */ }
-                        patchWorkspaceParams({ market: curMarket, duration: cfg.duration });
+                        try { await onPreloadXml(bot, { market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit }); } catch { /* non-fatal */ }
+                        patchWorkspaceParams({ market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit });
                         { const rm = curMarket; setTimeout(() => patchWorkspaceParams({ market: rm }), 500); setTimeout(() => patchWorkspaceParams({ market: rm }), 1000); }
                         marketSwitched = true;
                         break;
@@ -2378,8 +2408,8 @@ const BotDetail: React.FC<{
                         curMarketRef.current = curMarket;
                         addLog(`🔀 MARKET_2_SWITCH → ${curMarket} | stake ${curStake.toFixed(2)} | barrier ${slotBarrier()} | martingale ×${slotMartingale()} (${totalConsLoss} losses)`, 'switch');
                         /* Reload XML with new market and duration */
-                        try { await onPreloadXml(bot, { market: curMarket, duration: cfg.duration }); } catch { /* non-fatal */ }
-                        patchWorkspaceParams({ market: curMarket, duration: cfg.duration });
+                        try { await onPreloadXml(bot, { market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit }); } catch { /* non-fatal */ }
+                        patchWorkspaceParams({ market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit });
                         { const rm = curMarket; setTimeout(() => patchWorkspaceParams({ market: rm }), 500); setTimeout(() => patchWorkspaceParams({ market: rm }), 1000); }
                         continue; // re-scan on Market 2 with updated stake
                     }
@@ -2394,8 +2424,8 @@ const BotDetail: React.FC<{
                         curMarketRef.current = curMarket;
                         addLog(`🔀 MARKET_SWITCH → ${curMarket} | stake ${curStake.toFixed(2)} | martingale ×${slotMartingale()} (${totalConsLoss} losses, threshold: ${cfg.switchOnLosses})`, 'switch');
                         /* Reload XML with new market and sync ticks duration */
-                        try { await onPreloadXml(bot, { market: curMarket, duration: cfg.duration }); } catch { /* non-fatal */ }
-                        patchWorkspaceParams({ market: curMarket, duration: cfg.duration });
+                        try { await onPreloadXml(bot, { market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit }); } catch { /* non-fatal */ }
+                        patchWorkspaceParams({ market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit });
                         { const rm = curMarket; setTimeout(() => patchWorkspaceParams({ market: rm }), 500); setTimeout(() => patchWorkspaceParams({ market: rm }), 1000); }
                         continue; // re-scan on new market with martingale stake
                     }
@@ -2683,9 +2713,20 @@ const BotDetail: React.FC<{
                         <div className='sb-field-row'>
                             <div className='sb-field'>
                                 <label>Duration</label>
-                                <NumberField value={cfg.duration} min={1} max={10}
-                                    onCommit={n => cfgSet({ duration: n })} disabled={running} />
-                                <span className='sb-unit'>Ticks</span>
+                                <select
+                                    value={`${cfg.duration_unit}:${cfg.duration}`}
+                                    disabled={running}
+                                    onChange={e => {
+                                        const [unit, val] = e.target.value.split(':');
+                                        cfgSet({ duration: Number(val), duration_unit: unit as 't' | 's' });
+                                    }}
+                                >
+                                    {DURATION_OPTIONS.map(o => (
+                                        <option key={`${o.unit}:${o.value}`} value={`${o.unit}:${o.value}`}>
+                                            {o.label}
+                                        </option>
+                                    ))}
+                                </select>
                             </div>
                             <div className='sb-field'>
                                 <label>Stake (USD)</label>
@@ -3774,14 +3815,14 @@ const ScalperBots: React.FC = observer(() => {
     /* Silently sync the Bot Builder workspace with this bot's default XML.
        Retries up to 30 times (3 s total) so multi-scalper XML loads even
        when Blockly is initialising in the background. */
-    const handlePreloadXml = useCallback(async (bot: TScalperBot, opts?: { market?: string; duration?: number }) => {
+    const handlePreloadXml = useCallback(async (bot: TScalperBot, opts?: { market?: string; duration?: number; duration_unit?: 't' | 's' }) => {
         try {
             const res = await fetch(bot.xmlFile);
             if (!res.ok) return;
             let xml = await res.text();
             // Patch XML with current market + duration before loading into workspace
             if (opts?.market || opts?.duration != null) {
-                xml = patchXmlContent(xml, opts.market, opts.duration);
+                xml = patchXmlContent(xml, opts.market, opts.duration, opts.duration_unit);
             }
             // Try immediately, then retry until Blockly workspace is ready
             let ok = await loadXmlIntoWorkspace(xml, bot.name);
