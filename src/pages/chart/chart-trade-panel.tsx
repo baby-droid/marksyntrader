@@ -64,19 +64,42 @@ function sortActiveSymbols(list: Array<{symbol: string; display_name: string}>) 
     });
 }
 
+/* ── Duration unit metadata ───────────────────────────────────────────────── */
+type DurUnit = 't' | 's' | 'm' | 'h';
+
+const DUR_UNIT_LABELS: Record<DurUnit, string> = {
+    t: 'Ticks', s: 'Seconds', m: 'Minutes', h: 'Hours',
+};
+
+/** Quick-pick presets for each duration unit */
+const DUR_QUICK_PICKS: Record<DurUnit, number[]> = {
+    t: [1, 2, 4, 6, 8, 10],
+    s: [15, 30, 60, 120, 300, 600],
+    m: [1, 2, 5, 10, 30, 60],
+    h: [1, 2, 4, 8, 12, 24],
+};
+
+/** Min / Max for each unit (API limits) */
+const DUR_RANGE: Record<DurUnit, { min: number; max: number }> = {
+    t: { min: 1,  max: 10   },
+    s: { min: 15, max: 3600 },
+    m: { min: 1,  max: 1440 },
+    h: { min: 1,  max: 24   },
+};
+
 /* ── Trade type groups ────────────────────────────────────────────────────── */
 const TRADE_GROUPS = [
-    { id: 'over_under',   label: 'Over / Under',       icon: '↑↓', typeA: 'DIGITOVER',  typeB: 'DIGITUNDER',  needsBarrier: true,  isAccumulator: false, durationUnit: 't', minDur: 1,  maxDur: 10  },
-    { id: 'even_odd',     label: 'Even / Odd',          icon: '⚡', typeA: 'DIGITEVEN',  typeB: 'DIGITODD',    needsBarrier: false, isAccumulator: false, durationUnit: 't', minDur: 1,  maxDur: 10  },
-    { id: 'match_differ', label: 'Match / Differ',      icon: '🎯', typeA: 'DIGITMATCH', typeB: 'DIGITDIFF',   needsBarrier: true,  isAccumulator: false, durationUnit: 't', minDur: 1,  maxDur: 10  },
-    { id: 'accumulator',  label: 'Accumulator',         icon: '📊', typeA: 'ACCU',       typeB: 'ACCU',        needsBarrier: false, isAccumulator: true,  durationUnit: 't', minDur: 1,  maxDur: 10  },
-    { id: 'rise_fall',    label: 'Rise / Fall',         icon: '📈', typeA: 'CALL',       typeB: 'PUT',         needsBarrier: false, isAccumulator: false, durationUnit: 't', minDur: 1,  maxDur: 10  },
-    { id: 'higher_lower', label: 'Higher / Lower',      icon: '📊', typeA: 'CALL',       typeB: 'PUT',         needsBarrier: false, isAccumulator: false, durationUnit: 'm', minDur: 1,  maxDur: 60  },
-    { id: 'asian',        label: 'Asian Up / Down',     icon: '🌏', typeA: 'ASIANU',     typeB: 'ASIAND',      needsBarrier: false, isAccumulator: false, durationUnit: 't', minDur: 5,  maxDur: 10  },
-    { id: 'touch',        label: 'Touch / No Touch',    icon: '✋', typeA: 'ONETOUCH',   typeB: 'NOTOUCH',     needsBarrier: false, isAccumulator: false, durationUnit: 'm', minDur: 1,  maxDur: 60  },
-    { id: 'reset',        label: 'Reset Call / Put',    icon: '🔄', typeA: 'RESETCALL',  typeB: 'RESETPUT',    needsBarrier: false, isAccumulator: false, durationUnit: 't', minDur: 5,  maxDur: 10  },
-    { id: 'highlow',      label: 'High / Low Tick',     icon: '🔝', typeA: 'TICKHIGH',   typeB: 'TICKLOW',     needsBarrier: false, isAccumulator: false, durationUnit: 't', minDur: 5,  maxDur: 10  },
-    { id: 'runhighlow',   label: 'Run High / Run Low',  icon: '🏃', typeA: 'RUNHIGH',    typeB: 'RUNLOW',      needsBarrier: false, isAccumulator: false, durationUnit: 't', minDur: 1,  maxDur: 10  },
+    { id: 'over_under',   label: 'Over / Under',       icon: '↑↓', typeA: 'DIGITOVER',  typeB: 'DIGITUNDER',  needsBarrier: true,  isAccumulator: false, durationUnit: 't' as DurUnit, minDur: 1,  maxDur: 10, supportedUnits: ['t'] as DurUnit[]                },
+    { id: 'even_odd',     label: 'Even / Odd',          icon: '⚡', typeA: 'DIGITEVEN',  typeB: 'DIGITODD',    needsBarrier: false, isAccumulator: false, durationUnit: 't' as DurUnit, minDur: 1,  maxDur: 10, supportedUnits: ['t'] as DurUnit[]                },
+    { id: 'match_differ', label: 'Match / Differ',      icon: '🎯', typeA: 'DIGITMATCH', typeB: 'DIGITDIFF',   needsBarrier: true,  isAccumulator: false, durationUnit: 't' as DurUnit, minDur: 1,  maxDur: 10, supportedUnits: ['t'] as DurUnit[]                },
+    { id: 'accumulator',  label: 'Accumulator',         icon: '📊', typeA: 'ACCU',       typeB: 'ACCU',        needsBarrier: false, isAccumulator: true,  durationUnit: 't' as DurUnit, minDur: 1,  maxDur: 10, supportedUnits: ['t'] as DurUnit[]                },
+    { id: 'rise_fall',    label: 'Rise / Fall',         icon: '📈', typeA: 'CALL',       typeB: 'PUT',         needsBarrier: false, isAccumulator: false, durationUnit: 't' as DurUnit, minDur: 1,  maxDur: 10, supportedUnits: ['t', 's', 'm', 'h'] as DurUnit[] },
+    { id: 'higher_lower', label: 'Higher / Lower',      icon: '📊', typeA: 'CALL',       typeB: 'PUT',         needsBarrier: false, isAccumulator: false, durationUnit: 'm' as DurUnit, minDur: 1,  maxDur: 60, supportedUnits: ['m', 'h'] as DurUnit[]           },
+    { id: 'asian',        label: 'Asian Up / Down',     icon: '🌏', typeA: 'ASIANU',     typeB: 'ASIAND',      needsBarrier: false, isAccumulator: false, durationUnit: 't' as DurUnit, minDur: 5,  maxDur: 10, supportedUnits: ['t'] as DurUnit[]                },
+    { id: 'touch',        label: 'Touch / No Touch',    icon: '✋', typeA: 'ONETOUCH',   typeB: 'NOTOUCH',     needsBarrier: false, isAccumulator: false, durationUnit: 'm' as DurUnit, minDur: 1,  maxDur: 60, supportedUnits: ['m', 'h'] as DurUnit[]           },
+    { id: 'reset',        label: 'Reset Call / Put',    icon: '🔄', typeA: 'RESETCALL',  typeB: 'RESETPUT',    needsBarrier: false, isAccumulator: false, durationUnit: 't' as DurUnit, minDur: 5,  maxDur: 10, supportedUnits: ['t'] as DurUnit[]                },
+    { id: 'highlow',      label: 'High / Low Tick',     icon: '🔝', typeA: 'TICKHIGH',   typeB: 'TICKLOW',     needsBarrier: false, isAccumulator: false, durationUnit: 't' as DurUnit, minDur: 5,  maxDur: 10, supportedUnits: ['t'] as DurUnit[]                },
+    { id: 'runhighlow',   label: 'Run High / Run Low',  icon: '🏃', typeA: 'RUNHIGH',    typeB: 'RUNLOW',      needsBarrier: false, isAccumulator: false, durationUnit: 't' as DurUnit, minDur: 1,  maxDur: 10, supportedUnits: ['t'] as DurUnit[]                },
 ];
 
 /* ── Account badge ────────────────────────────────────────────────────────── */
@@ -159,7 +182,10 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
     const [groupId, setGroupId]       = useState(TRADE_GROUPS[0].id);
     const group = TRADE_GROUPS.find(g => g.id === groupId) ?? TRADE_GROUPS[0];
 
-    const [ticks,      setTicks]      = useState(2);
+    const [ticks,        setTicks]       = useState(2);
+    const [durationUnit, setDurationUnit] = useState<DurUnit>(TRADE_GROUPS[0].supportedUnits[0]);
+    const [durTab,       setDurTab]      = useState<'quick' | 'custom'>('quick');
+    const [customDurRaw, setCustomDurRaw] = useState('');
     const [stake,      setStake]      = useState(10.00);
     const [stakeRaw,   setStakeRaw]   = useState('10');   // raw string for the input — can be empty
     const [growthRate, setGrowthRate] = useState(0.03); // Accumulator growth rate: 1%, 2%, 3%, 4%, 5%
@@ -196,8 +222,16 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
     useEffect(() => subscribeCurrency(() => setDisplayCur(getDisplayCurrency())), []);
 
     useEffect(() => {
-        setTicks(t => Math.min(Math.max(t, group.minDur), group.maxDur));
-    }, [group]);
+        // When group changes: reset to first supported unit, reset ticks to group min
+        const firstUnit = group.supportedUnits[0];
+        setDurationUnit(firstUnit);
+        setDurTab('quick');
+        const range = firstUnit === 't'
+            ? { min: group.minDur, max: group.maxDur }
+            : DUR_RANGE[firstUnit];
+        setTicks(range.min);
+        setCustomDurRaw('');
+    }, [group.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
     /* ── Payout fetch (600ms debounce) — also warms the buy proposal cache ── */
     // Caching the proposal IDs lets buy() skip a full round-trip to Deriv and
@@ -208,7 +242,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
         const base: any = {
             proposal: 1, amount: stake, basis: 'stake',
             currency: getDisplayCurrency() || 'USD',
-            duration: ticks, duration_unit: group.durationUnit,
+            duration: ticks, duration_unit: durationUnit,
             underlying_symbol: symbol,
         };
         if (group.needsBarrier) base.barrier = String(barrier);
@@ -224,7 +258,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             setOverPct(aPayout > 0 ? ((aPayout - stake) / stake) * 100 : null);
             setUnderPct(bPayout > 0 ? ((bPayout - stake) / stake) * 100 : null);
             // Cache proposal IDs for instant buy (valid ~30s on Deriv; use 25s)
-            const cacheKey = `${group.id}|${barrier}|${ticks}|${stake}|${symbol}`;
+            const cacheKey = `${group.id}|${barrier}|${ticks}|${durationUnit}|${stake}|${symbol}`;
             if (aRes?.proposal?.id || bRes?.proposal?.id) {
                 cachedProposalRef.current = {
                     key:      cacheKey,
@@ -239,7 +273,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             setOverPayout(null); setUnderPayout(null);
             setOverPct(null);   setUnderPct(null);
         }
-    }, [symbol, stake, ticks, barrier, group]);
+    }, [symbol, stake, ticks, durationUnit, barrier, group]);
 
     const fetchPayouts = useCallback(() => {
         if (payoutTimerRef.current) clearTimeout(payoutTimerRef.current);
@@ -350,7 +384,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                 proposal: 1, amount: stake, basis: 'stake',
                 contract_type: contractType,
                 currency: getDisplayCurrency() || 'USD',
-                duration: ticks, duration_unit: group.durationUnit,
+                duration: ticks, duration_unit: durationUnit,
                 underlying_symbol: symbol,
             };
             if (group.needsBarrier) req.barrier = String(barrier);
@@ -363,7 +397,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             // change. Reusing the cached ID means the buy message hits the server
             // on the very next WebSocket frame — no extra proposal latency — so
             // the contract enters on the tick the user is currently watching.
-            const cacheKey = `${group.id}|${barrier}|${ticks}|${stake}|${symbol}`;
+            const cacheKey = `${group.id}|${barrier}|${ticks}|${durationUnit}|${stake}|${symbol}`;
             const cached   = cachedProposalRef.current;
             let proposalId: string | null = null;
             let askPrice:   number        = stake;
@@ -390,7 +424,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             try {
                 publishMasterTrade({
                     symbol, contract_type: contractType, stake,
-                    duration: ticks, duration_unit: group.durationUnit,
+                    duration: ticks, duration_unit: durationUnit,
                     ...(group.needsBarrier ? { barrier: String(barrier) } : {}),
                     source: getMasterSource(), time: Date.now(),
                 });
@@ -501,7 +535,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                 if (contractId) {
                     publishMasterTrade({
                         symbol, contract_type: contractType, stake,
-                        duration: ticks, duration_unit: group.durationUnit,
+                        duration: ticks, duration_unit: durationUnit,
                         ...(group.needsBarrier ? { barrier: String(barrier) } : {}),
                         source: getMasterSource(), time: Date.now(), contract_id: Number(contractId),
                     });
@@ -513,14 +547,37 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             setLoading(null);
             setTimeout(() => setResult(null), 4000);
         }
-    }, [loading, group, barrier, ticks, stake, symbol, warmProposalCache]);
+    }, [loading, group, barrier, ticks, durationUnit, stake, symbol, warmProposalCache]);
 
     /* ── Label helpers ───────────────────────────────────────────────────── */
     const overLabel  = group.id === 'over_under' ? 'Over'   : group.id === 'even_odd' ? 'Even'  : group.id === 'asian' ? 'Asian Up'   : group.id === 'touch' ? 'Touch'    : group.id === 'reset' ? 'Reset ↑' : group.id === 'highlow' ? 'High Tick'  : group.id === 'runhighlow' ? 'Run High' : group.id === 'match_differ' ? 'Matches' : 'Rise';
     const underLabel = group.id === 'over_under' ? 'Under'  : group.id === 'even_odd' ? 'Odd'   : group.id === 'asian' ? 'Asian Down' : group.id === 'touch' ? 'No Touch' : group.id === 'reset' ? 'Reset ↓' : group.id === 'highlow' ? 'Low Tick'   : group.id === 'runhighlow' ? 'Run Low'  : group.id === 'match_differ' ? 'Differs' : 'Fall';
 
     const digitRows = [[0, 1, 2, 3, 4], [9, 8, 7, 6, 5]];
-    const tickButtons = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].filter(n => n >= group.minDur && n <= group.maxDur);
+
+    /* ── Duration picker helpers ─────────────────────────────────────────── */
+    const durRange = durationUnit === 't'
+        ? { min: group.minDur, max: group.maxDur }
+        : DUR_RANGE[durationUnit];
+
+    // Quick-pick buttons, filtered to the active unit's allowed range
+    const durQuickPicks = DUR_QUICK_PICKS[durationUnit].filter(
+        n => n >= durRange.min && n <= durRange.max
+    );
+
+    /** Display string for the duration display field */
+    const durDisplayVal = `${ticks} ${DUR_UNIT_LABELS[durationUnit].toLowerCase()}`;
+
+    /** Called when user switches duration unit tab */
+    const handleUnitChange = (unit: DurUnit) => {
+        setDurationUnit(unit);
+        setDurTab('quick');
+        setCustomDurRaw('');
+        const range = unit === 't' ? { min: group.minDur, max: group.maxDur } : DUR_RANGE[unit];
+        // pick first quick-pick that fits, otherwise range.min
+        const picks = DUR_QUICK_PICKS[unit].filter(n => n >= range.min && n <= range.max);
+        setTicks(picks.length > 0 ? picks[0] : range.min);
+    };
 
     /* ════════════════════════════════════════════════════════════════════ */
     return (
@@ -658,42 +715,97 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                 </div>
             )}
 
-            {/* ── Ticks / Duration ──────────────────────────────────── */}
+            {/* ── Duration Picker ───────────────────────────────────── */}
             {!group.isAccumulator && (
-            <div className='ctp__section ctp__section--ticks'>
+            <div className='ctp__section ctp__section--duration'>
+                {/* Header row: label + current value display */}
                 <div className='ctp__section-label'>
-                    {group.durationUnit === 't' ? '⏱ Ticks (Duration)' : '⏱ Minutes (Duration)'}
-                    <span className='ctp__section-val'>{ticks}{group.durationUnit === 't' ? 't' : 'm'}</span>
+                    ⏱ Duration
+                    <span className='ctp__dur-display'>{durDisplayVal}</span>
                 </div>
-                {group.durationUnit === 't' ? (
-                    <div className='ctp__tick-row'>
-                        {tickButtons.map(n => (
+                <div className='ctp__dur-picker'>
+                    {/* Left sidebar: unit selector */}
+                    <div className='ctp__dur-units'>
+                        {group.supportedUnits.map(unit => (
                             <button
-                                key={n}
-                                className={`ctp__tick-btn${ticks === n ? ' active' : ''}`}
-                                onClick={() => setTicks(n)}
+                                key={unit}
+                                className={`ctp__dur-unit-btn${durationUnit === unit ? ' active' : ''}`}
+                                onClick={() => handleUnitChange(unit)}
                             >
-                                {n}
+                                {DUR_UNIT_LABELS[unit]}
                             </button>
                         ))}
                     </div>
-                ) : (
-                    <>
-                        <input
-                            type='range' min={group.minDur} max={group.maxDur} step={1}
-                            value={ticks}
-                            onChange={e => setTicks(Number(e.target.value))}
-                            className='ctp__slider'
-                        />
-                        <div className='ctp__slider-marks'>
-                            {[group.minDur, Math.round((group.minDur + group.maxDur) / 2), group.maxDur].map(n => (
-                                <span key={n} className={ticks === n ? 'active' : ''}>{n}</span>
-                            ))}
+                    {/* Right area: Quick picks / Custom tabs + content */}
+                    <div className='ctp__dur-right'>
+                        <div className='ctp__dur-tabs'>
+                            <button
+                                className={`ctp__dur-tab${durTab === 'quick' ? ' active' : ''}`}
+                                onClick={() => setDurTab('quick')}
+                            >Quick picks</button>
+                            <button
+                                className={`ctp__dur-tab${durTab === 'custom' ? ' active' : ''}`}
+                                onClick={() => { setDurTab('custom'); setCustomDurRaw(String(ticks)); }}
+                            >Custom</button>
                         </div>
-                    </>
-                )}
+                        {durTab === 'quick' ? (
+                            <div className='ctp__dur-picks'>
+                                {durQuickPicks.map(n => (
+                                    <button
+                                        key={n}
+                                        className={`ctp__dur-pick-btn${ticks === n ? ' active' : ''}`}
+                                        onClick={() => setTicks(n)}
+                                    >
+                                        {n} {durationUnit === 't' ? (n === 1 ? 'tick' : 'ticks')
+                                             : durationUnit === 's' ? (n === 1 ? 'sec' : 'secs')
+                                             : durationUnit === 'm' ? (n === 1 ? 'min' : 'mins')
+                                             : (n === 1 ? 'hr' : 'hrs')}
+                                    </button>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className='ctp__dur-custom'>
+                                <div className='ctp__dur-custom-row'>
+                                    <button className='ctp__dur-custom-adj' onClick={() => {
+                                        const next = Math.max(durRange.min, ticks - 1);
+                                        setTicks(next); setCustomDurRaw(String(next));
+                                    }}>−</button>
+                                    <input
+                                        className='ctp__dur-custom-inp'
+                                        type='text'
+                                        inputMode='numeric'
+                                        value={customDurRaw}
+                                        placeholder={String(durRange.min)}
+                                        onFocus={e => e.target.select()}
+                                        onChange={e => {
+                                            const raw = e.target.value.replace(/[^\d]/g, '');
+                                            setCustomDurRaw(raw);
+                                            const v = parseInt(raw, 10);
+                                            if (!isNaN(v)) setTicks(v);
+                                        }}
+                                        onBlur={() => {
+                                            const v = parseInt(customDurRaw, 10);
+                                            const clamped = isNaN(v)
+                                                ? durRange.min
+                                                : Math.min(Math.max(v, durRange.min), durRange.max);
+                                            setTicks(clamped);
+                                            setCustomDurRaw(String(clamped));
+                                        }}
+                                    />
+                                    <button className='ctp__dur-custom-adj' onClick={() => {
+                                        const next = Math.min(durRange.max, ticks + 1);
+                                        setTicks(next); setCustomDurRaw(String(next));
+                                    }}>+</button>
+                                </div>
+                                <div className='ctp__dur-custom-range'>
+                                    {durRange.min}–{durRange.max} {DUR_UNIT_LABELS[durationUnit].toLowerCase()}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
             </div>
-            )}{/* /!group.isAccumulator ticks section */}
+            )}{/* /!group.isAccumulator duration section */}
 
             {/* ── Last Digit Prediction ─────────────────────────────── */}
             {group.needsBarrier && (

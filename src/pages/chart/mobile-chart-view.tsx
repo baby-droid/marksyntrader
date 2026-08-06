@@ -10,19 +10,32 @@ import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency
 import { publishMasterTrade, getMasterSource } from '@/utils/trade-bus';
 import './mobile-chart-view.scss';
 
+/* ── Duration unit helpers (mirror of chart-trade-panel) ──────────────────── */
+type DurUnit = 't' | 's' | 'm' | 'h';
+const DUR_UNIT_LABELS: Record<DurUnit, string> = { t: 'Ticks', s: 'Seconds', m: 'Minutes', h: 'Hours' };
+const DUR_QUICK_PICKS: Record<DurUnit, number[]> = {
+    t: [1, 2, 4, 6, 8, 10],
+    s: [15, 30, 60, 120, 300, 600],
+    m: [1, 2, 5, 10, 30, 60],
+    h: [1, 2, 4, 8, 12, 24],
+};
+const DUR_RANGE: Record<DurUnit, { min: number; max: number }> = {
+    t: { min: 1, max: 10 }, s: { min: 15, max: 3600 }, m: { min: 1, max: 1440 }, h: { min: 1, max: 24 },
+};
+
 /* ── Shared trade-group definitions (same as ChartTradePanel) ─────────────── */
 const TRADE_GROUPS = [
-    { id: 'over_under',    label: 'Over / Under',           icon: '↑↓', typeA: 'DIGITOVER',   typeB: 'DIGITUNDER',  needsBarrier: true,  isAccumulator: false, durationUnit: 't', minDur: 1, maxDur: 10 },
-    { id: 'even_odd',      label: 'Even / Odd',              icon: '⚡', typeA: 'DIGITEVEN',   typeB: 'DIGITODD',    needsBarrier: false, isAccumulator: false, durationUnit: 't', minDur: 1, maxDur: 10 },
-    { id: 'match_differ',  label: 'Match / Differ',          icon: '🎯', typeA: 'DIGITMATCH',  typeB: 'DIGITDIFF',   needsBarrier: true,  isAccumulator: false, durationUnit: 't', minDur: 1, maxDur: 10 },
-    { id: 'rise_fall',     label: 'Rise / Fall',             icon: '📈', typeA: 'CALL',        typeB: 'PUT',         needsBarrier: false, isAccumulator: false, durationUnit: 't', minDur: 1, maxDur: 10 },
-    { id: 'higher_lower',  label: 'Higher / Lower',          icon: '📊', typeA: 'CALL',        typeB: 'PUT',         needsBarrier: false, isAccumulator: false, durationUnit: 'm', minDur: 1, maxDur: 60 },
-    { id: 'asian',         label: 'Asian Up / Down',         icon: '🌏', typeA: 'ASIANU',      typeB: 'ASIAND',      needsBarrier: false, isAccumulator: false, durationUnit: 't', minDur: 5, maxDur: 10 },
-    { id: 'touch',         label: 'Touch / No Touch',        icon: '✋', typeA: 'ONETOUCH',    typeB: 'NOTOUCH',     needsBarrier: false, isAccumulator: false, durationUnit: 'm', minDur: 1, maxDur: 60 },
-    { id: 'run_high_low',  label: 'Run High / Run Low',      icon: '🏃', typeA: 'RUNHIGH',     typeB: 'RUNLOW',      needsBarrier: false, isAccumulator: false, durationUnit: 't', minDur: 1, maxDur: 10 },
-    { id: 'reset',         label: 'Reset Call / Reset Put',  icon: '🔄', typeA: 'RESETCALL',   typeB: 'RESETPUT',    needsBarrier: false, isAccumulator: false, durationUnit: 't', minDur: 5, maxDur: 10 },
-    { id: 'ends_between',  label: 'Ends In / Ends Out',      icon: '📍', typeA: 'EXPIRYRANGE', typeB: 'EXPIRYMISS',  needsBarrier: false, isAccumulator: false, durationUnit: 'm', minDur: 1, maxDur: 60 },
-    { id: 'stays_between', label: 'Stays Between / Goes Out',icon: '🔒', typeA: 'RANGE',       typeB: 'UPORDOWN',    needsBarrier: false, isAccumulator: false, durationUnit: 'm', minDur: 1, maxDur: 60 },
+    { id: 'over_under',    label: 'Over / Under',           icon: '↑↓', typeA: 'DIGITOVER',   typeB: 'DIGITUNDER',  needsBarrier: true,  isAccumulator: false, durationUnit: 't' as DurUnit, minDur: 1, maxDur: 10, supportedUnits: ['t'] as DurUnit[]                },
+    { id: 'even_odd',      label: 'Even / Odd',              icon: '⚡', typeA: 'DIGITEVEN',   typeB: 'DIGITODD',    needsBarrier: false, isAccumulator: false, durationUnit: 't' as DurUnit, minDur: 1, maxDur: 10, supportedUnits: ['t'] as DurUnit[]                },
+    { id: 'match_differ',  label: 'Match / Differ',          icon: '🎯', typeA: 'DIGITMATCH',  typeB: 'DIGITDIFF',   needsBarrier: true,  isAccumulator: false, durationUnit: 't' as DurUnit, minDur: 1, maxDur: 10, supportedUnits: ['t'] as DurUnit[]                },
+    { id: 'rise_fall',     label: 'Rise / Fall',             icon: '📈', typeA: 'CALL',        typeB: 'PUT',         needsBarrier: false, isAccumulator: false, durationUnit: 't' as DurUnit, minDur: 1, maxDur: 10, supportedUnits: ['t', 's', 'm', 'h'] as DurUnit[] },
+    { id: 'higher_lower',  label: 'Higher / Lower',          icon: '📊', typeA: 'CALL',        typeB: 'PUT',         needsBarrier: false, isAccumulator: false, durationUnit: 'm' as DurUnit, minDur: 1, maxDur: 60, supportedUnits: ['m', 'h'] as DurUnit[]           },
+    { id: 'asian',         label: 'Asian Up / Down',         icon: '🌏', typeA: 'ASIANU',      typeB: 'ASIAND',      needsBarrier: false, isAccumulator: false, durationUnit: 't' as DurUnit, minDur: 5, maxDur: 10, supportedUnits: ['t'] as DurUnit[]                },
+    { id: 'touch',         label: 'Touch / No Touch',        icon: '✋', typeA: 'ONETOUCH',    typeB: 'NOTOUCH',     needsBarrier: false, isAccumulator: false, durationUnit: 'm' as DurUnit, minDur: 1, maxDur: 60, supportedUnits: ['m', 'h'] as DurUnit[]           },
+    { id: 'run_high_low',  label: 'Run High / Run Low',      icon: '🏃', typeA: 'RUNHIGH',     typeB: 'RUNLOW',      needsBarrier: false, isAccumulator: false, durationUnit: 't' as DurUnit, minDur: 1, maxDur: 10, supportedUnits: ['t'] as DurUnit[]                },
+    { id: 'reset',         label: 'Reset Call / Reset Put',  icon: '🔄', typeA: 'RESETCALL',   typeB: 'RESETPUT',    needsBarrier: false, isAccumulator: false, durationUnit: 't' as DurUnit, minDur: 5, maxDur: 10, supportedUnits: ['t'] as DurUnit[]                },
+    { id: 'ends_between',  label: 'Ends In / Ends Out',      icon: '📍', typeA: 'EXPIRYRANGE', typeB: 'EXPIRYMISS',  needsBarrier: false, isAccumulator: false, durationUnit: 'm' as DurUnit, minDur: 1, maxDur: 60, supportedUnits: ['m', 'h'] as DurUnit[]           },
+    { id: 'stays_between', label: 'Stays Between / Goes Out',icon: '🔒', typeA: 'RANGE',       typeB: 'UPORDOWN',    needsBarrier: false, isAccumulator: false, durationUnit: 'm' as DurUnit, minDur: 1, maxDur: 60, supportedUnits: ['m', 'h'] as DurUnit[]           },
 ];
 
 /* ── Rank-based solid fill colors (like desktop cdo__circle) ─────────────── */
@@ -163,36 +176,94 @@ const MarketSheet: React.FC<MarketSheetProps> = ({ current, markets, onSelect, o
 /* ── Duration sheet ───────────────────────────────────────────────────────── */
 interface DurationSheetProps {
     ticks: number;
-    min: number;
-    max: number;
-    unit: string;
-    onSet: (n: number) => void;
+    durationUnit: DurUnit;
+    supportedUnits: DurUnit[];
+    minTickDur: number;
+    maxTickDur: number;
+    onSet: (n: number, unit: DurUnit) => void;
     onClose: () => void;
 }
-const DurationSheet: React.FC<DurationSheetProps> = ({ ticks, min, max, unit, onSet, onClose }) => {
-    const [val, setVal] = useState(ticks);
+const DurationSheet: React.FC<DurationSheetProps> = ({
+    ticks, durationUnit, supportedUnits, minTickDur, maxTickDur, onSet, onClose,
+}) => {
+    const [unit, setUnit]   = useState<DurUnit>(durationUnit);
+    const [tab,  setTab]    = useState<'quick' | 'custom'>('quick');
+    const [val,  setVal]    = useState(ticks);
+    const [raw,  setRaw]    = useState(String(ticks));
+
+    const range = unit === 't' ? { min: minTickDur, max: maxTickDur } : DUR_RANGE[unit];
+    const picks = DUR_QUICK_PICKS[unit].filter(n => n >= range.min && n <= range.max);
+
+    const handleUnitSwitch = (u: DurUnit) => {
+        setUnit(u);
+        setTab('quick');
+        const r = u === 't' ? { min: minTickDur, max: maxTickDur } : DUR_RANGE[u];
+        const ps = DUR_QUICK_PICKS[u].filter(n => n >= r.min && n <= r.max);
+        const first = ps.length > 0 ? ps[0] : r.min;
+        setVal(first); setRaw(String(first));
+    };
+
     return (
         <div className='mcv-sheet' onClick={onClose}>
             <div className='mcv-sheet__panel' onClick={e => e.stopPropagation()}>
                 <div className='mcv-sheet__handle' />
                 <div className='mcv-sheet__title'>Duration</div>
-                <div className='mcv-dur'>
-                    <button className='mcv-dur__adj' onClick={() => setVal(v => Math.max(min, v - 1))}>−</button>
-                    <span className='mcv-dur__val'>{val} {unit === 't' ? 'Ticks' : 'Minutes'}</span>
-                    <button className='mcv-dur__adj' onClick={() => setVal(v => Math.min(max, v + 1))}>+</button>
+                {/* Unit tabs */}
+                <div className='mcv-dur__units'>
+                    {supportedUnits.map(u => (
+                        <button
+                            key={u}
+                            className={`mcv-dur__unit-btn${unit === u ? ' active' : ''}`}
+                            onClick={() => handleUnitSwitch(u)}
+                        >{DUR_UNIT_LABELS[u]}</button>
+                    ))}
                 </div>
-                {unit === 't' && (
+                {/* Quick picks / Custom tabs */}
+                <div className='mcv-dur__tabs'>
+                    <button className={`mcv-dur__tab${tab === 'quick' ? ' active' : ''}`} onClick={() => setTab('quick')}>Quick picks</button>
+                    <button className={`mcv-dur__tab${tab === 'custom' ? ' active' : ''}`} onClick={() => { setTab('custom'); setRaw(String(val)); }}>Custom</button>
+                </div>
+                {tab === 'quick' ? (
                     <div className='mcv-dur__grid'>
-                        {Array.from({ length: max - min + 1 }, (_, i) => i + min).map(n => (
+                        {picks.map(n => (
                             <button
                                 key={n}
                                 className={`mcv-dur__opt${val === n ? ' active' : ''}`}
                                 onClick={() => setVal(n)}
-                            >{n}</button>
+                            >
+                                {n} {unit === 't' ? (n === 1 ? 'tick' : 'ticks')
+                                     : unit === 's' ? (n === 1 ? 'sec' : 'secs')
+                                     : unit === 'm' ? (n === 1 ? 'min' : 'mins')
+                                     : (n === 1 ? 'hr' : 'hrs')}
+                            </button>
                         ))}
                     </div>
+                ) : (
+                    <div className='mcv-dur'>
+                        <button className='mcv-dur__adj' onClick={() => { const n = Math.max(range.min, val - 1); setVal(n); setRaw(String(n)); }}>−</button>
+                        <input
+                            className='mcv-dur__custom-inp'
+                            type='text'
+                            inputMode='numeric'
+                            value={raw}
+                            onFocus={e => e.target.select()}
+                            onChange={e => {
+                                const r2 = e.target.value.replace(/[^\d]/g, '');
+                                setRaw(r2);
+                                const v = parseInt(r2, 10);
+                                if (!isNaN(v)) setVal(v);
+                            }}
+                            onBlur={() => {
+                                const v = parseInt(raw, 10);
+                                const c = isNaN(v) ? range.min : Math.min(Math.max(v, range.min), range.max);
+                                setVal(c); setRaw(String(c));
+                            }}
+                        />
+                        <button className='mcv-dur__adj' onClick={() => { const n = Math.min(range.max, val + 1); setVal(n); setRaw(String(n)); }}>+</button>
+                    </div>
                 )}
-                <button className='mcv-dur__apply' onClick={() => { onSet(val); onClose(); }}>Apply</button>
+                <div className='mcv-dur__range-hint'>{range.min}–{range.max} {DUR_UNIT_LABELS[unit].toLowerCase()}</div>
+                <button className='mcv-dur__apply' onClick={() => { onSet(val, unit); onClose(); }}>Apply</button>
             </div>
         </div>
     );
@@ -291,8 +362,9 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
     activeSymbols,
 }) => {
     /* ── Trade state ──────────────────────────────────────────────────────── */
-    const [groupIdx,    setGroupIdx]    = useState(0);
-    const [ticks,       setTicks]       = useState(5);
+    const [groupIdx,     setGroupIdx]    = useState(0);
+    const [ticks,        setTicks]       = useState(5);
+    const [durationUnit, setDurationUnit] = useState<DurUnit>(TRADE_GROUPS[0].supportedUnits[0]);
     const [stake,       setStake]       = useState(10.00);
     const [stakeRaw,    setStakeRaw]    = useState('10.00');
     const [displayCur,  setDisplayCur]  = useState(getDisplayCurrency());
@@ -364,8 +436,14 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
 
     useEffect(() => subscribeCurrency(() => setDisplayCur(getDisplayCurrency())), []);
     useEffect(() => {
-        setTicks(t => Math.min(Math.max(t, group.minDur), group.maxDur));
-    }, [group]);
+        const firstUnit = group.supportedUnits[0];
+        setDurationUnit(firstUnit);
+        const range = firstUnit === 't'
+            ? { min: group.minDur, max: group.maxDur }
+            : DUR_RANGE[firstUnit];
+        const picks = DUR_QUICK_PICKS[firstUnit].filter(n => n >= range.min && n <= range.max);
+        setTicks(picks.length > 0 ? picks[0] : range.min);
+    }, [groupIdx]); // eslint-disable-line react-hooks/exhaustive-deps
 
     /* ── Payout fetch ─────────────────────────────────────────────────────── */
     // Also caches proposal IDs so the buy button can execute instantly
@@ -376,7 +454,7 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
         const base: any = {
             proposal: 1, amount: stake, basis: 'stake',
             currency: getDisplayCurrency() || 'USD',
-            duration: ticks, duration_unit: group.durationUnit,
+            duration: ticks, duration_unit: durationUnit,
             underlying_symbol: symbol,
         };
         if (group.needsBarrier) base.barrier = String(barrier);
@@ -390,7 +468,7 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
             setOverPayout(aP > 0 ? aP : null);
             setUnderPayout(bP > 0 ? bP : null);
             // Cache proposal IDs for instant buy (valid ~30s; we use 25s)
-            const cacheKey = `${group.id}|${barrier}|${ticks}|${stake}|${symbol}`;
+            const cacheKey = `${group.id}|${barrier}|${ticks}|${durationUnit}|${stake}|${symbol}`;
             if (aRes?.proposal?.id || bRes?.proposal?.id) {
                 cachedProposalRef.current = {
                     key:      cacheKey,
@@ -404,7 +482,7 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
         } catch {
             setOverPayout(null); setUnderPayout(null);
         }
-    }, [symbol, stake, ticks, barrier, group]);
+    }, [symbol, stake, ticks, durationUnit, barrier, group]);
 
     useEffect(() => {
         if (payoutTimerRef.current) clearTimeout(payoutTimerRef.current);
@@ -436,7 +514,7 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                 proposal: 1, amount: stake, basis: 'stake',
                 contract_type: contractType,
                 currency: getDisplayCurrency() || 'USD',
-                duration: ticks, duration_unit: group.durationUnit,
+                duration: ticks, duration_unit: durationUnit,
                 underlying_symbol: symbol,
             };
             if (group.needsBarrier) req.barrier = String(barrier);
@@ -449,7 +527,7 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
             // change (barrier, ticks, stake, symbol). Reusing that ID means the
             // buy message hits the server on the very next WebSocket frame — no
             // extra proposal latency — so the contract enters on the current tick.
-            const cacheKey = `${group.id}|${barrier}|${ticks}|${stake}|${symbol}`;
+            const cacheKey = `${group.id}|${barrier}|${ticks}|${durationUnit}|${stake}|${symbol}`;
             const cached   = cachedProposalRef.current;
             let proposalId: string | null = null;
             let askPrice:   number        = stake;
@@ -478,7 +556,7 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
             try {
                 publishMasterTrade({
                     symbol, contract_type: contractType, stake,
-                    duration: ticks, duration_unit: group.durationUnit,
+                    duration: ticks, duration_unit: durationUnit,
                     ...(group.needsBarrier ? { barrier: String(barrier) } : {}),
                     source: getMasterSource(), time: Date.now(),
                 });
@@ -579,7 +657,7 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
             try {
                 publishMasterTrade({
                     symbol, contract_type: contractType, stake,
-                    duration: ticks, duration_unit: group.durationUnit,
+                    duration: ticks, duration_unit: durationUnit,
                     ...(group.needsBarrier ? { barrier: String(barrier) } : {}),
                     source: getMasterSource(), time: Date.now(), contract_id: Number(contractId),
                 });
@@ -590,7 +668,7 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
             setLoading(null);
             setTimeout(() => setResult(null), 4000);
         }
-    }, [loading, group, barrier, ticks, stake, symbol, warmProposalCache]);
+    }, [loading, group, barrier, ticks, durationUnit, stake, symbol, warmProposalCache]);
 
     /* ── Derived state ────────────────────────────────────────────────────── */
     const OVER_LABELS: Record<string, string>  = { over_under: 'Over', even_odd: 'Even', match_differ: 'Matches', asian: 'Asian Up', touch: 'Touch', run_high_low: 'Run High', reset: 'Reset Call', ends_between: 'Ends In', stays_between: 'Stays Between' };
@@ -818,7 +896,7 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                     <button className='mcv-panel__summary-item' onClick={() => setShowDurationSheet(true)}>
                         <span className='mcv-panel__summary-lbl'>Duration</span>
                         <span className='mcv-panel__summary-val'>
-                            {ticks} {group.durationUnit === 't' ? 'ticks' : 'min'}
+                            {ticks} {DUR_UNIT_LABELS[durationUnit].toLowerCase()}
                         </span>
                     </button>
                     <div className='mcv-panel__summary-sep' />
@@ -907,10 +985,11 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
             {showDurationSheet && (
                 <DurationSheet
                     ticks={ticks}
-                    min={group.minDur}
-                    max={group.maxDur}
-                    unit={group.durationUnit}
-                    onSet={setTicks}
+                    durationUnit={durationUnit}
+                    supportedUnits={group.supportedUnits}
+                    minTickDur={group.minDur}
+                    maxTickDur={group.maxDur}
+                    onSet={(n, unit) => { setTicks(n); setDurationUnit(unit); }}
                     onClose={() => setShowDurationSheet(false)}
                 />
             )}
