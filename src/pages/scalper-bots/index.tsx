@@ -6,6 +6,7 @@ import { DBOT_TABS } from '@/constants/bot-contents';
 import { useDerivTrade } from '@/hooks/useDerivTrade';
 import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import { applyCommission } from '@/utils/commission';
+import { isFastExecutionEnabled } from '@/utils/execution-speed';
 import { observer as globalObserver, api_base } from '@/external/bot-skeleton';
 import { isEnded } from '@/components/shared';
 import manifest from '../../../public/bots/scalpers/manifest.json';
@@ -48,8 +49,9 @@ type RiskManagerConfig = {
    Any break in the sequence resets that phase from scratch. */
 type VirtualHookConfig = {
     enabled: boolean;
-    hookLoss: number;   // consecutive virtual losses required
-    hookWin: number;    // consecutive virtual wins required after losses (0 = none)
+    hookLoss: number;    // consecutive virtual losses required
+    hookWin: number;     // consecutive virtual wins required after losses (0 = none)
+    recoveryMode: boolean; // VHR: after any real-money loss, do 1 virtual check before re-entering
 };
 
 /* Strategy Logic — condition-based entry engine (mirrors the reference "OR Group" UI) */
@@ -144,7 +146,7 @@ const DEFAULT_RM: RiskManagerConfig = {
     multiplier: 2, overrideStake: 20,
 };
 
-const DEFAULT_VH: VirtualHookConfig = { enabled: false, hookLoss: 3, hookWin: 1 };
+const DEFAULT_VH: VirtualHookConfig = { enabled: false, hookLoss: 3, hookWin: 1, recoveryMode: false };
 
 /* The default condition mirrors checkEntry()'s contrarian logic exactly, so
    turning Strategy Logic on doesn't change default behaviour — it just makes
@@ -1149,7 +1151,7 @@ const BotDetail: React.FC<{
                ULTRA TURBO / ULTRA FAST caps this at 300 ms — enough for normal
                teardown but tight enough to catch the digit window before the
                next tick. */
-            const teardownMax = params.ultraTurbo ? 300 : 3000;
+            const teardownMax = params.ultraTurbo ? 50 : (isFastExecutionEnabled() ? 150 : 3000);
             const teardownStart = Date.now();
             while (api_base.is_stopping && Date.now() - teardownStart < teardownMax) {
                 await new Promise(r => setTimeout(r, 20));
@@ -1180,7 +1182,7 @@ const BotDetail: React.FC<{
                false "win", stopping the bot after every loss.
                50 ms for ultra/turbo (increased from 25 ms for more reliable drain),
                60 ms normal. */
-            const drainMs = params.ultraTurbo ? 50 : 60;
+            const drainMs = params.ultraTurbo ? 0 : (isFastExecutionEnabled() ? 10 : 60);
             await new Promise(r => setTimeout(r, drainMs));
 
             patchWorkspaceParams({
@@ -1353,6 +1355,7 @@ const BotDetail: React.FC<{
     const marketListRef   = useRef<string[]>([cfg.market]);
     const multiScanRef    = useRef(false);
     const firstTradeRef   = useRef(true);
+    const vhrActiveRef    = useRef(false); // VHR: flagged after real-money loss when recoveryMode is on
     const prevConnectedRef = useRef(true);
 
     useEffect(() => subscribeCurrency(() => setDisplayCur(getDisplayCurrency())), []);
@@ -1528,7 +1531,9 @@ const BotDetail: React.FC<{
             'SESSION_FINGERPRINT: DECOUPLED FROM ACCOUNT',
             'TRAFFIC_OBFUSCATION: ACTIVE',
             cfg.stealthMode ? '🛡 STEALTH_MODE: TICK_PRICES OBFUSCATED IN LOG' : 'STEALTH_MODE: STANDARD LOGGING',
-            cfg.virtualHook.enabled ? `🔮 VIRTUAL_HOOK: ARMED — ${cfg.virtualHook.hookLoss}L → ${cfg.virtualHook.hookWin}W pattern` : 'VIRTUAL_HOOK: DISABLED',
+            cfg.virtualHook.enabled
+                ? `🔮 VIRTUAL_HOOK: ARMED — ${cfg.virtualHook.hookLoss}L → ${cfg.virtualHook.hookWin}W pattern${cfg.virtualHook.recoveryMode ? ' + VHR active' : ''}`
+                : cfg.virtualHook.recoveryMode ? '⚡ VHR: RECOVERY MODE ONLY (1-virtual check on each real loss)' : 'VIRTUAL_HOOK: DISABLED',
             'MARKET_FEED_INTEGRITY: OK',
             '▶ SCAN ENGINE: READY',
         ];
@@ -1668,7 +1673,75 @@ const BotDetail: React.FC<{
                 const scanStartedAt = Date.now();
                 let marketSwitched = false;
                 let scanTick = 0;
+
+                /* ── Virtual Hook Recovery (VHR) gate ─────────────────────────────────────
+                   When VHR is active (set by the loss handler below), skip the full
+                   entry scan and do exactly ONE virtual tick check instead.
+
+                   Logic:
+                     • Virtual result = LOSS → market confirms the losing pattern
+                       → fire recovery trade immediately (entry = true, bypass inner scan)
+                     • Virtual result = WIN  → pattern not confirmed yet
+                       → clear VHR flag, run the normal entry scan as usual
+
+                   VHR fires independently of the full Virtual Hook pattern — it activates
+                   whenever cfg.virtualHook.recoveryMode is enabled, even when the main
+                   hookLoss/hookWin gate (cfg.virtualHook.enabled) is off.              */
                 let entry = false;
+                if (vhrActiveRef.current && cfg.virtualHook.recoveryMode) {
+                    vhrActiveRef.current = false; // consume the flag for this iteration
+                    addLog('⚡ VHR: 1-VIRTUAL CHECK — evaluating recovery entry...', 'hack');
+
+                    // Wait for exactly one live tick
+                    await new Promise<void>(res => {
+                        let done = false;
+                        const fin = () => { if (!done) { done = true; res(); } };
+                        tickSignalRef.current = fin;
+                        setTimeout(fin, 3000); // fallback: don't hang if feed is slow
+                    });
+
+                    if (!stopRef.current) {
+                        const vDigit = digitWindowRef.current[0] ?? 5;
+                        const vPred  = slotBarrier() ?? bot.prediction ?? 5;
+                        let   vWon   = false;
+                        switch (bot.contractType) {
+                            case 'DIGITEVEN':  vWon = vDigit % 2 === 0; break;
+                            case 'DIGITODD':   vWon = vDigit % 2 !== 0; break;
+                            case 'DIGITOVER':  vWon = vDigit > vPred;   break;
+                            case 'DIGITUNDER': vWon = vDigit < vPred;   break;
+                            case 'DIGITMATCH': vWon = vDigit === vPred;  break;
+                            case 'DIGITDIFF':  vWon = vDigit !== vPred;  break;
+                            case 'CALL':
+                                vWon = (priceWindowRef.current[0] ?? 0) > (priceWindowRef.current[1] ?? priceWindowRef.current[0] ?? 0);
+                                break;
+                            case 'PUT':
+                                vWon = (priceWindowRef.current[0] ?? 0) < (priceWindowRef.current[1] ?? priceWindowRef.current[0] ?? 0);
+                                break;
+                            default: vWon = vDigit % 2 === 0; break;
+                        }
+                        const vProfit = vWon ? +(curStake * 0.85).toFixed(2) : -curStake;
+                        setTxList(prev => [{
+                            id: ++txIdRef.current, time: ts(),
+                            market: curMarket,
+                            type: `[VHR] ${contractLabel(bot)}`,
+                            stake: curStake,
+                            barrier: slotBarrier() ?? null,
+                            result: vWon ? 'won' : 'lost',
+                            profit: vProfit,
+                            exitDigit: vDigit,
+                            virtual: true,
+                        }, ...prev]);
+
+                        if (!vWon) {
+                            addLog(`⚡ VHR ❌ VIRTUAL LOSS [${vDigit}] — PATTERN CONFIRMED → ENTERING RECOVERY TRADE IMMEDIATELY`, 'entry');
+                            entry = true; // bypass the inner scan; fire the real recovery trade now
+                        } else {
+                            addLog(`⚡ VHR ✅ VIRTUAL WIN [${vDigit}] — pattern not confirmed → resuming normal scan`, 'scan');
+                            // entry remains false → inner scan will run normally
+                        }
+                    }
+                }
+
                 while (!entry && !stopRef.current) {
                     /* ── Network/feed watchdog: no real ticks for 30 s → force reconnect ──
                        lastTickAtRef is updated by every live tick in subscribeMarket, so this
@@ -2194,12 +2267,24 @@ const BotDetail: React.FC<{
                         }
                     }
 
+                    /* ── Virtual Hook Recovery: queue 1-virtual-check recovery on next scan ──
+                       Sets vhrActiveRef so the NEXT outer iteration does a 1-tick virtual
+                       simulation before re-entering. If virtual = LOSS (confirms pattern),
+                       the recovery real trade fires immediately — skipping the full entry scan.
+                       This fires independently of the main VH hookLoss/hookWin gate. */
+                    if (cfg.virtualHook.recoveryMode) {
+                        vhrActiveRef.current = true;
+                        addLog('⚡ VHR: REAL LOSS FLAGGED — instant 1-virtual recovery check queued for next scan', 'hack');
+                    }
+
                     /* Buffer between loss cycles — gives lingering bot.stop events a
                        chance to drain before the new cycle registers its listeners.
-                       The drain delay inside runXmlBotCycle handles most cases;
-                       this is the outer-loop safety gap.
-                       Ultra Turbo / Ultra Fast: shrink to 50 ms for max throughput. */
-                    await new Promise(r => setTimeout(r, ultraTurboRef.current || fastExecRef.current === 'ultra' ? 50 : 300));
+                       Fast/UltraFast: 0-30 ms (VHR will wait 1 tick anyway on next iter).
+                       Normal: 50 ms safety gap. */
+                    const lossBufferMs = ultraTurboRef.current || fastExecRef.current === 'ultra' ? 0
+                        : fastExecRef.current === 'fast' ? 30
+                        : 50;
+                    await new Promise(r => setTimeout(r, lossBufferMs));
                     continue;
                 }
 
@@ -2846,6 +2931,27 @@ const BotDetail: React.FC<{
                                     </div>
                                 </div>
                                 <p className='sb-hint'>Example: 3 losses → 1 win means the bot will simulate 3 losses then 1 win in a row before placing a real trade. Any break in the sequence restarts that phase.</p>
+
+                                {/* ── Virtual Hook Recovery ── */}
+                                <div style={{ marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(168,85,247,0.25)' }}>
+                                    <div className='sb-field-row sb-field-row--center'>
+                                        <label style={{ color: '#a855f7', fontWeight: 700 }}>⚡ Virtual Hook Recovery</label>
+                                        <button
+                                            className={`sb-toggle ${cfg.virtualHook.recoveryMode ? 'on' : 'off'}`}
+                                            onClick={() => vhSet({ recoveryMode: !cfg.virtualHook.recoveryMode })}
+                                            disabled={running}
+                                            style={cfg.virtualHook.recoveryMode ? { background: 'linear-gradient(135deg,#a855f7,#7c3aed)', color: '#fff' } : undefined}
+                                        >
+                                            {cfg.virtualHook.recoveryMode ? '⚡ ON' : 'OFF'}
+                                        </button>
+                                    </div>
+                                    <p className='sb-hint' style={{ marginTop: '0.4rem' }}>
+                                        {cfg.virtualHook.recoveryMode
+                                            ? <><strong style={{ color: '#a855f7' }}>⚡ Active:</strong> After every real-money loss the bot instantly checks <strong>1 virtual trade</strong>. If the virtual result is also a LOSS (pattern confirmed), the recovery trade fires immediately — bypassing the full entry scan for the fastest possible loss recovery. Works even without the full Virtual Hook pattern above.</>
+                                            : <>When enabled: after every real-money loss, the bot does <strong>1 quick virtual check</strong>. A virtual loss confirms the pattern → recovery trade fires instantly. A virtual win → normal scan resumes. Zero-delay loss recovery.</>
+                                        }
+                                    </p>
+                                </div>
                             </>
                         )}
                     </SbAccordion>
