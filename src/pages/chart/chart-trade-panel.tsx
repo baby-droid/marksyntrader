@@ -454,10 +454,10 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
 
                         if (!pocSubId && res.subscription?.id) pocSubId = res.subscription.id;
 
-                        // ── Lock in entry_tick_time (Deriv API: epoch of the entry spot) ──
-                        // All market types (plain Volatility, 1s, Jump, Bear/Bull, Boom/Crash)
-                        // include the entry spot as tick_stream[0] with epoch == entry_tick_time.
-                        // T1 = first tick where epoch > entry_tick_time.
+                        // ── Lock in entry_tick_time (Deriv API: epoch of the entry tick) ──
+                        // Counting rule (chart-wrapper owns the actual count):
+                        //   epoch >= entry_tick_time → T-tick (entry tick = T1)
+                        //   epoch <  entry_tick_time → pre-contract, skip
                         // entry_tick_time may be 0 on the FIRST POC message (server timing);
                         // if so, fall back to tick_stream[0].epoch (same value once set).
                         if (savedEntryTime === 0) {

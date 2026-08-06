@@ -408,10 +408,11 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
     }, [warmProposalCache]);
 
     /* ── Market type (informational) ─────────────────────────────────────── */
-    // Deriv's entry-tick stripping (epoch > entry_tick_time) is uniform across
-    // all market types. The previous per-market .slice(1) caused a double-skip
-    // for 1s/Jump markets and has been removed. All markets use one filter.
-    // Keeping this constant for potential future market-specific UI (e.g. labels).
+    // Tick counting rule (driven by chart-wrapper.tsx, which owns pendingTrades):
+    //   epoch >= entry_tick_time → T-tick (entry tick itself = T1)
+    //   epoch <  entry_tick_time → pre-contract tick, skip
+    // Deriv returns different entry_tick_time values per market family so the
+    // same >= rule naturally produces the correct T1 for every market type.
     const is1sMarket   = /^1HZ/i.test(symbol);
     const isJumpMarket = /^JD/i.test(symbol);
 
@@ -531,8 +532,9 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                         if (!pocSubId && res.subscription?.id) pocSubId = res.subscription.id;
 
                         // ── Lock in entry_tick_time once (same logic as PC panel) ──────
-                        // All market types: tick_stream[0].epoch === entry_tick_time.
-                        // T1 = first tick where epoch > entry_tick_time.
+                        // Counting rule (chart-wrapper owns the count):
+                        //   epoch >= entry_tick_time → T-tick (entry tick = T1)
+                        //   epoch <  entry_tick_time → pre-contract, skip
                         // entry_tick_time may be 0 on the first POC message; fall back to
                         // tick_stream[0].epoch (identical value once available).
                         if (savedEntryTime === 0) {
