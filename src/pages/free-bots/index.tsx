@@ -5,6 +5,7 @@ import { useStore } from '@/hooks/useStore';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { api_base } from '@/external/bot-skeleton';
 import { isFastExecutionEnabled } from '@/utils/execution-speed';
+import { setTradeContext } from '@/utils/trade-metadata';
 import './free-bots.scss';
 
 const FREE_BOTS = [
@@ -357,6 +358,7 @@ const FreeBots = observer(() => {
   }, [store, loadXmlIntoWorkspace]);
 
   const handleLoadAndRun = useCallback(async (bot: typeof FREE_BOTS[0]) => {
+    setTradeContext({ page: 'Free Bots', bot: bot.name });
     setLoadingId(bot.id);
     try {
       const res = await fetch(bot.xmlFile);

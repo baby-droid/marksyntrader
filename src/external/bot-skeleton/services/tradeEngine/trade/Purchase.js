@@ -1,4 +1,5 @@
 import { getExecutionSpeed, getExecutionSpeedDelay, isFastExecutionEnabled, getPurchasesPerTick, SPEED_PURCHASES_PER_TICK } from '../../../../../utils/execution-speed';
+import { recordTradeMeta } from '../../../../../utils/trade-metadata';
 import { isBotPaused } from '../../../../../utils/bot-pause-flag';
 import { LogTypes } from '../../../constants/messages';
 import { api_base } from '../../api/api-base';
@@ -131,6 +132,14 @@ export default Engine =>
                     data: buy.transaction_id,
                     buy,
                 });
+
+                // Record speed mode + page/bot context for this contract
+                try {
+                    recordTradeMeta(buy.contract_id, {
+                        speed: getExecutionSpeed(),
+                        fast:  isFastExecutionEnabled(),
+                    });
+                } catch { /* non-fatal */ }
 
                 this.contractId = buy.contract_id;
                 this.store.dispatch(purchaseSuccessful());

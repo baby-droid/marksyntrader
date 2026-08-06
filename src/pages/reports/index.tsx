@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { observer } from 'mobx-react-lite';
 import { api_base } from '@/external/bot-skeleton';
 import { useDerivTrading } from '@/hooks/useDerivTrading';
+import { getTradeMeta, speedLabel } from '@/utils/trade-metadata';
 import './reports.scss';
 
 /* ── helpers ── */
@@ -218,7 +219,9 @@ const SIDEBAR_ITEMS = [
 ];
 
 /* ── Contract Detail Modal — matches dtrader.deriv.com layout ── */
-const ContractDetailModal: React.FC<{ trade: any; info: any; cur: string; onClose: () => void }> = ({ trade, info, cur, onClose }) => (
+const ContractDetailModal: React.FC<{ trade: any; info: any; cur: string; onClose: () => void }> = ({ trade, info, cur, onClose }) => {
+    const meta = getTradeMeta(trade?.contract_id);
+    return (
     <div className='rp__modal-overlay' onClick={onClose}>
         <div className='rp__modal' onClick={e => e.stopPropagation()}>
             <div className='rp__modal-titlebar'>
@@ -317,6 +320,32 @@ const ContractDetailModal: React.FC<{ trade: any; info: any; cur: string; onClos
                         <span>Exit time</span>
                         <strong>{fmtShort(trade.sell_time)}</strong>
                     </div>
+
+                    {/* ── Trading context (speed mode, page, bot) ── */}
+                    {meta && (
+                        <>
+                            <div className='rp__modal-divider' />
+                            <div className='rp__modal-meta'>
+                                <div className='rp__modal-meta-title'>Trading Context</div>
+                                <div className='rp__modal-meta-row'>
+                                    <span className='rp__modal-meta-label'>⚡ Speed Mode</span>
+                                    <span className={`rp__modal-meta-badge rp__modal-meta-badge--speed rp__modal-meta-badge--${meta.speed}${meta.fast ? ' fast' : ''}`}>
+                                        {speedLabel(meta)}
+                                    </span>
+                                </div>
+                                <div className='rp__modal-meta-row'>
+                                    <span className='rp__modal-meta-label'>📍 Page Used</span>
+                                    <span className='rp__modal-meta-val'>{meta.page}</span>
+                                </div>
+                                {meta.bot && (
+                                    <div className='rp__modal-meta-row'>
+                                        <span className='rp__modal-meta-label'>🤖 Bot / Strategy</span>
+                                        <span className='rp__modal-meta-val'>{meta.bot}</span>
+                                    </div>
+                                )}
+                            </div>
+                        </>
+                    )}
                 </div>
 
                 {/* Right: Tick chart + settlement data */}
@@ -362,7 +391,8 @@ const ContractDetailModal: React.FC<{ trade: any; info: any; cur: string; onClos
             </div>
         </div>
     </div>
-);
+    );
+};
 
 const Reports = observer(() => {
     const { balance, currency } = useDerivTrading();

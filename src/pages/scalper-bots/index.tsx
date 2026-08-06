@@ -7,6 +7,7 @@ import { useDerivTrade } from '@/hooks/useDerivTrade';
 import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import { applyCommission } from '@/utils/commission';
 import { isFastExecutionEnabled } from '@/utils/execution-speed';
+import { setTradeContext } from '@/utils/trade-metadata';
 import { observer as globalObserver, api_base } from '@/external/bot-skeleton';
 import { isEnded } from '@/components/shared';
 import manifest from '../../../public/bots/scalpers/manifest.json';
@@ -321,9 +322,12 @@ const DEFAULT_CONFIG = (bot: TScalperBot): BotConfig => ({
 const ALL_MARKETS = [
     // ── Volatility 1-second (fastest — 1s ticks) ──
     { label: 'V10 (1s)',    value: '1HZ10V'    },
+    { label: 'V15 (1s)',    value: '1HZ15V'    },
     { label: 'V25 (1s)',    value: '1HZ25V'    },
+    { label: 'V30 (1s)',    value: '1HZ30V'    },
     { label: 'V50 (1s)',    value: '1HZ50V'    },
     { label: 'V75 (1s)',    value: '1HZ75V'    },
+    { label: 'V90 (1s)',    value: '1HZ90V'    },
     { label: 'V100 (1s)',   value: '1HZ100V'   },
     { label: 'V150 (1s)',   value: '1HZ150V'   },
     { label: 'V200 (1s)',   value: '1HZ200V'   },
@@ -1611,6 +1615,8 @@ const BotDetail: React.FC<{
     /* ── Start bot (with real tick entry detection) ── */
     const startBot = useCallback(async () => {
         if (running || !derivTrade.authorized) return;
+        // Record which page + bot is trading so Report can display it
+        setTradeContext({ page: 'Scalper Bots', bot: bot.name });
         stopRef.current    = false;
         consLossRef.current = 0;
         sessionPnlRef.current = 0;

@@ -5,6 +5,7 @@ import DigitCircles from '@/components/digit-circles';
 import { useDigitStats } from '@/hooks/useDigitStats';
 import { useDerivTrade } from '@/hooks/useDerivTrade';
 import { isFastExecutionEnabled, subscribeFastExecution } from '@/utils/execution-speed';
+import { setTradeContext } from '@/utils/trade-metadata';
 import './speed-lab.scss';
 
 const AccountBadge: React.FC = () => {
@@ -246,6 +247,7 @@ const SpeedLab = observer(() => {
         setWinCount(0);
         setLossCount(0);
 
+        setTradeContext({ page: 'Speed Lab', bot: `${contractType} on ${symbol}` });
         runRef.current = true;
         setIsRunning(true);
         const cfg = SPEED_MODES[speedMode];
