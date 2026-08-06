@@ -238,6 +238,12 @@
     z-index: 2;
 
     &--final { color: #f59e0b; background: rgba(245,158,11,0.14); }
+
+    /* Bottom row (digits 5-9): label sits below the circle */
+    &--below {
+        top: auto;
+        bottom: -20px;
+    }
 }
 
 /* ── Navigation arrows ──────────────────────────────────────────────────── */

@@ -45,11 +45,12 @@ interface DigitCircleProps {
     isWin: boolean;
     isLoss: boolean;
     tickLabels: string[];
+    labelBelow?: boolean;
     onClick: () => void;
 }
 
 const DigitCircle: React.FC<DigitCircleProps> = ({
-    digit, pct, rank, isBarrier, isCurrent, isWin, isLoss, tickLabels, onClick,
+    digit, pct, rank, isBarrier, isCurrent, isWin, isLoss, tickLabels, labelBelow, onClick,
 }) => {
     const SIZE   = 76;
     const CX     = SIZE / 2;
@@ -70,17 +71,20 @@ const DigitCircle: React.FC<DigitCircleProps> = ({
     const hasT    = tickLabels.length > 0;
     const isFinal = tickLabels.some(l => l.includes('★'));
 
+    const tLabelEl = hasT && (
+        <div className={[
+            'mcv-circle__tlabel',
+            labelBelow ? 'mcv-circle__tlabel--below' : '',
+            isFinal ? 'mcv-circle__tlabel--final' : '',
+        ].filter(Boolean).join(' ')}>
+            {tickLabels.map(l => l.replace('★', '')).join(' ')}
+        </div>
+    );
+
     return (
         <div className='mcv-circle' onClick={onClick}>
-            {/* T-label always floats ABOVE the circle for all rows */}
-            {hasT && (
-                <div className={[
-                    'mcv-circle__tlabel',
-                    isFinal ? 'mcv-circle__tlabel--final' : '',
-                ].filter(Boolean).join(' ')}>
-                    {tickLabels.map(l => l.replace('★', '')).join(' ')}
-                </div>
-            )}
+            {/* Top row (0-4): label above; bottom row (5-9): label below */}
+            {!labelBelow && tLabelEl}
             <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
                 {/* Solid fill circle */}
                 <circle cx={CX} cy={CX} r={R} fill={fillColor} stroke={ringStroke} strokeWidth={SW} />
@@ -97,6 +101,7 @@ const DigitCircle: React.FC<DigitCircleProps> = ({
             <div className={`mcv-circle__pct${isBarrier ? ' mcv-circle__pct--barrier' : ''}`}>
                 {pct.toFixed(1)}%
             </div>
+            {labelBelow && tLabelEl}
         </div>
     );
 };
@@ -652,6 +657,7 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                         isWin={isWin}
                         isLoss={isLoss}
                         tickLabels={tLabels}
+                        labelBelow={isBottom}
                         onClick={() => onBarrierChange(d)}
                     />
                 );

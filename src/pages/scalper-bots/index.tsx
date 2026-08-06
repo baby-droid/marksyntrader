@@ -1993,14 +1993,16 @@ const BotDetail: React.FC<{
                 addLog('⚡ ENTRY_SIGNAL: DETECTED — EXECUTING TRADE', 'entry');
 
                 /* ══════════════════════════════════════════════════════════════
-                   Virtual Hook gate — pre-trade pattern filter.
-                   When enabled, every entry signal runs a SIMULATED trade
-                   (no real money, no XML bot). Results appear in the
-                   Transactions tab as [VIRTUAL] rows.  Only when the exact
-                   configured sequence (hookLoss losses → hookWin wins) has
-                   been completed consecutively does the gate open and a REAL
-                   trade fire.  Any break in a streak resets that phase.
+                   Virtual Hook gates — pre-trade pattern filters.
+                   VHook and VHA are INDEPENDENT: whichever meets its pattern
+                   first unlocks the real trade.  If VHook unlocks, VHA is
+                   skipped (no duplicate simulation).  If VHook is enabled but
+                   doesn't unlock, VHA gets its chance.  Only if ALL enabled
+                   gates fail does the loop continue without a real trade.
                    ══════════════════════════════════════════════════════════════ */
+                let realTradeUnlocked = false;
+                let vhaRealUnlocked   = false;
+
                 if (cfg.virtualHook.enabled && !stopRef.current) {
                     const vBarrier = slotBarrier();
                     const phaseDesc = vPhase === 'loss'
@@ -2057,8 +2059,6 @@ const BotDetail: React.FC<{
                     }, ...prev]);
 
                     // ── State machine: track the streak pattern ──
-                    let realTradeUnlocked = false;
-
                     if (vPhase === 'loss') {
                         if (!vWon) {
                             vLossCount++;
@@ -2095,12 +2095,10 @@ const BotDetail: React.FC<{
                         }
                     }
 
-                    if (!realTradeUnlocked) {
-                        setEntryReady(false);
-                        continue; // pattern not yet met — go back and scan for next entry signal
+                    if (realTradeUnlocked) {
+                        addLog(`🔓 VHOOK GATE OPEN — executing REAL trade with account funds`, 'entry');
                     }
-                    // Pattern met → fall through to real trade execution
-                    addLog(`🔓 VHOOK GATE OPEN — executing REAL trade with account funds`, 'entry');
+                    // Whether unlocked or not, fall through — VHA (if enabled) gets its chance
                 }
 
                 /* ══════════════════════════════════════════════════════════════
@@ -2109,8 +2107,9 @@ const BotDetail: React.FC<{
                             lossToTrigger consecutive virtual LOSSES →
                             REAL trade unlocked.
                    Any win during the loss phase resets the entire sequence.
+                   Skipped when VHook already unlocked (no duplicate simulation).
                    ══════════════════════════════════════════════════════════════ */
-                if (cfg.virtualHookAlt.enabled && !stopRef.current) {
+                if (cfg.virtualHookAlt.enabled && !stopRef.current && !realTradeUnlocked) {
                     const vhaBarrier = slotBarrier();
                     const vhaPhaseDesc = vhaPhase === 'win'
                         ? `seeking wins: ${vhaWinCount}/${cfg.virtualHookAlt.winsRequired}`
@@ -2162,8 +2161,6 @@ const BotDetail: React.FC<{
                         virtual: true,
                     }, ...prev]);
 
-                    let vhaRealUnlocked = false;
-
                     if (vhaPhase === 'win') {
                         if (vhaWon) {
                             vhaWinCount++;
@@ -2191,11 +2188,15 @@ const BotDetail: React.FC<{
                         }
                     }
 
-                    if (!vhaRealUnlocked) {
-                        setEntryReady(false);
-                        continue;
+                    if (vhaRealUnlocked) {
+                        addLog(`🔓 VHA GATE OPEN — executing REAL trade with account funds`, 'entry');
                     }
-                    addLog(`🔓 VHA GATE OPEN — executing REAL trade with account funds`, 'entry');
+                }
+
+                /* ── Combined gate check: if any hook was enabled, at least one must unlock ── */
+                if ((cfg.virtualHook.enabled || cfg.virtualHookAlt.enabled) && !realTradeUnlocked && !vhaRealUnlocked) {
+                    setEntryReady(false);
+                    continue; // neither gate unlocked — scan for next entry signal
                 }
 
                 /* ── Dispatch WA signal for live signal widget ── */
