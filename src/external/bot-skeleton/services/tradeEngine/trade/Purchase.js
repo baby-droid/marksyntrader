@@ -1,4 +1,4 @@
-import { getExecutionSpeed, getExecutionSpeedDelay, SPEED_PURCHASES_PER_TICK } from '../../../../../utils/execution-speed';
+import { getExecutionSpeed, getExecutionSpeedDelay, isFastExecutionEnabled, SPEED_PURCHASES_PER_TICK } from '../../../../../utils/execution-speed';
 import { isBotPaused } from '../../../../../utils/bot-pause-flag';
 import { LogTypes } from '../../../constants/messages';
 import { api_base } from '../../api/api-base';
@@ -37,8 +37,8 @@ export function sellAllSideContracts() {
 function _acquireBuySlot() {
     const speed = getExecutionSpeed();
     const limit  = _buyRateLimit[speed] ?? 1;
-    // In crazy / turbo mode skip the throttle entirely — resolve immediately.
-    if (limit === 0) return Promise.resolve();
+    // In crazy / turbo / Fast mode skip the throttle entirely — resolve immediately.
+    if (limit === 0 || isFastExecutionEnabled()) return Promise.resolve();
     const now    = Date.now();
     // Remove timestamps older than 1 second
     _buyTimestamps = _buyTimestamps.filter(t => now - t < 1000);

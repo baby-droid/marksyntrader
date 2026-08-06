@@ -235,7 +235,7 @@ const SpeedLab = observer(() => {
                     });
                 } catch (e: any) {
                     logEntry(`❌ BATCH_ERROR: ${e?.message || 'Unknown'}`);
-                    await new Promise(r => setTimeout(r, 300));
+                    await new Promise(r => setTimeout(r, isFastExecutionEnabled() ? 0 : 300));
                 }
             } else {
                 // Sequential path: buy → await settlement → inter-trade delay → repeat
@@ -259,7 +259,7 @@ const SpeedLab = observer(() => {
                     if (POST_DELAY > 0) await new Promise(r => setTimeout(r, POST_DELAY));
                 } catch (e: any) {
                     logEntry(`❌ ${e?.message || 'Unknown error'}`);
-                    await new Promise(r => setTimeout(r, 300));
+                    await new Promise(r => setTimeout(r, isFastExecutionEnabled() ? 0 : 300));
                 }
             }
         }

@@ -1,6 +1,7 @@
 // @ts-nocheck
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { api_base } from '@/external/bot-skeleton';
+import { isFastExecutionEnabled } from '@/utils/execution-speed';
 import './auto-trades.scss';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -331,7 +332,7 @@ function AiBotCard({ bot, globalStake, globalMartingale, session, onSessionUpdat
                 if (localProfit <= -sl) { onLog('🛑 Stop loss hit'); break; }
             } catch (err: any) {
                 onLog(`⚠️ ${err?.message || 'Error'}`);
-                await new Promise(r => setTimeout(r, 1500));
+                await new Promise(r => setTimeout(r, isFastExecutionEnabled() ? 0 : 1500));
             }
         }
 
@@ -547,7 +548,7 @@ const AutoTrades: React.FC = () => {
                         ? currentCfg.stake
                         : Math.max(0.35, +(stk * currentCfg.martingale).toFixed(2));
                 } catch {
-                    await new Promise(r => setTimeout(r, 1500));
+                    await new Promise(r => setTimeout(r, isFastExecutionEnabled() ? 0 : 1500));
                 }
             }
             smartStopFlags.current[id] = false;

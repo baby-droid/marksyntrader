@@ -4,6 +4,7 @@ import { observer } from 'mobx-react-lite';
 import { useStore } from '@/hooks/useStore';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { api_base } from '@/external/bot-skeleton';
+import { isFastExecutionEnabled } from '@/utils/execution-speed';
 import './free-bots.scss';
 
 const FREE_BOTS = [
@@ -319,7 +320,7 @@ const FreeBots = observer(() => {
         await run_panel.onRunButtonClick();
         return;
       } catch {
-        if (attempt < 5) await new Promise(r => setTimeout(r, 500));
+        if (attempt < 5) await new Promise(r => setTimeout(r, isFastExecutionEnabled() ? 0 : 500));
       }
     }
   }, [store]);
@@ -378,7 +379,7 @@ const FreeBots = observer(() => {
       }
       setLoadedId(bot.id);
       setTimeout(() => setLoadedId(null), 4000);
-      if (loaded) setTimeout(() => autoRun(), 900);
+      if (loaded) setTimeout(() => autoRun(), isFastExecutionEnabled() ? 0 : 900);
     } catch (e) {
       console.error('Load & Run error', e);
       store?.dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING);

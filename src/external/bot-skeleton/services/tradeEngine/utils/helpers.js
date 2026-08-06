@@ -1,7 +1,7 @@
 import { findValueByKeyRecursively, formatTime, getRoundedNumber, isEmptyObject } from '@/components/shared';
 import { getLocalizedErrorMessage } from '@/constants/backend-error-messages';
 import { config } from '@/external/bot-skeleton/constants';
-import { getExecutionSpeed } from '../../../../../utils/execution-speed';
+import { getExecutionSpeed, isFastExecutionEnabled } from '../../../../../utils/execution-speed';
 import { localize } from '@deriv-com/translations';
 import { observer as globalObserver } from '../../../utils/observer';
 import { error as logError } from './broadcast';
@@ -140,9 +140,19 @@ const getBackoffDelayInMs = (error_obj, delay_index) => {
 
     const isRateLimit = code === 'RateLimit' || code === 'RateLimitExceeded';
 
+    // Fast Execution: retry rate-limit errors with near-zero delay (5 ms).
+    const speed = getExecutionSpeed();
+    if (isRateLimit && isFastExecutionEnabled()) {
+        const resolved_msg_type_fe = msg_type || echo_req?.msg_type || 'buy';
+        logError(getLocalizedErrorMessage('RateLimit', {
+            message_type: resolved_msg_type_fe, delay: 0.005,
+            request: echo_req?.req_id ?? '', message: message || localize('The market is closed'), trade_type: '',
+        }));
+        return 5;
+    }
+
     // In fast modes (crazy/turbo) retry rate-limit errors almost immediately —
     // 100 ms for crazy, 50 ms for turbo — never let delay_index compound them.
-    const speed = getExecutionSpeed();
     if (isRateLimit && speed === 'supersonic') {
         const fast_ms = 20;
         const next_delay_in_seconds = 0.02;
