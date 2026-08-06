@@ -1993,27 +1993,21 @@ const BotDetail: React.FC<{
                 addLog('⚡ ENTRY_SIGNAL: DETECTED — EXECUTING TRADE', 'entry');
 
                 /* ══════════════════════════════════════════════════════════════
-                   Virtual Hook gates — pre-trade pattern filters.
-                   VHook and VHA are INDEPENDENT: whichever meets its pattern
-                   first unlocks the real trade.  If VHook unlocks, VHA is
-                   skipped (no duplicate simulation).  If VHook is enabled but
-                   doesn't unlock, VHA gets its chance.  Only if ALL enabled
-                   gates fail does the loop continue without a real trade.
+                   Virtual Hook gates — VHook and VHA run on the SAME tick.
+                   Both state machines observe one shared tick wait per loop
+                   iteration so they accumulate pattern progress in parallel.
+                   Whichever meets its condition first (or both simultaneously)
+                   unlocks exactly ONE real trade — no double simulation, no
+                   duplicate buy.  If neither unlocks this iteration, continue.
                    ══════════════════════════════════════════════════════════════ */
                 let realTradeUnlocked = false;
                 let vhaRealUnlocked   = false;
 
-                if (cfg.virtualHook.enabled && !stopRef.current) {
-                    const vBarrier = slotBarrier();
-                    const phaseDesc = vPhase === 'loss'
-                        ? `seeking losses: ${vLossCount}/${cfg.virtualHook.hookLoss}`
-                        : `seeking wins: ${vWinCount}/${cfg.virtualHook.hookWin}`;
-                    addLog(`🔮 VHOOK [${phaseDesc}] — simulating virtual trade on ${curMarket}`, 'hack');
-                    addLog(`🔒 STEALTH: real funds protected — virtual simulation running`, 'hack');
-
-                    // Wait cfg.duration ticks then evaluate the contract outcome
-                    const vTicks = Math.max(1, cfg.duration);
-                    for (let _vt = 0; _vt < vTicks && !stopRef.current; _vt++) {
+                if ((cfg.virtualHook.enabled || cfg.virtualHookAlt.enabled) && !stopRef.current) {
+                    /* ── Shared tick wait: one wait serves both state machines ── */
+                    const sharedBarrier = slotBarrier();
+                    const sharedTicks   = Math.max(1, cfg.duration);
+                    for (let _vt = 0; _vt < sharedTicks && !stopRef.current; _vt++) {
                         await new Promise<void>(res => {
                             let done = false;
                             const fin = () => { if (!done) { done = true; res(); } };
@@ -2023,180 +2017,133 @@ const BotDetail: React.FC<{
                     }
                     if (stopRef.current) break;
 
-                    const vDigit = digitWindowRef.current[0] ?? 5;
-                    const vPred  = vBarrier ?? bot.prediction ?? 5;
-                    let   vWon   = false;
+                    /* ── Shared tick snapshot ── */
+                    const sharedDigit = digitWindowRef.current[0] ?? 5;
+                    const sharedPred  = sharedBarrier ?? bot.prediction ?? 5;
+                    let   sharedWon   = false;
                     switch (bot.contractType) {
-                        case 'DIGITEVEN':  vWon = vDigit % 2 === 0; break;
-                        case 'DIGITODD':   vWon = vDigit % 2 !== 0; break;
-                        case 'DIGITOVER':  vWon = vDigit > vPred; break;
-                        case 'DIGITUNDER': vWon = vDigit < vPred; break;
-                        case 'DIGITMATCH': vWon = vDigit === vPred; break;
-                        case 'DIGITDIFF':  vWon = vDigit !== vPred; break;
+                        case 'DIGITEVEN':  sharedWon = sharedDigit % 2 === 0; break;
+                        case 'DIGITODD':   sharedWon = sharedDigit % 2 !== 0; break;
+                        case 'DIGITOVER':  sharedWon = sharedDigit > sharedPred; break;
+                        case 'DIGITUNDER': sharedWon = sharedDigit < sharedPred; break;
+                        case 'DIGITMATCH': sharedWon = sharedDigit === sharedPred; break;
+                        case 'DIGITDIFF':  sharedWon = sharedDigit !== sharedPred; break;
                         case 'CALL': {
-                            const ep = priceWindowRef.current[Math.min(vTicks, priceWindowRef.current.length - 1)] ?? (priceWindowRef.current[0] ?? 0);
-                            vWon = (priceWindowRef.current[0] ?? 0) > ep;
+                            const ep = priceWindowRef.current[Math.min(sharedTicks, priceWindowRef.current.length - 1)] ?? (priceWindowRef.current[0] ?? 0);
+                            sharedWon = (priceWindowRef.current[0] ?? 0) > ep;
                             break;
                         }
                         case 'PUT': {
-                            const ep = priceWindowRef.current[Math.min(vTicks, priceWindowRef.current.length - 1)] ?? (priceWindowRef.current[0] ?? 0);
-                            vWon = (priceWindowRef.current[0] ?? 0) < ep;
+                            const ep = priceWindowRef.current[Math.min(sharedTicks, priceWindowRef.current.length - 1)] ?? (priceWindowRef.current[0] ?? 0);
+                            sharedWon = (priceWindowRef.current[0] ?? 0) < ep;
                             break;
                         }
-                        default: vWon = vDigit % 2 === 0; // fallback: even = win
+                        default: sharedWon = sharedDigit % 2 === 0;
                     }
 
-                    // Record virtual tx in Transactions tab (looks like a real row but labelled VIRTUAL)
-                    const vProfit = vWon ? +(curStake * 0.85).toFixed(2) : -curStake;
-                    setTxList(prev => [{
-                        id: ++txIdRef.current,
-                        time: ts(), market: curMarket,
-                        type: `[VIRTUAL] ${contractLabel(bot)}`,
-                        stake: curStake, barrier: vBarrier ?? null,
-                        result: vWon ? 'won' : 'lost',
-                        profit: vProfit, exitDigit: vDigit,
-                        virtual: true,
-                    }, ...prev]);
+                    /* ── VHook state machine (uses shared tick result) ── */
+                    if (cfg.virtualHook.enabled) {
+                        const phaseDesc = vPhase === 'loss'
+                            ? `seeking losses: ${vLossCount}/${cfg.virtualHook.hookLoss}`
+                            : `seeking wins: ${vWinCount}/${cfg.virtualHook.hookWin}`;
+                        addLog(`🔮 VHOOK [${phaseDesc}] exit[${sharedDigit}]`, 'hack');
 
-                    // ── State machine: track the streak pattern ──
-                    if (vPhase === 'loss') {
-                        if (!vWon) {
-                            vLossCount++;
-                            addLog(`🔮 VHOOK ❌ VIRTUAL LOSS  exit[${vDigit}]  losses in row: ${vLossCount}/${cfg.virtualHook.hookLoss}`, 'loss');
-                            if (vLossCount >= cfg.virtualHook.hookLoss) {
-                                if (cfg.virtualHook.hookWin === 0) {
-                                    // No win phase needed — pattern met immediately
-                                    addLog(`🔮 VHOOK 🚀 PATTERN MET (${cfg.virtualHook.hookLoss}L) — REAL TRADE UNLOCKED`, 'entry');
+                        const vProfit = sharedWon ? +(curStake * 0.85).toFixed(2) : -curStake;
+                        setTxList(prev => [{
+                            id: ++txIdRef.current, time: ts(), market: curMarket,
+                            type: `[VIRTUAL] ${contractLabel(bot)}`,
+                            stake: curStake, barrier: sharedBarrier ?? null,
+                            result: sharedWon ? 'won' : 'lost',
+                            profit: vProfit, exitDigit: sharedDigit, virtual: true,
+                        }, ...prev]);
+
+                        if (vPhase === 'loss') {
+                            if (!sharedWon) {
+                                vLossCount++;
+                                addLog(`🔮 VHOOK ❌ VIRTUAL LOSS  losses in row: ${vLossCount}/${cfg.virtualHook.hookLoss}`, 'loss');
+                                if (vLossCount >= cfg.virtualHook.hookLoss) {
+                                    if (cfg.virtualHook.hookWin === 0) {
+                                        addLog(`🔮 VHOOK 🚀 PATTERN MET (${cfg.virtualHook.hookLoss}L) — REAL TRADE UNLOCKED`, 'entry');
+                                        vLossCount = 0; vWinCount = 0; vPhase = 'loss';
+                                        realTradeUnlocked = true;
+                                    } else {
+                                        addLog(`🔮 VHOOK: ${cfg.virtualHook.hookLoss} losses confirmed — now seeking ${cfg.virtualHook.hookWin} win(s)`, 'hack');
+                                        vPhase = 'win'; vWinCount = 0;
+                                    }
+                                }
+                            } else {
+                                addLog(`🔮 VHOOK ✅ VIRTUAL WIN — loss streak broken, restarting`, 'win');
+                                vLossCount = 0;
+                            }
+                        } else { // 'win' phase
+                            if (sharedWon) {
+                                vWinCount++;
+                                addLog(`🔮 VHOOK ✅ VIRTUAL WIN  wins in row: ${vWinCount}/${cfg.virtualHook.hookWin}`, 'win');
+                                if (vWinCount >= cfg.virtualHook.hookWin) {
+                                    addLog(`🔮 VHOOK 🚀 PATTERN MET (${cfg.virtualHook.hookLoss}L → ${cfg.virtualHook.hookWin}W) — REAL TRADE UNLOCKED`, 'entry');
                                     vLossCount = 0; vWinCount = 0; vPhase = 'loss';
                                     realTradeUnlocked = true;
-                                } else {
-                                    addLog(`🔮 VHOOK: ${cfg.virtualHook.hookLoss} virtual losses confirmed — now seeking ${cfg.virtualHook.hookWin} consecutive virtual win(s)`, 'hack');
-                                    vPhase = 'win'; vWinCount = 0;
                                 }
-                            }
-                        } else {
-                            // Win during loss-seeking phase → reset streak (must start over)
-                            addLog(`🔮 VHOOK ✅ VIRTUAL WIN  exit[${vDigit}]  — loss streak broken, restarting`, 'win');
-                            vLossCount = 0;
-                        }
-                    } else { // 'win' phase
-                        if (vWon) {
-                            vWinCount++;
-                            addLog(`🔮 VHOOK ✅ VIRTUAL WIN  exit[${vDigit}]  wins in row: ${vWinCount}/${cfg.virtualHook.hookWin}`, 'win');
-                            if (vWinCount >= cfg.virtualHook.hookWin) {
-                                addLog(`🔮 VHOOK 🚀 PATTERN MET (${cfg.virtualHook.hookLoss}L → ${cfg.virtualHook.hookWin}W) — REAL TRADE UNLOCKED`, 'entry');
+                            } else {
+                                addLog(`🔮 VHOOK ❌ VIRTUAL LOSS — win streak broken, restarting`, 'loss');
                                 vLossCount = 0; vWinCount = 0; vPhase = 'loss';
-                                realTradeUnlocked = true;
                             }
-                        } else {
-                            // Loss during win phase → reset all (start from scratch)
-                            addLog(`🔮 VHOOK ❌ VIRTUAL LOSS  exit[${vDigit}]  — win streak broken, restarting loss collection`, 'loss');
-                            vLossCount = 0; vWinCount = 0; vPhase = 'loss';
                         }
+
+                        if (realTradeUnlocked) addLog(`🔓 VHOOK GATE OPEN — executing REAL trade`, 'entry');
                     }
 
-                    if (realTradeUnlocked) {
-                        addLog(`🔓 VHOOK GATE OPEN — executing REAL trade with account funds`, 'entry');
-                    }
-                    // Whether unlocked or not, fall through — VHA (if enabled) gets its chance
-                }
+                    /* ── VHA state machine (same shared tick — independent counter) ── */
+                    if (cfg.virtualHookAlt.enabled) {
+                        const vhaPhaseDesc = vhaPhase === 'win'
+                            ? `seeking wins: ${vhaWinCount}/${cfg.virtualHookAlt.winsRequired}`
+                            : `seeking losses: ${vhaLossCount}/${cfg.virtualHookAlt.lossToTrigger}`;
+                        addLog(`💎 VHA [${vhaPhaseDesc}] exit[${sharedDigit}]`, 'hack');
 
-                /* ══════════════════════════════════════════════════════════════
-                   Virtual Hook ALTERNATIVE gate — Win-streak → Loss trigger.
-                   Pattern: winsRequired consecutive virtual WINS →
-                            lossToTrigger consecutive virtual LOSSES →
-                            REAL trade unlocked.
-                   Any win during the loss phase resets the entire sequence.
-                   Skipped when VHook already unlocked (no duplicate simulation).
-                   ══════════════════════════════════════════════════════════════ */
-                if (cfg.virtualHookAlt.enabled && !stopRef.current && !realTradeUnlocked) {
-                    const vhaBarrier = slotBarrier();
-                    const vhaPhaseDesc = vhaPhase === 'win'
-                        ? `seeking wins: ${vhaWinCount}/${cfg.virtualHookAlt.winsRequired}`
-                        : `seeking losses: ${vhaLossCount}/${cfg.virtualHookAlt.lossToTrigger}`;
-                    addLog(`💎 VHA [${vhaPhaseDesc}] — simulating virtual trade on ${curMarket}`, 'hack');
+                        const vhaProfit = sharedWon ? +(curStake * 0.85).toFixed(2) : -curStake;
+                        setTxList(prev => [{
+                            id: ++txIdRef.current, time: ts(), market: curMarket,
+                            type: `[VHA] ${contractLabel(bot)}`,
+                            stake: curStake, barrier: sharedBarrier ?? null,
+                            result: sharedWon ? 'won' : 'lost',
+                            profit: vhaProfit, exitDigit: sharedDigit, virtual: true,
+                        }, ...prev]);
 
-                    // Wait cfg.duration ticks then evaluate outcome
-                    const vhaTicks = Math.max(1, cfg.duration);
-                    for (let _vt = 0; _vt < vhaTicks && !stopRef.current; _vt++) {
-                        await new Promise<void>(res => {
-                            let done = false;
-                            const fin = () => { if (!done) { done = true; res(); } };
-                            tickSignalRef.current = fin;
-                            setTimeout(fin, 3000);
-                        });
-                    }
-                    if (stopRef.current) break;
-
-                    const vhaDigit = digitWindowRef.current[0] ?? 5;
-                    const vhaPred  = vhaBarrier ?? bot.prediction ?? 5;
-                    let vhaWon = false;
-                    switch (bot.contractType) {
-                        case 'DIGITEVEN':  vhaWon = vhaDigit % 2 === 0; break;
-                        case 'DIGITODD':   vhaWon = vhaDigit % 2 !== 0; break;
-                        case 'DIGITOVER':  vhaWon = vhaDigit > vhaPred; break;
-                        case 'DIGITUNDER': vhaWon = vhaDigit < vhaPred; break;
-                        case 'DIGITMATCH': vhaWon = vhaDigit === vhaPred; break;
-                        case 'DIGITDIFF':  vhaWon = vhaDigit !== vhaPred; break;
-                        case 'CALL': {
-                            const ep = priceWindowRef.current[Math.min(vhaTicks, priceWindowRef.current.length - 1)] ?? (priceWindowRef.current[0] ?? 0);
-                            vhaWon = (priceWindowRef.current[0] ?? 0) > ep;
-                            break;
-                        }
-                        case 'PUT': {
-                            const ep = priceWindowRef.current[Math.min(vhaTicks, priceWindowRef.current.length - 1)] ?? (priceWindowRef.current[0] ?? 0);
-                            vhaWon = (priceWindowRef.current[0] ?? 0) < ep;
-                            break;
-                        }
-                        default: vhaWon = vhaDigit % 2 === 0;
-                    }
-
-                    const vhaProfit = vhaWon ? +(curStake * 0.85).toFixed(2) : -curStake;
-                    setTxList(prev => [{
-                        id: ++txIdRef.current, time: ts(), market: curMarket,
-                        type: `[VHA] ${contractLabel(bot)}`,
-                        stake: curStake, barrier: vhaBarrier ?? null,
-                        result: vhaWon ? 'won' : 'lost',
-                        profit: vhaProfit, exitDigit: vhaDigit,
-                        virtual: true,
-                    }, ...prev]);
-
-                    if (vhaPhase === 'win') {
-                        if (vhaWon) {
-                            vhaWinCount++;
-                            addLog(`💎 VHA ✅ VIRTUAL WIN  exit[${vhaDigit}]  wins: ${vhaWinCount}/${cfg.virtualHookAlt.winsRequired}`, 'win');
-                            if (vhaWinCount >= cfg.virtualHookAlt.winsRequired) {
-                                addLog(`💎 VHA: ${cfg.virtualHookAlt.winsRequired} wins confirmed — now awaiting ${cfg.virtualHookAlt.lossToTrigger} virtual loss(es) to unlock REAL trade`, 'hack');
-                                vhaPhase = 'loss'; vhaLossCount = 0;
+                        if (vhaPhase === 'win') {
+                            if (sharedWon) {
+                                vhaWinCount++;
+                                addLog(`💎 VHA ✅ VIRTUAL WIN  wins: ${vhaWinCount}/${cfg.virtualHookAlt.winsRequired}`, 'win');
+                                if (vhaWinCount >= cfg.virtualHookAlt.winsRequired) {
+                                    addLog(`💎 VHA: ${cfg.virtualHookAlt.winsRequired} wins confirmed — awaiting ${cfg.virtualHookAlt.lossToTrigger} loss(es)`, 'hack');
+                                    vhaPhase = 'loss'; vhaLossCount = 0;
+                                }
+                            } else {
+                                addLog(`💎 VHA ❌ VIRTUAL LOSS — win streak broken, restarting`, 'loss');
+                                vhaWinCount = 0;
                             }
-                        } else {
-                            addLog(`💎 VHA ❌ VIRTUAL LOSS  exit[${vhaDigit}]  — win streak broken, restarting`, 'loss');
-                            vhaWinCount = 0;
-                        }
-                    } else { // 'loss' phase
-                        if (!vhaWon) {
-                            vhaLossCount++;
-                            addLog(`💎 VHA ❌ VIRTUAL LOSS  exit[${vhaDigit}]  losses: ${vhaLossCount}/${cfg.virtualHookAlt.lossToTrigger}`, 'loss');
-                            if (vhaLossCount >= cfg.virtualHookAlt.lossToTrigger) {
-                                addLog(`💎 VHA 🚀 PATTERN MET (${cfg.virtualHookAlt.winsRequired}W → ${cfg.virtualHookAlt.lossToTrigger}L) — REAL TRADE UNLOCKED`, 'entry');
+                        } else { // 'loss' phase
+                            if (!sharedWon) {
+                                vhaLossCount++;
+                                addLog(`💎 VHA ❌ VIRTUAL LOSS  losses: ${vhaLossCount}/${cfg.virtualHookAlt.lossToTrigger}`, 'loss');
+                                if (vhaLossCount >= cfg.virtualHookAlt.lossToTrigger) {
+                                    addLog(`💎 VHA 🚀 PATTERN MET (${cfg.virtualHookAlt.winsRequired}W → ${cfg.virtualHookAlt.lossToTrigger}L) — REAL TRADE UNLOCKED`, 'entry');
+                                    vhaWinCount = 0; vhaLossCount = 0; vhaPhase = 'win';
+                                    vhaRealUnlocked = true;
+                                }
+                            } else {
+                                addLog(`💎 VHA ✅ VIRTUAL WIN — loss trigger broken, restarting full sequence`, 'win');
                                 vhaWinCount = 0; vhaLossCount = 0; vhaPhase = 'win';
-                                vhaRealUnlocked = true;
                             }
-                        } else {
-                            addLog(`💎 VHA ✅ VIRTUAL WIN  exit[${vhaDigit}]  — loss trigger broken, restarting full sequence`, 'win');
-                            vhaWinCount = 0; vhaLossCount = 0; vhaPhase = 'win';
                         }
+
+                        if (vhaRealUnlocked) addLog(`🔓 VHA GATE OPEN — executing REAL trade`, 'entry');
                     }
 
-                    if (vhaRealUnlocked) {
-                        addLog(`🔓 VHA GATE OPEN — executing REAL trade with account funds`, 'entry');
+                    /* ── Gate check: neither hook unlocked → keep scanning ── */
+                    if (!realTradeUnlocked && !vhaRealUnlocked) {
+                        setEntryReady(false);
+                        continue;
                     }
-                }
-
-                /* ── Combined gate check: if any hook was enabled, at least one must unlock ── */
-                if ((cfg.virtualHook.enabled || cfg.virtualHookAlt.enabled) && !realTradeUnlocked && !vhaRealUnlocked) {
-                    setEntryReady(false);
-                    continue; // neither gate unlocked — scan for next entry signal
                 }
 
                 /* ── Dispatch WA signal for live signal widget ── */
