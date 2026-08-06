@@ -194,73 +194,35 @@ const SpeedLab = observer(() => {
         });
 
         // Zero inter-trade delay in Fast mode; otherwise tier-specific.
+        // ⚡ Fast = individual contracts at maximum speed (0ms between each).
         const POST_DELAY = isFastExecutionEnabled() ? 0 : speed === 'turbo' ? 0 : speed === 'crazy' ? 50 : 200;
-
-        // Fast Boost: concurrent batch size. Fast=20 concurrent, else sequential.
-        const BATCH = isFastExecutionEnabled() ? 50 : 1;
 
         while (runRef.current) {
             const curStake = currentStakeRef.current;
 
-            if (BATCH > 1) {
-                /* ⚡ FAST BOOST — fire BATCH contracts simultaneously.
-                   All requests hit the server in the same WebSocket flush.
-                   Each contract is independent (separate proposal + buy + POC).
-                   Target: ~20 settlements per contract-duration (20/s on 1t markets). */
-                try {
-                    const buyOnce = (idx: number): Promise<{ profit: number; extra?: any }> =>
-                        new Promise(resolve => {
-                            const bail = setTimeout(() => {
-                                logEntry(`⏱ [C${idx + 1}] timeout`);
-                                resolve({ profit: 0 });
-                            }, 15_000);
-                            derivTradeRef.current.buyContract(
-                                buildParams(curStake),
-                                settled => { clearTimeout(bail); resolve({ profit: settled.profit ?? 0, extra: settled }); }
-                            ).then(r => { if (!r?.contract_id) { clearTimeout(bail); resolve({ profit: 0 }); } })
-                             .catch(err => {
-                                 clearTimeout(bail);
-                                 logEntry(`❌ [C${idx + 1}] ${err?.message || err?.error?.message || 'Buy failed'}`);
-                                 resolve({ profit: 0 });
-                             });
-                        });
-
-                    const results = await Promise.allSettled(
-                        Array.from({ length: BATCH }, (_, i) => buyOnce(i))
-                    );
-                    if (!runRef.current) break;
-                    // Apply results in resolution order; martingale updates currentStakeRef after batch
-                    results.forEach(r => {
-                        if (r.status === 'fulfilled') applyResult(r.value.profit, curStake, speed, r.value.extra);
+            // Sequential path: buy → await settlement → inter-trade delay → repeat.
+            // Fast mode keeps this sequential but with 0ms POST_DELAY for super speed.
+            try {
+                const { profit, extra } = await new Promise<{ profit: number; extra?: any }>(resolve => {
+                    const bail = setTimeout(() => { logEntry('⏱ Settlement timeout'); resolve({ profit: 0 }); }, 15_000);
+                    derivTradeRef.current.buyContract(
+                        buildParams(curStake),
+                        settled => { clearTimeout(bail); resolve({ profit: settled.profit ?? 0, extra: settled }); }
+                    ).then(result => {
+                        if (!result?.contract_id) { clearTimeout(bail); resolve({ profit: 0 }); }
+                    }).catch(err => {
+                        clearTimeout(bail);
+                        const msg = err?.message || err?.error?.message || 'Buy failed';
+                        logEntry(`❌ ${msg}`);
+                        resolve({ profit: 0 });
                     });
-                } catch (e: any) {
-                    logEntry(`❌ BATCH_ERROR: ${e?.message || 'Unknown'}`);
-                    await new Promise(r => setTimeout(r, isFastExecutionEnabled() ? 0 : 300));
-                }
-            } else {
-                // Sequential path: buy → await settlement → inter-trade delay → repeat
-                try {
-                    const { profit, extra } = await new Promise<{ profit: number; extra?: any }>(resolve => {
-                        const bail = setTimeout(() => { logEntry('⏱ Settlement timeout'); resolve({ profit: 0 }); }, 15_000);
-                        derivTradeRef.current.buyContract(
-                            buildParams(curStake),
-                            settled => { clearTimeout(bail); resolve({ profit: settled.profit ?? 0, extra: settled }); }
-                        ).then(result => {
-                            if (!result?.contract_id) { clearTimeout(bail); resolve({ profit: 0 }); }
-                        }).catch(err => {
-                            clearTimeout(bail);
-                            const msg = err?.message || err?.error?.message || 'Buy failed';
-                            logEntry(`❌ ${msg}`);
-                            resolve({ profit: 0 });
-                        });
-                    });
-                    if (!runRef.current) break;
-                    applyResult(profit, curStake, speed, extra);
-                    if (POST_DELAY > 0) await new Promise(r => setTimeout(r, POST_DELAY));
-                } catch (e: any) {
-                    logEntry(`❌ ${e?.message || 'Unknown error'}`);
-                    await new Promise(r => setTimeout(r, isFastExecutionEnabled() ? 0 : 300));
-                }
+                });
+                if (!runRef.current) break;
+                applyResult(profit, curStake, speed, extra);
+                if (POST_DELAY > 0) await new Promise(r => setTimeout(r, POST_DELAY));
+            } catch (e: any) {
+                logEntry(`❌ ${e?.message || 'Unknown error'}`);
+                await new Promise(r => setTimeout(r, isFastExecutionEnabled() ? 0 : 300));
             }
         }
         setIsRunning(false);
