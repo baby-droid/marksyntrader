@@ -56,6 +56,22 @@ type VirtualHookConfig = {
     recoveryMode: boolean; // VHR: after any real-money loss, do 1 virtual check before re-entering
 };
 
+/* ── Virtual Hook Alternative: N wins → M losses triggers REAL trade ──
+   Opposite pattern to the main VH:
+     winsRequired consecutive virtual WINS  →
+     lossToTrigger consecutive virtual LOSSES  →
+     REAL trade fires.
+   Any win during the loss phase resets the entire sequence.
+   recoveryEnabled: after a real-money loss the bot does 1 virtual check;
+     virtual LOSS  → fire recovery real trade immediately (highest urgency);
+     still losing  → scan for best setup (checkEntry) before re-entering. */
+type VirtualHookAltConfig = {
+    enabled: boolean;
+    winsRequired: number;    // consecutive virtual wins needed (default 2)
+    lossToTrigger: number;   // virtual losses after wins to unlock real trade (default 1)
+    recoveryEnabled: boolean;// after real loss: 1-virtual check → recovery trade
+};
+
 /* Strategy Logic — condition-based entry engine (mirrors the reference "OR Group" UI) */
 
 const DIGITS_IS_OPTIONS = [
@@ -139,6 +155,7 @@ type BotConfig = {
     market2: Market2Config;
     multiTradeCount: number; // number of contracts to fire on each entry (multiple bots)
     virtualHook: VirtualHookConfig;
+    virtualHookAlt: VirtualHookAltConfig;
     stealthMode: boolean;  // obfuscates tick prices in terminal to reduce pattern visibility
 };
 
@@ -149,6 +166,7 @@ const DEFAULT_RM: RiskManagerConfig = {
 };
 
 const DEFAULT_VH: VirtualHookConfig = { enabled: false, hookLoss: 3, hookWin: 1, recoveryMode: false };
+const DEFAULT_VHA: VirtualHookAltConfig = { enabled: false, winsRequired: 2, lossToTrigger: 1, recoveryEnabled: false };
 
 /* The default condition mirrors checkEntry()'s contrarian logic exactly, so
    turning Strategy Logic on doesn't change default behaviour — it just makes
@@ -294,6 +312,7 @@ const DEFAULT_CONFIG = (bot: TScalperBot): BotConfig => ({
     },
     multiTradeCount: bot.multiple ? 3 : 1,
     virtualHook: { ...DEFAULT_VH },
+    virtualHookAlt: { ...DEFAULT_VHA },
     stealthMode: false,
 });
 
@@ -1359,7 +1378,9 @@ const BotDetail: React.FC<{
     const marketListRef   = useRef<string[]>([cfg.market]);
     const multiScanRef    = useRef(false);
     const firstTradeRef   = useRef(true);
-    const vhrActiveRef    = useRef(false); // VHR: flagged after real-money loss when recoveryMode is on
+    const vhrActiveRef     = useRef(false); // VHR: flagged after real-money loss when recoveryMode is on
+    const vhaRecovery1Ref  = useRef(false); // VHA recovery stage 1: 1-virtual check pending
+    const vhaRecovery2Ref  = useRef(false); // VHA recovery stage 2: best-setup scan then trade
     const prevConnectedRef = useRef(true);
 
     useEffect(() => subscribeCurrency(() => setDisplayCur(getDisplayCurrency())), []);
@@ -1438,6 +1459,8 @@ const BotDetail: React.FC<{
         setCfg(prev => ({ ...prev, market2: { ...prev.market2, ...patch } }));
     const vhSet = (patch: Partial<VirtualHookConfig>) =>
         setCfg(prev => ({ ...prev, virtualHook: { ...prev.virtualHook, ...patch } }));
+    const vhaSet = (patch: Partial<VirtualHookAltConfig>) =>
+        setCfg(prev => ({ ...prev, virtualHookAlt: { ...prev.virtualHookAlt, ...patch } }));
 
     /* ── Subscribe to ticks for the active market ──
        Each new tick immediately wakes the scan loop (tickSignalRef) so the
@@ -1542,6 +1565,9 @@ const BotDetail: React.FC<{
             cfg.virtualHook.enabled
                 ? `🔮 VIRTUAL_HOOK: ARMED — ${cfg.virtualHook.hookLoss}L → ${cfg.virtualHook.hookWin}W pattern${cfg.virtualHook.recoveryMode ? ' + VHR active' : ''}`
                 : cfg.virtualHook.recoveryMode ? '⚡ VHR: RECOVERY MODE ONLY (1-virtual check on each real loss)' : 'VIRTUAL_HOOK: DISABLED',
+            cfg.virtualHookAlt.enabled
+                ? `💎 VHA: ARMED — ${cfg.virtualHookAlt.winsRequired}W → ${cfg.virtualHookAlt.lossToTrigger}L pattern${cfg.virtualHookAlt.recoveryEnabled ? ' + VHA-Recovery active' : ''}`
+                : cfg.virtualHookAlt.recoveryEnabled ? '💎 VHA-RECOVERY: ON (2-stage check on each real loss)' : 'VHA: DISABLED',
             'MARKET_FEED_INTEGRITY: OK',
             '▶ SCAN ENGINE: READY',
         ];
@@ -1643,6 +1669,14 @@ const BotDetail: React.FC<{
         let vPhase: 'loss' | 'win' = 'loss';
         let vLossCount = 0;
         let vWinCount  = 0;
+
+        /* ── Virtual Hook Alternative state (persists across scan cycles) ──
+           vhaPhase 'win' : count consecutive virtual wins until winsRequired
+           vhaPhase 'loss': count consecutive virtual losses until lossToTrigger
+           A win during the loss phase resets everything back to the win phase. */
+        let vhaPhase: 'win' | 'loss' = 'win';
+        let vhaWinCount = 0;
+        let vhaLossCount = 0;
 
         /* ── FRESH XML RELOAD every time Run is pressed ──
            Await the load so the workspace is ready before the first trade fires. */
@@ -1750,16 +1784,89 @@ const BotDetail: React.FC<{
                     }
                 }
 
+                /* ── Virtual Hook Alternative recovery gate ─────────────────────
+                   Stage 1 (vhaRecovery1Ref): after a real loss, do 1 virtual tick.
+                     Virtual LOSS → fire recovery real trade immediately.
+                     Virtual WIN  → advance to stage 2.
+                   Stage 2 (vhaRecovery2Ref): run full checkEntry / strategy scan
+                     to find the best market setup, then fire the real trade. */
+                if (cfg.virtualHookAlt.recoveryEnabled) {
+                    if (vhaRecovery1Ref.current && !stopRef.current) {
+                        vhaRecovery1Ref.current = false;
+                        addLog('💎 VHA-R1: 1-VIRTUAL RECOVERY CHECK — evaluating market...', 'hack');
+                        await new Promise<void>(res => {
+                            let done = false;
+                            const fin = () => { if (!done) { done = true; res(); } };
+                            tickSignalRef.current = fin;
+                            setTimeout(fin, 3000);
+                        });
+                        if (!stopRef.current) {
+                            const rDigit = digitWindowRef.current[0] ?? 5;
+                            const rPred  = slotBarrier() ?? bot.prediction ?? 5;
+                            let rWon = false;
+                            switch (bot.contractType) {
+                                case 'DIGITEVEN':  rWon = rDigit % 2 === 0; break;
+                                case 'DIGITODD':   rWon = rDigit % 2 !== 0; break;
+                                case 'DIGITOVER':  rWon = rDigit > rPred;   break;
+                                case 'DIGITUNDER': rWon = rDigit < rPred;   break;
+                                case 'DIGITMATCH': rWon = rDigit === rPred;  break;
+                                case 'DIGITDIFF':  rWon = rDigit !== rPred;  break;
+                                case 'CALL': rWon = (priceWindowRef.current[0] ?? 0) > (priceWindowRef.current[1] ?? priceWindowRef.current[0] ?? 0); break;
+                                case 'PUT':  rWon = (priceWindowRef.current[0] ?? 0) < (priceWindowRef.current[1] ?? priceWindowRef.current[0] ?? 0); break;
+                                default: rWon = rDigit % 2 === 0;
+                            }
+                            setTxList(prev => [{
+                                id: ++txIdRef.current, time: ts(), market: curMarket,
+                                type: `[VHA-R1] ${contractLabel(bot)}`, stake: curStake,
+                                barrier: slotBarrier() ?? null,
+                                result: rWon ? 'won' : 'lost', profit: rWon ? +(curStake * 0.85).toFixed(2) : -curStake,
+                                exitDigit: rDigit, virtual: true,
+                            }, ...prev]);
+                            if (!rWon) {
+                                addLog(`💎 VHA-R1 ❌ VIRTUAL LOSS [${rDigit}] — CONFIRMED → ENTERING RECOVERY TRADE NOW`, 'entry');
+                                entry = true;
+                            } else {
+                                addLog(`💎 VHA-R1 ✅ VIRTUAL WIN [${rDigit}] — escalating to stage-2 best-setup scan`, 'scan');
+                                vhaRecovery2Ref.current = true;
+                            }
+                        }
+                    }
+
+                    if (vhaRecovery2Ref.current && !entry && !stopRef.current) {
+                        vhaRecovery2Ref.current = false;
+                        addLog('💎 VHA-R2: BEST-SETUP SCAN — reading market for optimal re-entry...', 'hack');
+                        // Read 3 ticks and check entry signal on each
+                        let bestFound = false;
+                        for (let _bi = 0; _bi < 3 && !stopRef.current && !bestFound; _bi++) {
+                            await new Promise<void>(res => {
+                                let done = false;
+                                const fin = () => { if (!done) { done = true; res(); } };
+                                tickSignalRef.current = fin;
+                                setTimeout(fin, 2500);
+                            });
+                            const favors = checkEntry(digitWindowRef.current, bot.contractType, bot.prediction, priceWindowRef.current);
+                            addLog(`  📊 VHA-R2 scan ${_bi + 1}/3: ${favors ? '✓ best setup confirmed' : '✗ not optimal'}`, 'scan');
+                            if (favors) { bestFound = true; entry = true; }
+                        }
+                        if (!bestFound) {
+                            addLog('💎 VHA-R2: best setup not found in 3 ticks — forcing re-entry (recovery priority)', 'entry');
+                            entry = true; // force fire even without ideal setup — recovery takes priority
+                        } else {
+                            addLog('💎 VHA-R2 🚀 BEST SETUP CONFIRMED — firing recovery real trade', 'entry');
+                        }
+                    }
+                }
+
                 while (!entry && !stopRef.current) {
-                    /* ── Network/feed watchdog: no real ticks for 30 s → force reconnect ──
+                    /* ── Network/feed watchdog: no real ticks for 8 s → force reconnect ──
                        lastTickAtRef is updated by every live tick in subscribeMarket, so this
                        only fires on a genuine feed freeze, not between normal tick intervals.
-                       A 30 s cooldown prevents rapid-reconnect loops. */
+                       An 8 s cooldown prevents rapid-reconnect loops while still reacting fast. */
                     const now = Date.now();
                     if (
                         !multiScan &&
-                        now - lastTickAtRef.current > 30_000 &&
-                        now - lastReconnectAtRef.current > 30_000
+                        now - lastTickAtRef.current > 8_000 &&
+                        now - lastReconnectAtRef.current > 8_000
                     ) {
                         addLog('⚠ FEED_STALL DETECTED — forcing reconnection...', 'error');
                         lastReconnectAtRef.current = now;
@@ -1840,7 +1947,12 @@ const BotDetail: React.FC<{
                         /* Periodic status messages — kept light so they don't flood the log */
                         if (scanTick % 3 === 1) {
                             const recent = digitWindowRef.current.slice(0, 20).join(', ');
-                            addLog(`STREAM: ${recent || '...'}  ← latest left`, 'scan');
+                            if (recent) {
+                                addLog(`STREAM: ${recent}  ← latest left`, 'scan');
+                            } else {
+                                const staleSec = Math.round((Date.now() - lastTickAtRef.current) / 1000);
+                                addLog(`FEED: AWAITING FIRST TICK... (${staleSec}s) — reconnect in ${Math.max(0, 8 - staleSec)}s if stalled`, 'hack');
+                            }
                         }
                         if (scanTick % 12 === 5) {
                             addLog(HACK_SCAN_MSGS[Math.floor(Math.random() * HACK_SCAN_MSGS.length)], 'hack');
@@ -1991,6 +2103,101 @@ const BotDetail: React.FC<{
                     addLog(`🔓 VHOOK GATE OPEN — executing REAL trade with account funds`, 'entry');
                 }
 
+                /* ══════════════════════════════════════════════════════════════
+                   Virtual Hook ALTERNATIVE gate — Win-streak → Loss trigger.
+                   Pattern: winsRequired consecutive virtual WINS →
+                            lossToTrigger consecutive virtual LOSSES →
+                            REAL trade unlocked.
+                   Any win during the loss phase resets the entire sequence.
+                   ══════════════════════════════════════════════════════════════ */
+                if (cfg.virtualHookAlt.enabled && !stopRef.current) {
+                    const vhaBarrier = slotBarrier();
+                    const vhaPhaseDesc = vhaPhase === 'win'
+                        ? `seeking wins: ${vhaWinCount}/${cfg.virtualHookAlt.winsRequired}`
+                        : `seeking losses: ${vhaLossCount}/${cfg.virtualHookAlt.lossToTrigger}`;
+                    addLog(`💎 VHA [${vhaPhaseDesc}] — simulating virtual trade on ${curMarket}`, 'hack');
+
+                    // Wait cfg.duration ticks then evaluate outcome
+                    const vhaTicks = Math.max(1, cfg.duration);
+                    for (let _vt = 0; _vt < vhaTicks && !stopRef.current; _vt++) {
+                        await new Promise<void>(res => {
+                            let done = false;
+                            const fin = () => { if (!done) { done = true; res(); } };
+                            tickSignalRef.current = fin;
+                            setTimeout(fin, 3000);
+                        });
+                    }
+                    if (stopRef.current) break;
+
+                    const vhaDigit = digitWindowRef.current[0] ?? 5;
+                    const vhaPred  = vhaBarrier ?? bot.prediction ?? 5;
+                    let vhaWon = false;
+                    switch (bot.contractType) {
+                        case 'DIGITEVEN':  vhaWon = vhaDigit % 2 === 0; break;
+                        case 'DIGITODD':   vhaWon = vhaDigit % 2 !== 0; break;
+                        case 'DIGITOVER':  vhaWon = vhaDigit > vhaPred; break;
+                        case 'DIGITUNDER': vhaWon = vhaDigit < vhaPred; break;
+                        case 'DIGITMATCH': vhaWon = vhaDigit === vhaPred; break;
+                        case 'DIGITDIFF':  vhaWon = vhaDigit !== vhaPred; break;
+                        case 'CALL': {
+                            const ep = priceWindowRef.current[Math.min(vhaTicks, priceWindowRef.current.length - 1)] ?? (priceWindowRef.current[0] ?? 0);
+                            vhaWon = (priceWindowRef.current[0] ?? 0) > ep;
+                            break;
+                        }
+                        case 'PUT': {
+                            const ep = priceWindowRef.current[Math.min(vhaTicks, priceWindowRef.current.length - 1)] ?? (priceWindowRef.current[0] ?? 0);
+                            vhaWon = (priceWindowRef.current[0] ?? 0) < ep;
+                            break;
+                        }
+                        default: vhaWon = vhaDigit % 2 === 0;
+                    }
+
+                    const vhaProfit = vhaWon ? +(curStake * 0.85).toFixed(2) : -curStake;
+                    setTxList(prev => [{
+                        id: ++txIdRef.current, time: ts(), market: curMarket,
+                        type: `[VHA] ${contractLabel(bot)}`,
+                        stake: curStake, barrier: vhaBarrier ?? null,
+                        result: vhaWon ? 'won' : 'lost',
+                        profit: vhaProfit, exitDigit: vhaDigit,
+                        virtual: true,
+                    }, ...prev]);
+
+                    let vhaRealUnlocked = false;
+
+                    if (vhaPhase === 'win') {
+                        if (vhaWon) {
+                            vhaWinCount++;
+                            addLog(`💎 VHA ✅ VIRTUAL WIN  exit[${vhaDigit}]  wins: ${vhaWinCount}/${cfg.virtualHookAlt.winsRequired}`, 'win');
+                            if (vhaWinCount >= cfg.virtualHookAlt.winsRequired) {
+                                addLog(`💎 VHA: ${cfg.virtualHookAlt.winsRequired} wins confirmed — now awaiting ${cfg.virtualHookAlt.lossToTrigger} virtual loss(es) to unlock REAL trade`, 'hack');
+                                vhaPhase = 'loss'; vhaLossCount = 0;
+                            }
+                        } else {
+                            addLog(`💎 VHA ❌ VIRTUAL LOSS  exit[${vhaDigit}]  — win streak broken, restarting`, 'loss');
+                            vhaWinCount = 0;
+                        }
+                    } else { // 'loss' phase
+                        if (!vhaWon) {
+                            vhaLossCount++;
+                            addLog(`💎 VHA ❌ VIRTUAL LOSS  exit[${vhaDigit}]  losses: ${vhaLossCount}/${cfg.virtualHookAlt.lossToTrigger}`, 'loss');
+                            if (vhaLossCount >= cfg.virtualHookAlt.lossToTrigger) {
+                                addLog(`💎 VHA 🚀 PATTERN MET (${cfg.virtualHookAlt.winsRequired}W → ${cfg.virtualHookAlt.lossToTrigger}L) — REAL TRADE UNLOCKED`, 'entry');
+                                vhaWinCount = 0; vhaLossCount = 0; vhaPhase = 'win';
+                                vhaRealUnlocked = true;
+                            }
+                        } else {
+                            addLog(`💎 VHA ✅ VIRTUAL WIN  exit[${vhaDigit}]  — loss trigger broken, restarting full sequence`, 'win');
+                            vhaWinCount = 0; vhaLossCount = 0; vhaPhase = 'win';
+                        }
+                    }
+
+                    if (!vhaRealUnlocked) {
+                        setEntryReady(false);
+                        continue;
+                    }
+                    addLog(`🔓 VHA GATE OPEN — executing REAL trade with account funds`, 'entry');
+                }
+
                 /* ── Dispatch WA signal for live signal widget ── */
                 try {
                     window.dispatchEvent(new CustomEvent('wa:signal', { detail: {
@@ -2000,6 +2207,16 @@ const BotDetail: React.FC<{
                         bot: bot.name,
                     }}));
                 } catch { /* non-fatal */ }
+
+                /* ── Anti-detection jitter: randomise request timing ──
+                   Adds a small random delay (25-180 ms) before every real buy to break
+                   any fixed-interval pattern that could be flagged by server-side
+                   anomaly detection. Ultra Turbo skips this to preserve zero-latency. */
+                if (!ultraTurboRef.current && fastExecRef.current !== 'ultra') {
+                    const jitter = 25 + Math.floor(Math.random() * 155);
+                    if (cfg.stealthMode) addLog(`ANTI_PATTERN_DELAY: ${jitter}ms jitter injected`, 'hack');
+                    await new Promise(r => setTimeout(r, jitter));
+                }
 
                 /* ── First trade: wait for workspace + feed to fully initialise ──
                    Subsequent trades are tick-driven (zero artificial delay).
@@ -2283,6 +2500,14 @@ const BotDetail: React.FC<{
                     if (cfg.virtualHook.recoveryMode) {
                         vhrActiveRef.current = true;
                         addLog('⚡ VHR: REAL LOSS FLAGGED — instant 1-virtual recovery check queued for next scan', 'hack');
+                    }
+
+                    /* ── Virtual Hook Alternative recovery: stage-1 virtual check queued ──
+                       After any real-money loss, queue a 1-virtual-tick recovery check.
+                       The VHA recovery gate at the top of the outer loop will handle it. */
+                    if (cfg.virtualHookAlt.recoveryEnabled) {
+                        vhaRecovery1Ref.current = true;
+                        addLog('💎 VHA: REAL LOSS → stage-1 recovery virtual check queued for next scan', 'hack');
                     }
 
                     /* Buffer between loss cycles — gives lingering bot.stop events a
@@ -2957,6 +3182,77 @@ const BotDetail: React.FC<{
                                         {cfg.virtualHook.recoveryMode
                                             ? <><strong style={{ color: '#a855f7' }}>⚡ Active:</strong> After every real-money loss the bot instantly checks <strong>1 virtual trade</strong>. If the virtual result is also a LOSS (pattern confirmed), the recovery trade fires immediately — bypassing the full entry scan for the fastest possible loss recovery. Works even without the full Virtual Hook pattern above.</>
                                             : <>When enabled: after every real-money loss, the bot does <strong>1 quick virtual check</strong>. A virtual loss confirms the pattern → recovery trade fires instantly. A virtual win → normal scan resumes. Zero-delay loss recovery.</>
+                                        }
+                                    </p>
+                                </div>
+                            </>
+                        )}
+                    </SbAccordion>
+
+                    {/* ── Virtual Hook Alternative ── */}
+                    <SbAccordion
+                        title='💎 Virtual Hook Alternative'
+                        badge={cfg.virtualHookAlt.enabled ? `${cfg.virtualHookAlt.winsRequired}W → ${cfg.virtualHookAlt.lossToTrigger}L` : 'OFF'}
+                        badgeColor={cfg.virtualHookAlt.enabled ? '#f59e0b' : '#64748b'}
+                    >
+                        <p className='sb-hint sb-hint--amber'>Opposite pattern to the standard Virtual Hook. After <strong>N consecutive virtual WINS</strong> followed by <strong>M virtual LOSSES</strong> the bot fires a REAL trade. Useful when you want to confirm a downward reversal before entering.</p>
+                        <div className='sb-field-row sb-field-row--center'>
+                            <label>Enable VH Alternative</label>
+                            <button
+                                className={`sb-toggle ${cfg.virtualHookAlt.enabled ? 'on' : 'off'}`}
+                                onClick={() => vhaSet({ enabled: !cfg.virtualHookAlt.enabled })}
+                                disabled={running}
+                                style={cfg.virtualHookAlt.enabled ? { background: 'linear-gradient(135deg,#f59e0b,#d97706)', color: '#000' } : undefined}
+                            >
+                                {cfg.virtualHookAlt.enabled ? 'ENABLED' : 'DISABLED'}
+                            </button>
+                        </div>
+                        {cfg.virtualHookAlt.enabled && (
+                            <>
+                                <div className='sb-vhook-diagram sb-vhook-diagram--alt'>
+                                    {Array.from({ length: cfg.virtualHookAlt.winsRequired }, (_, i) => (
+                                        <span key={`w${i}`} className='sb-vhook-chip sb-vhook-chip--win'>W</span>
+                                    ))}
+                                    <span className='sb-vhook-arrow'>→</span>
+                                    {Array.from({ length: cfg.virtualHookAlt.lossToTrigger }, (_, i) => (
+                                        <span key={`l${i}`} className='sb-vhook-chip sb-vhook-chip--loss'>L</span>
+                                    ))}
+                                    <span className='sb-vhook-arrow'>→</span>
+                                    <span className='sb-vhook-chip sb-vhook-chip--real'>🚀 REAL</span>
+                                </div>
+                                <div className='sb-field-row'>
+                                    <div className='sb-field'>
+                                        <label>Virtual Wins</label>
+                                        <NumberField value={cfg.virtualHookAlt.winsRequired} min={1} max={10}
+                                            onCommit={n => vhaSet({ winsRequired: n })} disabled={running} />
+                                        <span className='sb-unit'>consecutive wins required</span>
+                                    </div>
+                                    <div className='sb-field'>
+                                        <label>Virtual Losses</label>
+                                        <NumberField value={cfg.virtualHookAlt.lossToTrigger} min={1} max={5}
+                                            onCommit={n => vhaSet({ lossToTrigger: n })} disabled={running} />
+                                        <span className='sb-unit'>losses after wins to trigger real</span>
+                                    </div>
+                                </div>
+                                <p className='sb-hint'>Example: 2 wins → 1 loss means the bot simulates 2 consecutive wins then waits for 1 loss before placing a real trade. Any win during the loss phase resets the entire sequence.</p>
+
+                                {/* ── VHA Recovery ── */}
+                                <div style={{ marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(245,158,11,0.25)' }}>
+                                    <div className='sb-field-row sb-field-row--center'>
+                                        <label style={{ color: '#f59e0b', fontWeight: 700 }}>💎 VHA Recovery Limit</label>
+                                        <button
+                                            className={`sb-toggle ${cfg.virtualHookAlt.recoveryEnabled ? 'on' : 'off'}`}
+                                            onClick={() => vhaSet({ recoveryEnabled: !cfg.virtualHookAlt.recoveryEnabled })}
+                                            disabled={running}
+                                            style={cfg.virtualHookAlt.recoveryEnabled ? { background: 'linear-gradient(135deg,#f59e0b,#d97706)', color: '#000' } : undefined}
+                                        >
+                                            {cfg.virtualHookAlt.recoveryEnabled ? '💎 ON' : 'OFF'}
+                                        </button>
+                                    </div>
+                                    <p className='sb-hint' style={{ marginTop: '0.4rem' }}>
+                                        {cfg.virtualHookAlt.recoveryEnabled
+                                            ? <><strong style={{ color: '#f59e0b' }}>💎 Active:</strong> After a real-money loss: <strong>Stage 1</strong> — 1 virtual check; virtual LOSS → recovery trade fires instantly. <strong>Stage 2</strong> — if that also loses, scans 3 ticks for the best market setup before re-entering. Two-level safety net for loss recovery.</>
+                                            : <>When enabled: after every real-money loss the bot runs a 2-stage recovery check — first a quick 1-virtual confirmation, then a best-setup market scan — before re-entering with real funds.</>
                                         }
                                     </p>
                                 </div>

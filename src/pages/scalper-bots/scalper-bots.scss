@@ -1225,6 +1225,23 @@
   strong { color: #a855f7; }
 }
 
+/* Amber hint variant — Virtual Hook Alternative */
+.sb-hint--amber {
+  background: rgba(245, 158, 11, 0.06);
+  border-left: 3px solid rgba(245, 158, 11, 0.4);
+  border-radius: 0 0.35rem 0.35rem 0;
+  padding: 0.55rem 0.75rem;
+  color: #fcd34d;
+  margin-bottom: 0.75rem;
+  strong { color: #f59e0b; }
+}
+
+/* VHA diagram — amber tint */
+.sb-vhook-diagram--alt {
+  background: rgba(245, 158, 11, 0.06);
+  border-color: rgba(245, 158, 11, 0.2);
+}
+
 /* ════════════════════════════════════════════════════
    Stealth Mode — status pills
    ════════════════════════════════════════════════════ */
