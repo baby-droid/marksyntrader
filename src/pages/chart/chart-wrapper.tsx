@@ -42,6 +42,121 @@ function getLastDigit(price: number, ps: number): number {
  */
 const digitToPercent = (d: number): string => `${d * 10 + 5}%`;
 
+/* ── Market settlement info ────────────────────────────────────────────────
+ *  Describes tick speed, P/L settlement mechanism, and supported contract
+ *  types for each synthetic index family.
+ *
+ *  Source: https://developers.deriv.com/llms/contract-types.md
+ *
+ *  Bear / Bull  — trending synthetic indices. No digit contracts; price
+ *                 comparison decides win/loss (exit > entry → Rise wins).
+ *  Boom / Crash — spike-event indices. A spike occurs ~every N ticks.
+ *                 Boom spikes UP; Crash spikes DOWN. Rise/Fall only.
+ *  Jump         — volatility with rare large jumps. Full digit + Rise/Fall.
+ *  1s Vol (1HZ) — 1 tick per second. All digit and Rise/Fall contract types.
+ *  Plain Vol    — ~1 tick per 2 s. Full contract suite including Touch/Asian.
+ *  Step         — moves in fixed 0.1 steps; digit contracts available.
+ *  Range Break  — breakout synthetic; Rise/Fall and Touch only.
+ * ────────────────────────────────────────────────────────────────────────── */
+interface MarketSettlementInfo {
+    tickSpeed:  string;
+    settlement: string;
+    contracts:  string;
+    color:      string;
+    isDigit:    boolean;   // whether digit contracts are available
+}
+function getMarketSettlementInfo(sym: string): MarketSettlementInfo {
+    const s = sym.toUpperCase();
+    if (/^1HZ/.test(s)) {
+        const n = s.match(/\d+/)?.[0] ?? '';
+        return {
+            tickSpeed:  '1 sec / tick',
+            settlement: `Last digit of exit price vs barrier · ${n ? `Vol ${n}` : '1s Market'}`,
+            contracts:  'Digits (Over/Under, Match/Differ, Even/Odd) · Rise/Fall · Accumulators',
+            color:      '#1E88FF',
+            isDigit:    true,
+        };
+    }
+    if (/^R_/.test(s)) {
+        const n = s.match(/\d+/)?.[0] ?? '';
+        return {
+            tickSpeed:  '~2 sec / tick',
+            settlement: `Last digit of exit price vs barrier · Volatility ${n} Index`,
+            contracts:  'Digits · Rise/Fall · Touch · Asian · Reset · Run High/Low · Accumulators',
+            color:      '#1E88FF',
+            isDigit:    true,
+        };
+    }
+    if (s === 'RDBEAR') return {
+        tickSpeed:  '~2 sec / tick',
+        settlement: 'Exit price vs entry price — Bear trends DOWN ~90% of ticks — Rise/Fall P/L',
+        contracts:  'Rise/Fall · Higher/Lower · Touch · No Touch  ·  ⚠ Digit contracts unavailable',
+        color:      '#FF3D57',
+        isDigit:    false,
+    };
+    if (s === 'RDBULL') return {
+        tickSpeed:  '~2 sec / tick',
+        settlement: 'Exit price vs entry price — Bull trends UP ~90% of ticks — Rise/Fall P/L',
+        contracts:  'Rise/Fall · Higher/Lower · Touch · No Touch  ·  ⚠ Digit contracts unavailable',
+        color:      '#00C853',
+        isDigit:    false,
+    };
+    if (/^JD/.test(s)) {
+        const n = s.match(/\d+/)?.[0] ?? '';
+        return {
+            tickSpeed:  '~2 sec / tick',
+            settlement: `Last digit OR price movement · Jump ${n} — occasional large price jumps`,
+            contracts:  'Digits · Rise/Fall',
+            color:      '#FF9800',
+            isDigit:    true,
+        };
+    }
+    if (/^BOOM/.test(s)) {
+        const n = s.match(/\d+/)?.[0] ?? '?';
+        return {
+            tickSpeed:  '~2 sec / tick',
+            settlement: `Spike UP ~every ${n} ticks · exit price vs entry price decides P/L`,
+            contracts:  'Rise/Fall · Touch only  ·  ⚠ Digit contracts unavailable',
+            color:      '#00C853',
+            isDigit:    false,
+        };
+    }
+    if (/^CRASH/.test(s)) {
+        const n = s.match(/\d+/)?.[0] ?? '?';
+        return {
+            tickSpeed:  '~2 sec / tick',
+            settlement: `Spike DOWN ~every ${n} ticks · exit price vs entry price decides P/L`,
+            contracts:  'Rise/Fall · Touch only  ·  ⚠ Digit contracts unavailable',
+            color:      '#FF3D57',
+            isDigit:    false,
+        };
+    }
+    if (/^STP/i.test(s)) return {
+        tickSpeed:  '~2 sec / tick',
+        settlement: 'Moves in fixed steps of 0.1 · last digit of exit price vs barrier',
+        contracts:  'Digits · Rise/Fall',
+        color:      '#9C27B0',
+        isDigit:    true,
+    };
+    if (/^RB/i.test(s)) {
+        const n = s.match(/\d+/)?.[0] ?? '?';
+        return {
+            tickSpeed:  '~2 sec / tick',
+            settlement: `Breaks out of range every ~${n} ticks · exit price vs entry`,
+            contracts:  'Rise/Fall · Touch only  ·  ⚠ Digit contracts unavailable',
+            color:      '#FF9800',
+            isDigit:    false,
+        };
+    }
+    return {
+        tickSpeed:  '~2 sec / tick',
+        settlement: 'Varies by contract type',
+        contracts:  'Digits · Rise/Fall',
+        color:      '#888',
+        isDigit:    true,
+    };
+}
+
 interface PendingTrade {
     id: string;
     totalTicks: number;
@@ -531,7 +646,17 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                                 <div
                                     className={`cdo__triangle-pointer${currentDigit === null ? ' cdo__triangle-pointer--hidden' : ''}`}
                                     style={{ left: currentDigit !== null ? digitToPercent(currentDigit) : '-100px' }}
-                                />
+                                >
+                                    {/* T-badge rides the triangle — shows current T-number for active trades */}
+                                    {pendingTrades.length > 0 && pendingTrades[0].countedTicks > 0 && currentDigit !== null && (
+                                        <div className='cdo__t-badge'>
+                                            T{pendingTrades[0].countedTicks}
+                                            {pendingTrades[0].countedTicks === pendingTrades[0].totalTicks && (
+                                                <span className='cdo__t-badge__star'>★</span>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
 
                         {/* ② Circles row */}
@@ -576,6 +701,24 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                         </div>{/* /cdo__right */}
                     </div>{/* /cdo__body */}
                 </div>{/* /cdo */}
+
+                {/* ── Market settlement info strip ────────────────────────── */}
+                {(() => {
+                    const mi = getMarketSettlementInfo(symbol);
+                    return (
+                        <div
+                            className={`cdo__market-strip${!mi.isDigit ? ' cdo__market-strip--no-digit' : ''}`}
+                            style={{ '--strip-color': mi.color } as React.CSSProperties}
+                        >
+                            <span className='cdo__market-strip__speed'>{mi.tickSpeed}</span>
+                            <span className='cdo__market-strip__sep'>·</span>
+                            <span className='cdo__market-strip__settle'>{mi.settlement}</span>
+                            <span className='cdo__market-strip__sep'>·</span>
+                            <span className='cdo__market-strip__contracts'>{mi.contracts}</span>
+                        </div>
+                    );
+                })()}
+
             </div>{/* /cw-left */}
 
             {/* ── RIGHT: trade panel ────────────────────────────────────── */}
