@@ -1,0 +1,286 @@
+<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
+  <variables>
+    <variable id="rftt_stake">stake</variable>
+    <variable id="rftt_init">initial_stake</variable>
+    <variable id="rftt_mart">martingale</variable>
+    <variable id="rftt_dir">trade_direction</variable>
+    <variable id="rftt_lstreak">loss_streak</variable>
+    <variable id="rftt_tp">take_profit</variable>
+    <variable id="rftt_sl">stop_loss</variable>
+    <variable id="rftt_profit">session_profit</variable>
+  </variables>
+
+  <!-- ═══════════════════════════════════════════════════════════════════
+       ENTITY RISE FALL TURBO TRADER
+       STRATEGY:
+         trade_direction: 0=CALL(Rise), 1=PUT(Fall)
+         Starts with CALL (Rise)
+         On loss: flips to PUT (Fall) — market correction tendency
+         After 3 consecutive losses: reset to CALL + reset streak
+         Martingale 2x on loss | Reset on win
+         TP $5 / SL $50 | Market: V75 1s
+  ═══════════════════════════════════════════════════════════════════ -->
+  <block type="trade_definition" id="rftt_def" deletable="false" x="0" y="60">
+    <statement name="TRADE_OPTIONS">
+      <block type="trade_definition_market" id="rftt_mkt" deletable="false" movable="false">
+        <field name="MARKET_LIST">synthetic_index</field>
+        <field name="SUBMARKET_LIST">random_index</field>
+        <field name="SYMBOL_LIST">1HZ75V</field>
+        <next>
+          <block type="trade_definition_tradetype" id="rftt_tt" deletable="false" movable="false">
+            <field name="TRADETYPECAT_LIST">callput</field>
+            <field name="TRADETYPE_LIST">callput</field>
+            <next>
+              <block type="trade_definition_contracttype" id="rftt_ct" deletable="false" movable="false">
+                <field name="TYPE_LIST">CALL</field>
+                <next>
+                  <block type="trade_definition_duration" id="rftt_dur" deletable="false" movable="false">
+                    <field name="DURATIONTYPE_LIST">t</field>
+                    <value name="DURATION">
+                      <shadow type="math_number_positive" id="rftt_dur_v">
+                        <field name="NUM">5</field>
+                      </shadow>
+                    </value>
+                    <next>
+                      <block type="trade_definition_candleinterval" id="rftt_ci" deletable="false" movable="false">
+                        <field name="CANDLEINTERVAL_LIST">60</field>
+                        <next>
+                          <block type="trade_definition_restartbuysell" id="rftt_rbs" deletable="false" movable="false">
+                            <field name="TIME_MACHINE_ENABLED">FALSE</field>
+                            <next>
+                              <block type="trade_definition_restartonerror" id="rftt_roe" deletable="false" movable="false">
+                                <field name="RESTARTONERROR">TRUE</field>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="INITIALIZATION">
+      <block type="variables_set" id="rftt_i1">
+        <field name="VAR" id="rftt_stake">stake</field>
+        <value name="VALUE"><block type="math_number" id="rftt_i1v"><field name="NUM">0.5</field></block></value>
+        <next>
+          <block type="variables_set" id="rftt_i2">
+            <field name="VAR" id="rftt_init">initial_stake</field>
+            <value name="VALUE"><block type="math_number" id="rftt_i2v"><field name="NUM">0.5</field></block></value>
+            <next>
+              <block type="variables_set" id="rftt_i3">
+                <field name="VAR" id="rftt_mart">martingale</field>
+                <value name="VALUE"><block type="math_number" id="rftt_i3v"><field name="NUM">2</field></block></value>
+                <next>
+                  <!-- trade_direction: 0=CALL, 1=PUT -->
+                  <block type="variables_set" id="rftt_i4">
+                    <field name="VAR" id="rftt_dir">trade_direction</field>
+                    <value name="VALUE"><block type="math_number" id="rftt_i4v"><field name="NUM">0</field></block></value>
+                    <next>
+                      <block type="variables_set" id="rftt_i5">
+                        <field name="VAR" id="rftt_lstreak">loss_streak</field>
+                        <value name="VALUE"><block type="math_number" id="rftt_i5v"><field name="NUM">0</field></block></value>
+                        <next>
+                          <block type="variables_set" id="rftt_i6">
+                            <field name="VAR" id="rftt_tp">take_profit</field>
+                            <value name="VALUE"><block type="math_number" id="rftt_i6v"><field name="NUM">5</field></block></value>
+                            <next>
+                              <block type="variables_set" id="rftt_i7">
+                                <field name="VAR" id="rftt_sl">stop_loss</field>
+                                <value name="VALUE"><block type="math_number" id="rftt_i7v"><field name="NUM">50</field></block></value>
+                                <next>
+                                  <block type="variables_set" id="rftt_i8">
+                                    <field name="VAR" id="rftt_profit">session_profit</field>
+                                    <value name="VALUE"><block type="math_number" id="rftt_i8v"><field name="NUM">0</field></block></value>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+
+  <!-- ═══ BEFORE PURCHASE — direction: 0=CALL(Rise), 1=PUT(Fall) ═══ -->
+  <block type="before_purchase" id="rftt_bp" collapsed="false" deletable="false" x="0" y="600">
+    <statement name="BEFOREPURCHASE_STACK">
+      <block type="controls_if" id="rftt_bp_if">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+        <value name="IF0">
+          <block type="logic_compare" id="rftt_bp_cmp0">
+            <field name="OP">EQ</field>
+            <value name="A"><block type="variables_get" id="rftt_bp_g0"><field name="VAR" id="rftt_dir">trade_direction</field></block></value>
+            <value name="B"><block type="math_number" id="rftt_bp_n0"><field name="NUM">0</field></block></value>
+          </block>
+        </value>
+        <!-- direction=0: CALL (Rise) -->
+        <statement name="DO0">
+          <block type="timeout" id="rftt_bp_t0">
+            <statement name="TIMEOUTSTACK">
+              <block type="purchase" id="rftt_bp_p0">
+                <field name="PURCHASE_LIST">CALL</field>
+              </block>
+            </statement>
+            <value name="SECONDS"><block type="math_number" id="rftt_bp_t0v"><field name="NUM">-0.00001</field></block></value>
+          </block>
+        </statement>
+        <!-- direction=1: PUT (Fall) -->
+        <statement name="ELSE">
+          <block type="timeout" id="rftt_bp_t1">
+            <statement name="TIMEOUTSTACK">
+              <block type="purchase" id="rftt_bp_p1">
+                <field name="PURCHASE_LIST">PUT</field>
+              </block>
+            </statement>
+            <value name="SECONDS"><block type="math_number" id="rftt_bp_t1v"><field name="NUM">-0.00001</field></block></value>
+          </block>
+        </statement>
+      </block>
+    </statement>
+  </block>
+
+  <!-- ═══ AFTER PURCHASE ═══ -->
+  <block type="after_purchase" id="rftt_ap" collapsed="false" deletable="false" x="0" y="900">
+    <statement name="AFTERPURCHASE_STACK">
+      <block type="controls_if" id="rftt_ap_if">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+        <value name="IF0">
+          <block type="contract_check_result" id="rftt_ap_win">
+            <field name="CHECK_RESULT">win</field>
+          </block>
+        </value>
+        <statement name="DO0">
+          <!-- WIN: reset stake, reset loss_streak, flip direction -->
+          <block type="variables_set" id="rftt_ap_w1">
+            <field name="VAR" id="rftt_stake">stake</field>
+            <value name="VALUE">
+              <block type="variables_get" id="rftt_ap_w1v"><field name="VAR" id="rftt_init">initial_stake</field></block>
+            </value>
+            <next>
+              <block type="variables_set" id="rftt_ap_w2">
+                <field name="VAR" id="rftt_lstreak">loss_streak</field>
+                <value name="VALUE"><block type="math_number" id="rftt_ap_w2v"><field name="NUM">0</field></block></value>
+                <next>
+                  <!-- flip direction on win: CALL→PUT or PUT→CALL -->
+                  <block type="controls_if" id="rftt_ap_wflip">
+                    <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                    <value name="IF0">
+                      <block type="logic_compare" id="rftt_ap_wflip_c">
+                        <field name="OP">EQ</field>
+                        <value name="A"><block type="variables_get" id="rftt_ap_wflip_g"><field name="VAR" id="rftt_dir">trade_direction</field></block></value>
+                        <value name="B"><block type="math_number" id="rftt_ap_wflip_n"><field name="NUM">0</field></block></value>
+                      </block>
+                    </value>
+                    <statement name="DO0">
+                      <block type="variables_set" id="rftt_ap_wflip_s0">
+                        <field name="VAR" id="rftt_dir">trade_direction</field>
+                        <value name="VALUE"><block type="math_number" id="rftt_ap_wflip_s0v"><field name="NUM">1</field></block></value>
+                      </block>
+                    </statement>
+                    <statement name="ELSE">
+                      <block type="variables_set" id="rftt_ap_wflip_s1">
+                        <field name="VAR" id="rftt_dir">trade_direction</field>
+                        <value name="VALUE"><block type="math_number" id="rftt_ap_wflip_s1v"><field name="NUM">0</field></block></value>
+                      </block>
+                    </statement>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </statement>
+        <statement name="ELSE">
+          <!-- LOSS: martingale + loss_streak++ + flip direction -->
+          <block type="variables_set" id="rftt_ap_l1">
+            <field name="VAR" id="rftt_stake">stake</field>
+            <value name="VALUE">
+              <block type="math_arithmetic" id="rftt_ap_l1_arith">
+                <field name="OP">MULTIPLY</field>
+                <value name="A">
+                  <shadow type="math_number" id="rftt_ap_l1_as"><field name="NUM">1</field></shadow>
+                  <block type="variables_get" id="rftt_ap_l1_a"><field name="VAR" id="rftt_stake">stake</field></block>
+                </value>
+                <value name="B">
+                  <shadow type="math_number" id="rftt_ap_l1_bs"><field name="NUM">1</field></shadow>
+                  <block type="variables_get" id="rftt_ap_l1_b"><field name="VAR" id="rftt_mart">martingale</field></block>
+                </value>
+              </block>
+            </value>
+            <next>
+              <block type="math_change" id="rftt_ap_l2">
+                <field name="VAR" id="rftt_lstreak">loss_streak</field>
+                <value name="DELTA"><shadow type="math_number" id="rftt_ap_l2_v"><field name="NUM">1</field></shadow></value>
+                <next>
+                  <!-- Flip direction on loss -->
+                  <block type="controls_if" id="rftt_ap_lflip">
+                    <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                    <value name="IF0">
+                      <block type="logic_compare" id="rftt_ap_lflip_c">
+                        <field name="OP">EQ</field>
+                        <value name="A"><block type="variables_get" id="rftt_ap_lflip_g"><field name="VAR" id="rftt_dir">trade_direction</field></block></value>
+                        <value name="B"><block type="math_number" id="rftt_ap_lflip_n"><field name="NUM">0</field></block></value>
+                      </block>
+                    </value>
+                    <statement name="DO0">
+                      <block type="variables_set" id="rftt_ap_lflip_s0">
+                        <field name="VAR" id="rftt_dir">trade_direction</field>
+                        <value name="VALUE"><block type="math_number" id="rftt_ap_lflip_s0v"><field name="NUM">1</field></block></value>
+                      </block>
+                    </statement>
+                    <statement name="ELSE">
+                      <block type="variables_set" id="rftt_ap_lflip_s1">
+                        <field name="VAR" id="rftt_dir">trade_direction</field>
+                        <value name="VALUE"><block type="math_number" id="rftt_ap_lflip_s1v"><field name="NUM">0</field></block></value>
+                      </block>
+                    </statement>
+                  </block>
+                  <next>
+                    <!-- After 3 consecutive losses: reset direction to CALL + reset stake -->
+                    <block type="controls_if" id="rftt_ap_l3reset">
+                      <value name="IF0">
+                        <block type="logic_compare" id="rftt_ap_l3reset_cmp">
+                          <field name="OP">GTE</field>
+                          <value name="A"><block type="variables_get" id="rftt_ap_l3reset_g"><field name="VAR" id="rftt_lstreak">loss_streak</field></block></value>
+                          <value name="B"><block type="math_number" id="rftt_ap_l3reset_n"><field name="NUM">3</field></block></value>
+                        </block>
+                      </value>
+                      <statement name="DO0">
+                        <block type="variables_set" id="rftt_ap_l3reset_dir">
+                          <field name="VAR" id="rftt_dir">trade_direction</field>
+                          <value name="VALUE"><block type="math_number" id="rftt_ap_l3reset_dir_v"><field name="NUM">0</field></block></value>
+                          <next>
+                            <block type="variables_set" id="rftt_ap_l3reset_streak">
+                              <field name="VAR" id="rftt_lstreak">loss_streak</field>
+                              <value name="VALUE"><block type="math_number" id="rftt_ap_l3reset_sv"><field name="NUM">0</field></block></value>
+                            </block>
+                          </next>
+                        </block>
+                      </statement>
+                    </block>
+                  </next>
+                </next>
+              </block>
+            </next>
+          </block>
+        </statement>
+      </block>
+      <next>
+        <block type="trade_again" id="rftt_ta"></block>
+      </next>
+    </statement>
+  </block>
+</xml>

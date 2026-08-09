@@ -113,6 +113,7 @@ const DigitPercentWidget: React.FC = () => {
     const [ticks, setTicks] = useState<number[]>([]);
     const [currentDigit, setCurrentDigit] = useState<number | null>(null);
     const [currentPrice, setCurrentPrice] = useState<string | null>(null);
+    const [lastLiveTickAt, setLastLiveTickAt] = useState(0);
     const [threshold, setThreshold] = useState(5);
     const [darkMode, setDarkMode] = useState(() => {
         try { return localStorage.getItem('digit_widget_dark') === '1'; } catch { return false; }
@@ -192,6 +193,7 @@ const DigitPercentWidget: React.FC = () => {
         setTicks([]);
         setCurrentDigit(null);
         setCurrentPrice(null);
+        setLastLiveTickAt(0);
 
         // Reset state for this new subscription
         pipSizeRef.current = currentMarket.pipSize;
@@ -293,7 +295,9 @@ const DigitPercentWidget: React.FC = () => {
                                     if (digits.length > 0) setCurrentDigit(digits[digits.length - 1]);
                                     const last = stored[stored.length - 1];
                                     if (last != null) setCurrentPrice(last.toFixed(confirmedPs));
-                                    rawHistoryRef.current = [];
+                                    // Keep the authoritative price history alive for the
+                                    // AI's Rise/Fall, High/Low and streak analysis.
+                                    rawHistoryRef.current = stored.slice(-tickCount);
                                 }
                             } else {
                                 pipSizeRef.current = confirmedPs;
@@ -305,7 +309,9 @@ const DigitPercentWidget: React.FC = () => {
                         const digit = getLastDigit(quote, ps);
                         setCurrentDigit(digit);
                         setCurrentPrice(quote.toFixed(ps));
+                        rawHistoryRef.current = [...rawHistoryRef.current, quote].slice(-tickCount);
                         setTicks(prev => [...prev.slice(-(tickCount - 1)), digit]);
+                        setLastLiveTickAt(Date.now());
                         armWatchdog();
                     },
                     error: () => {
@@ -774,6 +780,17 @@ const DigitPercentWidget: React.FC = () => {
                                     color: darkMode ? '#a78bfa' : '#7b3fe4',
                                 }}>
                                     🤖 AI Contract Type Analyser
+                                    <span style={{
+                                        display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                        marginLeft: '2px', fontSize: '9px', fontWeight: 700,
+                                        color: connectionStatus === 'opened' && lastLiveTickAt ? '#22c55e' : '#f59e0b',
+                                    }}>
+                                        <span style={{
+                                            width: '6px', height: '6px', borderRadius: '50%',
+                                            background: connectionStatus === 'opened' && lastLiveTickAt ? '#22c55e' : '#f59e0b',
+                                        }} />
+                                        {connectionStatus === 'opened' && lastLiveTickAt ? 'LIVE MARKET' : 'CONNECTING'}
+                                    </span>
                                     {/* Adjustable AI tick count */}
                                     <span style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: 'auto' }}>
                                         <span style={{ fontSize: '10px', color: darkMode ? '#64748b' : '#9ca3af', fontWeight: 400 }}>Ticks:</span>

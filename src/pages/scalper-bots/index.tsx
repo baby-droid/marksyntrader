@@ -69,8 +69,31 @@ type VirtualHookConfig = {
 type VirtualHookAltConfig = {
     enabled: boolean;
     winsRequired: number;    // consecutive virtual wins needed (default 2)
-    lossToTrigger: number;   // virtual losses after wins to unlock real trade (default 1)
+    lossToTrigger: number;   // virtual losses after wins to unlock real trade (0 = unlock immediately after wins)
     recoveryEnabled: boolean;// after real loss: 1-virtual check → recovery trade
+};
+
+type CoolOffDurationUnit = 't' | 's' | 'm' | 'h';
+
+type CoolOffShortConfig = {
+    enabled: boolean;
+    winsInRow: number;
+    tradesLimit: number;
+    duration: number;
+    durationUnit: 't' | 's' | 'm';
+};
+
+type CoolOffLongConfig = {
+    enabled: boolean;
+    winsInRow: number;
+    lossesInRow: number;
+    duration: number;
+    durationUnit: CoolOffDurationUnit;
+};
+
+type CoolOffConfig = {
+    short: CoolOffShortConfig;
+    long: CoolOffLongConfig;
 };
 
 /* Strategy Logic — condition-based entry engine (mirrors the reference "OR Group" UI) */
@@ -158,6 +181,7 @@ type BotConfig = {
     multiTradeCount: number; // number of contracts to fire on each entry (multiple bots)
     virtualHook: VirtualHookConfig;
     virtualHookAlt: VirtualHookAltConfig;
+    coolOff: CoolOffConfig;
     stealthMode: boolean;  // obfuscates tick prices in terminal to reduce pattern visibility
 };
 
@@ -169,6 +193,10 @@ const DEFAULT_RM: RiskManagerConfig = {
 
 const DEFAULT_VH: VirtualHookConfig = { enabled: false, hookLoss: 3, hookWin: 1, recoveryMode: false };
 const DEFAULT_VHA: VirtualHookAltConfig = { enabled: false, winsRequired: 2, lossToTrigger: 1, recoveryEnabled: false };
+const DEFAULT_COOLOFF: CoolOffConfig = {
+    short: { enabled: false, winsInRow: 3, tradesLimit: 5, duration: 10, durationUnit: 't' },
+    long: { enabled: false, winsInRow: 7, lossesInRow: 3, duration: 5, durationUnit: 'm' },
+};
 
 /* The default condition mirrors checkEntry()'s contrarian logic exactly, so
    turning Strategy Logic on doesn't change default behaviour — it just makes
@@ -316,6 +344,10 @@ const DEFAULT_CONFIG = (bot: TScalperBot): BotConfig => ({
     multiTradeCount: bot.multiple ? 3 : 1,
     virtualHook: { ...DEFAULT_VH },
     virtualHookAlt: { ...DEFAULT_VHA },
+    coolOff: {
+        short: { ...DEFAULT_COOLOFF.short },
+        long: { ...DEFAULT_COOLOFF.long },
+    },
     stealthMode: false,
 });
 
@@ -1361,6 +1393,13 @@ const BotDetail: React.FC<{
     const [activeMarket, setActiveMarket] = useState(cfg.market);
     const [addMarketSel, setAddMarketSel] = useState('1HZ50V');
     const [digitDisplay, setDigitDisplay] = useState<number[]>([]); // reactive copy for rendering
+    const [coolOffStatus, setCoolOffStatus] = useState<{
+        mode: 'short' | 'long';
+        reason: string;
+        remaining: number;
+        total: number;
+        unit: CoolOffDurationUnit;
+    } | null>(null);
     const [winPopup, setWinPopup] = useState<{
         profit: number; stopped: boolean;
         sessionPnl: number; wins: number; losses: number; reason?: string;
@@ -1495,6 +1534,8 @@ const BotDetail: React.FC<{
         setCfg(prev => ({ ...prev, virtualHook: { ...prev.virtualHook, ...patch } }));
     const vhaSet = (patch: Partial<VirtualHookAltConfig>) =>
         setCfg(prev => ({ ...prev, virtualHookAlt: { ...prev.virtualHookAlt, ...patch } }));
+    const coolOffSet = <K extends keyof CoolOffConfig>(mode: K, patch: Partial<CoolOffConfig[K]>) =>
+        setCfg(prev => ({ ...prev, coolOff: { ...prev.coolOff, [mode]: { ...prev.coolOff[mode], ...patch } } }));
 
     /* ── Subscribe to ticks for the active market ──
        Each new tick immediately wakes the scan loop (tickSignalRef) so the
@@ -1630,6 +1671,7 @@ const BotDetail: React.FC<{
         setEntryReady(false);
         setTerminal([]);
         setWinPopup(null);
+        setCoolOffStatus(null);
 
         /* Determine market list — the MARKET field in Trade Parameters is always the
            starting market; the Market Switcher's added markets are additional
@@ -1695,6 +1737,7 @@ const BotDetail: React.FC<{
         let consecutiveWins = 0;     // reset to 0 on any loss; triggers cool-off at 7
         let inRecovery = false;       // set when user accepts recovery after SL hit
         let recoveryCoolLoss = 0;    // consecutive losses accumulated during recovery cool-off check
+        let sessionTrades = 0;
 
         /* ── Virtual Hook state (persists across scan cycles within one Run) ──
            vPhase tracks which part of the pattern we're collecting:
@@ -1713,6 +1756,80 @@ const BotDetail: React.FC<{
         let vhaPhase: 'win' | 'loss' = 'win';
         let vhaWinCount = 0;
         let vhaLossCount = 0;
+
+        const getVirtualOutcome = () => {
+            const digit = digitWindowRef.current[0] ?? 5;
+            const prediction = slotBarrier() ?? bot.prediction ?? 5;
+            switch (bot.contractType) {
+                case 'DIGITEVEN': return { won: digit % 2 === 0, digit };
+                case 'DIGITODD': return { won: digit % 2 !== 0, digit };
+                case 'DIGITOVER': return { won: digit > prediction, digit };
+                case 'DIGITUNDER': return { won: digit < prediction, digit };
+                case 'DIGITMATCH': return { won: digit === prediction, digit };
+                case 'DIGITDIFF': return { won: digit !== prediction, digit };
+                case 'CALL': return {
+                    won: (priceWindowRef.current[0] ?? 0) > (priceWindowRef.current[1] ?? priceWindowRef.current[0] ?? 0),
+                    digit,
+                };
+                case 'PUT': return {
+                    won: (priceWindowRef.current[0] ?? 0) < (priceWindowRef.current[1] ?? priceWindowRef.current[0] ?? 0),
+                    digit,
+                };
+                default: return { won: digit % 2 === 0, digit };
+            }
+        };
+
+        const waitForLiveTick = (timeoutMs: number) => new Promise<boolean>(resolve => {
+            let done = false;
+            const finish = (received: boolean) => {
+                if (done) return;
+                done = true;
+                if (tickSignalRef.current === finish) tickSignalRef.current = null;
+                resolve(received);
+            };
+            tickSignalRef.current = () => finish(true);
+            setTimeout(() => finish(false), timeoutMs);
+        });
+
+        /* A cool-off locks only real execution. Each live tick during the lock is
+           recorded as a virtual row, so the user can monitor the market without
+           sending any buy request to the real account. */
+        const runCoolOff = async (mode: 'short' | 'long', reason: string) => {
+            const settings = cfg.coolOff[mode];
+            if (!settings.enabled || settings.duration <= 0) return;
+            const unitMs: Record<CoolOffDurationUnit, number> = { t: 0, s: 1_000, m: 60_000, h: 3_600_000 };
+            const total = Math.max(1, settings.duration);
+            const byTicks = settings.durationUnit === 't';
+            const deadline = byTicks ? 0 : Date.now() + total * unitMs[settings.durationUnit];
+            let remaining = total;
+
+            setCoolOffStatus({ mode, reason, remaining, total, unit: settings.durationUnit });
+            addLog(`⏸ ${mode.toUpperCase()} COOL-OFF — ${reason} | ${total}${settings.durationUnit} | REAL TRADES LOCKED`, 'hack');
+
+            while (!stopRef.current && (byTicks ? remaining > 0 : Date.now() < deadline)) {
+                const gotTick = await waitForLiveTick(byTicks ? 2_500 : 1_000);
+                if (gotTick) {
+                    const { won, digit } = getVirtualOutcome();
+                    const virtualStake = curStake;
+                    setTxList(prev => [{
+                        id: ++txIdRef.current, time: ts(), market: curMarket,
+                        type: `[COOL-OFF ${mode.toUpperCase()}] ${contractLabel(bot)}`,
+                        stake: virtualStake, barrier: slotBarrier() ?? null,
+                        result: won ? 'won' : 'lost',
+                        profit: won ? +(virtualStake * 0.85).toFixed(2) : -virtualStake,
+                        exitDigit: digit, virtual: true,
+                    }, ...prev]);
+                    if (byTicks) remaining--;
+                }
+                if (!byTicks) {
+                    remaining = Math.max(0, Math.ceil((deadline - Date.now()) / unitMs[settings.durationUnit]));
+                }
+                setCoolOffStatus({ mode, reason, remaining, total, unit: settings.durationUnit });
+            }
+
+            setCoolOffStatus(null);
+            if (!stopRef.current) addLog(`▶ ${mode.toUpperCase()} COOL-OFF COMPLETE — real trading unlocked`, 'hack');
+        };
 
         /* ── FRESH XML RELOAD every time Run is pressed ──
            Await the load so the workspace is ready before the first trade fires. */
@@ -2150,8 +2267,14 @@ const BotDetail: React.FC<{
                                 vhaWinCount++;
                                 addLog(`💎 VHA ✅ VIRTUAL WIN  wins: ${vhaWinCount}/${cfg.virtualHookAlt.winsRequired}`, 'win');
                                 if (vhaWinCount >= cfg.virtualHookAlt.winsRequired) {
-                                    addLog(`💎 VHA: ${cfg.virtualHookAlt.winsRequired} wins confirmed — awaiting ${cfg.virtualHookAlt.lossToTrigger} loss(es)`, 'hack');
-                                    vhaPhase = 'loss'; vhaLossCount = 0;
+                                    if (cfg.virtualHookAlt.lossToTrigger === 0) {
+                                        addLog(`💎 VHA 🚀 PATTERN MET (${cfg.virtualHookAlt.winsRequired}W → 0L) — REAL TRADE UNLOCKED`, 'entry');
+                                        vhaWinCount = 0; vhaLossCount = 0; vhaPhase = 'win';
+                                        vhaRealUnlocked = true;
+                                    } else {
+                                        addLog(`💎 VHA: ${cfg.virtualHookAlt.winsRequired} wins confirmed — awaiting ${cfg.virtualHookAlt.lossToTrigger} loss(es)`, 'hack');
+                                        vhaPhase = 'loss'; vhaLossCount = 0;
+                                    }
                                 }
                             } else {
                                 addLog(`💎 VHA ❌ VIRTUAL LOSS — win streak broken, restarting`, 'loss');
@@ -2280,6 +2403,7 @@ const BotDetail: React.FC<{
                                 stake: buyPrice, barrier: activeBarrier, result: won ? 'won' : 'lost',
                                 profit, exitDigit,
                             }, ...prev]);
+                            sessionTrades++;
                             const pnlStr = `${sessionPnlRef.current >= 0 ? '+' : ''}${sessionPnlRef.current.toFixed(2)} USD`;
                             if (won) {
                                 winsRef.current++;
@@ -2497,6 +2621,31 @@ const BotDetail: React.FC<{
                         addLog('💎 VHA: REAL LOSS → stage-1 recovery virtual check queued for next scan', 'hack');
                     }
 
+                    const longLossTrigger = cfg.coolOff.long.enabled
+                        && cfg.coolOff.long.lossesInRow > 0
+                        && totalConsLoss >= cfg.coolOff.long.lossesInRow;
+                    if (longLossTrigger) {
+                        await runCoolOff('long', `${totalConsLoss} losses in a row`);
+                        sessionTrades = 0;
+                        consecutiveWins = 0;
+                        totalConsLoss = 0;
+                        consLossRef.current = 0;
+                        curStake = slotBaseStake();
+                        lastBuyPrice = curStake;
+                    }
+                    const shortTradeTriggerAfterLoss = cfg.coolOff.short.enabled
+                        && cfg.coolOff.short.tradesLimit > 0
+                        && sessionTrades >= cfg.coolOff.short.tradesLimit;
+                    if (!longLossTrigger && shortTradeTriggerAfterLoss) {
+                        await runCoolOff('short', `${sessionTrades} trades reached`);
+                        sessionTrades = 0;
+                        consecutiveWins = 0;
+                        totalConsLoss = 0;
+                        consLossRef.current = 0;
+                        curStake = slotBaseStake();
+                        lastBuyPrice = curStake;
+                    }
+
                     /* Buffer between loss cycles — gives lingering bot.stop events a
                        chance to drain before the new cycle registers its listeners.
                        Fast/UltraFast: 0-30 ms (VHR will wait 1 tick anyway on next iter).
@@ -2549,23 +2698,47 @@ const BotDetail: React.FC<{
                     break;
                 }
 
-                /* ── 7 consecutive wins → cool-off before stopping ──
-                   After a hot streak the bot pauses briefly so the market can
-                   breathe, then stops cleanly. This prevents over-trading on
-                   momentum and gives the user a natural re-entry point. */
-                if (consecutiveWins >= 7) {
-                    const coolSecs = 30;
-                    addLog(`⏸ COOL-OFF: 7 consecutive wins — pausing ${coolSecs}s before stopping`, 'hack');
-                    await new Promise(r => setTimeout(r, coolSecs * 1_000));
-                    addLog(`▶ COOL-OFF COMPLETE — stopping for fresh scalp`, 'hack');
+                const shortWinTrigger = cfg.coolOff.short.enabled
+                    && cfg.coolOff.short.winsInRow > 0
+                    && consecutiveWins >= cfg.coolOff.short.winsInRow;
+                const shortTradeTrigger = cfg.coolOff.short.enabled
+                    && cfg.coolOff.short.tradesLimit > 0
+                    && sessionTrades >= cfg.coolOff.short.tradesLimit;
+                const longWinTrigger = cfg.coolOff.long.enabled
+                    && cfg.coolOff.long.winsInRow > 0
+                    && consecutiveWins >= cfg.coolOff.long.winsInRow;
+                if (shortWinTrigger || shortTradeTrigger || longWinTrigger) {
+                    const mode: 'short' | 'long' = longWinTrigger && !shortWinTrigger && !shortTradeTrigger ? 'long' : 'short';
+                    const reason = shortWinTrigger
+                        ? `${consecutiveWins} wins in a row`
+                        : shortTradeTrigger
+                            ? `${sessionTrades} trades reached`
+                            : `${consecutiveWins} wins in a row`;
+                    await runCoolOff(mode, reason);
+                    sessionTrades = 0;
                     consecutiveWins = 0;
+                    totalConsLoss = 0;
+                    consLossRef.current = 0;
+                    curStake = slotBaseStake();
+                    lastBuyPrice = curStake;
+                    if (!stopRef.current) {
+                        addLog(`▶ SESSION CONTINUES — next ${mode} session started`, 'switch');
+                        continue;
+                    }
                 }
 
                 /* ── Stop after every successful trade ──
-                   Press RUN again to start a fresh scalp cycle. */
-                addLog('🎉 TRADE WIN — Bot stopped. Press ▶ RUN to start a fresh scalp.', 'win');
-                setWinPopup({ profit: cycle.cycleProfit, stopped: true, sessionPnl: sessionPnlRef.current, wins: winsRef.current, losses: lossesRef.current, reason: 'win' });
-                break;
+                   Keep the legacy one-trade mode when sessions are disabled.
+                   Enabling either short or long sessions makes RUN a continuous
+                   session, with the configured cool-off acting as the pause. */
+                const sessionsEnabled = cfg.coolOff.short.enabled || cfg.coolOff.long.enabled;
+                if (!sessionsEnabled) {
+                    addLog('🎉 TRADE WIN — Bot stopped. Press ▶ RUN to start a fresh scalp.', 'win');
+                    setWinPopup({ profit: cycle.cycleProfit, stopped: true, sessionPnl: sessionPnlRef.current, wins: winsRef.current, losses: lossesRef.current, reason: 'win' });
+                    break;
+                }
+                addLog('✅ SESSION WIN — continuing until a session cool-off threshold is reached', 'win');
+                await new Promise(r => setTimeout(r, 100));
 
             } catch (err: any) {
                 const errMsg = err?.error?.message || err?.message || 'Trade error — retrying...';
@@ -3211,7 +3384,7 @@ const BotDetail: React.FC<{
                                         <span key={`w${i}`} className='sb-vhook-chip sb-vhook-chip--win'>W</span>
                                     ))}
                                     <span className='sb-vhook-arrow'>→</span>
-                                    {Array.from({ length: cfg.virtualHookAlt.lossToTrigger }, (_, i) => (
+                                    {Array.from({ length: Math.max(0, cfg.virtualHookAlt.lossToTrigger) }, (_, i) => (
                                         <span key={`l${i}`} className='sb-vhook-chip sb-vhook-chip--loss'>L</span>
                                     ))}
                                     <span className='sb-vhook-arrow'>→</span>
@@ -3226,12 +3399,12 @@ const BotDetail: React.FC<{
                                     </div>
                                     <div className='sb-field'>
                                         <label>Virtual Losses</label>
-                                        <NumberField value={cfg.virtualHookAlt.lossToTrigger} min={1} max={5}
+                                        <NumberField value={cfg.virtualHookAlt.lossToTrigger} min={0} max={5}
                                             onCommit={n => vhaSet({ lossToTrigger: n })} disabled={running} />
-                                        <span className='sb-unit'>losses after wins to trigger real</span>
+                                        <span className='sb-unit'>losses after wins (0 = immediate)</span>
                                     </div>
                                 </div>
-                                <p className='sb-hint'>Example: 2 wins → 1 loss means the bot simulates 2 consecutive wins then waits for 1 loss before placing a real trade. Any win during the loss phase resets the entire sequence.</p>
+                                <p className='sb-hint'>Example: 2 wins → 1 loss means the bot simulates 2 consecutive wins then waits for 1 loss before placing a real trade. Set losses to <strong>0</strong> to unlock immediately after the wins — it will never be changed to 1.</p>
 
                                 {/* ── VHA Recovery ── */}
                                 <div style={{ marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(245,158,11,0.25)' }}>
@@ -3255,6 +3428,112 @@ const BotDetail: React.FC<{
                                 </div>
                             </>
                         )}
+                    </SbAccordion>
+
+                    {/* ── Cool-off sessions ── */}
+                    <SbAccordion
+                        title='⏸ Cool-off Sessions'
+                        badge={cfg.coolOff.short.enabled || cfg.coolOff.long.enabled ? 'ACTIVE' : 'OFF'}
+                        badgeColor={cfg.coolOff.short.enabled || cfg.coolOff.long.enabled ? '#06b6d4' : '#64748b'}
+                    >
+                        <p className='sb-hint sb-hint--cooloff'>
+                            Cool-off pauses real-money execution after the selected streak. Live ticks are still monitored and recorded as <strong>virtual trades only</strong>; no real-account buy is sent while the countdown is active.
+                        </p>
+
+                        <div className='sb-cooloff-card sb-cooloff-card--short'>
+                            <div className='sb-cooloff-card__heading'>
+                                <strong>⚡ Short session</strong>
+                                <button
+                                    className={`sb-toggle ${cfg.coolOff.short.enabled ? 'on' : 'off'}`}
+                                    onClick={() => coolOffSet('short', { enabled: !cfg.coolOff.short.enabled })}
+                                    disabled={running}
+                                >
+                                    {cfg.coolOff.short.enabled ? 'ON' : 'OFF'}
+                                </button>
+                            </div>
+                            {cfg.coolOff.short.enabled && (
+                                <>
+                                    <div className='sb-field-row'>
+                                        <div className='sb-field'>
+                                            <label>Wins in a row</label>
+                                            <NumberField value={cfg.coolOff.short.winsInRow} min={1} max={100}
+                                                onCommit={n => coolOffSet('short', { winsInRow: n })} disabled={running} />
+                                        </div>
+                                        <div className='sb-field'>
+                                            <label>Under trades</label>
+                                            <NumberField value={cfg.coolOff.short.tradesLimit} min={1} max={5}
+                                                onCommit={n => coolOffSet('short', { tradesLimit: n })} disabled={running} />
+                                        </div>
+                                    </div>
+                                    <div className='sb-field-row'>
+                                        <div className='sb-field'>
+                                            <label>Cool-off duration</label>
+                                            <NumberField value={cfg.coolOff.short.duration} min={1} max={100}
+                                                onCommit={n => coolOffSet('short', { duration: n })} disabled={running} />
+                                        </div>
+                                        <div className='sb-field'>
+                                            <label>Unit</label>
+                                            <select value={cfg.coolOff.short.durationUnit}
+                                                onChange={e => coolOffSet('short', { durationUnit: e.target.value as CoolOffShortConfig['durationUnit'] })}
+                                                disabled={running}>
+                                                <option value='t'>Ticks</option>
+                                                <option value='s'>Seconds</option>
+                                                <option value='m'>Minutes</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <p className='sb-hint'>Starts after the wins-in-row threshold or when the session reaches the under-trades limit.</p>
+                                </>
+                            )}
+                        </div>
+
+                        <div className='sb-cooloff-card sb-cooloff-card--long'>
+                            <div className='sb-cooloff-card__heading'>
+                                <strong>🛡 Long session</strong>
+                                <button
+                                    className={`sb-toggle ${cfg.coolOff.long.enabled ? 'on' : 'off'}`}
+                                    onClick={() => coolOffSet('long', { enabled: !cfg.coolOff.long.enabled })}
+                                    disabled={running}
+                                >
+                                    {cfg.coolOff.long.enabled ? 'ON' : 'OFF'}
+                                </button>
+                            </div>
+                            {cfg.coolOff.long.enabled && (
+                                <>
+                                    <div className='sb-field-row'>
+                                        <div className='sb-field'>
+                                            <label>Wins in a row</label>
+                                            <NumberField value={cfg.coolOff.long.winsInRow} min={1} max={100}
+                                                onCommit={n => coolOffSet('long', { winsInRow: n })} disabled={running} />
+                                        </div>
+                                        <div className='sb-field'>
+                                            <label>Losses in a row</label>
+                                            <NumberField value={cfg.coolOff.long.lossesInRow} min={1} max={100}
+                                                onCommit={n => coolOffSet('long', { lossesInRow: n })} disabled={running} />
+                                        </div>
+                                    </div>
+                                    <div className='sb-field-row'>
+                                        <div className='sb-field'>
+                                            <label>Cool-off duration</label>
+                                            <NumberField value={cfg.coolOff.long.duration} min={1} max={100}
+                                                onCommit={n => coolOffSet('long', { duration: n })} disabled={running} />
+                                        </div>
+                                        <div className='sb-field'>
+                                            <label>Unit</label>
+                                            <select value={cfg.coolOff.long.durationUnit}
+                                                onChange={e => coolOffSet('long', { durationUnit: e.target.value as CoolOffLongConfig['durationUnit'] })}
+                                                disabled={running}>
+                                                <option value='t'>Ticks</option>
+                                                <option value='s'>Seconds</option>
+                                                <option value='m'>Minutes</option>
+                                                <option value='h'>Hours</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <p className='sb-hint'>Starts after the configured wins-in-row or losses-in-row threshold, then resets the session counters and stake to base.</p>
+                                </>
+                            )}
+                        </div>
                     </SbAccordion>
 
                     {/* ── Stealth Mode ── */}
@@ -3434,6 +3713,28 @@ const BotDetail: React.FC<{
                                     <div className='vps-done-modal__stat'><span>Status</span><strong>Completed</strong></div>
                                 </div>
                                 <button className='vps-done-modal__ok' onClick={() => setVpsDonePopup(null)}>OK</button>
+                            </div>
+                        </div>
+                    )}
+                    {coolOffStatus && (
+                        <div className='sb-cooloff-overlay' role='status' aria-live='polite'>
+                            <div className='sb-cooloff-modal'>
+                                <div className='sb-cooloff-modal__pulse'>⏸</div>
+                                <div className='sb-cooloff-modal__eyebrow'>REAL TRADING PAUSED</div>
+                                <div className='sb-cooloff-modal__title'>
+                                    {coolOffStatus.mode === 'short' ? 'SHORT SESSION COOL-OFF' : 'LONG SESSION COOL-OFF'}
+                                </div>
+                                <div className='sb-cooloff-modal__reason'>{coolOffStatus.reason}</div>
+                                <div className='sb-cooloff-modal__timer'>
+                                    {coolOffStatus.remaining}
+                                    <span>{coolOffStatus.unit === 't' ? 'TICKS' : coolOffStatus.unit === 's' ? 'SECONDS' : coolOffStatus.unit === 'm' ? 'MINUTES' : 'HOURS'}</span>
+                                </div>
+                                <div className='sb-cooloff-modal__hint'>
+                                    Live market feed active · virtual trades only
+                                </div>
+                                <div className='sb-cooloff-modal__progress'>
+                                    <span style={{ width: `${Math.max(0, Math.min(100, ((coolOffStatus.total - coolOffStatus.remaining) / coolOffStatus.total) * 100))}%` }} />
+                                </div>
                             </div>
                         </div>
                     )}
