@@ -3,6 +3,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import { publishMasterTrade, getMasterSource } from '@/utils/trade-bus';
+import ChartAiControl from './chart-ai';
 
 /* ── Symbol display names ─────────────────────────────────────────────────── */
 const SYMBOL_NAMES: Record<string, string> = {
@@ -376,10 +377,15 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
     const isJumpMarket = /^JD/i.test(symbol);
 
     /* ── Buy ─────────────────────────────────────────────────────────────── */
-    const buy = useCallback(async (side: 'over' | 'under') => {
+    const buy = useCallback(async (
+        side: 'over' | 'under',
+        overrides: { ticks?: number; stake?: number } = {},
+    ) => {
         if (loading) return;
         const api = (api_base as any).api;
         if (!api) { setResult({ ok: false, msg: '❌ Not connected' }); return; }
+        const effectiveTicks = overrides.ticks ?? ticks;
+        const effectiveStake = overrides.stake ?? stake;
         setLoading(side);
         setResult(null);
         // Allow-equals: CALL→CALLE, PUT→PUTE for Rise/Fall
