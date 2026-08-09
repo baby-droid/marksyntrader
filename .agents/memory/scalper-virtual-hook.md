@@ -52,3 +52,9 @@ CSS classes: `.sb-tx-virtual`, `.sb-virtual-badge`, `.sb-tx-virtual-stake`, `.sb
 
 **Why:** Virtual hook prevents real money from trading on untested conditions; stealth mode reduces terminal pattern visibility from screenshots/screen shares.
 **How to apply:** Both are per-bot settings. vHook gate fires on every entry signal when enabled. Stealth only affects log display, not market data accuracy.
+
+## Settings normalization
+- Virtual-hook numeric settings may arrive from imported/browser state as strings. Normalize them at runtime without truthy fallbacks: `0` is a valid VHA loss target and means unlock immediately after the required wins.
+
+**Why:** The VHA 2W → 0L mode previously behaved like 2W → 1L when a string or falsy-value fallback converted the intentional zero.
+**How to apply:** Preserve zero explicitly for all optional threshold settings; only use defaults when the value is absent or non-numeric.

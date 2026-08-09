@@ -198,6 +198,18 @@ const DEFAULT_COOLOFF: CoolOffConfig = {
     long: { enabled: false, winsInRow: 7, lossesInRow: 3, duration: 5, durationUnit: 'm' },
 };
 
+/* Settings can come from an older imported session or a browser form as strings.
+   Keep zero meaningful here: VHA's 0-loss mode is an intentional "unlock after
+   the wins" setting, not a missing value that should be replaced by one. */
+const normalizeVirtualHookAlt = (value: Partial<VirtualHookAltConfig> | undefined): VirtualHookAltConfig => ({
+    ...DEFAULT_VHA,
+    ...(value || {}),
+    enabled: Boolean(value?.enabled),
+    winsRequired: Math.max(1, Math.floor(Number(value?.winsRequired ?? DEFAULT_VHA.winsRequired) || DEFAULT_VHA.winsRequired)),
+    lossToTrigger: Math.max(0, Math.floor(Number(value?.lossToTrigger ?? DEFAULT_VHA.lossToTrigger) || 0)),
+    recoveryEnabled: Boolean(value?.recoveryEnabled),
+});
+
 /* The default condition mirrors checkEntry()'s contrarian logic exactly, so
    turning Strategy Logic on doesn't change default behaviour — it just makes
    the recovery-limit-aware re-entry configurable. Contract type is always
@@ -1753,6 +1765,9 @@ const BotDetail: React.FC<{
            vhaPhase 'win' : count consecutive virtual wins until winsRequired
            vhaPhase 'loss': count consecutive virtual losses until lossToTrigger
            A win during the loss phase resets everything back to the win phase. */
+        const virtualHookAlt = normalizeVirtualHookAlt(cfg.virtualHookAlt);
+        const vhaWinsRequired = virtualHookAlt.winsRequired;
+        const vhaLossTarget = virtualHookAlt.lossToTrigger;
         let vhaPhase: 'win' | 'loss' = 'win';
         let vhaWinCount = 0;
         let vhaLossCount = 0;
@@ -1798,7 +1813,7 @@ const BotDetail: React.FC<{
             const settings = cfg.coolOff[mode];
             if (!settings.enabled || settings.duration <= 0) return;
             const unitMs: Record<CoolOffDurationUnit, number> = { t: 0, s: 1_000, m: 60_000, h: 3_600_000 };
-            const total = Math.max(1, settings.duration);
+            const total = Math.max(1, Math.floor(Number(settings.duration) || 0));
             const byTicks = settings.durationUnit === 't';
             const deadline = byTicks ? 0 : Date.now() + total * unitMs[settings.durationUnit];
             let remaining = total;
@@ -2247,10 +2262,10 @@ const BotDetail: React.FC<{
                     }
 
                     /* ── VHA state machine (same shared tick — independent counter) ── */
-                    if (cfg.virtualHookAlt.enabled) {
+                    if (virtualHookAlt.enabled) {
                         const vhaPhaseDesc = vhaPhase === 'win'
-                            ? `seeking wins: ${vhaWinCount}/${cfg.virtualHookAlt.winsRequired}`
-                            : `seeking losses: ${vhaLossCount}/${cfg.virtualHookAlt.lossToTrigger}`;
+                            ? `seeking wins: ${vhaWinCount}/${vhaWinsRequired}`
+                            : `seeking losses: ${vhaLossCount}/${vhaLossTarget}`;
                         addLog(`💎 VHA [${vhaPhaseDesc}] exit[${sharedDigit}]`, 'hack');
 
                         const vhaProfit = sharedWon ? +(curStake * 0.85).toFixed(2) : -curStake;
@@ -2265,14 +2280,17 @@ const BotDetail: React.FC<{
                         if (vhaPhase === 'win') {
                             if (sharedWon) {
                                 vhaWinCount++;
-                                addLog(`💎 VHA ✅ VIRTUAL WIN  wins: ${vhaWinCount}/${cfg.virtualHookAlt.winsRequired}`, 'win');
-                                if (vhaWinCount >= cfg.virtualHookAlt.winsRequired) {
-                                    if (cfg.virtualHookAlt.lossToTrigger === 0) {
-                                        addLog(`💎 VHA 🚀 PATTERN MET (${cfg.virtualHookAlt.winsRequired}W → 0L) — REAL TRADE UNLOCKED`, 'entry');
+                                addLog(`💎 VHA ✅ VIRTUAL WIN  wins: ${vhaWinCount}/${vhaWinsRequired}`, 'win');
+                                if (vhaWinCount >= vhaWinsRequired) {
+                                    /* Zero is a valid target. Do not use a truthy
+                                       fallback here: 2W → 0L must unlock immediately
+                                       after the second virtual win. */
+                                    if (vhaLossTarget === 0) {
+                                        addLog(`💎 VHA 🚀 PATTERN MET (${vhaWinsRequired}W → 0L) — REAL TRADE UNLOCKED`, 'entry');
                                         vhaWinCount = 0; vhaLossCount = 0; vhaPhase = 'win';
                                         vhaRealUnlocked = true;
                                     } else {
-                                        addLog(`💎 VHA: ${cfg.virtualHookAlt.winsRequired} wins confirmed — awaiting ${cfg.virtualHookAlt.lossToTrigger} loss(es)`, 'hack');
+                                        addLog(`💎 VHA: ${vhaWinsRequired} wins confirmed — awaiting ${vhaLossTarget} loss(es)`, 'hack');
                                         vhaPhase = 'loss'; vhaLossCount = 0;
                                     }
                                 }
@@ -2283,9 +2301,9 @@ const BotDetail: React.FC<{
                         } else { // 'loss' phase
                             if (!sharedWon) {
                                 vhaLossCount++;
-                                addLog(`💎 VHA ❌ VIRTUAL LOSS  losses: ${vhaLossCount}/${cfg.virtualHookAlt.lossToTrigger}`, 'loss');
-                                if (vhaLossCount >= cfg.virtualHookAlt.lossToTrigger) {
-                                    addLog(`💎 VHA 🚀 PATTERN MET (${cfg.virtualHookAlt.winsRequired}W → ${cfg.virtualHookAlt.lossToTrigger}L) — REAL TRADE UNLOCKED`, 'entry');
+                                addLog(`💎 VHA ❌ VIRTUAL LOSS  losses: ${vhaLossCount}/${vhaLossTarget}`, 'loss');
+                                if (vhaLossCount >= vhaLossTarget) {
+                                    addLog(`💎 VHA 🚀 PATTERN MET (${vhaWinsRequired}W → ${vhaLossTarget}L) — REAL TRADE UNLOCKED`, 'entry');
                                     vhaWinCount = 0; vhaLossCount = 0; vhaPhase = 'win';
                                     vhaRealUnlocked = true;
                                 }
