@@ -6,24 +6,33 @@ import { doUntilDone, getUUID } from '../tradeEngine/utils/helpers';
 import { api_base } from './api-base';
 
 const parseTick = tick => ({
-    epoch: +tick.epoch,
-    quote: +tick.quote,
+    epoch: +(tick?.epoch ?? 0),
+    quote: +(tick?.quote ?? 0),
 });
 
 const parseOhlc = ohlc => ({
-    open: +ohlc.open,
-    high: +ohlc.high,
-    low: +ohlc.low,
-    close: +ohlc.close,
-    epoch: +(ohlc.open_time || ohlc.epoch),
+    open: +(ohlc?.open ?? 0),
+    high: +(ohlc?.high ?? 0),
+    low: +(ohlc?.low ?? 0),
+    close: +(ohlc?.close ?? 0),
+    epoch: +(ohlc?.open_time || ohlc?.epoch || 0),
 });
 
 const parseCandles = candles => candles.map(t => parseOhlc(t));
 
-const updateTicks = (ticks, newTick) => (getLast(ticks).epoch >= newTick.epoch ? ticks : [...ticks.slice(1), newTick]);
+const updateTicks = (ticks, newTick) => {
+    const safeTicks = ticks || [];
+    const lastTick = getLast(safeTicks);
+    if (!newTick || !Number.isFinite(newTick.epoch) || !Number.isFinite(newTick.quote)) return safeTicks;
+    if (!lastTick) return [newTick];
+    return lastTick.epoch >= newTick.epoch ? safeTicks : [...safeTicks.slice(1), newTick];
+};
 
 const updateCandles = (candles, ohlc) => {
-    const lastCandle = getLast(candles);
+    const safeCandles = candles || [];
+    const lastCandle = getLast(safeCandles);
+    if (!ohlc || !Number.isFinite(ohlc.epoch)) return safeCandles;
+    if (!lastCandle) return [ohlc];
     if (
         (lastCandle.open === ohlc.open &&
             lastCandle.high === ohlc.high &&
@@ -32,9 +41,9 @@ const updateCandles = (candles, ohlc) => {
             lastCandle.epoch === ohlc.epoch) ||
         lastCandle.epoch > ohlc.epoch
     ) {
-        return candles;
+        return safeCandles;
     }
-    const prevCandles = lastCandle.epoch === ohlc.epoch ? candles.slice(0, -1) : candles.slice(1);
+    const prevCandles = lastCandle.epoch === ohlc.epoch ? safeCandles.slice(0, -1) : safeCandles.slice(1);
     return [...prevCandles, ohlc];
 };
 
@@ -210,6 +219,7 @@ export default class TicksService {
 
                 if (data.msg_type === 'ohlc') {
                     const { ohlc } = data;
+                    if (!ohlc) return; // malformed/empty candle during reconnect
                     const { symbol, granularity, id } = ohlc;
                     if (this.candles.hasIn([symbol, Number(granularity)])) {
                         this.subscriptions = this.subscriptions.setIn(['ohlc', symbol, Number(granularity)], id);

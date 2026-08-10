@@ -8,6 +8,7 @@ import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency
 import { applyCommission } from '@/utils/commission';
 import { isFastExecutionEnabled } from '@/utils/execution-speed';
 import { setTradeContext } from '@/utils/trade-metadata';
+import { getMasterSource } from '@/utils/trade-bus';
 import { observer as globalObserver, api_base } from '@/external/bot-skeleton';
 import { isEnded } from '@/components/shared';
 import manifest from '../../../public/bots/scalpers/manifest.json';
@@ -1445,6 +1446,9 @@ const BotDetail: React.FC<{
     /* Supersonic scanning — the tick subscriber calls this to wake the scan
        loop immediately on every new tick instead of polling on a fixed timer. */
     const tickSignalRef   = useRef<(() => void) | null>(null);
+    /* Hard execution gate used during cool-off. Tick subscriptions and all
+       terminal analysis continue, but no real XML run may cross this gate. */
+    const realExecutionLockedRef = useRef(false);
     /* Per-session counters (refs so they stay accurate inside async callbacks) */
     const winsRef         = useRef(0);
     const lossesRef       = useRef(0);
@@ -1684,6 +1688,8 @@ const BotDetail: React.FC<{
         setTerminal([]);
         setWinPopup(null);
         setCoolOffStatus(null);
+        realExecutionLockedRef.current = false;
+        addLog(`🟢 LIVE ACCOUNT EXECUTION: ${getMasterSource().toUpperCase()} — VPS/session controls active`, 'start');
 
         /* Determine market list — the MARKET field in Trade Parameters is always the
            starting market; the Market Switcher's added markets are additional
@@ -1818,32 +1824,37 @@ const BotDetail: React.FC<{
             const deadline = byTicks ? 0 : Date.now() + total * unitMs[settings.durationUnit];
             let remaining = total;
 
+            realExecutionLockedRef.current = true;
             setCoolOffStatus({ mode, reason, remaining, total, unit: settings.durationUnit });
-            addLog(`⏸ ${mode.toUpperCase()} COOL-OFF — ${reason} | ${total}${settings.durationUnit} | REAL TRADES LOCKED`, 'hack');
+            addLog(`⏸ ${mode.toUpperCase()} COOL-OFF — LIVE WIN RULE MET: ${reason} | ${total}${settings.durationUnit} | REAL XML EXECUTION LOCKED`, 'hack');
+            addLog('📡 TERMINAL ANALYSIS CONTINUES — collecting live ticks; only virtual rows are recorded', 'scan');
 
-            while (!stopRef.current && (byTicks ? remaining > 0 : Date.now() < deadline)) {
-                const gotTick = await waitForLiveTick(byTicks ? 2_500 : 1_000);
-                if (gotTick) {
-                    const { won, digit } = getVirtualOutcome();
-                    const virtualStake = curStake;
-                    setTxList(prev => [{
-                        id: ++txIdRef.current, time: ts(), market: curMarket,
-                        type: `[COOL-OFF ${mode.toUpperCase()}] ${contractLabel(bot)}`,
-                        stake: virtualStake, barrier: slotBarrier() ?? null,
-                        result: won ? 'won' : 'lost',
-                        profit: won ? +(virtualStake * 0.85).toFixed(2) : -virtualStake,
-                        exitDigit: digit, virtual: true,
-                    }, ...prev]);
-                    if (byTicks) remaining--;
+            try {
+                while (!stopRef.current && (byTicks ? remaining > 0 : Date.now() < deadline)) {
+                    const gotTick = await waitForLiveTick(byTicks ? 2_500 : 1_000);
+                    if (gotTick) {
+                        const { won, digit } = getVirtualOutcome();
+                        const virtualStake = curStake;
+                        setTxList(prev => [{
+                            id: ++txIdRef.current, time: ts(), market: curMarket,
+                            type: `[COOL-OFF ${mode.toUpperCase()}] ${contractLabel(bot)}`,
+                            stake: virtualStake, barrier: slotBarrier() ?? null,
+                            result: won ? 'won' : 'lost',
+                            profit: won ? +(virtualStake * 0.85).toFixed(2) : -virtualStake,
+                            exitDigit: digit, virtual: true,
+                        }, ...prev]);
+                        if (byTicks) remaining--;
+                    }
+                    if (!byTicks) {
+                        remaining = Math.max(0, Math.ceil((deadline - Date.now()) / unitMs[settings.durationUnit]));
+                    }
+                    setCoolOffStatus({ mode, reason, remaining, total, unit: settings.durationUnit });
                 }
-                if (!byTicks) {
-                    remaining = Math.max(0, Math.ceil((deadline - Date.now()) / unitMs[settings.durationUnit]));
-                }
-                setCoolOffStatus({ mode, reason, remaining, total, unit: settings.durationUnit });
+            } finally {
+                realExecutionLockedRef.current = false;
+                setCoolOffStatus(null);
             }
-
-            setCoolOffStatus(null);
-            if (!stopRef.current) addLog(`▶ ${mode.toUpperCase()} COOL-OFF COMPLETE — real trading unlocked`, 'hack');
+            if (!stopRef.current) addLog(`▶ ${mode.toUpperCase()} COOL-OFF COMPLETE — LIVE ACCOUNT REAL TRADING UNLOCKED`, 'hack');
         };
 
         /* ── FRESH XML RELOAD every time Run is pressed ──
@@ -2158,7 +2169,17 @@ const BotDetail: React.FC<{
                 if (marketSwitched) continue;
 
                 setEntryReady(true);
-                addLog('⚡ ENTRY_SIGNAL: DETECTED — EXECUTING TRADE', 'entry');
+                addLog('⚡ ENTRY_SIGNAL: DETECTED — ANALYZING ENTRY POINT', 'entry');
+                addLog('🔎 ENTRY_POINT: confirming live tick window before execution...', 'scan');
+                /* A cool-off is a terminal execution lock, not a feed pause.
+                   This guard prevents a queued signal from buying if the
+                   threshold was reached while the signal was being processed. */
+                if (realExecutionLockedRef.current) {
+                    addLog('⏸ COOL-OFF ACTIVE — signal held; no live-account buy sent', 'hack');
+                    setEntryReady(false);
+                    continue;
+                }
+                addLog('✅ ENTRY_POINT: confirmed — waiting to execute real XML trade', 'entry');
 
                 /* ══════════════════════════════════════════════════════════════
                    Virtual Hook gates — VHook and VHA run on the SAME tick.
@@ -2425,7 +2446,8 @@ const BotDetail: React.FC<{
                             const pnlStr = `${sessionPnlRef.current >= 0 ? '+' : ''}${sessionPnlRef.current.toFixed(2)} USD`;
                             if (won) {
                                 winsRef.current++;
-                                addLog(`${contractTag}✅ WIN  +${profit.toFixed(2)} USD  |  P/L: ${pnlStr}`, 'win');
+                                consecutiveWins++;
+                                addLog(`${contractTag}✅ LIVE ACCOUNT WIN #${consecutiveWins}  +${profit.toFixed(2)} USD  |  P/L: ${pnlStr}`, 'win');
                             } else {
                                 lossesRef.current++;
                                 /* Any loss breaks the consecutive-win streak */
@@ -2678,8 +2700,6 @@ const BotDetail: React.FC<{
                 totalConsLoss = 0;
                 consLossRef.current = 0;
                 lastFiredGroupRef.current = null;
-                consecutiveWins++;
-
                 /* Restore default market after a win if we had switched */
                 if (activeSlot === 'm2' || curMarketIdx !== 0) {
                     activeSlot = 'm1';
@@ -3789,14 +3809,13 @@ const BotDetail: React.FC<{
                                 lastReconnectAtRef.current = Date.now();
                             } catch { /* retried again by the next VPS health check */ }
                         }}
-                        onRequestRestart={() => {
+                        onRequestRestart={(runPnl, completedRuns, cumulativePnl) => {
                             if (running) return;
-                            setVpsRuns(r => r + 1);
-                            /* Accumulate, don't overwrite — vpsPnl must hold the running total
-                               across every VPS run (matching Summary/Transactions), or a
-                               TP/SL that only ever reflects the last run's P/L never actually
-                               triggers off the real cumulative total. */
-                            setVpsPnl(p => +(p + sessionPnlRef.current).toFixed(2));
+                            /* VpsMode computes the completed run boundary and
+                               passes the exact cumulative values. VPS, not the
+                               terminal scanner, owns restart accounting. */
+                            setVpsRuns(completedRuns);
+                            setVpsPnl(cumulativePnl);
                             sessionPnlRef.current = 0;
                             // Re-fire the terminal's own RUN handler directly — do not rely on a
                             // DOM selector (the terminal's actual class is .sb-detail__start-btn,
@@ -3805,8 +3824,8 @@ const BotDetail: React.FC<{
                                 if (!running && derivTrade.authorized) startBot();
                             }, 500);
                         }}
-                        onDone={reason => {
-                            setVpsDonePopup({ reason, pnl: vpsPnl + sessionPnlRef.current, runs: vpsRuns });
+                        onDone={(reason, runs, pnl) => {
+                            setVpsDonePopup({ reason, pnl, runs });
                             setVpsEnabled(false);
                         }}
                     />

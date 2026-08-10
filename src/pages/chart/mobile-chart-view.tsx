@@ -624,8 +624,9 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                             const pocEntryTime: number = poc.entry_tick_time ?? 0;
                             if (pocEntryTime > 0) {
                                 savedEntryTime = pocEntryTime;
-                            } else if (Array.isArray(poc.tick_stream) && poc.tick_stream.length > 0) {
-                                savedEntryTime = poc.tick_stream[0].epoch;
+                            } else if (Array.isArray(poc.tick_stream)) {
+                                const firstTick = poc.tick_stream.find((tick: any) => Number.isFinite(Number(tick?.epoch)));
+                                savedEntryTime = firstTick ? Number(firstTick.epoch) : 0;
                             }
                             if (savedEntryTime > 0 && !entryTimeDispatched) {
                                 entryTimeDispatched = true;

@@ -36,9 +36,11 @@ interface VpsModeProps {
     vpsPnl: number;
     onToggle: (enabled: boolean) => void;
     onSettingsChange: (s: VpsSettings) => void;
-    onRequestRestart: () => void;
+    /* VPS owns the run boundary. Pass the completed run's values explicitly so
+       the parent cannot restart with stale session counters. */
+    onRequestRestart: (runPnl: number, runs: number, pnl: number) => void;
     onForceReconnect: () => void;
-    onDone: (reason: string) => void;
+    onDone: (reason: string, runs: number, pnl: number) => void;
 }
 
 const VpsMode: React.FC<VpsModeProps> = ({
@@ -145,7 +147,9 @@ const VpsMode: React.FC<VpsModeProps> = ({
 
             const tpHit    = settings.takeProfit > 0 && pnl >= settings.takeProfit;
             const slHit    = settings.stopLoss > 0 && pnl <= -Math.abs(settings.stopLoss);
-            const runsHit  = settings.numRuns > 0 && nextRuns > settings.numRuns;
+            /* numRuns is a hard ceiling: with 1 configured run, the first
+               completed terminal run must stop, not restart for a second one. */
+            const runsHit  = settings.numRuns > 0 && nextRuns >= settings.numRuns;
             const consecHit = settings.maxConsecLosses > 0 && consecLossesRef.current >= settings.maxConsecLosses;
 
             if (tpHit || slHit || runsHit || consecHit) {
@@ -162,7 +166,7 @@ const VpsMode: React.FC<VpsModeProps> = ({
                 if (consecHit) {
                     addLog(`🛑 CONSECUTIVE_LOSS_GUARD: ${consecLossesRef.current} losses in a row — all trades halted`, 'error');
                 }
-                onDone(reason);
+                onDone(reason, nextRuns, pnl);
                 return;
             }
 
@@ -174,7 +178,7 @@ const VpsMode: React.FC<VpsModeProps> = ({
                 restartPendingRef.current = false;
                 if (!doneRef.current && enabled) {
                     addLog('▶ VPS: RESTARTING TERMINAL LOG...', 'restart');
-                    onRequestRestart();
+                    onRequestRestart(sessionPnlRef.current, nextRuns, pnl);
                 }
             }, delay);
         }

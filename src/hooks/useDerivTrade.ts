@@ -121,16 +121,23 @@ export function useDerivTrade() {
 
             if (d.tick) {
                 recordTick(); // count tick for Fast mode tick-rate display
-                const q = d.tick.quote;
-                const ps = d.tick.pip_size ?? 2;
+                const q = Number(d.tick.quote);
+                const epoch = Number(d.tick.epoch);
+                const ps = Number(d.tick.pip_size ?? 2);
+                /* Deriv can emit a partial tick while a subscription is being
+                   attached/re-attached. Never forward that payload: scalpers
+                   and charts both use epoch as the ordering/entry anchor. */
+                if (!Number.isFinite(q) || !Number.isFinite(epoch) || !Number.isFinite(ps) || ps < 0) return;
                 const tick: TickData = {
                     symbol: d.tick.symbol,
                     digit: getLastDigit(q, ps),
                     quote: q,
-                    epoch: d.tick.epoch,
+                    epoch,
                     pip_size: ps,
                 };
-                tickCallbacksRef.current.get(d.tick.symbol)?.(tick);
+                if (typeof d.tick.symbol === 'string' && d.tick.symbol) {
+                    tickCallbacksRef.current.get(d.tick.symbol)?.(tick);
+                }
             }
 
             if (d.proposal_open_contract) {

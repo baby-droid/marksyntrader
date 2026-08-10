@@ -62,7 +62,7 @@ const Chart = observer(({ show_digits_stats }: { show_digits_stats: boolean }) =
         setIsSafari(isSafariBrowser());
 
         return () => {
-            chart_api.api.forgetAll('ticks');
+            chart_api.api?.forgetAll?.('ticks');
         };
     }, []);
 
