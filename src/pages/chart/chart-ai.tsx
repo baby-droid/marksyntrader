@@ -282,6 +282,8 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
     const ladderBaseRef = useRef(MIN_STAKE);
     const ladderPeakRef = useRef(MIN_STAKE);
     const ladderHadLossRef = useRef(false);
+    const strategiesRef = useRef(strategies);
+    const confirmTicksRef = useRef(confirmTicks);
 
     const setPhase = (next: string) => {
         entryPhaseRef.current = next;
@@ -289,6 +291,8 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
     };
 
     useEffect(() => { signalRef.current = signal; }, [signal]);
+    useEffect(() => { strategiesRef.current = strategies; }, [strategies]);
+    useEffect(() => { confirmTicksRef.current = confirmTicks; }, [confirmTicks]);
     useEffect(() => {
         if (enabled) setAiStake(Math.max(MIN_STAKE, stake));
     }, [stake, enabled]);
@@ -308,6 +312,7 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
         pricesRef.current = [];
         pipRef.current = null;
         setSample(0);
+        signalRef.current = null;
         setSignal(null);
         defaultSignalRef.current = null;
         recoveryPendingRef.current = false;
@@ -396,12 +401,13 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                         setSample(v => v + 1);
                         const active = signalRef.current;
                         if (!active || activeContractRef.current || cooldownRef.current > 0 || autoAttemptRef.current) return;
-                        const matches = entryMatches(active, digitsRef.current, digit, strategies);
+                        const matches = entryMatches(active, digitsRef.current, digit, strategiesRef.current);
                         if (!matches) {
                             setPhase('analysing');
                             setEntryDigit(digit);
                             setConfirmCount(0);
                             confirmCountRef.current = 0;
+                            entryDigitRef.current = null;
                             setStatus(`Analysing entry point · ${digit}`);
                             return;
                         }
@@ -410,15 +416,15 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                             entryDigitRef.current = digit;
                             confirmCountRef.current = 1;
                         } else {
-                            confirmCountRef.current = Math.min(confirmTicks, confirmCountRef.current + 1);
+                            confirmCountRef.current = Math.min(confirmTicksRef.current, confirmCountRef.current + 1);
                         }
                         setConfirmCount(confirmCountRef.current);
-                        if (confirmCountRef.current >= confirmTicks) {
+                        if (confirmCountRef.current >= confirmTicksRef.current) {
                             setPhase('waiting');
                             setStatus(`Waiting to execute · ${digit} · ${active.duration} tick${active.duration === 1 ? '' : 's'}`);
                         } else {
                             setPhase('confirming');
-                            setStatus(`Confirming ${digit} · ${confirmCountRef.current}/${confirmTicks} ticks`);
+                            setStatus(`Confirming ${digit} · ${confirmCountRef.current}/${confirmTicksRef.current} ticks`);
                         }
                     },
                     error: () => { if (alive) setStatus('Market stream paused · retrying…'); },
