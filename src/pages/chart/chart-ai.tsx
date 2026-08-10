@@ -164,7 +164,7 @@ function patternSignal(
     return { matched: false, note: '' };
 }
 
-function evaluateSide(
+export function evaluateSide(
     digits: number[],
     prices: number[],
     circlePcts: number[],

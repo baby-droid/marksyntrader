@@ -7,4 +7,4 @@ The chart AI uses the reference map as an ordered entry-point preference for Ove
 
 **Why:** A hard strong-digit/shield gate prevented valid qualifying markets from ever reaching the entry-point confirmation loop.
 
-**How to apply:** Preserve the ordered entry-point preference alongside the 50-tick distribution and historical-duration checks. Do not apply this map to unrelated contract groups such as Rise/Fall or Even/Odd.
+**How to apply:** Preserve the ordered entry-point preference alongside the 50-tick distribution and historical-duration scoring. A qualifying chart distribution must not be vetoed by a noisy historical backtest; do not apply this map to unrelated groups such as Rise/Fall or Even/Odd.
