@@ -8,10 +8,16 @@ const MAX_CONFIRM_TICKS = 5;
 const SCAN_SIZE = 50;
 const RESCAN_MS = 120_000;
 const COOLDOWN_TICKS = 10;
+const ENTRY_CONFIRM_HITS = 3;
+const ENTRY_USE_LIMIT = 3;
+const ENTRY_FAILURE_LIMIT = 3;
+const ENTRY_WINDOW_TICKS = 5;
+const ENTRY_STALE_TICKS = 8;
 
 const ENTRY_POINTS = {
-    // Entry groups from the supplied trading reference. These are entry
-    // digits, not barriers: the selected barrier still decides the contract.
+    // Entry points are ordered from the safer, farther-from-barrier digits
+    // toward the weaker points. Weak points are valid fallback triggers when
+    // the distribution and confirmation window still validate the trade.
     over: { strong: [3, 4, 1, 8], weak: [7, 0] },
     under: { strong: [9, 6, 2], weak: [5] },
 };
@@ -48,10 +54,12 @@ function groupSideLabel(group: any, side: 'over' | 'under') {
 }
 
 function marketThreshold(symbol: string) {
-    const s = String(symbol).toUpperCase();
-    if (/^1HZ|^JD|BEAR|BULL/.test(s)) return 10.6;
-    if (/^R_/.test(s)) return 10.2;
-    return 10.2;
+    // The AI rule is intentionally consistent across markets: a digit must
+    // stay below 10.5% to be part of the low-frequency condition. The live
+    // distribution is still market-specific; only the decision threshold is
+    // shared so a single digit above 10.5% can be used as the shield.
+    void symbol;
+    return 10.5;
 }
 
 function pctsFor(digits: number[]) {
@@ -85,6 +93,77 @@ function backtestDigits(digits: number[], side: 'over' | 'under', barrier: numbe
     };
 }
 
+function entrySequence(side: 'over' | 'under'): number[] {
+    const points = ENTRY_POINTS[side];
+    return [...points.strong, ...points.weak];
+}
+
+function chooseEntryDigit(
+    side: 'over' | 'under',
+    barrier: number,
+    pcts: number[],
+    index = 0,
+) {
+    const sequence = entrySequence(side);
+    const safelyAway = sequence.filter(d =>
+        side === 'over' ? d > barrier && d - barrier >= 3 : d < barrier && barrier - d >= 3,
+    );
+    const candidates = safelyAway.length ? safelyAway : sequence.filter(d =>
+        side === 'over' ? d > barrier : d < barrier,
+    );
+    const ordered = candidates.length ? candidates : sequence;
+    // Prefer a point that is already visible in the window, then rotate
+    // deterministically. This prevents the AI from locking to one digit.
+    const visible = ordered.filter(d => (pcts[d] ?? 0) > 0);
+    const pool = visible.length ? visible : ordered;
+    return pool[index % pool.length] ?? null;
+}
+
+function patternSignal(
+    group: any,
+    side: 'over' | 'under',
+    digits: number[],
+    prices: number[],
+) {
+    const recentDigits = digits.slice(-4);
+    const recentPrices = prices.slice(-4);
+    if (recentDigits.length < 4) return { matched: false, note: '' };
+
+    const type = side === 'over' ? group?.typeA : group?.typeB;
+    const evenCount = recentDigits.filter(d => d % 2 === 0).length;
+    const oddCount = recentDigits.length - evenCount;
+    const changes = recentPrices.slice(1).map((p, i) => p - recentPrices[i]);
+    const rises = changes.filter(delta => delta > 0).length;
+    const falls = changes.filter(delta => delta < 0).length;
+
+    if (type === 'DIGITEVEN') {
+        const matched = oddCount >= 3 && evenCount <= 1;
+        return { matched, note: matched ? '3 odd / 1 even reversal' : '' };
+    }
+    if (type === 'DIGITODD') {
+        const matched = evenCount >= 3 && oddCount <= 1;
+        return { matched, note: matched ? '3 even / 1 odd reversal' : '' };
+    }
+    if (type === 'DIGITMATCH') {
+        const matched = recentDigits[3] === recentDigits[2] || recentDigits[2] === recentDigits[1];
+        return { matched, note: matched ? 'repeating digit pattern' : '' };
+    }
+    if (type === 'DIGITDIFF') {
+        const distinct = new Set(recentDigits).size;
+        const matched = distinct >= 3 && recentDigits[3] !== recentDigits[2];
+        return { matched, note: matched ? '3+ differing digits pattern' : '' };
+    }
+    if (type === 'CALL') {
+        const matched = falls >= 2 && rises >= 1 && falls >= rises;
+        return { matched, note: matched ? '3-fall / 1-rise reversal' : '' };
+    }
+    if (type === 'PUT') {
+        const matched = rises >= 2 && falls >= 1 && rises >= falls;
+        return { matched, note: matched ? '3-rise / 1-fall reversal' : '' };
+    }
+    return { matched: false, note: '' };
+}
+
 function evaluateSide(
     digits: number[],
     prices: number[],
@@ -102,12 +181,13 @@ function evaluateSide(
     // Blend it in without changing the circle DOM or its moving pointer.
     const pcts = windowPcts.map((p, i) => p * 0.75 + (circlePcts?.[i] ?? p) * 0.25);
     const threshold = marketThreshold(symbol);
-    if (!group?.needsBarrier) {
+    if (!group?.needsBarrier || group?.id === 'match_differ') {
         const type = side === 'over' ? group?.typeA : group?.typeB;
         const duration = autoRotate ? [1, 2, 3, 4, 5][0] : clamp(selectedTicks, 1, MAX_CONFIRM_TICKS);
         let score = 0;
         let note = '50-tick market sample ready';
         let expectedDigit = null;
+        const pattern = patternSignal(group, side, digits, prices);
         if (type === 'DIGITEVEN' || type === 'DIGITODD') {
             const even = digits.filter(d => d % 2 === 0).length / digits.length;
             score = type === 'DIGITEVEN' ? even : 1 - even;
@@ -128,6 +208,10 @@ function evaluateSide(
         } else {
             score = 0.56;
         }
+        if (pattern.matched) {
+            score = Math.max(score, 0.62);
+            note = `${note} · ${pattern.note}`;
+        }
         if (score < 0.56) return null;
         return {
             side,
@@ -137,6 +221,8 @@ function evaluateSide(
             expectedDigit,
             entryDigit: null,
             requiresReferenceEntry: group?.id === 'over_under',
+            patternRequired: ['even_odd', 'match_differ', 'rise_fall'].includes(group?.id),
+            patternNote: pattern.note,
             conditionPct: score * 100,
             threshold,
             note,
@@ -147,13 +233,19 @@ function evaluateSide(
         : Array.from({ length: 10 - barrier }, (_, i) => barrier + i);
     const shield = side === 'over' ? barrier + 1 : barrier - 1;
     if (shield < 0 || shield > 9 || losing.length === 0) return null;
-    const conditionMet = losing.every(d => pcts[d] <= threshold);
+    const conditionMet = losing.every(d => pcts[d] < threshold);
     const shieldPct = pcts[shield] ?? 0;
-    if (!conditionMet || shieldPct < threshold) return null;
+    const highDigits = pcts.filter(value => value > threshold).length;
+    // Conservative Over/Under entry: the losing range stays below 10.5%,
+    // the first safe digit clears the threshold, and there is only one
+    // dominant digit in the 50-tick sample.
+    if (!conditionMet || shieldPct <= threshold || highDigits !== 1) return null;
 
-    const candidates = autoRotate
-        ? [1, 2, 3, 4, 5]
-        : [clamp(selectedTicks, 1, MAX_CONFIRM_TICKS)];
+    // Over/Under is deliberately conservative: use the best one- or
+    // two-tick confirmation. Other barrier contracts may still use 1–5.
+    const candidates = group?.id === 'over_under'
+        ? [1, 2]
+        : autoRotate ? [1, 2, 3, 4, 5] : [clamp(selectedTicks, 1, MAX_CONFIRM_TICKS)];
     const tests = candidates.map(duration => ({
         duration,
         ...backtestDigits(digits, side, barrier, duration),
@@ -177,8 +269,9 @@ function evaluateSide(
         duration: best.duration,
         confidence,
         expectedDigit: best.expectedDigit,
-        entryDigit: null,
+        entryDigit: chooseEntryDigit(side, barrier, pcts),
         requiresReferenceEntry: group?.id === 'over_under',
+        patternRequired: false,
         conditionPct: Math.max(...losing.map(d => pcts[d] ?? 0)),
         threshold,
         note: `${groupSideLabel(group, side)} ${barrier} · max condition ${Math.max(...losing.map(d => pcts[d] ?? 0)).toFixed(1)}% · ${Math.round(best.winRate * 100)}% historical wins`,
@@ -190,6 +283,9 @@ function entryMatches(
     digits: number[],
     currentDigit: number | null,
     strategies: string[],
+    activeEntryDigit: number | null = signal?.entryDigit ?? null,
+    group: any = null,
+    prices: number[] = [],
 ) {
     if (currentDigit == null || !digits.length) return false;
     const side = signal.side;
@@ -197,28 +293,35 @@ function entryMatches(
     const previous = digits[digits.length - 2];
     const strong = entry.strong.includes(currentDigit);
     const weak = entry.weak.includes(currentDigit);
+    const entryPoint = activeEntryDigit == null || currentDigit === activeEntryDigit;
+    const distance = side === 'over'
+        ? currentDigit - Number(signal.barrier)
+        : Number(signal.barrier) - currentDigit;
+    const pattern = patternSignal(group, side, digits, prices);
     const momentum = previous == null
         ? true
         : side === 'over' ? currentDigit >= previous : currentDigit <= previous;
-    // Never enter on a weak digit. A weak digit can be useful context during
-    // analysis, but it is not an entry trigger. This is especially important
-    // when the user enables only one side (for example Over with barrier 2).
     const checks: Record<string, boolean> = {
-        reversal: strong,
-        'tick-concept': previous == null || currentDigit !== previous,
-        'entry-loop': strong || weak,
-        conservative: strong && Math.abs(currentDigit - signal.barrier) >= 2,
+        // Both strong and weak points can trigger. The distribution gate,
+        // distance from the barrier, and three-hit confirmation provide the
+        // safety check instead of hard-blocking weak reference digits.
+        reversal: signal.requiresReferenceEntry ? entryPoint : pattern.matched,
+        'tick-concept': signal.requiresReferenceEntry
+            ? entryPoint && distance >= 3
+            : pattern.matched || (previous == null || currentDigit !== previous),
+        'entry-loop': signal.requiresReferenceEntry ? entryPoint : pattern.matched,
+        conservative: signal.requiresReferenceEntry
+            ? entryPoint && distance >= 3
+            : pattern.matched,
         'number-losses': true,
         'digit-distribution': signal.conditionPct <= signal.threshold,
         momentum,
     };
-    // The supplied entry map is specifically for Over/Under. Never enter an
-    // Over/Under trade on a weak digit; it must wait for a strong digit from
-    // the selected side. Other contract groups retain their own checks.
-    if (signal.requiresReferenceEntry && !strong) return false;
+    if (signal.requiresReferenceEntry && !entryPoint) return false;
+    if (signal.patternRequired && !pattern.matched) return false;
     const selected = strategies.length ? strategies : ['reversal', 'tick-concept', 'entry-loop'];
     const passed = selected.filter(id => checks[id]).length;
-    return passed >= Math.max(1, Math.ceil(selected.length * 0.66));
+    return passed >= Math.max(1, Math.ceil(selected.length * 0.5));
 }
 
 export interface ChartAiControlProps {
@@ -247,7 +350,7 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
     const [entryPhase, setEntryPhase] = useState('idle');
     const [entryDigit, setEntryDigit] = useState<number | null>(null);
     const [confirmCount, setConfirmCount] = useState(0);
-    const [confirmTicks, setConfirmTicks] = useState(2);
+    const [confirmTicks, setConfirmTicks] = useState(ENTRY_CONFIRM_HITS);
     const [autoRotate, setAutoRotate] = useState(true);
     const [fullMargin, setFullMargin] = useState(false);
     const [fixedStake, setFixedStake] = useState(true);
@@ -278,10 +381,17 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
     const subscriptionIdRef = useRef<string | null>(null);
     const activeContractRef = useRef<number | null>(null);
     const activeStakeRef = useRef(aiStake);
+    const initialStakeRef = useRef(Math.max(MIN_STAKE, stake));
     const signalRef = useRef<any>(null);
     const entryPhaseRef = useRef('idle');
     const entryDigitRef = useRef<number | null>(null);
     const confirmCountRef = useRef(0);
+    const entryIndexRef = useRef(0);
+    const entryUseCountRef = useRef(0);
+    const entryFailureCountRef = useRef(0);
+    const entryWindowTicksRef = useRef(0);
+    const entryWindowHitsRef = useRef(0);
+    const reversePendingRef = useRef(false);
     const autoAttemptRef = useRef(false);
     const scanEpochRef = useRef(0);
     const scanActiveRef = useRef(false);
@@ -295,7 +405,6 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
     const ladderPeakRef = useRef(MIN_STAKE);
     const ladderHadLossRef = useRef(false);
     const strategiesRef = useRef(strategies);
-    const confirmTicksRef = useRef(confirmTicks);
 
     const setPhase = (next: string) => {
         entryPhaseRef.current = next;
@@ -304,9 +413,15 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
 
     useEffect(() => { signalRef.current = signal; }, [signal]);
     useEffect(() => { strategiesRef.current = strategies; }, [strategies]);
-    useEffect(() => { confirmTicksRef.current = confirmTicks; }, [confirmTicks]);
     useEffect(() => {
-        if (enabled) setAiStake(Math.max(MIN_STAKE, stake));
+        // `stake` is the user's base stake. AI progression must not call
+        // onStakeChange and feed its temporary amount back into this effect.
+        // Only accept a user/base-stake change while no contract is active.
+        if (!activeContractRef.current) {
+            const nextBase = Math.max(MIN_STAKE, Number(stake) || MIN_STAKE);
+            initialStakeRef.current = nextBase;
+            if (enabled) setAiStake(nextBase);
+        }
     }, [stake, enabled]);
 
     const stopStream = () => {
@@ -328,6 +443,12 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
         setSignal(null);
         defaultSignalRef.current = null;
         recoveryPendingRef.current = false;
+        entryIndexRef.current = 0;
+        entryUseCountRef.current = 0;
+        entryFailureCountRef.current = 0;
+        entryWindowTicksRef.current = 0;
+        entryWindowHitsRef.current = 0;
+        reversePendingRef.current = false;
         setPhase('idle');
         setEntryDigit(null);
         setConfirmCount(0);
@@ -413,31 +534,147 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                         setSample(v => v + 1);
                         const active = signalRef.current;
                         if (!active || activeContractRef.current || cooldownRef.current > 0 || autoAttemptRef.current) return;
-                        const matches = entryMatches(active, digitsRef.current, digit, strategiesRef.current);
-                        if (!matches) {
-                            setPhase('analysing');
-                            setEntryDigit(digit);
-                            setConfirmCount(0);
-                            confirmCountRef.current = 0;
-                            entryDigitRef.current = null;
-                            setStatus(`Analysing entry point · ${digit}`);
+                        if (entryDigitRef.current == null) {
+                            entryDigitRef.current = active.entryDigit
+                                ?? chooseEntryDigit(active.side, active.barrier, pctsFor(digitsRef.current), entryIndexRef.current);
+                        }
+                        entryWindowTicksRef.current = Math.min(
+                            ENTRY_STALE_TICKS,
+                            entryWindowTicksRef.current + 1,
+                        );
+                        const matches = entryMatches(
+                            active,
+                            digitsRef.current,
+                            digit,
+                            strategiesRef.current,
+                            entryDigitRef.current,
+                            group,
+                            pricesRef.current,
+                        );
+                        if (matches) {
+                            entryWindowHitsRef.current += 1;
+                        }
+                        setEntryDigit(entryDigitRef.current);
+                        confirmCountRef.current = Math.min(
+                            ENTRY_CONFIRM_HITS,
+                            entryWindowHitsRef.current,
+                        );
+                        setConfirmCount(confirmCountRef.current);
+
+                        // A 1–5 tick confirmation window is used for every
+                        // entry point. Three qualifying touches in that
+                        // window are enough; repeated consecutive ticks are
+                        // not required.
+                        if (confirmCountRef.current >= ENTRY_CONFIRM_HITS) {
+                            entryWindowTicksRef.current = 0;
+                            entryWindowHitsRef.current = 0;
+                            setPhase('waiting');
+                            setStatus(`Entry ${entryDigitRef.current} confirmed · ${ENTRY_CONFIRM_HITS}/${ENTRY_WINDOW_TICKS} touches · ready`);
                             return;
                         }
-                        setEntryDigit(digit);
-                        if (entryDigitRef.current !== digit) {
-                            entryDigitRef.current = digit;
-                            confirmCountRef.current = 1;
-                        } else {
-                            confirmCountRef.current = Math.min(confirmTicksRef.current, confirmCountRef.current + 1);
+
+                        if (entryWindowTicksRef.current >= ENTRY_STALE_TICKS &&
+                            entryWindowHitsRef.current === 0 &&
+                            !reversePendingRef.current) {
+                            const reverseSide = active.side === 'over' ? 'under' : 'over';
+                            const reverseBarrier = reverseSide === 'over'
+                                ? Math.max(2, Math.min(3, Number(active.barrier)))
+                                : Math.min(7, Math.max(6, Number(active.barrier)));
+                            const reverseSignal = {
+                                ...active,
+                                side: reverseSide,
+                                barrier: reverseBarrier,
+                                entryDigit: chooseEntryDigit(
+                                    reverseSide,
+                                    reverseBarrier,
+                                    pctsFor(digitsRef.current),
+                                    0,
+                                ),
+                                note: `Reverse after ${ENTRY_STALE_TICKS} ticks without entry`,
+                            };
+                            reversePendingRef.current = true;
+                            signalRef.current = reverseSignal;
+                            setSignal(reverseSignal);
+                            entryIndexRef.current = 0;
+                            entryDigitRef.current = reverseSignal.entryDigit;
+                            entryWindowTicksRef.current = 0;
+                            entryWindowHitsRef.current = 0;
+                            confirmCountRef.current = 0;
+                            setEntryDigit(reverseSignal.entryDigit);
+                            setConfirmCount(0);
+                            setPhase('analysing');
+                            setStatus(`Reverse ${groupSideLabel(group, reverseSide)} selected · waiting for ${reverseSignal.entryDigit}`);
+                            return;
                         }
-                        setConfirmCount(confirmCountRef.current);
-                        if (confirmCountRef.current >= confirmTicksRef.current) {
-                            setPhase('waiting');
-                            setStatus(`Waiting to execute · ${digit} · ${active.duration} tick${active.duration === 1 ? '' : 's'}`);
-                        } else {
-                            setPhase('confirming');
-                            setStatus(`Confirming ${digit} · ${confirmCountRef.current}/${confirmTicksRef.current} ticks`);
+
+                        if (entryWindowTicksRef.current >= ENTRY_WINDOW_TICKS && entryWindowHitsRef.current === 0) {
+                            // Keep a no-touch entry alive through the stale
+                            // band so the reverse rule can take over.
+                            if (
+                                entryWindowTicksRef.current < ENTRY_STALE_TICKS &&
+                                !reversePendingRef.current
+                            ) {
+                                setPhase('analysing');
+                                setConfirmCount(0);
+                                setStatus(
+                                    `Entry ${entryDigitRef.current ?? '—'} not touched · ` +
+                                    `watching reverse band ${entryWindowTicksRef.current}/${ENTRY_STALE_TICKS}`,
+                                );
+                                return;
+                            }
+                            entryWindowTicksRef.current = 0;
+                            entryWindowHitsRef.current = 0;
+                            confirmCountRef.current = 0;
+                            entryFailureCountRef.current += 1;
+                            if (entryFailureCountRef.current >= ENTRY_FAILURE_LIMIT) {
+                                entryFailureCountRef.current = 0;
+                                entryIndexRef.current += 1;
+                                entryDigitRef.current = chooseEntryDigit(
+                                    active.side,
+                                    active.barrier,
+                                    pctsFor(digitsRef.current),
+                                    entryIndexRef.current,
+                                );
+                                setStatus(`Entry point rotated · watching ${entryDigitRef.current}`);
+                            } else {
+                                setStatus(`No 3 touches in ${ENTRY_WINDOW_TICKS} ticks · restarting entry check`);
+                            }
+                            setPhase('analysing');
+                            setConfirmCount(0);
+                            return;
                         }
+
+                        if (
+                            entryWindowTicksRef.current >= ENTRY_WINDOW_TICKS &&
+                            entryWindowHitsRef.current < ENTRY_CONFIRM_HITS
+                        ) {
+                            entryWindowTicksRef.current = 0;
+                            entryWindowHitsRef.current = 0;
+                            confirmCountRef.current = 0;
+                            entryFailureCountRef.current += 1;
+                            if (entryFailureCountRef.current >= ENTRY_FAILURE_LIMIT) {
+                                entryFailureCountRef.current = 0;
+                                entryIndexRef.current += 1;
+                                entryDigitRef.current = chooseEntryDigit(
+                                    active.side,
+                                    active.barrier,
+                                    pctsFor(digitsRef.current),
+                                    entryIndexRef.current,
+                                );
+                            }
+                            setEntryDigit(entryDigitRef.current);
+                            setConfirmCount(0);
+                            setPhase('analysing');
+                            setStatus(`Confirmation window ended · watching ${entryDigitRef.current}`);
+                            return;
+                        }
+
+                        setPhase('confirming');
+                        setStatus(
+                            `Watching ${entryDigitRef.current ?? '—'} · ` +
+                            `${confirmCountRef.current}/${ENTRY_CONFIRM_HITS} touches in ` +
+                            `${entryWindowTicksRef.current}/${ENTRY_WINDOW_TICKS} ticks`,
+                        );
                     },
                     error: () => { if (alive) setStatus('Market stream paused · retrying…'); },
                 });
@@ -516,31 +753,55 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
             setRunCount(v => v + 1);
             if (!won) setLossCount(v => v + 1);
 
-            let next = activeStakeRef.current;
-            if (fullMargin) {
-                if (won) {
-                    next = next + Math.max(0, Number(profit) || 0);
-                    ladderPeakRef.current = Math.max(ladderPeakRef.current, next);
-                    if (next >= 2 && !ladderHadLossRef.current) {
-                        ladderBaseRef.current = Number((ladderBaseRef.current + 0.1).toFixed(2));
-                        next = ladderBaseRef.current;
-                        ladderPeakRef.current = next;
-                    }
-                } else {
-                    ladderHadLossRef.current = true;
-                    ladderBaseRef.current = MIN_STAKE;
-                    next = MIN_STAKE;
-                    ladderPeakRef.current = MIN_STAKE;
-                }
-                if (won && next < 2) ladderHadLossRef.current = false;
-            } else if (!won && fixedStake && martingaleEnabled) {
-                next = next * Math.max(1, martingale);
-            } else if (won || fixedStake) {
-                next = Math.max(MIN_STAKE, stake);
+            const stakeStep = (amount: number) =>
+                amount > 10 ? 2 : amount > 5 ? 1 : amount > 2 ? 0.5 : 0;
+            const baseNext = activeStakeRef.current + stakeStep(activeStakeRef.current);
+            // Keep the user-selected stake as the floor. Never fall back to
+            // MIN_STAKE after a loss or settlement. Optional martingale still
+            // works when explicitly enabled, but its result also receives the
+            // requested additive tier step.
+            let next = !won && fixedStake && martingaleEnabled
+                ? activeStakeRef.current * Math.max(1, martingale)
+                : baseNext;
+            if (!won && fixedStake && martingaleEnabled) {
+                next += stakeStep(next);
             }
             next = Number(clamp(next, MIN_STAKE, 100000).toFixed(2));
             setAiStake(next);
-            onStakeChange(next);
+            // Do not call onStakeChange here. That callback edits the user's
+            // base stake input; AI's progression belongs to aiStake only.
+            initialStakeRef.current = Math.max(MIN_STAKE, Number(stake) || MIN_STAKE);
+
+            // An entry point may be used three times, then the AI rotates to
+            // the next point. Two failed windows rotate sooner so one stale
+            // digit cannot lock the engine.
+            if (won) {
+                entryUseCountRef.current += 1;
+            }
+            if (
+                entryUseCountRef.current >= ENTRY_USE_LIMIT ||
+                (!won && entryFailureCountRef.current >= 2)
+            ) {
+                entryUseCountRef.current = 0;
+                entryFailureCountRef.current = 0;
+                entryIndexRef.current += 1;
+            }
+            const settledSignal = signalRef.current ?? defaultSignalRef.current;
+            if (settledSignal) {
+                const rotatedEntry = chooseEntryDigit(
+                    settledSignal.side,
+                    Number(settledSignal.barrier),
+                    pctsFor(digitsRef.current),
+                    entryIndexRef.current,
+                );
+                entryDigitRef.current = rotatedEntry;
+                entryWindowTicksRef.current = 0;
+                entryWindowHitsRef.current = 0;
+                confirmCountRef.current = 0;
+                signalRef.current = { ...settledSignal, entryDigit: rotatedEntry };
+                setSignal(signalRef.current);
+                setEntryDigit(rotatedEntry);
+            }
 
             const nextBatch = batchCountRef.current + 1;
             batchCountRef.current = nextBatch;
@@ -551,17 +812,40 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                 const recoveryBarrier = recovery === 'over4' ? 4 : 5;
                 const baseSignal = defaultSignalRef.current;
                 if (baseSignal) {
-                    setSignal({
+                    const recoverySignal = {
                         ...baseSignal,
                         side: recoverySide,
                         barrier: recoveryBarrier,
                         recoveryBarrier,
+                        entryDigit: chooseEntryDigit(
+                            recoverySide,
+                            recoveryBarrier,
+                            pctsFor(digitsRef.current),
+                            0,
+                        ),
                         note: `Opposite recovery ${recoverySide === 'over' ? 'Over 4' : 'Under 5'} · fresh entry`,
-                    });
+                    };
+                    signalRef.current = recoverySignal;
+                    setSignal(recoverySignal);
+                    entryIndexRef.current = 0;
+                    entryDigitRef.current = recoverySignal.entryDigit;
+                    entryWindowTicksRef.current = 0;
+                    entryWindowHitsRef.current = 0;
+                    confirmCountRef.current = 0;
+                    setEntryDigit(recoverySignal.entryDigit);
+                    setConfirmCount(0);
                 }
             } else if (won && recoveryPendingRef.current) {
                 recoveryPendingRef.current = false;
-                setSignal(defaultSignalRef.current);
+                const restoredSignal = defaultSignalRef.current;
+                signalRef.current = restoredSignal;
+                setSignal(restoredSignal);
+                entryDigitRef.current = restoredSignal?.entryDigit ?? null;
+                entryWindowTicksRef.current = 0;
+                entryWindowHitsRef.current = 0;
+                confirmCountRef.current = 0;
+                setEntryDigit(entryDigitRef.current);
+                setConfirmCount(0);
             }
 
             if (nextBatch >= batchLimit) {
@@ -578,7 +862,7 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                 setStatus(won ? 'Run limit reached · AI stopped' : 'Stop-loss reached · AI stopped');
             } else {
                 setPhase('analysing');
-                setEntryDigit(null);
+                setEntryDigit(entryDigitRef.current);
                 setConfirmCount(0);
                 setStatus(won ? 'Profit · searching for a fresh entry' : 'Loss · searching for a fresh entry');
             }
@@ -649,7 +933,7 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                         <b>{phaseLabel}</b>
                         {signal && <span>Best entry: {signal.entryDigit ?? 'watching'} · {signal.duration} tick{signal.duration === 1 ? '' : 's'} · condition ≤ {threshold.toFixed(1)}%</span>}
                         <span className='chart-ai__entry-map'>
-                            Strong Over: 3 · 4 · 1 · 8 &nbsp;|&nbsp; Strong Under: 9 · 6 · 2 · 5
+                            Over points: 3 · 4 · 1 · 8 · 7 · 0 &nbsp;|&nbsp; Under points: 9 · 6 · 2 · 5
                         </span>
                         <span className='chart-ai__circle-readout'>
                             Circle distribution: {circlePcts.map((v, i) => `${i} ${v.toFixed(1)}%`).join(' · ')}
