@@ -177,9 +177,14 @@ function evaluateSide(
 ) {
     if (digits.length < SCAN_SIZE) return null;
     const windowPcts = pctsFor(digits);
-    // The chart's circle is a longer, independently maintained distribution.
-    // Blend it in without changing the circle DOM or its moving pointer.
-    const pcts = windowPcts.map((p, i) => p * 0.75 + (circlePcts?.[i] ?? p) * 0.25);
+    // The chart's circles are the distribution the user is looking at. Use a
+    // blended view first, but do not throw away a qualifying chart distribution
+    // just because this component's private 50-tick window is slightly
+    // different. The live sample remains the fallback when the chart has not
+    // populated its percentages yet.
+    const blendedPcts = windowPcts.map(
+        (p, i) => p * 0.75 + (circlePcts?.[i] ?? p) * 0.25,
+    );
     const threshold = marketThreshold(symbol);
     if (!group?.needsBarrier || group?.id === 'match_differ') {
         const type = side === 'over' ? group?.typeA : group?.typeB;
@@ -236,6 +241,18 @@ function evaluateSide(
         : Array.from({ length: barrier }, (_, i) => i);
     const shield = side === 'over' ? barrier + 1 : barrier - 1;
     if (shield < 0 || shield > 9 || losing.length === 0 || winning.length === 0) return null;
+
+    const distributionQualifies = (values: number[]) =>
+        losing.every(d => (values[d] ?? 0) < threshold) &&
+        winning.some(d => (values[d] ?? 0) > threshold);
+    const distribution = [
+        { values: blendedPcts, source: 'combined live/chart distribution' },
+        { values: circlePcts, source: 'chart distribution' },
+        { values: windowPcts, source: '50-tick distribution' },
+    ].find(candidate => distributionQualifies(candidate.values));
+    if (!distribution) return null;
+    const pcts = distribution.values;
+
     const conditionMet = losing.every(d => pcts[d] < threshold);
     const shieldPct = pcts[shield] ?? 0;
     const bestWinningDigit = [...winning].sort(
@@ -243,8 +260,8 @@ function evaluateSide(
     )[0];
     const bestWinningPct = pcts[bestWinningDigit] ?? 0;
     const highDigits = winning.filter(d => (pcts[d] ?? 0) > threshold).length;
-    // Conservative Over/Under entry: the losing range stays below 10.5%,
-    // and at least one winning digit is strong enough to carry the signal.
+    // Over/Under entry: the losing range stays below 10.5%, and at least one
+    // winning digit is strong enough to carry the signal.
     // The adjacent shield is preferred when it is the strongest digit, but
     // it is optional: a different winning digit can carry the condition.
     if (!conditionMet || highDigits < 1 || bestWinningPct <= threshold) return null;
@@ -262,17 +279,20 @@ function evaluateSide(
     const best = [...tests].sort((a, b) =>
         (b.safeRate * 0.7 + b.winRate * 0.3) - (a.safeRate * 0.7 + a.winRate * 0.3)
     )[0];
-    if (!best || best.winRate < 0.52) return null;
+    // Historical backtesting helps choose between one- and two-tick duration,
+    // but it must not veto a live distribution that meets the market rule.
+    // For example, a valid Under 7 distribution can have a noisy 50-tick
+    // backtest while the current market still has a clear entry opportunity.
+    if (!best) return null;
 
     const entry = ENTRY_POINTS[side];
     const confidence = clamp(
-        54 + bestWinningPct + best.safeRate * 18 + best.winRate * 12
+        60 + bestWinningPct + best.safeRate * 18 + best.winRate * 12
             + (shieldIsBest ? 7 : 0)
             + (entry.strong.includes(digits[digits.length - 1]) ? 7 : 0),
-        55,
+        60,
         98,
     );
-    if (confidence < 60) return null;
     return {
         side,
         barrier,
@@ -284,7 +304,7 @@ function evaluateSide(
         patternRequired: false,
         conditionPct: Math.max(...losing.map(d => pcts[d] ?? 0)),
         threshold,
-        note: `${groupSideLabel(group, side)} ${barrier} · best winning digit ${bestWinningDigit} at ${bestWinningPct.toFixed(1)}%${shieldIsBest ? ' · shield preferred' : ' · shield optional'} · ${Math.round(best.winRate * 100)}% historical wins`,
+        note: `${groupSideLabel(group, side)} ${barrier} · best winning digit ${bestWinningDigit} at ${bestWinningPct.toFixed(1)}% · ${distribution.source}${shieldIsBest ? ' · shield preferred' : ' · shield optional'} · ${Math.round(best.winRate * 100)}% historical wins`,
     };
 }
 
