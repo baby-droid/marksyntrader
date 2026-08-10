@@ -10,8 +10,10 @@ const RESCAN_MS = 120_000;
 const COOLDOWN_TICKS = 10;
 
 const ENTRY_POINTS = {
-    over: { strong: [3, 4, 1], weak: [8, 7, 0] },
-    under: { strong: [9, 6, 2], weak: [5, 4, 3] },
+    // Entry groups from the supplied trading reference. These are entry
+    // digits, not barriers: the selected barrier still decides the contract.
+    over: { strong: [3, 4, 1, 8], weak: [7, 0] },
+    under: { strong: [9, 6, 2], weak: [5] },
 };
 
 const STRATEGIES = [
@@ -134,6 +136,7 @@ function evaluateSide(
             confidence: clamp(55 + score * 40, 55, 95),
             expectedDigit,
             entryDigit: null,
+            requiresReferenceEntry: group?.id === 'over_under',
             conditionPct: score * 100,
             threshold,
             note,
@@ -175,6 +178,7 @@ function evaluateSide(
         confidence,
         expectedDigit: best.expectedDigit,
         entryDigit: null,
+        requiresReferenceEntry: group?.id === 'over_under',
         conditionPct: Math.max(...losing.map(d => pcts[d] ?? 0)),
         threshold,
         note: `${groupSideLabel(group, side)} ${barrier} · max condition ${Math.max(...losing.map(d => pcts[d] ?? 0)).toFixed(1)}% · ${Math.round(best.winRate * 100)}% historical wins`,
@@ -196,6 +200,9 @@ function entryMatches(
     const momentum = previous == null
         ? true
         : side === 'over' ? currentDigit >= previous : currentDigit <= previous;
+    // Never enter on a weak digit. A weak digit can be useful context during
+    // analysis, but it is not an entry trigger. This is especially important
+    // when the user enables only one side (for example Over with barrier 2).
     const checks: Record<string, boolean> = {
         reversal: strong,
         'tick-concept': previous == null || currentDigit !== previous,
@@ -205,6 +212,10 @@ function entryMatches(
         'digit-distribution': signal.conditionPct <= signal.threshold,
         momentum,
     };
+    // The supplied entry map is specifically for Over/Under. Never enter an
+    // Over/Under trade on a weak digit; it must wait for a strong digit from
+    // the selected side. Other contract groups retain their own checks.
+    if (signal.requiresReferenceEntry && !strong) return false;
     const selected = strategies.length ? strategies : ['reversal', 'tick-concept', 'entry-loop'];
     const passed = selected.filter(id => checks[id]).length;
     return passed >= Math.max(1, Math.ceil(selected.length * 0.66));
@@ -258,6 +269,7 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
     const [refreshIn, setRefreshIn] = useState(0);
     const [popup, setPopup] = useState<any>(null);
     const [aiStake, setAiStake] = useState(Math.max(MIN_STAKE, stake));
+    const [strategiesOpen, setStrategiesOpen] = useState(false);
 
     const digitsRef = useRef<number[]>([]);
     const pricesRef = useRef<number[]>([]);
@@ -585,10 +597,27 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
         waiting: `Waiting to execute · ${entryDigit ?? '—'}`,
     }[entryPhase] ?? status;
 
-    const updateStrategies = (event: any) => {
-        const values = Array.from(event.target.selectedOptions).map((o: any) => o.value);
-        setStrategies(values.length ? values : ['entry-loop']);
+    const updateStrategies = (strategyId: string) => {
+        if (strategyId === 'all') {
+            setStrategies(STRATEGIES.map(strategy => strategy.id));
+        } else {
+            setStrategies(current => {
+                const next = current.includes(strategyId)
+                    ? current.filter(id => id !== strategyId)
+                    : [...current, strategyId];
+                return next.length ? next : ['entry-loop'];
+            });
+        }
+        // Keep the menu open while selecting multiple strategies. The trigger
+        // remains the explicit retract/expand control.
     };
+
+    const allStrategiesSelected = strategies.length === STRATEGIES.length;
+    const selectedStrategyLabel = allStrategiesSelected
+        ? 'All strategies'
+        : STRATEGIES.filter(strategy => strategies.includes(strategy.id))
+            .map(strategy => strategy.label)
+            .join(', ') || 'Entry loop';
 
     return (
         <div className={`chart-ai${enabled ? ' chart-ai--active' : ''}`}>
@@ -607,7 +636,7 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                 <span className='chart-ai__status'>{group?.isAccumulator ? 'Unavailable for accumulator' : status}</span>
             </div>
             {enabled && (
-                <>
+                <div className='chart-ai__body'>
                     <div className='chart-ai__scan'>
                         <span className={scanning ? 'pulse' : 'ready'} />
                         {scanning
@@ -619,6 +648,9 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                     <div className='chart-ai__entry'>
                         <b>{phaseLabel}</b>
                         {signal && <span>Best entry: {signal.entryDigit ?? 'watching'} · {signal.duration} tick{signal.duration === 1 ? '' : 's'} · condition ≤ {threshold.toFixed(1)}%</span>}
+                        <span className='chart-ai__entry-map'>
+                            Strong Over: 3 · 4 · 1 · 8 &nbsp;|&nbsp; Strong Under: 9 · 6 · 2 · 5
+                        </span>
                         <span className='chart-ai__circle-readout'>
                             Circle distribution: {circlePcts.map((v, i) => `${i} ${v.toFixed(1)}%`).join(' · ')}
                         </span>
@@ -651,10 +683,44 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                         </label>
                         <span className='chart-ai__stake-readout'>AI stake {aiStake.toFixed(2)}</span>
                     </div>
-                    <label className='chart-ai__strategy-label'>Strategies used</label>
-                    <select className='chart-ai__strategies' multiple value={strategies} onChange={updateStrategies}>
-                        {STRATEGIES.map(strategy => <option key={strategy.id} value={strategy.id}>{strategy.label}</option>)}
-                    </select>
+                    <div className='chart-ai__strategy-picker'>
+                        <span className='chart-ai__strategy-label'>Strategies used</span>
+                        <button
+                            type='button'
+                            className={`chart-ai__strategy-trigger${strategiesOpen ? ' open' : ''}`}
+                            aria-expanded={strategiesOpen}
+                            onClick={() => setStrategiesOpen(value => !value)}
+                        >
+                            <span>{selectedStrategyLabel}</span>
+                            <span aria-hidden='true'>{strategiesOpen ? '⌃' : '⌄'}</span>
+                        </button>
+                        {strategiesOpen && (
+                            <div className='chart-ai__strategy-menu'>
+                                <button
+                                    type='button'
+                                    className={`chart-ai__strategy-option${allStrategiesSelected ? ' selected' : ''}`}
+                                    onClick={() => updateStrategies('all')}
+                                >
+                                    <span className='chart-ai__strategy-check'>{allStrategiesSelected ? '✓' : ''}</span>
+                                    <span>All strategies</span>
+                                </button>
+                                {STRATEGIES.map(strategy => {
+                                    const selected = strategies.includes(strategy.id);
+                                    return (
+                                        <button
+                                            type='button'
+                                            key={strategy.id}
+                                            className={`chart-ai__strategy-option${selected ? ' selected' : ''}`}
+                                            onClick={() => updateStrategies(strategy.id)}
+                                        >
+                                            <span className='chart-ai__strategy-check'>{selected ? '✓' : ''}</span>
+                                            <span>{strategy.label}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
                     <div className='chart-ai__settings'>
                         {[
                             ['runs', runs, setRuns, 1, 100],
@@ -669,7 +735,7 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                         <button className={allowB ? 'active' : ''} onClick={() => setAllowB(v => !v)}>{sideB} {allowB ? 'ON' : 'OFF'}</button>
                         <span>{runCount} trades · {lossCount} losses · batch {batchCount}/{batchLimit}</span>
                     </div>
-                </>
+                </div>
             )}
         </div>
     );
