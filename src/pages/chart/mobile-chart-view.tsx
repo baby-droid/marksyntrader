@@ -506,13 +506,14 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
     /* ── Buy ──────────────────────────────────────────────────────────────── */
     const buy = useCallback(async (
         side: 'over' | 'under',
-        overrides: { ticks?: number; stake?: number } = {},
+        overrides: { ticks?: number; stake?: number; barrier?: number } = {},
     ): Promise<number | null> => {
         if (loading) return null;
         const api = (api_base as any).api;
         if (!api) { setResult({ ok: false, msg: '❌ Not connected' }); return null; }
         const effectiveTicks = overrides.ticks ?? ticks;
         const effectiveStake = overrides.stake ?? stake;
+        const effectiveBarrier = overrides.barrier ?? barrier;
         const isOverrideBuy = overrides.ticks != null || overrides.stake != null;
         setLoading(side);
         setResult(null);
@@ -528,7 +529,7 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                 duration: effectiveTicks, duration_unit: durationUnit,
                 underlying_symbol: symbol,
             };
-            if (group.needsBarrier) req.barrier = String(barrier);
+            if (group.needsBarrier) req.barrier = String(effectiveBarrier);
             return req;
         };
 
@@ -538,7 +539,7 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
             // change (barrier, ticks, stake, symbol). Reusing that ID means the
             // buy message hits the server on the very next WebSocket frame — no
             // extra proposal latency — so the contract enters on the current tick.
-            const cacheKey = `${group.id}|${barrier}|${effectiveTicks}|${durationUnit}|${effectiveStake}|${symbol}`;
+            const cacheKey = `${group.id}|${effectiveBarrier}|${effectiveTicks}|${durationUnit}|${effectiveStake}|${symbol}`;
             const cached   = cachedProposalRef.current;
             let proposalId: string | null = null;
             let askPrice:   number        = stake;
@@ -568,7 +569,7 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                 publishMasterTrade({
                     symbol, contract_type: contractType, stake: effectiveStake,
                     duration: effectiveTicks, duration_unit: durationUnit,
-                    ...(group.needsBarrier ? { barrier: String(barrier) } : {}),
+                    ...(group.needsBarrier ? { barrier: String(effectiveBarrier) } : {}),
                     source: getMasterSource(), time: Date.now(),
                 });
             } catch { /* non-fatal */ }
@@ -657,7 +658,7 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                                 ? String(poc.exit_tick_display_value).replace('.', '') : null;
                             const exitDigit = exitStr ? parseInt(exitStr[exitStr.length - 1], 10) : null;
                             window.dispatchEvent(new CustomEvent('chart:trade-settled', {
-                                detail: { won, profit, exitDigit, barrier, contractType, contractId: cid },
+                                detail: { won, profit, exitDigit, barrier: effectiveBarrier, contractType, contractId: cid },
                             }));
                             forgetPoc();
                         }
@@ -671,7 +672,7 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                 publishMasterTrade({
                     symbol, contract_type: contractType, stake: effectiveStake,
                     duration: effectiveTicks, duration_unit: durationUnit,
-                    ...(group.needsBarrier ? { barrier: String(barrier) } : {}),
+                    ...(group.needsBarrier ? { barrier: String(effectiveBarrier) } : {}),
                     source: getMasterSource(), time: Date.now(), contract_id: Number(contractId),
                 });
             } catch { /* non-fatal */ }
@@ -958,7 +959,8 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                         durationUnit={durationUnit}
                         stake={stake}
                         onStakeChange={next => { setStake(next); setStakeRaw(next.toFixed(2)); }}
-                        onAutoTrade={(side, aiTicks, aiStake) => buy(side, { ticks: aiTicks, stake: aiStake })}
+                        pcts={pcts}
+                        onAutoTrade={(side, aiTicks, aiStake, aiBarrier) => buy(side, { ticks: aiTicks, stake: aiStake, barrier: aiBarrier })}
                         tradeBusy={!!loading}
                     />
                 </div>

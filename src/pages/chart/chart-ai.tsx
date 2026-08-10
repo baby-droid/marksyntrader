@@ -85,6 +85,7 @@ function backtestDigits(digits: number[], side: 'over' | 'under', barrier: numbe
 
 function evaluateSide(
     digits: number[],
+    prices: number[],
     circlePcts: number[],
     side: 'over' | 'under',
     barrier: number,
@@ -99,6 +100,45 @@ function evaluateSide(
     // Blend it in without changing the circle DOM or its moving pointer.
     const pcts = windowPcts.map((p, i) => p * 0.75 + (circlePcts?.[i] ?? p) * 0.25);
     const threshold = marketThreshold(symbol);
+    if (!group?.needsBarrier) {
+        const type = side === 'over' ? group?.typeA : group?.typeB;
+        const duration = autoRotate ? [1, 2, 3, 4, 5][0] : clamp(selectedTicks, 1, MAX_CONFIRM_TICKS);
+        let score = 0;
+        let note = '50-tick market sample ready';
+        let expectedDigit = null;
+        if (type === 'DIGITEVEN' || type === 'DIGITODD') {
+            const even = digits.filter(d => d % 2 === 0).length / digits.length;
+            score = type === 'DIGITEVEN' ? even : 1 - even;
+            note = `${(score * 100).toFixed(0)}% ${type === 'DIGITEVEN' ? 'even' : 'odd'} in 50 ticks`;
+        } else if (type === 'DIGITMATCH' || type === 'DIGITDIFF') {
+            const counts = Array.from({ length: 10 }, (_, d) => digits.filter(x => x === d).length);
+            const selected = type === 'DIGITMATCH'
+                ? counts.indexOf(Math.max(...counts))
+                : counts.indexOf(Math.min(...counts));
+            expectedDigit = selected;
+            score = type === 'DIGITMATCH' ? counts[selected] / digits.length : 1 - counts[selected] / digits.length;
+            note = `digit ${selected} ${type === 'DIGITMATCH' ? 'dominates' : 'is rare'} in the window`;
+        } else if (type === 'CALL' || type === 'PUT') {
+            let up = 0;
+            for (let i = 1; i < prices.length; i++) if (prices[i] > prices[i - 1]) up++;
+            score = type === 'CALL' ? up / Math.max(1, prices.length - 1) : 1 - up / Math.max(1, prices.length - 1);
+            note = `${(score * 100).toFixed(0)}% directional price confirmation`;
+        } else {
+            score = 0.56;
+        }
+        if (score < 0.56) return null;
+        return {
+            side,
+            barrier,
+            duration,
+            confidence: clamp(55 + score * 40, 55, 95),
+            expectedDigit,
+            entryDigit: null,
+            conditionPct: score * 100,
+            threshold,
+            note,
+        };
+    }
     const losing = side === 'over'
         ? Array.from({ length: barrier + 1 }, (_, i) => i)
         : Array.from({ length: 10 - barrier }, (_, i) => barrier + i);
@@ -232,6 +272,7 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
     const confirmCountRef = useRef(0);
     const autoAttemptRef = useRef(false);
     const scanEpochRef = useRef(0);
+    const scanActiveRef = useRef(false);
     const refreshTimerRef = useRef<any>(null);
     const refreshClockRef = useRef<any>(null);
     const cooldownRef = useRef(0);
@@ -274,6 +315,7 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
         setEntryDigit(null);
         setConfirmCount(0);
         setScanning(true);
+        scanActiveRef.current = true;
         setStatus(`${reason} · collecting live ticks 0/50`);
         if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
         if (refreshClockRef.current) clearInterval(refreshClockRef.current);
@@ -301,6 +343,7 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
             if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
             if (refreshClockRef.current) clearInterval(refreshClockRef.current);
             setScanning(false);
+            scanActiveRef.current = false;
             setStatus('AI is off');
             return;
         }
@@ -330,7 +373,7 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                             if (cooldownRef.current === 0) beginScan('Cooldown complete');
                         }
 
-                        if (scanning || digitsRef.current.length < SCAN_SIZE) {
+                        if (scanActiveRef.current || digitsRef.current.length < SCAN_SIZE) {
                             digitsRef.current = [...digitsRef.current, digit].slice(-SCAN_SIZE);
                             pricesRef.current = [...pricesRef.current, price].slice(-SCAN_SIZE);
                             setSample(digitsRef.current.length);
@@ -338,6 +381,7 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                                 setStatus(`Scanning live ticks… ${digitsRef.current.length}/50`);
                             } else {
                                 setScanning(false);
+                                scanActiveRef.current = false;
                                 setPhase('analysing');
                                 setStatus('50 ticks ready · analysing digit distribution');
                                 scheduleRefresh();
@@ -394,11 +438,13 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
 
     useEffect(() => {
         if (!enabled || scanning || digitsRef.current.length < SCAN_SIZE || group?.isAccumulator) return;
+        if (signalRef.current) return;
         const candidates = [
-            allowA && evaluateSide(digitsRef.current, pcts, 'over', barrier, ticks, autoRotate, symbol, group),
-            allowB && evaluateSide(digitsRef.current, pcts, 'under', barrier, ticks, autoRotate, symbol, group),
+            allowA && evaluateSide(digitsRef.current, pricesRef.current, pcts, 'over', barrier, ticks, autoRotate, symbol, group),
+            allowB && evaluateSide(digitsRef.current, pricesRef.current, pcts, 'under', barrier, ticks, autoRotate, symbol, group),
         ].filter(Boolean);
         const next = candidates.sort((a, b) => b.confidence - a.confidence)[0] ?? null;
+        signalRef.current = next;
         setSignal(next);
         defaultSignalRef.current = next;
         setPhase(next ? 'analysing' : 'idle');
@@ -456,18 +502,18 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                 if (won) {
                     next = next + Math.max(0, Number(profit) || 0);
                     ladderPeakRef.current = Math.max(ladderPeakRef.current, next);
+                    if (next >= 2 && !ladderHadLossRef.current) {
+                        ladderBaseRef.current = Number((ladderBaseRef.current + 0.1).toFixed(2));
+                        next = ladderBaseRef.current;
+                        ladderPeakRef.current = next;
+                    }
                 } else {
                     ladderHadLossRef.current = true;
-                    const cleanCycleReachedTwo = ladderPeakRef.current >= 2 && !ladderHadLossRef.current;
-                    const base = cleanCycleReachedTwo
-                        ? Number((ladderBaseRef.current + 0.1).toFixed(2))
-                        : MIN_STAKE;
-                    ladderBaseRef.current = base;
-                    next = base;
-                    ladderPeakRef.current = base;
+                    ladderBaseRef.current = MIN_STAKE;
+                    next = MIN_STAKE;
+                    ladderPeakRef.current = MIN_STAKE;
                 }
-                // Keep a clean-cycle flag separate from the current loss event.
-                if (won && next >= 2) ladderHadLossRef.current = false;
+                if (won && next < 2) ladderHadLossRef.current = false;
             } else if (!won && fixedStake && martingaleEnabled) {
                 next = next * Math.max(1, martingale);
             } else if (won || fixedStake) {
@@ -504,6 +550,7 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                 setBatchCount(0);
                 cooldownRef.current = COOLDOWN_TICKS;
                 setCooldown(COOLDOWN_TICKS);
+                signalRef.current = null;
                 setSignal(null);
                 setPhase('idle');
                 setStatus(`Batch complete · cooling off ${COOLDOWN_TICKS} ticks`);

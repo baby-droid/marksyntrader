@@ -127,6 +127,7 @@ interface ChartTradePanelProps {
     symbol: string;
     onSymbolChange?: (s: string) => void;
     currentDigit: number | null;
+    pcts?: number[];
     currentPrice: number | null;
     priceChange: number;
     pipSize: number;
@@ -139,6 +140,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
     symbol,
     onSymbolChange,
     currentDigit,
+    pcts = [],
     currentPrice,
     priceChange,
     pipSize,
@@ -380,13 +382,14 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
     /* ── Buy ─────────────────────────────────────────────────────────────── */
     const buy = useCallback(async (
         side: 'over' | 'under',
-        overrides: { ticks?: number; stake?: number } = {},
+        overrides: { ticks?: number; stake?: number; barrier?: number } = {},
     ): Promise<number | null> => {
         if (loading) return null;
         const api = (api_base as any).api;
         if (!api) { setResult({ ok: false, msg: '❌ Not connected' }); return null; }
         const effectiveTicks = overrides.ticks ?? ticks;
         const effectiveStake = overrides.stake ?? stake;
+        const effectiveBarrier = overrides.barrier ?? barrier;
         const isOverrideBuy = overrides.ticks != null || overrides.stake != null;
         setLoading(side);
         setResult(null);
@@ -404,7 +407,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                 duration: effectiveTicks, duration_unit: durationUnit,
                 underlying_symbol: symbol,
             };
-            if (group.needsBarrier) req.barrier = String(barrier);
+            if (group.needsBarrier) req.barrier = String(effectiveBarrier);
             return req;
         };
 
@@ -414,7 +417,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             // change. Reusing the cached ID means the buy message hits the server
             // on the very next WebSocket frame — no extra proposal latency — so
             // the contract enters on the tick the user is currently watching.
-            const cacheKey = `${group.id}|${barrier}|${effectiveTicks}|${durationUnit}|${allowEquals}|${effectiveStake}|${symbol}`;
+            const cacheKey = `${group.id}|${effectiveBarrier}|${effectiveTicks}|${durationUnit}|${allowEquals}|${effectiveStake}|${symbol}`;
             const cached   = cachedProposalRef.current;
             let proposalId: string | null = null;
             let askPrice:   number        = stake;
@@ -442,7 +445,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                 publishMasterTrade({
                     symbol, contract_type: contractType, stake: effectiveStake,
                     duration: effectiveTicks, duration_unit: durationUnit,
-                    ...(group.needsBarrier ? { barrier: String(barrier) } : {}),
+                    ...(group.needsBarrier ? { barrier: String(effectiveBarrier) } : {}),
                     source: getMasterSource(), time: Date.now(),
                 });
             } catch { /* never block trade */ }
@@ -541,7 +544,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                             const exitDigit = exitStr
                                 ? parseInt(exitStr[exitStr.length - 1], 10) : null;
                             window.dispatchEvent(new CustomEvent('chart:trade-settled', {
-                                detail: { won, profit, exitDigit, barrier, contractType, contractId: cid },
+                                detail: { won, profit, exitDigit, barrier: effectiveBarrier, contractType, contractId: cid },
                             }));
                             forgetPoc();
                         }
@@ -555,7 +558,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                     publishMasterTrade({
                         symbol, contract_type: contractType, stake: effectiveStake,
                         duration: effectiveTicks, duration_unit: durationUnit,
-                        ...(group.needsBarrier ? { barrier: String(barrier) } : {}),
+                        ...(group.needsBarrier ? { barrier: String(effectiveBarrier) } : {}),
                         source: getMasterSource(), time: Date.now(), contract_id: Number(contractId),
                     });
                 }
@@ -941,7 +944,8 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                     durationUnit={durationUnit}
                     stake={stake}
                     onStakeChange={next => { setStake(next); setStakeRaw(String(next)); }}
-                    onAutoTrade={(side, aiTicks, aiStake) => buy(side, { ticks: aiTicks, stake: aiStake })}
+                    pcts={pcts}
+                    onAutoTrade={(side, aiTicks, aiStake, aiBarrier) => buy(side, { ticks: aiTicks, stake: aiStake, barrier: aiBarrier })}
                     tradeBusy={!!loading}
                 />
             </div>

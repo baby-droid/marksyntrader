@@ -734,6 +734,7 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                     symbol={symbol}
                     onSymbolChange={(s) => chart_store.onSymbolChange(s)}
                     currentDigit={currentDigit}
+                    pcts={pcts}
                     currentPrice={currentPrice}
                     priceChange={priceChange}
                     pipSize={pipSize}
