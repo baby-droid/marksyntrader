@@ -196,6 +196,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
     const [accumContractId, setAccumContractId] = useState<number | null>(null);
     const [result,    setResult]      = useState<{ ok: boolean; msg: string } | null>(null);
     const [displayCur, setDisplayCur] = useState(getDisplayCurrency());
+    const [aiEnabled, setAiEnabled] = useState(false);
 
     // Accumulator-specific extras
     const [accumTakeProfitEnabled, setAccumTakeProfitEnabled] = useState(false);
@@ -380,14 +381,16 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
     const buy = useCallback(async (
         side: 'over' | 'under',
         overrides: { ticks?: number; stake?: number } = {},
-    ) => {
-        if (loading) return;
+    ): Promise<number | null> => {
+        if (loading) return null;
         const api = (api_base as any).api;
-        if (!api) { setResult({ ok: false, msg: '❌ Not connected' }); return; }
+        if (!api) { setResult({ ok: false, msg: '❌ Not connected' }); return null; }
         const effectiveTicks = overrides.ticks ?? ticks;
         const effectiveStake = overrides.stake ?? stake;
+        const isOverrideBuy = overrides.ticks != null || overrides.stake != null;
         setLoading(side);
         setResult(null);
+        let purchasedContractId: number | null = null;
         // Allow-equals: CALL→CALLE, PUT→PUTE for Rise/Fall
         const contractType = side === 'over'
             ? (group.id === 'rise_fall' && allowEquals ? 'CALLE' : group.typeA)
@@ -395,10 +398,10 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
 
         const buildProposalReq = () => {
             const req: any = {
-                proposal: 1, amount: stake, basis: 'stake',
+                proposal: 1, amount: effectiveStake, basis: 'stake',
                 contract_type: contractType,
                 currency: getDisplayCurrency() || 'USD',
-                duration: ticks, duration_unit: durationUnit,
+                duration: effectiveTicks, duration_unit: durationUnit,
                 underlying_symbol: symbol,
             };
             if (group.needsBarrier) req.barrier = String(barrier);
@@ -411,13 +414,13 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             // change. Reusing the cached ID means the buy message hits the server
             // on the very next WebSocket frame — no extra proposal latency — so
             // the contract enters on the tick the user is currently watching.
-            const cacheKey = `${group.id}|${barrier}|${ticks}|${durationUnit}|${allowEquals}|${stake}|${symbol}`;
+            const cacheKey = `${group.id}|${barrier}|${effectiveTicks}|${durationUnit}|${allowEquals}|${effectiveStake}|${symbol}`;
             const cached   = cachedProposalRef.current;
             let proposalId: string | null = null;
             let askPrice:   number        = stake;
             let usedCache                 = false;
 
-            if (cached?.key === cacheKey && cached.expiry > Date.now()) {
+            if (!isOverrideBuy && cached?.key === cacheKey && cached.expiry > Date.now()) {
                 proposalId = side === 'over' ? cached.overId : cached.underId;
                 askPrice   = side === 'over' ? cached.overAsk : cached.underAsk;
                 if (proposalId) {
@@ -437,8 +440,8 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             // ── PRE-SIGNAL (copy-trading timing fix) ──────────────────────────
             try {
                 publishMasterTrade({
-                    symbol, contract_type: contractType, stake,
-                    duration: ticks, duration_unit: durationUnit,
+                    symbol, contract_type: contractType, stake: effectiveStake,
+                    duration: effectiveTicks, duration_unit: durationUnit,
                     ...(group.needsBarrier ? { barrier: String(barrier) } : {}),
                     source: getMasterSource(), time: Date.now(),
                 });
@@ -457,9 +460,10 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             if (buyRes?.error) throw new Error(buyRes.error.message);
 
             const contractId = buyRes?.buy?.contract_id;
+            purchasedContractId = contractId != null ? Number(contractId) : null;
             setResult({ ok: true, msg: `✅ #${contractId}` });
             window.dispatchEvent(new CustomEvent('chart:trade-started', {
-                detail: { contractId: Number(contractId), ticks },
+                detail: { contractId: Number(contractId), ticks: effectiveTicks },
             }));
 
             // Re-warm the proposal cache immediately so the next buy is also instant
@@ -549,8 +553,8 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             try {
                 if (contractId) {
                     publishMasterTrade({
-                        symbol, contract_type: contractType, stake,
-                        duration: ticks, duration_unit: durationUnit,
+                        symbol, contract_type: contractType, stake: effectiveStake,
+                        duration: effectiveTicks, duration_unit: durationUnit,
                         ...(group.needsBarrier ? { barrier: String(barrier) } : {}),
                         source: getMasterSource(), time: Date.now(), contract_id: Number(contractId),
                     });
@@ -558,10 +562,12 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             } catch { /* never block */ }
         } catch (e: any) {
             setResult({ ok: false, msg: `❌ ${e.message}` });
+            return null;
         } finally {
             setLoading(null);
             setTimeout(() => setResult(null), 4000);
         }
+        return purchasedContractId;
     }, [loading, group, allowEquals, barrier, ticks, durationUnit, stake, symbol, warmProposalCache]);
 
     /* ── Label helpers ───────────────────────────────────────────────────── */
@@ -898,7 +904,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                 </div>
                 {/* Preset quick-select chips — click to apply, click active to clear */}
                 <div className='ctp__stake-presets'>
-                    {[0.35, 1, 2, 10, 50].map(p => {
+                    {[0.35, 1, 2, 10].map(p => {
                         const isActive = stake === p;
                         return (
                             <button
@@ -915,7 +921,29 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                             </button>
                         );
                     })}
+                    <button
+                        className={`ctp__preset ctp__preset--ai${aiEnabled ? ' active' : ''}`}
+                        onClick={() => setAiEnabled(v => !v)}
+                        title='Open AI market scanner'
+                    >
+                        AI
+                    </button>
                 </div>
+            </div>
+
+            <div className={`ctp__ai-slot${aiEnabled ? '' : ' ctp__ai-slot--closed'}`}>
+                <ChartAiControl
+                    symbol={symbol}
+                    group={group}
+                    barrier={barrier}
+                    currentDigit={currentDigit}
+                    ticks={ticks}
+                    durationUnit={durationUnit}
+                    stake={stake}
+                    onStakeChange={next => { setStake(next); setStakeRaw(String(next)); }}
+                    onAutoTrade={(side, aiTicks, aiStake) => buy(side, { ticks: aiTicks, stake: aiStake })}
+                    tradeBusy={!!loading}
+                />
             </div>
 
             {/* ── Result feedback ───────────────────────────────────── */}

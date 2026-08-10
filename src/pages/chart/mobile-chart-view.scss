@@ -419,6 +419,34 @@
     padding: 10px 12px;
 }
 
+.mcv-panel__ai-btn {
+    flex-shrink: 0;
+    border: 0;
+    border-radius: 8px;
+    padding: 7px 10px;
+    background: linear-gradient(135deg, #1769ff, #00a550);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    &.active { box-shadow: 0 0 0 2px rgba(23,105,255,.22); }
+}
+
+.mcv-panel__ai {
+    max-height: 500px;
+    opacity: 1;
+    overflow: visible;
+    transition: max-height 0.2s ease, opacity 0.15s ease;
+}
+
+.mcv-panel__ai--closed {
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+
 /* Directly editable stake number input */
 .mcv-stake-input {
     flex: 1;

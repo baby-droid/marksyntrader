@@ -522,6 +522,34 @@
     }
 }
 
+.ctp__preset--ai {
+    background: linear-gradient(135deg, #1769ff, #00a550);
+    border-color: transparent;
+    color: #fff;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    &:hover, &.active {
+        color: #fff;
+        border-color: transparent;
+        background: linear-gradient(135deg, #1258d4, #008b43);
+    }
+}
+
+.ctp__ai-slot {
+    padding: 0 4px;
+    max-height: 500px;
+    opacity: 1;
+    overflow: visible;
+    transition: max-height 0.2s ease, opacity 0.15s ease;
+}
+
+.ctp__ai-slot--closed {
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+
 /* X indicator on active preset — clicking deselects it */
 .ctp__preset-x {
     font-size: 9px;

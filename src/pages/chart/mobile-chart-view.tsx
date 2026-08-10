@@ -8,6 +8,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import { publishMasterTrade, getMasterSource } from '@/utils/trade-bus';
+import ChartAiControl from './chart-ai';
 import './mobile-chart-view.scss';
 
 /* ── Duration unit helpers (mirror of chart-trade-panel) ──────────────────── */
@@ -274,9 +275,10 @@ interface AmountSheetProps {
     stake: number;
     displayCur: string;
     onSet: (n: number) => void;
+    onOpenAi: () => void;
     onClose: () => void;
 }
-const AmountSheet: React.FC<AmountSheetProps> = ({ stake, displayCur, onSet, onClose }) => {
+const AmountSheet: React.FC<AmountSheetProps> = ({ stake, displayCur, onSet, onOpenAi, onClose }) => {
     const [raw, setRaw] = useState(String(stake));
 
     const handleKey = (key: string) => {
@@ -299,9 +301,10 @@ const AmountSheet: React.FC<AmountSheetProps> = ({ stake, displayCur, onSet, onC
                 <div className='mcv-sheet__title'>Stake</div>
                 <div className='mcv-amt__display'>{raw} <span className='mcv-amt__cur'>{displayCur}</span></div>
                 <div className='mcv-amt__presets'>
-                    {[0.35, 1, 5, 10, 50, 100].map(p => (
+                    {[0.35, 1, 5, 10, 100].map(p => (
                         <button key={p} className='mcv-amt__preset' onClick={() => setRaw(String(p))}>{p}</button>
                     ))}
+                    <button className='mcv-amt__preset mcv-amt__preset--ai' onClick={() => { onOpenAi(); onClose(); }}>AI</button>
                 </div>
                 <div className='mcv-amt__pad'>
                     {keys.map(k => (
@@ -370,6 +373,7 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
     const [displayCur,  setDisplayCur]  = useState(getDisplayCurrency());
     const [loading,     setLoading]     = useState<'over' | 'under' | null>(null);
     const [result,      setResult]      = useState<{ ok: boolean; msg: string } | null>(null);
+    const [aiEnabled,   setAiEnabled]   = useState(false);
     const [overPayout,  setOverPayout]  = useState<number | null>(null);
     const [underPayout, setUnderPayout] = useState<number | null>(null);
     const payoutTimerRef = useRef<any>(null);
@@ -500,21 +504,28 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
     const isJumpMarket = /^JD/i.test(symbol);
 
     /* ── Buy ──────────────────────────────────────────────────────────────── */
-    const buy = useCallback(async (side: 'over' | 'under') => {
-        if (loading) return;
+    const buy = useCallback(async (
+        side: 'over' | 'under',
+        overrides: { ticks?: number; stake?: number } = {},
+    ): Promise<number | null> => {
+        if (loading) return null;
         const api = (api_base as any).api;
-        if (!api) { setResult({ ok: false, msg: '❌ Not connected' }); return; }
+        if (!api) { setResult({ ok: false, msg: '❌ Not connected' }); return null; }
+        const effectiveTicks = overrides.ticks ?? ticks;
+        const effectiveStake = overrides.stake ?? stake;
+        const isOverrideBuy = overrides.ticks != null || overrides.stake != null;
         setLoading(side);
         setResult(null);
         const contractType = side === 'over' ? group.typeA : group.typeB;
+        let purchasedContractId: number | null = null;
 
         // Helper to build a fresh proposal request
         const buildProposalReq = () => {
             const req: any = {
-                proposal: 1, amount: stake, basis: 'stake',
+                proposal: 1, amount: effectiveStake, basis: 'stake',
                 contract_type: contractType,
                 currency: getDisplayCurrency() || 'USD',
-                duration: ticks, duration_unit: durationUnit,
+                duration: effectiveTicks, duration_unit: durationUnit,
                 underlying_symbol: symbol,
             };
             if (group.needsBarrier) req.barrier = String(barrier);
@@ -527,13 +538,13 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
             // change (barrier, ticks, stake, symbol). Reusing that ID means the
             // buy message hits the server on the very next WebSocket frame — no
             // extra proposal latency — so the contract enters on the current tick.
-            const cacheKey = `${group.id}|${barrier}|${ticks}|${durationUnit}|${stake}|${symbol}`;
+            const cacheKey = `${group.id}|${barrier}|${effectiveTicks}|${durationUnit}|${effectiveStake}|${symbol}`;
             const cached   = cachedProposalRef.current;
             let proposalId: string | null = null;
             let askPrice:   number        = stake;
             let usedCache                 = false;
 
-            if (cached?.key === cacheKey && cached.expiry > Date.now()) {
+            if (!isOverrideBuy && cached?.key === cacheKey && cached.expiry > Date.now()) {
                 proposalId = side === 'over' ? cached.overId : cached.underId;
                 askPrice   = side === 'over' ? cached.overAsk : cached.underAsk;
                 if (proposalId) {
@@ -555,8 +566,8 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
             // PRE-signal for copy trading (before buy so follower gets same tick)
             try {
                 publishMasterTrade({
-                    symbol, contract_type: contractType, stake,
-                    duration: ticks, duration_unit: durationUnit,
+                    symbol, contract_type: contractType, stake: effectiveStake,
+                    duration: effectiveTicks, duration_unit: durationUnit,
                     ...(group.needsBarrier ? { barrier: String(barrier) } : {}),
                     source: getMasterSource(), time: Date.now(),
                 });
@@ -575,9 +586,10 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
             if (buyRes?.error) throw new Error(buyRes.error.message);
 
             const contractId = buyRes?.buy?.contract_id;
+            purchasedContractId = contractId != null ? Number(contractId) : null;
             setResult({ ok: true, msg: `✅ #${contractId}` });
             window.dispatchEvent(new CustomEvent('chart:trade-started', {
-                detail: { contractId: Number(contractId), ticks },
+                detail: { contractId: Number(contractId), ticks: effectiveTicks },
             }));
 
             // Re-warm the proposal cache immediately so the next buy is also instant
@@ -657,18 +669,20 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
             // POST-signal
             try {
                 publishMasterTrade({
-                    symbol, contract_type: contractType, stake,
-                    duration: ticks, duration_unit: durationUnit,
+                    symbol, contract_type: contractType, stake: effectiveStake,
+                    duration: effectiveTicks, duration_unit: durationUnit,
                     ...(group.needsBarrier ? { barrier: String(barrier) } : {}),
                     source: getMasterSource(), time: Date.now(), contract_id: Number(contractId),
                 });
             } catch { /* non-fatal */ }
         } catch (e: any) {
             setResult({ ok: false, msg: `❌ ${e.message}` });
+            return null;
         } finally {
             setLoading(null);
             setTimeout(() => setResult(null), 4000);
         }
+        return purchasedContractId;
     }, [loading, group, barrier, ticks, durationUnit, stake, symbol, warmProposalCache]);
 
     /* ── Derived state ────────────────────────────────────────────────────── */
@@ -924,7 +938,29 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                             }}
                         />
                         <span className='mcv-panel__summary-lbl mcv-panel__summary-lbl--cur'>{displayCur}</span>
+                        <button
+                            className={`mcv-panel__ai-btn${aiEnabled ? ' active' : ''}`}
+                            onClick={() => setAiEnabled(v => !v)}
+                            title='Open AI market scanner'
+                        >
+                            AI
+                        </button>
                     </div>
+                </div>
+
+                <div className={`mcv-panel__ai${aiEnabled ? '' : ' mcv-panel__ai--closed'}`}>
+                    <ChartAiControl
+                        symbol={symbol}
+                        group={group}
+                        barrier={barrier}
+                        currentDigit={currentDigit}
+                        ticks={ticks}
+                        durationUnit={durationUnit}
+                        stake={stake}
+                        onStakeChange={next => { setStake(next); setStakeRaw(next.toFixed(2)); }}
+                        onAutoTrade={(side, aiTicks, aiStake) => buy(side, { ticks: aiTicks, stake: aiStake })}
+                        tradeBusy={!!loading}
+                    />
                 </div>
 
                 {/* Result feedback */}
@@ -999,6 +1035,7 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                     stake={stake}
                     displayCur={displayCur}
                     onSet={setStake}
+                    onOpenAi={() => setAiEnabled(true)}
                     onClose={() => setShowAmountSheet(false)}
                 />
             )}
