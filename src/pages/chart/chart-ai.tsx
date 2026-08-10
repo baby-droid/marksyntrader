@@ -441,6 +441,7 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
     }, [enabled, symbol]);
 
     const windowPcts = useMemo(() => pctsFor(digitsRef.current), [sample]);
+    const circlePcts = pcts.length ? pcts : windowPcts;
 
     useEffect(() => {
         if (!enabled || scanning || digitsRef.current.length < SCAN_SIZE || group?.isAccumulator) return;
@@ -619,7 +620,7 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                         <b>{phaseLabel}</b>
                         {signal && <span>Best entry: {signal.entryDigit ?? 'watching'} · {signal.duration} tick{signal.duration === 1 ? '' : 's'} · condition ≤ {threshold.toFixed(1)}%</span>}
                         <span className='chart-ai__circle-readout'>
-                            Circle distribution: {windowPcts.map((v, i) => `${i} ${v.toFixed(1)}%`).join(' · ')}
+                            Circle distribution: {circlePcts.map((v, i) => `${i} ${v.toFixed(1)}%`).join(' · ')}
                         </span>
                     </div>
                     <div className='chart-ai__toggles'>
