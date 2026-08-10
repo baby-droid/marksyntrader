@@ -231,15 +231,24 @@ function evaluateSide(
     const losing = side === 'over'
         ? Array.from({ length: barrier + 1 }, (_, i) => i)
         : Array.from({ length: 10 - barrier }, (_, i) => barrier + i);
+    const winning = side === 'over'
+        ? Array.from({ length: 9 - barrier }, (_, i) => barrier + 1 + i)
+        : Array.from({ length: barrier }, (_, i) => i);
     const shield = side === 'over' ? barrier + 1 : barrier - 1;
-    if (shield < 0 || shield > 9 || losing.length === 0) return null;
+    if (shield < 0 || shield > 9 || losing.length === 0 || winning.length === 0) return null;
     const conditionMet = losing.every(d => pcts[d] < threshold);
     const shieldPct = pcts[shield] ?? 0;
-    const highDigits = pcts.filter(value => value > threshold).length;
+    const bestWinningDigit = [...winning].sort(
+        (a, b) => (pcts[b] ?? 0) - (pcts[a] ?? 0),
+    )[0];
+    const bestWinningPct = pcts[bestWinningDigit] ?? 0;
+    const highDigits = winning.filter(d => (pcts[d] ?? 0) > threshold).length;
     // Conservative Over/Under entry: the losing range stays below 10.5%,
-    // the first safe digit clears the threshold, and there is only one
-    // dominant digit in the 50-tick sample.
-    if (!conditionMet || shieldPct <= threshold || highDigits !== 1) return null;
+    // and at least one winning digit is strong enough to carry the signal.
+    // The adjacent shield is preferred when it is the strongest digit, but
+    // it is optional: a different winning digit can carry the condition.
+    if (!conditionMet || highDigits < 1 || bestWinningPct <= threshold) return null;
+    const shieldIsBest = bestWinningDigit === shield && shieldPct > threshold;
 
     // Over/Under is deliberately conservative: use the best one- or
     // two-tick confirmation. Other barrier contracts may still use 1–5.
@@ -257,7 +266,8 @@ function evaluateSide(
 
     const entry = ENTRY_POINTS[side];
     const confidence = clamp(
-        54 + shieldPct + best.safeRate * 18 + best.winRate * 12
+        54 + bestWinningPct + best.safeRate * 18 + best.winRate * 12
+            + (shieldIsBest ? 7 : 0)
             + (entry.strong.includes(digits[digits.length - 1]) ? 7 : 0),
         55,
         98,
@@ -274,7 +284,7 @@ function evaluateSide(
         patternRequired: false,
         conditionPct: Math.max(...losing.map(d => pcts[d] ?? 0)),
         threshold,
-        note: `${groupSideLabel(group, side)} ${barrier} · max condition ${Math.max(...losing.map(d => pcts[d] ?? 0)).toFixed(1)}% · ${Math.round(best.winRate * 100)}% historical wins`,
+        note: `${groupSideLabel(group, side)} ${barrier} · best winning digit ${bestWinningDigit} at ${bestWinningPct.toFixed(1)}%${shieldIsBest ? ' · shield preferred' : ' · shield optional'} · ${Math.round(best.winRate * 100)}% historical wins`,
     };
 }
 
@@ -350,7 +360,7 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
     const [entryPhase, setEntryPhase] = useState('idle');
     const [entryDigit, setEntryDigit] = useState<number | null>(null);
     const [confirmCount, setConfirmCount] = useState(0);
-    const [confirmTicks, setConfirmTicks] = useState(ENTRY_CONFIRM_HITS);
+    const confirmTicks = ENTRY_CONFIRM_HITS;
     const [autoRotate, setAutoRotate] = useState(true);
     const [fullMargin, setFullMargin] = useState(false);
     const [fixedStake, setFixedStake] = useState(true);
@@ -777,7 +787,9 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
             // digit cannot lock the engine.
             if (won) {
                 entryUseCountRef.current += 1;
+                entryFailureCountRef.current = 0;
             }
+            reversePendingRef.current = false;
             if (
                 entryUseCountRef.current >= ENTRY_USE_LIMIT ||
                 (!won && entryFailureCountRef.current >= 2)
@@ -949,8 +961,8 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                     </div>
                     <div className='chart-ai__settings'>
                         <label>confirm
-                            <select value={confirmTicks} onChange={e => setConfirmTicks(Number(e.target.value))}>
-                                {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n} tick{n === 1 ? '' : 's'}</option>)}
+                            <select value={confirmTicks} disabled>
+                                <option value={ENTRY_CONFIRM_HITS}>{ENTRY_CONFIRM_HITS} touches</option>
                             </select>
                         </label>
                         <label>batch
