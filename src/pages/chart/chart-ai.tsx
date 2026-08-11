@@ -15,9 +15,9 @@ const ENTRY_WINDOW_TICKS = 5;
 const ENTRY_STALE_TICKS = 8;
 
 const ENTRY_POINTS = {
-    // Entry points are ordered from the safer, farther-from-barrier digits
-    // toward the weaker points. Weak points are valid fallback triggers when
-    // the distribution and confirmation window still validate the trade.
+    // These are the preferred reference digits for the default barrier. For a
+    // user-selected barrier, validBarrierEntries() below always expands this
+    // to every digit on the winning side.
     over: { strong: [3, 4, 1, 8], weak: [7, 0] },
     under: { strong: [9, 6, 2], weak: [5] },
 };
@@ -93,30 +93,123 @@ function backtestDigits(digits: number[], side: 'over' | 'under', barrier: numbe
     };
 }
 
-function entrySequence(side: 'over' | 'under'): number[] {
-    const points = ENTRY_POINTS[side];
-    return [...points.strong, ...points.weak];
+function backtestContract(
+    digits: number[],
+    prices: number[],
+    type: string,
+    side: 'over' | 'under',
+    barrier: number,
+    duration: number,
+    expectedDigit: number | null,
+) {
+    if (digits.length <= duration + 4) return { winRate: 0, safeRate: 0, expectedDigit };
+    let wins = 0;
+    let safeWins = 0;
+    for (let i = 0; i < digits.length - duration; i++) {
+        const exitDigit = digits[i + duration];
+        const entryPrice = prices[i];
+        const exitPrice = prices[i + duration];
+        let won = false;
+        if (type === 'DIGITEVEN') won = exitDigit % 2 === 0;
+        else if (type === 'DIGITODD') won = exitDigit % 2 !== 0;
+        else if (type === 'DIGITMATCH') won = expectedDigit == null ? exitDigit === digits[i] : exitDigit === expectedDigit;
+        else if (type === 'DIGITDIFF') won = expectedDigit == null ? exitDigit !== digits[i] : exitDigit !== expectedDigit;
+        else if (type === 'CALL') won = exitPrice > entryPrice;
+        else if (type === 'PUT') won = exitPrice < entryPrice;
+        else won = side === 'over' ? exitDigit > barrier : exitDigit < barrier;
+        if (won) {
+            wins++;
+            if (type === 'DIGITOVER' || type === 'DIGITUNDER') {
+                if (Math.abs(exitDigit - barrier) >= 3) safeWins++;
+            } else {
+                safeWins++;
+            }
+        }
+    }
+    const attempts = digits.length - duration;
+    return {
+        winRate: wins / attempts,
+        safeRate: safeWins / attempts,
+        expectedDigit,
+    };
 }
 
-function chooseEntryDigit(
+export function durationCandidates(selectedTicks: number, autoRotate: boolean): number[] {
+    const maxTicks = clamp(Math.round(Number(selectedTicks) || 1), 1, MAX_CONFIRM_TICKS);
+    // Auto ticks means “compare every duration up to the selected limit”, not
+    // “always use one tick”. With 3 selected, evaluate 1, 2, and 3; with 5,
+    // evaluate all five.
+    return autoRotate
+        ? Array.from({ length: maxTicks }, (_, index) => index + 1)
+        : [maxTicks];
+}
+
+export function validBarrierEntries(side: 'over' | 'under', barrier: number): number[] {
+    const b = clamp(Math.round(Number(barrier) || 0), 0, 9);
+    return side === 'over'
+        ? Array.from({ length: 9 - b }, (_, index) => b + 1 + index)
+        : Array.from({ length: b }, (_, index) => index);
+}
+
+function entrySequence(side: 'over' | 'under', barrier: number): number[] {
+    // Start with the farthest valid digits (safer distance from the barrier),
+    // then walk toward the barrier. This is dynamic for every selected
+    // prediction digit: Over 3 scans 9,8,7,6,5,4 rather than a fixed list.
+    return validBarrierEntries(side, barrier).sort((a, b) => {
+        const distanceA = Math.abs(a - barrier);
+        const distanceB = Math.abs(b - barrier);
+        return distanceB - distanceA || a - b;
+    });
+}
+
+export function chooseEntryDigit(
     side: 'over' | 'under',
     barrier: number,
     pcts: number[],
     index = 0,
 ) {
-    const sequence = entrySequence(side);
-    const safelyAway = sequence.filter(d =>
-        side === 'over' ? d > barrier && d - barrier >= 3 : d < barrier && barrier - d >= 3,
-    );
-    const candidates = safelyAway.length ? safelyAway : sequence.filter(d =>
-        side === 'over' ? d > barrier : d < barrier,
-    );
-    const ordered = candidates.length ? candidates : sequence;
-    // Prefer a point that is already visible in the window, then rotate
-    // deterministically. This prevents the AI from locking to one digit.
+    const ordered = entrySequence(side, barrier);
+    // Prefer a visible point within the safe ordering, then rotate
+    // deterministically through every valid winning digit. This prevents the
+    // AI from locking to one hardcoded entry point.
     const visible = ordered.filter(d => (pcts[d] ?? 0) > 0);
     const pool = visible.length ? visible : ordered;
     return pool[index % pool.length] ?? null;
+}
+
+function chooseSignalEntry(signal: any, pcts: number[], index = 0) {
+    if (!signal) return null;
+    if (signal.requiresReferenceEntry) {
+        return chooseEntryDigit(signal.side, Number(signal.barrier), pcts, index);
+    }
+    return entryDigitForType(signal.entryType, signal.expectedDigit ?? null, pcts, index);
+}
+
+function entryDigitForType(type: string, expectedDigit: number | null, pcts: number[], index = 0) {
+    const candidates = type === 'DIGITEVEN'
+        ? [0, 2, 4, 6, 8]
+        : type === 'DIGITODD'
+            ? [1, 3, 5, 7, 9]
+            : type === 'DIGITDIFF' && expectedDigit != null
+                ? Array.from({ length: 10 }, (_, digit) => digit).filter(digit => digit !== expectedDigit)
+                : expectedDigit != null
+                    ? [expectedDigit]
+                    : [];
+    const visible = candidates.filter(digit => (pcts[digit] ?? 0) > 0);
+    const pool = visible.length ? visible : candidates;
+    return pool[index % pool.length] ?? null;
+}
+
+function isDigitEntryType(type: string) {
+    return ['DIGITEVEN', 'DIGITODD', 'DIGITMATCH', 'DIGITDIFF'].includes(type);
+}
+
+function isUpEntryType(type: string) {
+    return ['CALL', 'CALLE', 'ASIANU', 'TICKHIGH', 'RUNHIGH', 'RESETCALL'].includes(type);
+}
+
+function isDownEntryType(type: string) {
+    return ['PUT', 'PUTE', 'ASIAND', 'TICKLOW', 'RUNLOW', 'RESETPUT'].includes(type);
 }
 
 function patternSignal(
@@ -188,7 +281,6 @@ export function evaluateSide(
     const threshold = marketThreshold(symbol);
     if (!group?.needsBarrier || group?.id === 'match_differ') {
         const type = side === 'over' ? group?.typeA : group?.typeB;
-        const duration = autoRotate ? [1, 2, 3, 4, 5][0] : clamp(selectedTicks, 1, MAX_CONFIRM_TICKS);
         let score = 0;
         let note = '50-tick market sample ready';
         let expectedDigit = null;
@@ -218,19 +310,34 @@ export function evaluateSide(
             note = `${note} · ${pattern.note}`;
         }
         if (score < 0.56) return null;
+        const candidates = durationCandidates(selectedTicks, autoRotate);
+        const tests = candidates.map(duration => ({
+            duration,
+            ...backtestContract(digits, prices, type, side, barrier, duration, expectedDigit),
+        }));
+        const best = [...tests].sort(
+            (a, b) => (b.safeRate * 0.7 + b.winRate * 0.3) - (a.safeRate * 0.7 + a.winRate * 0.3),
+        )[0];
+        if (!best) return null;
+        const entryType = type || '';
+        const entryDigit = isDigitEntryType(entryType)
+            ? entryDigitForType(entryType, expectedDigit, blendedPcts)
+            : null;
         return {
             side,
             barrier,
-            duration,
-            confidence: clamp(55 + score * 40, 55, 95),
+            duration: best.duration,
+            confidence: clamp(55 + score * 30 + best.winRate * 15, 55, 95),
             expectedDigit,
-            entryDigit: null,
+            entryDigit,
+            entryType,
             requiresReferenceEntry: group?.id === 'over_under',
-            patternRequired: ['even_odd', 'match_differ', 'rise_fall'].includes(group?.id),
+            patternRequired: false,
             patternNote: pattern.note,
+            marketQualified: true,
             conditionPct: score * 100,
             threshold,
-            note,
+            note: `${note} · ${best.duration} tick${best.duration === 1 ? '' : 's'} selected from ${candidates.join(', ')}`,
         };
     }
     const losing = side === 'over'
@@ -267,11 +374,9 @@ export function evaluateSide(
     if (!conditionMet || highDigits < 1 || bestWinningPct <= threshold) return null;
     const shieldIsBest = bestWinningDigit === shield && shieldPct > threshold;
 
-    // Over/Under is deliberately conservative: use the best one- or
-    // two-tick confirmation. Other barrier contracts may still use 1–5.
-    const candidates = group?.id === 'over_under'
-        ? [1, 2]
-        : autoRotate ? [1, 2, 3, 4, 5] : [clamp(selectedTicks, 1, MAX_CONFIRM_TICKS)];
+    // Compare every duration up to the user's selected limit when Auto Ticks
+    // is enabled. Never silently collapse a selection of 3 or 5 to one tick.
+    const candidates = durationCandidates(selectedTicks, autoRotate);
     const tests = candidates.map(duration => ({
         duration,
         ...backtestDigits(digits, side, barrier, duration),
@@ -285,11 +390,11 @@ export function evaluateSide(
     // backtest while the current market still has a clear entry opportunity.
     if (!best) return null;
 
-    const entry = ENTRY_POINTS[side];
+    const validEntries = entrySequence(side, barrier);
     const confidence = clamp(
         60 + bestWinningPct + best.safeRate * 18 + best.winRate * 12
             + (shieldIsBest ? 7 : 0)
-            + (entry.strong.includes(digits[digits.length - 1]) ? 7 : 0),
+            + (validEntries.includes(digits[digits.length - 1]) ? 7 : 0),
         60,
         98,
     );
@@ -300,15 +405,17 @@ export function evaluateSide(
         confidence,
         expectedDigit: best.expectedDigit,
         entryDigit: chooseEntryDigit(side, barrier, pcts),
+        entryType: side === 'over' ? 'DIGITOVER' : 'DIGITUNDER',
         requiresReferenceEntry: group?.id === 'over_under',
         patternRequired: false,
+        marketQualified: true,
         conditionPct: Math.max(...losing.map(d => pcts[d] ?? 0)),
         threshold,
-        note: `${groupSideLabel(group, side)} ${barrier} · best winning digit ${bestWinningDigit} at ${bestWinningPct.toFixed(1)}% · ${distribution.source}${shieldIsBest ? ' · shield preferred' : ' · shield optional'} · ${Math.round(best.winRate * 100)}% historical wins`,
+        note: `${groupSideLabel(group, side)} ${barrier} · entries ${validEntries.join(', ')} · best winning digit ${bestWinningDigit} at ${bestWinningPct.toFixed(1)}% · ${distribution.source}${shieldIsBest ? ' · shield preferred' : ' · shield optional'} · ${Math.round(best.winRate * 100)}% historical wins`,
     };
 }
 
-function entryMatches(
+export function entryMatches(
     signal: any,
     digits: number[],
     currentDigit: number | null,
@@ -319,32 +426,45 @@ function entryMatches(
 ) {
     if (currentDigit == null || !digits.length) return false;
     const side = signal.side;
-    const entry = ENTRY_POINTS[side];
     const previous = digits[digits.length - 2];
-    const strong = entry.strong.includes(currentDigit);
-    const weak = entry.weak.includes(currentDigit);
     const entryPoint = activeEntryDigit == null || currentDigit === activeEntryDigit;
     const distance = side === 'over'
         ? currentDigit - Number(signal.barrier)
         : Number(signal.barrier) - currentDigit;
     const pattern = patternSignal(group, side, digits, prices);
+    const type = signal.entryType || (side === 'over' ? group?.typeA : group?.typeB) || '';
+    const pricePrevious = prices[prices.length - 2];
+    const priceDelta = Number.isFinite(pricePrevious)
+        ? prices[prices.length - 1] - pricePrevious
+        : 0;
+    const directionHit = isUpEntryType(type)
+        ? priceDelta > 0
+        : isDownEntryType(type)
+            ? priceDelta < 0
+            : false;
+    const digitEntryHit = isDigitEntryType(type) && entryPoint;
     const momentum = previous == null
         ? true
         : side === 'over' ? currentDigit >= previous : currentDigit <= previous;
+    const nonReferenceEntry = isDigitEntryType(type)
+        ? digitEntryHit
+        : isUpEntryType(type) || isDownEntryType(type)
+            ? directionHit || pattern.matched
+            : pattern.matched || currentDigit !== previous;
     const checks: Record<string, boolean> = {
-        // Both strong and weak points can trigger. The distribution gate,
-        // distance from the barrier, and three-hit confirmation provide the
-        // safety check instead of hard-blocking weak reference digits.
-        reversal: signal.requiresReferenceEntry ? entryPoint : pattern.matched,
+        // Every selected strategy observes the same type-specific entry
+        // condition. The surrounding three-touch window is the confirmation
+        // safety check; no fixed “strong digit” list can block a valid barrier.
+        reversal: signal.requiresReferenceEntry ? entryPoint : nonReferenceEntry,
         'tick-concept': signal.requiresReferenceEntry
-            ? entryPoint && distance >= 3
-            : pattern.matched || (previous == null || currentDigit !== previous),
-        'entry-loop': signal.requiresReferenceEntry ? entryPoint : pattern.matched,
+            ? entryPoint && distance >= 1
+            : nonReferenceEntry,
+        'entry-loop': signal.requiresReferenceEntry ? entryPoint : nonReferenceEntry,
         conservative: signal.requiresReferenceEntry
-            ? entryPoint && distance >= 3
-            : pattern.matched,
+            ? entryPoint && distance >= 1
+            : nonReferenceEntry,
         'number-losses': true,
-        'digit-distribution': signal.conditionPct <= signal.threshold,
+        'digit-distribution': signal.marketQualified !== false,
         momentum,
     };
     if (signal.requiresReferenceEntry && !entryPoint) return false;
@@ -412,6 +532,8 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
     const activeContractRef = useRef<number | null>(null);
     const activeStakeRef = useRef(aiStake);
     const initialStakeRef = useRef(Math.max(MIN_STAKE, stake));
+    const userStakeRef = useRef(Math.max(MIN_STAKE, stake));
+    const hasPlacedTradeRef = useRef(false);
     const signalRef = useRef<any>(null);
     const entryPhaseRef = useRef('idle');
     const entryDigitRef = useRef<number | null>(null);
@@ -449,6 +571,7 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
         // Only accept a user/base-stake change while no contract is active.
         if (!activeContractRef.current) {
             const nextBase = Math.max(MIN_STAKE, Number(stake) || MIN_STAKE);
+            userStakeRef.current = nextBase;
             initialStakeRef.current = nextBase;
             if (enabled) setAiStake(nextBase);
         }
@@ -473,6 +596,12 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
         setSignal(null);
         defaultSignalRef.current = null;
         recoveryPendingRef.current = false;
+        // A fresh market scan starts a new AI cycle. The first order in that
+        // cycle must use the user's current stake exactly, before progression.
+        hasPlacedTradeRef.current = false;
+        const baseStake = userStakeRef.current;
+        initialStakeRef.current = baseStake;
+        setAiStake(baseStake);
         entryIndexRef.current = 0;
         entryUseCountRef.current = 0;
         entryFailureCountRef.current = 0;
@@ -746,8 +875,14 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
         if (runsEnabled && runCount >= runs) return;
         if (stopLossEnabled && lossCount >= stopLoss) return;
         autoAttemptRef.current = true;
-        const duration = autoRotate ? signal.duration : clamp(ticks, 1, MAX_CONFIRM_TICKS);
-        const nextStake = Math.max(MIN_STAKE, aiStake);
+        const duration = clamp(
+            Number(signal.duration ?? ticks) || 1,
+            1,
+            MAX_CONFIRM_TICKS,
+        );
+        const nextStake = hasPlacedTradeRef.current
+            ? Math.max(MIN_STAKE, aiStake)
+            : Math.max(MIN_STAKE, initialStakeRef.current);
         const recoveryBarrier = signal.recoveryBarrier;
         activeStakeRef.current = nextStake;
         setPopup({ ...signal, duration, recovery: !!recoveryBarrier });
@@ -755,6 +890,7 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
         onAutoTrade(signal.side, duration, nextStake, recoveryBarrier).then(id => {
             if (id != null) {
                 activeContractRef.current = Number(id);
+                hasPlacedTradeRef.current = true;
                 setStatus(`${groupSideLabel(group, signal.side)} fired · ${duration} tick${duration === 1 ? '' : 's'}`);
             } else {
                 autoAttemptRef.current = false;
@@ -965,7 +1101,10 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                         <b>{phaseLabel}</b>
                         {signal && <span>Best entry: {signal.entryDigit ?? 'watching'} · {signal.duration} tick{signal.duration === 1 ? '' : 's'} · condition ≤ {threshold.toFixed(1)}%</span>}
                         <span className='chart-ai__entry-map'>
-                            Over points: 3 · 4 · 1 · 8 · 7 · 0 &nbsp;|&nbsp; Under points: 9 · 6 · 2 · 5
+                            {signal?.requiresReferenceEntry
+                                ? `${groupSideLabel(group, signal.side)} ${signal.barrier} entries: ${validBarrierEntries(signal.side, signal.barrier).join(' · ')}`
+                                : `${groupSideLabel(group, signal?.side ?? 'over')} entry confirmation follows the selected contract pattern`
+                            }
                         </span>
                         <span className='chart-ai__circle-readout'>
                             Circle distribution: {circlePcts.map((v, i) => `${i} ${v.toFixed(1)}%`).join(' · ')}

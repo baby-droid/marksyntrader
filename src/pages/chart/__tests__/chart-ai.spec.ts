@@ -1,4 +1,42 @@
-import { evaluateSide } from '../chart-ai';
+import {
+    durationCandidates,
+    entryMatches,
+    evaluateSide,
+    validBarrierEntries,
+} from '../chart-ai';
+
+describe('chart AI duration and entry selection', () => {
+    it('checks every duration up to the selected limit when Auto Ticks is enabled', () => {
+        expect(durationCandidates(3, true)).toEqual([1, 2, 3]);
+        expect(durationCandidates(5, true)).toEqual([1, 2, 3, 4, 5]);
+        expect(durationCandidates(5, false)).toEqual([5]);
+    });
+
+    it('derives all valid entry points from the selected prediction digit', () => {
+        expect(validBarrierEntries('over', 3)).toEqual([4, 5, 6, 7, 8, 9]);
+        expect(validBarrierEntries('under', 7)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    });
+
+    it('confirms a non-barrier digit contract using its selected entry digit', () => {
+        const signal = {
+            side: 'over',
+            entryType: 'DIGITEVEN',
+            entryDigit: 4,
+            requiresReferenceEntry: false,
+            marketQualified: true,
+        };
+
+        expect(entryMatches(
+            signal,
+            [1, 4, 2, 6],
+            4,
+            ['reversal', 'tick-concept', 'entry-loop'],
+            4,
+            { id: 'even_odd', typeA: 'DIGITEVEN', typeB: 'DIGITODD' },
+            [100, 100.1, 100.2, 100.3],
+        )).toBe(true);
+    });
+});
 
 describe('chart AI Over/Under market qualification', () => {
     const overUnderGroup = {
