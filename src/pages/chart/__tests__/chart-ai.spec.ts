@@ -1,4 +1,5 @@
 import {
+    analyzeEntryFlow,
     durationCandidates,
     entryMatches,
     evaluateSide,
@@ -15,6 +16,24 @@ describe('chart AI duration and entry selection', () => {
     it('derives all valid entry points from the selected prediction digit', () => {
         expect(validBarrierEntries('over', 3)).toEqual([4, 5, 6, 7, 8, 9]);
         expect(validBarrierEntries('under', 7)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    });
+
+    it('uses the setup-tick offset for 1s and Jump flows but not plain indices', () => {
+        const flow = [7, 0, 9, 2, 3, 8, 1];
+        expect(analyzeEntryFlow(flow, 7, 'over', 2, '1HZ50V', [1, 2, 3, 4, 5])).toEqual(
+            expect.objectContaining({
+                offset: 1,
+                skippedDigit: 0,
+                flow: [9, 2, 3, 8, 1],
+            }),
+        );
+        expect(analyzeEntryFlow(flow, 7, 'over', 2, 'R_50', [1, 2, 3, 4, 5])).toEqual(
+            expect.objectContaining({
+                offset: 0,
+                skippedDigit: null,
+                flow: [0, 9, 2, 3, 8],
+            }),
+        );
     });
 
     it('confirms a non-barrier digit contract using its selected entry digit', () => {

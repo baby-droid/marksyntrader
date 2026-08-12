@@ -53,6 +53,13 @@
     font-weight: 800;
     white-space: nowrap;
 }
+.chart-ai__flow {
+    color: #0f766e !important;
+    font-weight: 800;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 .chart-ai__circle-readout { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; }
 .chart-ai__strategy-picker { position: relative; margin: 0 7px 5px; min-width: 180px; }
 .chart-ai__strategy-label { display: block; padding: 0 0 2px; color: #64748b; font-weight: 800; }

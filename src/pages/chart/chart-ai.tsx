@@ -11,8 +11,10 @@ const COOLDOWN_TICKS = 10;
 const ENTRY_CONFIRM_HITS = 3;
 const ENTRY_USE_LIMIT = 3;
 const ENTRY_FAILURE_LIMIT = 3;
-const ENTRY_WINDOW_TICKS = 5;
-const ENTRY_STALE_TICKS = 8;
+const ENTRY_ANALYSIS_MIN_TICKS = 10;
+const ENTRY_ANALYSIS_MAX_TICKS = 15;
+const ENTRY_WAIT_MIN_TICKS = 6;
+const ENTRY_WAIT_MAX_TICKS = 10;
 
 const ENTRY_POINTS = {
     // These are the preferred reference digits for the default barrier. For a
@@ -54,12 +56,10 @@ function groupSideLabel(group: any, side: 'over' | 'under') {
 }
 
 function marketThreshold(symbol: string) {
-    // The AI rule is intentionally consistent across markets: a digit must
-    // stay below 10.5% to be part of the low-frequency condition. The live
-    // distribution is still market-specific; only the decision threshold is
-    // shared so a single digit above 10.5% can be used as the shield.
-    void symbol;
-    return 10.5;
+    // Fast 1-second and Jump feeds need the slightly wider 10.6% band used
+    // by the visual analyser; plain Volatility/Bear/Bull/Step feeds retain
+    // the stricter 10.5% threshold.
+    return /^(1HZ|JD)/i.test(String(symbol)) ? 10.6 : 10.5;
 }
 
 function pctsFor(digits: number[]) {
@@ -142,6 +142,53 @@ export function durationCandidates(selectedTicks: number, autoRotate: boolean): 
     return autoRotate
         ? Array.from({ length: maxTicks }, (_, index) => index + 1)
         : [maxTicks];
+}
+
+function marketFlowOffset(symbol: string) {
+    // The one-second and Jump feeds are faster/noisier at the first tick after
+    // an entry. Treat that first post-entry tick as the setup tick, just like
+    // the chart AI's manual analysis does, then score the following ticks.
+    return /^(1HZ|JD)/i.test(String(symbol)) ? 1 : 0;
+}
+
+export function analyzeEntryFlow(
+    digits: number[],
+    entryDigit: number,
+    side: 'over' | 'under',
+    barrier: number,
+    symbol: string,
+    durations: number[] = [1, 2, 3, 4, 5],
+) {
+    const offset = marketFlowOffset(symbol);
+    const scores = durations.map(duration => {
+        let wins = 0;
+        let attempts = 0;
+        for (let index = 0; index < digits.length; index++) {
+            if (digits[index] !== entryDigit) continue;
+            const exit = digits[index + offset + duration];
+            if (exit == null) continue;
+            attempts++;
+            if (side === 'over' ? exit > barrier : exit < barrier) wins++;
+        }
+        return {
+            duration,
+            attempts,
+            winRate: attempts ? wins / attempts : 0,
+        };
+    });
+    const best = [...scores].sort((a, b) =>
+        (b.winRate * 0.8 + Math.min(b.attempts, 5) * 0.04)
+        - (a.winRate * 0.8 + Math.min(a.attempts, 5) * 0.04)
+    )[0];
+    const latestEntry = digits.lastIndexOf(entryDigit);
+    const flowStart = latestEntry >= 0 ? latestEntry + 1 + offset : digits.length;
+    return {
+        offset,
+        skippedDigit: offset ? digits[latestEntry + 1] ?? null : null,
+        flow: digits.slice(flowStart, flowStart + Math.max(...durations)),
+        duration: best?.duration ?? durations[0] ?? 1,
+        scores,
+    };
 }
 
 export function validBarrierEntries(side: 'over' | 'under', barrier: number): number[] {
@@ -323,13 +370,25 @@ export function evaluateSide(
         const entryDigit = isDigitEntryType(entryType)
             ? entryDigitForType(entryType, expectedDigit, blendedPcts)
             : null;
+        const flow = entryDigit == null
+            ? null
+            : analyzeEntryFlow(digits, entryDigit, side, barrier, symbol, candidates);
+        const selectedDuration = flow?.scores?.length
+            ? [...tests].sort((a, b) => {
+                const flowA = flow.scores.find(item => item.duration === a.duration)?.winRate ?? 0;
+                const flowB = flow.scores.find(item => item.duration === b.duration)?.winRate ?? 0;
+                return (flowB * 0.55 + b.safeRate * 0.3 + b.winRate * 0.15)
+                    - (flowA * 0.55 + a.safeRate * 0.3 + a.winRate * 0.15);
+            })[0]
+            : best;
         return {
             side,
             barrier,
-            duration: best.duration,
+            duration: selectedDuration?.duration ?? best.duration,
             confidence: clamp(55 + score * 30 + best.winRate * 15, 55, 95),
             expectedDigit,
             entryDigit,
+            flow,
             entryType,
             requiresReferenceEntry: group?.id === 'over_under',
             patternRequired: false,
@@ -337,7 +396,7 @@ export function evaluateSide(
             marketQualified: true,
             conditionPct: score * 100,
             threshold,
-            note: `${note} · ${best.duration} tick${best.duration === 1 ? '' : 's'} selected from ${candidates.join(', ')}`,
+            note: `${note} · ${selectedDuration?.duration ?? best.duration} tick${(selectedDuration?.duration ?? best.duration) === 1 ? '' : 's'} selected from ${candidates.join(', ')}`,
         };
     }
     const losing = side === 'over'
@@ -349,18 +408,48 @@ export function evaluateSide(
     const shield = side === 'over' ? barrier + 1 : barrier - 1;
     if (shield < 0 || shield > 9 || losing.length === 0 || winning.length === 0) return null;
 
+    const lowRunLength = (values: number[]) => {
+        let length = 0;
+        if (side === 'over') {
+            for (let digit = 0; digit < barrier; digit++) {
+                if ((values[digit] ?? 0) >= threshold) break;
+                length++;
+            }
+        } else {
+            for (let digit = 9; digit >= barrier; digit--) {
+                if ((values[digit] ?? 0) >= threshold) break;
+                length++;
+            }
+        }
+        return length;
+    };
+    // A barrier remains the user's command. The AI only needs the contiguous
+    // low-frequency run that supports it: Over 1 needs 0 low, Over 2 needs
+    // 0+1 low, while Under 7 can be supported by 9+8+7. This mirrors the
+    // digit-circle reading in the reference image without requiring every
+    // digit on the losing side to be below 10.5%.
+    const requiredLowRun = side === 'over'
+        ? Math.max(1, Math.min(barrier, 3))
+        : Math.max(1, Math.min(10 - barrier, 3));
     const distributionQualifies = (values: number[]) =>
-        losing.every(d => (values[d] ?? 0) < threshold) &&
+        lowRunLength(values) >= requiredLowRun &&
         winning.some(d => (values[d] ?? 0) > threshold);
-    const distribution = [
-        { values: blendedPcts, source: 'combined live/chart distribution' },
-        { values: circlePcts, source: 'chart distribution' },
-        { values: windowPcts, source: '50-tick distribution' },
-    ].find(candidate => distributionQualifies(candidate.values));
+    // The visible digit circles are the user's source of truth. Previously a
+    // neutral private 50-tick sample could blend with the circles and either
+    // hide a real qualifying market or manufacture a false qualification.
+    // Prefer the displayed distribution whenever it is available; only use
+    // the private window while the chart has not populated its circles yet.
+    const distributionCandidates = circlePcts?.length === 10
+        ? [{ values: circlePcts, source: 'chart distribution' }]
+        : [
+            { values: blendedPcts, source: 'combined live/chart distribution' },
+            { values: windowPcts, source: '50-tick distribution' },
+        ];
+    const distribution = distributionCandidates.find(candidate => distributionQualifies(candidate.values));
     if (!distribution) return null;
     const pcts = distribution.values;
 
-    const conditionMet = losing.every(d => pcts[d] < threshold);
+    const conditionMet = lowRunLength(pcts) >= requiredLowRun;
     const shieldPct = pcts[shield] ?? 0;
     const bestWinningDigit = [...winning].sort(
         (a, b) => (pcts[b] ?? 0) - (pcts[a] ?? 0),
@@ -398,20 +487,29 @@ export function evaluateSide(
         60,
         98,
     );
+    const entryDigit = chooseEntryDigit(side, barrier, pcts);
+    const flow = analyzeEntryFlow(digits, entryDigit, side, barrier, symbol, candidates);
+    const selectedDuration = [...tests].sort((a, b) => {
+        const flowA = flow.scores.find(item => item.duration === a.duration)?.winRate ?? 0;
+        const flowB = flow.scores.find(item => item.duration === b.duration)?.winRate ?? 0;
+        return (flowB * 0.55 + b.safeRate * 0.3 + b.winRate * 0.15)
+            - (flowA * 0.55 + a.safeRate * 0.3 + a.winRate * 0.15);
+    })[0] ?? best;
     return {
         side,
         barrier,
-        duration: best.duration,
+        duration: selectedDuration.duration,
         confidence,
         expectedDigit: best.expectedDigit,
-        entryDigit: chooseEntryDigit(side, barrier, pcts),
+        entryDigit,
+        flow,
         entryType: side === 'over' ? 'DIGITOVER' : 'DIGITUNDER',
         requiresReferenceEntry: group?.id === 'over_under',
         patternRequired: false,
         marketQualified: true,
-        conditionPct: Math.max(...losing.map(d => pcts[d] ?? 0)),
+            conditionPct: Math.max(...losing.map(d => pcts[d] ?? 0)),
         threshold,
-        note: `${groupSideLabel(group, side)} ${barrier} · entries ${validEntries.join(', ')} · best winning digit ${bestWinningDigit} at ${bestWinningPct.toFixed(1)}% · ${distribution.source}${shieldIsBest ? ' · shield preferred' : ' · shield optional'} · ${Math.round(best.winRate * 100)}% historical wins`,
+        note: `${groupSideLabel(group, side)} ${barrier} · entries ${validEntries.join(', ')} · best winning digit ${bestWinningDigit} at ${bestWinningPct.toFixed(1)}% · ${distribution.source}${shieldIsBest ? ' · shield preferred' : ' · shield optional'} · ${selectedDuration.duration} ticks from entry-flow confirmation · ${Math.round(best.winRate * 100)}% historical wins`,
     };
 }
 
@@ -541,6 +639,9 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
     const entryIndexRef = useRef(0);
     const entryUseCountRef = useRef(0);
     const entryFailureCountRef = useRef(0);
+    const entryAnalysisTicksRef = useRef(0);
+    const entryConfirmedRef = useRef(false);
+    const entryWaitTicksRef = useRef(0);
     const entryWindowTicksRef = useRef(0);
     const entryWindowHitsRef = useRef(0);
     const reversePendingRef = useRef(false);
@@ -557,6 +658,8 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
     const ladderPeakRef = useRef(MIN_STAKE);
     const ladderHadLossRef = useRef(false);
     const strategiesRef = useRef(strategies);
+    const allowARef = useRef(allowA);
+    const allowBRef = useRef(allowB);
 
     const setPhase = (next: string) => {
         entryPhaseRef.current = next;
@@ -565,6 +668,23 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
 
     useEffect(() => { signalRef.current = signal; }, [signal]);
     useEffect(() => { strategiesRef.current = strategies; }, [strategies]);
+    useEffect(() => { allowARef.current = allowA; }, [allowA]);
+    useEffect(() => { allowBRef.current = allowB; }, [allowB]);
+    useEffect(() => {
+        // A side toggle is a user command, not merely a display filter. If a
+        // signal was already selected for a side the user just disabled,
+        // discard it immediately so the next live tick can select only from
+        // the remaining enabled side.
+        const active = signalRef.current;
+        const sideDisabled = active
+            && ((active.side === 'over' && !allowA) || (active.side === 'under' && !allowB));
+        if (enabled && sideDisabled) {
+            signalRef.current = null;
+            setSignal(null);
+            setPhase('idle');
+            setStatus('Selected side disabled · waiting for the enabled side');
+        }
+    }, [allowA, allowB, enabled]);
     useEffect(() => {
         // `stake` is the user's base stake. AI progression must not call
         // onStakeChange and feed its temporary amount back into this effect.
@@ -605,6 +725,9 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
         entryIndexRef.current = 0;
         entryUseCountRef.current = 0;
         entryFailureCountRef.current = 0;
+        entryAnalysisTicksRef.current = 0;
+        entryConfirmedRef.current = false;
+        entryWaitTicksRef.current = 0;
         entryWindowTicksRef.current = 0;
         entryWindowHitsRef.current = 0;
         reversePendingRef.current = false;
@@ -697,10 +820,6 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                             entryDigitRef.current = active.entryDigit
                                 ?? chooseEntryDigit(active.side, active.barrier, pctsFor(digitsRef.current), entryIndexRef.current);
                         }
-                        entryWindowTicksRef.current = Math.min(
-                            ENTRY_STALE_TICKS,
-                            entryWindowTicksRef.current + 1,
-                        );
                         const matches = entryMatches(
                             active,
                             digitsRef.current,
@@ -710,35 +829,106 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                             group,
                             pricesRef.current,
                         );
-                        if (matches) {
-                            entryWindowHitsRef.current += 1;
-                        }
                         setEntryDigit(entryDigitRef.current);
-                        confirmCountRef.current = Math.min(
-                            ENTRY_CONFIRM_HITS,
-                            entryWindowHitsRef.current,
-                        );
-                        setConfirmCount(confirmCountRef.current);
+                        if (!entryConfirmedRef.current) {
+                            // First observe 10–15 live ticks after the 50-tick
+                            // scan. This is the entry-flow confirmation phase:
+                            // it learns whether the selected point is actually
+                            // appearing, rather than firing on the first match.
+                            entryAnalysisTicksRef.current = Math.min(
+                                ENTRY_ANALYSIS_MAX_TICKS,
+                                entryAnalysisTicksRef.current + 1,
+                            );
+                            if (matches) entryWindowHitsRef.current += 1;
+                            confirmCountRef.current = Math.min(
+                                ENTRY_CONFIRM_HITS,
+                                entryWindowHitsRef.current,
+                            );
+                            setConfirmCount(confirmCountRef.current);
 
-                        // A 1–5 tick confirmation window is used for every
-                        // entry point. Three qualifying touches in that
-                        // window are enough; repeated consecutive ticks are
-                        // not required.
-                        if (confirmCountRef.current >= ENTRY_CONFIRM_HITS) {
-                            entryWindowTicksRef.current = 0;
-                            entryWindowHitsRef.current = 0;
-                            setPhase('waiting');
-                            setStatus(`Entry ${entryDigitRef.current} confirmed · ${ENTRY_CONFIRM_HITS}/${ENTRY_WINDOW_TICKS} touches · ready`);
+                            if (
+                                entryAnalysisTicksRef.current >= ENTRY_ANALYSIS_MIN_TICKS &&
+                                entryWindowHitsRef.current >= ENTRY_CONFIRM_HITS
+                            ) {
+                                entryConfirmedRef.current = true;
+                                entryWaitTicksRef.current = 0;
+                                setPhase('confirming');
+                                setStatus(
+                                    `Entry ${entryDigitRef.current} confirmed · ` +
+                                    `${entryWindowHitsRef.current}/${ENTRY_CONFIRM_HITS} touches · ` +
+                                    `watching next ${ENTRY_WAIT_MIN_TICKS}-${ENTRY_WAIT_MAX_TICKS} ticks`,
+                                );
+                                // A match on the confirmation tick is valid
+                                // immediately; otherwise wait for the next
+                                // entry-point appearance.
+                                if (matches) {
+                                    setPhase('waiting');
+                                    setStatus(`Entry ${entryDigitRef.current} confirmed · ready`);
+                                }
+                                return;
+                            }
+
+                            if (entryAnalysisTicksRef.current >= ENTRY_ANALYSIS_MAX_TICKS) {
+                                entryAnalysisTicksRef.current = 0;
+                                entryWindowHitsRef.current = 0;
+                                confirmCountRef.current = 0;
+                                entryFailureCountRef.current += 1;
+                                if (entryFailureCountRef.current >= ENTRY_FAILURE_LIMIT) {
+                                    entryFailureCountRef.current = 0;
+                                    entryIndexRef.current += 1;
+                                }
+                                entryDigitRef.current = chooseEntryDigit(
+                                    active.side,
+                                    active.barrier,
+                                    pctsFor(digitsRef.current),
+                                    entryIndexRef.current,
+                                );
+                                setEntryDigit(entryDigitRef.current);
+                                setConfirmCount(0);
+                                setPhase('analysing');
+                                setStatus(
+                                    `10-${ENTRY_ANALYSIS_MAX_TICKS} tick flow checked · ` +
+                                    `watching entry ${entryDigitRef.current}`,
+                                );
+                                return;
+                            }
+
+                            setPhase('confirming');
+                            setStatus(
+                                `Analysing entry ${entryDigitRef.current ?? '—'} · ` +
+                                `${entryWindowHitsRef.current}/${ENTRY_CONFIRM_HITS} touches · ` +
+                                `${entryAnalysisTicksRef.current}/${ENTRY_ANALYSIS_MIN_TICKS}-${ENTRY_ANALYSIS_MAX_TICKS} ticks`,
+                            );
                             return;
                         }
 
-                        if (entryWindowTicksRef.current >= ENTRY_STALE_TICKS &&
-                            entryWindowHitsRef.current === 0 &&
-                            !reversePendingRef.current) {
-                            const reverseSide = active.side === 'over' ? 'under' : 'over';
-                            const reverseBarrier = reverseSide === 'over'
-                                ? Math.max(2, Math.min(3, Number(active.barrier)))
-                                : Math.min(7, Math.max(6, Number(active.barrier)));
+                        // Once the point has been confirmed, allow 6–10 ticks
+                        // for the actual entry to appear. If it does not,
+                        // reverse only when the user left the opposite side
+                        // enabled; otherwise rotate within the user's side.
+                        entryWaitTicksRef.current = Math.min(
+                            ENTRY_WAIT_MAX_TICKS,
+                            entryWaitTicksRef.current + 1,
+                        );
+                        if (matches) {
+                            setPhase('waiting');
+                            setConfirmCount(ENTRY_CONFIRM_HITS);
+                            setStatus(`Entry ${entryDigitRef.current} appeared · ready`);
+                            return;
+                        }
+                        if (entryWaitTicksRef.current < ENTRY_WAIT_MAX_TICKS) {
+                            setPhase('confirming');
+                            setStatus(
+                                `Entry ${entryDigitRef.current ?? '—'} confirmed · ` +
+                                `waiting ${entryWaitTicksRef.current}/${ENTRY_WAIT_MAX_TICKS} ticks`,
+                            );
+                            return;
+                        }
+
+                        const reverseSide = active.side === 'over' ? 'under' : 'over';
+                        const reverseAllowed = reverseSide === 'over' ? allowARef.current : allowBRef.current;
+                        if (reverseAllowed && !reversePendingRef.current) {
+                            const reverseBarrier = Number(active.barrier);
                             const reverseSignal = {
                                 ...active,
                                 side: reverseSide,
@@ -749,91 +939,40 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                                     pctsFor(digitsRef.current),
                                     0,
                                 ),
-                                note: `Reverse after ${ENTRY_STALE_TICKS} ticks without entry`,
+                                note: `Reverse after ${ENTRY_WAIT_MIN_TICKS}-${ENTRY_WAIT_MAX_TICKS} ticks without entry`,
                             };
                             reversePendingRef.current = true;
                             signalRef.current = reverseSignal;
                             setSignal(reverseSignal);
                             entryIndexRef.current = 0;
                             entryDigitRef.current = reverseSignal.entryDigit;
-                            entryWindowTicksRef.current = 0;
+                            entryAnalysisTicksRef.current = 0;
+                            entryConfirmedRef.current = false;
+                            entryWaitTicksRef.current = 0;
                             entryWindowHitsRef.current = 0;
                             confirmCountRef.current = 0;
                             setEntryDigit(reverseSignal.entryDigit);
                             setConfirmCount(0);
                             setPhase('analysing');
-                            setStatus(`Reverse ${groupSideLabel(group, reverseSide)} selected · waiting for ${reverseSignal.entryDigit}`);
-                            return;
-                        }
-
-                        if (entryWindowTicksRef.current >= ENTRY_WINDOW_TICKS && entryWindowHitsRef.current === 0) {
-                            // Keep a no-touch entry alive through the stale
-                            // band so the reverse rule can take over.
-                            if (
-                                entryWindowTicksRef.current < ENTRY_STALE_TICKS &&
-                                !reversePendingRef.current
-                            ) {
-                                setPhase('analysing');
-                                setConfirmCount(0);
-                                setStatus(
-                                    `Entry ${entryDigitRef.current ?? '—'} not touched · ` +
-                                    `watching reverse band ${entryWindowTicksRef.current}/${ENTRY_STALE_TICKS}`,
-                                );
-                                return;
-                            }
-                            entryWindowTicksRef.current = 0;
+                            setStatus(`Reverse ${groupSideLabel(group, reverseSide)} selected · analysing ${reverseSignal.entryDigit}`);
+                        } else {
+                            entryIndexRef.current += 1;
+                            entryDigitRef.current = chooseEntryDigit(
+                                active.side,
+                                active.barrier,
+                                pctsFor(digitsRef.current),
+                                entryIndexRef.current,
+                            );
+                            entryAnalysisTicksRef.current = 0;
+                            entryConfirmedRef.current = false;
+                            entryWaitTicksRef.current = 0;
                             entryWindowHitsRef.current = 0;
                             confirmCountRef.current = 0;
-                            entryFailureCountRef.current += 1;
-                            if (entryFailureCountRef.current >= ENTRY_FAILURE_LIMIT) {
-                                entryFailureCountRef.current = 0;
-                                entryIndexRef.current += 1;
-                                entryDigitRef.current = chooseEntryDigit(
-                                    active.side,
-                                    active.barrier,
-                                    pctsFor(digitsRef.current),
-                                    entryIndexRef.current,
-                                );
-                                setStatus(`Entry point rotated · watching ${entryDigitRef.current}`);
-                            } else {
-                                setStatus(`No 3 touches in ${ENTRY_WINDOW_TICKS} ticks · restarting entry check`);
-                            }
-                            setPhase('analysing');
-                            setConfirmCount(0);
-                            return;
-                        }
-
-                        if (
-                            entryWindowTicksRef.current >= ENTRY_WINDOW_TICKS &&
-                            entryWindowHitsRef.current < ENTRY_CONFIRM_HITS
-                        ) {
-                            entryWindowTicksRef.current = 0;
-                            entryWindowHitsRef.current = 0;
-                            confirmCountRef.current = 0;
-                            entryFailureCountRef.current += 1;
-                            if (entryFailureCountRef.current >= ENTRY_FAILURE_LIMIT) {
-                                entryFailureCountRef.current = 0;
-                                entryIndexRef.current += 1;
-                                entryDigitRef.current = chooseEntryDigit(
-                                    active.side,
-                                    active.barrier,
-                                    pctsFor(digitsRef.current),
-                                    entryIndexRef.current,
-                                );
-                            }
                             setEntryDigit(entryDigitRef.current);
                             setConfirmCount(0);
                             setPhase('analysing');
-                            setStatus(`Confirmation window ended · watching ${entryDigitRef.current}`);
-                            return;
+                            setStatus(`Entry window expired · rotating to ${entryDigitRef.current}`);
                         }
-
-                        setPhase('confirming');
-                        setStatus(
-                            `Watching ${entryDigitRef.current ?? '—'} · ` +
-                            `${confirmCountRef.current}/${ENTRY_CONFIRM_HITS} touches in ` +
-                            `${entryWindowTicksRef.current}/${ENTRY_WINDOW_TICKS} ticks`,
-                        );
                     },
                     error: () => { if (alive) setStatus('Market stream paused · retrying…'); },
                 });
@@ -946,6 +1085,9 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                 entryFailureCountRef.current = 0;
             }
             reversePendingRef.current = false;
+            entryAnalysisTicksRef.current = 0;
+            entryConfirmedRef.current = false;
+            entryWaitTicksRef.current = 0;
             if (
                 entryUseCountRef.current >= ENTRY_USE_LIMIT ||
                 (!won && entryFailureCountRef.current >= 2)
@@ -1044,8 +1186,8 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
     const sideB = groupSideLabel(group, 'under');
     const phaseLabel = {
         idle: 'Waiting for a qualifying market',
-        analysing: `Analysing entry point${entryDigit == null ? '' : ` · ${entryDigit}`}`,
-        confirming: `Confirming ${entryDigit ?? '—'} · ${confirmCount}/${confirmTicks} ticks`,
+        analysing: `Analysing 10-${ENTRY_ANALYSIS_MAX_TICKS} tick flow${entryDigit == null ? '' : ` · ${entryDigit}`}`,
+        confirming: `Confirming ${entryDigit ?? '—'} · ${confirmCount}/${confirmTicks} touches`,
         waiting: `Waiting to execute · ${entryDigit ?? '—'}`,
     }[entryPhase] ?? status;
 
@@ -1106,6 +1248,13 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                                 : `${groupSideLabel(group, signal?.side ?? 'over')} entry confirmation follows the selected contract pattern`
                             }
                         </span>
+                        {signal?.flow && (
+                            <span className='chart-ai__flow'>
+                                Flow: {signal.flow.offset ? `skip ${signal.flow.skippedDigit ?? 'setup'} · ` : ''}
+                                {signal.flow.flow.length ? signal.flow.flow.join(' → ') : 'collecting next ticks'}
+                                {' · '}best {signal.duration} ticks
+                            </span>
+                        )}
                         <span className='chart-ai__circle-readout'>
                             Circle distribution: {circlePcts.map((v, i) => `${i} ${v.toFixed(1)}%`).join(' · ')}
                         </span>
