@@ -44,7 +44,7 @@
     gap: 3px;
     padding: 0 7px 5px;
     .chart-ai__strategy-label { grid-column: 1 / -1; }
-    button {
+    button, .chart-ai__mode-fixed {
         border: 1px solid #d5dfeb;
         border-radius: 6px;
         padding: 5px 4px;
@@ -55,6 +55,14 @@
         cursor: pointer;
         &.active { border-color: #1684ff; background: #e4f1ff; color: #0755a1; }
     }
+    .chart-ai__mode-fixed {
+        grid-column: 1 / -1;
+        border-color: #1684ff;
+        background: #e4f1ff;
+        color: #0755a1;
+        text-align: center;
+        cursor: default;
+    }
 }
 .chart-ai__settings { display: flex; align-items: center; gap: 4px; padding: 0 7px 5px; }
 .chart-ai__settings label { display: flex; align-items: center; gap: 2px; color: #64748b; font-weight: 800; }
@@ -62,6 +70,20 @@
 .chart-ai__settings .chart-ai__stake-field { width: 52px; }
 .chart-ai__settings .chart-ai__number-field { width: 35px; }
 .chart-ai__settings select { width: auto; max-width: 78px; }
+.chart-ai__auto-value {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 31px;
+    min-height: 21px;
+    padding: 2px 5px;
+    border: 1px solid #1684ff;
+    border-radius: 4px;
+    background: #e4f1ff;
+    color: #0755a1;
+    font-size: 9px;
+    font-weight: 900;
+}
 .chart-ai__stake-readout { margin-left: auto; color: #0755a1; font-weight: 900; white-space: nowrap; }
 .chart-ai__sides { display: flex; gap: 4px; align-items: center; padding: 0 7px 6px; }
 .chart-ai__sides span { margin-left: auto; color: #64748b; white-space: nowrap; }

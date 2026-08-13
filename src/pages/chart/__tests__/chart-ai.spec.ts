@@ -1,11 +1,9 @@
 import {
     analyzeEntryFlow,
     calculateNextAiStake,
-    countQualifyingTouches,
     durationCandidates,
     entryMatches,
     evaluateSide,
-    touchMatches,
     validBarrierEntries,
 } from '../chart-ai';
 
@@ -59,49 +57,18 @@ describe('chart AI duration and entry selection', () => {
         )).toBe(true);
     });
 
-    it('counts Over and Under barrier-side touches without requiring one entry digit', () => {
-        const over = {
-            side: 'over',
-            barrier: 2,
-            entryType: 'DIGITOVER',
-            requiresReferenceEntry: true,
-            marketQualified: true,
-        };
-        const under = {
-            side: 'under',
-            barrier: 7,
-            entryType: 'DIGITUNDER',
-            requiresReferenceEntry: true,
-            marketQualified: true,
-        };
+    it('automatically selects the strongest tick duration from entry flows', () => {
+        const flow = [
+            7, 9, 0,
+            7, 0, 0,
+            7, 9, 0,
+        ];
+        const result = analyzeEntryFlow(flow, 7, 'over', 2, 'R_50', [1, 2, 3, 4, 5]);
 
-        expect(touchMatches(over, 0, 4)).toBe(true);
-        expect(touchMatches(over, 2, 0)).toBe(true);
-        expect(touchMatches(over, 3, 2)).toBe(false);
-        expect(touchMatches(under, 9, 2)).toBe(true);
-        expect(touchMatches(under, 7, 9)).toBe(true);
-        expect(touchMatches(under, 6, 7)).toBe(false);
-        expect(countQualifyingTouches(over, [0, 4, 1, 2, 3, 0])).toBe(4);
-    });
-
-    it('counts type-appropriate touches for parity, match/differ, and direction', () => {
-        expect(countQualifyingTouches(
-            { side: 'over', entryType: 'DIGITEVEN', marketQualified: true },
-            [2, 3, 8, 5],
-        )).toBe(2);
-        expect(countQualifyingTouches(
-            { side: 'over', entryType: 'DIGITMATCH', expectedDigit: 4, marketQualified: true },
-            [4, 1, 4, 4],
-        )).toBe(3);
-        expect(countQualifyingTouches(
-            { side: 'over', entryType: 'DIGITDIFF', expectedDigit: 4, marketQualified: true },
-            [4, 1, 4, 5],
-        )).toBe(2);
-        expect(countQualifyingTouches(
-            { side: 'over', entryType: 'CALL', marketQualified: true },
-            [1, 2, 3],
-            [100, 99, 100],
-        )).toBe(1);
+        expect(result.duration).toBe(3);
+        expect(result.scores).toEqual(expect.arrayContaining([
+            expect.objectContaining({ duration: 1, attempts: 3, winRate: 2 / 3 }),
+        ]));
     });
 
     it('keeps Fixed Stake, Full Margin, and Martingale progression distinct', () => {
