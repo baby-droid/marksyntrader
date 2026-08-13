@@ -1802,14 +1802,19 @@ const BotDetail: React.FC<{
 
         const waitForLiveTick = (timeoutMs: number) => new Promise<boolean>(resolve => {
             let done = false;
+            let timeout: ReturnType<typeof setTimeout> | null = null;
             const finish = (received: boolean) => {
                 if (done) return;
                 done = true;
+                if (timeout) {
+                    clearTimeout(timeout);
+                    timeout = null;
+                }
                 if (tickSignalRef.current === finish) tickSignalRef.current = null;
                 resolve(received);
             };
             tickSignalRef.current = () => finish(true);
-            setTimeout(() => finish(false), timeoutMs);
+            timeout = setTimeout(() => finish(false), timeoutMs);
         });
 
         /* A cool-off locks only real execution. Each live tick during the lock is
@@ -1819,14 +1824,21 @@ const BotDetail: React.FC<{
             const settings = cfg.coolOff[mode];
             if (!settings.enabled || settings.duration <= 0) return;
             const unitMs: Record<CoolOffDurationUnit, number> = { t: 0, s: 1_000, m: 60_000, h: 3_600_000 };
+            // Imported/older sessions may contain a duration unit that is no
+            // longer supported by the current form. Never let that produce
+            // NaN deadlines or an invalid status update loop.
+            const unit: CoolOffDurationUnit = ['t', 's', 'm', 'h'].includes(settings.durationUnit)
+                ? settings.durationUnit
+                : 't';
             const total = Math.max(1, Math.floor(Number(settings.duration) || 0));
-            const byTicks = settings.durationUnit === 't';
-            const deadline = byTicks ? 0 : Date.now() + total * unitMs[settings.durationUnit];
+            const byTicks = unit === 't';
+            const deadline = byTicks ? 0 : Date.now() + total * unitMs[unit];
             let remaining = total;
+            let lastShownRemaining = remaining;
 
             realExecutionLockedRef.current = true;
-            setCoolOffStatus({ mode, reason, remaining, total, unit: settings.durationUnit });
-            addLog(`⏸ ${mode.toUpperCase()} COOL-OFF — LIVE WIN RULE MET: ${reason} | ${total}${settings.durationUnit} | REAL XML EXECUTION LOCKED`, 'hack');
+            setCoolOffStatus({ mode, reason, remaining, total, unit });
+            addLog(`⏸ ${mode.toUpperCase()} COOL-OFF — LIVE WIN RULE MET: ${reason} | ${total}${unit} | REAL XML EXECUTION LOCKED`, 'hack');
             addLog('📡 TERMINAL ANALYSIS CONTINUES — collecting live ticks; only virtual rows are recorded', 'scan');
 
             try {
@@ -1835,20 +1847,39 @@ const BotDetail: React.FC<{
                     if (gotTick) {
                         const { won, digit } = getVirtualOutcome();
                         const virtualStake = curStake;
-                        setTxList(prev => [{
+                        const virtualRow = {
                             id: ++txIdRef.current, time: ts(), market: curMarket,
                             type: `[COOL-OFF ${mode.toUpperCase()}] ${contractLabel(bot)}`,
                             stake: virtualStake, barrier: slotBarrier() ?? null,
                             result: won ? 'won' : 'lost',
                             profit: won ? +(virtualStake * 0.85).toFixed(2) : -virtualStake,
                             exitDigit: digit, virtual: true,
-                        }, ...prev]);
+                        };
+                        /* Keep the UI responsive during long/high-frequency
+                           cool-offs. Virtual rows are telemetry, not a
+                           permanent transaction ledger: retain the latest
+                           120 cool-off rows while preserving every real row. */
+                        setTxList(prev => {
+                            const next = [virtualRow, ...prev];
+                            let coolOffRows = 0;
+                            return next.filter(row => {
+                                if (!row.virtual || !String(row.type).startsWith('[COOL-OFF')) return true;
+                                coolOffRows++;
+                                return coolOffRows <= 120;
+                            });
+                        });
                         if (byTicks) remaining--;
                     }
                     if (!byTicks) {
-                        remaining = Math.max(0, Math.ceil((deadline - Date.now()) / unitMs[settings.durationUnit]));
+                        remaining = Math.max(0, Math.ceil((deadline - Date.now()) / unitMs[unit]));
                     }
-                    setCoolOffStatus({ mode, reason, remaining, total, unit: settings.durationUnit });
+                    // Avoid a React render when a long duration still has the
+                    // same displayed unit remaining (for example, hours update
+                    // every second but the visible value stays unchanged).
+                    if (remaining !== lastShownRemaining) {
+                        lastShownRemaining = remaining;
+                        setCoolOffStatus({ mode, reason, remaining, total, unit });
+                    }
                 }
             } finally {
                 realExecutionLockedRef.current = false;

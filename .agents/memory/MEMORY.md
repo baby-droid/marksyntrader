@@ -46,3 +46,4 @@
 - [Digit widget AI analyser](digit-widget-ai-analyser.md) — AI analyser uses aiTickCount state (5-100, default 50, persisted to localStorage digit_widget_ai_ticks); rawHistoryRef holds raw float prices for Rise/Fall/HighTick/LowTick/OnlyUps/OnlyDowns scoring; 12 contract types total.
 - [Manual trader mobile tick circles](manual-trader-mobile-ticks.md) — Desktop: mtp-tick-circles--desktop (visible); Mobile (≤768px): mtp-tick-circles--mobile shows NumberField instead; both divs present in JSX, CSS handles visibility.
 - [Virtual Hook + Stealth Mode](scalper-virtual-hook.md) — VirtualHookConfig in BotConfig; gate in startBot after ENTRY_SIGNAL log; vPhase/vLossCount/vWinCount local vars; virtual TxRecord rows (virtual: true); stealthMode masks tick prices in terminal.
+- [Scalper cool-off stability](scalper-cooloff-crash.md) — bound cool-off virtual telemetry, clear resolved tick wait timers, normalize units, and avoid redundant countdown renders.
