@@ -38,9 +38,29 @@
 .chart-ai__toggles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; padding: 5px 7px; }
 .chart-ai__toggles button, .chart-ai__sides button { border: 1px solid #d5dfeb; border-radius: 6px; padding: 4px 3px; background: #fff; color: #64748b; font-size: 9px; font-weight: 800; cursor: pointer; }
 .chart-ai__toggles button.active, .chart-ai__sides button.active { border-color: #1684ff; background: #e4f1ff; color: #0755a1; }
+.chart-ai__mode-picker {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 3px;
+    padding: 0 7px 5px;
+    .chart-ai__strategy-label { grid-column: 1 / -1; }
+    button {
+        border: 1px solid #d5dfeb;
+        border-radius: 6px;
+        padding: 5px 4px;
+        background: #fff;
+        color: #64748b;
+        font-size: 9px;
+        font-weight: 800;
+        cursor: pointer;
+        &.active { border-color: #1684ff; background: #e4f1ff; color: #0755a1; }
+    }
+}
 .chart-ai__settings { display: flex; align-items: center; gap: 4px; padding: 0 7px 5px; }
 .chart-ai__settings label { display: flex; align-items: center; gap: 2px; color: #64748b; font-weight: 800; }
 .chart-ai__settings input, .chart-ai__settings select, .chart-ai__strategies { width: 31px; border: 1px solid #d5dfeb; border-radius: 4px; padding: 2px; text-align: center; font-size: 9px; background: #fff; color: #24344d; }
+.chart-ai__settings .chart-ai__stake-field { width: 52px; }
+.chart-ai__settings .chart-ai__number-field { width: 35px; }
 .chart-ai__settings select { width: auto; max-width: 78px; }
 .chart-ai__stake-readout { margin-left: auto; color: #0755a1; font-weight: 900; white-space: nowrap; }
 .chart-ai__sides { display: flex; gap: 4px; align-items: center; padding: 0 7px 6px; }
@@ -124,6 +144,8 @@
     .chart-ai__head { flex-wrap: wrap; }
     .chart-ai__status { flex: 1 1 100%; order: 3; }
     .chart-ai__toggles { grid-template-columns: repeat(2, 1fr); }
+    .chart-ai__mode-picker { grid-template-columns: 1fr; }
+    .chart-ai__mode-picker button { width: 100%; }
     .chart-ai__settings { flex-wrap: wrap; }
     .chart-ai__stake-readout { margin-left: 0; width: 100%; }
     .chart-ai__strategy-picker { min-width: 240px; }

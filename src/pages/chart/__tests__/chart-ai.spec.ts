@@ -1,8 +1,11 @@
 import {
     analyzeEntryFlow,
+    calculateNextAiStake,
+    countQualifyingTouches,
     durationCandidates,
     entryMatches,
     evaluateSide,
+    touchMatches,
     validBarrierEntries,
 } from '../chart-ai';
 
@@ -54,6 +57,68 @@ describe('chart AI duration and entry selection', () => {
             { id: 'even_odd', typeA: 'DIGITEVEN', typeB: 'DIGITODD' },
             [100, 100.1, 100.2, 100.3],
         )).toBe(true);
+    });
+
+    it('counts Over and Under barrier-side touches without requiring one entry digit', () => {
+        const over = {
+            side: 'over',
+            barrier: 2,
+            entryType: 'DIGITOVER',
+            requiresReferenceEntry: true,
+            marketQualified: true,
+        };
+        const under = {
+            side: 'under',
+            barrier: 7,
+            entryType: 'DIGITUNDER',
+            requiresReferenceEntry: true,
+            marketQualified: true,
+        };
+
+        expect(touchMatches(over, 0, 4)).toBe(true);
+        expect(touchMatches(over, 2, 0)).toBe(true);
+        expect(touchMatches(over, 3, 2)).toBe(false);
+        expect(touchMatches(under, 9, 2)).toBe(true);
+        expect(touchMatches(under, 7, 9)).toBe(true);
+        expect(touchMatches(under, 6, 7)).toBe(false);
+        expect(countQualifyingTouches(over, [0, 4, 1, 2, 3, 0])).toBe(4);
+    });
+
+    it('counts type-appropriate touches for parity, match/differ, and direction', () => {
+        expect(countQualifyingTouches(
+            { side: 'over', entryType: 'DIGITEVEN', marketQualified: true },
+            [2, 3, 8, 5],
+        )).toBe(2);
+        expect(countQualifyingTouches(
+            { side: 'over', entryType: 'DIGITMATCH', expectedDigit: 4, marketQualified: true },
+            [4, 1, 4, 4],
+        )).toBe(3);
+        expect(countQualifyingTouches(
+            { side: 'over', entryType: 'DIGITDIFF', expectedDigit: 4, marketQualified: true },
+            [4, 1, 4, 5],
+        )).toBe(2);
+        expect(countQualifyingTouches(
+            { side: 'over', entryType: 'CALL', marketQualified: true },
+            [1, 2, 3],
+            [100, 99, 100],
+        )).toBe(1);
+    });
+
+    it('keeps Fixed Stake, Full Margin, and Martingale progression distinct', () => {
+        const base = {
+            activeStake: 2,
+            initialStake: 2,
+            martingale: 2,
+        };
+        expect(calculateNextAiStake({
+            ...base, won: false, profit: -2, fullMargin: false, fixedStake: true, martingaleEnabled: true,
+        })).toBe(2);
+        expect(calculateNextAiStake({
+            ...base, won: true, profit: 1.5, fullMargin: true, fixedStake: false, martingaleEnabled: false,
+        })).toBe(3.5);
+        expect(calculateNextAiStake({
+            ...base, won: false, profit: -2, fullMargin: false, fixedStake: false, martingaleEnabled: true,
+        })).toBe(4);
     });
 });
 
