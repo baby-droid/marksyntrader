@@ -932,7 +932,6 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                                     entryIndexRef.current,
                                 );
                                 setEntryDigit(entryDigitRef.current);
-                                setConfirmCount(0);
                                 setPhase('analysing');
                                 setStatus(
                                     `10-${ENTRY_ANALYSIS_MAX_TICKS} tick flow checked · ` +
@@ -960,7 +959,6 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                         );
                         if (matches) {
                             setPhase('waiting');
-                            setConfirmCount(Number(active.duration) || 1);
                             setStatus(`Entry ${entryDigitRef.current} appeared · ready`);
                             return;
                         }
@@ -998,7 +996,6 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                             entryConfirmedRef.current = false;
                             entryWaitTicksRef.current = 0;
                             setEntryDigit(reverseSignal.entryDigit);
-                            setConfirmCount(0);
                             setPhase('analysing');
                             setStatus(`Reverse ${groupSideLabel(group, reverseSide)} selected · analysing ${reverseSignal.entryDigit}`);
                         } else {
@@ -1013,7 +1010,6 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                             entryConfirmedRef.current = false;
                             entryWaitTicksRef.current = 0;
                             setEntryDigit(entryDigitRef.current);
-                            setConfirmCount(0);
                             setPhase('analysing');
                             setStatus(`Entry window expired · rotating to ${entryDigitRef.current}`);
                         }
@@ -1050,7 +1046,6 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
         setPhase(next ? 'analysing' : 'idle');
         setEntryDigit(next?.entryDigit ?? null);
         entryDigitRef.current = next?.entryDigit ?? null;
-        setConfirmCount(0);
         if (next) {
             setStatus(
                 `${groupSideLabel(group, next.side)} ${barrier} selected · ` +
@@ -1184,7 +1179,6 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                     entryIndexRef.current = 0;
                     entryDigitRef.current = recoverySignal.entryDigit;
                     setEntryDigit(recoverySignal.entryDigit);
-                    setConfirmCount(0);
                 }
             } else if (won && recoveryPendingRef.current) {
                 recoveryPendingRef.current = false;
@@ -1193,7 +1187,6 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                 setSignal(restoredSignal);
                 entryDigitRef.current = restoredSignal?.entryDigit ?? null;
                 setEntryDigit(entryDigitRef.current);
-                setConfirmCount(0);
             }
 
             if (runLimitReached || stopLossReached) {
@@ -1218,7 +1211,6 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                 setAiStake(next);
                 setPhase('analysing');
                 setEntryDigit(entryDigitRef.current);
-                setConfirmCount(0);
                 setStatus(won ? 'Profit · searching for a fresh entry' : 'Loss · searching for a fresh entry');
             }
         };
