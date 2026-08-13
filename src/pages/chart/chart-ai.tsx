@@ -766,7 +766,6 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
         setBestTicks(null);
         setPhase('idle');
         setEntryDigit(null);
-        setConfirmCount(0);
         setScanning(true);
         scanActiveRef.current = true;
         setStatus(`${reason} · collecting live ticks 0/50`);
