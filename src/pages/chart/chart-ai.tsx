@@ -7,10 +7,13 @@ import './chart-ai.scss';
 const MIN_STAKE = 0.35;
 const MAX_CONFIRM_TICKS = 5;
 const SCAN_SIZE = 50;
-const RESCAN_MS = 120_000;
+const RESCAN_MS = 300_000;
+const RESCAN_SECONDS = 300;
 const COOLDOWN_TICKS = 10;
 const ENTRY_USE_LIMIT = 3;
 const ENTRY_FAILURE_LIMIT = 3;
+const TOUCH_CONFIRM_DEFAULT = 3;
+const LOSS_RESCAN_LIMIT = 3;
 const ENTRY_ANALYSIS_MIN_TICKS = 10;
 const ENTRY_ANALYSIS_MAX_TICKS = 15;
 const ENTRY_WAIT_MIN_TICKS = 6;
@@ -194,14 +197,13 @@ export function validBarrierEntries(side: 'over' | 'under', barrier: number): nu
 }
 
 function entrySequence(side: 'over' | 'under', barrier: number): number[] {
-    // Start with the farthest valid digits (safer distance from the barrier),
-    // then walk toward the barrier. This is dynamic for every selected
-    // prediction digit: Over 3 scans 9,8,7,6,5,4 rather than a fixed list.
-    return validBarrierEntries(side, barrier).sort((a, b) => {
-        const distanceA = Math.abs(a - barrier);
-        const distanceB = Math.abs(b - barrier);
-        return distanceB - distanceA || a - b;
-    });
+    // Start Over with the lower winning digits nearest its barrier and Under
+    // with the upper winning digits nearest its barrier. This keeps the first
+    // scan aligned with the user's requested entry direction while still
+    // rotating through every valid digit.
+    return validBarrierEntries(side, barrier).sort((a, b) =>
+        side === 'over' ? a - b : b - a
+    );
 }
 
 export function chooseEntryDigit(
@@ -606,6 +608,104 @@ export function entryMatches(
     return passed >= Math.max(1, Math.ceil(selected.length * 0.5));
 }
 
+export function touchMatches(
+    signal: any,
+    digit: number | null,
+    previousDigit: number | null,
+    prices: number[] = [],
+) {
+    if (!signal || digit == null) return false;
+    const type = signal.entryType || '';
+    const barrier = Number(signal.barrier);
+    const previousPrice = prices[prices.length - 2];
+    const currentPrice = prices[prices.length - 1];
+    const priceDelta = Number.isFinite(previousPrice) && Number.isFinite(currentPrice)
+        ? currentPrice - previousPrice
+        : 0;
+
+    if (type === 'DIGITOVER' || (signal.side === 'over' && signal.requiresReferenceEntry)) {
+        return digit >= 0 && digit <= barrier;
+    }
+    if (type === 'DIGITUNDER' || (signal.side === 'under' && signal.requiresReferenceEntry)) {
+        return digit >= barrier && digit <= 9;
+    }
+    if (type === 'DIGITEVEN') return digit % 2 === 0;
+    if (type === 'DIGITODD') return digit % 2 !== 0;
+    if (type === 'DIGITMATCH') return signal.expectedDigit == null
+        ? digit === previousDigit
+        : digit === Number(signal.expectedDigit);
+    if (type === 'DIGITDIFF') return signal.expectedDigit == null
+        ? digit !== previousDigit
+        : digit !== Number(signal.expectedDigit);
+    if (isUpEntryType(type)) return priceDelta > 0;
+    if (isDownEntryType(type)) return priceDelta < 0;
+    return signal.side === 'over' ? digit > barrier : digit < barrier;
+}
+
+export function touchStrategyMatches(
+    signal: any,
+    digits: number[],
+    currentDigit: number | null,
+    strategies: string[],
+    group: any = null,
+    prices: number[] = [],
+) {
+    if (!signal || currentDigit == null) return false;
+    const previousDigit = digits[digits.length - 2] ?? null;
+    const pattern = patternSignal(group, signal.side, digits, prices);
+    const previousPrice = prices[prices.length - 2];
+    const currentPrice = prices[prices.length - 1];
+    const delta = Number.isFinite(previousPrice) && Number.isFinite(currentPrice)
+        ? currentPrice - previousPrice
+        : 0;
+    const type = signal.entryType || '';
+    const momentum = previousDigit == null
+        ? true
+        : signal.side === 'over' ? currentDigit >= previousDigit : currentDigit <= previousDigit;
+    const directional = isUpEntryType(type)
+        ? delta > 0
+        : isDownEntryType(type)
+            ? delta < 0
+            : true;
+    const checks: Record<string, boolean> = {
+        reversal: pattern.matched || directional,
+        'tick-concept': momentum,
+        'entry-loop': true,
+        conservative: directional || pattern.matched,
+        'number-losses': true,
+        'digit-distribution': signal.marketQualified !== false,
+        momentum,
+    };
+    const selected = strategies.length ? strategies : TICK_DEFAULT_STRATEGIES;
+    const passed = selected.filter(id => checks[id]).length;
+    return passed >= Math.max(1, Math.ceil(selected.length * 0.5));
+}
+
+export function countQualifyingTouches(
+    signal: any,
+    digits: number[],
+    prices: number[] = [],
+    strategies: string[] = TICK_DEFAULT_STRATEGIES,
+    group: any = null,
+) {
+    return digits.reduce((count, digit, index) => {
+        const priceWindow = prices.slice(0, index + 1);
+        const previousDigit = digits[index - 1] ?? null;
+        return count
+            + (touchMatches(signal, digit, previousDigit, priceWindow)
+                && touchStrategyMatches(
+                    signal,
+                    digits.slice(0, index + 1),
+                    digit,
+                    strategies,
+                    group,
+                    priceWindow,
+                )
+                ? 1
+                : 0);
+    }, 0);
+}
+
 export interface ChartAiControlProps {
     symbol: string;
     group: any;
@@ -654,6 +754,9 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
     const [aiStake, setAiStake] = useState(Math.max(MIN_STAKE, stake));
     const [aiTicks, setAiTicks] = useState(clamp(Number(ticks) || 1, 1, MAX_CONFIRM_TICKS));
     const [bestTicks, setBestTicks] = useState<number | null>(null);
+    const [executionMode, setExecutionMode] = useState<'ticks' | 'touches'>('ticks');
+    const [confirmTouches, setConfirmTouches] = useState(TOUCH_CONFIRM_DEFAULT);
+    const [confirmCount, setConfirmCount] = useState(0);
     const [strategiesOpen, setStrategiesOpen] = useState(false);
 
     const digitsRef = useRef<number[]>([]);
@@ -675,6 +778,11 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
     const entryAnalysisTicksRef = useRef(0);
     const entryConfirmedRef = useRef(false);
     const entryWaitTicksRef = useRef(0);
+    const confirmCountRef = useRef(0);
+    const executionModeRef = useRef(executionMode);
+    const confirmTouchesRef = useRef(confirmTouches);
+    const lossStreakRef = useRef(0);
+    const tradingFinishedRef = useRef(false);
     const reversePendingRef = useRef(false);
     const autoAttemptRef = useRef(false);
     const scanEpochRef = useRef(0);
@@ -698,6 +806,8 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
     useEffect(() => { strategiesRef.current = strategies; }, [strategies]);
     useEffect(() => { allowARef.current = allowA; }, [allowA]);
     useEffect(() => { allowBRef.current = allowB; }, [allowB]);
+    useEffect(() => { executionModeRef.current = executionMode; }, [executionMode]);
+    useEffect(() => { confirmTouchesRef.current = confirmTouches; }, [confirmTouches]);
     useEffect(() => {
         // A side toggle is a user command, not merely a display filter. If a
         // signal was already selected for a side the user just disabled,
@@ -756,14 +866,17 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
         const baseStake = userStakeRef.current;
         initialStakeRef.current = baseStake;
         setAiStake(baseStake);
+        tradingFinishedRef.current = false;
         entryIndexRef.current = 0;
         entryUseCountRef.current = 0;
         entryFailureCountRef.current = 0;
         entryAnalysisTicksRef.current = 0;
         entryConfirmedRef.current = false;
         entryWaitTicksRef.current = 0;
+        confirmCountRef.current = 0;
         reversePendingRef.current = false;
         setBestTicks(null);
+        setConfirmCount(0);
         setPhase('idle');
         setEntryDigit(null);
         setScanning(true);
@@ -771,13 +884,13 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
         setStatus(`${reason} · collecting live ticks 0/50`);
         if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
         if (refreshClockRef.current) clearInterval(refreshClockRef.current);
-        setRefreshIn(120);
+        setRefreshIn(RESCAN_SECONDS);
     };
 
     const scheduleRefresh = () => {
         if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
         if (refreshClockRef.current) clearInterval(refreshClockRef.current);
-        setRefreshIn(120);
+        setRefreshIn(RESCAN_SECONDS);
         refreshClockRef.current = setInterval(() => setRefreshIn(v => Math.max(0, v - 1)), 1000);
         refreshTimerRef.current = setTimeout(() => {
             if (activeContractRef.current) {
@@ -847,7 +960,60 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                         pricesRef.current = [...pricesRef.current, price].slice(-SCAN_SIZE);
                         setSample(v => v + 1);
                         const active = signalRef.current;
-                        if (!active || activeContractRef.current || cooldownRef.current > 0 || autoAttemptRef.current) return;
+                         if (
+                             tradingFinishedRef.current
+                             || !active
+                             || activeContractRef.current
+                             || cooldownRef.current > 0
+                             || autoAttemptRef.current
+                         ) return;
+
+                         if (executionModeRef.current === 'touches') {
+                             const previousDigit = digitsRef.current[digitsRef.current.length - 2] ?? null;
+                             const touchHit = touchMatches(
+                                 active,
+                                 digit,
+                                 previousDigit,
+                                 pricesRef.current,
+                             );
+                             const strategyHit = touchStrategyMatches(
+                                 active,
+                                 digitsRef.current,
+                                 digit,
+                                 strategiesRef.current,
+                                 group,
+                                 pricesRef.current,
+                             );
+                             if (touchHit && strategyHit) {
+                                 const nextCount = Math.min(
+                                     confirmTouchesRef.current,
+                                     confirmCountRef.current + 1,
+                                 );
+                                 confirmCountRef.current = nextCount;
+                                 setConfirmCount(nextCount);
+                                 if (nextCount >= confirmTouchesRef.current) {
+                                     setPhase('waiting');
+                                     setStatus(
+                                         `${groupSideLabel(group, active.side)} ${active.barrier} · ` +
+                                         `${nextCount}/${confirmTouchesRef.current} touch hits ready`,
+                                     );
+                                 } else {
+                                     setPhase('confirming');
+                                     setStatus(
+                                         `Touch mode · ${nextCount}/${confirmTouchesRef.current} ` +
+                                         `strategy-confirmed hits`,
+                                     );
+                                 }
+                             } else {
+                                 setPhase('confirming');
+                                 setStatus(
+                                     `Touch mode · ${confirmCountRef.current}/${confirmTouchesRef.current} ` +
+                                     `hits · watching ${active.entryDigit ?? 'barrier side'}`,
+                                 );
+                             }
+                             return;
+                         }
+
                         if (entryDigitRef.current == null) {
                             entryDigitRef.current = active.entryDigit
                                 ?? chooseEntryDigit(active.side, active.barrier, pctsFor(digitsRef.current), entryIndexRef.current);
@@ -863,11 +1029,10 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                         );
                         setEntryDigit(entryDigitRef.current);
                          if (!entryConfirmedRef.current) {
-                             // First observe 10–15 live ticks after the 50-tick
+                              // First observe 10–15 live ticks after the 50-tick
                              // scan. This phase analyses the flow after the
                              // selected entry digit and automatically edits the
-                             // recommended contract duration. It deliberately
-                             // does not count entry-point touches.
+                              // recommended contract duration.
                             entryAnalysisTicksRef.current = Math.min(
                                 ENTRY_ANALYSIS_MAX_TICKS,
                                 entryAnalysisTicksRef.current + 1,
@@ -1025,13 +1190,14 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
             if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
             if (refreshClockRef.current) clearInterval(refreshClockRef.current);
         };
-    }, [enabled, symbol]);
+        }, [enabled, symbol, executionMode]);
 
     const windowPcts = useMemo(() => pctsFor(digitsRef.current), [sample]);
     const circlePcts = pcts.length ? pcts : windowPcts;
 
     useEffect(() => {
         if (!enabled || scanning || digitsRef.current.length < SCAN_SIZE || group?.isAccumulator) return;
+        if (tradingFinishedRef.current) return;
         if (signalRef.current) return;
         const durationLimit = autoRotate ? AUTO_TICK_LIMIT : aiTicks;
         const candidates = [
@@ -1104,6 +1270,7 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
             setPopup(null);
             setRunCount(v => v + 1);
             if (!won) setLossCount(v => v + 1);
+            lossStreakRef.current = won ? 0 : lossStreakRef.current + 1;
 
             const next = calculateNextAiStake({
                 won,
@@ -1117,8 +1284,8 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
             });
 
             // Rotate the reference entry after repeated completed trades or
-            // failed windows. Duration is always selected from tick-flow
-            // analysis; there is no touch-hit counter.
+            // failed windows. Touch mode keeps its own hit counter and never
+            // shares confirmation state with tick-flow mode.
             if (won) {
                 entryUseCountRef.current += 1;
                 entryFailureCountRef.current = 0;
@@ -1127,6 +1294,8 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
             entryAnalysisTicksRef.current = 0;
             entryConfirmedRef.current = false;
             entryWaitTicksRef.current = 0;
+            confirmCountRef.current = 0;
+            setConfirmCount(0);
             if (
                 entryUseCountRef.current >= ENTRY_USE_LIMIT ||
                 (!won && entryFailureCountRef.current >= 2)
@@ -1155,44 +1324,100 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
             const runLimitReached = runsEnabled && runCount + 1 >= runs;
             const stopLossReached = stopLossEnabled && lossCount + (won ? 0 : 1) >= stopLoss;
             const batchComplete = nextBatch >= batchLimit;
-            if (!won && recovery !== 'off' && !recoveryPendingRef.current && !runLimitReached && !stopLossReached) {
+            const lossRescanReached = !won
+                && lossStreakRef.current >= LOSS_RESCAN_LIMIT
+                && !runLimitReached
+                && !stopLossReached;
+
+            if (lossRescanReached) {
+                const lossStreak = lossStreakRef.current;
+                lossStreakRef.current = 0;
+                recoveryPendingRef.current = false;
+                tradingFinishedRef.current = false;
+                signalRef.current = null;
+                defaultSignalRef.current = null;
+                setSignal(null);
+                setBestTicks(null);
+                setPhase('idle');
+                batchCountRef.current = 0;
+                setBatchCount(0);
+                cooldownRef.current = 0;
+                setCooldown(0);
+                beginScan(`${lossStreak} consecutive losses · rescanning market`);
+            } else if (!won && recovery !== 'off' && !recoveryPendingRef.current && !runLimitReached && !stopLossReached) {
                 recoveryPendingRef.current = true;
-                const recoverySide = recovery === 'over4' ? 'over' : 'under';
-                const recoveryBarrier = recovery === 'over4' ? 4 : 5;
+                const recoverySide = recovery.startsWith('over') ? 'over' : 'under';
+                const recoveryBarrier = Number(recovery.replace(/\D/g, ''))
+                    || (recoverySide === 'over' ? 3 : 6);
                 const baseSignal = defaultSignalRef.current;
-                if (baseSignal) {
-                    const recoverySignal = {
-                        ...baseSignal,
-                        side: recoverySide,
-                        barrier: recoveryBarrier,
-                        recoveryBarrier,
-                        entryDigit: chooseEntryDigit(
+                const durationLimit = autoRotate ? AUTO_TICK_LIMIT : aiTicks;
+                const scannedRecovery = evaluateSide(
+                    digitsRef.current,
+                    pricesRef.current,
+                    pcts,
+                    recoverySide,
+                    recoveryBarrier,
+                    durationLimit,
+                    autoRotate,
+                    symbol,
+                    group,
+                );
+                const recoverySource = scannedRecovery ?? baseSignal ?? {};
+                const recoverySignal = {
+                    ...recoverySource,
+                    side: recoverySide,
+                    barrier: recoveryBarrier,
+                    recoveryBarrier,
+                    duration: scannedRecovery?.duration ?? baseSignal?.duration ?? aiTicks,
+                    confidence: Number(recoverySource.confidence) || 60,
+                    marketQualified: true,
+                    entryType: scannedRecovery?.entryType
+                        ?? (recoverySide === 'over' ? 'DIGITOVER' : 'DIGITUNDER'),
+                    requiresReferenceEntry: group?.id === 'over_under',
+                    entryDigit: scannedRecovery?.entryDigit
+                        ?? chooseEntryDigit(
                             recoverySide,
                             recoveryBarrier,
                             pctsFor(digitsRef.current),
                             0,
                         ),
-                        note: `Opposite recovery ${recoverySide === 'over' ? 'Over 4' : 'Under 5'} · fresh entry`,
-                    };
-                    signalRef.current = recoverySignal;
-                    setSignal(recoverySignal);
-                    entryIndexRef.current = 0;
-                    entryDigitRef.current = recoverySignal.entryDigit;
-                    setEntryDigit(recoverySignal.entryDigit);
-                }
+                    note: `Best ${recoverySide === 'over' ? 'Over' : 'Under'} ${recoveryBarrier} recovery · ` +
+                        `entry and ${scannedRecovery?.duration ?? baseSignal?.duration ?? aiTicks} ticks rescanned`,
+                };
+                signalRef.current = recoverySignal;
+                setSignal(recoverySignal);
+                setBestTicks(recoverySignal.duration);
+                entryIndexRef.current = 0;
+                entryDigitRef.current = recoverySignal.entryDigit;
+                entryAnalysisTicksRef.current = 0;
+                entryConfirmedRef.current = false;
+                entryWaitTicksRef.current = 0;
+                setEntryDigit(recoverySignal.entryDigit);
+                setPhase(executionModeRef.current === 'touches' ? 'confirming' : 'analysing');
+                setStatus(
+                    `Recovery ${recoverySide === 'over' ? 'Over' : 'Under'} ${recoveryBarrier} · ` +
+                    `best entry ${recoverySignal.entryDigit ?? '—'} · best ${recoverySignal.duration} ticks`,
+                );
             } else if (won && recoveryPendingRef.current) {
                 recoveryPendingRef.current = false;
                 const restoredSignal = defaultSignalRef.current;
                 signalRef.current = restoredSignal;
                 setSignal(restoredSignal);
+                setBestTicks(restoredSignal?.duration ?? null);
                 entryDigitRef.current = restoredSignal?.entryDigit ?? null;
                 setEntryDigit(entryDigitRef.current);
             }
 
             if (runLimitReached || stopLossReached) {
+                tradingFinishedRef.current = true;
+                signalRef.current = null;
+                setSignal(null);
+                setPhase('idle');
                 setAiStake(next);
-                setEnabled(false);
                 setStatus(won ? 'Run limit reached · AI stopped' : 'Stop-loss reached · AI stopped');
+            } else if (lossRescanReached) {
+                setAiStake(next);
+                setStatus('Loss streak reached · fresh market scan running');
             } else if (batchComplete) {
                 // A new Full Margin batch starts from the user's initial stake;
                 // reinvestment is only carried through the current batch.
@@ -1223,9 +1448,13 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
     const sideB = groupSideLabel(group, 'under');
     const phaseLabel = {
         idle: 'Waiting for a qualifying market',
+        confirming: executionMode === 'touches'
+            ? `Touch hits ${confirmCount}/${confirmTouches} · ${entryDigit ?? 'barrier side'}`
+            : `Best ${bestTicks ?? '—'} ticks confirmed · waiting for entry ${entryDigit ?? '—'}`,
         analysing: `Analysing 10-${ENTRY_ANALYSIS_MAX_TICKS} tick flow${entryDigit == null ? '' : ` · entry ${entryDigit}`}`,
-        confirming: `Best ${bestTicks ?? '—'} ticks confirmed · waiting for entry ${entryDigit ?? '—'}`,
-        waiting: `Entry ${entryDigit ?? '—'} ready · ${bestTicks ?? '—'} tick duration`,
+        waiting: executionMode === 'touches'
+            ? `Touch target ${confirmTouches} reached · ${bestTicks ?? signal?.duration ?? '—'} tick duration`
+            : `Entry ${entryDigit ?? '—'} ready · ${bestTicks ?? '—'} tick duration`,
     }[entryPhase] ?? status;
 
     const commitAiStake = (value: number) => {
@@ -1310,7 +1539,28 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                     </div>
                     <div className='chart-ai__mode-picker' role='group' aria-label='AI execution mode'>
                         <span className='chart-ai__strategy-label'>Execution mode</span>
-                        <span className='chart-ai__mode-fixed'>Ticks · entry points</span>
+                        <button
+                            type='button'
+                            className={executionMode === 'ticks' ? 'active' : ''}
+                            onClick={() => {
+                                setExecutionMode('ticks');
+                                confirmCountRef.current = 0;
+                                setConfirmCount(0);
+                            }}
+                        >
+                            Ticks · entry points
+                        </button>
+                        <button
+                            type='button'
+                            className={executionMode === 'touches' ? 'active' : ''}
+                            onClick={() => {
+                                setExecutionMode('touches');
+                                confirmCountRef.current = 0;
+                                setConfirmCount(0);
+                            }}
+                        >
+                            Touches · count hits
+                        </button>
                     </div>
                     <div className='chart-ai__toggles'>
                         <button className={autoRotate ? 'active' : ''} onClick={() => setAutoRotate(v => !v)}>Auto ticks {autoRotate ? 'ON' : 'OFF'}</button>
@@ -1321,11 +1571,28 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                         <button className={martingaleEnabled ? 'active' : ''} onClick={() => setMartingaleEnabled(v => !v)}>Martingale {martingaleEnabled ? 'ON' : 'OFF'}</button>
                     </div>
                     <div className='chart-ai__settings'>
-                        <label>Best ticks
+                        <label>{executionMode === 'touches' ? 'Best ticks' : 'Best ticks'}
                             <output className='chart-ai__auto-value' aria-label='Automatically selected best ticks'>
                                 {bestTicks ?? '—'}
                             </output>
                         </label>
+                        {executionMode === 'touches' && (
+                            <label>hits
+                                <input
+                                    type='number'
+                                    min={1}
+                                    max={5}
+                                    value={confirmTouches}
+                                    onChange={e => {
+                                        const next = clamp(Number(e.target.value) || TOUCH_CONFIRM_DEFAULT, 1, 5);
+                                        confirmTouchesRef.current = next;
+                                        setConfirmTouches(next);
+                                        confirmCountRef.current = Math.min(confirmCountRef.current, next);
+                                        setConfirmCount(confirmCountRef.current);
+                                    }}
+                                />
+                            </label>
+                        )}
                         <label>AI stake
                             <NumberField
                                 value={aiStake}
@@ -1344,6 +1611,8 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                         <label>recovery
                             <select value={recovery} onChange={e => setRecovery(e.target.value)}>
                                 <option value='off'>Off</option>
+                                <option value='over3'>Over 3</option>
+                                <option value='under6'>Under 6</option>
                                 <option value='over4'>Over 4</option>
                                 <option value='under5'>Under 5</option>
                             </select>

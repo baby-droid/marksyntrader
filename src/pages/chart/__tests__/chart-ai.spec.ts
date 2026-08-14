@@ -1,9 +1,11 @@
 import {
     analyzeEntryFlow,
     calculateNextAiStake,
+    countQualifyingTouches,
     durationCandidates,
     entryMatches,
     evaluateSide,
+    touchMatches,
     validBarrierEntries,
 } from '../chart-ai';
 
@@ -69,6 +71,27 @@ describe('chart AI duration and entry selection', () => {
         expect(result.scores).toEqual(expect.arrayContaining([
             expect.objectContaining({ duration: 1, attempts: 3, winRate: 2 / 3 }),
         ]));
+    });
+
+    it('keeps Touches mode independent and counts barrier-side strategy hits', () => {
+        const signal = {
+            side: 'over',
+            barrier: 2,
+            entryType: 'DIGITOVER',
+            requiresReferenceEntry: true,
+            marketQualified: true,
+        };
+        const digits = [0, 4, 1, 7, 2, 9, 3, 0];
+
+        expect(touchMatches(signal, 0, 4)).toBe(true);
+        expect(touchMatches(signal, 3, 0)).toBe(false);
+        expect(countQualifyingTouches(
+            signal,
+            digits,
+            [],
+            ['entry-loop'],
+            { id: 'over_under' },
+        )).toBe(4);
     });
 
     it('keeps Fixed Stake, Full Margin, and Martingale progression distinct', () => {
