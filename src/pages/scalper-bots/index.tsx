@@ -1428,6 +1428,7 @@ const BotDetail: React.FC<{
     const [vpsRuns, setVpsRuns]           = useState(0);
     const [vpsPnl, setVpsPnl]             = useState(0);
     const [vpsDonePopup, setVpsDonePopup] = useState<{ reason: string; pnl: number; runs: number } | null>(null);
+    const [settingsOpen, setSettingsOpen] = useState(false);
 
     const stopRef         = useRef(false);
     const consLossRef     = useRef(0);
@@ -2924,8 +2925,17 @@ const BotDetail: React.FC<{
 
             {/* ── Body ── */}
             <div className='sb-detail__body'>
+                <button
+                    type='button'
+                    className={`sb-detail__settings-handle${settingsOpen ? ' is-open' : ''}`}
+                    onClick={() => setSettingsOpen(open => !open)}
+                    aria-label={settingsOpen ? 'Hide scalper settings' : 'Show scalper settings'}
+                    aria-expanded={settingsOpen}
+                >
+                    {settingsOpen ? '<' : '>'}
+                </button>
                 {/* ── Left Sidebar — Config ── */}
-                <div className='sb-detail__sidebar'>
+                <div className={`sb-detail__sidebar${settingsOpen ? ' is-open' : ''}`}>
 
                     {/* Builder buttons */}
                     <div className='sb-bot-actions'>

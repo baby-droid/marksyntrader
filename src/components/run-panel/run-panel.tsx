@@ -369,13 +369,13 @@ const RunPanel = observer(() => {
     const { statistics } = transactions;
     const { active_tour, active_tab } = dashboard;
     const { total_payout, total_profit, total_stake, won_contracts, lost_contracts, number_of_runs } = statistics;
-    const { BOT_BUILDER, CHART, AHMED_LEARNING, MANUAL_TRADER, BULK_TRADE, AUTO_TRADES } = DBOT_TABS;
+    const { BOT_BUILDER, AHMED_SCALPER_BOTS, BULK_TRADE, AUTO_TRADES } = DBOT_TABS;
 
-    // On mobile, hide the run panel (Summary/Transactions/Journal) on pages
-    // that have their own full-screen trade UI — Charts and Manual Trader use
-    // MobileChartView which already contains everything the user needs.
-    const HIDE_ON_MOBILE = [MANUAL_TRADER, BULK_TRADE, AUTO_TRADES, CHART];
-    const hide_on_mobile = !isDesktop && HIDE_ON_MOBILE.includes(active_tab);
+    // Summary/Transactions/Journal are intentionally available on mobile only
+    // for the four bot execution surfaces requested by the mobile layout:
+    // Bot Builder, Scalper Bots, Bulk Trade, and Auto Trades.
+    const MOBILE_RUN_PANEL_TABS = [BOT_BUILDER, AHMED_SCALPER_BOTS, BULK_TRADE, AUTO_TRADES];
+    const hide_on_mobile = !isDesktop && !MOBILE_RUN_PANEL_TABS.includes(active_tab);
 
     React.useEffect(() => {
         onMount();
@@ -422,7 +422,6 @@ const RunPanel = observer(() => {
         />
     );
 
-    const show_run_panel = [BOT_BUILDER, CHART, AHMED_LEARNING].includes(active_tab) || active_tour;
     if (active_tour === 'bot_builder') return null;
 
     return (
