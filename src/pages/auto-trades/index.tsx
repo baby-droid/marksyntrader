@@ -2,11 +2,10 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { api_base } from '@/external/bot-skeleton';
 import { isFastExecutionEnabled } from '@/utils/execution-speed';
+import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import './auto-trades.scss';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-const APP_ID_DIGIT = (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_DERIV_APP_ID) || '36300';
-
 function fmtProfit(v: number) {
     return (v >= 0 ? '+' : '') + v.toFixed(2);
 }
@@ -15,12 +14,179 @@ function extractDigit(quote: any, pipSize: number): number {
     return parseInt(Number(quote).toFixed(pipSize).slice(-1), 10);
 }
 
-// ── Per-symbol live digit hook ────────────────────────────────────────────────
-function useLiveDigitsRef(symbol: string): React.MutableRefObject<number[]> {
+// ── Authenticated per-symbol live digit hook ─────────────────────────────────
+// Auto Trades must consume the same authorized API session as the rest of the
+// app. A second public socket can show a different tick stream and cannot trade
+// on the account the user selected.
+function useAuthenticatedLiveDigits(symbol: string) {
+    const [digits, setDigits] = useState<number[]>([]);
+    const [livePrice, setLivePrice] = useState<number | null>(null);
     const digitsRef = useRef<number[]>([]);
-    const wsRef = useRef<WebSocket | null>(null);
+    const priceRef = useRef<number | null>(null);
 
     useEffect(() => {
+        let alive = true;
+        let rxSub: any = null;
+        let retryTimer: ReturnType<typeof setTimeout> | null = null;
+        let watchdog: ReturnType<typeof setTimeout> | null = null;
+        let subscriptionId: string | null = null;
+        let historyLoaded = false;
+        let pipSize = 2;
+        const seenEpochs = new Set<number>();
+        let liveBuffer: Array<{ epoch: number; digit: number }> = [];
+
+        const publish = (next: number[]) => {
+            const bounded = next.slice(-1000);
+            digitsRef.current = bounded;
+            if (alive) setDigits(bounded);
+        };
+
+        const clearWatchdog = () => {
+            if (watchdog) clearTimeout(watchdog);
+            watchdog = null;
+        };
+
+        const forget = () => {
+            if (subscriptionId && api_base.api) {
+                try { (api_base.api as any).send({ forget: subscriptionId }).catch(() => {}); } catch {}
+            }
+            subscriptionId = null;
+        };
+
+        const teardown = () => {
+            clearWatchdog();
+            try { rxSub?.unsubscribe?.(); } catch {}
+            rxSub = null;
+            forget();
+        };
+
+        const scheduleStart = (delay = 350) => {
+            if (!alive) return;
+            if (retryTimer) clearTimeout(retryTimer);
+            retryTimer = setTimeout(start, delay);
+        };
+
+        const start = async () => {
+            if (!alive) return;
+            const api = (api_base as any).api;
+            if (!api) { scheduleStart(); return; }
+
+            teardown();
+            historyLoaded = false;
+            pipSize = 2;
+            seenEpochs.clear();
+            liveBuffer = [];
+            publish([]);
+            if (alive) {
+                setLivePrice(null);
+                priceRef.current = null;
+            }
+
+            const loadHistory = async () => {
+                try {
+                    const response = await api.send({
+                        ticks_history: symbol,
+                        count: 200,
+                        end: 'latest',
+                        style: 'ticks',
+                    });
+                    if (!alive || response?.error) return;
+                    const prices = (response?.history?.prices ?? []).map(Number);
+                    const times = response?.history?.times ?? [];
+                    const historyDigits = prices
+                        .filter((_, i) => !seenEpochs.has(Number(times[i])))
+                        .map((price: number) => extractDigit(price, pipSize));
+                    publish([...historyDigits, ...liveBuffer.map(item => item.digit)]);
+                } catch {
+                    // Live ticks remain usable if the history request is delayed.
+                } finally {
+                    historyLoaded = true;
+                }
+            };
+
+            const onTick = (tick: any) => {
+                if (!alive || !tick || tick.quote == null) return;
+                const quote = Number(tick.quote);
+                const epoch = Number(tick.epoch ?? 0);
+                if (!Number.isFinite(quote)) return;
+                if (tick.pip_size != null) pipSize = Number(tick.pip_size);
+                if (epoch && seenEpochs.has(epoch)) return;
+                if (epoch) seenEpochs.add(epoch);
+
+                const digit = extractDigit(quote, pipSize);
+                priceRef.current = quote;
+                setLivePrice(quote);
+                if (!historyLoaded) {
+                    liveBuffer.push({ epoch, digit });
+                    publish([...digitsRef.current, digit]);
+                    if (liveBuffer.length === 1) void loadHistory();
+                } else {
+                    publish([...digitsRef.current, digit]);
+                }
+
+                clearWatchdog();
+                watchdog = setTimeout(() => {
+                    if (alive) { teardown(); scheduleStart(100); }
+                }, 20000);
+            };
+
+            try {
+                const stream = api.subscribe({ ticks: symbol, subscribe: 1 });
+                rxSub = stream?.subscribe?.({
+                    next: (message: any) => {
+                        if (message?.subscription?.id && !subscriptionId) {
+                            subscriptionId = String(message.subscription.id);
+                        }
+                        onTick(message?.tick);
+                    },
+                    error: () => { teardown(); scheduleStart(100); },
+                });
+                // If the account session is ready but the first tick is delayed,
+                // retry rather than leaving the card looking connected forever.
+                watchdog = setTimeout(() => {
+                    if (alive && !historyLoaded) { teardown(); scheduleStart(100); }
+                }, 20000);
+            } catch {
+                teardown();
+                scheduleStart(700);
+            }
+        };
+
+        start();
+        const reconnect = () => { if (alive && !rxSub) start(); };
+        window.addEventListener('online', reconnect);
+        window.addEventListener('focus', reconnect);
+
+        return () => {
+            alive = false;
+            if (retryTimer) clearTimeout(retryTimer);
+            window.removeEventListener('online', reconnect);
+            window.removeEventListener('focus', reconnect);
+            teardown();
+        };
+    }, [symbol]);
+
+    return { digits, digitsRef, livePrice, priceRef };
+}
+
+function useLiveDigitsRef(symbol: string): React.MutableRefObject<number[]> {
+    const { digitsRef } = useAuthenticatedLiveDigits(symbol);
+    return digitsRef;
+}
+
+function useLiveDigitsState(symbol: string): number[] {
+    const { digits } = useAuthenticatedLiveDigits(symbol);
+    return digits;
+}
+
+/* Keep a single compatibility helper for code that only needs a ref. */
+function useLegacyLiveDigitsRef(symbol: string): React.MutableRefObject<number[]> {
+    const { digitsRef } = useAuthenticatedLiveDigits(symbol);
+    return digitsRef;
+}
+
+/* ── Removed public WebSocket implementation ──────────────────────────────── */
+/*
         wsRef.current?.close();
         digitsRef.current = [];
         const ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID_DIGIT}`);
@@ -49,7 +215,7 @@ function useLiveDigitsRef(symbol: string): React.MutableRefObject<number[]> {
     }, [symbol]); // eslint-disable-line react-hooks/exhaustive-deps
 
     return digitsRef;
-}
+*/
 
 // ── Shared buy-and-wait via app's API connection ──────────────────────────────
 // Uses proposal→buy flow for reliable contract execution.
@@ -73,10 +239,10 @@ function useBuyAndWait() {
             amount: stake,
             basis: 'stake',
             contract_type: contractType,
-            currency: 'USD',
-            duration: 1,
+            currency: getDisplayCurrency() || 'USD',
+            duration: arguments[4] ?? 1,
             duration_unit: 't',
-            symbol,
+            underlying_symbol: symbol,
         };
         if (needsBarrier && barrier !== null) proposalReq.barrier = String(barrier);
 
@@ -95,30 +261,46 @@ function useBuyAndWait() {
         // Step 3: Subscribe to proposal_open_contract to track settlement
         return new Promise<number>(resolve => {
             let sub: any;
-            const bail = setTimeout(() => {
+            let subId: string | null = null;
+            const cleanup = () => {
                 try { sub?.unsubscribe?.(); } catch {}
+                if (subId) {
+                    try { send({ forget: subId }).catch(() => {}); } catch {}
+                    subId = null;
+                }
+            };
+            const bail = setTimeout(() => {
+                cleanup();
                 resolve(0);
             }, 20_000);
 
             try {
-                sub = (api_base.api as any)?.onMessage?.()?.subscribe(({ data: d }: any) => {
-                    if (!d?.proposal_open_contract) return;
-                    const poc = d.proposal_open_contract;
-                    if (Number(poc.contract_id) !== Number(contract_id)) return;
-                    if (poc.is_sold === 1 || poc.status === 'won' || poc.status === 'lost') {
+                const stream = (api_base.api as any)?.subscribe?.({
+                    proposal_open_contract: 1, contract_id, subscribe: 1,
+                });
+                sub = stream?.subscribe?.({
+                    next: (message: any) => {
+                        if (message?.subscription?.id) subId = String(message.subscription.id);
+                        const poc = message?.proposal_open_contract;
+                        if (!poc || Number(poc.contract_id) !== Number(contract_id)) return;
+                        if (poc.is_sold === 1 || poc.status === 'won' || poc.status === 'lost') {
+                            clearTimeout(bail);
+                            cleanup();
+                            resolve(parseFloat(poc.profit ?? '0'));
+                        }
+                    },
+                    error: () => {
                         clearTimeout(bail);
-                        try { sub?.unsubscribe?.(); } catch {}
-                        resolve(parseFloat(poc.profit ?? '0'));
-                    }
+                        cleanup();
+                        resolve(0);
+                    },
                 });
             } catch {
                 clearTimeout(bail);
+                cleanup();
                 resolve(0);
                 return;
             }
-
-            send({ proposal_open_contract: 1, contract_id, subscribe: 1 })
-                .catch(() => { clearTimeout(bail); try { sub?.unsubscribe?.(); } catch {} resolve(0); });
         });
     }, [send]);
 }
@@ -244,41 +426,6 @@ function computeSmartAnalysis(digits: number[], analysisDepth: number) {
 }
 
 // ── Smart bot live digit state (for display) ──────────────────────────────────
-function useLiveDigitsState(symbol: string): number[] {
-    const [digits, setDigits] = useState<number[]>([]);
-    const wsRef = useRef<WebSocket | null>(null);
-
-    useEffect(() => {
-        wsRef.current?.close();
-        setDigits([]);
-        const ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID_DIGIT}`);
-        wsRef.current = ws;
-        let pipSize = 2;
-
-        ws.onopen = () => ws.send(JSON.stringify({
-            ticks_history: symbol, count: 200, end: 'latest', style: 'ticks', subscribe: 1,
-        }));
-        ws.onmessage = e => {
-            try {
-                const d = JSON.parse(e.data);
-                if (d.tick?.pip_size) pipSize = d.tick.pip_size;
-                if (d.history?.prices) {
-                    const ps = d.pip_size ?? pipSize;
-                    setDigits(d.history.prices.map((p: any) => extractDigit(p, ps)));
-                }
-                if (d.tick?.quote) {
-                    const ps = d.tick.pip_size ?? pipSize;
-                    const digit = extractDigit(d.tick.quote, ps);
-                    setDigits(prev => [...prev.slice(-499), digit]);
-                }
-            } catch {}
-        };
-        return () => ws.close();
-    }, [symbol]); // eslint-disable-line react-hooks/exhaustive-deps
-
-    return digits;
-}
-
 // ── Individual AI bot runner ──────────────────────────────────────────────────
 interface AiBotRunnerProps {
     bot: AiBotDef;
