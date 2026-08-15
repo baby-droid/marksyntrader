@@ -2,7 +2,9 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { observer } from 'mobx-react-lite';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
-import { useDerivTrading } from '@/hooks/useDerivTrading';
+import { MessageTypes } from '@/external/bot-skeleton';
+import { useStore } from '@/hooks/useStore';
+import { BatchEvent, useDerivTrading } from '@/hooks/useDerivTrading';
 import { useDigitStats } from '@/hooks/useDigitStats';
 import DigitCircles from '@/components/digit-circles';
 import NumberField from '@/components/number-field';
@@ -67,6 +69,7 @@ const STAKE_PRESETS = [0.35, 0.5, 1, 2, 5];
 const COUNT_OPTIONS = [2, 3, 5, 10, 20, 50];
 
 const BulkTrade = observer(() => {
+  const store = useStore();
   const [market, setMarket] = useState('1HZ100V');
   const [tradeType, setTradeType] = useState('DIGITOVER');
   const [prediction, setPrediction] = useState(7);
@@ -78,13 +81,15 @@ const BulkTrade = observer(() => {
   const [isRunning, setIsRunning] = useState(false);
   const [disclaimer, setDisclaimer] = useState(true);
   const [displayCur, setDisplayCur] = useState(getDisplayCurrency());
+  const [batchSummary, setBatchSummary] = useState<any>(null);
+  const appliedMartingaleBatchRef = useRef<string | null>(null);
 
   useEffect(() => subscribeCurrency(() => setDisplayCur(getDisplayCurrency())), []);
 
   const fmt = (usd: number) => `${fromUsd(usd).toFixed(2)} ${displayCur}`;
   const fmtProfit = (usd: number) => `${usd >= 0 ? '+' : ''}${fromUsd(usd).toFixed(2)} ${displayCur}`;
 
-  const { balance, currency, buyContract, tradeResults, winCount, lossCount, totalProfit, clearResults } = useDerivTrading();
+  const { balance, currency, buyBatch, tradeResults, winCount, lossCount, totalProfit, clearResults } = useDerivTrading();
   const { digits, lastDigit, currentPrice, isConnected, setSymbol } = useDigitStats(market);
 
   // Sync market changes into useDigitStats (it only reads initialSymbol on mount)
@@ -104,91 +109,135 @@ const BulkTrade = observer(() => {
   const needsPrediction = ['DIGITOVER', 'DIGITUNDER', 'DIGITMATCH', 'DIGITDIFF'].includes(tradeType);
 
   const [activeStake, setActiveStake] = useState(stake);
-  const prevResultLenRef = useRef(0);
 
   useEffect(() => { setActiveStake(stake); }, [stake]);
+
+  const buildContractInfo = useCallback((event: BatchEvent) => {
+    const raw = event.contract || {};
+    const result = event.result || {};
+    const contractId = String(raw.contract_id || result.contract_id || result.id || '');
+    const profit = Number(result.profit ?? raw.profit ?? 0);
+    const buyPrice = Number(result.stake ?? raw.buy_price ?? activeStake);
+    const settled = event.phase === 'settled';
+    return {
+      id: contractId,
+      contract_id: contractId,
+      transaction_ids: { buy: String(raw.transaction_id || `${event.batchId}-${event.index ?? 0}`) },
+      contract_type: result.type || tradeType,
+      underlying_symbol: market,
+      buy_price: buyPrice,
+      bid_price: settled ? buyPrice + profit : buyPrice,
+      payout: settled ? buyPrice + profit : 0,
+      profit: settled ? profit : 0,
+      currency: currency || 'USD',
+      status: settled ? (result.won ? 'won' : 'lost') : 'open',
+      is_sold: settled,
+      is_expired: settled,
+      date_start: new Date(result.time || Date.now()).toISOString(),
+      entry_spot: result.entry_spot ?? raw.entry_spot,
+      exit_spot: result.exit_spot ?? raw.exit_spot,
+      batch_id: event.batchId,
+      batch_index: event.index,
+      batch_total: event.total,
+    };
+  }, [activeStake, currency, market, tradeType]);
+
+  const handleBatchEvent = useCallback((event: BatchEvent) => {
+    setBatchSummary((previous: any) => {
+      const current = previous?.batchId === event.batchId
+        ? previous
+        : {
+            batchId: event.batchId,
+            total: event.total,
+            bought: 0,
+            settled: 0,
+            pending: event.total,
+            wins: 0,
+            losses: 0,
+            totalStake: 0,
+            totalProfit: 0,
+            currency: currency || 'USD',
+            contractType: tradeType,
+            symbol: market,
+            updatedAt: Date.now(),
+          };
+      const next = { ...current, updatedAt: Date.now() };
+      if (event.phase === 'bought') {
+        next.bought += 1;
+        next.totalStake += Number(event.result?.stake || activeStake);
+      }
+      if (event.phase === 'settled' && event.result) {
+        next.settled += 1;
+        next.pending = Math.max(0, next.total - next.settled);
+        next.wins += event.result.won ? 1 : 0;
+        next.losses += event.result.won ? 0 : 1;
+        next.totalProfit += Number(event.result.profit || 0);
+      }
+      if (event.phase === 'failed') {
+        next.pending = Math.max(0, next.pending - 1);
+      }
+      store.summary_card.setBatchSummary(next);
+      return next;
+    });
+
+    if (event.phase === 'bought' || event.phase === 'settled') {
+      const contract = buildContractInfo(event);
+      if (contract.contract_id) store.transactions.onBotContractEvent(contract);
+      if (event.phase === 'bought') {
+        store.journal.pushMessage(
+          `Batch ${event.batchId}: contract ${event.index + 1}/${event.total} bought`,
+          MessageTypes.SUCCESS,
+          'bulk-trade__journal-message'
+        );
+      } else {
+        store.journal.pushMessage(
+          `Batch ${event.batchId}: contract ${event.index + 1}/${event.total} ${event.result?.won ? 'won' : 'lost'} (${fmtProfit(Number(event.result?.profit || 0))})`,
+          MessageTypes.SUCCESS,
+          'bulk-trade__journal-message'
+        );
+      }
+    }
+    if (event.phase === 'failed') {
+      store.journal.pushMessage(
+        `Batch ${event.batchId}: contract ${event.index !== undefined ? event.index + 1 : 'request'} failed — ${event.error || 'unknown error'}`,
+        MessageTypes.ERROR,
+        'bulk-trade__journal-message'
+      );
+    }
+  }, [activeStake, buildContractInfo, currency, fmtProfit, market, store, tradeType]);
 
   const runBulk = useCallback(async () => {
     if (isRunning) return;
     if (!api_base?.api) { console.error('API not connected'); return; }
     setIsRunning(true);
-    prevResultLenRef.current = tradeResults.length;
     try {
-      const batchStake = activeStake;
-
-      // ── Phase 1: send all N proposals simultaneously ──
-      // Same-instant proposal requests → same market snapshot → same entry spot.
-      const proposalReq: any = {
-        proposal: 1,
-        amount: batchStake,
-        basis: 'stake',
+      await buyBatch({
+        symbol: market,
         contract_type: tradeType,
-        currency: currency || 'USD',
+        stake: activeStake,
         duration: ticks,
         duration_unit: 't',
-        underlying_symbol: market,
-      };
-      if (needsPrediction) proposalReq.barrier = String(prediction);
-
-      const proposalResults = await Promise.all(
-        Array.from({ length: count }, () => (api_base.api as any).send({ ...proposalReq }))
-      );
-
-      const validProposals = proposalResults.filter((r: any) => r?.proposal?.id && !r?.error);
-      if (validProposals.length === 0) {
-        throw new Error(proposalResults[0]?.error?.message ?? 'All proposals failed');
-      }
-
-      // ── Phase 2: buy all N contracts simultaneously using the proposal IDs ──
-      // All buys land at the same tick → same entry AND exit spot.
-      // Also call buyContract (which handles result monitoring / tradeResults) in
-      // parallel so the UI updates correctly after settlement.
-      await Promise.all([
-        // Actual buys using the pre-fetched proposal IDs
-        ...validProposals.map((pr: any) =>
-          (api_base.api as any).send({
-            buy: pr.proposal.id,
-            price: Number(pr.proposal.ask_price ?? batchStake),
-          })
-        ),
-        // Parallel monitoring contracts (buyContract also does proposal+buy but
-        // the result tracking / tradeResults update comes from this path)
-        ...Array.from({ length: validProposals.length }, () =>
-          buyContract({
-            symbol: market,
-            contract_type: tradeType,
-            stake: batchStake,
-            duration: ticks,
-            duration_unit: 't',
-            barrier: needsPrediction ? String(prediction) : undefined,
-            currency: currency || 'USD',
-          })
-        ),
-      ]);
+        barrier: needsPrediction ? String(prediction) : undefined,
+        currency: currency || 'USD',
+        count,
+      }, handleBatchEvent);
     } catch (e) {
       console.error('Bulk trade error', e);
     } finally {
       setIsRunning(false);
     }
-  }, [isRunning, count, activeStake, market, tradeType, ticks, prediction, buyContract, needsPrediction, currency, tradeResults.length]);
+  }, [isRunning, count, activeStake, market, tradeType, ticks, prediction, buyBatch, handleBatchEvent, needsPrediction, currency]);
 
   useEffect(() => {
-    if (!martingale || tradeResults.length === 0) return;
-    const newCount = tradeResults.length - prevResultLenRef.current;
-    // Wait until all contracts in the current batch have settled
-    if (newCount < count) return;
-    // tradeResults is ordered newest-first; the fresh batch is the first `newCount` items
-    const newResults = tradeResults.slice(0, newCount);
-    const batchWins   = newResults.filter(r => r.won).length;
-    const batchLosses = newResults.filter(r => !r.won).length;
-    if (batchLosses > batchWins) {
+    if (!martingale || !batchSummary || batchSummary.pending > 0 || !batchSummary.settled) return;
+    if (appliedMartingaleBatchRef.current === batchSummary.batchId) return;
+    appliedMartingaleBatchRef.current = batchSummary.batchId;
+    if (batchSummary.losses > batchSummary.wins) {
       setActiveStake(prev => Math.max(0.35, +(prev * martMult).toFixed(2)));
     } else {
       setActiveStake(stake);
     }
-    // Advance the baseline so the next batch starts fresh
-    prevResultLenRef.current = tradeResults.length;
-  }, [tradeResults.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [batchSummary, martingale, martMult, stake]);
 
   const wins = winCount;
   const losses = lossCount;

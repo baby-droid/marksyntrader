@@ -4,6 +4,7 @@ import { useStore } from '@/hooks/useStore';
 import { useDevice } from '@deriv-com/ui';
 import ThemedScrollbars from '../shared_ui/themed-scrollbars';
 import SummaryCard from './summary-card';
+import BatchSummaryCard from './batch-summary-card';
 
 type TSummary = {
     is_drawer_open: boolean;
@@ -11,7 +12,7 @@ type TSummary = {
 
 const Summary = observer(({ is_drawer_open }: TSummary) => {
     const { dashboard, summary_card } = useStore();
-    const { is_contract_loading, contract_info, is_bot_running } = summary_card;
+    const { is_contract_loading, contract_info, is_bot_running, batch_summary } = summary_card;
     const { active_tour } = dashboard;
     const { isDesktop } = useDevice();
     return (
@@ -35,6 +36,7 @@ const Summary = observer(({ is_drawer_open }: TSummary) => {
                     contract_info={contract_info}
                     is_bot_running={is_bot_running}
                 />
+                {batch_summary && <BatchSummaryCard summary={batch_summary} />}
             </ThemedScrollbars>
         </div>
     );
