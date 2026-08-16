@@ -122,7 +122,14 @@ const BulkTrade = observer(() => {
     return {
       id: contractId,
       contract_id: contractId,
-      transaction_ids: { buy: String(raw.transaction_id || `${event.batchId}-${event.index ?? 0}`) },
+      transaction_ids: {
+        buy: String(
+          raw.transaction_ids?.buy ||
+          raw.transaction_id ||
+          result.transaction_id ||
+          `${event.batchId}-${event.index ?? 0}`
+        ),
+      },
       contract_type: result.type || tradeType,
       underlying_symbol: market,
       buy_price: buyPrice,
@@ -154,6 +161,7 @@ const BulkTrade = observer(() => {
             pending: event.total,
             wins: 0,
             losses: 0,
+             failed: 0,
             totalStake: 0,
             totalProfit: 0,
             currency: currency || 'USD',
@@ -168,12 +176,13 @@ const BulkTrade = observer(() => {
       }
       if (event.phase === 'settled' && event.result) {
         next.settled += 1;
-        next.pending = Math.max(0, next.total - next.settled);
+         next.pending = Math.max(0, next.total - next.settled - next.failed);
         next.wins += event.result.won ? 1 : 0;
         next.losses += event.result.won ? 0 : 1;
         next.totalProfit += Number(event.result.profit || 0);
       }
       if (event.phase === 'failed') {
+         next.failed += 1;
         next.pending = Math.max(0, next.pending - 1);
       }
       store.summary_card.setBatchSummary(next);

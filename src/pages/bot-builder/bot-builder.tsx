@@ -104,6 +104,11 @@ const FreeBotsSidePanel: React.FC<TFreeBotsPanelProps> = ({ onClose, onLoadDone 
                             this.setNextStatement(true);
                         },
                     };
+                    const generator = Blockly.JavaScript?.javascriptGenerator;
+                    if (generator && !generator.forBlock[type]) {
+                        generator.forBlock[type] = (block: any) =>
+                            block.outputConnection ? ['0', generator.ORDER_ATOMIC] : '';
+                    }
                 });
                 if (missingTypes.size > 0) {
                     console.info(`[Bot Loader] Registered ${missingTypes.size} unsupported-block placeholder(s):`, [...missingTypes]);

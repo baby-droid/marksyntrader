@@ -9,6 +9,55 @@ import { setTradeContext } from '@/utils/trade-metadata';
 import './free-bots.scss';
 
 const FREE_BOTS = [
+  // ── Recovery barrier bots ────────────────────────────────────────────────
+  {
+    id: 'recovery-over1-over3',
+    name: 'Over 1 → Recovery Over 3',
+    description: '🎯 Waits for a confirmed digit pattern, trades OVER 1, then switches to OVER 3 after a loss. Configured stake, martingale, TP/SL and restart blocks.',
+    category: 'Over/Under', market: 'V50 1s', type: 'DIGITOVER', prediction: '1 → 3',
+    xmlFile: '/bots/over1.xml',
+    badge: 'RECOVERY', badgeColor: '#34d399', icon: '↗', winRate: '—',
+  },
+  {
+    id: 'recovery-over2-over3',
+    name: 'Over 2 → Recovery Over 3',
+    description: '🎯 Pattern-confirmed OVER 2 entry with automatic OVER 3 recovery barrier after a loss, plus martingale and session limits.',
+    category: 'Over/Under', market: 'V50 1s', type: 'DIGITOVER', prediction: '2 → 3',
+    xmlFile: '/bots/over2.xml',
+    badge: 'RECOVERY', badgeColor: '#34d399', icon: '↗', winRate: '—',
+  },
+  {
+    id: 'recovery-over3-over4',
+    name: 'Over 3 → Recovery Over 4',
+    description: '🎯 Pattern-confirmed OVER 3 entry with automatic OVER 4 recovery barrier after a loss, stake progression and restart controls.',
+    category: 'Over/Under', market: 'V50 1s', type: 'DIGITOVER', prediction: '3 → 4',
+    xmlFile: '/bots/over3.xml',
+    badge: 'RECOVERY', badgeColor: '#34d399', icon: '↗', winRate: '—',
+  },
+  {
+    id: 'recovery-under8-under6',
+    name: 'Under 8 → Recovery Under 6',
+    description: '🎯 Pattern-confirmed UNDER 8 entry with automatic UNDER 6 recovery barrier after a loss, martingale and session limits.',
+    category: 'Over/Under', market: 'V100 1s', type: 'DIGITUNDER', prediction: '8 → 6',
+    xmlFile: '/bots/under8.xml',
+    badge: 'RECOVERY', badgeColor: '#60a5fa', icon: '↘', winRate: '—',
+  },
+  {
+    id: 'recovery-under7-under6',
+    name: 'Under 7 → Recovery Under 6',
+    description: '🎯 Pattern-confirmed UNDER 7 entry with automatic UNDER 6 recovery barrier after a loss, martingale and restart controls.',
+    category: 'Over/Under', market: 'V100 1s', type: 'DIGITUNDER', prediction: '7 → 6',
+    xmlFile: '/bots/under7.xml',
+    badge: 'RECOVERY', badgeColor: '#60a5fa', icon: '↘', winRate: '—',
+  },
+  {
+    id: 'recovery-under6-under5',
+    name: 'Under 6 → Recovery Under 5',
+    description: '🎯 Pattern-confirmed UNDER 6 entry with automatic UNDER 5 recovery barrier after a loss, stake progression and session limits.',
+    category: 'Over/Under', market: 'V100 1s', type: 'DIGITUNDER', prediction: '6 → 5',
+    xmlFile: '/bots/under6.xml',
+    badge: 'RECOVERY', badgeColor: '#60a5fa', icon: '↘', winRate: '—',
+  },
   // ── NEW signature bots — Omni Cycle Trader Pro & Smart Entry Pattern Pro V2 ─
   {
     id: 'omni-cycle-trader-pro',

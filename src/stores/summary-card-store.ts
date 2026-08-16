@@ -34,6 +34,7 @@ export type TBatchSummary = {
     pending: number;
     wins: number;
     losses: number;
+    failed: number;
     totalStake: number;
     totalProfit: number;
     currency?: string;

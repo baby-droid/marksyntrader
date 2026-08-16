@@ -240,6 +240,18 @@ export const load = async ({
                     },
                 };
             }
+            // Blockly's JavaScript generator must also know how to compile a
+            // third-party block. Keep statement blocks as safe no-ops and
+            // provide a neutral numeric value for unknown value blocks. This
+            // preserves the rest of a strategy instead of failing at runtime
+            // with "forBlock[type] is not a function".
+            const generator = window.Blockly.JavaScript?.javascriptGenerator;
+            if (generator && !generator.forBlock[type]) {
+                generator.forBlock[type] = block =>
+                    block.outputConnection
+                        ? ['0', generator.ORDER_ATOMIC]
+                        : '';
+            }
         });
         // Log for awareness but do NOT abort the load.
         console.warn('[DBot] Auto-registered stub blocks for unknown types:', unknown_block_types);

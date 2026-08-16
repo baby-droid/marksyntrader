@@ -17,6 +17,7 @@ export interface TradeResult {
   batchId?: string;
   batchIndex?: number;
   batchTotal?: number;
+  transaction_id?: string;
 }
 
 export interface BatchParams {
@@ -189,17 +190,24 @@ export function useDerivTrading(): UseDerivTradingReturn {
     contractId: string,
     type: string,
     stake: number,
-    batchMeta: { batchId?: string; batchIndex?: number; batchTotal?: number } = {},
+    batchMeta: {
+      batchId?: string;
+      batchIndex?: number;
+      batchTotal?: number;
+      buyTransactionId?: string;
+    } = {},
     onEvent?: (event: BatchEvent) => void
   ) => {
     let obs: any;
+    let hasSettled = false;
     try {
       obs = api_base.api.subscribe({ proposal_open_contract: 1, contract_id: parseInt(contractId, 10) });
       const sub = obs.subscribe({
         next: (res: any) => {
           const poc = res?.proposal_open_contract;
           if (!poc) return;
-          if (poc.is_sold || poc.status === 'won' || poc.status === 'lost') {
+          if (!hasSettled && (poc.is_sold || poc.status === 'won' || poc.status === 'lost')) {
+            hasSettled = true;
             const rawProfit = parseFloat(poc.profit || '0');
             const profit = applyCommission(rawProfit);
             const won = poc.status === 'won' || profit > 0;
@@ -213,6 +221,7 @@ export function useDerivTrading(): UseDerivTradingReturn {
               time: Date.now(),
               entry_spot: poc.entry_spot,
               exit_spot: poc.exit_spot,
+              transaction_id: poc.transaction_ids?.buy || batchMeta.buyTransactionId,
               ...batchMeta,
             };
             setTradeResults(prev => [result, ...prev].slice(0, 200));
@@ -234,7 +243,17 @@ export function useDerivTrading(): UseDerivTradingReturn {
             try { sub.unsubscribe(); } catch (_) {}
           }
         },
-        error: () => {},
+        error: (error: any) => {
+          if (!hasSettled && onEvent && batchMeta.batchId) {
+            onEvent({
+              phase: 'failed',
+              batchId: batchMeta.batchId,
+              index: batchMeta.batchIndex,
+              total: batchMeta.batchTotal || 1,
+              error: error?.message || 'Contract monitoring failed',
+            });
+          }
+        },
       });
     } catch (e) {
       console.error('monitorContract error', e);
@@ -278,35 +297,53 @@ export function useDerivTrading(): UseDerivTradingReturn {
       if (barrier !== undefined) proposalReq.barrier = String(barrier);
 
       const proposalResults = await Promise.all(
-        Array.from({ length: total }, () => api_base.api.send({ ...proposalReq }))
-      );
-      const proposals = proposalResults
-        .map((response: any, index: number) => ({ response, index }))
-        .filter(({ response }) => response?.proposal?.id && !response?.error);
-
-      if (!proposals.length) {
-        throw new Error(proposalResults[0]?.error?.message || 'All batch proposals failed');
-      }
-
-      // No buyContract calls here: these are the only buy requests in the batch.
-      const buyResults = await Promise.all(
-        proposals.map(({ response, index }) =>
-          api_base.api.send({
-            buy: response.proposal.id,
-            price: Number(response.proposal.ask_price ?? stake),
-          }).then((buyResponse: any) => ({ buyResponse, index }))
+        Array.from({ length: total }, (_, index) =>
+          Promise.resolve()
+            .then(() => api_base.api.send({ ...proposalReq }))
+            .then((response: any) => ({ status: 'fulfilled', response, index }))
+            .catch((error: any) => ({ status: 'rejected', error, index }))
         )
       );
+      const proposals = proposalResults
+        .filter(({ status, response }: any) => status === 'fulfilled' && response?.proposal?.id && !response?.error)
+        .map(({ response, index }: any) => ({ response, index }));
 
-      buyResults.forEach(({ buyResponse, index }) => {
-        const buy = buyResponse?.buy;
-        if (!buy?.contract_id) {
+      proposalResults.forEach(({ status, response, error, index }: any) => {
+        if (status === 'rejected' || response?.error || !response?.proposal?.id) {
           emit({
             phase: 'failed',
             batchId,
             index,
             total,
-            error: buyResponse?.error?.message || 'Buy returned no contract ID',
+            error: error?.message || response?.error?.message || 'Proposal failed',
+          });
+        }
+      });
+
+      if (!proposals.length) return events;
+
+      // No buyContract calls here: these are the only buy requests in the batch.
+      const buyResults = await Promise.all(
+        proposals.map(({ response, index }) =>
+          Promise.resolve()
+            .then(() => api_base.api.send({
+              buy: response.proposal.id,
+              price: Number(response.proposal.ask_price ?? stake),
+            }))
+            .then((buyResponse: any) => ({ status: 'fulfilled', buyResponse, index }))
+            .catch((error: any) => ({ status: 'rejected', error, index }))
+        )
+      );
+
+      buyResults.forEach(({ status, buyResponse, error, index }: any) => {
+        const buy = buyResponse?.buy;
+        if (status === 'rejected' || !buy?.contract_id) {
+          emit({
+            phase: 'failed',
+            batchId,
+            index,
+            total,
+            error: error?.message || buyResponse?.error?.message || 'Buy returned no contract ID',
           });
           return;
         }
@@ -324,13 +361,15 @@ export function useDerivTrading(): UseDerivTradingReturn {
           batchId,
           batchIndex: index,
           batchTotal: total,
+          transaction_id: String(buy.transaction_id || buyResponse?.transaction_id || `${batchId}-${index}`),
         };
         emit({ phase: 'bought', batchId, index, total, contract: buy, result: boughtResult });
         monitorContract(contractId, contract_type, Number(buy.buy_price ?? stake), {
           batchId,
           batchIndex: index,
           batchTotal: total,
-        }, onEvent);
+          buyTransactionId: boughtResult.transaction_id,
+        }, emit);
       });
 
       subscribeBalance();

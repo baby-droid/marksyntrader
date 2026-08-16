@@ -26,6 +26,7 @@ const BatchSummaryCard = observer(({ summary }: Props) => {
                 <div><span>Bought</span><strong>{summary.bought}</strong></div>
                 <div><span>Wins</span><strong className='batch-summary-card__positive'>{summary.wins}</strong></div>
                 <div><span>Losses</span><strong className='batch-summary-card__negative'>{summary.losses}</strong></div>
+                <div><span>Failed</span><strong>{summary.failed}</strong></div>
                 <div><span>Total stake</span><strong>{money(summary.totalStake)}</strong></div>
                 <div><span>Net P/L</span><strong className={profitClass}>{money(summary.totalProfit)}</strong></div>
             </div>
