@@ -361,6 +361,19 @@
   }
 }
 
+@media (max-width: 600px) {
+    .speed-lab__digits-card .digit-circles__row {
+        display: grid !important;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 6px !important;
+        width: 100%;
+    }
+
+    .speed-lab__digits-card .digit-circles__wrapper {
+        min-width: 0;
+    }
+}
+
 @keyframes turboGlow {
   0%, 100% { box-shadow: 0 4px 18px rgba(76,125,255,0.35); }
   50% { box-shadow: 0 4px 28px rgba(76,125,255,0.7), 0 0 40px rgba(76,125,255,0.2); }

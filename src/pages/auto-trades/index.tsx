@@ -2,7 +2,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { api_base } from '@/external/bot-skeleton';
 import { isFastExecutionEnabled } from '@/utils/execution-speed';
-import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import './auto-trades.scss';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -21,6 +20,7 @@ function extractDigit(quote: any, pipSize: number): number {
 function useAuthenticatedLiveDigits(symbol: string) {
     const [digits, setDigits] = useState<number[]>([]);
     const [livePrice, setLivePrice] = useState<number | null>(null);
+    const [tickVersion, setTickVersion] = useState(0);
     const digitsRef = useRef<number[]>([]);
     const priceRef = useRef<number | null>(null);
 
@@ -80,6 +80,7 @@ function useAuthenticatedLiveDigits(symbol: string) {
             if (alive) {
                 setLivePrice(null);
                 priceRef.current = null;
+                setTickVersion(0);
             }
 
             const loadHistory = async () => {
@@ -116,6 +117,7 @@ function useAuthenticatedLiveDigits(symbol: string) {
                 const digit = extractDigit(quote, pipSize);
                 priceRef.current = quote;
                 setLivePrice(quote);
+                if (alive) setTickVersion(version => version + 1);
                 if (!historyLoaded) {
                     liveBuffer.push({ epoch, digit });
                     publish([...digitsRef.current, digit]);
@@ -166,7 +168,7 @@ function useAuthenticatedLiveDigits(symbol: string) {
         };
     }, [symbol]);
 
-    return { digits, digitsRef, livePrice, priceRef };
+    return { digits, digitsRef, livePrice, priceRef, tickVersion };
 }
 
 function useLiveDigitsRef(symbol: string): React.MutableRefObject<number[]> {
@@ -178,44 +180,6 @@ function useLiveDigitsState(symbol: string): number[] {
     const { digits } = useAuthenticatedLiveDigits(symbol);
     return digits;
 }
-
-/* Keep a single compatibility helper for code that only needs a ref. */
-function useLegacyLiveDigitsRef(symbol: string): React.MutableRefObject<number[]> {
-    const { digitsRef } = useAuthenticatedLiveDigits(symbol);
-    return digitsRef;
-}
-
-/* ── Removed public WebSocket implementation ──────────────────────────────── */
-/*
-        wsRef.current?.close();
-        digitsRef.current = [];
-        const ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID_DIGIT}`);
-        wsRef.current = ws;
-        let pipSize = 2;
-
-        ws.onopen = () => ws.send(JSON.stringify({
-            ticks_history: symbol, count: 200, end: 'latest', style: 'ticks', subscribe: 1,
-        }));
-        ws.onmessage = e => {
-            try {
-                const d = JSON.parse(e.data);
-                if (d.tick?.pip_size) pipSize = d.tick.pip_size;
-                if (d.history?.prices) {
-                    const ps = d.pip_size ?? pipSize;
-                    digitsRef.current = d.history.prices.map((p: any) => extractDigit(p, ps));
-                }
-                if (d.tick?.quote) {
-                    const ps = d.tick.pip_size ?? pipSize;
-                    const digit = extractDigit(d.tick.quote, ps);
-                    digitsRef.current = [...digitsRef.current.slice(-499), digit];
-                }
-            } catch {}
-        };
-        return () => ws.close();
-    }, [symbol]); // eslint-disable-line react-hooks/exhaustive-deps
-
-    return digitsRef;
-*/
 
 // ── Shared buy-and-wait via app's API connection ──────────────────────────────
 // Uses proposal→buy flow for reliable contract execution.
@@ -230,6 +194,8 @@ function useBuyAndWait() {
         contractType: string,
         barrier: number | null,
         stake: number,
+        duration = 1,
+        options: { settle?: boolean; onSettled?: (profit: number) => void } = {},
     ): Promise<number> => {
         const needsBarrier = ['DIGITOVER','DIGITUNDER','DIGITMATCH','DIGITDIFF'].includes(contractType);
 
@@ -239,8 +205,7 @@ function useBuyAndWait() {
             amount: stake,
             basis: 'stake',
             contract_type: contractType,
-            currency: getDisplayCurrency() || 'USD',
-            duration: arguments[4] ?? 1,
+            duration,
             duration_unit: 't',
             underlying_symbol: symbol,
         };
@@ -258,10 +223,13 @@ function useBuyAndWait() {
         const contract_id = buyRes?.buy?.contract_id;
         if (!contract_id) throw new Error('Buy failed — no contract ID');
 
-        // Step 3: Subscribe to proposal_open_contract to track settlement
-        return new Promise<number>(resolve => {
+        // Step 3: Subscribe to proposal_open_contract to track settlement.
+        // Each-tick and super-speed modes use the same authenticated settlement
+        // stream, but return immediately after buy so the next tick can trade.
+        const watchSettlement = (onDone: (profit: number) => void) => {
             let sub: any;
             let subId: string | null = null;
+            let finished = false;
             const cleanup = () => {
                 try { sub?.unsubscribe?.(); } catch {}
                 if (subId) {
@@ -269,9 +237,17 @@ function useBuyAndWait() {
                     subId = null;
                 }
             };
-            const bail = setTimeout(() => {
+            const finish = (profit: number) => {
+                if (finished) return;
+                finished = true;
+                clearTimeout(bail);
                 cleanup();
-                resolve(0);
+                onDone(profit);
+            };
+            const bail = setTimeout(() => {
+                finished = true;
+                cleanup();
+                onDone(0);
             }, 20_000);
 
             try {
@@ -284,24 +260,24 @@ function useBuyAndWait() {
                         const poc = message?.proposal_open_contract;
                         if (!poc || Number(poc.contract_id) !== Number(contract_id)) return;
                         if (poc.is_sold === 1 || poc.status === 'won' || poc.status === 'lost') {
-                            clearTimeout(bail);
-                            cleanup();
-                            resolve(parseFloat(poc.profit ?? '0'));
+                            finish(parseFloat(poc.profit ?? '0'));
                         }
                     },
                     error: () => {
-                        clearTimeout(bail);
-                        cleanup();
-                        resolve(0);
+                        finish(0);
                     },
                 });
             } catch {
-                clearTimeout(bail);
-                cleanup();
-                resolve(0);
-                return;
+                finish(0);
             }
-        });
+        };
+
+        if (options.settle === false) {
+            watchSettlement(options.onSettled ?? (() => {}));
+            return 0;
+        }
+
+        return new Promise<number>(resolve => watchSettlement(resolve));
     }, [send]);
 }
 
@@ -558,23 +534,21 @@ const AutoTrades: React.FC = () => {
     useEffect(() => { smartSharedSymbolRef.current = smartSharedSymbol; }, [smartSharedSymbol]);
     useEffect(() => { smartSharedDepthRef.current = smartSharedDepth; }, [smartSharedDepth]);
 
-    const smartDigits = useLiveDigitsState(smartSharedSymbol);
+    const smartFeed = useAuthenticatedLiveDigits(smartSharedSymbol);
+    const smartDigits = smartFeed.digits;
     const smartDigitsRef = useRef(smartDigits);
     useEffect(() => { smartDigitsRef.current = smartDigits; }, [smartDigits]);
+    const smartTickVersionRef = useRef(smartFeed.tickVersion);
+    useEffect(() => { smartTickVersionRef.current = smartFeed.tickVersion; }, [smartFeed.tickVersion]);
 
-    // Live price tracker for the smart header
-    const [smartLivePrice, setSmartLivePrice] = React.useState<number | null>(null);
-    React.useEffect(() => {
-        const wsUrl = `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID_DIGIT}`;
-        const ws = new WebSocket(wsUrl);
-        ws.onopen = () => ws.send(JSON.stringify({ ticks: smartSharedSymbol, subscribe: 1 }));
-        ws.onmessage = e => {
-            try { const d = JSON.parse(e.data); if (d.tick?.quote) setSmartLivePrice(d.tick.quote); } catch {}
-        };
-        return () => ws.close();
-    }, [smartSharedSymbol]);
+    // The header price is from the same authorized stream as the digit history.
+    const smartLivePrice = smartFeed.livePrice;
 
     const buyAndWait = useBuyAndWait();
+    type SmartExecutionMode = 'normal' | 'eachTick' | 'superSpeed';
+    const [smartExecutionMode, setSmartExecutionMode] = useState<SmartExecutionMode>('normal');
+    const smartExecutionModeRef = useRef<SmartExecutionMode>('normal');
+    useEffect(() => { smartExecutionModeRef.current = smartExecutionMode; }, [smartExecutionMode]);
 
     // Per-card config (editable params)
     const [smartCardCfg, setSmartCardCfg] = useState<Record<SmartCardId, {
@@ -659,41 +633,72 @@ const AutoTrades: React.FC = () => {
         const loop = async () => {
             while (!smartStopFlags.current[id]) {
                 try {
+                    const mode = smartExecutionModeRef.current;
+                    if (mode !== 'normal') {
+                        // A non-settling mode is clocked by the authenticated
+                        // tick stream, not by a polling trade timer.
+                        const tickAtStart = smartTickVersionRef.current;
+                        while (!smartStopFlags.current[id] && smartTickVersionRef.current <= tickAtStart) {
+                            await new Promise(r => setTimeout(r, 40));
+                        }
+                        if (smartStopFlags.current[id]) break;
+                    }
+
                     const { contract, barrier } = pickSmartTrade(id);
                     const currentCfg = smartCardCfgRef.current[id];
                     const stk = smartCurrentStakes.current[id];
                     const sym = smartSharedSymbolRef.current;
 
-                    const profit = await buyAndWait(sym, contract, barrier, stk);
-                    if (smartStopFlags.current[id]) break;
+                    const recordResult = (profit: number) => {
+                        const won = profit > 0;
+                        sessionProfit = +(sessionProfit + profit).toFixed(2);
+                        if (won) wins++; else losses++;
 
-                    const won = profit > 0;
-                    sessionProfit = +(sessionProfit + profit).toFixed(2);
-                    if (won) wins++; else losses++;
+                        const ts = new Date().toLocaleTimeString('en', { hour12: false });
+                        const logMsg = `${won ? '✅' : '❌'} ${contract}${barrier !== null ? '@' + barrier : ''} ${fmtProfit(profit)}`;
+                        updateSess(id, { wins, losses, profit: sessionProfit, lastLog: logMsg });
 
-                    const ts = new Date().toLocaleTimeString('en', { hour12: false });
-                    const logMsg = `${won ? '✅' : '❌'} ${contract}${barrier !== null ? '@' + barrier : ''} ${fmtProfit(profit)}`;
-                    updateSess(id, { wins, losses, profit: sessionProfit, lastLog: logMsg });
+                        setSummaryStats(prev => ({
+                            stake: +(prev.stake + stk).toFixed(2),
+                            payout: +(prev.payout + (won ? stk + profit : 0)).toFixed(2),
+                            runs: prev.runs + 1,
+                            won: prev.won + (won ? 1 : 0),
+                            lost: prev.lost + (won ? 0 : 1),
+                            profit: +(prev.profit + profit).toFixed(2),
+                        }));
+                        setTransactions(prev => [...prev.slice(-99), {
+                            time: ts, contract: `${contract}${barrier !== null ? '@' + barrier : ''}`,
+                            profit: +profit.toFixed(2), symbol: sym,
+                        }]);
+                        setJournal(prev => [`[${ts}] [${id}] ${logMsg}`, ...prev].slice(0, 50));
 
-                    // Feed shared summary + transactions
-                    setSummaryStats(prev => ({
-                        stake: +(prev.stake + stk).toFixed(2),
-                        payout: +(prev.payout + (won ? stk + profit : 0)).toFixed(2),
-                        runs: prev.runs + 1,
-                        won: prev.won + (won ? 1 : 0),
-                        lost: prev.lost + (won ? 0 : 1),
-                        profit: +(prev.profit + profit).toFixed(2),
-                    }));
-                    setTransactions(prev => [...prev.slice(-99), {
-                        time: ts, contract: `${contract}${barrier !== null ? '@' + barrier : ''}`,
-                        profit: +profit.toFixed(2), symbol: sym,
-                    }]);
-                    setJournal(prev => [`[${ts}] [${id}] ${logMsg}`, ...prev].slice(0, 50));
+                        smartCurrentStakes.current[id] = won
+                            ? currentCfg.stake
+                            : Math.max(0.35, +(stk * currentCfg.martingale).toFixed(2));
+                    };
 
-                    // Martingale
-                    smartCurrentStakes.current[id] = won
-                        ? currentCfg.stake
-                        : Math.max(0.35, +(stk * currentCfg.martingale).toFixed(2));
+                    if (mode === 'normal') {
+                        const profit = await buyAndWait(sym, contract, barrier, stk, currentCfg.ticks);
+                        if (smartStopFlags.current[id]) break;
+                        recordResult(profit);
+                    } else {
+                        // Each Tick and Super Speed both place a separate
+                        // one-tick contract for every newly received tick.
+                        // They deliberately do not wait for settlement.
+                        const settle = (profit: number) => recordResult(profit);
+                        const request = buyAndWait(
+                            sym, contract, barrier, stk, 1,
+                            { settle: false, onSettled: settle },
+                        );
+                        if (mode === 'eachTick') {
+                            await request;
+                        } else {
+                            // Super Speed intentionally does not wait for the
+                            // buy acknowledgement; the authenticated API
+                            // still performs proposal → buy for each contract.
+                            void request.catch(() => {});
+                        }
+                    }
                 } catch {
                     await new Promise(r => setTimeout(r, isFastExecutionEnabled() ? 0 : 1500));
                 }
@@ -854,6 +859,42 @@ const AutoTrades: React.FC = () => {
                         <div className='st__data-status'>
                             <span className={`st__dot ${smartDigits.length > 0 ? 'live' : ''}`} />
                             {smartDigits.length > 0 ? `${smartDigits.length} ticks loaded` : 'Loading market data…'}
+                        </div>
+                        <div className='st__execution'>
+                            <span className='st__execution-label'>Execution</span>
+                            <div className='st__execution-buttons'>
+                                <button
+                                    className={smartExecutionMode === 'normal' ? 'active' : ''}
+                                    disabled={SMART_CARD_IDS.some(id => smartCardSess[id].running)}
+                                    onClick={() => setSmartExecutionMode('normal')}
+                                    title='Buy a contract, then wait for Deriv to settle it before the next trade'
+                                >
+                                    Normal Tick
+                                </button>
+                                <button
+                                    className={smartExecutionMode === 'eachTick' ? 'active' : ''}
+                                    disabled={SMART_CARD_IDS.some(id => smartCardSess[id].running)}
+                                    onClick={() => setSmartExecutionMode('eachTick')}
+                                    title='Buy one separate one-tick contract for every authenticated market tick'
+                                >
+                                    Each Tick
+                                </button>
+                                <button
+                                    className={smartExecutionMode === 'superSpeed' ? 'active super' : 'super'}
+                                    disabled={SMART_CARD_IDS.some(id => smartCardSess[id].running)}
+                                    onClick={() => setSmartExecutionMode('superSpeed')}
+                                    title='Buy each individual tick contract without waiting for buy or settlement acknowledgement'
+                                >
+                                    Super Speed
+                                </button>
+                            </div>
+                            <span className='st__execution-help'>
+                                {smartExecutionMode === 'normal'
+                                    ? 'Deriv settlement gates the next trade'
+                                    : smartExecutionMode === 'eachTick'
+                                        ? 'One individual 1-tick contract per live digit'
+                                        : 'Individual contracts sent at maximum API speed'}
+                            </span>
                         </div>
                     </div>
 
