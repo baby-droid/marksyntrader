@@ -113,6 +113,15 @@ const Cards = observer(({ is_mobile, has_dashboard_strategies }: TCardProps) => 
                                 className={classNames('tab__dashboard__table__block', {
                                     'tab__dashboard__table__block--minimized': has_dashboard_strategies && is_mobile,
                                 })}
+                                role='button'
+                                tabIndex={0}
+                                onClick={callback}
+                                onKeyDown={e => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault();
+                                        callback();
+                                    }
+                                }}
                             >
                                 <div
                                     className={classNames('tab__dashboard__table__images', {
@@ -122,9 +131,6 @@ const Cards = observer(({ is_mobile, has_dashboard_strategies }: TCardProps) => 
                                     height='8rem'
                                     icon={icon}
                                     id={id}
-                                    onClick={() => {
-                                        callback();
-                                    }}
                                 >
                                     {icon}
                                 </div>
