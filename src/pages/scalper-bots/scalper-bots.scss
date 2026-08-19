@@ -1501,9 +1501,22 @@
 /* On phones the report tabs belong immediately below the bot heading.
    Keep them in normal flow so they cannot sit behind the terminal/sidebar. */
 @media (max-width: 600px) {
+  /*
+   * The app's dark-green main navigation is rendered above the page content
+   * on phones. Keep the scalper report tabs in a separate, normal-flow layer
+   * below that navigation instead of allowing their labels/drop control to
+   * slide underneath it.
+   */
+  .scalper-bots {
+    position: relative;
+    z-index: 0;
+  }
+
   .sb-detail {
     overflow-y: auto;
     overflow-x: hidden;
+    position: relative;
+    z-index: 0;
   }
 
   .sb-detail__header { order: 1; }
@@ -1518,10 +1531,16 @@
     height: auto;
     min-height: 260px;
     flex-shrink: 0;
+    position: relative;
+    z-index: 2;
+    margin-top: 0.9rem;
+    clear: both;
   }
   .sb-tabs__nav {
     position: static;
     background: #fff;
+    min-height: 2.8rem;
+    z-index: 2;
   }
   .sb-tabs__panel {
     min-height: 180px;
