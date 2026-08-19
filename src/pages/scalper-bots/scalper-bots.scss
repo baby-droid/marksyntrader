@@ -446,6 +446,16 @@
 }
 .sb-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
 .sb-unit { font-size: 0.7rem; color: #9ca3af; }
+.sb-touch-preview {
+  display: block;
+  margin-top: 0.18rem;
+  padding: 0.2rem 0.35rem;
+  border-radius: 0.3rem;
+  background: rgba(124, 58, 237, 0.08);
+  color: #6d28d9;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
 .sb-badge {
   display: inline-flex; align-items: center; padding: 0.2rem 0.6rem;
   background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe;
@@ -1446,7 +1456,7 @@
    ════════════════════════════════════════════════════ */
 
 .sb-tx-virtual {
-  opacity: 0.78;
+  opacity: 0.86;
   background: rgba(168, 85, 247, 0.04) !important;
   border-left: 3px solid rgba(168, 85, 247, 0.35);
 
@@ -1467,10 +1477,7 @@
   vertical-align: middle;
 }
 
-.sb-tx-virtual-stake s {
-  text-decoration: line-through;
-  opacity: 0.55;
-}
+.sb-tx-virtual-stake { color: #94a3b8 !important; font-weight: 800; }
 
 .sb-result-virtual {
   color: #a855f7 !important;
@@ -1480,6 +1487,46 @@
 .sb-tx-virtual-pnl {
   color: #94a3b8 !important;
   font-style: italic;
+}
+
+/* On phones the report tabs belong immediately below the bot heading.
+   Keep them in normal flow so they cannot sit behind the terminal/sidebar. */
+@media (max-width: 600px) {
+  .sb-detail {
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .sb-detail__header { order: 1; }
+  .sb-detail__body {
+    order: 3;
+    flex: none;
+    min-height: 430px;
+    overflow: visible;
+  }
+  .sb-tabs {
+    order: 2;
+    height: auto;
+    min-height: 260px;
+    flex-shrink: 0;
+  }
+  .sb-tabs__nav {
+    position: static;
+    background: #fff;
+  }
+  .sb-tabs__panel {
+    min-height: 180px;
+    overflow-x: auto;
+  }
+  .sb-summary__stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.7rem;
+  }
+  .sb-tx-table {
+    min-width: 680px;
+    font-size: 0.72rem;
+  }
 }
 
 .sb-ldp-item {

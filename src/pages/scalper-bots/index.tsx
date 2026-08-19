@@ -124,6 +124,7 @@ type StrategyCondition = {
     ifLast: number;            // analysis window size (all algorithms)
     digitsIs: DigitsIsType;    // predicate used by LDP, Market Percentage, Entry Point Pattern
     digitValue: number;        // barrier digit for OVER/UNDER/MATCHES/DIFFERS (0-9)
+    touches: number;           // minimum matching ticks in the window (e.g. 3 touches UNDER 4)
     recoveryLimit: number;     // relaxed window size after a loss (all algorithms)
     // ── Market Percentage extras ──
     percentageThreshold: number; // 50-100; default 60 — minimum % of window digits that must match
@@ -217,6 +218,7 @@ const normalizeVirtualHookAlt = (value: Partial<VirtualHookAltConfig> | undefine
    locked to the bot's own contractType/prediction (never edited here). */
 /* Default extra fields shared across all new algorithms */
 const COND_DEFAULTS = {
+    touches: 1,
     percentageThreshold: 60,
     sequenceType: 'alternating' as const,
     complexPattern: 'high-low' as const,
@@ -647,6 +649,20 @@ function evaluateSingleCondition(
         case 'LDP':
         case 'NDP':
         default: {
+            /* Touch mode is an explicit count rule: for example, "3 touches
+               UNDER 4" means at least three of the recent ticks are below 4.
+               It intentionally replaces strict consecutive matching when set
+               above one, so the touches setting is useful for mixed windows. */
+            const touches = Math.max(1, Math.floor(Number(cond.touches) || 1));
+            if (touches > 1) {
+                let touched = 0;
+                let prev: number | null = cond.algorithm === 'NDP' ? (digits[n] ?? null) : null;
+                for (const d of recent) {
+                    if (matchFn(d, prev)) touched++;
+                    prev = d;
+                }
+                return touched >= touches;
+            }
             if (cond.strict) {
                 /* NDP is evaluated against the newest ticks, but directional
                    predicates still need the tick immediately before that
@@ -3212,6 +3228,20 @@ const BotDetail: React.FC<{
                                                         </div>
                                                     )}
 
+                                                    {(cond.algorithm === 'LDP' || cond.algorithm === 'NDP') && (
+                                                        <div className='sb-field'>
+                                                            <label>Touches</label>
+                                                            <NumberField value={cond.touches ?? 1} min={1} max={20}
+                                                                onCommit={n => conditionSet(g.id, cond.id, { touches: Math.max(1, Math.floor(n)) })} disabled={running} />
+                                                            <span className='sb-unit'>matching ticks in window</span>
+                                                            {(cond.touches ?? 1) > 1 && (
+                                                                <span className='sb-touch-preview'>
+                                                                    {cond.touches} touches of {cond.digitsIs.toLowerCase()} {cond.digitValue}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    )}
+
                                                     {/* Market Percentage — threshold */}
                                                     {cond.algorithm === 'Market Percentage' && (
                                                         <div className='sb-field'>
@@ -4064,7 +4094,7 @@ const BotDetail: React.FC<{
                                     <thead>
                                         <tr>
                                             <th>Time</th><th>Market</th><th>Type</th>
-                                            <th>Stake</th><th>Result</th><th>Exit Digit</th><th>Profit</th>
+                                             <th>Stake</th><th>Result</th><th>Exit Digit</th><th>Profit</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -4072,19 +4102,19 @@ const BotDetail: React.FC<{
                                             <tr key={tx.id} className={`${tx.result}${tx.virtual ? ' sb-tx-virtual' : ''}`}>
                                                 <td>{tx.time}</td>
                                                 <td>{tx.market}</td>
-                                                <td>
-                                                    {tx.virtual && <span className='sb-virtual-badge'>VIRTUAL</span>}
-                                                    {tx.type.replace('[VIRTUAL] ', '')}
-                                                </td>
-                                                <td className={tx.virtual ? 'sb-tx-virtual-stake' : ''}>
-                                                    {tx.virtual ? <s>${tx.stake.toFixed(2)}</s> : `$${tx.stake.toFixed(2)}`}
-                                                </td>
+                                                 <td>
+                                                     {tx.virtual && <span className='sb-virtual-badge'>HOOK</span>}
+                                                     {tx.virtual ? 'Virtual Hook' : tx.type.replace('[VIRTUAL] ', '')}
+                                                 </td>
+                                                 <td className={tx.virtual ? 'sb-tx-virtual-stake' : ''}>
+                                                     {tx.virtual ? '—' : `$${tx.stake.toFixed(2)}`}
+                                                 </td>
                                                 <td className={`sb-result-${tx.result}${tx.virtual ? ' sb-result-virtual' : ''}`}>
-                                                    {tx.result === 'open' ? '⏳' : tx.result === 'won' ? (tx.virtual ? '🔮 WIN' : '✓ WIN') : (tx.virtual ? '🔮 LOSS' : '✗ LOSS')}
+                                                     {tx.result === 'open' ? '⏳' : tx.virtual ? (tx.result === 'won' ? '🔮 HOOK PROFIT' : '🔮 HOOK LOSS') : (tx.result === 'won' ? '✓ WIN' : '✗ LOSS')}
                                                 </td>
                                                 <td>{tx.exitDigit ?? '—'}</td>
                                                 <td className={tx.virtual ? 'sb-tx-virtual-pnl' : (tx.profit >= 0 ? 'green' : 'red')}>
-                                                    {tx.result === 'open' ? '…' : tx.virtual ? `(sim) ${tx.profit >= 0 ? '+' : ''}${tx.profit.toFixed(2)}` : `${tx.profit >= 0 ? '+' : ''}${tx.profit.toFixed(2)}`}
+                                                     {tx.virtual ? '—' : tx.result === 'open' ? '…' : `${tx.profit >= 0 ? '+' : ''}${tx.profit.toFixed(2)}`}
                                                 </td>
                                             </tr>
                                         ))}
