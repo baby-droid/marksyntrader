@@ -196,6 +196,9 @@ const PopoverContent = ({ contract }: TPopoverContent) => (
 );
 
 const Transaction = ({ contract, active_transaction_id, onClickTransaction }: TTransaction) => {
+    const isHook = Boolean((contract as any)?.is_virtual_hook);
+    const hookWon = (contract as any)?.hook_result === 'profit';
+    const hookLabel = hookWon ? '✓ HOOK PROFIT' : '✗ HOOK LOSS';
     return (
         <Popover
             zIndex={popover_zindex.TRANSACTION.toString()}
@@ -209,7 +212,7 @@ const Transaction = ({ contract, active_transaction_id, onClickTransaction }: TT
                 className='transactions__item'
                 onClick={() => onClickTransaction && onClickTransaction(contract?.transaction_ids?.buy || null)}
             >
-                <div className='transactions__cell transactions__trade-type'>
+                <div className={classNames('transactions__cell transactions__trade-type', { 'transactions__hook': isHook })}>
                     <div className='transactions__loader-container'>
                         {contract ? (
                             <TransactionIconWithText
@@ -231,10 +234,12 @@ const Transaction = ({ contract, active_transaction_id, onClickTransaction }: TT
                     </div>
                     <div className='transactions__loader-container'>
                         {contract ? (
-                            <TransactionIconWithText
-                                icon={<TradeTypeIcon type={contract.contract_type || ''} size='sm' />}
-                                title={getContractTypeName(contract)}
-                            />
+                            isHook ? <span className='transactions__hook-label'>🔮 HOOK</span> : (
+                                <TransactionIconWithText
+                                    icon={<TradeTypeIcon type={contract.contract_type || ''} size='sm' />}
+                                    title={getContractTypeName(contract)}
+                                />
+                            )
                         ) : (
                             <TransactionIconLoader />
                         )}
@@ -255,7 +260,7 @@ const Transaction = ({ contract, active_transaction_id, onClickTransaction }: TT
                     />
                 </div>
                 <div className='transactions__cell transactions__stake'>
-                    {contract ? (
+                    {isHook ? '—' : contract ? (
                         <KshMoney
                             amount={contract.buy_price}
                             contractCurrency={contract.currency}
@@ -266,7 +271,11 @@ const Transaction = ({ contract, active_transaction_id, onClickTransaction }: TT
                     )}
                 </div>
                 <div className='transactions__cell transactions__profit'>
-                    {contract?.is_completed ? (
+                    {isHook ? (
+                        <div className={hookWon ? 'transactions__profit--win transactions__hook-result' : 'transactions__profit--loss transactions__hook-result'}>
+                            {hookLabel}
+                        </div>
+                    ) : contract?.is_completed ? (
                         <div
                             className={classNames({
                                 'transactions__profit--win': contract?.profit && contract?.profit >= 0,
