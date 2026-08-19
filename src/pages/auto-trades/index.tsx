@@ -189,13 +189,17 @@ function useBuyAndWait() {
         return (api_base.api.send as unknown as (d: unknown) => Promise<any>)(msg);
     }, []);
 
-    return useCallback(async (
+    const buyAndWait = useCallback(async (
         symbol: string,
         contractType: string,
         barrier: number | null,
         stake: number,
         duration = 1,
-        options: { settle?: boolean; onSettled?: (profit: number) => void } = {},
+        options: {
+            settle?: boolean;
+            onSettled?: (profit: number) => void;
+            tradingParameters?: Record<string, unknown>;
+        } = {},
     ): Promise<number> => {
         const needsBarrier = ['DIGITOVER','DIGITUNDER','DIGITMATCH','DIGITDIFF'].includes(contractType);
 
@@ -210,6 +214,9 @@ function useBuyAndWait() {
             underlying_symbol: symbol,
         };
         if (needsBarrier && barrier !== null) proposalReq.barrier = String(barrier);
+        if (options.tradingParameters) {
+            proposalReq.passthrough = options.tradingParameters;
+        }
 
         const propRes = await send(proposalReq);
         if (propRes?.error) throw new Error(propRes.error.message || 'Proposal failed');
@@ -218,7 +225,11 @@ function useBuyAndWait() {
         const askPrice = propRes?.proposal?.ask_price ?? stake;
 
         // Step 2: Buy using the proposal ID
-        const buyRes = await send({ buy: proposalId, price: Number(askPrice) });
+        const buyRes = await send({
+            buy: proposalId,
+            price: Number(askPrice),
+            ...(options.tradingParameters ? { passthrough: options.tradingParameters } : {}),
+        });
         if (buyRes?.error) throw new Error(buyRes.error.message || 'Buy failed');
         const contract_id = buyRes?.buy?.contract_id;
         if (!contract_id) throw new Error('Buy failed — no contract ID');
@@ -279,6 +290,23 @@ function useBuyAndWait() {
 
         return new Promise<number>(resolve => watchSettlement(resolve));
     }, [send]);
+
+    const sellContract = useCallback(async (
+        contractId: number | string,
+        price = 0,
+        tradingParameters?: Record<string, unknown>,
+    ) => {
+        if (!contractId) throw new Error('A contract ID is required to sell');
+        const response = await send({
+            sell: contractId,
+            price: Math.max(0, Number(price) || 0),
+            ...(tradingParameters ? { passthrough: tradingParameters } : {}),
+        });
+        if (response?.error) throw new Error(response.error.message || 'Sell failed');
+        return response;
+    }, [send]);
+
+    return { buyAndWait, sellContract };
 }
 
 // ── AI Bot Definitions ────────────────────────────────────────────────────────
