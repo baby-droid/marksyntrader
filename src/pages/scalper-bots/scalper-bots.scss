@@ -1512,9 +1512,39 @@
   .scalper-bots__folders {
     flex: none;
     min-height: 0;
-    grid-auto-rows: minmax(142px, auto);
-    padding-bottom: 4.5rem;
+    grid-auto-rows: minmax(104px, auto);
+    gap: 0;
+    padding-bottom: 1.5rem;
     overflow: visible;
+  }
+
+  /* Keep all category folders compact enough that the final row starts
+     inside the first phone viewport. */
+  .sb-folder {
+    min-height: 104px;
+    gap: 0.3rem;
+    padding: 0.45rem 0.25rem;
+
+    &__icon {
+      width: 72px;
+      height: 52px;
+
+      svg {
+        width: 72px;
+        height: 52px;
+      }
+    }
+
+    &__label {
+      font-size: 0.72rem;
+      letter-spacing: 0.04em;
+      line-height: 1.05;
+    }
+
+    &__count {
+      font-size: 0.66rem;
+      margin-top: 0;
+    }
   }
 
   /*

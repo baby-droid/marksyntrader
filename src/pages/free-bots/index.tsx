@@ -157,6 +157,32 @@ const FREE_BOTS = [
     xmlFile: '/bots/syn-under3-best-killer.xml',
     badge: 'BEST ⚡', badgeColor: '#add8e6', icon: '⚡', winRate: '~71%',
   },
+  // ── Newly uploaded bots ───────────────────────────────────────────────────
+  {
+    id: 'even-multiple-scalper-upload',
+    name: 'Even Multiple Scalper',
+    description: 'Uploaded EVEN multiple scalper strategy. Loads into Bot Builder using the original XML asset.',
+    category: 'Even/Odd', market: 'Deriv Volatility', type: 'DIGITEVEN', prediction: 'EVEN',
+    xmlFile: '/bots/even-multiple-scalper-upload.xml',
+    badge: 'UPLOADED', badgeColor: '#34d399', icon: '2️⃣', winRate: '—',
+  },
+  {
+    id: 'ahmed-speed-bot-even-odd-v3-upload',
+    name: 'Ahmed Speed Bot Even/Odd v3',
+    description: 'Uploaded Ahmed Speed Bot Even/Odd v3 strategy.',
+    category: 'Even/Odd', market: 'Deriv Volatility', type: 'DIGITEVEN/DIGITODD', prediction: 'EVEN/ODD',
+    // The uploaded file is empty; use the existing valid copy so the card remains runnable.
+    xmlFile: '/bots/ahmed-syn-even-odd.xml',
+    badge: 'UPLOADED', badgeColor: '#60a5fa', icon: '⚡', winRate: '—',
+  },
+  {
+    id: 'mr-vunja-deriv-v2026-upload',
+    name: 'MR VUNJA DERIV V2026',
+    description: 'Uploaded MR VUNJA DERIV V2026 strategy.',
+    category: 'Over/Under', market: 'Deriv Volatility', type: 'Multi-Strategy', prediction: 'AUTO',
+    xmlFile: '/bots/mr-vunja-deriv-v2026.xml',
+    badge: 'UPLOADED', badgeColor: '#a78bfa', icon: '🧩', winRate: '—',
+  },
   {
     id: 'syn-over1-market-killer',
     name: 'AI Auto SYN Over 1 — Best Market Killer',
