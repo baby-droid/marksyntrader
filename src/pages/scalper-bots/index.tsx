@@ -4082,7 +4082,7 @@ const BotDetail: React.FC<{
                 <div className='sb-tabs__panel'>
                     {tab === 'summary' && (
                         <div className='sb-summary'>
-                            {summary.runs === 0 ? (
+                            {summary.runs === 0 && summary.virtualCount === 0 ? (
                                 <div className='sb-summary__empty'>
                                     <p>Bot is not running</p>
                                     <p>When you're ready to trade, hit RUN. You'll be able to track your bot's performance here.</p>
@@ -4099,6 +4099,10 @@ const BotDetail: React.FC<{
                                     <div className='sb-stat'>
                                         <span>WIN RATE</span>
                                         <strong>{summary.runs > 0 ? ((summary.won / summary.runs) * 100).toFixed(1) : '0.0'}%</strong>
+                                    </div>
+                                    <div className='sb-stat sb-stat--virtual'>
+                                        <span>VIRTUAL HOOKS</span>
+                                        <strong>🔮 {summary.virtualCount}</strong>
                                     </div>
                                 </div>
                             )}
@@ -4147,11 +4151,19 @@ const BotDetail: React.FC<{
                     {tab === 'journal' && (
                         <div className='sb-journal'>
                             {terminal.length === 0 ? (
-                                <p className='sb-empty'>No journal entries yet. Run the bot to see activity.</p>
+                                txList.some(tx => tx.virtual)
+                                    ? <p className='sb-empty'>Virtual Hook activity is shown below.</p>
+                                    : <p className='sb-empty'>No journal entries yet. Run the bot to see activity.</p>
                             ) : terminal.slice().reverse().map((e, i) => (
                                 <div key={i} className={`sb-journal__line ${e.kind}`}>
                                     <span className='sb-journal__ts'>{e.t}</span>
                                     {e.msg}
+                                </div>
+                            ))}
+                            {txList.filter(tx => tx.virtual).map(tx => (
+                                <div key={`hook-journal-${tx.id}`} className={`sb-journal__line ${tx.result === 'won' ? 'win' : 'loss'} sb-journal__hook`}>
+                                    <span className='sb-journal__ts'>{tx.time}</span>
+                                    {tx.result === 'won' ? '✓ HOOK PROFIT' : '✗ HOOK LOSS'} · {tx.market} · digit {tx.exitDigit ?? '—'}
                                 </div>
                             ))}
                         </div>

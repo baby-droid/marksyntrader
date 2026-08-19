@@ -72,6 +72,8 @@ const IconContainer = ({ message, icon }: { message: string; icon: ReactElement 
 );
 
 export default function MobileTransactionCards({ transaction }: { transaction: TTransaction }) {
+    const isHook = Boolean((transaction as any)?.is_virtual_hook);
+    const hookWon = (transaction as any)?.hook_result === 'profit';
     return (
         <div className={`${PARENT_CLASS}__card`} data-testid='dt_mobile_transaction_card'>
             <div className={`${PARENT_CLASS}__card__row`}>
@@ -85,10 +87,12 @@ export default function MobileTransactionCards({ transaction }: { transaction: T
                                 }
                                 icon={<MarketIcon type={transaction?.underlying_symbol} size='md' />}
                             />
-                            <IconContainer
-                                message={getContractTypeName(transaction)}
-                                icon={<TradeTypeIcon type={transaction?.contract_type} size='md' />}
-                            />
+                            isHook ? <span className='transaction-details-modal-mobile__hook-label'>🔮 HOOK</span> : (
+                                <IconContainer
+                                    message={getContractTypeName(transaction)}
+                                    icon={<TradeTypeIcon type={transaction?.contract_type} size='md' />}
+                                />
+                            )
                         </div>
                     }
                 />
@@ -113,7 +117,7 @@ export default function MobileTransactionCards({ transaction }: { transaction: T
                 />
             </div>
             <div className={`${PARENT_CLASS}__card__row`}>
-                <CardColumn title='Buy Price' label={Math.abs(transaction?.buy_price ?? 0).toFixed(2)} />
+                <CardColumn title='Buy Price' label={isHook ? '—' : Math.abs(transaction?.buy_price ?? 0).toFixed(2)} />
                 <CardColumn
                     title='Exit Spot'
                     label={transaction?.exit_spot}
@@ -132,7 +136,7 @@ export default function MobileTransactionCards({ transaction }: { transaction: T
                                 [`${PARENT_CLASS}__card__profit--loss`]: transaction?.profit < 0,
                             })}
                         >
-                            {Math.abs(transaction?.profit ?? 0).toFixed(2)}
+                            {isHook ? (hookWon ? '✓ HOOK PROFIT' : '✗ HOOK LOSS') : Math.abs(transaction?.profit ?? 0).toFixed(2)}
                         </div>
                     }
                     right_aligned

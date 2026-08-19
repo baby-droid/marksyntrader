@@ -1049,6 +1049,15 @@
   }
 }
 
+.sb-stat--virtual {
+  color: #7c3aed;
+  border-color: rgba(124, 58, 237, 0.3);
+}
+
+.sb-journal__hook {
+  font-weight: 800;
+}
+
 /* AND / CONDITION label */
 .sb-condition-label {
   font-size: 0.7rem;
