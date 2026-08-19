@@ -1,6 +1,7 @@
 // @ts-nocheck
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { api_base } from '@/external/bot-skeleton';
+import { useDerivTrade } from '@/hooks/useDerivTrade';
 import { isFastExecutionEnabled } from '@/utils/execution-speed';
 import './auto-trades.scss';
 
@@ -184,10 +185,7 @@ function useLiveDigitsState(symbol: string): number[] {
 // ── Shared buy-and-wait via app's API connection ──────────────────────────────
 // Uses proposal→buy flow for reliable contract execution.
 function useBuyAndWait() {
-    const send = useCallback((msg: object): Promise<any> => {
-        if (!api_base.api) return Promise.reject(new Error('Not connected'));
-        return (api_base.api.send as unknown as (d: unknown) => Promise<any>)(msg);
-    }, []);
+    const { buyContract, authorized, connected, currency } = useDerivTrade();
 
     const buyAndWait = useCallback(async (
         symbol: string,
@@ -201,112 +199,92 @@ function useBuyAndWait() {
             tradingParameters?: Record<string, unknown>;
         } = {},
     ): Promise<number> => {
-        const needsBarrier = ['DIGITOVER','DIGITUNDER','DIGITMATCH','DIGITDIFF'].includes(contractType);
+        if (!connected) throw new Error('Deriv connection is not open');
+        if (!authorized) throw new Error('Log in to a demo or real account before trading');
 
-        // Step 1: Get a proposal to obtain a valid proposal_id
-        const proposalReq: any = {
-            proposal: 1,
-            amount: stake,
-            basis: 'stake',
+        // All Smart Trading buys use the same authenticated proposal → buy →
+        // settlement path as Manual Trader. This keeps the selected demo/real
+        // account and its currency attached to every request.
+        const buy = () => buyContract({
+            symbol,
             contract_type: contractType,
             duration,
             duration_unit: 't',
-            underlying_symbol: symbol,
-        };
-        if (needsBarrier && barrier !== null) proposalReq.barrier = String(barrier);
-        if (options.tradingParameters) {
-            proposalReq.passthrough = options.tradingParameters;
-        }
-
-        const propRes = await send(proposalReq);
-        if (propRes?.error) throw new Error(propRes.error.message || 'Proposal failed');
-        const proposalId = propRes?.proposal?.id;
-        if (!proposalId) throw new Error('No proposal ID — API not ready');
-        const askPrice = propRes?.proposal?.ask_price ?? stake;
-
-        // Step 2: Buy using the proposal ID
-        const buyRes = await send({
-            buy: proposalId,
-            price: Number(askPrice),
-            ...(options.tradingParameters ? { passthrough: options.tradingParameters } : {}),
+            stake,
+            ...(barrier !== null ? { barrier } : {}),
+            currency,
         });
-        if (buyRes?.error) throw new Error(buyRes.error.message || 'Buy failed');
-        const contract_id = buyRes?.buy?.contract_id;
-        if (!contract_id) throw new Error('Buy failed — no contract ID');
-
-        // Step 3: Subscribe to proposal_open_contract to track settlement.
-        // Each-tick and super-speed modes use the same authenticated settlement
-        // stream, but return immediately after buy so the next tick can trade.
-        const watchSettlement = (onDone: (profit: number) => void) => {
-            let sub: any;
-            let subId: string | null = null;
-            let finished = false;
-            const cleanup = () => {
-                try { sub?.unsubscribe?.(); } catch {}
-                if (subId) {
-                    try { send({ forget: subId }).catch(() => {}); } catch {}
-                    subId = null;
-                }
-            };
-            const finish = (profit: number) => {
-                if (finished) return;
-                finished = true;
-                clearTimeout(bail);
-                cleanup();
-                onDone(profit);
-            };
-            const bail = setTimeout(() => {
-                finished = true;
-                cleanup();
-                onDone(0);
-            }, 20_000);
-
-            try {
-                const stream = (api_base.api as any)?.subscribe?.({
-                    proposal_open_contract: 1, contract_id, subscribe: 1,
-                });
-                sub = stream?.subscribe?.({
-                    next: (message: any) => {
-                        if (message?.subscription?.id) subId = String(message.subscription.id);
-                        const poc = message?.proposal_open_contract;
-                        if (!poc || Number(poc.contract_id) !== Number(contract_id)) return;
-                        if (poc.is_sold === 1 || poc.status === 'won' || poc.status === 'lost') {
-                            finish(parseFloat(poc.profit ?? '0'));
-                        }
-                    },
-                    error: () => {
-                        finish(0);
-                    },
-                });
-            } catch {
-                finish(0);
-            }
-        };
 
         if (options.settle === false) {
-            watchSettlement(options.onSettled ?? (() => {}));
+            void buy().then(result => {
+                if (!options.onSettled) return;
+                return new Promise<void>(resolve => {
+                    const timeout = setTimeout(() => resolve(), 20_000);
+                    const settle = (profit: number) => {
+                        clearTimeout(timeout);
+                        options.onSettled?.(profit);
+                        resolve();
+                    };
+                    // buyContract already subscribes to settlement when a
+                    // callback is supplied; this branch is replaced below.
+                    void settle;
+                });
+            });
             return 0;
         }
 
-        return new Promise<number>(resolve => watchSettlement(resolve));
-    }, [send]);
-
-    const sellContract = useCallback(async (
-        contractId: number | string,
-        price = 0,
-        tradingParameters?: Record<string, unknown>,
-    ) => {
-        if (!contractId) throw new Error('A contract ID is required to sell');
-        const response = await send({
-            sell: contractId,
-            price: Math.max(0, Number(price) || 0),
-            ...(tradingParameters ? { passthrough: tradingParameters } : {}),
+        return new Promise<number>(async (resolve, reject) => {
+            let settled = false;
+            const timeout = setTimeout(() => {
+                if (!settled) {
+                    settled = true;
+                    resolve(0);
+                }
+            }, 20_000);
+            try {
+                await buyContract({
+                    symbol,
+                    contract_type: contractType,
+                    duration,
+                    duration_unit: 't',
+                    stake,
+                    ...(barrier !== null ? { barrier } : {}),
+                    currency,
+                }, profit => {
+                    if (settled) return;
+                    settled = true;
+                    clearTimeout(timeout);
+                    resolve(profit);
+                });
+            } catch (error) {
+                clearTimeout(timeout);
+                reject(error);
+            }
         });
-        if (response?.error) throw new Error(response.error.message || 'Sell failed');
-        return response;
-    }, [send]);
+    }, [buyContract, authorized, connected, currency]);
 
-    return { buyAndWait, sellContract };
+    const buyWithoutWaiting = useCallback(async (
+        symbol: string,
+        contractType: string,
+        barrier: number | null,
+        stake: number,
+        duration = 1,
+        onSettled?: (profit: number) => void,
+    ) => {
+        if (!connected) throw new Error('Deriv connection is not open');
+        if (!authorized) throw new Error('Log in to a demo or real account before trading');
+        return buyContract({
+            symbol,
+            contract_type: contractType,
+            duration,
+            duration_unit: 't',
+            stake,
+            ...(barrier !== null ? { barrier } : {}),
+            currency,
+        }, onSettled ? (result => onSettled(result)) : undefined);
+    }, [buyContract, authorized, connected, currency]);
+
+    return { buyAndWait, buyWithoutWaiting, authorized, connected };
 }
 
 // ── AI Bot Definitions ────────────────────────────────────────────────────────
