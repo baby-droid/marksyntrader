@@ -1501,6 +1501,22 @@
 /* On phones the report tabs belong immediately below the bot heading.
    Keep them in normal flow so they cannot sit behind the terminal/sidebar. */
 @media (max-width: 600px) {
+  /* Keep the category picker vertically scrollable so lower folders
+     (Even/Odd, Odd/Even, etc.) are reachable on short phone screens. */
+  .scalper-bots {
+    min-height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .scalper-bots__folders {
+    flex: none;
+    min-height: 0;
+    grid-auto-rows: minmax(142px, auto);
+    padding-bottom: 4.5rem;
+    overflow: visible;
+  }
+
   /*
    * The app's dark-green main navigation is rendered above the page content
    * on phones. Keep the scalper report tabs in a separate, normal-flow layer
@@ -1557,6 +1573,29 @@
   .sb-tx-table {
     min-width: 680px;
     font-size: 0.72rem;
+  }
+
+  .sb-folder {
+    gap: 0.45rem;
+    min-height: 142px;
+
+    &__icon {
+      width: 82px;
+      height: 66px;
+      transform: scale(0.72);
+      transform-origin: center;
+      margin: -0.45rem 0;
+    }
+
+    &__label {
+      font-size: 0.72rem;
+      letter-spacing: 0.045em;
+    }
+
+    &__count {
+      font-size: 0.65rem;
+      margin-top: -0.2rem;
+    }
   }
 }
 
