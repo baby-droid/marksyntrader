@@ -20,6 +20,7 @@ const NAV_ITEMS = [
     { tab: DBOT_TABS.BULK_TRADE,     icon: '📦', label: 'Bulk Trade' },
     { tab: DBOT_TABS.ANALYSIS,       icon: '🔍', label: 'Analysis' },
     { tab: DBOT_TABS.TUTORIAL,       icon: '📚', label: 'Tutorials' },
+    { tab: DBOT_TABS.TRADING_SOFTWARE, icon: '💻', label: 'Trading Software' },
 ];
 
 const NavDrawer: React.FC = observer(() => {
