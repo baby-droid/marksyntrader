@@ -1345,6 +1345,11 @@
         background: linear-gradient(135deg, #1d4ed8, #3b82f6);
         color: #fff;
         &:hover { filter: brightness(1.1); }
+         &:disabled {
+             cursor: not-allowed;
+             opacity: 0.45;
+             filter: grayscale(0.35);
+         }
         &.stop {
             background: linear-gradient(135deg, #991b1b, #ef4444);
         }

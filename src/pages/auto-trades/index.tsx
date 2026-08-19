@@ -205,31 +205,16 @@ function useBuyAndWait() {
         // All Smart Trading buys use the same authenticated proposal → buy →
         // settlement path as Manual Trader. This keeps the selected demo/real
         // account and its currency attached to every request.
-        const buy = () => buyContract({
-            symbol,
-            contract_type: contractType,
-            duration,
-            duration_unit: 't',
-            stake,
-            ...(barrier !== null ? { barrier } : {}),
-            currency,
-        });
-
         if (options.settle === false) {
-            void buy().then(result => {
-                if (!options.onSettled) return;
-                return new Promise<void>(resolve => {
-                    const timeout = setTimeout(() => resolve(), 20_000);
-                    const settle = (profit: number) => {
-                        clearTimeout(timeout);
-                        options.onSettled?.(profit);
-                        resolve();
-                    };
-                    // buyContract already subscribes to settlement when a
-                    // callback is supplied; this branch is replaced below.
-                    void settle;
-                });
-            });
+            await buyContract({
+                symbol,
+                contract_type: contractType,
+                duration,
+                duration_unit: 't',
+                stake,
+                ...(barrier !== null ? { barrier } : {}),
+                currency,
+            }, settlement => options.onSettled?.(Number(settlement?.profit ?? 0)));
             return 0;
         }
 
@@ -254,7 +239,7 @@ function useBuyAndWait() {
                     if (settled) return;
                     settled = true;
                     clearTimeout(timeout);
-                    resolve(profit);
+                    resolve(Number(profit?.profit ?? 0));
                 });
             } catch (error) {
                 clearTimeout(timeout);
@@ -263,28 +248,7 @@ function useBuyAndWait() {
         });
     }, [buyContract, authorized, connected, currency]);
 
-    const buyWithoutWaiting = useCallback(async (
-        symbol: string,
-        contractType: string,
-        barrier: number | null,
-        stake: number,
-        duration = 1,
-        onSettled?: (profit: number) => void,
-    ) => {
-        if (!connected) throw new Error('Deriv connection is not open');
-        if (!authorized) throw new Error('Log in to a demo or real account before trading');
-        return buyContract({
-            symbol,
-            contract_type: contractType,
-            duration,
-            duration_unit: 't',
-            stake,
-            ...(barrier !== null ? { barrier } : {}),
-            currency,
-        }, onSettled ? (result => onSettled(result)) : undefined);
-    }, [buyContract, authorized, connected, currency]);
-
-    return { buyAndWait, buyWithoutWaiting, authorized, connected };
+    return { buyAndWait, authorized, connected };
 }
 
 // ── AI Bot Definitions ────────────────────────────────────────────────────────
@@ -422,7 +386,7 @@ function AiBotCard({ bot, globalStake, globalMartingale, session, onSessionUpdat
     const digitsRef = useLiveDigitsRef(bot.symbol);
     const stopRef = useRef(false);
     const pausedStakeRef = useRef<number | null>(null); // for resume-with-martingale
-    const buyAndWait = useBuyAndWait();
+    const { buyAndWait } = useBuyAndWait();
 
     const start = useCallback(async (resumeStake?: number) => {
         stopRef.current = false;
@@ -562,7 +526,7 @@ const AutoTrades: React.FC = () => {
     // The header price is from the same authorized stream as the digit history.
     const smartLivePrice = smartFeed.livePrice;
 
-    const buyAndWait = useBuyAndWait();
+    const { buyAndWait, authorized, connected } = useBuyAndWait();
     type SmartExecutionMode = 'normal' | 'eachTick' | 'superSpeed';
     const [smartExecutionMode, setSmartExecutionMode] = useState<SmartExecutionMode>('normal');
     const smartExecutionModeRef = useRef<SmartExecutionMode>('normal');
@@ -678,29 +642,25 @@ const AutoTrades: React.FC = () => {
         updateSess(id, { running: true, wins: 0, losses: 0, profit: 0, lastLog: 'Starting…' });
 
         let wins = 0, losses = 0, sessionProfit = 0;
+        let evaluatedTick = smartTickVersionRef.current - 1;
 
         const loop = async () => {
             while (!smartStopFlags.current[id]) {
                 try {
                     const mode = smartExecutionModeRef.current;
-                    if (mode !== 'normal') {
-                        // A non-settling mode is clocked by the authenticated
-                        // tick stream, not by a polling trade timer.
-                        const tickAtStart = smartTickVersionRef.current;
-                        while (!smartStopFlags.current[id] && smartTickVersionRef.current <= tickAtStart) {
-                            await new Promise(r => setTimeout(r, 40));
-                        }
-                        if (smartStopFlags.current[id]) break;
+                    // Every card evaluates once per new authenticated tick.
+                    // Without this gate Normal mode can buy repeatedly from
+                    // the same already-matching digit window after settlement.
+                    while (!smartStopFlags.current[id] && smartTickVersionRef.current <= evaluatedTick) {
+                        await new Promise(r => setTimeout(r, 40));
                     }
+                    if (smartStopFlags.current[id]) break;
+                    evaluatedTick = smartTickVersionRef.current;
 
                     const trade = pickSmartTrade(id);
                     if (!trade.meetsCondition) {
                         // Conditions are tick-gated. Do not repeatedly buy while
                         // the same non-matching window is on screen.
-                        const observedTick = smartTickVersionRef.current;
-                        while (!smartStopFlags.current[id] && smartTickVersionRef.current <= observedTick) {
-                            await new Promise(r => setTimeout(r, 80));
-                        }
                         continue;
                     }
                     const { contract, barrier } = trade;
@@ -926,6 +886,12 @@ const AutoTrades: React.FC = () => {
                         <div className='st__data-status'>
                             <span className={`st__dot ${smartDigits.length > 0 ? 'live' : ''}`} />
                             {smartDigits.length > 0 ? `${smartDigits.length} ticks loaded` : 'Loading market data…'}
+                        </div>
+                        <div className='st__data-status'>
+                            <span className={`st__dot ${connected && authorized ? 'live' : ''}`} />
+                            {connected && authorized
+                                ? 'Authenticated trading ready'
+                                : 'Log in to a demo or real account to trade'}
                         </div>
                         <div className='st__execution'>
                             <span className='st__execution-label'>Execution</span>
@@ -1170,6 +1136,10 @@ const AutoTrades: React.FC = () => {
                                     {/* Run button */}
                                     <button
                                         className={`st__run-btn ${isRunning ? 'stop' : ''}`}
+                                        disabled={!isRunning && (!connected || !authorized)}
+                                        title={!connected || !authorized
+                                            ? 'Log in to a demo or real account before starting'
+                                            : undefined}
                                         onClick={() => toggleSmartCard(card.id)}
                                     >
                                         {isRunning ? '⏹ Stop Auto Trading' : '▶ Start Auto Trading'}
