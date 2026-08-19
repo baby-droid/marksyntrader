@@ -1516,7 +1516,9 @@
     overflow-y: auto;
     overflow-x: hidden;
     position: relative;
-    z-index: 0;
+    // Do not create a lower stacking context: the report tabs must be able
+    // to rise above the app-wide page navigation.
+    z-index: auto;
   }
 
   .sb-detail__header { order: 1; }
@@ -1532,15 +1534,16 @@
     min-height: 260px;
     flex-shrink: 0;
     position: relative;
-    z-index: 2;
+    z-index: 10050;
     margin-top: 0.9rem;
     clear: both;
+    box-shadow: 0 -4px 18px rgba(0, 0, 0, 0.16);
   }
   .sb-tabs__nav {
     position: static;
     background: #fff;
     min-height: 2.8rem;
-    z-index: 2;
+    z-index: 10051;
   }
   .sb-tabs__panel {
     min-height: 180px;
