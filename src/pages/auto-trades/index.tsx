@@ -554,6 +554,18 @@ const AutoTrades: React.FC = () => {
     // ── Smart Trader (multi-card) state ──────────────────────────────────────────
     type SmartCardId = 'risefall' | 'evenodd' | 'overunder' | 'matchdiffer';
     const SMART_CARD_IDS: SmartCardId[] = ['risefall', 'evenodd', 'overunder', 'matchdiffer'];
+    const CONDITION_OPTIONS: Record<SmartCardId, string[]> = {
+        risefall: ['Rise', 'Fall'],
+        evenodd: ['Even', 'Odd'],
+        overunder: ['Over', 'Under'],
+        matchdiffer: ['Matches', 'Differs'],
+    };
+    const ACTION_OPTIONS: Record<SmartCardId, string[]> = {
+        risefall: ['Buy Rise', 'Buy Fall'],
+        evenodd: ['Buy Even', 'Buy Odd'],
+        overunder: ['Buy Over', 'Buy Under'],
+        matchdiffer: ['Buy Matches', 'Buy Differs'],
+    };
 
     const [smartSharedSymbol, setSmartSharedSymbol] = useState('1HZ10V');
     const [smartSharedDepth, setSmartSharedDepth] = useState(100);
@@ -581,11 +593,12 @@ const AutoTrades: React.FC = () => {
     // Per-card config (editable params)
     const [smartCardCfg, setSmartCardCfg] = useState<Record<SmartCardId, {
         stake: number; ticks: number; martingale: number; condition: number; barrier: number;
+        lookback: number; ifValue: string; thenAction: string;
     }>>({
-        risefall:    { stake: 5, ticks: 1, martingale: 1, condition: 50, barrier: 5 },
-        evenodd:     { stake: 5, ticks: 1, martingale: 1, condition: 51, barrier: 5 },
-        overunder:   { stake: 5, ticks: 1, martingale: 1, condition: 55, barrier: 5 },
-        matchdiffer: { stake: 5, ticks: 1, martingale: 1, condition: 100, barrier: 5 },
+        risefall:    { stake: 5, ticks: 1, martingale: 1, condition: 50, barrier: 5, lookback: 3, ifValue: 'Rise', thenAction: 'Buy Rise' },
+        evenodd:     { stake: 5, ticks: 1, martingale: 1, condition: 51, barrier: 5, lookback: 3, ifValue: 'Even', thenAction: 'Buy Even' },
+        overunder:   { stake: 5, ticks: 1, martingale: 1, condition: 55, barrier: 5, lookback: 3, ifValue: 'Over', thenAction: 'Buy Over' },
+        matchdiffer: { stake: 5, ticks: 1, martingale: 1, condition: 100, barrier: 5, lookback: 3, ifValue: 'Matches', thenAction: 'Buy Matches' },
     });
     const smartCardCfgRef = useRef(smartCardCfg);
     useEffect(() => { smartCardCfgRef.current = smartCardCfg; }, [smartCardCfg]);
@@ -620,27 +633,50 @@ const AutoTrades: React.FC = () => {
         const cfg = smartCardCfgRef.current[id];
         const depth = Math.min(smartSharedDepthRef.current, digits.length);
         const last = digits.slice(-Math.max(depth, 20));
+        const sample = last.slice(-Math.max(1, Math.min(10, cfg.lookback || 3)));
+        const matchesAction = (name: string) => cfg.thenAction === name;
 
         if (id === 'risefall') {
-            // Count consecutive rises vs falls (price direction via digit delta)
-            const rises = last.slice(1).filter((d, i) => d !== last[i]).length; // digit changed
-            const riseProb = last.length > 1 ? (last.slice(1).filter((d, i) => d > last[i]).length / (last.length - 1)) * 100 : 50;
-            return { contract: riseProb >= cfg.condition ? 'CALL' : 'PUT', barrier: null, riseProb: +riseProb.toFixed(2) };
+            const rising = sample.length < 2 || sample.slice(1).every((d, i) => d > sample[i]);
+            const falling = sample.length < 2 || sample.slice(1).every((d, i) => d < sample[i]);
+            const meetsCondition = cfg.ifValue === 'Rise' ? rising : falling;
+            return {
+                contract: matchesAction('Buy Rise') ? 'CALL' : 'PUT',
+                barrier: null,
+                meetsCondition,
+                riseProb: rising ? 100 : 0,
+            };
         }
         if (id === 'evenodd') {
-            const evenCount = last.filter(d => d % 2 === 0).length;
-            const evenProb = last.length > 0 ? (evenCount / last.length) * 100 : 50;
-            return { contract: evenProb >= cfg.condition ? 'DIGITEVEN' : 'DIGITODD', barrier: null, evenProb: +evenProb.toFixed(2) };
+            const meetsCondition = sample.length > 0 && sample.every(d => (d % 2 === 0) === (cfg.ifValue === 'Even'));
+            return {
+                contract: matchesAction('Buy Even') ? 'DIGITEVEN' : 'DIGITODD',
+                barrier: null,
+                meetsCondition,
+                evenProb: sample.filter(d => d % 2 === 0).length / Math.max(1, sample.length) * 100,
+            };
         }
         if (id === 'overunder') {
-            const overCount = last.filter(d => d > cfg.barrier).length;
-            const overProb = last.length > 0 ? (overCount / last.length) * 100 : 50;
-            return { contract: overProb >= cfg.condition ? 'DIGITOVER' : 'DIGITUNDER', barrier: cfg.barrier, overProb: +overProb.toFixed(2) };
+            const isOver = sample.length > 0 && sample.every(d => d > cfg.barrier);
+            const isUnder = sample.length > 0 && sample.every(d => d < cfg.barrier);
+            return {
+                contract: matchesAction('Buy Over') ? 'DIGITOVER' : 'DIGITUNDER',
+                barrier: cfg.barrier,
+                meetsCondition: cfg.ifValue === 'Over' ? isOver : isUnder,
+                overProb: sample.filter(d => d > cfg.barrier).length / Math.max(1, sample.length) * 100,
+            };
         }
-        // matchdiffer — find least-frequent digit
+        // Matches means the recent digits are identical; Differs means at least
+        // two different digits appeared in the selected window.
         const freq = Array.from({ length: 10 }, (_, i) => last.filter(d => d === i).length);
         const minDigit = freq.indexOf(Math.min(...freq));
-        return { contract: 'DIGITDIFF', barrier: minDigit, freq };
+        const isMatch = sample.length > 0 && sample.every(d => d === sample[0]);
+        return {
+            contract: matchesAction('Buy Matches') ? 'DIGITMATCH' : 'DIGITDIFF',
+            barrier: matchesAction('Buy Matches') ? sample[0] : minDigit,
+            meetsCondition: cfg.ifValue === 'Matches' ? isMatch : new Set(sample).size > 1,
+            freq,
+        };
     }, []);
 
     // Start/stop a smart card bot
@@ -672,7 +708,17 @@ const AutoTrades: React.FC = () => {
                         if (smartStopFlags.current[id]) break;
                     }
 
-                    const { contract, barrier } = pickSmartTrade(id);
+                    const trade = pickSmartTrade(id);
+                    if (!trade.meetsCondition) {
+                        // Conditions are tick-gated. Do not repeatedly buy while
+                        // the same non-matching window is on screen.
+                        const observedTick = smartTickVersionRef.current;
+                        while (!smartStopFlags.current[id] && smartTickVersionRef.current <= observedTick) {
+                            await new Promise(r => setTimeout(r, 80));
+                        }
+                        continue;
+                    }
+                    const { contract, barrier } = trade;
                     const currentCfg = smartCardCfgRef.current[id];
                     const stk = smartCurrentStakes.current[id];
                     const sym = smartSharedSymbolRef.current;
