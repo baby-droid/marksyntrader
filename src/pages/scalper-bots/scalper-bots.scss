@@ -1576,14 +1576,13 @@
   }
   .sb-tabs {
     order: 2;
-    height: auto;
-    min-height: 260px;
-    flex-shrink: 0;
-    position: relative;
-    z-index: 10050;
-    margin-top: 0.9rem;
-    clear: both;
-    box-shadow: 0 -4px 18px rgba(0, 0, 0, 0.16);
+    /*
+     * The report tabs (Summary / Transactions / Journal) are useful on
+     * desktop, but on phones they sit between the bot controls and the
+     * actual transaction/run surface and hide most of it. Keep the main
+     * scalper transaction view unobstructed on mobile.
+     */
+    display: none;
   }
   .sb-tabs__nav {
     position: static;
