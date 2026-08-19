@@ -592,13 +592,13 @@ const AutoTrades: React.FC = () => {
 
     // Per-card config (editable params)
     const [smartCardCfg, setSmartCardCfg] = useState<Record<SmartCardId, {
-        stake: number; ticks: number; martingale: number; condition: number; barrier: number;
+        stake: number; ticks: number; martingale: number; barrier: number;
         lookback: number; ifValue: string; thenAction: string;
     }>>({
-        risefall:    { stake: 5, ticks: 1, martingale: 1, condition: 50, barrier: 5, lookback: 3, ifValue: 'Rise', thenAction: 'Buy Rise' },
-        evenodd:     { stake: 5, ticks: 1, martingale: 1, condition: 51, barrier: 5, lookback: 3, ifValue: 'Even', thenAction: 'Buy Even' },
-        overunder:   { stake: 5, ticks: 1, martingale: 1, condition: 55, barrier: 5, lookback: 3, ifValue: 'Over', thenAction: 'Buy Over' },
-        matchdiffer: { stake: 5, ticks: 1, martingale: 1, condition: 100, barrier: 5, lookback: 3, ifValue: 'Matches', thenAction: 'Buy Matches' },
+        risefall:    { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Rise', thenAction: 'Buy Rise' },
+        evenodd:     { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Even', thenAction: 'Buy Even' },
+        overunder:   { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Over', thenAction: 'Buy Over' },
+        matchdiffer: { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Matches', thenAction: 'Buy Matches' },
     });
     const smartCardCfgRef = useRef(smartCardCfg);
     useEffect(() => { smartCardCfgRef.current = smartCardCfg; }, [smartCardCfg]);
@@ -1092,9 +1092,9 @@ const AutoTrades: React.FC = () => {
                                         <div className='st__condition-title'>Trading Condition</div>
                                          <div className={`st__condition-row ${card.id === 'evenodd' ? 'st__condition-row--interactive' : ''}`}>
                                              <span className='st__cond-lbl'>If</span>
-                                            {card.id === 'risefall' && (
-                                                <span className='st__cond-text'>Rise Prob &gt; {cfg.condition}%</span>
-                                            )}
+                                             {card.id === 'risefall' && (
+                                                 <span className='st__cond-text'>the last {cfg.lookback} digits move {cfg.ifValue}</span>
+                                             )}
                                             {card.id === 'evenodd' && (
                                                  <>
                                                      <span className='st__cond-text'>the last</span>
@@ -1119,16 +1119,16 @@ const AutoTrades: React.FC = () => {
                                                      </select>
                                                  </>
                                             )}
-                                            {card.id === 'overunder' && (
-                                                <span className='st__cond-text'>Over Prob &gt; {cfg.condition}%</span>
-                                            )}
+                                             {card.id === 'overunder' && (
+                                                 <span className='st__cond-text'>the last {cfg.lookback} digits are {cfg.ifValue} digit {ouBarrier}</span>
+                                             )}
                                             {card.id === 'matchdiffer' && (
-                                                <span className='st__cond-text'>Check last {cfg.condition} digits → Differ {leastFreqDigit}</span>
+                                                 <span className='st__cond-text'>the last {cfg.lookback} digits are {cfg.ifValue}</span>
                                             )}
                                         </div>
                                          <div className={`st__condition-row ${card.id === 'evenodd' ? 'st__condition-row--interactive' : ''}`}>
                                             <span className='st__cond-lbl'>Then</span>
-                                            {card.id === 'risefall' && <span className='st__cond-text'>Buy {riseProb >= cfg.condition ? 'Rise' : 'Fall'}</span>}
+                                             {card.id === 'risefall' && <span className='st__cond-text'>{cfg.thenAction}</span>}
                                              {card.id === 'evenodd' && (
                                                  <select
                                                      className='st__cond-select st__cond-action-select'
@@ -1140,10 +1140,8 @@ const AutoTrades: React.FC = () => {
                                                      {ACTION_OPTIONS.evenodd.map(value => <option key={value} value={value}>{value}</option>)}
                                                  </select>
                                              )}
-                                            {card.id === 'overunder' && (
-                                                <span className='st__cond-text'>Buy {overProb >= cfg.condition ? 'Over' : 'Under'} digit {ouBarrier}</span>
-                                            )}
-                                            {card.id === 'matchdiffer' && <span className='st__cond-text'>Buy Differ on {leastFreqDigit}</span>}
+                                             {card.id === 'overunder' && <span className='st__cond-text'>{cfg.thenAction} digit {ouBarrier}</span>}
+                                             {card.id === 'matchdiffer' && <span className='st__cond-text'>{cfg.thenAction}</span>}
                                         </div>
                                         {card.id === 'overunder' && (
                                             <div className='st__condition-row'>
@@ -1155,14 +1153,6 @@ const AutoTrades: React.FC = () => {
                                                     onChange={e => updateCardCfg(card.id, { barrier: +e.target.value })} />
                                             </div>
                                         )}
-                                        <div className='st__condition-row'>
-                                            <span className='st__cond-lbl'>Threshold %</span>
-                                            <input type='number' min='0' max='100' step='1'
-                                                className='st__cond-input'
-                                                value={cfg.condition}
-                                                disabled={isRunning}
-                                                onChange={e => updateCardCfg(card.id, { condition: +e.target.value })} />
-                                        </div>
                                     </div>
 
                                     {/* Per-card params */}
