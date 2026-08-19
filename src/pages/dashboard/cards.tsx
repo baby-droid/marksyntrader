@@ -64,7 +64,7 @@ const Cards = observer(({ is_mobile, has_dashboard_strategies }: TCardProps) => 
             ) : (
                 <DerivLightMyComputerIcon height='48px' width='48px' />
             ),
-            content: <Localize i18n_default_text='Load Bot' />,
+            content: <Localize i18n_default_text='Import a Bot' />,
             callback: () => {
                 openFileLoader();
                 /* [AI] - Analytics event tracking removed - see migrate-docs/MONITORING_PACKAGES.md for re-implementation guide */

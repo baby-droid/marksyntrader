@@ -15,7 +15,6 @@ import { Localize } from '@deriv-com/translations';
 import { Header, useDevice, Wrapper } from '@deriv-com/ui';
 import { AppLogo } from '../app-logo';
 import AccountSwitcher from './account-switcher';
-import MenuItems from './menu-items';
 import MobileMenu from './mobile-menu';
 import NavDrawer from '@/components/nav-drawer/NavDrawer';
 import './header.scss';
@@ -340,7 +339,6 @@ const AppHeader = observer(() => {
                     <AppLogo />
                     {isDesktop ? (
                         <>
-                            <MenuItems />
                             {demoResetBtn}
                         </>
                     ) : renderAccountSection('left')}
