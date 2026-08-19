@@ -1488,6 +1488,7 @@ const BotDetail: React.FC<{
     const vhaRecovery1Ref  = useRef(false); // VHA recovery stage 1: 1-virtual check pending
     const vhaRecovery2Ref  = useRef(false); // VHA recovery stage 2: best-setup scan then trade
     const prevConnectedRef = useRef(true);
+    const publishedHookIdsRef = useRef<Set<number>>(new Set());
 
     useEffect(() => subscribeCurrency(() => setDisplayCur(getDisplayCurrency())), []);
     useEffect(() => { setActiveMarket(cfg.market); }, [cfg.market]);
@@ -1502,6 +1503,25 @@ const BotDetail: React.FC<{
         const virtualCount = txList.filter(t => !!t.virtual).length;
         return { runs: real.length, won, lost, pnl, totalStake, totalPayout, virtualCount };
     }, [txList]);
+
+    /* Mirror hook telemetry into Bot Builder's native Transactions tab.
+       The store marks these rows as virtual, keeping native totals real-only. */
+    useEffect(() => {
+        const nativeTransactions = (store as any)?.transactions;
+        if (!nativeTransactions?.pushVirtualHook) return;
+        txList.filter(tx => tx.virtual).forEach(tx => {
+            if (publishedHookIdsRef.current.has(tx.id)) return;
+            publishedHookIdsRef.current.add(tx.id);
+            nativeTransactions.pushVirtualHook({
+                id: tx.id,
+                time: tx.time,
+                market: tx.market,
+                result: tx.result === 'won' ? 'won' : 'lost',
+                exitDigit: tx.exitDigit,
+                hookType: tx.type,
+            });
+        });
+    }, [store, txList]);
 
     const ts = () => new Date().toLocaleTimeString('en', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
