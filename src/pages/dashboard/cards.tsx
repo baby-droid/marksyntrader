@@ -1,4 +1,4 @@
-// @ts-nocheck — vendored bot code with known upstream type gaps; see AGENTS.md
+2// @ts-nocheck — vendored bot code with known upstream type gaps; see AGENTS.md
 // TODO: Complete MobX integration for popup functionality
 // Some code is kept commented out pending popup integration
 import React from 'react';
@@ -72,25 +72,19 @@ const Cards = observer(({ is_mobile, has_dashboard_strategies }: TCardProps) => 
             },
         },
         {
-            id: 'google-drive',
-            icon: <DerivLightGoogleDriveIcon height='48px' width='48px' />,
-            content: <Localize i18n_default_text='Premium Bots' />,
-            callback: () => setActiveTab(DBOT_TABS.FREE_BOTS),
-        },
-        {
             id: 'bot-builder',
             icon: <DerivLightBotBuilderIcon height='48px' width='48px' />,
-            content: <Localize i18n_default_text='Analysis Tools' />,
-            callback: () => setActiveTab(DBOT_TABS.ANALYSIS),
+            content: <Localize i18n_default_text='Bot Builder' />,
+            callback: () => setActiveTab(DBOT_TABS.BOT_BUILDER),
         },
         {
             id: 'quick-strategy',
             icon: <DerivLightQuickStrategyIcon height='48px' width='48px' />,
-            content: <Localize i18n_default_text='Auto Trading Hub' />,
+            content: <Localize i18n_default_text='Quick strategy' />,
             callback: () => setActiveTab(DBOT_TABS.AUTO_TRADES),
         },
     ]
-        // Keep the four dashboard feature tiles visible on mobile and desktop.
+        // Keep the three primary dashboard actions visible on mobile and desktop.
 
     return React.useMemo(
         () => (

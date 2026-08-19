@@ -648,12 +648,19 @@ const AutoTrades: React.FC = () => {
             };
         }
         if (id === 'evenodd') {
-            const meetsCondition = sample.length > 0 && sample.every(d => (d % 2 === 0) === (cfg.ifValue === 'Even'));
+            // The Even/Odd card is deliberately streak-based: the latest N
+            // digits must all have the selected parity before an entry is
+            // allowed. This keeps the UI condition and execution gate
+            // identical.
+            const requiredDigits = Math.max(1, Math.min(10, cfg.lookback || 3));
+            const paritySample = digits.slice(-requiredDigits);
+            const meetsCondition = paritySample.length === requiredDigits
+                && paritySample.every(d => (d % 2 === 0) === (cfg.ifValue === 'Even'));
             return {
                 contract: matchesAction('Buy Even') ? 'DIGITEVEN' : 'DIGITODD',
                 barrier: null,
                 meetsCondition,
-                evenProb: sample.filter(d => d % 2 === 0).length / Math.max(1, sample.length) * 100,
+                evenProb: paritySample.filter(d => d % 2 === 0).length / Math.max(1, paritySample.length) * 100,
             };
         }
         if (id === 'overunder') {
@@ -900,6 +907,14 @@ const AutoTrades: React.FC = () => {
                 const matchProb = n > 0 ? (freq[mostFreqDigit] / n) * 100 : 10;
                 const differProb = 100 - (n > 0 ? (freq[leastFreqDigit] / n) * 100 : 10);
                 const last10 = smartDigits.slice(-10);
+                 const evenOddPattern = last10.map(d => d % 2 === 0 ? 'E' : 'O');
+                 const evenOddStreak = (() => {
+                     if (!last10.length) return 0;
+                     const parity = last10[last10.length - 1] % 2;
+                     let count = 0;
+                     for (let i = last10.length - 1; i >= 0 && last10[i] % 2 === parity; i--) count++;
+                     return count;
+                 })();
 
                 const CARD_DEFS = [
                     { id: 'risefall' as SmartCardId,    title: 'Rise/Fall',         icon: '📈' },
@@ -1028,19 +1043,28 @@ const AutoTrades: React.FC = () => {
                                     </div>
 
                                     {/* Last Digits Pattern */}
-                                    {(card.id === 'overunder' || card.id === 'matchdiffer') && (
+                                    {(card.id === 'evenodd' || card.id === 'overunder' || card.id === 'matchdiffer') && (
                                         <div className='st__digit-pattern'>
                                             <div className='st__pattern-label'>Last Digits Pattern</div>
                                             <div className='st__pattern-dots'>
                                                 {last10.map((d, i) => (
-                                                    <span key={i} className={`st__pdot ${(card.id === 'evenodd' || card.id === 'overunder') ? (d % 2 === 0 ? 'even' : 'odd') : `d${d % 5}`}`}>{d}</span>
+                                                    <span key={i} className={`st__pdot ${(card.id === 'evenodd' || card.id === 'overunder') ? (d % 2 === 0 ? 'even' : 'odd') : `d${d % 5}`}`}>
+                                                        {card.id === 'evenodd' ? evenOddPattern[i] : d}
+                                                    </span>
                                                 ))}
                                             </div>
                                             <div className='st__pattern-note'>
-                                                {card.id === 'overunder'
+                                                {card.id === 'evenodd'
+                                                    ? `${last10.length ? evenOddPattern.join(' · ') : 'Waiting for ticks'}`
+                                                    : card.id === 'overunder'
                                                     ? `O=Over (>${ouBarrier}), E=Equal (=${ouBarrier}), U=Under (<${ouBarrier})`
                                                     : `Most frequent: ${mostFreqDigit} (${matchProb.toFixed(2)}%)`}
                                             </div>
+                                            {card.id === 'evenodd' && (
+                                                <div className='st__streak-note'>
+                                                    Current streak: <strong>{last10.length ? `${evenOddStreak} ${last10[last10.length - 1] % 2 === 0 ? 'Even' : 'Odd'}` : '—'}</strong>
+                                                </div>
+                                            )}
                                             {card.id === 'matchdiffer' && (
                                                 <div className='st__freq-dist'>
                                                     <div className='st__freq-label'>Digit Frequency Distribution</div>
@@ -1066,13 +1090,34 @@ const AutoTrades: React.FC = () => {
                                     {/* Trading Condition */}
                                     <div className='st__condition'>
                                         <div className='st__condition-title'>Trading Condition</div>
-                                        <div className='st__condition-row'>
-                                            <span className='st__cond-lbl'>If</span>
+                                         <div className={`st__condition-row ${card.id === 'evenodd' ? 'st__condition-row--interactive' : ''}`}>
+                                             <span className='st__cond-lbl'>If</span>
                                             {card.id === 'risefall' && (
                                                 <span className='st__cond-text'>Rise Prob &gt; {cfg.condition}%</span>
                                             )}
                                             {card.id === 'evenodd' && (
-                                                <span className='st__cond-text'>Even Prob &gt; {cfg.condition}%</span>
+                                                 <>
+                                                     <span className='st__cond-text'>the last</span>
+                                                     <select
+                                                         className='st__cond-select st__cond-select--number'
+                                                         value={cfg.lookback}
+                                                         disabled={isRunning}
+                                                         aria-label='Number of last digits'
+                                                         onChange={e => updateCardCfg(card.id, { lookback: Math.max(1, Math.min(10, +e.target.value)) })}
+                                                     >
+                                                         {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(v => <option key={v} value={v}>{v}</option>)}
+                                                     </select>
+                                                     <span className='st__cond-text'>digits are</span>
+                                                     <select
+                                                         className='st__cond-select'
+                                                         value={cfg.ifValue}
+                                                         disabled={isRunning}
+                                                         aria-label='Required digit parity'
+                                                         onChange={e => updateCardCfg(card.id, { ifValue: e.target.value })}
+                                                     >
+                                                         {CONDITION_OPTIONS.evenodd.map(value => <option key={value} value={value}>{value}</option>)}
+                                                     </select>
+                                                 </>
                                             )}
                                             {card.id === 'overunder' && (
                                                 <span className='st__cond-text'>Over Prob &gt; {cfg.condition}%</span>
@@ -1081,10 +1126,20 @@ const AutoTrades: React.FC = () => {
                                                 <span className='st__cond-text'>Check last {cfg.condition} digits → Differ {leastFreqDigit}</span>
                                             )}
                                         </div>
-                                        <div className='st__condition-row'>
+                                         <div className={`st__condition-row ${card.id === 'evenodd' ? 'st__condition-row--interactive' : ''}`}>
                                             <span className='st__cond-lbl'>Then</span>
                                             {card.id === 'risefall' && <span className='st__cond-text'>Buy {riseProb >= cfg.condition ? 'Rise' : 'Fall'}</span>}
-                                            {card.id === 'evenodd' && <span className='st__cond-text'>Buy {evenProb >= cfg.condition ? 'Even' : 'Odd'}</span>}
+                                             {card.id === 'evenodd' && (
+                                                 <select
+                                                     className='st__cond-select st__cond-action-select'
+                                                     value={cfg.thenAction}
+                                                     disabled={isRunning}
+                                                     aria-label='Action to buy'
+                                                     onChange={e => updateCardCfg(card.id, { thenAction: e.target.value })}
+                                                 >
+                                                     {ACTION_OPTIONS.evenodd.map(value => <option key={value} value={value}>{value}</option>)}
+                                                 </select>
+                                             )}
                                             {card.id === 'overunder' && (
                                                 <span className='st__cond-text'>Buy {overProb >= cfg.condition ? 'Over' : 'Under'} digit {ouBarrier}</span>
                                             )}

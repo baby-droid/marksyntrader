@@ -1161,6 +1161,12 @@
         font-size: 10px;
         color: rgba(255,255,255,0.3);
     }
+    &__streak-note {
+        margin-top: 5px;
+        font-size: 11px;
+        color: rgba(255,255,255,0.5);
+        strong { color: #60a5fa; }
+    }
 
     // ── Frequency distribution
     &__freq-dist { margin-top: 6px; }
@@ -1217,6 +1223,7 @@
         align-items: center;
         gap: 8px;
         margin-bottom: 4px;
+        &--interactive { flex-wrap: wrap; }
     }
     &__cond-lbl {
         font-size: 11px;
@@ -1245,6 +1252,24 @@
         flex-shrink: 0;
         &:disabled { opacity: 0.5; }
     }
+    &__cond-select {
+        min-width: 72px;
+        padding: 4px 24px 4px 8px;
+        border-radius: 5px;
+        background: #111c2d;
+        border: 1px solid rgba(59,130,246,0.5);
+        color: #dbeafe;
+        font-size: 12px;
+        font-weight: 700;
+        font-family: inherit;
+        outline: none;
+        cursor: pointer;
+        flex: 1;
+        &:focus { border-color: #60a5fa; box-shadow: 0 0 0 2px rgba(59,130,246,0.15); }
+        &:disabled { opacity: 0.5; cursor: not-allowed; }
+        &--number { min-width: 52px; flex: 0 0 52px; }
+    }
+    &__cond-action-select { max-width: 150px; }
 
     // ── Per-card params
     &__params {
@@ -1354,6 +1379,10 @@
         &__bars { padding: 0.65rem 0.8rem 0.4rem; }
         &__digit-pattern { padding: 0.55rem 0.8rem; }
         &__condition { padding: 0.65rem 0.8rem; }
+        &__condition-row--interactive { gap: 5px; }
+        &__condition-row--interactive .st__cond-lbl { width: 100%; margin-bottom: 1px; }
+        &__cond-select { min-width: 0; }
+        &__cond-action-select { max-width: none; }
         &__params { padding: 0.65rem 0.8rem; gap: 0.45rem; }
         &__run-btn {
             margin: 0.8rem;
