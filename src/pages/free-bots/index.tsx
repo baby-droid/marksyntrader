@@ -9,6 +9,14 @@ import { setTradeContext } from '@/utils/trade-metadata';
 import './free-bots.scss';
 
 const FREE_BOTS = [
+  {
+    id: 'differs-edge-scanner',
+    name: 'Differs Edge Scanner — Recovery Matrix',
+    description: '🧠 Scans the latest digit, rotates Differs → Over 1 → Over 2 → Differs → Under 8 → Under 7, then uses Even/Odd recovery after a loss. Includes 2× stake recovery.',
+    category: 'Scanner', market: 'V50 1s', type: 'Multi-Strategy', prediction: 'SCAN',
+    xmlFile: '/bots/differs-edge-scanner.xml',
+    badge: 'SCAN 🧠', badgeColor: '#34d399', icon: '🔎', winRate: '—',
+  },
   // ── Recovery barrier bots ────────────────────────────────────────────────
   {
     id: 'recovery-over1-over3',

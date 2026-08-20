@@ -24,6 +24,7 @@ const PALE_BLUE5 = '#6cb4e4';
 
 const FREE_BOTS_LIST = [
     // ── Signature bots (top of panel) ─────────────────────────────────────────
+    { id: 'differs-edge-scanner', name: 'Differs Edge Scanner', market: 'V50 1s', badge: 'SCAN 🧠', badgeColor: '#34d399', xmlFile: '/bots/differs-edge-scanner.xml', icon: '🔎' },
     { id: 'omni-cycle-trader-pro', name: 'Omni Cycle Trader Pro', market: 'V75 1s', badge: 'CYCLE 🔄', badgeColor: '#a78bfa', xmlFile: '/bots/omni-cycle-trader-pro.xml', icon: '🔄' },
     { id: 'smart-entry-pattern-pro-v2', name: 'Smart Entry Pattern Pro V2', market: 'V25 1s', badge: 'SMART 🧠', badgeColor: '#34d399', xmlFile: '/bots/smart-entry-pattern-pro-v2.xml', icon: '🧠' },
     { id: 'ahmed-cycle-master', name: 'Ahmed Cycle Master', market: 'V50 1s', badge: 'CYCLE 🔄', badgeColor: '#a78bfa', xmlFile: '/bots/ahmed-cycle-master.xml', icon: '🔄' },
