@@ -6,9 +6,6 @@
     <variable id="DES_phase">phase</variable>
     <variable id="DES_lastDigit">last_digit</variable>
     <variable id="DES_lossStreak">loss_streak</variable>
-    <variable id="DES_pnl">session_profit</variable>
-    <variable id="DES_tp">take_profit</variable>
-    <variable id="DES_sl">stop_loss</variable>
   </variables>
 
   <!--
@@ -86,24 +83,6 @@
                           <block type="variables_set" id="DES_init_loss">
                             <field name="VAR" id="DES_lossStreak">loss_streak</field>
                             <value name="VALUE"><block type="math_number" id="DES_init_loss_v"><field name="NUM">0</field></block></value>
-                            <next>
-                              <block type="variables_set" id="DES_init_pnl">
-                                <field name="VAR" id="DES_pnl">session_profit</field>
-                                <value name="VALUE"><block type="math_number" id="DES_init_pnl_v"><field name="NUM">0</field></block></value>
-                                <next>
-                                  <block type="variables_set" id="DES_init_tp">
-                                    <field name="VAR" id="DES_tp">take_profit</field>
-                                    <value name="VALUE"><block type="math_number" id="DES_init_tp_v"><field name="NUM">5</field></block></value>
-                                    <next>
-                                      <block type="variables_set" id="DES_init_sl">
-                                        <field name="VAR" id="DES_sl">stop_loss</field>
-                                        <value name="VALUE"><block type="math_number" id="DES_init_sl_v"><field name="NUM">20</field></block></value>
-                                      </block>
-                                    </next>
-                                  </block>
-                                </next>
-                              </block>
-                            </next>
                           </block>
                         </next>
                       </block>
@@ -245,10 +224,6 @@
        parity recovery: EVEN after an even scan digit, ODD after an odd digit. -->
   <block type="after_purchase" id="DES_after" deletable="false" x="950" y="1200">
     <statement name="AFTERPURCHASE_STACK">
-      <block type="math_change" id="DES_update_pnl">
-        <field name="VAR" id="DES_pnl">session_profit</field>
-        <value name="DELTA"><block type="read_details" id="DES_read_profit"><field name="DETAIL_INDEX">4</field></block></value>
-        <next>
       <block type="controls_if" id="DES_result">
         <mutation else="1"></mutation>
         <value name="IF0"><block type="contract_check_result" id="DES_win_check"><field name="CHECK_RESULT">win</field></block></value>
@@ -273,7 +248,7 @@
             <field name="VAR" id="DES_stake">stake</field>
             <value name="VALUE"><block type="math_arithmetic" id="DES_loss_mult"><field name="OP">MULTIPLY</field><value name="A"><block type="variables_get" id="DES_loss_get"><field name="VAR" id="DES_stake">stake</field></block></value><value name="B"><block type="variables_get" id="DES_loss_mart"><field name="VAR" id="DES_martingale">martingale</field></block></value></block></value>
             <next>
-              <block type="math_change" id="DES_loss_inc"><field name="VAR" id="DES_lossStreak">loss_streak</field><value name="DELTA"><shadow type="math_number"><field name="NUM">1</field></shadow></value>
+              <block type="math_change" id="DES_loss_inc"><field name="VAR" id="DES_lossStreak"><value name="DELTA"><shadow type="math_number"><field name="NUM">1</field></shadow></value>
                 <next>
                   <block type="controls_if" id="DES_recovery_parity">
                     <mutation else="1"></mutation>
@@ -287,45 +262,7 @@
           </block>
         </statement>
       </block>
-      <next>
-        <block type="controls_if" id="DES_tpsl">
-          <mutation elseif="1" else="1"></mutation>
-          <value name="IF0">
-            <block type="logic_compare" id="DES_tp_compare"><field name="OP">GTE</field>
-              <value name="A"><block type="variables_get" id="DES_tp_pnl"><field name="VAR" id="DES_pnl">session_profit</field></block></value>
-              <value name="B"><block type="variables_get" id="DES_tp_limit"><field name="VAR" id="DES_tp">take_profit</field></block></value>
-            </block>
-          </value>
-          <statement name="DO0">
-            <block type="notify" id="DES_tp_notify">
-              <field name="NOTIFICATION_TYPE">success</field>
-              <field name="NOTIFICATION_SOUND">earned-money</field>
-              <value name="MESSAGE"><shadow type="text"><field name="TEXT">Take Profit reached — bot stopped.</field></shadow></value>
-            </block>
-          </statement>
-          <value name="IF1">
-            <block type="logic_compare" id="DES_sl_compare"><field name="OP">LTE</field>
-              <value name="A"><block type="variables_get" id="DES_sl_pnl"><field name="VAR" id="DES_pnl">session_profit</field></block></value>
-              <value name="B">
-                <block type="math_arithmetic" id="DES_sl_negative"><field name="OP">MULTIPLY</field>
-                  <value name="A"><block type="math_number"><field name="NUM">-1</field></block></value>
-                  <value name="B"><block type="variables_get" id="DES_sl_limit"><field name="VAR" id="DES_sl">stop_loss</field></block></value>
-                </block>
-              </value>
-            </block>
-          </value>
-          <statement name="DO1">
-            <block type="notify" id="DES_sl_notify">
-              <field name="NOTIFICATION_TYPE">error</field>
-              <field name="NOTIFICATION_SOUND">error</field>
-              <value name="MESSAGE"><shadow type="text"><field name="TEXT">Stop Loss reached — bot stopped.</field></shadow></value>
-            </block>
-          </statement>
-          <statement name="ELSE"><block type="trade_again" id="DES_trade_again"></block></statement>
-        </block>
-      </next>
-        </next>
-      </block>
+      <next><block type="trade_again" id="DES_trade_again"></block></next>
     </statement>
   </block>
 </xml>
