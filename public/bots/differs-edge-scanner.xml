@@ -6,6 +6,9 @@
     <variable id="DES_phase">phase</variable>
     <variable id="DES_lastDigit">last_digit</variable>
     <variable id="DES_lossStreak">loss_streak</variable>
+    <variable id="DES_pnl">session_profit</variable>
+    <variable id="DES_tp">take_profit</variable>
+    <variable id="DES_sl">stop_loss</variable>
   </variables>
 
   <!--
@@ -83,6 +86,24 @@
                           <block type="variables_set" id="DES_init_loss">
                             <field name="VAR" id="DES_lossStreak">loss_streak</field>
                             <value name="VALUE"><block type="math_number" id="DES_init_loss_v"><field name="NUM">0</field></block></value>
+                            <next>
+                              <block type="variables_set" id="DES_init_pnl">
+                                <field name="VAR" id="DES_pnl">session_profit</field>
+                                <value name="VALUE"><block type="math_number" id="DES_init_pnl_v"><field name="NUM">0</field></block></value>
+                                <next>
+                                  <block type="variables_set" id="DES_init_tp">
+                                    <field name="VAR" id="DES_tp">take_profit</field>
+                                    <value name="VALUE"><block type="math_number" id="DES_init_tp_v"><field name="NUM">5</field></block></value>
+                                    <next>
+                                      <block type="variables_set" id="DES_init_sl">
+                                        <field name="VAR" id="DES_sl">stop_loss</field>
+                                        <value name="VALUE"><block type="math_number" id="DES_init_sl_v"><field name="NUM">20</field></block></value>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
                           </block>
                         </next>
                       </block>
