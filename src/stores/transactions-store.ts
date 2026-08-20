@@ -57,7 +57,8 @@ export default class TransactionsStore {
     is_transaction_details_modal_open = false;
 
     get transactions(): TTransaction[] {
-        if (this.core?.client?.loginid) return this.elements[this.core?.client?.loginid] ?? [];
+        const accountId = this.core?.client?.loginid || localStorage.getItem('active_loginid');
+        if (accountId) return this.elements[accountId] ?? [];
         return [];
     }
 
@@ -164,7 +165,8 @@ export default class TransactionsStore {
     pushTransaction(data: TContractInfo) {
         const is_completed = isEnded(data as ProposalOpenContract);
         const { run_id } = this.root_store.run_panel;
-        const current_account = this.core?.client?.loginid as string;
+        const current_account = (this.core?.client?.loginid || localStorage.getItem('active_loginid')) as string;
+        if (!current_account || !data?.contract_id) return;
 
         const contract: TContractInfo = {
             ...data,
@@ -238,6 +240,14 @@ export default class TransactionsStore {
 
     registerReactions() {
         const { client } = this.core;
+        const autoTradeListener = (event: CustomEvent) => {
+            if (event.detail?.contract_id) {
+                this.onBotContractEvent(event.detail);
+            }
+        };
+        if (typeof window !== 'undefined') {
+            window.addEventListener('auto-trade:contract', autoTradeListener as EventListener);
+        }
 
         // Write transactions to session storage on each change in transaction elements.
         const disposeTransactionElementsListener = reaction(
@@ -260,6 +270,9 @@ export default class TransactionsStore {
         return () => {
             disposeTransactionElementsListener();
             disposeRecoverContracts();
+            if (typeof window !== 'undefined') {
+                window.removeEventListener('auto-trade:contract', autoTradeListener as EventListener);
+            }
         };
     }
 

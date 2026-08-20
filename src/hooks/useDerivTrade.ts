@@ -165,7 +165,7 @@ export function useDerivTrade() {
                         });
                         const meta = contractMetaRef.current.get(cid);
                         if (meta) {
-                            observer.emit('bot.contract', {
+                            const settledContract = {
                                 ...meta,
                                 transaction_ids: { ...meta.transaction_ids, sell: cid },
                                 is_sold: true,
@@ -178,7 +178,11 @@ export function useDerivTrade() {
                                 exit_spot: poc.exit_spot,
                                 entry_tick_time: poc.entry_tick_time,
                                 exit_tick_time: poc.exit_tick_time,
-                            });
+                            };
+                            observer.emit('bot.contract', settledContract);
+                            window.dispatchEvent(new CustomEvent('auto-trade:contract', {
+                                detail: settledContract,
+                            }));
                             window.dispatchEvent(new CustomEvent('chart:trade-settled', {
                                 detail: {
                                     contractId: cid,
@@ -333,6 +337,9 @@ export function useDerivTrade() {
             };
             contractMetaRef.current.set(contract_id, contractMeta);
             observer.emit('bot.contract', contractMeta);
+            window.dispatchEvent(new CustomEvent('auto-trade:contract', {
+                detail: contractMeta,
+            }));
             window.dispatchEvent(new CustomEvent('chart:trade-started', {
                 detail: {
                     contractId: contract_id,
