@@ -237,7 +237,23 @@ const AppWrapper = observer(() => {
 
     const mkIcon = (svg: React.ReactNode, text: string) => (
         <span style={{ display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}>
-            {svg}<span>{text}</span>
+            <span
+                aria-hidden='true'
+                style={{
+                    width: '22px',
+                    height: '22px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: '7px',
+                    background: 'linear-gradient(135deg, #06b6d4 0%, #6366f1 52%, #ec4899 100%)',
+                    boxShadow: '0 2px 8px rgba(99, 102, 241, 0.32)',
+                    flexShrink: 0,
+                }}
+            >
+                {svg}
+            </span>
+            <span>{text}</span>
         </span>
     );
 
