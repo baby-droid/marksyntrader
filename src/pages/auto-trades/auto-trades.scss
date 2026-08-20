@@ -1525,6 +1525,12 @@
     }
 
     @media (max-width: 700px) {
+        // The Summary / Transactions / Journal rail blocks the trading cards
+        // on phones. Keep it on desktop, but remove it from the mobile flow.
+        &__summary-panel {
+            display: none;
+        }
+
         &__cards {
             grid-template-columns: 1fr;
             padding: 0.65rem;
