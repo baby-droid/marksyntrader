@@ -110,8 +110,8 @@ type DigitsIsType = typeof DIGITS_IS_OPTIONS[number];
 
 const IF_LAST_OPTIONS = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20];
 
-/* ── The 6 analysis algorithms available in the OR Group conditions ── */
-const ALGORITHM_OPTIONS = ['LDP', 'Market Percentage', 'Sequence Radar', 'Complex Patterns', 'Entry Point Pattern', 'NDP'] as const;
+/* ── The 7 analysis algorithms available in the OR Group conditions ── */
+const ALGORITHM_OPTIONS = ['LDP', 'Touches', 'Market Percentage', 'Sequence Radar', 'Complex Patterns', 'Entry Point Pattern', 'NDP'] as const;
 type AlgorithmType = typeof ALGORITHM_OPTIONS[number];
 
 /** A single strategy sub-condition (one row in the UI).
@@ -124,7 +124,7 @@ type StrategyCondition = {
     ifLast: number;            // analysis window size (all algorithms)
     digitsIs: DigitsIsType;    // predicate used by LDP, Market Percentage, Entry Point Pattern
     digitValue: number;        // barrier digit for OVER/UNDER/MATCHES/DIFFERS (0-9)
-    touches: number;           // minimum matching ticks in the window (e.g. 3 touches UNDER 4)
+    touches: number;           // Touches algorithm: minimum matching ticks in the window
     recoveryLimit: number;     // relaxed window size after a loss (all algorithms)
     // ── Market Percentage extras ──
     percentageThreshold: number; // 50-100; default 60 — minimum % of window digits that must match
@@ -311,6 +311,15 @@ function algorithmChangeDefaults(
         return {
             ifLast: defaultStrategyWindow(bot, 'LDP'),
             recoveryLimit: 1,
+            digitsIs: defaultStrategyPredicate(bot, 'LDP'),
+            digitValue: bot.prediction ?? current.digitValue,
+        };
+    }
+    if (algorithm === 'Touches') {
+        return {
+            ifLast: defaultStrategyWindow(bot, 'LDP'),
+            recoveryLimit: 1,
+            touches: Math.max(1, current.touches ?? 1),
             digitsIs: defaultStrategyPredicate(bot, 'LDP'),
             digitValue: bot.prediction ?? current.digitValue,
         };
@@ -646,23 +655,22 @@ function evaluateSingleCondition(
            as its own selectable algorithm so it can be added as a second,
            independent AND condition confirming the "next" digit streak on
            top of an LDP condition in the same OR group (both must pass). */
+        case 'Touches': {
+            /* Touches is an explicit algorithm, not an extra LDP toggle.
+               Count matching ticks in the selected window and enter once the
+               configured count is reached. */
+            const touches = Math.max(1, Math.floor(Number(cond.touches) || 1));
+            let touched = 0;
+            let prev: number | null = null;
+            for (const d of recent) {
+                if (matchFn(d, prev)) touched++;
+                prev = d;
+            }
+            return touched >= Math.min(touches, n);
+        }
         case 'LDP':
         case 'NDP':
         default: {
-            /* Touch mode is an explicit count rule: for example, "3 touches
-               UNDER 4" means at least three of the recent ticks are below 4.
-               It intentionally replaces strict consecutive matching when set
-               above one, so the touches setting is useful for mixed windows. */
-            const touches = Math.max(1, Math.floor(Number(cond.touches) || 1));
-            if (touches > 1) {
-                let touched = 0;
-                let prev: number | null = cond.algorithm === 'NDP' ? (digits[n] ?? null) : null;
-                for (const d of recent) {
-                    if (matchFn(d, prev)) touched++;
-                    prev = d;
-                }
-                return touched >= touches;
-            }
             if (cond.strict) {
                 /* NDP is evaluated against the newest ticks, but directional
                    predicates still need the tick immediately before that
@@ -3194,7 +3202,8 @@ const BotDetail: React.FC<{
 
                                                     {/* Algorithm description chip */}
                                                     <div className='sb-algo-desc'>
-                                                        {cond.algorithm === 'LDP' && 'Last-Digit Pattern: checks consecutive digit streaks'}
+                                                         {cond.algorithm === 'LDP' && 'Last-Digit Pattern: checks consecutive digit streaks'}
+                                                         {cond.algorithm === 'Touches' && 'Touch count: enters when the selected number of ticks match the digit rule'}
                                                         {cond.algorithm === 'Market Percentage' && 'Statistical: fires when ≥X% of recent digits match'}
                                                         {cond.algorithm === 'Sequence Radar' && 'Pattern: detects alternating / trend / zigzag sequences'}
                                                         {cond.algorithm === 'Complex Patterns' && 'Multi-phase: compares first vs second half of window'}
@@ -3225,7 +3234,7 @@ const BotDetail: React.FC<{
                                                     </div>
 
                                                     {/* Algorithm-specific fields */}
-                                                    {(cond.algorithm === 'LDP' || cond.algorithm === 'NDP' || cond.algorithm === 'Market Percentage' || cond.algorithm === 'Entry Point Pattern') && (
+                                                     {(cond.algorithm === 'LDP' || cond.algorithm === 'Touches' || cond.algorithm === 'NDP' || cond.algorithm === 'Market Percentage' || cond.algorithm === 'Entry Point Pattern') && (
                                                         <div className='sb-field-row'>
                                                             <div className='sb-field'>
                                                                 <label>Digits Is</label>
@@ -3248,9 +3257,9 @@ const BotDetail: React.FC<{
                                                         </div>
                                                     )}
 
-                                                    {(cond.algorithm === 'LDP' || cond.algorithm === 'NDP') && (
+                                                     {cond.algorithm === 'Touches' && (
                                                         <div className='sb-field'>
-                                                            <label>Touches</label>
+                                                             <label>Touch Count</label>
                                                             <NumberField value={cond.touches ?? 1} min={1} max={20}
                                                                 onCommit={n => conditionSet(g.id, cond.id, { touches: Math.max(1, Math.floor(n)) })} disabled={running} />
                                                             <span className='sb-unit'>matching ticks in window</span>
