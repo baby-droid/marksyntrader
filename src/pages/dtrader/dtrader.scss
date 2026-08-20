@@ -21,3 +21,85 @@
 .dtrader__trade-panel { padding:.7rem; display:flex; flex-direction:column; gap:.65rem; }.dtrader__learn { display:flex; justify-content:space-between; background:#f5f7f8; padding:.55rem .65rem; font-size:.65rem; color:#63707a; }.dtrader__contract-tabs { display:grid; grid-template-columns:1fr 1fr; gap:.35rem; }.dtrader__contract-tabs button, .dtrader__segmented button { border:1px solid #dce2e6; background:#fff; border-radius:.3rem; padding:.6rem .3rem; font-size:.68rem; font-weight:800; color:#59656e; }.dtrader__contract-tabs button.active, .dtrader__segmented button.active { background:#e5f5f1; border-color:#65bbaa; color:#087f73; }.dtrader__field-label { display:flex; justify-content:space-between; font-size:.7rem; color:#52606a; font-weight:800; }.dtrader__field-label strong { color:#2e3942; }.dtrader__range { width:100%; accent-color:#0f9583; }.dtrader__digit-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:.28rem; }.dtrader__digit-grid button { border:1px solid #dce2e6; background:#fff; border-radius:.3rem; padding:.45rem; font-weight:800; color:#65717a; }.dtrader__digit-grid button.active { background:#e4f4f0; color:#087f73; border-color:#52b5a3; }.dtrader__segmented { display:grid; grid-template-columns:repeat(5,1fr); gap:.25rem; }.dtrader__check { display:flex; gap:.4rem; align-items:center; font-size:.72rem; color:#58656e; }.dtrader__stake-control { display:grid; grid-template-columns:2rem 1fr 2rem; align-items:center; background:#f3f5f6; border:1px solid #dfe4e7; border-radius:.35rem; text-align:center; }.dtrader__stake-control button { border:0; background:transparent; font-size:1.2rem; color:#65727b; padding:.4rem; }.dtrader__stake-control span { font-weight:900; font-size:.82rem; }.dtrader__stake-control small { font-size:.6rem; color:#8a959e; }.dtrader__commission { color:#77838b; font-size:.6rem; line-height:1.35; }.dtrader__commission strong { color:#35414a; }.dtrader__quotes { display:flex; flex-direction:column; gap:.5rem; }.dtrader__buy { border:0; color:#fff; padding:.75rem .8rem; border-radius:.35rem; display:grid; grid-template-columns:1fr auto; text-align:left; cursor:pointer; font-weight:900; box-shadow:0 4px 10px #183d3a18; }.dtrader__buy:disabled { opacity:.5; cursor:not-allowed; }.dtrader__buy span { font-size:.85rem; }.dtrader__buy b { font-size:.9rem; }.dtrader__buy small { grid-column:1/-1; margin-top:.25rem; opacity:.9; }.dtrader__buy--over { background:linear-gradient(135deg,#47aaa6,#58c2b5); }.dtrader__buy--under { background:linear-gradient(135deg,#db4b48,#ee6861); }.dtrader__buy--buy { background:linear-gradient(135deg,#47aaa6,#369e99); }.dtrader__message { padding:.55rem; border-radius:.3rem; background:#eef8f6; color:#087f73; font-size:.68rem; }.dtrader__login-note { color:#9b6d22; background:#fff7e7; border:1px solid #f4e0ad; padding:.55rem; font-size:.65rem; line-height:1.35; }
 @media (max-width: 980px) { .dtrader__workspace { grid-template-columns: 170px minmax(0,1fr) 270px; } .dtrader { padding:.8rem; } }
 @media (max-width: 760px) { .dtrader { padding:.55rem; min-height:calc(100vh - 4rem); }.dtrader__header { margin-bottom:.55rem; }.dtrader h1 { font-size:1.1rem; }.dtrader__account { font-size:.62rem; padding:.4rem .55rem; }.dtrader__workspace { display:flex; flex-direction:column; min-height:0; gap:.55rem; }.dtrader__chart-shell { order:1; height:52vh; min-height:340px; }.dtrader__trade-panel { order:2; }.dtrader__positions { order:3; min-height:115px; max-height:240px; }.dtrader__positions .dtrader__empty { padding:1.1rem; }.dtrader__chart { inset-bottom:3.3rem; }.dtrader__market-select { left:.55rem; top:.55rem; right:.55rem; }.dtrader__market-select select { min-width:0; flex:1; font-size:.72rem; }.dtrader__digits { left:9%; right:7%; }.dtrader__trade-panel { padding:.6rem; }.dtrader__buy { min-height:3.3rem; }.dtrader__position { margin:.4rem; } }
+
+/* ── Center chart digit distribution ───────────────────────────────────────
+   The distribution sits inside the chart shell, with the live pointer in its
+   own row above the circles so it never overlaps a digit or the price graph. */
+.dtrader__digit-overlay {
+    position: absolute;
+    z-index: 4;
+    left: 20%;
+    right: 7%;
+    bottom: .55rem;
+    padding-top: .2rem;
+}
+
+.dtrader__triangle-track {
+    position: relative;
+    height: .65rem;
+    margin: 0 .3rem;
+}
+
+.dtrader__moving-triangle {
+    position: absolute;
+    top: 0;
+    width: 0;
+    height: 0;
+    transform: translateX(-50%);
+    border-left: .38rem solid transparent;
+    border-right: .38rem solid transparent;
+    border-top: .58rem solid #e53935;
+    filter: drop-shadow(0 0 1px #fff) drop-shadow(0 0 2px #fff);
+    transition: left .18s ease-out;
+}
+
+.dtrader__digit-row {
+    display: grid;
+    grid-template-columns: repeat(10, minmax(0, 1fr));
+    gap: .32rem;
+    align-items: start;
+}
+
+.dtrader__digit-circle {
+    min-width: 0;
+    aspect-ratio: 1;
+    padding: .18rem .08rem;
+    display: grid;
+    place-items: center;
+    align-content: center;
+    gap: .08rem;
+    border: 2px solid #d7dcdf;
+    border-radius: 50%;
+    background: rgba(255,255,255,.94);
+    color: #3f4b54;
+    cursor: pointer;
+    transition: transform .15s, border-color .15s, box-shadow .15s;
+
+    strong { font-size: .78rem; line-height: 1; }
+    small { color: #8a959d; font-size: .48rem; line-height: 1; }
+
+    &:hover { transform: translateY(-2px); border-color: #0f9583; }
+    &.active {
+        border-color: #169d8b;
+        color: #087f73;
+        box-shadow: 0 0 0 3px #c6eee5;
+    }
+    &.selected:not(.active) {
+        border-color: #7592a3;
+        box-shadow: 0 0 0 2px #e7edf0;
+    }
+}
+
+@media (max-width: 760px) {
+    .dtrader__digit-overlay {
+        left: 7%;
+        right: 6%;
+        bottom: .5rem;
+    }
+    .dtrader__digit-row { gap: .2rem; }
+    .dtrader__digit-circle {
+        border-width: 1.5px;
+        strong { font-size: .66rem; }
+        small { font-size: .38rem; }
+    }
+}

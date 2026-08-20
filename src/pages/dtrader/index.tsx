@@ -36,6 +36,16 @@ const DTrader: React.FC = () => {
     const [positions, setPositions] = useState<OpenPosition[]>([]);
     const [message, setMessage] = useState('');
     const latestPrice = ticks[ticks.length - 1]?.quote ?? null;
+    const currentDigit = latestPrice == null ? null : digit(latestPrice, ticks[ticks.length - 1]?.pip_size ?? 2);
+    const digitDistribution = useMemo(() => {
+        const counts = Array.from({ length: 10 }, () => 0);
+        ticks.forEach(tick => {
+            const value = digit(tick.quote, tick.pip_size ?? 2);
+            if (value >= 0 && value <= 9) counts[value] += 1;
+        });
+        const total = Math.max(1, ticks.length);
+        return counts.map(count => +(count / total * 100).toFixed(1));
+    }, [ticks]);
     const chartRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -186,8 +196,29 @@ const DTrader: React.FC = () => {
                         <div className='dtrader__chart-axis'><span>{latestPrice ? (latestPrice + 2).toFixed(2) : '—'}</span><span>{latestPrice ? latestPrice.toFixed(2) : '—'}</span><span>{latestPrice ? (latestPrice - 2).toFixed(2) : '—'}</span></div>
                         {!ticks.length && <div className='dtrader__chart-loading'>Waiting for live market data…</div>}
                     </div>
-                    <div className='dtrader__digits'>
-                        {Array.from({ length: 10 }, (_, value) => <span key={value} className={latestPrice != null && digit(latestPrice, ticks[ticks.length - 1]?.pip_size ?? 2) === value ? 'active' : ''}>{value}<small>—</small></span>)}
+                    <div className='dtrader__digit-overlay' aria-label='Live digit distribution'>
+                        <div className='dtrader__triangle-track'>
+                            {currentDigit != null && (
+                                <span
+                                    className='dtrader__moving-triangle'
+                                    style={{ left: `${currentDigit * 10 + 5}%` }}
+                                    aria-label={`Current digit ${currentDigit}`}
+                                />
+                            )}
+                        </div>
+                        <div className='dtrader__digit-row'>
+                            {digitDistribution.map((percentage, value) => (
+                                <button
+                                    key={value}
+                                    className={`dtrader__digit-circle${currentDigit === value ? ' active' : ''}${barrier === value ? ' selected' : ''}`}
+                                    onClick={() => setBarrier(value)}
+                                    aria-label={`Digit ${value}, ${percentage}%`}
+                                >
+                                    <strong>{value}</strong>
+                                    <small>{percentage}%</small>
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 </section>
 
