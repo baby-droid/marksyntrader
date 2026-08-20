@@ -777,26 +777,34 @@ const AutoTrades: React.FC = () => {
                                 buyAndWait(sym, contract, barrier, stk, currentCfg.ticks)
                             )
                         );
-                        let batchLoss = false;
-                        batchResults.forEach((result, index) => {
-                            const resultId = batchTransactionIds[index];
-                            if (result.status === 'fulfilled') {
-                                const profit = Number(result.value) || 0;
-                                if (profit <= 0) batchLoss = true;
-                                recordResult(profit, resultId, false);
-                            } else {
-                                batchLoss = true;
+                        const firstSettled = batchResults.find(result => result.status === 'fulfilled');
+                        const batchCompleted = batchResults.length === 10
+                            && batchResults.every(result => result.status === 'fulfilled');
+                        let batchLoss = true;
+                        if (batchCompleted && firstSettled?.status === 'fulfilled') {
+                            // The batch is one synchronized trade: use the
+                            // first authoritative settlement for all ten
+                            // rows, so Summary and Transactions show either
+                            // 10 wins or 10 losses with identical P/L.
+                            const batchProfit = Number(firstSettled.value) || 0;
+                            batchLoss = batchProfit <= 0;
+                            batchResults.forEach((_, index) =>
+                                recordResult(batchProfit, batchTransactionIds[index], false)
+                            );
+                        } else {
+                            batchResults.forEach((result, index) => {
+                                const resultId = batchTransactionIds[index];
                                 setTransactions(prev => prev.map(transaction =>
                                     transaction.id === resultId
                                         ? { ...transaction, status: 'error', profit: null }
                                         : transaction
                                 ));
-                                setJournal(prev => [
-                                    `[${new Date().toLocaleTimeString('en', { hour12: false })}] [${id}] ⚠️ Bulk contract ${index + 1}/10 failed`,
-                                    ...prev,
-                                ].slice(0, 50));
-                            }
-                        });
+                            });
+                            setJournal(prev => [
+                                `[${new Date().toLocaleTimeString('en', { hour12: false })}] [${id}] ⚠️ Bulk batch failed before all 10 contracts settled`,
+                                ...prev,
+                            ].slice(0, 50));
+                        }
                         smartCurrentStakes.current[id] = batchLoss
                             ? Math.max(0.35, +(stk * currentCfg.martingale).toFixed(2))
                             : currentCfg.stake;
@@ -1008,7 +1016,6 @@ const AutoTrades: React.FC = () => {
                             <div className='st__execution-buttons'>
                                 <button
                                     className={smartExecutionMode === 'normal' ? 'active' : ''}
-                                    disabled={SMART_CARD_IDS.some(id => smartCardSess[id].running)}
                                     onClick={() => setSmartExecutionMode('normal')}
                                     title='Buy a contract, then wait for Deriv to settle it before the next trade'
                                 >
@@ -1016,7 +1023,6 @@ const AutoTrades: React.FC = () => {
                                 </button>
                                 <button
                                     className={smartExecutionMode === 'eachTick' ? 'active' : ''}
-                                    disabled={SMART_CARD_IDS.some(id => smartCardSess[id].running)}
                                     onClick={() => setSmartExecutionMode('eachTick')}
                                     title='Buy one separate one-tick contract for every authenticated market tick'
                                 >
@@ -1024,7 +1030,6 @@ const AutoTrades: React.FC = () => {
                                 </button>
                                 <button
                                     className={smartExecutionMode === 'superSpeed' ? 'active super' : 'super'}
-                                    disabled={SMART_CARD_IDS.some(id => smartCardSess[id].running)}
                                     onClick={() => setSmartExecutionMode('superSpeed')}
                                     title='Buy each individual tick contract without waiting for buy or settlement acknowledgement'
                                 >
@@ -1032,7 +1037,6 @@ const AutoTrades: React.FC = () => {
                                 </button>
                                  <button
                                      className={smartExecutionMode === 'bulk10' ? 'active batch' : 'batch'}
-                                     disabled={SMART_CARD_IDS.some(id => smartCardSess[id].running)}
                                      onClick={() => setSmartExecutionMode('bulk10')}
                                      title='Buy ten identical contracts concurrently at the same signal, stake, barrier, and duration'
                                  >
@@ -1213,6 +1217,21 @@ const AutoTrades: React.FC = () => {
                                                 disabled={isRunning}
                                                 onChange={e => updateCardCfg(card.id, { stake: +e.target.value })} />
                                         </div>
+
+                                     {smartExecutionMode === 'bulk10' && (
+                                         <div className='st__bulk-panel'>
+                                             <div className='st__bulk-panel-title'>Bulk trade active</div>
+                                             <div className='st__bulk-grid'>
+                                                 <span>Contracts <strong>10</strong></span>
+                                                 <span>Stake each <strong>${cfg.stake.toFixed(2)}</strong></span>
+                                                 <span>Total stake <strong>${(cfg.stake * 10).toFixed(2)}</strong></span>
+                                                 <span>Exit <strong>{cfg.ticks} tick{cfg.ticks === 1 ? '' : 's'}</strong></span>
+                                             </div>
+                                             <div className='st__bulk-note'>
+                                                 Same entry signal and contract settings. All 10 rows share one synchronized win/loss result.
+                                             </div>
+                                         </div>
+                                     )}
                                         <div className='st__param'>
                                             <label>Ticks</label>
                                             <input type='number' min='1' max='10' step='1' value={cfg.ticks}
