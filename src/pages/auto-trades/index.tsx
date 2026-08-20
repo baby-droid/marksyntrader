@@ -516,7 +516,10 @@ const AutoTrades: React.FC = () => {
     const [summaryTab, setSummaryTab] = useState<'summary' | 'transactions' | 'journal'>('summary');
     const [summaryStats, setSummaryStats] = useState({ stake: 0, payout: 0, runs: 0, won: 0, lost: 0, profit: 0 });
     const [journal, setJournal] = useState<string[]>([]);
-    const [transactions, setTransactions] = useState<Array<{ time: string; contract: string; profit: number; symbol: string }>>([]);
+    const [transactions, setTransactions] = useState<Array<{
+        id: string; time: string; contract: string; profit: number | null; symbol: string;
+        stake?: number; status?: 'open' | 'won' | 'lost';
+    }>>([]);
 
     // ── Smart Trader (multi-card) state ──────────────────────────────────────────
     type SmartCardId = 'risefall' | 'evenodd' | 'overunder' | 'matchdiffer';
@@ -668,6 +671,7 @@ const AutoTrades: React.FC = () => {
 
         let wins = 0, losses = 0, sessionProfit = 0;
         let evaluatedTick = smartTickVersionRef.current - 1;
+        let waitUntilTick = 0;
 
         const loop = async () => {
             while (!smartStopFlags.current[id]) {
@@ -676,7 +680,7 @@ const AutoTrades: React.FC = () => {
                     // Every card evaluates once per new authenticated tick.
                     // Without this gate Normal mode can buy repeatedly from
                     // the same already-matching digit window after settlement.
-                    while (!smartStopFlags.current[id] && smartTickVersionRef.current <= evaluatedTick) {
+                    while (!smartStopFlags.current[id] && smartTickVersionRef.current <= Math.max(evaluatedTick, waitUntilTick)) {
                         await new Promise(r => setTimeout(r, 40));
                     }
                     if (smartStopFlags.current[id]) break;
@@ -692,6 +696,18 @@ const AutoTrades: React.FC = () => {
                     const currentCfg = smartCardCfgRef.current[id];
                     const stk = smartCurrentStakes.current[id];
                     const sym = smartSharedSymbolRef.current;
+
+                    const transactionId = `${id}-${Date.now()}-${wins + losses}`;
+                    const transactionTime = new Date().toLocaleTimeString('en', { hour12: false });
+                    setTransactions(prev => [...prev.slice(-99), {
+                        id: transactionId,
+                        time: transactionTime,
+                        contract: `${contract}${barrier !== null ? '@' + barrier : ''}`,
+                        profit: null,
+                        symbol: sym,
+                        stake: stk,
+                        status: 'open',
+                    }]);
 
                     const recordResult = (profit: number) => {
                         const won = profit > 0;
@@ -710,10 +726,15 @@ const AutoTrades: React.FC = () => {
                             lost: prev.lost + (won ? 0 : 1),
                             profit: +(prev.profit + profit).toFixed(2),
                         }));
-                        setTransactions(prev => [...prev.slice(-99), {
-                            time: ts, contract: `${contract}${barrier !== null ? '@' + barrier : ''}`,
-                            profit: +profit.toFixed(2), symbol: sym,
-                        }]);
+                        setTransactions(prev => prev.map(transaction => transaction.id === transactionId
+                            ? {
+                                ...transaction,
+                                time: ts,
+                                profit: +profit.toFixed(2),
+                                status: won ? 'won' : 'lost',
+                            }
+                            : transaction
+                        ));
                         setJournal(prev => [`[${ts}] [${id}] ${logMsg}`, ...prev].slice(0, 50));
 
                         smartCurrentStakes.current[id] = won
@@ -743,6 +764,10 @@ const AutoTrades: React.FC = () => {
                             void request.catch(() => {});
                         }
                     }
+                    // Require a completely new lookback window before this
+                    // card can enter again. For example, after "3 Even →
+                    // Buy Odd", the next entry waits for three new ticks.
+                    waitUntilTick = evaluatedTick + Math.max(1, Math.min(10, currentCfg.lookback || 3));
                 } catch {
                     await new Promise(r => setTimeout(r, isFastExecutionEnabled() ? 0 : 1500));
                 }
@@ -1323,7 +1348,8 @@ const AutoTrades: React.FC = () => {
                             }} className='autotrades__printer-clear'>🗑 Clear</button>
                             <button onClick={() => {
                                 const lines = transactions.map(t =>
-                                    `${t.time}\t${t.symbol}\t${t.contract}\t${t.profit >= 0 ? '+' : ''}${t.profit.toFixed(2)}`
+                                     `${t.time}\t${t.symbol}\t${t.contract}\t${t.profit == null ? 'OPEN' : `${t.profit >= 0 ? '+' : ''}${t.profit.toFixed(2)}`
+                                     }`
                                 ).join('\n');
                                 const blob = new Blob([`Time\tSymbol\tContract\tP/L\n${lines}`], { type: 'text/plain' });
                                 const url = URL.createObjectURL(blob);
@@ -1338,7 +1364,7 @@ const AutoTrades: React.FC = () => {
                                         <span className='time'>{t.time}</span>
                                         <span className='sym'>{t.symbol}</span>
                                         <span className='ctype'>{t.contract}</span>
-                                        <span className='pl'>{t.profit >= 0 ? '+' : ''}{t.profit.toFixed(2)}</span>
+                                         <span className='pl'>{t.profit == null ? 'OPEN' : `${t.profit >= 0 ? '+' : ''}${t.profit.toFixed(2)}`}</span>
                                     </div>
                                 ))
                             }
@@ -1426,8 +1452,8 @@ const AutoTrades: React.FC = () => {
                                                 <span className='autotrades__txn-type'>{t.contract}</span>
                                             </div>
                                             <div className='autotrades__txn-right'>
-                                                <span className={`autotrades__txn-pl ${t.profit >= 0 ? 'pos' : 'neg'}`}>
-                                                    {t.profit >= 0 ? '+' : ''}{t.profit.toFixed(2)}
+                                             <span className={`autotrades__txn-pl ${t.profit == null ? 'pending' : t.profit >= 0 ? 'pos' : 'neg'}`}>
+                                                     {t.profit == null ? 'OPEN' : `${t.profit >= 0 ? '+' : ''}${t.profit.toFixed(2)}`}
                                                 </span>
                                                 <span className='autotrades__txn-time'>{t.time}</span>
                                             </div>

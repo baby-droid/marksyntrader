@@ -492,7 +492,15 @@
         flex-direction: column;
         overflow: hidden;
 
-        @media (max-width: 900px) { display: none; }
+        @media (max-width: 900px) {
+            display: flex;
+            width: 100%;
+            max-height: 320px;
+            min-height: 240px;
+            border-left: 0;
+            border-top: 1px solid rgba(255,255,255,0.07);
+            flex-shrink: 0;
+        }
     }
 
     &__summary-tabs {
@@ -640,6 +648,7 @@
         font-size: 13px; font-weight: 700;
         &.pos { color: #22c55e; }
         &.neg { color: #ef4444; }
+        &.pending { color: #fbbf24; }
     }
     &__txn-time { font-size: 10px; color: rgba(255,255,255,0.35); }
 
