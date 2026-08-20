@@ -555,7 +555,7 @@ const AutoTrades: React.FC = () => {
     const smartLivePrice = smartFeed.livePrice;
 
     const { buyAndWait, authorized, connected } = useBuyAndWait();
-    type SmartExecutionMode = 'normal' | 'eachTick' | 'superSpeed';
+    type SmartExecutionMode = 'normal' | 'eachTick' | 'superSpeed' | 'bulk10';
     const [smartExecutionMode, setSmartExecutionMode] = useState<SmartExecutionMode>('normal');
     const smartExecutionModeRef = useRef<SmartExecutionMode>('normal');
     useEffect(() => { smartExecutionModeRef.current = smartExecutionMode; }, [smartExecutionMode]);
@@ -701,17 +701,33 @@ const AutoTrades: React.FC = () => {
                     const transactionId = `${id}-${Date.now()}-${wins + losses}`;
                     pendingTransactionId = transactionId;
                     const transactionTime = new Date().toLocaleTimeString('en', { hour12: false });
-                    setTransactions(prev => [...prev.slice(-99), {
-                        id: transactionId,
-                        time: transactionTime,
-                        contract: `${contract}${barrier !== null ? '@' + barrier : ''}`,
-                        profit: null,
-                        symbol: sym,
-                        stake: stk,
-                        status: 'open',
-                    }]);
+                    const batchTransactionIds = Array.from({ length: 10 }, (_, index) =>
+                        `${transactionId}-${index + 1}`
+                    );
+                    setTransactions(prev => [
+                        ...prev.slice(-(mode === 'bulk10' ? 90 : 99)),
+                        ...(mode === 'bulk10'
+                            ? batchTransactionIds.map((id, index) => ({
+                                id,
+                                time: transactionTime,
+                                contract: `${contract}${barrier !== null ? '@' + barrier : ''} #${index + 1}/10`,
+                                profit: null,
+                                symbol: sym,
+                                stake: stk,
+                                status: 'open',
+                            }))
+                            : [{
+                                id: transactionId,
+                                time: transactionTime,
+                                contract: `${contract}${barrier !== null ? '@' + barrier : ''}`,
+                                profit: null,
+                                symbol: sym,
+                                stake: stk,
+                                status: 'open',
+                            }]),
+                    ]);
 
-                    const recordResult = (profit: number) => {
+                    const recordResult = (profit: number, resultTransactionId = transactionId, advanceStake = true) => {
                         const won = profit > 0;
                         sessionProfit = +(sessionProfit + profit).toFixed(2);
                         if (won) wins++; else losses++;
@@ -728,7 +744,7 @@ const AutoTrades: React.FC = () => {
                             lost: prev.lost + (won ? 0 : 1),
                             profit: +(prev.profit + profit).toFixed(2),
                         }));
-                        setTransactions(prev => prev.map(transaction => transaction.id === transactionId
+                        setTransactions(prev => prev.map(transaction => transaction.id === resultTransactionId
                             ? {
                                 ...transaction,
                                 time: ts,
@@ -739,15 +755,51 @@ const AutoTrades: React.FC = () => {
                         ));
                         setJournal(prev => [`[${ts}] [${id}] ${logMsg}`, ...prev].slice(0, 50));
 
-                        smartCurrentStakes.current[id] = won
-                            ? currentCfg.stake
-                            : Math.max(0.35, +(stk * currentCfg.martingale).toFixed(2));
+                        if (advanceStake) {
+                            smartCurrentStakes.current[id] = won
+                                ? currentCfg.stake
+                                : Math.max(0.35, +(stk * currentCfg.martingale).toFixed(2));
+                        }
                     };
 
                     if (mode === 'normal') {
                         const profit = await buyAndWait(sym, contract, barrier, stk, currentCfg.ticks);
                         if (smartStopFlags.current[id]) break;
                         recordResult(profit);
+                    } else if (mode === 'bulk10') {
+                        // Dispatch all ten identical orders from the same
+                        // signal without awaiting one before starting the
+                        // next. Each buy has its own proposal and settlement
+                        // subscription, but shares the same symbol, contract,
+                        // barrier, stake, duration, and entry tick.
+                        const batchResults = await Promise.allSettled(
+                            batchTransactionIds.map(() =>
+                                buyAndWait(sym, contract, barrier, stk, currentCfg.ticks)
+                            )
+                        );
+                        let batchLoss = false;
+                        batchResults.forEach((result, index) => {
+                            const resultId = batchTransactionIds[index];
+                            if (result.status === 'fulfilled') {
+                                const profit = Number(result.value) || 0;
+                                if (profit <= 0) batchLoss = true;
+                                recordResult(profit, resultId, false);
+                            } else {
+                                batchLoss = true;
+                                setTransactions(prev => prev.map(transaction =>
+                                    transaction.id === resultId
+                                        ? { ...transaction, status: 'error', profit: null }
+                                        : transaction
+                                ));
+                                setJournal(prev => [
+                                    `[${new Date().toLocaleTimeString('en', { hour12: false })}] [${id}] ⚠️ Bulk contract ${index + 1}/10 failed`,
+                                    ...prev,
+                                ].slice(0, 50));
+                            }
+                        });
+                        smartCurrentStakes.current[id] = batchLoss
+                            ? Math.max(0.35, +(stk * currentCfg.martingale).toFixed(2))
+                            : currentCfg.stake;
                     } else {
                         // Each Tick and Super Speed both place a separate
                         // one-tick contract for every newly received tick.
@@ -978,13 +1030,23 @@ const AutoTrades: React.FC = () => {
                                 >
                                     Super Speed
                                 </button>
+                                 <button
+                                     className={smartExecutionMode === 'bulk10' ? 'active batch' : 'batch'}
+                                     disabled={SMART_CARD_IDS.some(id => smartCardSess[id].running)}
+                                     onClick={() => setSmartExecutionMode('bulk10')}
+                                     title='Buy ten identical contracts concurrently at the same signal, stake, barrier, and duration'
+                                 >
+                                     Bulk 10
+                                 </button>
                             </div>
                             <span className='st__execution-help'>
                                 {smartExecutionMode === 'normal'
                                     ? 'Deriv settlement gates the next trade'
                                     : smartExecutionMode === 'eachTick'
                                         ? 'One individual 1-tick contract per live digit'
-                                        : 'Individual contracts sent at maximum API speed'}
+                                         : smartExecutionMode === 'superSpeed'
+                                             ? 'Individual contracts sent at maximum API speed'
+                                             : '10 identical contracts dispatched concurrently per signal'}
                             </span>
                         </div>
                     </div>

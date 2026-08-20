@@ -1035,6 +1035,16 @@
                 color: #fbbf24;
                 &.active { background: linear-gradient(135deg, #b45309, #f59e0b); border-color: #fbbf24; color: #fff; }
             }
+            &.batch {
+                border-color: rgba(168,85,247,0.48);
+                color: #d8b4fe;
+                background: rgba(126,34,206,0.12);
+                &.active {
+                    background: linear-gradient(135deg, #6d28d9, #a855f7);
+                    border-color: #d8b4fe;
+                    color: #fff;
+                }
+            }
             &:disabled { cursor: not-allowed; opacity: 0.45; }
         }
     }
