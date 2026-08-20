@@ -197,6 +197,7 @@ function useBuyAndWait() {
         options: {
             settle?: boolean;
             onSettled?: (profit: number) => void;
+            onBought?: (contractId: number) => void;
             tradingParameters?: Record<string, unknown>;
         } = {},
     ): Promise<number> => {
@@ -207,7 +208,7 @@ function useBuyAndWait() {
         // settlement path as Manual Trader. This keeps the selected demo/real
         // account and its currency attached to every request.
         if (options.settle === false) {
-            await buyContract({
+            const bought = await buyContract({
                 symbol,
                 contract_type: contractType,
                 duration,
@@ -216,6 +217,7 @@ function useBuyAndWait() {
                 ...(barrier !== null ? { barrier } : {}),
                 currency,
             }, settlement => options.onSettled?.(Number(settlement?.profit ?? 0)));
+            options.onBought?.(bought.contract_id);
             return 0;
         }
 
@@ -228,7 +230,7 @@ function useBuyAndWait() {
                 }
             }, 20_000);
             try {
-                await buyContract({
+                const bought = await buyContract({
                     symbol,
                     contract_type: contractType,
                     duration,
@@ -242,6 +244,7 @@ function useBuyAndWait() {
                     clearTimeout(timeout);
                     resolve(Number(profit?.profit ?? 0));
                 });
+                options.onBought?.(bought.contract_id);
             } catch (error) {
                 clearTimeout(timeout);
                 reject(error);
@@ -677,7 +680,7 @@ const AutoTrades: React.FC = () => {
 
         const loop = async () => {
             while (!smartStopFlags.current[id]) {
-                let pendingTransactionId: string | null = null;
+                let pendingTransactionIds: string[] = [];
                 try {
                     const mode = smartExecutionModeRef.current;
                     // Every card evaluates once per new authenticated tick.
@@ -702,12 +705,13 @@ const AutoTrades: React.FC = () => {
                     const batchEnabled = currentCfg.bulkEnabled;
                     const batchCount = Math.max(10, Math.min(100, Math.round(currentCfg.bulkCount || 10)));
 
-                    const transactionId = `${id}-${Date.now()}-${wins + losses}`;
-                    pendingTransactionId = transactionId;
+                    const batchId = `BATCH-${id}-${Date.now()}-${wins + losses}`;
+                    const transactionId = `${batchId}-ORDER-1`;
                     const transactionTime = new Date().toLocaleTimeString('en', { hour12: false });
                     const batchTransactionIds = Array.from({ length: batchCount }, (_, index) =>
-                        `${transactionId}-${index + 1}`
+                        `${batchId}-ORDER-${index + 1}`
                     );
+                    pendingTransactionIds = batchEnabled ? batchTransactionIds : [transactionId];
                     setTransactions(prev => [
                         ...prev.slice(-(batchEnabled ? Math.max(99, batchCount * 2) : 99)),
                         ...(batchEnabled
@@ -719,6 +723,7 @@ const AutoTrades: React.FC = () => {
                                 symbol: sym,
                                 stake: stk,
                                 status: 'open',
+                                batchId,
                             }))
                             : [{
                                 id: transactionId,
@@ -728,10 +733,16 @@ const AutoTrades: React.FC = () => {
                                 symbol: sym,
                                 stake: stk,
                                 status: 'open',
+                                batchId,
                             }]),
                     ]);
 
-                    const recordResult = (profit: number, resultTransactionId = transactionId, advanceStake = true) => {
+                    const recordResult = (
+                        profit: number,
+                        resultTransactionId = transactionId,
+                        advanceStake = true,
+                        contractId?: number,
+                    ) => {
                         const won = profit > 0;
                         sessionProfit = +(sessionProfit + profit).toFixed(2);
                         if (won) wins++; else losses++;
@@ -754,6 +765,7 @@ const AutoTrades: React.FC = () => {
                                 time: ts,
                                 profit: +profit.toFixed(2),
                                 status: won ? 'won' : 'lost',
+                                ...(contractId ? { contractId } : {}),
                             }
                             : transaction
                         ));
@@ -776,40 +788,48 @@ const AutoTrades: React.FC = () => {
                         // next. Each buy has its own proposal and settlement
                         // subscription, but shares the same symbol, contract,
                         // barrier, stake, duration, and entry tick.
+                        const boughtContractIds = new Map<string, number>();
                         const batchResults = await Promise.allSettled(
-                            batchTransactionIds.map(() =>
-                                buyAndWait(sym, contract, barrier, stk, currentCfg.ticks)
+                            batchTransactionIds.map(orderId =>
+                                buyAndWait(sym, contract, barrier, stk, currentCfg.ticks, {
+                                    onBought: contractId => {
+                                        boughtContractIds.set(orderId, contractId);
+                                        setTransactions(prev => prev.map(transaction =>
+                                            transaction.id === orderId
+                                                ? { ...transaction, status: 'open', contractId }
+                                                : transaction
+                                        ));
+                                    },
+                                })
                             )
                         );
-                        const firstSettled = batchResults.find(result => result.status === 'fulfilled');
-                        const batchCompleted = batchResults.length === batchCount
-                            && batchResults.every(result => result.status === 'fulfilled');
-                        let batchLoss = true;
-                        if (batchCompleted && firstSettled?.status === 'fulfilled') {
-                            // The batch is one synchronized trade: use the
-                            // first authoritative settlement for every row,
-                            // so Summary and Transactions show one atomic
-                            // batch outcome.
-                            const batchProfit = Number(firstSettled.value) || 0;
-                            batchLoss = batchProfit <= 0;
-                            batchResults.forEach((_, index) =>
-                                recordResult(batchProfit, batchTransactionIds[index], false)
-                            );
-                        } else {
-                            batchResults.forEach((result, index) => {
-                                const resultId = batchTransactionIds[index];
+                        let batchWins = 0;
+                        let batchLosses = 0;
+                        let batchProfit = 0;
+                        let failedOrders = 0;
+                        batchResults.forEach((result, index) => {
+                            const orderId = batchTransactionIds[index];
+                            const contractId = boughtContractIds.get(orderId);
+                            if (result.status === 'fulfilled') {
+                                const profit = Number(result.value) || 0;
+                                batchProfit = +(batchProfit + profit).toFixed(2);
+                                if (profit > 0) batchWins++; else batchLosses++;
+                                recordResult(profit, orderId, false, contractId);
+                            } else {
+                                failedOrders++;
                                 setTransactions(prev => prev.map(transaction =>
-                                    transaction.id === resultId
+                                    transaction.id === orderId
                                         ? { ...transaction, status: 'error', profit: null }
                                         : transaction
                                 ));
-                            });
-                            setJournal(prev => [
-                                `[${new Date().toLocaleTimeString('en', { hour12: false })}] [${id}] ⚠️ Bulk batch failed before all 10 contracts settled`,
-                                ...prev,
-                            ].slice(0, 50));
-                        }
-                        smartCurrentStakes.current[id] = batchLoss
+                            }
+                        });
+                        const settledCount = batchWins + batchLosses;
+                        setJournal(prev => [
+                            `[${new Date().toLocaleTimeString('en', { hour12: false })}] [${id}] ${batchId}: ${settledCount}/${batchCount} settled · ${batchWins} won · ${batchLosses} lost · P/L ${fmtProfit(batchProfit)}${failedOrders ? ` · ${failedOrders} failed` : ''}`,
+                            ...prev,
+                        ].slice(0, 50));
+                        smartCurrentStakes.current[id] = batchProfit <= 0
                             ? Math.max(0.35, +(stk * currentCfg.martingale).toFixed(2))
                             : currentCfg.stake;
                     } else {
@@ -838,8 +858,8 @@ const AutoTrades: React.FC = () => {
                     // A proposal/buy failure is not a taken trade. Remove its
                     // optimistic OPEN row instead of leaving a phantom
                     // transaction in the Bot Builder-style history.
-                    if (pendingTransactionId) {
-                        setTransactions(prev => prev.filter(transaction => transaction.id !== pendingTransactionId));
+                    if (pendingTransactionIds.length) {
+                        setTransactions(prev => prev.filter(transaction => !pendingTransactionIds.includes(transaction.id)));
                     }
                     await new Promise(r => setTimeout(r, isFastExecutionEnabled() ? 0 : 1500));
                 }
