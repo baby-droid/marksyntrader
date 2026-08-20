@@ -11,3 +11,10 @@ The Differs Edge Scanner is an XML-driven Bot Builder strategy. It captures the 
 **How to apply:** Keep the XML loadable through both Free Bots and Bot Builder. A win resets stake and advances the main rotation; a loss multiplies stake by 2 and sets recovery phase 6 for an even scanned digit or 7 for an odd scanned digit. Recovery wins return to phase 0.
 
 This scan is a latest-tick heuristic, not a guarantee of profit. It should be described as an entry filter and tested on demo before real trading.
+
+## Risk controls
+The bot tracks each contract's profit with `read_details` index 4 in `session_profit`. It stops by omitting `trade_again` when session profit reaches `take_profit` (default 5) or falls to `-stop_loss` (default -20).
+
+**Why:** The Bot Builder engine's normal stop pattern is conditional continuation, not a separate native stop block.
+
+**How to apply:** Keep the TP/SL check after win/loss state updates and before `trade_again`; changing the thresholds only requires editing the initialization values.
