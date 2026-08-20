@@ -1,45 +1,30 @@
 /**
- * Opens the Deriv cashier deposit page for real accounts.
+ * Opens Deriv Home's deposit sheet for real accounts.
  *
- * Deriv's `cashier` API returns a URL (or iframe URL) to the payment provider
- * page. We open that in a new tab so the user can complete a deposit; the
- * resulting balance credit hits their Deriv account and the app's balance
- * subscription will reflect it automatically.
- *
- * Fallback: if the API call fails or is not available, we open the public
- * Deriv cashier page directly.
+ * The deposit flow is intentionally opened in a separate tab. That keeps the
+ * authenticated Marksyntrader tab alive as the return surface after the user
+ * completes or closes the deposit flow, and lets its existing balance
+ * subscription receive the updated balance.
  */
 import { useCallback, useState } from 'react';
-import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 
-const CASHIER_FALLBACK = 'https://app.deriv.com/portfolio';
+const DERIV_DEPOSIT_URL =
+    'https://home.deriv.com/dashboard/deposit?from=home&depositSheet=1&currency=USD';
 
 export type DepositState = 'idle' | 'loading' | 'error';
 
 export const useDepositReal = () => {
     const [state, setState] = useState<DepositState>('idle');
 
-    const openDeposit = useCallback(async () => {
+    const openDeposit = useCallback(() => {
         setState('loading');
         try {
-            if (api_base.api) {
-                const res = await (api_base.api as any).send({
-                    cashier: 'deposit',
-                    provider: 'doughflow',
-                    type: 'url',
-                });
-                if (res?.cashier && typeof res.cashier === 'string' && res.cashier.startsWith('http')) {
-                    window.open(res.cashier, '_blank', 'noopener,noreferrer');
-                    setState('idle');
-                    return;
-                }
-            }
-            // Fallback — open public cashier page
-            window.open(CASHIER_FALLBACK, '_blank', 'noopener,noreferrer');
+            // Keep Marksyntrader open so the user returns to the live app
+            // after completing the external deposit flow.
+            const opened = window.open(DERIV_DEPOSIT_URL, '_blank', 'noopener,noreferrer');
+            if (!opened) throw new Error('Deposit window was blocked');
             setState('idle');
         } catch {
-            // On any error, still open the fallback so the user isn't stuck
-            window.open(CASHIER_FALLBACK, '_blank', 'noopener,noreferrer');
             setState('error');
             setTimeout(() => setState('idle'), 2500);
         }
