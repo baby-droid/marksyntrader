@@ -703,7 +703,10 @@ const AutoTrades: React.FC = () => {
                     const stk = smartCurrentStakes.current[id];
                     const sym = smartSharedSymbolRef.current;
                     const batchEnabled = currentCfg.bulkEnabled;
-                    const batchCount = Math.max(10, Math.min(100, Math.round(currentCfg.bulkCount || 10)));
+                    // Snapshot the edited count for this signal. Changes made
+                    // while this batch is settling apply only to the next
+                    // batch, never halfway through the current one.
+                    const batchCount = Math.max(1, Math.min(100, Math.round(currentCfg.bulkCount || 10)));
 
                     const batchId = `BATCH-${id}-${Date.now()}-${wins + losses}`;
                     const transactionId = `${batchId}-ORDER-1`;
@@ -788,6 +791,10 @@ const AutoTrades: React.FC = () => {
                         // next. Each buy has its own proposal and settlement
                         // subscription, but shares the same symbol, contract,
                         // barrier, stake, duration, and entry tick.
+                        setJournal(prev => [
+                            `[${transactionTime}] [${id}] ${batchId}: dispatching all ${batchCount} positions together`,
+                            ...prev,
+                        ].slice(0, 50));
                         const boughtContractIds = new Map<string, number>();
                         const batchResults = await Promise.allSettled(
                             batchTransactionIds.map(orderId =>
@@ -1268,13 +1275,12 @@ const AutoTrades: React.FC = () => {
                                             <>
                                                 <div className='st__batch-fields'>
                                                     <label>
-                                                        Positions
+                                                        Positions (editable)
                                                         <NumberField
                                                             value={cfg.bulkCount}
-                                                            min={10}
+                                                            min={1}
                                                             max={100}
                                                             onCommit={n => updateCardCfg(card.id, { bulkCount: n })}
-                                                            disabled={isRunning}
                                                             className='st__batch-count'
                                                         />
                                                     </label>
@@ -1284,7 +1290,7 @@ const AutoTrades: React.FC = () => {
                                                     </div>
                                                 </div>
                                                 <p className='st__batch-note'>
-                                                    {cfg.bulkCount} contracts · ${cfg.stake.toFixed(2)} each · {cfg.ticks} tick{cfg.ticks === 1 ? '' : 's'}.
+                                                    {cfg.bulkCount} positions · ${cfg.stake.toFixed(2)} each · {cfg.ticks} tick{cfg.ticks === 1 ? '' : 's'}.
                                                     All use this card's same symbol, entry signal, barrier and exit duration.
                                                 </p>
                                             </>
