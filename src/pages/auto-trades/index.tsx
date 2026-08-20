@@ -350,6 +350,8 @@ const AI_BOTS: AiBotDef[] = [
     },
 ];
 
+const AI_RUNS_PER_SCAN = 6;
+
 // ── Per-bot session state ─────────────────────────────────────────────────────
 interface BotSession {
     active: boolean;
@@ -399,30 +401,53 @@ function AiBotCard({ bot, globalStake, globalMartingale, session, onSessionUpdat
         const sl = bot.defaultStopLoss * Math.max(1, globalStake);
         let stk = resumeStake ?? globalStake; // resume with saved stake (martingale preserved)
         let recoveryMode = false;
+        let lastScanKey = '';
         onLog(`🚀 ${bot.name} started | Stake: $${stk.toFixed(2)} | TP:${tp.toFixed(2)} SL:${sl.toFixed(2)}`);
 
         while (!stopRef.current) {
             try {
-                const { contract, barrier } = bot.pickTrade(digitsRef.current, recoveryMode);
-                const profit = await buyAndWait(bot.symbol, contract, barrier, stk);
-                const won = profit > 0;
-                localProfit = +(localProfit + profit).toFixed(2);
-                if (won) localWins++; else localLosses++;
+                // A scan is anchored to a new digit window. One valid entry
+                // starts exactly six sequential contracts; settlement gates
+                // every next buy so fast execution never races the account's
+                // contract state or reuses the same tick indefinitely.
+                let scanDigits = digitsRef.current.slice();
+                while (!stopRef.current && (
+                    !scanDigits.length ||
+                    scanDigits.slice(-10).join(',') === lastScanKey
+                )) {
+                    await new Promise(r => setTimeout(r, isFastExecutionEnabled() ? 0 : 80));
+                    scanDigits = digitsRef.current.slice();
+                }
+                if (stopRef.current) break;
+                lastScanKey = scanDigits.slice(-10).join(',');
 
-                onSessionUpdate({ wins: localWins, losses: localLosses, profit: localProfit });
-                onLog(`${won ? '✅' : '❌'} ${contract}${barrier !== null ? '@' + barrier : ''} ${fmtProfit(profit)} | Total: ${fmtProfit(localProfit)}`);
+                const entry = bot.pickTrade(scanDigits, recoveryMode);
+                if (!entry || scanDigits.length < 3) continue;
 
-                if (bot.id === 'auto-o2u7') recoveryMode = !won;
-                if (won) {
-                    stk = globalStake;
-                    pausedStakeRef.current = null;
-                } else {
-                    stk = Math.max(0.35, +(stk * globalMartingale).toFixed(2));
-                    pausedStakeRef.current = stk; // save for resume
+                for (let run = 0; run < AI_RUNS_PER_SCAN && !stopRef.current; run++) {
+                    const { contract, barrier } = bot.pickTrade(scanDigits, recoveryMode);
+                    const profit = await buyAndWait(bot.symbol, contract, barrier, stk);
+                    const won = profit > 0;
+                    localProfit = +(localProfit + profit).toFixed(2);
+                    if (won) localWins++; else localLosses++;
+
+                    onSessionUpdate({ wins: localWins, losses: localLosses, profit: localProfit });
+                    onLog(`${won ? '✅' : '❌'} AI scan ${run + 1}/${AI_RUNS_PER_SCAN}: ${contract}${barrier !== null ? '@' + barrier : ''} ${fmtProfit(profit)} | Total: ${fmtProfit(localProfit)}`);
+
+                    if (bot.id === 'auto-o2u7') recoveryMode = !won;
+                    if (won) {
+                        stk = globalStake;
+                        pausedStakeRef.current = null;
+                    } else {
+                        stk = Math.max(0.35, +(stk * globalMartingale).toFixed(2));
+                        pausedStakeRef.current = stk; // save for resume
+                    }
+
+                    if (localProfit >= tp) { onLog('🎯 Take profit hit'); break; }
+                    if (localProfit <= -sl) { onLog('🛑 Stop loss hit'); break; }
                 }
 
-                if (localProfit >= tp) { onLog('🎯 Take profit hit'); break; }
-                if (localProfit <= -sl) { onLog('🛑 Stop loss hit'); break; }
+                if (localProfit >= tp || localProfit <= -sl) break;
             } catch (err: any) {
                 onLog(`⚠️ ${err?.message || 'Error'}`);
                 await new Promise(r => setTimeout(r, isFastExecutionEnabled() ? 0 : 1500));

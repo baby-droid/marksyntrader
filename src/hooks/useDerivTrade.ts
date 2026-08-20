@@ -6,6 +6,7 @@ import {
     isAuthorized$,
 } from '@/external/bot-skeleton/services/api/observables/connection-status-stream';
 import { publishMasterTrade, getMasterSource } from '@/utils/trade-bus';
+import { observer } from '@/external/bot-skeleton/utils/observer';
 import {
     isFastExecutionEnabled,
     recordPhase,
@@ -73,6 +74,7 @@ function getLastDigit(quote: number, pipSize = 2): number {
 export function useDerivTrade() {
     const tickCallbacksRef = useRef<Map<string, (t: TickData) => void>>(new Map());
     const pocCallbacksRef = useRef<Map<number, (c: SettledContract) => void>>(new Map());
+    const contractMetaRef = useRef<Map<number, any>>(new Map());
     const [connected, setConnected] = useState(connectionStatus$.value === CONNECTION_STATUS.OPENED);
     const [balance, setBalance] = useState<number | null>(null);
     const [currency, setCurrency] = useState('USD');
@@ -161,6 +163,37 @@ export function useDerivTrade() {
                             buy_price: poc.buy_price,
                             pip_size: poc.pip_size != null ? Number(poc.pip_size) : undefined,
                         });
+                        const meta = contractMetaRef.current.get(cid);
+                        if (meta) {
+                            observer.emit('bot.contract', {
+                                ...meta,
+                                transaction_ids: { ...meta.transaction_ids, sell: cid },
+                                is_sold: true,
+                                is_completed: true,
+                                status,
+                                profit,
+                                payout: profit > 0 ? Number(poc.payout ?? meta.buy_price + profit) : 0,
+                                bid_price: Number(poc.bid_price ?? 0),
+                                entry_spot: poc.entry_spot,
+                                exit_spot: poc.exit_spot,
+                                entry_tick_time: poc.entry_tick_time,
+                                exit_tick_time: poc.exit_tick_time,
+                            });
+                            window.dispatchEvent(new CustomEvent('chart:trade-settled', {
+                                detail: {
+                                    contractId: cid,
+                                    symbol: meta.underlying_symbol,
+                                    contractType: meta.contract_type,
+                                    won: status === 'won',
+                                    profit,
+                                    barrier: meta.barrier,
+                                    exitDigit: poc.exit_tick_display_value
+                                        ? parseInt(String(poc.exit_tick_display_value).replace('.', '').slice(-1), 10)
+                                        : undefined,
+                                },
+                            }));
+                            contractMetaRef.current.delete(cid);
+                        }
                         pocCallbacksRef.current.delete(cid);
                     }
                 }
@@ -278,6 +311,36 @@ export function useDerivTrade() {
             if (!contract_id) {
                 throw new Error('Buy failed — no contract ID returned');
             }
+
+            const contractMeta = {
+                id: contract_id,
+                contract_id,
+                transaction_ids: { buy: contract_id },
+                underlying_symbol: symbol,
+                display_name: symbol,
+                contract_type,
+                currency: cur_,
+                buy_price: Number(buyRes?.buy?.buy_price ?? stake),
+                payout: 0,
+                bid_price: 0,
+                profit: 0,
+                is_sold: false,
+                status: 'open',
+                date_start: Math.floor(Date.now() / 1000),
+                barrier,
+                duration,
+                duration_unit,
+            };
+            contractMetaRef.current.set(contract_id, contractMeta);
+            observer.emit('bot.contract', contractMeta);
+            window.dispatchEvent(new CustomEvent('chart:trade-started', {
+                detail: {
+                    contractId: contract_id,
+                    ticks: duration,
+                    symbol,
+                    contractType: contract_type,
+                },
+            }));
 
             // Step 3 — subscribe to settlement notifications
             // In Fast mode: subscribe is fire-and-forget (never blocks the caller)
