@@ -675,6 +675,7 @@ const AutoTrades: React.FC = () => {
 
         const loop = async () => {
             while (!smartStopFlags.current[id]) {
+                let pendingTransactionId: string | null = null;
                 try {
                     const mode = smartExecutionModeRef.current;
                     // Every card evaluates once per new authenticated tick.
@@ -698,6 +699,7 @@ const AutoTrades: React.FC = () => {
                     const sym = smartSharedSymbolRef.current;
 
                     const transactionId = `${id}-${Date.now()}-${wins + losses}`;
+                    pendingTransactionId = transactionId;
                     const transactionTime = new Date().toLocaleTimeString('en', { hour12: false });
                     setTransactions(prev => [...prev.slice(-99), {
                         id: transactionId,
@@ -769,6 +771,12 @@ const AutoTrades: React.FC = () => {
                     // Buy Odd", the next entry waits for three new ticks.
                     waitUntilTick = evaluatedTick + Math.max(1, Math.min(10, currentCfg.lookback || 3));
                 } catch {
+                    // A proposal/buy failure is not a taken trade. Remove its
+                    // optimistic OPEN row instead of leaving a phantom
+                    // transaction in the Bot Builder-style history.
+                    if (pendingTransactionId) {
+                        setTransactions(prev => prev.filter(transaction => transaction.id !== pendingTransactionId));
+                    }
                     await new Promise(r => setTimeout(r, isFastExecutionEnabled() ? 0 : 1500));
                 }
             }
