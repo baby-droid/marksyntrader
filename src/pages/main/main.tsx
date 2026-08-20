@@ -294,7 +294,20 @@ const AppWrapper = observer(() => {
                             {/* 3 — Ahmed Scalper Bots */}
                             <div
                                 label={mkIcon(
-                                    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M13 2L3 14h7l-1 8 10-12h-7l1-8z'/></svg>,
+                                    <svg width='19' height='19' viewBox='0 0 24 24' fill='none' aria-hidden='true'>
+                                        <defs>
+                                            <linearGradient id='scalper-tab-gradient' x1='3' y1='21' x2='21' y2='3' gradientUnits='userSpaceOnUse'>
+                                                <stop offset='0' stopColor='#22d3ee' />
+                                                <stop offset='0.5' stopColor='#a78bfa' />
+                                                <stop offset='1' stopColor='#f472b6' />
+                                            </linearGradient>
+                                        </defs>
+                                        <path d='M13.4 2.5 4 13.4h6.6L9.7 21.5 20 10.2h-6.5l-.1-7.7Z'
+                                            fill='url(#scalper-tab-gradient)' stroke='#e0f2fe' strokeWidth='0.8'
+                                            strokeLinejoin='round' />
+                                        <circle cx='4' cy='5' r='1.2' fill='#fbbf24' />
+                                        <circle cx='20' cy='18.5' r='1' fill='#34d399' />
+                                    </svg>,
                                     'Scalper Bots'
                                 )}
                                 id='id-scalper-bots'
