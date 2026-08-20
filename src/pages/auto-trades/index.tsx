@@ -1059,58 +1059,44 @@ const AutoTrades: React.FC = () => {
                                     {/* Trading Condition */}
                                     <div className='st__condition'>
                                         <div className='st__condition-title'>Trading Condition</div>
-                                         <div className={`st__condition-row ${card.id === 'evenodd' ? 'st__condition-row--interactive' : ''}`}>
+                                         <div className='st__condition-row st__condition-row--interactive'>
                                              <span className='st__cond-lbl'>If</span>
-                                             {card.id === 'risefall' && (
-                                                 <span className='st__cond-text'>the last {cfg.lookback} digits move {cfg.ifValue}</span>
-                                             )}
-                                            {card.id === 'evenodd' && (
-                                                 <>
-                                                     <span className='st__cond-text'>the last</span>
-                                                     <select
-                                                         className='st__cond-select st__cond-select--number'
-                                                         value={cfg.lookback}
-                                                         disabled={isRunning}
-                                                         aria-label='Number of last digits'
-                                                         onChange={e => updateCardCfg(card.id, { lookback: Math.max(1, Math.min(10, +e.target.value)) })}
-                                                     >
-                                                         {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(v => <option key={v} value={v}>{v}</option>)}
-                                                     </select>
-                                                     <span className='st__cond-text'>digits are</span>
-                                                     <select
-                                                         className='st__cond-select'
-                                                         value={cfg.ifValue}
-                                                         disabled={isRunning}
-                                                         aria-label='Required digit parity'
-                                                         onChange={e => updateCardCfg(card.id, { ifValue: e.target.value })}
-                                                     >
-                                                         {CONDITION_OPTIONS.evenodd.map(value => <option key={value} value={value}>{value}</option>)}
-                                                     </select>
-                                                 </>
-                                            )}
-                                             {card.id === 'overunder' && (
-                                                 <span className='st__cond-text'>the last {cfg.lookback} digits are {cfg.ifValue} digit {ouBarrier}</span>
-                                             )}
-                                            {card.id === 'matchdiffer' && (
-                                                 <span className='st__cond-text'>the last {cfg.lookback} digits are {cfg.ifValue}</span>
-                                            )}
+                                             <span className='st__cond-text'>the last</span>
+                                             <select
+                                                 className='st__cond-select st__cond-select--number'
+                                                 value={cfg.lookback}
+                                                 disabled={isRunning}
+                                                 aria-label={`${card.title} lookback digits`}
+                                                 onChange={e => updateCardCfg(card.id, { lookback: Math.max(1, Math.min(10, +e.target.value)) })}
+                                             >
+                                                 {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(v => <option key={v} value={v}>{v}</option>)}
+                                             </select>
+                                             <span className='st__cond-text'>
+                                                 {card.id === 'risefall' ? 'digits move' : 'digits are'}
+                                             </span>
+                                             <select
+                                                 className='st__cond-select'
+                                                 value={cfg.ifValue}
+                                                 disabled={isRunning}
+                                                 aria-label={`${card.title} entry condition`}
+                                                 onChange={e => updateCardCfg(card.id, { ifValue: e.target.value })}
+                                             >
+                                                 {CONDITION_OPTIONS[card.id].map(value => <option key={value} value={value}>{value}</option>)}
+                                             </select>
+                                             {card.id === 'overunder' && <span className='st__cond-text'>digit {ouBarrier}</span>}
                                         </div>
-                                         <div className={`st__condition-row ${card.id === 'evenodd' ? 'st__condition-row--interactive' : ''}`}>
+                                          <div className='st__condition-row st__condition-row--interactive'>
                                             <span className='st__cond-lbl'>Then</span>
-                                             {card.id === 'risefall' && <span className='st__cond-text'>{cfg.thenAction}</span>}
-                                             {card.id === 'evenodd' && (
-                                                 <select
-                                                     className='st__cond-select st__cond-action-select'
-                                                     value={cfg.thenAction}
-                                                     disabled={isRunning}
-                                                     aria-label='Action to buy'
-                                                     onChange={e => updateCardCfg(card.id, { thenAction: e.target.value })}
-                                                 >
-                                                     {ACTION_OPTIONS.evenodd.map(value => <option key={value} value={value}>{value}</option>)}
-                                                 </select>
-                                             )}
-                                             {card.id === 'overunder' && <span className='st__cond-text'>{cfg.thenAction} digit {ouBarrier}</span>}
-                                             {card.id === 'matchdiffer' && <span className='st__cond-text'>{cfg.thenAction}</span>}
+                                              <select
+                                                  className='st__cond-select st__cond-action-select'
+                                                  value={cfg.thenAction}
+                                                  disabled={isRunning}
+                                                  aria-label={`${card.title} trade action`}
+                                                  onChange={e => updateCardCfg(card.id, { thenAction: e.target.value })}
+                                              >
+                                                  {ACTION_OPTIONS[card.id].map(value => <option key={value} value={value}>{value}</option>)}
+                                              </select>
+                                              {card.id === 'overunder' && <span className='st__cond-text'>digit {ouBarrier}</span>}
                                         </div>
                                         {card.id === 'overunder' && (
                                             <div className='st__condition-row'>
