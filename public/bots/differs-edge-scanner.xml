@@ -248,7 +248,7 @@
             <field name="VAR" id="DES_stake">stake</field>
             <value name="VALUE"><block type="math_arithmetic" id="DES_loss_mult"><field name="OP">MULTIPLY</field><value name="A"><block type="variables_get" id="DES_loss_get"><field name="VAR" id="DES_stake">stake</field></block></value><value name="B"><block type="variables_get" id="DES_loss_mart"><field name="VAR" id="DES_martingale">martingale</field></block></value></block></value>
             <next>
-              <block type="math_change" id="DES_loss_inc"><field name="VAR" id="DES_lossStreak"><value name="DELTA"><shadow type="math_number"><field name="NUM">1</field></shadow></value>
+              <block type="math_change" id="DES_loss_inc"><field name="VAR" id="DES_lossStreak"></field><value name="DELTA"><shadow type="math_number"><field name="NUM">1</field></shadow></value>
                 <next>
                   <block type="controls_if" id="DES_recovery_parity">
                     <mutation else="1"></mutation>
