@@ -189,6 +189,14 @@ const DTrader: React.FC = () => {
                     </div>
                     <div className='dtrader__chart' ref={chartRef}>
                         <div className='dtrader__grid' />
+                        <div className='dtrader__chart-tools' aria-label='Chart tools'>
+                            <span>1T</span>
+                            <button aria-label='Line chart'>⌁</button>
+                            <button aria-label='Indicators'>⌁</button>
+                            <button aria-label='Chart settings'>▤</button>
+                            <button aria-label='Draw'>╱</button>
+                            <button aria-label='Download'>⇩</button>
+                        </div>
                         <svg viewBox='0 0 100 100' preserveAspectRatio='none' aria-label='Live market chart'>
                             <defs><linearGradient id='dtrader-fill' x1='0' y1='0' x2='0' y2='1'><stop offset='0%' stopColor='#6ee7b7' stopOpacity='.34' /><stop offset='100%' stopColor='#6ee7b7' stopOpacity='.02' /></linearGradient></defs>
                             {chartPath && <><path d={`${chartPath} L 100 100 L 0 100 Z`} fill='url(#dtrader-fill)' /><path d={chartPath} fill='none' stroke='#1f2937' strokeWidth='.35' vectorEffect='non-scaling-stroke' /></>}
