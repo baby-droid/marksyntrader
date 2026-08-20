@@ -3,6 +3,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { api_base } from '@/external/bot-skeleton';
 import { useDerivTrade } from '@/hooks/useDerivTrade';
 import { isFastExecutionEnabled } from '@/utils/execution-speed';
+import NumberField from '@/components/number-field';
 import './auto-trades.scss';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -555,7 +556,7 @@ const AutoTrades: React.FC = () => {
     const smartLivePrice = smartFeed.livePrice;
 
     const { buyAndWait, authorized, connected } = useBuyAndWait();
-    type SmartExecutionMode = 'normal' | 'eachTick' | 'superSpeed' | 'bulk10';
+    type SmartExecutionMode = 'normal' | 'eachTick' | 'superSpeed';
     const [smartExecutionMode, setSmartExecutionMode] = useState<SmartExecutionMode>('normal');
     const smartExecutionModeRef = useRef<SmartExecutionMode>('normal');
     useEffect(() => { smartExecutionModeRef.current = smartExecutionMode; }, [smartExecutionMode]);
@@ -564,11 +565,12 @@ const AutoTrades: React.FC = () => {
     const [smartCardCfg, setSmartCardCfg] = useState<Record<SmartCardId, {
         stake: number; ticks: number; martingale: number; barrier: number;
         lookback: number; ifValue: string; thenAction: string;
+        bulkEnabled: boolean; bulkCount: number;
     }>>({
-        risefall:    { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Rise', thenAction: 'Buy Rise' },
-        evenodd:     { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Even', thenAction: 'Buy Even' },
-        overunder:   { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Over', thenAction: 'Buy Over' },
-        matchdiffer: { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Matches', thenAction: 'Buy Matches' },
+        risefall:    { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Rise', thenAction: 'Buy Rise', bulkEnabled: false, bulkCount: 10 },
+        evenodd:     { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Even', thenAction: 'Buy Even', bulkEnabled: false, bulkCount: 10 },
+        overunder:   { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Over', thenAction: 'Buy Over', bulkEnabled: false, bulkCount: 10 },
+        matchdiffer: { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Matches', thenAction: 'Buy Matches', bulkEnabled: false, bulkCount: 10 },
     });
     const smartCardCfgRef = useRef(smartCardCfg);
     useEffect(() => { smartCardCfgRef.current = smartCardCfg; }, [smartCardCfg]);
@@ -697,20 +699,22 @@ const AutoTrades: React.FC = () => {
                     const currentCfg = smartCardCfgRef.current[id];
                     const stk = smartCurrentStakes.current[id];
                     const sym = smartSharedSymbolRef.current;
+                    const batchEnabled = currentCfg.bulkEnabled;
+                    const batchCount = Math.max(10, Math.min(100, Math.round(currentCfg.bulkCount || 10)));
 
                     const transactionId = `${id}-${Date.now()}-${wins + losses}`;
                     pendingTransactionId = transactionId;
                     const transactionTime = new Date().toLocaleTimeString('en', { hour12: false });
-                    const batchTransactionIds = Array.from({ length: 10 }, (_, index) =>
+                    const batchTransactionIds = Array.from({ length: batchCount }, (_, index) =>
                         `${transactionId}-${index + 1}`
                     );
                     setTransactions(prev => [
-                        ...prev.slice(-(mode === 'bulk10' ? 90 : 99)),
-                        ...(mode === 'bulk10'
+                        ...prev.slice(-(batchEnabled ? Math.max(99, batchCount * 2) : 99)),
+                        ...(batchEnabled
                             ? batchTransactionIds.map((id, index) => ({
                                 id,
                                 time: transactionTime,
-                                contract: `${contract}${barrier !== null ? '@' + barrier : ''} #${index + 1}/10`,
+                                contract: `${contract}${barrier !== null ? '@' + barrier : ''} #${index + 1}/${batchCount}`,
                                 profit: null,
                                 symbol: sym,
                                 stake: stk,
@@ -762,12 +766,12 @@ const AutoTrades: React.FC = () => {
                         }
                     };
 
-                    if (mode === 'normal') {
+                    if (!batchEnabled && mode === 'normal') {
                         const profit = await buyAndWait(sym, contract, barrier, stk, currentCfg.ticks);
                         if (smartStopFlags.current[id]) break;
                         recordResult(profit);
-                    } else if (mode === 'bulk10') {
-                        // Dispatch all ten identical orders from the same
+                    } else if (batchEnabled) {
+                        // Dispatch all identical orders from the same signal
                         // signal without awaiting one before starting the
                         // next. Each buy has its own proposal and settlement
                         // subscription, but shares the same symbol, contract,
@@ -778,14 +782,14 @@ const AutoTrades: React.FC = () => {
                             )
                         );
                         const firstSettled = batchResults.find(result => result.status === 'fulfilled');
-                        const batchCompleted = batchResults.length === 10
+                        const batchCompleted = batchResults.length === batchCount
                             && batchResults.every(result => result.status === 'fulfilled');
                         let batchLoss = true;
                         if (batchCompleted && firstSettled?.status === 'fulfilled') {
                             // The batch is one synchronized trade: use the
-                            // first authoritative settlement for all ten
-                            // rows, so Summary and Transactions show either
-                            // 10 wins or 10 losses with identical P/L.
+                            // first authoritative settlement for every row,
+                            // so Summary and Transactions show one atomic
+                            // batch outcome.
                             const batchProfit = Number(firstSettled.value) || 0;
                             batchLoss = batchProfit <= 0;
                             batchResults.forEach((_, index) =>
@@ -1035,22 +1039,13 @@ const AutoTrades: React.FC = () => {
                                 >
                                     Super Speed
                                 </button>
-                                 <button
-                                     className={smartExecutionMode === 'bulk10' ? 'active batch' : 'batch'}
-                                     onClick={() => setSmartExecutionMode('bulk10')}
-                                     title='Buy ten identical contracts concurrently at the same signal, stake, barrier, and duration'
-                                 >
-                                     Bulk 10
-                                 </button>
                             </div>
                             <span className='st__execution-help'>
                                 {smartExecutionMode === 'normal'
                                     ? 'Deriv settlement gates the next trade'
                                     : smartExecutionMode === 'eachTick'
                                         ? 'One individual 1-tick contract per live digit'
-                                         : smartExecutionMode === 'superSpeed'
-                                             ? 'Individual contracts sent at maximum API speed'
-                                             : '10 identical contracts dispatched concurrently per signal'}
+                                         : 'Individual contracts sent at maximum API speed'}
                             </span>
                         </div>
                     </div>
@@ -1218,20 +1213,6 @@ const AutoTrades: React.FC = () => {
                                                 onChange={e => updateCardCfg(card.id, { stake: +e.target.value })} />
                                         </div>
 
-                                     {smartExecutionMode === 'bulk10' && (
-                                         <div className='st__bulk-panel'>
-                                             <div className='st__bulk-panel-title'>Bulk trade active</div>
-                                             <div className='st__bulk-grid'>
-                                                 <span>Contracts <strong>10</strong></span>
-                                                 <span>Stake each <strong>${cfg.stake.toFixed(2)}</strong></span>
-                                                 <span>Total stake <strong>${(cfg.stake * 10).toFixed(2)}</strong></span>
-                                                 <span>Exit <strong>{cfg.ticks} tick{cfg.ticks === 1 ? '' : 's'}</strong></span>
-                                             </div>
-                                             <div className='st__bulk-note'>
-                                                 Same entry signal and contract settings. All 10 rows share one synchronized win/loss result.
-                                             </div>
-                                         </div>
-                                     )}
                                         <div className='st__param'>
                                             <label>Ticks</label>
                                             <input type='number' min='1' max='10' step='1' value={cfg.ticks}
@@ -1244,6 +1225,50 @@ const AutoTrades: React.FC = () => {
                                                 disabled={isRunning}
                                                 onChange={e => updateCardCfg(card.id, { martingale: +e.target.value })} />
                                         </div>
+                                    </div>
+
+                                    {/* Per-card batch controls */}
+                                    <div className={`st__batch-panel ${cfg.bulkEnabled ? 'active' : ''}`}>
+                                        <div className='st__batch-header'>
+                                            <div>
+                                                <strong>Batch trade</strong>
+                                                <span>Open matching contracts from one entry signal</span>
+                                            </div>
+                                            <button
+                                                type='button'
+                                                className={`st__batch-toggle ${cfg.bulkEnabled ? 'on' : ''}`}
+                                                disabled={isRunning}
+                                                aria-pressed={cfg.bulkEnabled}
+                                                onClick={() => updateCardCfg(card.id, { bulkEnabled: !cfg.bulkEnabled })}
+                                            >
+                                                {cfg.bulkEnabled ? 'ON' : 'OFF'}
+                                            </button>
+                                        </div>
+                                        {cfg.bulkEnabled && (
+                                            <>
+                                                <div className='st__batch-fields'>
+                                                    <label>
+                                                        Positions
+                                                        <NumberField
+                                                            value={cfg.bulkCount}
+                                                            min={10}
+                                                            max={100}
+                                                            onCommit={n => updateCardCfg(card.id, { bulkCount: n })}
+                                                            disabled={isRunning}
+                                                            className='st__batch-count'
+                                                        />
+                                                    </label>
+                                                    <div className='st__batch-total'>
+                                                        <span>Total stake</span>
+                                                        <strong>${(cfg.stake * cfg.bulkCount).toFixed(2)}</strong>
+                                                    </div>
+                                                </div>
+                                                <p className='st__batch-note'>
+                                                    {cfg.bulkCount} contracts · ${cfg.stake.toFixed(2)} each · {cfg.ticks} tick{cfg.ticks === 1 ? '' : 's'}.
+                                                    All use this card's same symbol, entry signal, barrier and exit duration.
+                                                </p>
+                                            </>
+                                        )}
                                     </div>
 
                                     {/* Session stats */}
