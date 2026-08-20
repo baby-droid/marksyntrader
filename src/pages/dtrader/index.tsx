@@ -165,7 +165,7 @@ const DTrader: React.FC = () => {
                     <div className='dtrader__panel-title'><span>Open positions</span><span>{positions.filter(p => p.status === 'open').length}</span></div>
                     {positions.length === 0 ? (
                         <div className='dtrader__empty'>
-                            <span className='dtrader__empty-icon'>⌁</span>
+                            <span className='dtrader__empty-icon'>▱</span>
                             <strong>You have no open positions.</strong>
                             <span>Choose a contract on the right to start trading.</span>
                         </div>
@@ -233,8 +233,9 @@ const DTrader: React.FC = () => {
                 <aside className='dtrader__trade-panel'>
                     <div className='dtrader__learn'>Learn about this trade type <span>ⓘ</span></div>
                     <div className='dtrader__contract-tabs'>
-                        <button className={contractFamily === 'digits' ? 'active' : ''} onClick={() => setContractFamily('digits')}>↗ Over/Under</button>
-                        <button className={contractFamily === 'accumulators' ? 'active' : ''} onClick={() => setContractFamily('accumulators')}>⌁ Accumulators</button>
+                        <button className='dtrader__contract-arrow' onClick={() => setContractFamily('accumulators')} aria-label='Previous trade type'>‹</button>
+                        <button className={contractFamily === 'digits' ? 'active' : ''} onClick={() => setContractFamily('digits')}>↗ <span>Over/Under</span></button>
+                        <button className='dtrader__contract-arrow' onClick={() => setContractFamily('digits')} aria-label='Next trade type'>›</button>
                     </div>
                     {contractFamily === 'digits' ? (
                         <>

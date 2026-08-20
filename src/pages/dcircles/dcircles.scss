@@ -456,13 +456,18 @@
     flex-direction: column;
     overflow-y: auto;
 
-    &__left, &__right {
+    &__left {
       flex: none;
       border-right: none;
       border-bottom: 1px solid var(--general-section-2, #e2e8f0);
     }
 
-    &__right { min-height: 50vh; }
+    // The Summary / Transactions / Journal panel blocks the trading cards on
+    // phones. Keep it available on desktop, but remove it from the mobile
+    // layout so trading controls remain immediately accessible.
+    &__right {
+      display: none;
+    }
   }
 }
 
