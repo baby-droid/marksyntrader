@@ -164,7 +164,10 @@ export default class TransactionsStore {
 
     pushTransaction(data: TContractInfo) {
         const is_completed = isEnded(data as ProposalOpenContract);
-        const { run_id } = this.root_store.run_panel;
+        // Auto Trades supplies a batch ID so its contracts are grouped in the
+        // native Bot Builder transaction page. Regular Bot Builder contracts
+        // continue using the current run-panel run ID.
+        const run_id = (data as any).batch_id || this.root_store.run_panel.run_id;
         const current_account = (this.core?.client?.loginid || localStorage.getItem('active_loginid')) as string;
         if (!current_account || !data?.contract_id) return;
 

@@ -62,6 +62,9 @@ export interface BuyParams {
     stake: number;
     barrier?: number | string;
     currency?: string;
+    // Extra app metadata is copied onto the native contract event so
+    // Bot Builder's transaction store can group Auto Trades positions.
+    metadata?: Record<string, unknown>;
 }
 
 const NEEDS_BARRIER = new Set(['DIGITOVER','DIGITUNDER','DIGITMATCH','DIGITDIFF']);
@@ -236,6 +239,7 @@ export function useDerivTrade() {
                 stake,
                 barrier,
                 currency: cur,
+                metadata,
             } = params;
 
             const cur_ = cur || currency || 'USD';
@@ -334,6 +338,7 @@ export function useDerivTrade() {
                 barrier,
                 duration,
                 duration_unit,
+                ...(metadata || {}),
             };
             contractMetaRef.current.set(contract_id, contractMeta);
             observer.emit('bot.contract', contractMeta);

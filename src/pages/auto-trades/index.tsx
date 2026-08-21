@@ -198,6 +198,7 @@ function useBuyAndWait() {
             settle?: boolean;
             onSettled?: (profit: number) => void;
             onBought?: (contractId: number) => void;
+            metadata?: Record<string, unknown>;
             tradingParameters?: Record<string, unknown>;
         } = {},
     ): Promise<number> => {
@@ -216,6 +217,7 @@ function useBuyAndWait() {
                 stake,
                 ...(barrier !== null ? { barrier } : {}),
                 currency,
+                metadata: options.metadata,
             }, settlement => options.onSettled?.(Number(settlement?.profit ?? 0)));
             options.onBought?.(bought.contract_id);
             return 0;
@@ -238,6 +240,7 @@ function useBuyAndWait() {
                     stake,
                     ...(barrier !== null ? { barrier } : {}),
                     currency,
+                    metadata: options.metadata,
                 }, profit => {
                     if (settled) return;
                     settled = true;
@@ -782,7 +785,15 @@ const AutoTrades: React.FC = () => {
                     };
 
                     if (!batchEnabled && mode === 'normal') {
-                        const profit = await buyAndWait(sym, contract, barrier, stk, currentCfg.ticks);
+                        const profit = await buyAndWait(sym, contract, barrier, stk, currentCfg.ticks, {
+                            metadata: {
+                                source: 'auto-trades',
+                                execution_mode: 'single',
+                                batch_id: batchId,
+                                batch_index: 1,
+                                batch_size: 1,
+                            },
+                        });
                         if (smartStopFlags.current[id]) break;
                         recordResult(profit);
                     } else if (batchEnabled) {
@@ -799,6 +810,13 @@ const AutoTrades: React.FC = () => {
                         const batchResults = await Promise.allSettled(
                             batchTransactionIds.map(orderId =>
                                 buyAndWait(sym, contract, barrier, stk, currentCfg.ticks, {
+                                    metadata: {
+                                        source: 'auto-trades',
+                                        execution_mode: 'parallel',
+                                        batch_id: batchId,
+                                        batch_index: batchTransactionIds.indexOf(orderId) + 1,
+                                        batch_size: batchCount,
+                                    },
                                     onBought: contractId => {
                                         boughtContractIds.set(orderId, contractId);
                                         setTransactions(prev => prev.map(transaction =>
@@ -1050,7 +1068,7 @@ const AutoTrades: React.FC = () => {
                                     onClick={() => setSmartExecutionMode('normal')}
                                     title='Buy a contract, then wait for Deriv to settle it before the next trade'
                                 >
-                                    Normal Tick
+                                        Single Trade
                                 </button>
                                 <button
                                     className={smartExecutionMode === 'eachTick' ? 'active' : ''}
@@ -1069,7 +1087,7 @@ const AutoTrades: React.FC = () => {
                             </div>
                             <span className='st__execution-help'>
                                 {smartExecutionMode === 'normal'
-                                    ? 'Deriv settlement gates the next trade'
+                                    ? 'Default: one trade at a time from each entry signal'
                                     : smartExecutionMode === 'eachTick'
                                         ? 'One individual 1-tick contract per live digit'
                                          : 'Individual contracts sent at maximum API speed'}
