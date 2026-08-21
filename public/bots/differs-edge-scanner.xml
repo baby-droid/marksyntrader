@@ -241,8 +241,8 @@
     </statement>
   </block>
 
-  <!-- Win advances the strategy rotation. Loss doubles stake and enters
-       parity recovery: EVEN after an even scan digit, ODD after an odd digit. -->
+  <!-- Win advances the six-step strategy rotation. Loss doubles stake and
+       takes one parity-recovery trade; the recovery result resumes phase 0. -->
   <block type="after_purchase" id="DES_after" deletable="false" x="950" y="1200">
     <statement name="AFTERPURCHASE_STACK">
       <block type="math_change" id="DES_update_pnl">
@@ -275,11 +275,18 @@
             <next>
               <block type="math_change" id="DES_loss_inc"><field name="VAR" id="DES_lossStreak">loss_streak</field><value name="DELTA"><shadow type="math_number"><field name="NUM">1</field></shadow></value>
                 <next>
-                  <block type="controls_if" id="DES_recovery_parity">
+                  <block type="controls_if" id="DES_recovery_or_resume">
                     <mutation else="1"></mutation>
+                    <value name="IF0"><block type="logic_compare" id="DES_already_recovery"><field name="OP">GTE</field><value name="A"><block type="variables_get" id="DES_recovery_phase"><field name="VAR" id="DES_phase">phase</field></block></value><value name="B"><block type="math_number" id="DES_recovery_min"><field name="NUM">6</field></block></value></block></value>
+                    <statement name="DO0"><block type="variables_set" id="DES_resume_circle"><field name="VAR" id="DES_phase">phase</field><value name="VALUE"><block type="math_number" id="DES_resume_circle_value"><field name="NUM">0</field></block></value></block></statement>
+                    <statement name="ELSE">
+                      <block type="controls_if" id="DES_recovery_parity">
+                        <mutation else="1"></mutation>
                     <value name="IF0"><block type="logic_compare" id="DES_even_test"><field name="OP">EQ</field><value name="A"><block type="math_modulo" id="DES_mod"><value name="DIVIDEND"><block type="variables_get" id="DES_digit_for_mod"><field name="VAR" id="DES_lastDigit">last_digit</field></block></value><value name="DIVISOR"><shadow type="math_number"><field name="NUM">2</field></shadow></value></block></value><value name="B"><block type="math_number"><field name="NUM">0</field></block></value></block></value>
                     <statement name="DO0"><block type="variables_set" id="DES_recovery_even"><field name="VAR" id="DES_phase">phase</field><value name="VALUE"><block type="math_number"><field name="NUM">6</field></block></value></block></statement>
                     <statement name="ELSE"><block type="variables_set" id="DES_recovery_odd"><field name="VAR" id="DES_phase">phase</field><value name="VALUE"><block type="math_number"><field name="NUM">7</field></block></value></block></statement>
+                      </block>
+                    </statement>
                   </block>
                 </next>
               </block>
