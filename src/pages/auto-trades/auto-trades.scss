@@ -501,6 +501,12 @@
             border-top: 1px solid rgba(255,255,255,0.07);
             flex-shrink: 0;
         }
+
+        // Keep the mobile Auto Trades view focused on the trading cards.
+        // Summary, Transactions, and Journal remain available on desktop.
+        @media (max-width: 600px) {
+            display: none;
+        }
     }
 
     &__summary-tabs {
