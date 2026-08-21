@@ -150,13 +150,14 @@ export function useDerivTrade() {
                 const cid = Number(poc.contract_id);
                 if (poc.is_sold || poc.status === 'won' || poc.status === 'lost') {
                     const cb = pocCallbacksRef.current.get(cid);
+                    const meta = contractMetaRef.current.get(cid);
+                    const profit = parseFloat(poc.profit ?? '0');
+                    // Use the definitive status from the API; fall back to profit sign.
+                    const status: 'won' | 'lost' =
+                        poc.status === 'won' ? 'won'
+                        : poc.status === 'lost' ? 'lost'
+                        : profit > 0 ? 'won' : 'lost';
                     if (cb) {
-                        const profit = parseFloat(poc.profit ?? '0');
-                        // Use the definitive status from the API; fall back to profit sign
-                        const status: 'won' | 'lost' =
-                            poc.status === 'won' ? 'won'
-                            : poc.status === 'lost' ? 'lost'
-                            : profit > 0 ? 'won' : 'lost';
                         cb({
                             contract_id: cid,
                             profit,
@@ -166,43 +167,44 @@ export function useDerivTrade() {
                             buy_price: poc.buy_price,
                             pip_size: poc.pip_size != null ? Number(poc.pip_size) : undefined,
                         });
-                        const meta = contractMetaRef.current.get(cid);
-                        if (meta) {
-                            const settledContract = {
-                                ...meta,
-                                transaction_ids: { ...meta.transaction_ids, sell: cid },
-                                is_sold: true,
-                                is_completed: true,
-                                status,
-                                profit,
-                                payout: profit > 0 ? Number(poc.payout ?? meta.buy_price + profit) : 0,
-                                bid_price: Number(poc.bid_price ?? 0),
-                                entry_spot: poc.entry_spot,
-                                exit_spot: poc.exit_spot,
-                                entry_tick_time: poc.entry_tick_time,
-                                exit_tick_time: poc.exit_tick_time,
-                            };
-                            observer.emit('bot.contract', settledContract);
-                            window.dispatchEvent(new CustomEvent('auto-trade:contract', {
-                                detail: settledContract,
-                            }));
-                            window.dispatchEvent(new CustomEvent('chart:trade-settled', {
-                                detail: {
-                                    contractId: cid,
-                                    symbol: meta.underlying_symbol,
-                                    contractType: meta.contract_type,
-                                    won: status === 'won',
-                                    profit,
-                                    barrier: meta.barrier,
-                                    exitDigit: poc.exit_tick_display_value
-                                        ? parseInt(String(poc.exit_tick_display_value).replace('.', '').slice(-1), 10)
-                                        : undefined,
-                                },
-                            }));
-                            contractMetaRef.current.delete(cid);
-                        }
-                        pocCallbacksRef.current.delete(cid);
                     }
+                    // Keep the native transaction page authoritative even if
+                    // the local waiting promise timed out or was interrupted.
+                    if (meta) {
+                        const settledContract = {
+                            ...meta,
+                            transaction_ids: { ...meta.transaction_ids, sell: cid },
+                            is_sold: true,
+                            is_completed: true,
+                            status,
+                            profit,
+                            payout: profit > 0 ? Number(poc.payout ?? meta.buy_price + profit) : 0,
+                            bid_price: Number(poc.bid_price ?? 0),
+                            entry_spot: poc.entry_spot,
+                            exit_spot: poc.exit_spot,
+                            entry_tick_time: poc.entry_tick_time,
+                            exit_tick_time: poc.exit_tick_time,
+                        };
+                        observer.emit('bot.contract', settledContract);
+                        window.dispatchEvent(new CustomEvent('auto-trade:contract', {
+                            detail: settledContract,
+                        }));
+                        window.dispatchEvent(new CustomEvent('chart:trade-settled', {
+                            detail: {
+                                contractId: cid,
+                                symbol: meta.underlying_symbol,
+                                contractType: meta.contract_type,
+                                won: status === 'won',
+                                profit,
+                                barrier: meta.barrier,
+                                exitDigit: poc.exit_tick_display_value
+                                    ? parseInt(String(poc.exit_tick_display_value).replace('.', '').slice(-1), 10)
+                                    : undefined,
+                            },
+                        }));
+                        contractMetaRef.current.delete(cid);
+                    }
+                    pocCallbacksRef.current.delete(cid);
                 }
             }
         });
