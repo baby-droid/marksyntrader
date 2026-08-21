@@ -578,6 +578,7 @@ const AutoTrades: React.FC = () => {
         overunder:   { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Over', thenAction: 'Buy Over', bulkEnabled: false, bulkCount: 10 },
         matchdiffer: { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Matches', thenAction: 'Buy Matches', bulkEnabled: false, bulkCount: 10 },
     });
+    const batchTradingEnabled = Object.values(smartCardCfg).some(cfg => cfg.bulkEnabled);
     const smartCardCfgRef = useRef(smartCardCfg);
     useEffect(() => { smartCardCfgRef.current = smartCardCfg; }, [smartCardCfg]);
 
@@ -1065,6 +1066,7 @@ const AutoTrades: React.FC = () => {
                             <div className='st__execution-buttons'>
                                 <button
                                     className={smartExecutionMode === 'normal' ? 'active' : ''}
+                                    disabled={batchTradingEnabled}
                                     onClick={() => setSmartExecutionMode('normal')}
                                     title='Buy a contract, then wait for Deriv to settle it before the next trade'
                                 >
@@ -1072,6 +1074,7 @@ const AutoTrades: React.FC = () => {
                                 </button>
                                 <button
                                     className={smartExecutionMode === 'eachTick' ? 'active' : ''}
+                                    disabled={batchTradingEnabled}
                                     onClick={() => setSmartExecutionMode('eachTick')}
                                     title='Buy one separate one-tick contract for every authenticated market tick'
                                 >
@@ -1079,6 +1082,7 @@ const AutoTrades: React.FC = () => {
                                 </button>
                                 <button
                                     className={smartExecutionMode === 'superSpeed' ? 'active super' : 'super'}
+                                    disabled={batchTradingEnabled}
                                     onClick={() => setSmartExecutionMode('superSpeed')}
                                     title='Buy each individual tick contract without waiting for buy or settlement acknowledgement'
                                 >

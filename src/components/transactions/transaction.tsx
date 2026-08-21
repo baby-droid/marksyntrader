@@ -140,6 +140,16 @@ const PopoverContent = ({ contract }: TPopoverContent) => (
                 )}
             </PopoverItem>
         )}
+        {(contract as any).batch_id && (
+            <PopoverItem title={localize('Batch execution')}>
+                <div className='transactions__popover-value'>
+                    {(contract as any).batch_id}
+                </div>
+                <div className='transactions__popover-value'>
+                    {`Position ${(contract as any).batch_index || 1}/${(contract as any).batch_size || 1} · ${((contract as any).execution_mode || 'single') === 'parallel' ? 'Parallel' : 'Single Trade'}`}
+                </div>
+            </PopoverItem>
+        )}
         {contract.tick_count && (
             <PopoverItem title={localize('Duration')}>
                 <div className='transactions__popover-value'>{`${contract.tick_count} ${localize('ticks')}`}</div>
