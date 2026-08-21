@@ -123,6 +123,23 @@ export default Engine =>
             return this._executePurchase(contract_type);
         }
 
+        purchaseMultiple(contract_types = []) {
+            if (this.store.getState().scope !== BEFORE_PURCHASE || isBotPaused()) {
+                return Promise.resolve();
+            }
+
+            const unique_types = [...new Set(contract_types)].filter(Boolean);
+            if (!unique_types.length) return Promise.resolve();
+
+            // The first contract follows the normal tracked lifecycle. The
+            // remaining contracts are independent same-tick purchases.
+            unique_types.slice(1).forEach(contract_type => {
+                fireSidePurchase(this.tradeOptions, contract_type);
+            });
+
+            return this.purchase(unique_types[0]);
+        }
+
         _executePurchase(contract_type) {
             const onSuccess = response => {
                 const { buy } = response;

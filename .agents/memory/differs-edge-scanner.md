@@ -18,3 +18,10 @@ The bot tracks each contract's profit with `read_details` index 4 in `session_pr
 **Why:** The Bot Builder engine's normal stop pattern is conditional continuation, not a separate native stop block.
 
 **How to apply:** Keep the TP/SL check after win/loss state updates and before `trade_again`; changing the thresholds only requires editing the initialization values.
+
+## Multiple contract block
+The supported multi-contract UI is a `Multiple Purchase` block in the Purchase Conditions toolbox. It exposes Over, Under, Even, Odd, Matches, and Differs slots; the first selected contract is tracked and later selections are independent same-tick purchases.
+
+**Why:** The standard engine has one tracked `purchase` lifecycle, so a custom block must preserve that lifecycle while routing optional side contracts through the existing purchase API.
+
+**How to apply:** Use the block for phase routing instead of inventing a second trade-definition category. Keep the trade definition on the API-supported digits category and select the contract family in each Multiple Purchase slot.
