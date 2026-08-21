@@ -25,3 +25,10 @@ The supported multi-contract UI is a `Multiple Purchase` block in the Purchase C
 **Why:** The standard engine has one tracked `purchase` lifecycle, so a custom block must preserve that lifecycle while routing optional side contracts through the existing purchase API.
 
 **How to apply:** Use the block for phase routing instead of inventing a second trade-definition category. Keep the trade definition on the API-supported digits category and select the contract family in each Multiple Purchase slot.
+
+## Validator compatibility
+Workspace validation treats `purchase` and `multiple_purchase` as interchangeable purchase-entry blocks, while still requiring the standard `before_purchase` container.
+
+**Why:** XML bots that use only the custom multi-purchase block must not be rejected as missing the legacy mandatory Purchase block.
+
+**How to apply:** Preserve the OR rule in required-block and disabled-block checks when adding other purchase-entry block variants.
