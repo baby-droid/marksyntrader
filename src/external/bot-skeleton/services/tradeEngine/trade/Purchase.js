@@ -60,11 +60,11 @@ function _acquireBuySlot() {
 // at a time, and is not safe to share across concurrent contracts. Side
 // purchases still go through the real API, settle independently, and show up
 // normally in transactions/reports/balance.
-function fireSidePurchase(tradeOptions, contract_type) {
+function fireSidePurchase(tradeOptions, contract_type, tradeOptionsOverride = tradeOptions) {
     // Do NOT fire side purchases while the bot is paused.
     if (isBotPaused()) return;
     try {
-        const trade_option = tradeOptionToBuy(contract_type, tradeOptions);
+        const trade_option = tradeOptionToBuy(contract_type, tradeOptionsOverride);
         _acquireBuySlot()
             .then(() => api_base.api.send(trade_option))
             .then(response => {
@@ -128,19 +128,53 @@ export default Engine =>
                 return Promise.resolve();
             }
 
-            const unique_types = [...new Set(contract_types)].filter(Boolean);
-            if (!unique_types.length) return Promise.resolve();
+            const specs = contract_types
+                .map(spec => typeof spec === 'string' ? { contract_type: spec } : spec)
+                .filter(spec => spec?.contract_type);
+            const unique_specs = specs.filter((spec, index, all) =>
+                all.findIndex(candidate =>
+                    candidate.contract_type === spec.contract_type &&
+                    candidate.prediction === spec.prediction
+                ) === index
+            );
+            if (!unique_specs.length) return Promise.resolve();
+
+            /* A prediction supplied by the XML purchase block is intentionally
+               bought directly. Proposals are created once by Bot.start(), so
+               selecting a different barrier after the first settlement would
+               otherwise reuse the first phase's proposal and stop the bot. */
+            const hasDynamicOptions = unique_specs.some(spec =>
+                spec.dynamic === true || spec.prediction !== undefined
+            );
+            if (hasDynamicOptions) {
+                unique_specs.slice(1).forEach(spec => {
+                    fireSidePurchase(this.tradeOptions, spec.contract_type, {
+                        ...this.tradeOptions,
+                        amount: spec.amount ?? this.tradeOptions.amount,
+                        prediction: spec.prediction,
+                    });
+                });
+                return this._executePurchase(
+                    unique_specs[0].contract_type,
+                    {
+                        ...this.tradeOptions,
+                        amount: unique_specs[0].amount ?? this.tradeOptions.amount,
+                        prediction: unique_specs[0].prediction,
+                    },
+                    true
+                );
+            }
 
             // The first contract follows the normal tracked lifecycle. The
             // remaining contracts are independent same-tick purchases.
-            unique_types.slice(1).forEach(contract_type => {
-                fireSidePurchase(this.tradeOptions, contract_type);
+            unique_specs.slice(1).forEach(spec => {
+                fireSidePurchase(this.tradeOptions, spec.contract_type);
             });
 
-            return this.purchase(unique_types[0]);
+            return this.purchase(unique_specs[0].contract_type);
         }
 
-        _executePurchase(contract_type) {
+        _executePurchase(contract_type, tradeOptions = this.tradeOptions, forceDirect = false) {
             const onSuccess = response => {
                 const { buy } = response;
 
@@ -183,6 +217,7 @@ export default Engine =>
             // Fast Execution bypasses the proposal round-trip just like Crazy/Turbo —
             // the biggest single source of purchase latency.
             const useDirectBuy =
+                forceDirect ||
                 (isFastExecutionEnabled() || speed === 'crazy' || speed === 'turbo' || speed === 'supersonic') &&
                 !this.options.timeMachineEnabled;
 
@@ -230,7 +265,7 @@ export default Engine =>
             // ── Direct-buy path (Crazy/Turbo, or no payout block) ──
             // Build the buy request from current trade options — no proposal ID
             // needed. The rate-limiter slot ensures we stay within API limits.
-            const trade_option = tradeOptionToBuy(contract_type, this.tradeOptions);
+            const trade_option = tradeOptionToBuy(contract_type, tradeOptions);
             const action = () => _acquireBuySlot().then(() =>
                 api_base.api.send(trade_option)
             );
@@ -239,7 +274,7 @@ export default Engine =>
 
             contractStatus({
                 id: 'contract.purchase_sent',
-                data: this.tradeOptions.amount,
+                data: tradeOptions.amount,
             });
 
             if (!this.options.timeMachineEnabled) {

@@ -11,15 +11,28 @@ const CONTRACT_OPTIONS = [
     [localize('Differs'), 'DIGITDIFF'],
 ];
 
+const PREDICTION_OPTIONS = [
+    [localize('No prediction override'), 'NONE'],
+    [localize('Latest digit'), 'LAST_DIGIT'],
+    ...Array.from({ length: 10 }, (_, digit) => [String(digit), String(digit)]),
+];
+
 window.Blockly.Blocks.multiple_purchase = {
     init() {
         this.jsonInit({
-            message0: localize('Multiple Purchase: %1 %2 %3 %4 %5 %6'),
-            args0: [1, 2, 3, 4, 5, 6].map(index => ({
-                type: 'field_dropdown',
-                name: `PURCHASE_${index}`,
-                options: CONTRACT_OPTIONS,
-            })),
+            message0: localize('Multiple Purchase: %1 %2 %3 %4 %5 %6 | Prediction %7'),
+            args0: [
+                ...[1, 2, 3, 4, 5, 6].map(index => ({
+                    type: 'field_dropdown',
+                    name: `PURCHASE_${index}`,
+                    options: CONTRACT_OPTIONS,
+                })),
+                {
+                    type: 'field_dropdown',
+                    name: 'PREDICTION',
+                    options: PREDICTION_OPTIONS,
+                },
+            ],
             previousStatement: null,
             colour: window.Blockly.Colours.Special1.colour,
             colourSecondary: window.Blockly.Colours.Special1.colourSecondary,
@@ -64,5 +77,17 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.multiple_purchase = block
 
     if (!contract_types.length) return '';
 
-    return `Bot.purchaseMultiple(${JSON.stringify(contract_types)});\n`;
+    const predictionField = block.getField('PREDICTION');
+    if (!predictionField) return `Bot.purchaseMultiple(${JSON.stringify(contract_types)});\n`;
+
+    const prediction = block.getFieldValue('PREDICTION');
+    const predictionCode = prediction === 'LAST_DIGIT' ? 'last_digit' :
+        prediction === 'NONE' ? null : String(Number(prediction));
+    const specs = contract_types
+        .map(contract_type => {
+            const predictionPart = predictionCode == null ? '' : `, prediction: ${predictionCode}`;
+            return `{ contract_type: ${JSON.stringify(contract_type)}, amount: stake${predictionPart}, dynamic: true }`;
+        })
+        .join(', ');
+    return `Bot.purchaseMultiple([${specs}]);\n`;
 };

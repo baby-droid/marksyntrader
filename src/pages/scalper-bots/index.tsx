@@ -1936,16 +1936,8 @@ const BotDetail: React.FC<{
         /* ── FRESH XML RELOAD every time Run is pressed ──
            Await the load so the workspace is ready before the first trade fires. */
         addLog('📂 LOADING BOT STRATEGY...', 'hack');
-        try {
-            await onPreloadXml(bot, {
-                market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit,
-                takeProfit: cfg.takeProfit, stopLoss: cfg.stopLoss,
-            });
-        } catch { /* non-fatal */ }
-        patchWorkspaceParams({
-            duration: cfg.duration, duration_unit: cfg.duration_unit,
-            takeProfit: cfg.takeProfit, stopLoss: cfg.stopLoss,
-        });
+        try { await onPreloadXml(bot, { market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit }); } catch { /* non-fatal */ }
+        patchWorkspaceParams({ duration: cfg.duration, duration_unit: cfg.duration_unit });
         // Re-apply market with staggered delays so it lands AFTER dbot's async
         // submarket onChange reloads the SYMBOL_LIST options (Bear/Bull/Jump need this).
         { const rm = curMarket; setTimeout(() => patchWorkspaceParams({ market: rm }), 500); setTimeout(() => patchWorkspaceParams({ market: rm }), 1100); }
@@ -2154,16 +2146,8 @@ const BotDetail: React.FC<{
                         lastFiredGroupRef.current = null;
                         subscribeMarket(curMarket);
                         addLog(`⏱ SCAN_TIMEOUT — no entry in 2 min | rotating → ${curMarket} | reloading XML...`, 'switch');
-                        try {
-                            await onPreloadXml(bot, {
-                                market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit,
-                                takeProfit: cfg.takeProfit, stopLoss: cfg.stopLoss,
-                            });
-                        } catch { /* non-fatal */ }
-                        patchWorkspaceParams({
-                            market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit,
-                            takeProfit: cfg.takeProfit, stopLoss: cfg.stopLoss,
-                        });
+                        try { await onPreloadXml(bot, { market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit }); } catch { /* non-fatal */ }
+                        patchWorkspaceParams({ market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit });
                         { const rm = curMarket; setTimeout(() => patchWorkspaceParams({ market: rm }), 500); setTimeout(() => patchWorkspaceParams({ market: rm }), 1000); }
                         marketSwitched = true;
                         break;
@@ -2670,16 +2654,8 @@ const BotDetail: React.FC<{
                         curMarketRef.current = curMarket;
                         addLog(`🔀 MARKET_2_SWITCH → ${curMarket} | stake ${curStake.toFixed(2)} | barrier ${slotBarrier()} | martingale ×${slotMartingale()} (${totalConsLoss} losses)`, 'switch');
                         /* Reload XML with new market and duration */
-                        try {
-                            await onPreloadXml(bot, {
-                                market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit,
-                                takeProfit: cfg.takeProfit, stopLoss: cfg.stopLoss,
-                            });
-                        } catch { /* non-fatal */ }
-                        patchWorkspaceParams({
-                            market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit,
-                            takeProfit: cfg.takeProfit, stopLoss: cfg.stopLoss,
-                        });
+                        try { await onPreloadXml(bot, { market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit }); } catch { /* non-fatal */ }
+                        patchWorkspaceParams({ market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit });
                         { const rm = curMarket; setTimeout(() => patchWorkspaceParams({ market: rm }), 500); setTimeout(() => patchWorkspaceParams({ market: rm }), 1000); }
                         continue; // re-scan on Market 2 with updated stake
                     }
@@ -2694,16 +2670,8 @@ const BotDetail: React.FC<{
                         curMarketRef.current = curMarket;
                         addLog(`🔀 MARKET_SWITCH → ${curMarket} | stake ${curStake.toFixed(2)} | martingale ×${slotMartingale()} (${totalConsLoss} losses, threshold: ${cfg.switchOnLosses})`, 'switch');
                         /* Reload XML with new market and sync ticks duration */
-                        try {
-                            await onPreloadXml(bot, {
-                                market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit,
-                                takeProfit: cfg.takeProfit, stopLoss: cfg.stopLoss,
-                            });
-                        } catch { /* non-fatal */ }
-                        patchWorkspaceParams({
-                            market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit,
-                            takeProfit: cfg.takeProfit, stopLoss: cfg.stopLoss,
-                        });
+                        try { await onPreloadXml(bot, { market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit }); } catch { /* non-fatal */ }
+                        patchWorkspaceParams({ market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit });
                         { const rm = curMarket; setTimeout(() => patchWorkspaceParams({ market: rm }), 500); setTimeout(() => patchWorkspaceParams({ market: rm }), 1000); }
                         continue; // re-scan on new market with martingale stake
                     }
@@ -4303,20 +4271,15 @@ const ScalperBots: React.FC = observer(() => {
     /* Silently sync the Bot Builder workspace with this bot's default XML.
        Retries up to 30 times (3 s total) so multi-scalper XML loads even
        when Blockly is initialising in the background. */
-    const handlePreloadXml = useCallback(async (bot: TScalperBot, opts?: {
-        market?: string; duration?: number; duration_unit?: 't' | 's';
-        takeProfit?: number; stopLoss?: number;
-    }) => {
+    const handlePreloadXml = useCallback(async (bot: TScalperBot, opts?: { market?: string; duration?: number; duration_unit?: 't' | 's' }) => {
         try {
             const res = await fetch(bot.xmlFile);
             if (!res.ok) return;
             let xml = await res.text();
-            // Patch every scalper XML with market, duration, and current TP/SL
-            // before loading it into the real Bot Builder workspace.
-            xml = patchXmlContent(
-                xml, opts?.market, opts?.duration, opts?.duration_unit,
-                opts?.takeProfit, opts?.stopLoss,
-            );
+            // Patch XML with current market + duration before loading into workspace
+            if (opts?.market || opts?.duration != null) {
+                xml = patchXmlContent(xml, opts.market, opts.duration, opts.duration_unit);
+            }
             // Try immediately, then retry until Blockly workspace is ready
             let ok = await loadXmlIntoWorkspace(xml, bot.name);
             if (!ok) {
