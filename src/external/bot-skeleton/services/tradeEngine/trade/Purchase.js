@@ -195,7 +195,14 @@ export default Engine =>
                 this.contractId = buy.contract_id;
                 this.store.dispatch(purchaseSuccessful());
 
-                if (this.is_proposal_subscription_required) {
+                // Dynamic Multiple Purchase entries are bought directly from
+                // the phase-specific parameters. Refreshing the old proposal
+                // subscription here races the next before_purchase handoff
+                // and can leave the interpreter waiting in the previous
+                // phase. The next Bot.start() refreshes proposals when the
+                // phase or stake changes; keep the eager refresh for the
+                // normal proposal-based purchase path.
+                if (this.is_proposal_subscription_required && !forceDirect) {
                     this.renewProposalsOnPurchase();
                 }
 
