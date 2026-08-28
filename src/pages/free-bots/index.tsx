@@ -17,6 +17,22 @@ const FREE_BOTS = [
     xmlFile: '/bots/differs-edge-scanner.xml',
     badge: 'SCAN 🧠', badgeColor: '#34d399', icon: '🔎', winRate: '—',
   },
+  {
+    id: 'ahmed-auto-even',
+    name: 'AHMED AUTO EVEN — Streak Reversal',
+    description: '🎯 Detects an odd-digit streak or low odd digits, then buys DIGIT EVEN. Includes real purchase/trade-again flow, notifications, 2× martingale, TP and SL.',
+    category: 'Even/Odd', market: 'V25 1s', type: 'DIGITEVEN', prediction: 'EVEN',
+    xmlFile: '/bots/ahmed-auto-even.xml',
+    badge: 'AUTO EVEN', badgeColor: '#34d399', icon: '✅', winRate: '—',
+  },
+  {
+    id: 'ahmed-auto-odd',
+    name: 'AHMED AUTO ODD — Streak Reversal',
+    description: '🎯 Detects an even-digit streak or low even digits, then buys DIGIT ODD. Includes real purchase/trade-again flow, notifications, 2× martingale, TP and SL.',
+    category: 'Even/Odd', market: 'V25 1s', type: 'DIGITODD', prediction: 'ODD',
+    xmlFile: '/bots/ahmed-auto-odd.xml',
+    badge: 'AUTO ODD', badgeColor: '#60a5fa', icon: '🔢', winRate: '—',
+  },
   // ── Recovery barrier bots ────────────────────────────────────────────────
   {
     id: 'recovery-over1-over3',
@@ -306,7 +322,7 @@ const FREE_BOTS = [
   },
 ];
 
-const CATEGORIES = ['All', 'Cycle', 'Even/Odd', 'Over/Under'];
+const CATEGORIES = ['All', 'Scanner', 'Cycle', 'Even/Odd', 'Over/Under'];
 
 // Market Killer Prime V1 — market rotation for Trade Restart
 const MKP_MARKETS = [
