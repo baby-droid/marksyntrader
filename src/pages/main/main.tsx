@@ -51,6 +51,7 @@ const ChartWrapper   = lazy(() => import('../chart/chart-wrapper'));
 const Tutorial       = lazy(() => import('../tutorials'));
 const FreeBots       = lazy(() => import('../free-bots'));
 const DCircles       = lazy(() => import('../dcircles'));
+const AutoDigits     = lazy(() => import('../auto-digits'));
 const TradingSoftware = lazy(() => import('../trading-software'));
 const SpeedLab       = lazy(() => import('../speed-lab'));
 const ProHedge       = lazy(() => import('../hedge-trading'));
@@ -99,18 +100,19 @@ const AppWrapper = observer(() => {
         'ahmed_learning',   // 1
         'free_bots',        // 2
         'ahmed_scalper_bots', // 3
-        'dcircles',         // 4
-        'speed_lab',        // 5
-        'pro_hedge',        // 6
-        'chart',            // 7
-        'manual_trader',    // 8
-        'auto_trades',      // 9
-        'copy_trading',     // 10
-        'reports',          // 11
-        'bulk_trade',       // 12
-        'analysis',         // 13
-        'tutorial',         // 14
-        'trading_software', // 15
+        'auto_digits',      // 4
+        'dcircles',         // 5
+        'speed_lab',        // 6
+        'pro_hedge',        // 7
+        'chart',            // 8
+        'manual_trader',    // 9
+        'auto_trades',      // 10
+        'copy_trading',     // 11
+        'reports',          // 12
+        'bulk_trade',       // 13
+        'analysis',         // 14
+        'tutorial',         // 15
+        'trading_software', // 16
     ];
 
     const { isDesktop } = useDevice();
@@ -334,7 +336,20 @@ const AppWrapper = observer(() => {
                                 </Suspense>
                             </div>
 
-                            {/* 4 — D-Circles */}
+                            {/* 4 — Auto-Digits */}
+                            <div
+                                label={mkIcon(
+                                    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='12' cy='12' r='8'/><path d='M12 8v4l3 2'/><path d='M4.5 6.5 3 5M19.5 6.5 21 5'/></svg>,
+                                    'Auto-Digits'
+                                )}
+                                id='id-auto-digits'
+                            >
+                                <Suspense fallback={tabLoader('Loading Auto-Digits...')}>
+                                    <AutoDigits />
+                                </Suspense>
+                            </div>
+
+                            {/* 5 — D-Circles */}
                             <div
                                 label={mkIcon(
                                     <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='7' cy='12' r='4'/><circle cx='17' cy='12' r='4'/></svg>,
@@ -513,7 +528,7 @@ const AppWrapper = observer(() => {
             </div>
 
             {/* Floating panels — hide bot runner on chart & manual-trader tabs */}
-            {active_tab !== 7 && active_tab !== 8 && active_tab !== 15 && <FloatingRunButton />}
+            {active_tab !== DBOT_TABS.CHART && active_tab !== DBOT_TABS.MANUAL_TRADER && active_tab !== DBOT_TABS.TUTORIAL && <FloatingRunButton />}
             <WhatsAppFloat />
 
             <DesktopWrapper>
