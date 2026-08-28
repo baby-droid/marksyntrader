@@ -50,3 +50,4 @@
 - [Auto Trades Even/Odd condition](auto-trades-evenodd.md) — the card gates entries on the latest N digits sharing the selected parity; UI dropdowns drive both the condition and buy contract.
 - [Auto Trades batch manager](auto-trades-batch-manager.md) — same-account batches use concurrent authenticated WebSocket buys; track each contract under a batch ID because REST bulk purchase targets multiple accounts.
 - [Differs Edge Scanner bot](differs-edge-scanner.md) — XML bot scans latest digit, rotates Differs/Over/Under phases, and uses Even/Odd parity recovery after losses.
+- [Auto-Digits scanner](auto-digits-scanner.md) — authenticated live tick distribution dashboard; two real-tick virtual validations precede buyContract trades, which emit native Bot Builder transaction events.
