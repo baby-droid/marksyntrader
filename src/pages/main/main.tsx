@@ -64,7 +64,6 @@ const Analysis       = lazy(() => import('../analysis'));
 const AhmedLearning  = lazy(() => import('../ahmed-learning'));
 const AutoTrades     = lazy(() => import('../auto-trades'));
 const ScalperBots    = lazy(() => import('../scalper-bots'));
-const AutoDigits     = lazy(() => import('../auto-digits'));
 
 const AppWrapper = observer(() => {
     const { connectionStatus } = useApiBase();
