@@ -33,3 +33,29 @@
     touch-action: none;
     overflow: hidden;
 }
+
+@media (max-width: 600px) {
+    #scratch_div {
+        margin-top: 0.25rem;
+        height: calc(100dvh - 12rem);
+        overflow: hidden;
+    }
+
+    .injectionDiv {
+        height: 100%;
+        min-width: 0;
+        overflow: hidden;
+    }
+
+    .blocklyToolboxDiv {
+        width: 42px !important;
+    }
+
+    .blocklyFlyout {
+        max-width: 82vw;
+    }
+
+    .blocklyMainBackground {
+        fill: var(--general-main-1, #fff);
+    }
+}

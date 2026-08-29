@@ -470,6 +470,61 @@
         margin: 0.4rem 0;
     }
 
+    /* ── Trading Context metadata block ── */
+    &__modal-meta {
+        margin-top: 0.6rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.55rem;
+    }
+
+    &__modal-meta-title {
+        font-size: 1rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        color: #888;
+        margin-bottom: 0.2rem;
+    }
+
+    &__modal-meta-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.6rem;
+    }
+
+    &__modal-meta-label {
+        font-size: 1.15rem;
+        color: #666;
+        white-space: nowrap;
+    }
+
+    &__modal-meta-val {
+        font-size: 1.15rem;
+        font-weight: 600;
+        color: #222;
+        text-align: right;
+    }
+
+    &__modal-meta-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        padding: 0.2rem 0.7rem;
+        border-radius: 2rem;
+        font-size: 1.05rem;
+        font-weight: 700;
+        letter-spacing: 0.03em;
+
+        &--normal        { background: rgba(100,116,139,0.12); color: #475569; }
+        &--crazy         { background: rgba(234,179,8,0.15);   color: #a16207; }
+        &--turbo         { background: rgba(239,68,68,0.13);   color: #dc2626; }
+        &--normal.fast   { background: rgba(59,130,246,0.13);  color: #1d4ed8; }
+        &--crazy.fast    { background: rgba(168,85,247,0.15);  color: #7e22ce; }
+        &--turbo.fast    { background: rgba(239,68,68,0.18);   color: #b91c1c; box-shadow: 0 0 0 1.5px #fca5a5; }
+    }
+
     &__modal-chart {
         padding: 2rem;
         display: flex;

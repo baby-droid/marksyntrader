@@ -1,0 +1,719 @@
+<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
+  <variables>
+    <variable id="sepp_stake">stake</variable>
+    <variable id="sepp_init">initial_stake</variable>
+    <variable id="sepp_scan">scan_stake</variable>
+    <variable id="sepp_mart">martingale</variable>
+    <variable id="sepp_tp">take_profit</variable>
+    <variable id="sepp_sl">stop_loss</variable>
+    <variable id="sepp_codd">cons_odd</variable>
+    <variable id="sepp_cevn">cons_even</variable>
+    <variable id="sepp_pcodd">prev_cons_odd</variable>
+    <variable id="sepp_pcevn">prev_cons_even</variable>
+    <variable id="sepp_hiodd">high_odd_seen</variable>
+    <variable id="sepp_hievn">high_even_seen</variable>
+    <variable id="sepp_last">last_digit_val</variable>
+    <variable id="sepp_sig">signal_type</variable>
+  </variables>
+
+  <!-- ═══════════════════════════════════════════════════════════════════
+       SMART ENTRY PATTERN PRO
+       ─────────────────────────────────────────────────────────────────
+       SIGNAL LOGIC (runs every trade in before_purchase):
+         Detects patterns on the last observed digit and fires a real trade:
+
+         Pattern A — 3+ consecutive ODD digits, then 1st EVEN digit:
+           → BUY DIGITEVEN  (market reversing from odd streak)
+
+         Pattern B — 3+ consecutive EVEN digits, then 1st ODD digit:
+           → BUY DIGITODD   (market reversing from even streak)
+
+         Pattern C — last digit is 1 or 3 (lowest odd digits):
+           → BUY DIGITEVEN directly (extreme-low odd → reversion expected)
+
+         Pattern D — last digit is 0 or 2 (lowest even digits):
+           → BUY DIGITODD directly  (extreme-low even → reversion expected)
+
+         Pattern E — last digit is 7 or 9 (highest odd), AND 3+ prior odds:
+           → confirms Pattern A with high-odd signal (stronger conviction)
+           → BUY DIGITEVEN  (highest-odd streak → even reversion)
+
+         Pattern F — last digit is 6 or 8 (highest even), AND 3+ prior evens:
+           → confirms Pattern B with high-even signal (stronger conviction)
+           → BUY DIGITODD   (highest-even streak → odd reversion)
+
+         No signal → scan mode: use min stake (0.35) to keep engine live
+
+       Martingale 2x on real-trade loss | Reset on win or after scan
+       TP $5 / SL $50 | Market: V25 1s (Volatility 25 Index 1s)
+  ═══════════════════════════════════════════════════════════════════ -->
+  <block type="trade_definition" id="sepp_def" deletable="false" x="0" y="60">
+    <statement name="TRADE_OPTIONS">
+      <block type="trade_definition_market" id="sepp_mkt" deletable="false" movable="false">
+        <field name="MARKET_LIST">synthetic_index</field>
+        <field name="SUBMARKET_LIST">random_index</field>
+        <field name="SYMBOL_LIST">1HZ25V</field>
+        <next>
+          <block type="trade_definition_tradetype" id="sepp_tt" deletable="false" movable="false">
+            <field name="TRADETYPECAT_LIST">digits</field>
+            <field name="TRADETYPE_LIST">evenodd</field>
+            <next>
+              <block type="trade_definition_contracttype" id="sepp_ct" deletable="false" movable="false">
+                <field name="TYPE_LIST">DIGITEVEN</field>
+                <next>
+                  <block type="trade_definition_candleinterval" id="sepp_ci" deletable="false" movable="false">
+                    <field name="CANDLEINTERVAL_LIST">60</field>
+                    <next>
+                      <block type="trade_definition_restartbuysell" id="sepp_rbs" deletable="false" movable="false">
+                        <field name="TIME_MACHINE_ENABLED">FALSE</field>
+                        <next>
+                          <block type="trade_definition_restartonerror" id="sepp_roe" deletable="false" movable="false">
+                            <field name="RESTARTONERROR">TRUE</field>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="INITIALIZATION">
+      <block type="variables_set" id="sepp_i1">
+        <field name="VAR" id="sepp_stake">stake</field>
+        <value name="VALUE"><block type="math_number" id="sepp_i1v"><field name="NUM">0.5</field></block></value>
+        <next>
+          <block type="variables_set" id="sepp_i2">
+            <field name="VAR" id="sepp_init">initial_stake</field>
+            <value name="VALUE"><block type="math_number" id="sepp_i2v"><field name="NUM">0.5</field></block></value>
+            <next>
+              <block type="variables_set" id="sepp_i3">
+                <field name="VAR" id="sepp_scan">scan_stake</field>
+                <value name="VALUE"><block type="math_number" id="sepp_i3v"><field name="NUM">0.35</field></block></value>
+                <next>
+                  <block type="variables_set" id="sepp_i4">
+                    <field name="VAR" id="sepp_mart">martingale</field>
+                    <value name="VALUE"><block type="math_number" id="sepp_i4v"><field name="NUM">2</field></block></value>
+                    <next>
+                      <block type="variables_set" id="sepp_i5">
+                        <field name="VAR" id="sepp_tp">take_profit</field>
+                        <value name="VALUE"><block type="math_number" id="sepp_i5v"><field name="NUM">5</field></block></value>
+                        <next>
+                          <block type="variables_set" id="sepp_i6">
+                            <field name="VAR" id="sepp_sl">stop_loss</field>
+                            <value name="VALUE"><block type="math_number" id="sepp_i6v"><field name="NUM">50</field></block></value>
+                            <next>
+                              <block type="variables_set" id="sepp_i7">
+                                <field name="VAR" id="sepp_codd">cons_odd</field>
+                                <value name="VALUE"><block type="math_number" id="sepp_i7v"><field name="NUM">0</field></block></value>
+                                <next>
+                                  <block type="variables_set" id="sepp_i8">
+                                    <field name="VAR" id="sepp_cevn">cons_even</field>
+                                    <value name="VALUE"><block type="math_number" id="sepp_i8v"><field name="NUM">0</field></block></value>
+                                    <next>
+                                      <block type="variables_set" id="sepp_i9">
+                                        <field name="VAR" id="sepp_pcodd">prev_cons_odd</field>
+                                        <value name="VALUE"><block type="math_number" id="sepp_i9v"><field name="NUM">0</field></block></value>
+                                        <next>
+                                          <block type="variables_set" id="sepp_i10">
+                                            <field name="VAR" id="sepp_pcevn">prev_cons_even</field>
+                                            <value name="VALUE"><block type="math_number" id="sepp_i10v"><field name="NUM">0</field></block></value>
+                                            <next>
+                                              <block type="variables_set" id="sepp_i11">
+                                                <field name="VAR" id="sepp_hiodd">high_odd_seen</field>
+                                                <value name="VALUE"><block type="math_number" id="sepp_i11v"><field name="NUM">0</field></block></value>
+                                                <next>
+                                                  <block type="variables_set" id="sepp_i12">
+                                                    <field name="VAR" id="sepp_hievn">high_even_seen</field>
+                                                    <value name="VALUE"><block type="math_number" id="sepp_i12v"><field name="NUM">0</field></block></value>
+                                                    <next>
+                                                      <block type="variables_set" id="sepp_i13">
+                                                        <field name="VAR" id="sepp_last">last_digit_val</field>
+                                                        <value name="VALUE"><block type="math_number" id="sepp_i13v"><field name="NUM">0</field></block></value>
+                                                        <next>
+                                                          <block type="variables_set" id="sepp_i14">
+                                                            <field name="VAR" id="sepp_sig">signal_type</field>
+                                                            <value name="VALUE"><block type="math_number" id="sepp_i14v"><field name="NUM">0</field></block></value>
+                                                          </block>
+                                                        </next>
+                                                      </block>
+                                                    </next>
+                                                  </block>
+                                                </next>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="SUBMARKET">
+      <block type="trade_definition_tradeoptions" id="sepp_opts">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="false"></mutation>
+        <field name="DURATIONTYPE_LIST">t</field>
+        <value name="DURATION">
+          <shadow type="math_number_positive" id="sepp_dur_s"><field name="NUM">1</field></shadow>
+        </value>
+        <value name="AMOUNT">
+          <shadow type="math_number_positive" id="sepp_amt_s"><field name="NUM">0.5</field></shadow>
+          <block type="variables_get" id="sepp_amt_g">
+            <field name="VAR" id="sepp_stake">stake</field>
+          </block>
+        </value>
+      </block>
+    </statement>
+  </block>
+
+  <!-- ═══ BEFORE PURCHASE — Full pattern scanner + signal routing ═══ -->
+  <block type="before_purchase" id="sepp_bp" collapsed="false" deletable="false" x="0" y="800">
+    <statement name="BEFOREPURCHASE_STACK">
+
+      <!-- Step 1: Save previous counters BEFORE updating them (needed for transition detection) -->
+      <block type="variables_set" id="sepp_bp_sv1">
+        <field name="VAR" id="sepp_pcodd">prev_cons_odd</field>
+        <value name="VALUE"><block type="variables_get" id="sepp_bp_sv1_g"><field name="VAR" id="sepp_codd">cons_odd</field></block></value>
+        <next>
+          <block type="variables_set" id="sepp_bp_sv2">
+            <field name="VAR" id="sepp_pcevn">prev_cons_even</field>
+            <value name="VALUE"><block type="variables_get" id="sepp_bp_sv2_g"><field name="VAR" id="sepp_cevn">cons_even</field></block></value>
+            <next>
+
+              <!-- Step 2: Read last digit -->
+              <block type="variables_set" id="sepp_bp_ld">
+                <field name="VAR" id="sepp_last">last_digit_val</field>
+                <value name="VALUE"><block type="last_digit" id="sepp_bp_ld_blk"></block></value>
+                <next>
+
+                  <!-- Step 3: Branch on ODD vs EVEN digit -->
+                  <!-- ODD check: last_digit_val in {1,3,5,7,9} -->
+                  <block type="controls_if" id="sepp_bp_parity">
+                    <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                    <value name="IF0">
+                      <!-- last_digit == 1 OR 3 OR 5 OR 7 OR 9 -->
+                      <block type="logic_operation" id="sepp_bp_odd_top">
+                        <field name="OP">OR</field>
+                        <value name="A">
+                          <block type="logic_operation" id="sepp_bp_odd_ab">
+                            <field name="OP">OR</field>
+                            <value name="A">
+                              <block type="logic_compare" id="sepp_bp_odd_c1">
+                                <field name="OP">EQ</field>
+                                <value name="A"><block type="variables_get" id="sepp_bp_odd_g1"><field name="VAR" id="sepp_last">last_digit_val</field></block></value>
+                                <value name="B"><block type="math_number" id="sepp_bp_odd_n1"><field name="NUM">1</field></block></value>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="logic_operation" id="sepp_bp_odd_bc">
+                                <field name="OP">OR</field>
+                                <value name="A">
+                                  <block type="logic_compare" id="sepp_bp_odd_c3">
+                                    <field name="OP">EQ</field>
+                                    <value name="A"><block type="variables_get" id="sepp_bp_odd_g3"><field name="VAR" id="sepp_last">last_digit_val</field></block></value>
+                                    <value name="B"><block type="math_number" id="sepp_bp_odd_n3"><field name="NUM">3</field></block></value>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <block type="logic_compare" id="sepp_bp_odd_c5">
+                                    <field name="OP">EQ</field>
+                                    <value name="A"><block type="variables_get" id="sepp_bp_odd_g5"><field name="VAR" id="sepp_last">last_digit_val</field></block></value>
+                                    <value name="B"><block type="math_number" id="sepp_bp_odd_n5"><field name="NUM">5</field></block></value>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <block type="logic_operation" id="sepp_bp_odd_cd">
+                            <field name="OP">OR</field>
+                            <value name="A">
+                              <block type="logic_compare" id="sepp_bp_odd_c7">
+                                <field name="OP">EQ</field>
+                                <value name="A"><block type="variables_get" id="sepp_bp_odd_g7"><field name="VAR" id="sepp_last">last_digit_val</field></block></value>
+                                <value name="B"><block type="math_number" id="sepp_bp_odd_n7"><field name="NUM">7</field></block></value>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="logic_compare" id="sepp_bp_odd_c9">
+                                <field name="OP">EQ</field>
+                                <value name="A"><block type="variables_get" id="sepp_bp_odd_g9"><field name="VAR" id="sepp_last">last_digit_val</field></block></value>
+                                <value name="B"><block type="math_number" id="sepp_bp_odd_n9"><field name="NUM">9</field></block></value>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+
+                    <!-- ── ODD branch ── -->
+                    <statement name="DO0">
+                      <!-- Signal detection using prev_cons_even (BEFORE update) -->
+                      <block type="controls_if" id="sepp_bp_odd_sig">
+                        <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="2" else="1"></mutation>
+
+                        <!-- Pattern B+F: prev_cons_even >= 3 AND high_even_seen → strong buy ODD -->
+                        <value name="IF0">
+                          <block type="logic_operation" id="sepp_bp_odd_sig_c0">
+                            <field name="OP">AND</field>
+                            <value name="A">
+                              <block type="logic_compare" id="sepp_bp_odd_sig_c0a">
+                                <field name="OP">GTE</field>
+                                <value name="A"><block type="variables_get" id="sepp_bp_odd_sig_g0a"><field name="VAR" id="sepp_pcevn">prev_cons_even</field></block></value>
+                                <value name="B"><block type="math_number" id="sepp_bp_odd_sig_n0a"><field name="NUM">3</field></block></value>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="logic_compare" id="sepp_bp_odd_sig_c0b">
+                                <field name="OP">EQ</field>
+                                <value name="A"><block type="variables_get" id="sepp_bp_odd_sig_g0b"><field name="VAR" id="sepp_hievn">high_even_seen</field></block></value>
+                                <value name="B"><block type="math_number" id="sepp_bp_odd_sig_n0b"><field name="NUM">1</field></block></value>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <statement name="DO0">
+                          <!-- Signal 2: buy ODD (high-even streak confirmed) -->
+                          <block type="variables_set" id="sepp_bp_odd_s0">
+                            <field name="VAR" id="sepp_sig">signal_type</field>
+                            <value name="VALUE"><block type="math_number" id="sepp_bp_odd_s0v"><field name="NUM">2</field></block></value>
+                          </block>
+                        </statement>
+
+                        <!-- Pattern B: prev_cons_even >= 3 (basic 3-even streak) → buy ODD -->
+                        <value name="IF1">
+                          <block type="logic_compare" id="sepp_bp_odd_sig_c1">
+                            <field name="OP">GTE</field>
+                            <value name="A"><block type="variables_get" id="sepp_bp_odd_sig_g1"><field name="VAR" id="sepp_pcevn">prev_cons_even</field></block></value>
+                            <value name="B"><block type="math_number" id="sepp_bp_odd_sig_n1"><field name="NUM">3</field></block></value>
+                          </block>
+                        </value>
+                        <statement name="DO1">
+                          <block type="variables_set" id="sepp_bp_odd_s1">
+                            <field name="VAR" id="sepp_sig">signal_type</field>
+                            <value name="VALUE"><block type="math_number" id="sepp_bp_odd_s1v"><field name="NUM">2</field></block></value>
+                          </block>
+                        </statement>
+
+                        <!-- Pattern C: last_digit is 1 or 3 (lowest odd) → buy EVEN directly -->
+                        <value name="IF2">
+                          <block type="logic_operation" id="sepp_bp_odd_sig_c2">
+                            <field name="OP">OR</field>
+                            <value name="A">
+                              <block type="logic_compare" id="sepp_bp_odd_sig_c2a">
+                                <field name="OP">EQ</field>
+                                <value name="A"><block type="variables_get" id="sepp_bp_odd_sig_g2a"><field name="VAR" id="sepp_last">last_digit_val</field></block></value>
+                                <value name="B"><block type="math_number" id="sepp_bp_odd_sig_n2a"><field name="NUM">1</field></block></value>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="logic_compare" id="sepp_bp_odd_sig_c2b">
+                                <field name="OP">EQ</field>
+                                <value name="A"><block type="variables_get" id="sepp_bp_odd_sig_g2b"><field name="VAR" id="sepp_last">last_digit_val</field></block></value>
+                                <value name="B"><block type="math_number" id="sepp_bp_odd_sig_n2b"><field name="NUM">3</field></block></value>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <statement name="DO2">
+                          <block type="variables_set" id="sepp_bp_odd_s2">
+                            <field name="VAR" id="sepp_sig">signal_type</field>
+                            <value name="VALUE"><block type="math_number" id="sepp_bp_odd_s2v"><field name="NUM">1</field></block></value>
+                          </block>
+                        </statement>
+
+                        <!-- No signal: scan mode -->
+                        <statement name="ELSE">
+                          <block type="variables_set" id="sepp_bp_odd_se">
+                            <field name="VAR" id="sepp_sig">signal_type</field>
+                            <value name="VALUE"><block type="math_number" id="sepp_bp_odd_sev"><field name="NUM">0</field></block></value>
+                          </block>
+                        </statement>
+                      </block>
+                      <next>
+                        <!-- Update counters for ODD digit -->
+                        <block type="math_change" id="sepp_bp_odd_codd_inc">
+                          <field name="VAR" id="sepp_codd">cons_odd</field>
+                          <value name="DELTA"><shadow type="math_number" id="sepp_bp_odd_codd_dv"><field name="NUM">1</field></shadow></value>
+                          <next>
+                            <block type="variables_set" id="sepp_bp_odd_cevn_rst">
+                              <field name="VAR" id="sepp_cevn">cons_even</field>
+                              <value name="VALUE"><block type="math_number" id="sepp_bp_odd_cevn_rst_v"><field name="NUM">0</field></block></value>
+                              <next>
+                                <!-- Reset high_even_seen (even streak broken) -->
+                                <block type="variables_set" id="sepp_bp_odd_hievn_rst">
+                                  <field name="VAR" id="sepp_hievn">high_even_seen</field>
+                                  <value name="VALUE"><block type="math_number" id="sepp_bp_odd_hievn_rst_v"><field name="NUM">0</field></block></value>
+                                  <next>
+                                    <!-- Set high_odd_seen if digit is 7 or 9 -->
+                                    <block type="controls_if" id="sepp_bp_odd_hiodd_if">
+                                      <value name="IF0">
+                                        <block type="logic_operation" id="sepp_bp_odd_hiodd_cond">
+                                          <field name="OP">OR</field>
+                                          <value name="A">
+                                            <block type="logic_compare" id="sepp_bp_odd_hiodd_c7">
+                                              <field name="OP">EQ</field>
+                                              <value name="A"><block type="variables_get" id="sepp_bp_odd_hiodd_g7"><field name="VAR" id="sepp_last">last_digit_val</field></block></value>
+                                              <value name="B"><block type="math_number" id="sepp_bp_odd_hiodd_n7"><field name="NUM">7</field></block></value>
+                                            </block>
+                                          </value>
+                                          <value name="B">
+                                            <block type="logic_compare" id="sepp_bp_odd_hiodd_c9">
+                                              <field name="OP">EQ</field>
+                                              <value name="A"><block type="variables_get" id="sepp_bp_odd_hiodd_g9"><field name="VAR" id="sepp_last">last_digit_val</field></block></value>
+                                              <value name="B"><block type="math_number" id="sepp_bp_odd_hiodd_n9"><field name="NUM">9</field></block></value>
+                                            </block>
+                                          </value>
+                                        </block>
+                                      </value>
+                                      <statement name="DO0">
+                                        <block type="variables_set" id="sepp_bp_odd_hiodd_set">
+                                          <field name="VAR" id="sepp_hiodd">high_odd_seen</field>
+                                          <value name="VALUE"><block type="math_number" id="sepp_bp_odd_hiodd_set_v"><field name="NUM">1</field></block></value>
+                                        </block>
+                                      </statement>
+                                    </block>
+                                  </next>
+                                </block>
+                              </next>
+                            </block>
+                          </next>
+                        </block>
+                      </next>
+                    </statement>
+
+                    <!-- ── EVEN branch ── -->
+                    <statement name="ELSE">
+                      <!-- Signal detection using prev_cons_odd (BEFORE update) -->
+                      <block type="controls_if" id="sepp_bp_evn_sig">
+                        <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="2" else="1"></mutation>
+
+                        <!-- Pattern A+E: prev_cons_odd >= 3 AND high_odd_seen → strong buy EVEN -->
+                        <value name="IF0">
+                          <block type="logic_operation" id="sepp_bp_evn_sig_c0">
+                            <field name="OP">AND</field>
+                            <value name="A">
+                              <block type="logic_compare" id="sepp_bp_evn_sig_c0a">
+                                <field name="OP">GTE</field>
+                                <value name="A"><block type="variables_get" id="sepp_bp_evn_sig_g0a"><field name="VAR" id="sepp_pcodd">prev_cons_odd</field></block></value>
+                                <value name="B"><block type="math_number" id="sepp_bp_evn_sig_n0a"><field name="NUM">3</field></block></value>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="logic_compare" id="sepp_bp_evn_sig_c0b">
+                                <field name="OP">EQ</field>
+                                <value name="A"><block type="variables_get" id="sepp_bp_evn_sig_g0b"><field name="VAR" id="sepp_hiodd">high_odd_seen</field></block></value>
+                                <value name="B"><block type="math_number" id="sepp_bp_evn_sig_n0b"><field name="NUM">1</field></block></value>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <statement name="DO0">
+                          <!-- Signal 1: buy EVEN (high-odd streak confirmed) -->
+                          <block type="variables_set" id="sepp_bp_evn_s0">
+                            <field name="VAR" id="sepp_sig">signal_type</field>
+                            <value name="VALUE"><block type="math_number" id="sepp_bp_evn_s0v"><field name="NUM">1</field></block></value>
+                          </block>
+                        </statement>
+
+                        <!-- Pattern A: prev_cons_odd >= 3 (basic 3-odd streak) → buy EVEN -->
+                        <value name="IF1">
+                          <block type="logic_compare" id="sepp_bp_evn_sig_c1">
+                            <field name="OP">GTE</field>
+                            <value name="A"><block type="variables_get" id="sepp_bp_evn_sig_g1"><field name="VAR" id="sepp_pcodd">prev_cons_odd</field></block></value>
+                            <value name="B"><block type="math_number" id="sepp_bp_evn_sig_n1"><field name="NUM">3</field></block></value>
+                          </block>
+                        </value>
+                        <statement name="DO1">
+                          <block type="variables_set" id="sepp_bp_evn_s1">
+                            <field name="VAR" id="sepp_sig">signal_type</field>
+                            <value name="VALUE"><block type="math_number" id="sepp_bp_evn_s1v"><field name="NUM">1</field></block></value>
+                          </block>
+                        </statement>
+
+                        <!-- Pattern D: last_digit is 0 or 2 (lowest even) → buy ODD directly -->
+                        <value name="IF2">
+                          <block type="logic_operation" id="sepp_bp_evn_sig_c2">
+                            <field name="OP">OR</field>
+                            <value name="A">
+                              <block type="logic_compare" id="sepp_bp_evn_sig_c2a">
+                                <field name="OP">EQ</field>
+                                <value name="A"><block type="variables_get" id="sepp_bp_evn_sig_g2a"><field name="VAR" id="sepp_last">last_digit_val</field></block></value>
+                                <value name="B"><block type="math_number" id="sepp_bp_evn_sig_n2a"><field name="NUM">0</field></block></value>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="logic_compare" id="sepp_bp_evn_sig_c2b">
+                                <field name="OP">EQ</field>
+                                <value name="A"><block type="variables_get" id="sepp_bp_evn_sig_g2b"><field name="VAR" id="sepp_last">last_digit_val</field></block></value>
+                                <value name="B"><block type="math_number" id="sepp_bp_evn_sig_n2b"><field name="NUM">2</field></block></value>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <statement name="DO2">
+                          <block type="variables_set" id="sepp_bp_evn_s2">
+                            <field name="VAR" id="sepp_sig">signal_type</field>
+                            <value name="VALUE"><block type="math_number" id="sepp_bp_evn_s2v"><field name="NUM">2</field></block></value>
+                          </block>
+                        </statement>
+
+                        <!-- No signal: scan mode -->
+                        <statement name="ELSE">
+                          <block type="variables_set" id="sepp_bp_evn_se">
+                            <field name="VAR" id="sepp_sig">signal_type</field>
+                            <value name="VALUE"><block type="math_number" id="sepp_bp_evn_sev"><field name="NUM">0</field></block></value>
+                          </block>
+                        </statement>
+                      </block>
+                      <next>
+                        <!-- Update counters for EVEN digit -->
+                        <block type="math_change" id="sepp_bp_evn_cevn_inc">
+                          <field name="VAR" id="sepp_cevn">cons_even</field>
+                          <value name="DELTA"><shadow type="math_number" id="sepp_bp_evn_cevn_dv"><field name="NUM">1</field></shadow></value>
+                          <next>
+                            <block type="variables_set" id="sepp_bp_evn_codd_rst">
+                              <field name="VAR" id="sepp_codd">cons_odd</field>
+                              <value name="VALUE"><block type="math_number" id="sepp_bp_evn_codd_rst_v"><field name="NUM">0</field></block></value>
+                              <next>
+                                <!-- Reset high_odd_seen (odd streak broken) -->
+                                <block type="variables_set" id="sepp_bp_evn_hiodd_rst">
+                                  <field name="VAR" id="sepp_hiodd">high_odd_seen</field>
+                                  <value name="VALUE"><block type="math_number" id="sepp_bp_evn_hiodd_rst_v"><field name="NUM">0</field></block></value>
+                                  <next>
+                                    <!-- Set high_even_seen if digit is 6 or 8 -->
+                                    <block type="controls_if" id="sepp_bp_evn_hievn_if">
+                                      <value name="IF0">
+                                        <block type="logic_operation" id="sepp_bp_evn_hievn_cond">
+                                          <field name="OP">OR</field>
+                                          <value name="A">
+                                            <block type="logic_compare" id="sepp_bp_evn_hievn_c6">
+                                              <field name="OP">EQ</field>
+                                              <value name="A"><block type="variables_get" id="sepp_bp_evn_hievn_g6"><field name="VAR" id="sepp_last">last_digit_val</field></block></value>
+                                              <value name="B"><block type="math_number" id="sepp_bp_evn_hievn_n6"><field name="NUM">6</field></block></value>
+                                            </block>
+                                          </value>
+                                          <value name="B">
+                                            <block type="logic_compare" id="sepp_bp_evn_hievn_c8">
+                                              <field name="OP">EQ</field>
+                                              <value name="A"><block type="variables_get" id="sepp_bp_evn_hievn_g8"><field name="VAR" id="sepp_last">last_digit_val</field></block></value>
+                                              <value name="B"><block type="math_number" id="sepp_bp_evn_hievn_n8"><field name="NUM">8</field></block></value>
+                                            </block>
+                                          </value>
+                                        </block>
+                                      </value>
+                                      <statement name="DO0">
+                                        <block type="variables_set" id="sepp_bp_evn_hievn_set">
+                                          <field name="VAR" id="sepp_hievn">high_even_seen</field>
+                                          <value name="VALUE"><block type="math_number" id="sepp_bp_evn_hievn_set_v"><field name="NUM">1</field></block></value>
+                                        </block>
+                                      </statement>
+                                    </block>
+                                  </next>
+                                </block>
+                              </next>
+                            </block>
+                          </next>
+                        </block>
+                      </next>
+                    </statement>
+                  </block>
+                  <next>
+
+                    <!-- Step 4: Execute purchase based on signal_type -->
+                    <block type="controls_if" id="sepp_bp_pur">
+                      <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="1" else="1"></mutation>
+
+                      <!-- signal=1: REAL trade → buy DIGITEVEN with current stake -->
+                      <value name="IF0">
+                        <block type="logic_compare" id="sepp_bp_pur_c0">
+                          <field name="OP">EQ</field>
+                          <value name="A"><block type="variables_get" id="sepp_bp_pur_g0"><field name="VAR" id="sepp_sig">signal_type</field></block></value>
+                          <value name="B"><block type="math_number" id="sepp_bp_pur_n0"><field name="NUM">1</field></block></value>
+                        </block>
+                      </value>
+                      <statement name="DO0">
+                        <block type="timeout" id="sepp_bp_pur_t0">
+                          <statement name="TIMEOUTSTACK">
+                            <block type="purchase" id="sepp_bp_pur_p0"><field name="PURCHASE_LIST">DIGITEVEN</field></block>
+                          </statement>
+                          <value name="SECONDS"><block type="math_number" id="sepp_bp_pur_t0v"><field name="NUM">-0.00001</field></block></value>
+                        </block>
+                      </statement>
+
+                      <!-- signal=2: REAL trade → buy DIGITODD with current stake -->
+                      <value name="IF1">
+                        <block type="logic_compare" id="sepp_bp_pur_c1">
+                          <field name="OP">EQ</field>
+                          <value name="A"><block type="variables_get" id="sepp_bp_pur_g1"><field name="VAR" id="sepp_sig">signal_type</field></block></value>
+                          <value name="B"><block type="math_number" id="sepp_bp_pur_n1"><field name="NUM">2</field></block></value>
+                        </block>
+                      </value>
+                      <statement name="DO1">
+                        <block type="timeout" id="sepp_bp_pur_t1">
+                          <statement name="TIMEOUTSTACK">
+                            <block type="purchase" id="sepp_bp_pur_p1"><field name="PURCHASE_LIST">DIGITODD</field></block>
+                          </statement>
+                          <value name="SECONDS"><block type="math_number" id="sepp_bp_pur_t1v"><field name="NUM">-0.00001</field></block></value>
+                        </block>
+                      </statement>
+
+                      <!-- signal=0: SCAN mode → use scan_stake (min), buy DIGITEVEN as probe -->
+                      <statement name="ELSE">
+                        <block type="variables_set" id="sepp_bp_pur_scan_stk">
+                          <field name="VAR" id="sepp_stake">stake</field>
+                          <value name="VALUE"><block type="variables_get" id="sepp_bp_pur_scan_g"><field name="VAR" id="sepp_scan">scan_stake</field></block></value>
+                          <next>
+                            <block type="timeout" id="sepp_bp_pur_te">
+                              <statement name="TIMEOUTSTACK">
+                                <block type="purchase" id="sepp_bp_pur_pe"><field name="PURCHASE_LIST">DIGITEVEN</field></block>
+                              </statement>
+                              <value name="SECONDS"><block type="math_number" id="sepp_bp_pur_tev"><field name="NUM">-0.00001</field></block></value>
+                            </block>
+                          </next>
+                        </block>
+                      </statement>
+                    </block>
+
+                  </next>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+
+  <!-- ═══ AFTER PURCHASE — Martingale on real-trade loss, reset on win/scan ═══ -->
+  <block type="after_purchase" id="sepp_ap" collapsed="false" deletable="false" x="0" y="1300">
+    <statement name="AFTERPURCHASE_STACK">
+      <!-- TP/SL guard -->
+      <block type="controls_if" id="sepp_ap_tpsl">
+        <value name="IF0">
+          <block type="logic_operation" id="sepp_ap_tpsl_or">
+            <field name="OP">OR</field>
+            <value name="A">
+              <block type="logic_compare" id="sepp_ap_tp_cmp">
+                <field name="OP">GTE</field>
+                <value name="A"><block type="total_profit" id="sepp_ap_tp_prof"></block></value>
+                <value name="B"><block type="variables_get" id="sepp_ap_tp_g"><field name="VAR" id="sepp_tp">take_profit</field></block></value>
+              </block>
+            </value>
+            <value name="B">
+              <block type="logic_compare" id="sepp_ap_sl_cmp">
+                <field name="OP">LTE</field>
+                <value name="A"><block type="total_profit" id="sepp_ap_sl_prof"></block></value>
+                <value name="B">
+                  <block type="math_single" id="sepp_ap_sl_neg">
+                    <field name="OP">NEG</field>
+                    <value name="NUM">
+                      <shadow type="math_number" id="sepp_ap_sl_neg_s"><field name="NUM">9</field></shadow>
+                      <block type="variables_get" id="sepp_ap_sl_g"><field name="VAR" id="sepp_sl">stop_loss</field></block>
+                    </value>
+                  </block>
+                </value>
+              </block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="notify" id="sepp_ap_tpsl_n">
+            <field name="NOTIFICATION_TYPE">info</field>
+            <field name="NOTIFICATION_SOUND">earned-money</field>
+            <value name="MESSAGE">
+              <shadow type="text" id="sepp_ap_tpsl_ns"><field name="TEXT">abc</field></shadow>
+              <block type="text" id="sepp_ap_tpsl_nm"><field name="TEXT">🏁 SMART ENTRY PATTERN PRO: session limit reached</field></block>
+            </value>
+          </block>
+        </statement>
+      </block>
+      <next>
+        <block type="controls_if" id="sepp_ap_wl">
+          <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+          <!-- WIN -->
+          <value name="IF0">
+            <block type="contract_check_result" id="sepp_ap_win"><field name="CHECK_RESULT">win</field></block>
+          </value>
+          <statement name="DO0">
+            <!-- WIN: if real trade (stake > scan_stake) → reset to initial; else no-op -->
+            <block type="controls_if" id="sepp_ap_win_rt">
+              <value name="IF0">
+                <block type="logic_compare" id="sepp_ap_win_rt_cmp">
+                  <field name="OP">GT</field>
+                  <value name="A"><block type="variables_get" id="sepp_ap_win_rt_g"><field name="VAR" id="sepp_stake">stake</field></block></value>
+                  <value name="B"><block type="variables_get" id="sepp_ap_win_rt_sg"><field name="VAR" id="sepp_scan">scan_stake</field></block></value>
+                </block>
+              </value>
+              <statement name="DO0">
+                <block type="variables_set" id="sepp_ap_win_reset">
+                  <field name="VAR" id="sepp_stake">stake</field>
+                  <value name="VALUE"><block type="variables_get" id="sepp_ap_win_reset_g"><field name="VAR" id="sepp_init">initial_stake</field></block></value>
+                </block>
+              </statement>
+            </block>
+          </statement>
+          <!-- LOSS -->
+          <statement name="ELSE">
+            <block type="controls_if" id="sepp_ap_loss_rt">
+              <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+              <!-- Real trade loss: apply martingale -->
+              <value name="IF0">
+                <block type="logic_compare" id="sepp_ap_loss_rt_cmp">
+                  <field name="OP">GT</field>
+                  <value name="A"><block type="variables_get" id="sepp_ap_loss_rt_g"><field name="VAR" id="sepp_stake">stake</field></block></value>
+                  <value name="B"><block type="variables_get" id="sepp_ap_loss_rt_sg"><field name="VAR" id="sepp_scan">scan_stake</field></block></value>
+                </block>
+              </value>
+              <statement name="DO0">
+                <block type="variables_set" id="sepp_ap_loss_mart">
+                  <field name="VAR" id="sepp_stake">stake</field>
+                  <value name="VALUE">
+                    <block type="math_arithmetic" id="sepp_ap_loss_mart_arith">
+                      <field name="OP">MULTIPLY</field>
+                      <value name="A">
+                        <shadow type="math_number" id="sepp_ap_loss_as"><field name="NUM">1</field></shadow>
+                        <block type="variables_get" id="sepp_ap_loss_ag"><field name="VAR" id="sepp_stake">stake</field></block>
+                      </value>
+                      <value name="B">
+                        <shadow type="math_number" id="sepp_ap_loss_bs"><field name="NUM">1</field></shadow>
+                        <block type="variables_get" id="sepp_ap_loss_bg"><field name="VAR" id="sepp_mart">martingale</field></block>
+                      </value>
+                    </block>
+                  </value>
+                </block>
+              </statement>
+              <!-- Scan trade loss: restore initial stake for next real trade -->
+              <statement name="ELSE">
+                <block type="variables_set" id="sepp_ap_loss_scan">
+                  <field name="VAR" id="sepp_stake">stake</field>
+                  <value name="VALUE"><block type="variables_get" id="sepp_ap_loss_scan_g"><field name="VAR" id="sepp_init">initial_stake</field></block></value>
+                </block>
+              </statement>
+            </block>
+          </statement>
+        </block>
+        <next>
+          <block type="trade_again" id="sepp_ta"></block>
+        </next>
+      </next>
+    </statement>
+  </block>
+</xml>

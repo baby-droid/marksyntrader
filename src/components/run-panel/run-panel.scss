@@ -170,7 +170,8 @@
 
         &--mobile {
             width: 100%;
-            bottom: 0;
+            bottom: 6.8rem;
+            z-index: 10002;
         }
     }
 
@@ -310,7 +311,7 @@
         width: 100%;
         background-color: var(--general-main-1);
         border-top: solid 2px var(--general-section-1);
-        z-index: 8;
+        z-index: 10001;
 
         /* Fix for iOS devices to respect safe area */
         @supports (-webkit-touch-callout: none) {

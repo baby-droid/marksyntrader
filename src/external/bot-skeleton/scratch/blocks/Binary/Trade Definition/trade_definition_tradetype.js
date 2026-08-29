@@ -37,4 +37,15 @@ window.Blockly.Blocks.trade_definition_tradetype = {
     enforceLimitations: window.Blockly.Blocks.trade_definition_market.enforceLimitations,
 };
 
+// The live Deriv contract API still supplies the normal category/type dropdowns.
+// This explicit menu entry makes it clear that a digits strategy can route
+// Over/Under/Even/Odd/Matches/Differs through the Multiple Purchase block.
+window.Blockly.Blocks.trade_definition_tradetype.meta = () => ({
+    display_name: localize('Trade Type'),
+    description: localize(
+        'Select a trade type category. Use Multiple Purchase in Purchase Conditions for Over, Under, Even, Odd, Matches, and Differs.'
+    ),
+    key_words: localize('trade type, multiple contract type, digits'),
+});
+
 window.Blockly.JavaScript.javascriptGenerator.forBlock.trade_definition_tradetype = () => {};

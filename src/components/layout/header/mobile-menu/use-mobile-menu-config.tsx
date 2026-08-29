@@ -34,32 +34,35 @@ const useMobileMenuConfig = (
     const { ui, dashboard } = store as any;
 
     const menuConfig = useMemo((): TMenuConfig[] => {
+        const mainPages = [
+            { tab: DBOT_TABS.DASHBOARD, icon: '🏠', label: 'Dashboard' },
+            { tab: DBOT_TABS.BOT_BUILDER, icon: '🧱', label: 'Bot Builder' },
+            { tab: DBOT_TABS.FREE_BOTS, icon: '🤖', label: 'Free Bots & Personal Bots' },
+            { tab: DBOT_TABS.AHMED_SCALPER_BOTS, icon: '⚡', label: 'Scalper Bots' },
+            { tab: DBOT_TABS.AUTO_DIGITS, icon: '◉', label: 'Auto-Digits' },
+            { tab: DBOT_TABS.DCIRCLES, icon: '⬤', label: 'D-Circles' },
+            { tab: DBOT_TABS.DTRADER, icon: '📊', label: 'D-Trader' },
+            { tab: DBOT_TABS.SPEEDLAB, icon: '🚀', label: 'Speed Lab' },
+            { tab: DBOT_TABS.HEDGE, icon: '🔀', label: 'Hedge Trading' },
+            { tab: DBOT_TABS.CHART, icon: '📈', label: 'Charts' },
+            { tab: DBOT_TABS.MANUAL_TRADER, icon: '🎯', label: 'Manual Trader' },
+            { tab: DBOT_TABS.AUTO_TRADES, icon: '🔄', label: 'Auto Trades' },
+            { tab: DBOT_TABS.COPY_TRADING, icon: '📋', label: 'Copy Trading' },
+            { tab: DBOT_TABS.REPORT, icon: '📄', label: 'Reports' },
+            { tab: DBOT_TABS.BULK_TRADE, icon: '📦', label: 'Bulk Trade' },
+            { tab: DBOT_TABS.ANALYSIS, icon: '🔍', label: 'Analysis' },
+            { tab: DBOT_TABS.TUTORIAL, icon: '📚', label: 'Tutorials' },
+            { tab: DBOT_TABS.TRADING_SOFTWARE, icon: '💻', label: 'Trading Software' },
+        ];
 
         return [
             [
-                // ========================================
-                // CUSTOM MENU ITEMS PLACEHOLDER
-                // ========================================
-                //
-                // Add your custom menu items here.
-                //
-                // EXAMPLE:
-                // {
-                //     as: 'a',
-                //     label: localize('Your Page'),
-                //     LeftComponent: YourIcon,
-                //     href: '/your-page',
-                // },
-                //
-                // For desktop menu items, see:
-                // src/components/layout/header/header-config.tsx
-
-                {
-                    as: 'button',
-                    label: localize('Scalper Bots'),
-                    LeftComponent: () => <span style={{ fontSize: '1rem', lineHeight: 1 }}>⚡</span>,
-                    onClick: () => dashboard?.setActiveTab?.(DBOT_TABS.AHMED_SCALPER_BOTS),
-                },
+                ...mainPages.map(page => ({
+                    as: 'button' as const,
+                    label: localize(page.label),
+                    LeftComponent: () => <span style={{ fontSize: '1rem', lineHeight: 1 }}>{page.icon}</span>,
+                    onClick: () => dashboard?.setActiveTab?.(page.tab),
+                })),
                 {
                     as: 'button',
                     label: localize('Settings'),

@@ -1,11 +1,12 @@
 // @ts-nocheck
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { api_base } from '@/external/bot-skeleton';
+import { useDerivTrade } from '@/hooks/useDerivTrade';
+import { isFastExecutionEnabled } from '@/utils/execution-speed';
+import NumberField from '@/components/number-field';
 import './auto-trades.scss';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-const APP_ID_DIGIT = (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_DERIV_APP_ID) || '36300';
-
 function fmtProfit(v: number) {
     return (v >= 0 ? '+' : '') + v.toFixed(2);
 }
@@ -14,112 +15,247 @@ function extractDigit(quote: any, pipSize: number): number {
     return parseInt(Number(quote).toFixed(pipSize).slice(-1), 10);
 }
 
-// ── Per-symbol live digit hook ────────────────────────────────────────────────
-function useLiveDigitsRef(symbol: string): React.MutableRefObject<number[]> {
+// ── Authenticated per-symbol live digit hook ─────────────────────────────────
+// Auto Trades must consume the same authorized API session as the rest of the
+// app. A second public socket can show a different tick stream and cannot trade
+// on the account the user selected.
+function useAuthenticatedLiveDigits(symbol: string) {
+    const [digits, setDigits] = useState<number[]>([]);
+    const [livePrice, setLivePrice] = useState<number | null>(null);
+    const [tickVersion, setTickVersion] = useState(0);
     const digitsRef = useRef<number[]>([]);
-    const wsRef = useRef<WebSocket | null>(null);
+    const priceRef = useRef<number | null>(null);
 
     useEffect(() => {
-        wsRef.current?.close();
-        digitsRef.current = [];
-        const ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID_DIGIT}`);
-        wsRef.current = ws;
+        let alive = true;
+        let rxSub: any = null;
+        let retryTimer: ReturnType<typeof setTimeout> | null = null;
+        let watchdog: ReturnType<typeof setTimeout> | null = null;
+        let subscriptionId: string | null = null;
+        let historyLoaded = false;
         let pipSize = 2;
+        const seenEpochs = new Set<number>();
+        let liveBuffer: Array<{ epoch: number; digit: number }> = [];
 
-        ws.onopen = () => ws.send(JSON.stringify({
-            ticks_history: symbol, count: 200, end: 'latest', style: 'ticks', subscribe: 1,
-        }));
-        ws.onmessage = e => {
-            try {
-                const d = JSON.parse(e.data);
-                if (d.tick?.pip_size) pipSize = d.tick.pip_size;
-                if (d.history?.prices) {
-                    const ps = d.pip_size ?? pipSize;
-                    digitsRef.current = d.history.prices.map((p: any) => extractDigit(p, ps));
-                }
-                if (d.tick?.quote) {
-                    const ps = d.tick.pip_size ?? pipSize;
-                    const digit = extractDigit(d.tick.quote, ps);
-                    digitsRef.current = [...digitsRef.current.slice(-499), digit];
-                }
-            } catch {}
+        const publish = (next: number[]) => {
+            const bounded = next.slice(-1000);
+            digitsRef.current = bounded;
+            if (alive) setDigits(bounded);
         };
-        return () => ws.close();
-    }, [symbol]); // eslint-disable-line react-hooks/exhaustive-deps
 
+        const clearWatchdog = () => {
+            if (watchdog) clearTimeout(watchdog);
+            watchdog = null;
+        };
+
+        const forget = () => {
+            if (subscriptionId && api_base.api) {
+                try { (api_base.api as any).send({ forget: subscriptionId }).catch(() => {}); } catch {}
+            }
+            subscriptionId = null;
+        };
+
+        const teardown = () => {
+            clearWatchdog();
+            try { rxSub?.unsubscribe?.(); } catch {}
+            rxSub = null;
+            forget();
+        };
+
+        const scheduleStart = (delay = 350) => {
+            if (!alive) return;
+            if (retryTimer) clearTimeout(retryTimer);
+            retryTimer = setTimeout(start, delay);
+        };
+
+        const start = async () => {
+            if (!alive) return;
+            const api = (api_base as any).api;
+            if (!api) { scheduleStart(); return; }
+
+            teardown();
+            historyLoaded = false;
+            pipSize = 2;
+            seenEpochs.clear();
+            liveBuffer = [];
+            publish([]);
+            if (alive) {
+                setLivePrice(null);
+                priceRef.current = null;
+                setTickVersion(0);
+            }
+
+            const loadHistory = async () => {
+                try {
+                    const response = await api.send({
+                        ticks_history: symbol,
+                        count: 200,
+                        end: 'latest',
+                        style: 'ticks',
+                    });
+                    if (!alive || response?.error) return;
+                    const prices = (response?.history?.prices ?? []).map(Number);
+                    const times = response?.history?.times ?? [];
+                    const historyDigits = prices
+                        .filter((_, i) => !seenEpochs.has(Number(times[i])))
+                        .map((price: number) => extractDigit(price, pipSize));
+                    publish([...historyDigits, ...liveBuffer.map(item => item.digit)]);
+                } catch {
+                    // Live ticks remain usable if the history request is delayed.
+                } finally {
+                    historyLoaded = true;
+                }
+            };
+
+            const onTick = (tick: any) => {
+                if (!alive || !tick || tick.quote == null) return;
+                const quote = Number(tick.quote);
+                const epoch = Number(tick.epoch ?? 0);
+                if (!Number.isFinite(quote)) return;
+                if (tick.pip_size != null) pipSize = Number(tick.pip_size);
+                if (epoch && seenEpochs.has(epoch)) return;
+                if (epoch) seenEpochs.add(epoch);
+
+                const digit = extractDigit(quote, pipSize);
+                priceRef.current = quote;
+                setLivePrice(quote);
+                if (alive) setTickVersion(version => version + 1);
+                if (!historyLoaded) {
+                    liveBuffer.push({ epoch, digit });
+                    publish([...digitsRef.current, digit]);
+                    if (liveBuffer.length === 1) void loadHistory();
+                } else {
+                    publish([...digitsRef.current, digit]);
+                }
+
+                clearWatchdog();
+                watchdog = setTimeout(() => {
+                    if (alive) { teardown(); scheduleStart(100); }
+                }, 20000);
+            };
+
+            try {
+                const stream = api.subscribe({ ticks: symbol, subscribe: 1 });
+                rxSub = stream?.subscribe?.({
+                    next: (message: any) => {
+                        if (message?.subscription?.id && !subscriptionId) {
+                            subscriptionId = String(message.subscription.id);
+                        }
+                        onTick(message?.tick);
+                    },
+                    error: () => { teardown(); scheduleStart(100); },
+                });
+                // If the account session is ready but the first tick is delayed,
+                // retry rather than leaving the card looking connected forever.
+                watchdog = setTimeout(() => {
+                    if (alive && !historyLoaded) { teardown(); scheduleStart(100); }
+                }, 20000);
+            } catch {
+                teardown();
+                scheduleStart(700);
+            }
+        };
+
+        start();
+        const reconnect = () => { if (alive && !rxSub) start(); };
+        window.addEventListener('online', reconnect);
+        window.addEventListener('focus', reconnect);
+
+        return () => {
+            alive = false;
+            if (retryTimer) clearTimeout(retryTimer);
+            window.removeEventListener('online', reconnect);
+            window.removeEventListener('focus', reconnect);
+            teardown();
+        };
+    }, [symbol]);
+
+    return { digits, digitsRef, livePrice, priceRef, tickVersion };
+}
+
+function useLiveDigitsRef(symbol: string): React.MutableRefObject<number[]> {
+    const { digitsRef } = useAuthenticatedLiveDigits(symbol);
     return digitsRef;
+}
+
+function useLiveDigitsState(symbol: string): number[] {
+    const { digits } = useAuthenticatedLiveDigits(symbol);
+    return digits;
 }
 
 // ── Shared buy-and-wait via app's API connection ──────────────────────────────
 // Uses proposal→buy flow for reliable contract execution.
 function useBuyAndWait() {
-    const send = useCallback((msg: object): Promise<any> => {
-        if (!api_base.api) return Promise.reject(new Error('Not connected'));
-        return (api_base.api.send as unknown as (d: unknown) => Promise<any>)(msg);
-    }, []);
+    const { buyContract, authorized, connected, currency } = useDerivTrade();
 
-    return useCallback(async (
+    const buyAndWait = useCallback(async (
         symbol: string,
         contractType: string,
         barrier: number | null,
         stake: number,
+        duration = 1,
+        options: {
+            settle?: boolean;
+            onSettled?: (profit: number) => void;
+            onBought?: (contractId: number) => void;
+            metadata?: Record<string, unknown>;
+            tradingParameters?: Record<string, unknown>;
+        } = {},
     ): Promise<number> => {
-        const needsBarrier = ['DIGITOVER','DIGITUNDER','DIGITMATCH','DIGITDIFF'].includes(contractType);
+        if (!connected) throw new Error('Deriv connection is not open');
+        if (!authorized) throw new Error('Log in to a demo or real account before trading');
 
-        // Step 1: Get a proposal to obtain a valid proposal_id
-        const proposalReq: any = {
-            proposal: 1,
-            amount: stake,
-            basis: 'stake',
-            contract_type: contractType,
-            currency: 'USD',
-            duration: 1,
-            duration_unit: 't',
-            symbol,
-        };
-        if (needsBarrier && barrier !== null) proposalReq.barrier = String(barrier);
+        // All Smart Trading buys use the same authenticated proposal → buy →
+        // settlement path as Manual Trader. This keeps the selected demo/real
+        // account and its currency attached to every request.
+        if (options.settle === false) {
+            const bought = await buyContract({
+                symbol,
+                contract_type: contractType,
+                duration,
+                duration_unit: 't',
+                stake,
+                ...(barrier !== null ? { barrier } : {}),
+                currency,
+                metadata: options.metadata,
+            }, settlement => options.onSettled?.(Number(settlement?.profit ?? 0)));
+            options.onBought?.(bought.contract_id);
+            return 0;
+        }
 
-        const propRes = await send(proposalReq);
-        if (propRes?.error) throw new Error(propRes.error.message || 'Proposal failed');
-        const proposalId = propRes?.proposal?.id;
-        if (!proposalId) throw new Error('No proposal ID — API not ready');
-        const askPrice = propRes?.proposal?.ask_price ?? stake;
-
-        // Step 2: Buy using the proposal ID
-        const buyRes = await send({ buy: proposalId, price: Number(askPrice) });
-        if (buyRes?.error) throw new Error(buyRes.error.message || 'Buy failed');
-        const contract_id = buyRes?.buy?.contract_id;
-        if (!contract_id) throw new Error('Buy failed — no contract ID');
-
-        // Step 3: Subscribe to proposal_open_contract to track settlement
-        return new Promise<number>(resolve => {
-            let sub: any;
-            const bail = setTimeout(() => {
-                try { sub?.unsubscribe?.(); } catch {}
-                resolve(0);
+        return new Promise<number>(async (resolve, reject) => {
+            let settled = false;
+            const timeout = setTimeout(() => {
+                if (!settled) {
+                    settled = true;
+                    resolve(0);
+                }
             }, 20_000);
-
             try {
-                sub = (api_base.api as any)?.onMessage?.()?.subscribe(({ data: d }: any) => {
-                    if (!d?.proposal_open_contract) return;
-                    const poc = d.proposal_open_contract;
-                    if (Number(poc.contract_id) !== Number(contract_id)) return;
-                    if (poc.is_sold === 1 || poc.status === 'won' || poc.status === 'lost') {
-                        clearTimeout(bail);
-                        try { sub?.unsubscribe?.(); } catch {}
-                        resolve(parseFloat(poc.profit ?? '0'));
-                    }
+                const bought = await buyContract({
+                    symbol,
+                    contract_type: contractType,
+                    duration,
+                    duration_unit: 't',
+                    stake,
+                    ...(barrier !== null ? { barrier } : {}),
+                    currency,
+                    metadata: options.metadata,
+                }, profit => {
+                    if (settled) return;
+                    settled = true;
+                    clearTimeout(timeout);
+                    resolve(Number(profit?.profit ?? 0));
                 });
-            } catch {
-                clearTimeout(bail);
-                resolve(0);
-                return;
+                options.onBought?.(bought.contract_id);
+            } catch (error) {
+                clearTimeout(timeout);
+                reject(error);
             }
-
-            send({ proposal_open_contract: 1, contract_id, subscribe: 1 })
-                .catch(() => { clearTimeout(bail); try { sub?.unsubscribe?.(); } catch {} resolve(0); });
         });
-    }, [send]);
+    }, [buyContract, authorized, connected, currency]);
+
+    return { buyAndWait, authorized, connected };
 }
 
 // ── AI Bot Definitions ────────────────────────────────────────────────────────
@@ -221,6 +357,8 @@ const AI_BOTS: AiBotDef[] = [
     },
 ];
 
+const AI_RUNS_PER_SCAN = 6;
+
 // ── Per-bot session state ─────────────────────────────────────────────────────
 interface BotSession {
     active: boolean;
@@ -243,41 +381,6 @@ function computeSmartAnalysis(digits: number[], analysisDepth: number) {
 }
 
 // ── Smart bot live digit state (for display) ──────────────────────────────────
-function useLiveDigitsState(symbol: string): number[] {
-    const [digits, setDigits] = useState<number[]>([]);
-    const wsRef = useRef<WebSocket | null>(null);
-
-    useEffect(() => {
-        wsRef.current?.close();
-        setDigits([]);
-        const ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID_DIGIT}`);
-        wsRef.current = ws;
-        let pipSize = 2;
-
-        ws.onopen = () => ws.send(JSON.stringify({
-            ticks_history: symbol, count: 200, end: 'latest', style: 'ticks', subscribe: 1,
-        }));
-        ws.onmessage = e => {
-            try {
-                const d = JSON.parse(e.data);
-                if (d.tick?.pip_size) pipSize = d.tick.pip_size;
-                if (d.history?.prices) {
-                    const ps = d.pip_size ?? pipSize;
-                    setDigits(d.history.prices.map((p: any) => extractDigit(p, ps)));
-                }
-                if (d.tick?.quote) {
-                    const ps = d.tick.pip_size ?? pipSize;
-                    const digit = extractDigit(d.tick.quote, ps);
-                    setDigits(prev => [...prev.slice(-499), digit]);
-                }
-            } catch {}
-        };
-        return () => ws.close();
-    }, [symbol]); // eslint-disable-line react-hooks/exhaustive-deps
-
-    return digits;
-}
-
 // ── Individual AI bot runner ──────────────────────────────────────────────────
 interface AiBotRunnerProps {
     bot: AiBotDef;
@@ -292,7 +395,7 @@ function AiBotCard({ bot, globalStake, globalMartingale, session, onSessionUpdat
     const digitsRef = useLiveDigitsRef(bot.symbol);
     const stopRef = useRef(false);
     const pausedStakeRef = useRef<number | null>(null); // for resume-with-martingale
-    const buyAndWait = useBuyAndWait();
+    const { buyAndWait } = useBuyAndWait();
 
     const start = useCallback(async (resumeStake?: number) => {
         stopRef.current = false;
@@ -305,33 +408,56 @@ function AiBotCard({ bot, globalStake, globalMartingale, session, onSessionUpdat
         const sl = bot.defaultStopLoss * Math.max(1, globalStake);
         let stk = resumeStake ?? globalStake; // resume with saved stake (martingale preserved)
         let recoveryMode = false;
+        let lastScanKey = '';
         onLog(`🚀 ${bot.name} started | Stake: $${stk.toFixed(2)} | TP:${tp.toFixed(2)} SL:${sl.toFixed(2)}`);
 
         while (!stopRef.current) {
             try {
-                const { contract, barrier } = bot.pickTrade(digitsRef.current, recoveryMode);
-                const profit = await buyAndWait(bot.symbol, contract, barrier, stk);
-                const won = profit > 0;
-                localProfit = +(localProfit + profit).toFixed(2);
-                if (won) localWins++; else localLosses++;
+                // A scan is anchored to a new digit window. One valid entry
+                // starts exactly six sequential contracts; settlement gates
+                // every next buy so fast execution never races the account's
+                // contract state or reuses the same tick indefinitely.
+                let scanDigits = digitsRef.current.slice();
+                while (!stopRef.current && (
+                    !scanDigits.length ||
+                    scanDigits.slice(-10).join(',') === lastScanKey
+                )) {
+                    await new Promise(r => setTimeout(r, isFastExecutionEnabled() ? 0 : 80));
+                    scanDigits = digitsRef.current.slice();
+                }
+                if (stopRef.current) break;
+                lastScanKey = scanDigits.slice(-10).join(',');
 
-                onSessionUpdate({ wins: localWins, losses: localLosses, profit: localProfit });
-                onLog(`${won ? '✅' : '❌'} ${contract}${barrier !== null ? '@' + barrier : ''} ${fmtProfit(profit)} | Total: ${fmtProfit(localProfit)}`);
+                const entry = bot.pickTrade(scanDigits, recoveryMode);
+                if (!entry || scanDigits.length < 3) continue;
 
-                if (bot.id === 'auto-o2u7') recoveryMode = !won;
-                if (won) {
-                    stk = globalStake;
-                    pausedStakeRef.current = null;
-                } else {
-                    stk = Math.max(0.35, +(stk * globalMartingale).toFixed(2));
-                    pausedStakeRef.current = stk; // save for resume
+                for (let run = 0; run < AI_RUNS_PER_SCAN && !stopRef.current; run++) {
+                    const { contract, barrier } = bot.pickTrade(scanDigits, recoveryMode);
+                    const profit = await buyAndWait(bot.symbol, contract, barrier, stk);
+                    const won = profit > 0;
+                    localProfit = +(localProfit + profit).toFixed(2);
+                    if (won) localWins++; else localLosses++;
+
+                    onSessionUpdate({ wins: localWins, losses: localLosses, profit: localProfit });
+                    onLog(`${won ? '✅' : '❌'} AI scan ${run + 1}/${AI_RUNS_PER_SCAN}: ${contract}${barrier !== null ? '@' + barrier : ''} ${fmtProfit(profit)} | Total: ${fmtProfit(localProfit)}`);
+
+                    if (bot.id === 'auto-o2u7') recoveryMode = !won;
+                    if (won) {
+                        stk = globalStake;
+                        pausedStakeRef.current = null;
+                    } else {
+                        stk = Math.max(0.35, +(stk * globalMartingale).toFixed(2));
+                        pausedStakeRef.current = stk; // save for resume
+                    }
+
+                    if (localProfit >= tp) { onLog('🎯 Take profit hit'); break; }
+                    if (localProfit <= -sl) { onLog('🛑 Stop loss hit'); break; }
                 }
 
-                if (localProfit >= tp) { onLog('🎯 Take profit hit'); break; }
-                if (localProfit <= -sl) { onLog('🛑 Stop loss hit'); break; }
+                if (localProfit >= tp || localProfit <= -sl) break;
             } catch (err: any) {
                 onLog(`⚠️ ${err?.message || 'Error'}`);
-                await new Promise(r => setTimeout(r, 1500));
+                await new Promise(r => setTimeout(r, isFastExecutionEnabled() ? 0 : 1500));
             }
         }
 
@@ -397,11 +523,26 @@ const AutoTrades: React.FC = () => {
     const [summaryTab, setSummaryTab] = useState<'summary' | 'transactions' | 'journal'>('summary');
     const [summaryStats, setSummaryStats] = useState({ stake: 0, payout: 0, runs: 0, won: 0, lost: 0, profit: 0 });
     const [journal, setJournal] = useState<string[]>([]);
-    const [transactions, setTransactions] = useState<Array<{ time: string; contract: string; profit: number; symbol: string }>>([]);
+    const [transactions, setTransactions] = useState<Array<{
+        id: string; time: string; contract: string; profit: number | null; symbol: string;
+        stake?: number; status?: 'open' | 'won' | 'lost';
+    }>>([]);
 
     // ── Smart Trader (multi-card) state ──────────────────────────────────────────
     type SmartCardId = 'risefall' | 'evenodd' | 'overunder' | 'matchdiffer';
     const SMART_CARD_IDS: SmartCardId[] = ['risefall', 'evenodd', 'overunder', 'matchdiffer'];
+    const CONDITION_OPTIONS: Record<SmartCardId, string[]> = {
+        risefall: ['Rise', 'Fall'],
+        evenodd: ['Even', 'Odd'],
+        overunder: ['Over', 'Under'],
+        matchdiffer: ['Matches', 'Differs'],
+    };
+    const ACTION_OPTIONS: Record<SmartCardId, string[]> = {
+        risefall: ['Buy Rise', 'Buy Fall'],
+        evenodd: ['Buy Even', 'Buy Odd'],
+        overunder: ['Buy Over', 'Buy Under'],
+        matchdiffer: ['Buy Matches', 'Buy Differs'],
+    };
 
     const [smartSharedSymbol, setSmartSharedSymbol] = useState('1HZ10V');
     const [smartSharedDepth, setSmartSharedDepth] = useState(100);
@@ -410,33 +551,34 @@ const AutoTrades: React.FC = () => {
     useEffect(() => { smartSharedSymbolRef.current = smartSharedSymbol; }, [smartSharedSymbol]);
     useEffect(() => { smartSharedDepthRef.current = smartSharedDepth; }, [smartSharedDepth]);
 
-    const smartDigits = useLiveDigitsState(smartSharedSymbol);
+    const smartFeed = useAuthenticatedLiveDigits(smartSharedSymbol);
+    const smartDigits = smartFeed.digits;
     const smartDigitsRef = useRef(smartDigits);
     useEffect(() => { smartDigitsRef.current = smartDigits; }, [smartDigits]);
+    const smartTickVersionRef = useRef(smartFeed.tickVersion);
+    useEffect(() => { smartTickVersionRef.current = smartFeed.tickVersion; }, [smartFeed.tickVersion]);
 
-    // Live price tracker for the smart header
-    const [smartLivePrice, setSmartLivePrice] = React.useState<number | null>(null);
-    React.useEffect(() => {
-        const wsUrl = `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID_DIGIT}`;
-        const ws = new WebSocket(wsUrl);
-        ws.onopen = () => ws.send(JSON.stringify({ ticks: smartSharedSymbol, subscribe: 1 }));
-        ws.onmessage = e => {
-            try { const d = JSON.parse(e.data); if (d.tick?.quote) setSmartLivePrice(d.tick.quote); } catch {}
-        };
-        return () => ws.close();
-    }, [smartSharedSymbol]);
+    // The header price is from the same authorized stream as the digit history.
+    const smartLivePrice = smartFeed.livePrice;
 
-    const buyAndWait = useBuyAndWait();
+    const { buyAndWait, authorized, connected } = useBuyAndWait();
+    type SmartExecutionMode = 'normal' | 'eachTick' | 'superSpeed';
+    const [smartExecutionMode, setSmartExecutionMode] = useState<SmartExecutionMode>('normal');
+    const smartExecutionModeRef = useRef<SmartExecutionMode>('normal');
+    useEffect(() => { smartExecutionModeRef.current = smartExecutionMode; }, [smartExecutionMode]);
 
     // Per-card config (editable params)
     const [smartCardCfg, setSmartCardCfg] = useState<Record<SmartCardId, {
-        stake: number; ticks: number; martingale: number; condition: number; barrier: number;
+        stake: number; ticks: number; martingale: number; barrier: number;
+        lookback: number; ifValue: string; thenAction: string;
+        bulkEnabled: boolean; bulkCount: number;
     }>>({
-        risefall:    { stake: 5, ticks: 1, martingale: 1, condition: 50, barrier: 5 },
-        evenodd:     { stake: 5, ticks: 1, martingale: 1, condition: 51, barrier: 5 },
-        overunder:   { stake: 5, ticks: 1, martingale: 1, condition: 55, barrier: 5 },
-        matchdiffer: { stake: 5, ticks: 1, martingale: 1, condition: 100, barrier: 5 },
+        risefall:    { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Rise', thenAction: 'Buy Rise', bulkEnabled: false, bulkCount: 10 },
+        evenodd:     { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Even', thenAction: 'Buy Even', bulkEnabled: false, bulkCount: 10 },
+        overunder:   { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Over', thenAction: 'Buy Over', bulkEnabled: false, bulkCount: 10 },
+        matchdiffer: { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Matches', thenAction: 'Buy Matches', bulkEnabled: false, bulkCount: 10 },
     });
+    const batchTradingEnabled = Object.values(smartCardCfg).some(cfg => cfg.bulkEnabled);
     const smartCardCfgRef = useRef(smartCardCfg);
     useEffect(() => { smartCardCfgRef.current = smartCardCfg; }, [smartCardCfg]);
 
@@ -470,27 +612,57 @@ const AutoTrades: React.FC = () => {
         const cfg = smartCardCfgRef.current[id];
         const depth = Math.min(smartSharedDepthRef.current, digits.length);
         const last = digits.slice(-Math.max(depth, 20));
+        const sample = last.slice(-Math.max(1, Math.min(10, cfg.lookback || 3)));
+        const matchesAction = (name: string) => cfg.thenAction === name;
 
         if (id === 'risefall') {
-            // Count consecutive rises vs falls (price direction via digit delta)
-            const rises = last.slice(1).filter((d, i) => d !== last[i]).length; // digit changed
-            const riseProb = last.length > 1 ? (last.slice(1).filter((d, i) => d > last[i]).length / (last.length - 1)) * 100 : 50;
-            return { contract: riseProb >= cfg.condition ? 'CALL' : 'PUT', barrier: null, riseProb: +riseProb.toFixed(2) };
+            const rising = sample.length < 2 || sample.slice(1).every((d, i) => d > sample[i]);
+            const falling = sample.length < 2 || sample.slice(1).every((d, i) => d < sample[i]);
+            const meetsCondition = cfg.ifValue === 'Rise' ? rising : falling;
+            return {
+                contract: matchesAction('Buy Rise') ? 'CALL' : 'PUT',
+                barrier: null,
+                meetsCondition,
+                riseProb: rising ? 100 : 0,
+            };
         }
         if (id === 'evenodd') {
-            const evenCount = last.filter(d => d % 2 === 0).length;
-            const evenProb = last.length > 0 ? (evenCount / last.length) * 100 : 50;
-            return { contract: evenProb >= cfg.condition ? 'DIGITEVEN' : 'DIGITODD', barrier: null, evenProb: +evenProb.toFixed(2) };
+            // The Even/Odd card is deliberately streak-based: the latest N
+            // digits must all have the selected parity before an entry is
+            // allowed. This keeps the UI condition and execution gate
+            // identical.
+            const requiredDigits = Math.max(1, Math.min(10, cfg.lookback || 3));
+            const paritySample = digits.slice(-requiredDigits);
+            const meetsCondition = paritySample.length === requiredDigits
+                && paritySample.every(d => (d % 2 === 0) === (cfg.ifValue === 'Even'));
+            return {
+                contract: matchesAction('Buy Even') ? 'DIGITEVEN' : 'DIGITODD',
+                barrier: null,
+                meetsCondition,
+                evenProb: paritySample.filter(d => d % 2 === 0).length / Math.max(1, paritySample.length) * 100,
+            };
         }
         if (id === 'overunder') {
-            const overCount = last.filter(d => d > cfg.barrier).length;
-            const overProb = last.length > 0 ? (overCount / last.length) * 100 : 50;
-            return { contract: overProb >= cfg.condition ? 'DIGITOVER' : 'DIGITUNDER', barrier: cfg.barrier, overProb: +overProb.toFixed(2) };
+            const isOver = sample.length > 0 && sample.every(d => d > cfg.barrier);
+            const isUnder = sample.length > 0 && sample.every(d => d < cfg.barrier);
+            return {
+                contract: matchesAction('Buy Over') ? 'DIGITOVER' : 'DIGITUNDER',
+                barrier: cfg.barrier,
+                meetsCondition: cfg.ifValue === 'Over' ? isOver : isUnder,
+                overProb: sample.filter(d => d > cfg.barrier).length / Math.max(1, sample.length) * 100,
+            };
         }
-        // matchdiffer — find least-frequent digit
+        // Matches means the recent digits are identical; Differs means at least
+        // two different digits appeared in the selected window.
         const freq = Array.from({ length: 10 }, (_, i) => last.filter(d => d === i).length);
         const minDigit = freq.indexOf(Math.min(...freq));
-        return { contract: 'DIGITDIFF', barrier: minDigit, freq };
+        const isMatch = sample.length > 0 && sample.every(d => d === sample[0]);
+        return {
+            contract: matchesAction('Buy Matches') ? 'DIGITMATCH' : 'DIGITDIFF',
+            barrier: matchesAction('Buy Matches') ? sample[0] : minDigit,
+            meetsCondition: cfg.ifValue === 'Matches' ? isMatch : new Set(sample).size > 1,
+            freq,
+        };
     }, []);
 
     // Start/stop a smart card bot
@@ -507,47 +679,215 @@ const AutoTrades: React.FC = () => {
         updateSess(id, { running: true, wins: 0, losses: 0, profit: 0, lastLog: 'Starting…' });
 
         let wins = 0, losses = 0, sessionProfit = 0;
+        let evaluatedTick = smartTickVersionRef.current - 1;
+        let waitUntilTick = 0;
 
         const loop = async () => {
             while (!smartStopFlags.current[id]) {
+                let pendingTransactionIds: string[] = [];
                 try {
-                    const { contract, barrier } = pickSmartTrade(id);
+                    const mode = smartExecutionModeRef.current;
+                    // Every card evaluates once per new authenticated tick.
+                    // Without this gate Normal mode can buy repeatedly from
+                    // the same already-matching digit window after settlement.
+                    while (!smartStopFlags.current[id] && smartTickVersionRef.current <= Math.max(evaluatedTick, waitUntilTick)) {
+                        await new Promise(r => setTimeout(r, 40));
+                    }
+                    if (smartStopFlags.current[id]) break;
+                    evaluatedTick = smartTickVersionRef.current;
+
+                    const trade = pickSmartTrade(id);
+                    if (!trade.meetsCondition) {
+                        // Conditions are tick-gated. Do not repeatedly buy while
+                        // the same non-matching window is on screen.
+                        continue;
+                    }
+                    const { contract, barrier } = trade;
                     const currentCfg = smartCardCfgRef.current[id];
                     const stk = smartCurrentStakes.current[id];
                     const sym = smartSharedSymbolRef.current;
+                    const batchEnabled = currentCfg.bulkEnabled;
+                    // Snapshot the edited count for this signal. Changes made
+                    // while this batch is settling apply only to the next
+                    // batch, never halfway through the current one.
+                    const batchCount = Math.max(1, Math.min(100, Math.round(currentCfg.bulkCount || 10)));
 
-                    const profit = await buyAndWait(sym, contract, barrier, stk);
-                    if (smartStopFlags.current[id]) break;
+                    const batchId = `BATCH-${id}-${Date.now()}-${wins + losses}`;
+                    const transactionId = `${batchId}-ORDER-1`;
+                    const transactionTime = new Date().toLocaleTimeString('en', { hour12: false });
+                    const batchTransactionIds = Array.from({ length: batchCount }, (_, index) =>
+                        `${batchId}-ORDER-${index + 1}`
+                    );
+                    pendingTransactionIds = batchEnabled ? batchTransactionIds : [transactionId];
+                    setTransactions(prev => [
+                        ...prev.slice(-(batchEnabled ? Math.max(99, batchCount * 2) : 99)),
+                        ...(batchEnabled
+                            ? batchTransactionIds.map((id, index) => ({
+                                id,
+                                time: transactionTime,
+                                contract: `${contract}${barrier !== null ? '@' + barrier : ''} #${index + 1}/${batchCount}`,
+                                profit: null,
+                                symbol: sym,
+                                stake: stk,
+                                status: 'open',
+                                batchId,
+                            }))
+                            : [{
+                                id: transactionId,
+                                time: transactionTime,
+                                contract: `${contract}${barrier !== null ? '@' + barrier : ''}`,
+                                profit: null,
+                                symbol: sym,
+                                stake: stk,
+                                status: 'open',
+                                batchId,
+                            }]),
+                    ]);
 
-                    const won = profit > 0;
-                    sessionProfit = +(sessionProfit + profit).toFixed(2);
-                    if (won) wins++; else losses++;
+                    const recordResult = (
+                        profit: number,
+                        resultTransactionId = transactionId,
+                        advanceStake = true,
+                        contractId?: number,
+                    ) => {
+                        const won = profit > 0;
+                        sessionProfit = +(sessionProfit + profit).toFixed(2);
+                        if (won) wins++; else losses++;
 
-                    const ts = new Date().toLocaleTimeString('en', { hour12: false });
-                    const logMsg = `${won ? '✅' : '❌'} ${contract}${barrier !== null ? '@' + barrier : ''} ${fmtProfit(profit)}`;
-                    updateSess(id, { wins, losses, profit: sessionProfit, lastLog: logMsg });
+                        const ts = new Date().toLocaleTimeString('en', { hour12: false });
+                        const logMsg = `${won ? '✅' : '❌'} ${contract}${barrier !== null ? '@' + barrier : ''} ${fmtProfit(profit)}`;
+                        updateSess(id, { wins, losses, profit: sessionProfit, lastLog: logMsg });
 
-                    // Feed shared summary + transactions
-                    setSummaryStats(prev => ({
-                        stake: +(prev.stake + stk).toFixed(2),
-                        payout: +(prev.payout + (won ? stk + profit : 0)).toFixed(2),
-                        runs: prev.runs + 1,
-                        won: prev.won + (won ? 1 : 0),
-                        lost: prev.lost + (won ? 0 : 1),
-                        profit: +(prev.profit + profit).toFixed(2),
-                    }));
-                    setTransactions(prev => [...prev.slice(-99), {
-                        time: ts, contract: `${contract}${barrier !== null ? '@' + barrier : ''}`,
-                        profit: +profit.toFixed(2), symbol: sym,
-                    }]);
-                    setJournal(prev => [`[${ts}] [${id}] ${logMsg}`, ...prev].slice(0, 50));
+                        setSummaryStats(prev => ({
+                            stake: +(prev.stake + stk).toFixed(2),
+                            payout: +(prev.payout + (won ? stk + profit : 0)).toFixed(2),
+                            runs: prev.runs + 1,
+                            won: prev.won + (won ? 1 : 0),
+                            lost: prev.lost + (won ? 0 : 1),
+                            profit: +(prev.profit + profit).toFixed(2),
+                        }));
+                        setTransactions(prev => prev.map(transaction => transaction.id === resultTransactionId
+                            ? {
+                                ...transaction,
+                                time: ts,
+                                profit: +profit.toFixed(2),
+                                status: won ? 'won' : 'lost',
+                                ...(contractId ? { contractId } : {}),
+                            }
+                            : transaction
+                        ));
+                        setJournal(prev => [`[${ts}] [${id}] ${logMsg}`, ...prev].slice(0, 50));
 
-                    // Martingale
-                    smartCurrentStakes.current[id] = won
-                        ? currentCfg.stake
-                        : Math.max(0.35, +(stk * currentCfg.martingale).toFixed(2));
+                        if (advanceStake) {
+                            smartCurrentStakes.current[id] = won
+                                ? currentCfg.stake
+                                : Math.max(0.35, +(stk * currentCfg.martingale).toFixed(2));
+                        }
+                    };
+
+                    if (!batchEnabled && mode === 'normal') {
+                        const profit = await buyAndWait(sym, contract, barrier, stk, currentCfg.ticks, {
+                            metadata: {
+                                source: 'auto-trades',
+                                execution_mode: 'single',
+                                batch_id: batchId,
+                                batch_index: 1,
+                                batch_size: 1,
+                            },
+                        });
+                        if (smartStopFlags.current[id]) break;
+                        recordResult(profit);
+                    } else if (batchEnabled) {
+                        // Dispatch all identical orders from the same signal
+                        // signal without awaiting one before starting the
+                        // next. Each buy has its own proposal and settlement
+                        // subscription, but shares the same symbol, contract,
+                        // barrier, stake, duration, and entry tick.
+                        setJournal(prev => [
+                            `[${transactionTime}] [${id}] ${batchId}: dispatching all ${batchCount} positions together`,
+                            ...prev,
+                        ].slice(0, 50));
+                        const boughtContractIds = new Map<string, number>();
+                        const batchResults = await Promise.allSettled(
+                            batchTransactionIds.map(orderId =>
+                                buyAndWait(sym, contract, barrier, stk, currentCfg.ticks, {
+                                    metadata: {
+                                        source: 'auto-trades',
+                                        execution_mode: 'parallel',
+                                        batch_id: batchId,
+                                        batch_index: batchTransactionIds.indexOf(orderId) + 1,
+                                        batch_size: batchCount,
+                                    },
+                                    onBought: contractId => {
+                                        boughtContractIds.set(orderId, contractId);
+                                        setTransactions(prev => prev.map(transaction =>
+                                            transaction.id === orderId
+                                                ? { ...transaction, status: 'open', contractId }
+                                                : transaction
+                                        ));
+                                    },
+                                })
+                            )
+                        );
+                        let batchWins = 0;
+                        let batchLosses = 0;
+                        let batchProfit = 0;
+                        let failedOrders = 0;
+                        batchResults.forEach((result, index) => {
+                            const orderId = batchTransactionIds[index];
+                            const contractId = boughtContractIds.get(orderId);
+                            if (result.status === 'fulfilled') {
+                                const profit = Number(result.value) || 0;
+                                batchProfit = +(batchProfit + profit).toFixed(2);
+                                if (profit > 0) batchWins++; else batchLosses++;
+                                recordResult(profit, orderId, false, contractId);
+                            } else {
+                                failedOrders++;
+                                setTransactions(prev => prev.map(transaction =>
+                                    transaction.id === orderId
+                                        ? { ...transaction, status: 'error', profit: null }
+                                        : transaction
+                                ));
+                            }
+                        });
+                        const settledCount = batchWins + batchLosses;
+                        setJournal(prev => [
+                            `[${new Date().toLocaleTimeString('en', { hour12: false })}] [${id}] ${batchId}: ${settledCount}/${batchCount} settled · ${batchWins} won · ${batchLosses} lost · P/L ${fmtProfit(batchProfit)}${failedOrders ? ` · ${failedOrders} failed` : ''}`,
+                            ...prev,
+                        ].slice(0, 50));
+                        smartCurrentStakes.current[id] = batchProfit <= 0
+                            ? Math.max(0.35, +(stk * currentCfg.martingale).toFixed(2))
+                            : currentCfg.stake;
+                    } else {
+                        // Each Tick and Super Speed both place a separate
+                        // one-tick contract for every newly received tick.
+                        // They deliberately do not wait for settlement.
+                        const settle = (profit: number) => recordResult(profit);
+                        const request = buyAndWait(
+                            sym, contract, barrier, stk, 1,
+                            { settle: false, onSettled: settle },
+                        );
+                        if (mode === 'eachTick') {
+                            await request;
+                        } else {
+                            // Super Speed intentionally does not wait for the
+                            // buy acknowledgement; the authenticated API
+                            // still performs proposal → buy for each contract.
+                            void request.catch(() => {});
+                        }
+                    }
+                    // Require a completely new lookback window before this
+                    // card can enter again. For example, after "3 Even →
+                    // Buy Odd", the next entry waits for three new ticks.
+                    waitUntilTick = evaluatedTick + Math.max(1, Math.min(10, currentCfg.lookback || 3));
                 } catch {
-                    await new Promise(r => setTimeout(r, 1500));
+                    // A proposal/buy failure is not a taken trade. Remove its
+                    // optimistic OPEN row instead of leaving a phantom
+                    // transaction in the Bot Builder-style history.
+                    if (pendingTransactionIds.length) {
+                        setTransactions(prev => prev.filter(transaction => !pendingTransactionIds.includes(transaction.id)));
+                    }
+                    await new Promise(r => setTimeout(r, isFastExecutionEnabled() ? 0 : 1500));
                 }
             }
             smartStopFlags.current[id] = false;
@@ -673,6 +1013,14 @@ const AutoTrades: React.FC = () => {
                 const matchProb = n > 0 ? (freq[mostFreqDigit] / n) * 100 : 10;
                 const differProb = 100 - (n > 0 ? (freq[leastFreqDigit] / n) * 100 : 10);
                 const last10 = smartDigits.slice(-10);
+                 const evenOddPattern = last10.map(d => d % 2 === 0 ? 'E' : 'O');
+                 const evenOddStreak = (() => {
+                     if (!last10.length) return 0;
+                     const parity = last10[last10.length - 1] % 2;
+                     let count = 0;
+                     for (let i = last10.length - 1; i >= 0 && last10[i] % 2 === parity; i--) count++;
+                     return count;
+                 })();
 
                 const CARD_DEFS = [
                     { id: 'risefall' as SmartCardId,    title: 'Rise/Fall',         icon: '📈' },
@@ -706,6 +1054,48 @@ const AutoTrades: React.FC = () => {
                         <div className='st__data-status'>
                             <span className={`st__dot ${smartDigits.length > 0 ? 'live' : ''}`} />
                             {smartDigits.length > 0 ? `${smartDigits.length} ticks loaded` : 'Loading market data…'}
+                        </div>
+                        <div className='st__data-status'>
+                            <span className={`st__dot ${connected && authorized ? 'live' : ''}`} />
+                            {connected && authorized
+                                ? 'Authenticated trading ready'
+                                : 'Log in to a demo or real account to trade'}
+                        </div>
+                        <div className='st__execution'>
+                            <span className='st__execution-label'>Execution</span>
+                            <div className='st__execution-buttons'>
+                                <button
+                                    className={smartExecutionMode === 'normal' ? 'active' : ''}
+                                    disabled={batchTradingEnabled}
+                                    onClick={() => setSmartExecutionMode('normal')}
+                                    title='Buy a contract, then wait for Deriv to settle it before the next trade'
+                                >
+                                        Single Trade
+                                </button>
+                                <button
+                                    className={smartExecutionMode === 'eachTick' ? 'active' : ''}
+                                    disabled={batchTradingEnabled}
+                                    onClick={() => setSmartExecutionMode('eachTick')}
+                                    title='Buy one separate one-tick contract for every authenticated market tick'
+                                >
+                                    Each Tick
+                                </button>
+                                <button
+                                    className={smartExecutionMode === 'superSpeed' ? 'active super' : 'super'}
+                                    disabled={batchTradingEnabled}
+                                    onClick={() => setSmartExecutionMode('superSpeed')}
+                                    title='Buy each individual tick contract without waiting for buy or settlement acknowledgement'
+                                >
+                                    Super Speed
+                                </button>
+                            </div>
+                            <span className='st__execution-help'>
+                                {smartExecutionMode === 'normal'
+                                    ? 'Default: one trade at a time from each entry signal'
+                                    : smartExecutionMode === 'eachTick'
+                                        ? 'One individual 1-tick contract per live digit'
+                                         : 'Individual contracts sent at maximum API speed'}
+                            </span>
                         </div>
                     </div>
 
@@ -765,19 +1155,28 @@ const AutoTrades: React.FC = () => {
                                     </div>
 
                                     {/* Last Digits Pattern */}
-                                    {(card.id === 'overunder' || card.id === 'matchdiffer') && (
+                                    {(card.id === 'evenodd' || card.id === 'overunder' || card.id === 'matchdiffer') && (
                                         <div className='st__digit-pattern'>
                                             <div className='st__pattern-label'>Last Digits Pattern</div>
                                             <div className='st__pattern-dots'>
                                                 {last10.map((d, i) => (
-                                                    <span key={i} className={`st__pdot ${(card.id === 'evenodd' || card.id === 'overunder') ? (d % 2 === 0 ? 'even' : 'odd') : `d${d % 5}`}`}>{d}</span>
+                                                    <span key={i} className={`st__pdot ${(card.id === 'evenodd' || card.id === 'overunder') ? (d % 2 === 0 ? 'even' : 'odd') : `d${d % 5}`}`}>
+                                                        {card.id === 'evenodd' ? evenOddPattern[i] : d}
+                                                    </span>
                                                 ))}
                                             </div>
                                             <div className='st__pattern-note'>
-                                                {card.id === 'overunder'
+                                                {card.id === 'evenodd'
+                                                    ? `${last10.length ? evenOddPattern.join(' · ') : 'Waiting for ticks'}`
+                                                    : card.id === 'overunder'
                                                     ? `O=Over (>${ouBarrier}), E=Equal (=${ouBarrier}), U=Under (<${ouBarrier})`
                                                     : `Most frequent: ${mostFreqDigit} (${matchProb.toFixed(2)}%)`}
                                             </div>
+                                            {card.id === 'evenodd' && (
+                                                <div className='st__streak-note'>
+                                                    Current streak: <strong>{last10.length ? `${evenOddStreak} ${last10[last10.length - 1] % 2 === 0 ? 'Even' : 'Odd'}` : '—'}</strong>
+                                                </div>
+                                            )}
                                             {card.id === 'matchdiffer' && (
                                                 <div className='st__freq-dist'>
                                                     <div className='st__freq-label'>Digit Frequency Distribution</div>
@@ -803,29 +1202,44 @@ const AutoTrades: React.FC = () => {
                                     {/* Trading Condition */}
                                     <div className='st__condition'>
                                         <div className='st__condition-title'>Trading Condition</div>
-                                        <div className='st__condition-row'>
-                                            <span className='st__cond-lbl'>If</span>
-                                            {card.id === 'risefall' && (
-                                                <span className='st__cond-text'>Rise Prob &gt; {cfg.condition}%</span>
-                                            )}
-                                            {card.id === 'evenodd' && (
-                                                <span className='st__cond-text'>Even Prob &gt; {cfg.condition}%</span>
-                                            )}
-                                            {card.id === 'overunder' && (
-                                                <span className='st__cond-text'>Over Prob &gt; {cfg.condition}%</span>
-                                            )}
-                                            {card.id === 'matchdiffer' && (
-                                                <span className='st__cond-text'>Check last {cfg.condition} digits → Differ {leastFreqDigit}</span>
-                                            )}
+                                         <div className='st__condition-row st__condition-row--interactive'>
+                                             <span className='st__cond-lbl'>If</span>
+                                             <span className='st__cond-text'>the last</span>
+                                             <select
+                                                 className='st__cond-select st__cond-select--number'
+                                                 value={cfg.lookback}
+                                                 disabled={isRunning}
+                                                 aria-label={`${card.title} lookback digits`}
+                                                 onChange={e => updateCardCfg(card.id, { lookback: Math.max(1, Math.min(10, +e.target.value)) })}
+                                             >
+                                                 {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(v => <option key={v} value={v}>{v}</option>)}
+                                             </select>
+                                             <span className='st__cond-text'>
+                                                 {card.id === 'risefall' ? 'digits move' : 'digits are'}
+                                             </span>
+                                             <select
+                                                 className='st__cond-select'
+                                                 value={cfg.ifValue}
+                                                 disabled={isRunning}
+                                                 aria-label={`${card.title} entry condition`}
+                                                 onChange={e => updateCardCfg(card.id, { ifValue: e.target.value })}
+                                             >
+                                                 {CONDITION_OPTIONS[card.id].map(value => <option key={value} value={value}>{value}</option>)}
+                                             </select>
+                                             {card.id === 'overunder' && <span className='st__cond-text'>digit {ouBarrier}</span>}
                                         </div>
-                                        <div className='st__condition-row'>
+                                          <div className='st__condition-row st__condition-row--interactive'>
                                             <span className='st__cond-lbl'>Then</span>
-                                            {card.id === 'risefall' && <span className='st__cond-text'>Buy {riseProb >= cfg.condition ? 'Rise' : 'Fall'}</span>}
-                                            {card.id === 'evenodd' && <span className='st__cond-text'>Buy {evenProb >= cfg.condition ? 'Even' : 'Odd'}</span>}
-                                            {card.id === 'overunder' && (
-                                                <span className='st__cond-text'>Buy {overProb >= cfg.condition ? 'Over' : 'Under'} digit {ouBarrier}</span>
-                                            )}
-                                            {card.id === 'matchdiffer' && <span className='st__cond-text'>Buy Differ on {leastFreqDigit}</span>}
+                                              <select
+                                                  className='st__cond-select st__cond-action-select'
+                                                  value={cfg.thenAction}
+                                                  disabled={isRunning}
+                                                  aria-label={`${card.title} trade action`}
+                                                  onChange={e => updateCardCfg(card.id, { thenAction: e.target.value })}
+                                              >
+                                                  {ACTION_OPTIONS[card.id].map(value => <option key={value} value={value}>{value}</option>)}
+                                              </select>
+                                              {card.id === 'overunder' && <span className='st__cond-text'>digit {ouBarrier}</span>}
                                         </div>
                                         {card.id === 'overunder' && (
                                             <div className='st__condition-row'>
@@ -837,14 +1251,6 @@ const AutoTrades: React.FC = () => {
                                                     onChange={e => updateCardCfg(card.id, { barrier: +e.target.value })} />
                                             </div>
                                         )}
-                                        <div className='st__condition-row'>
-                                            <span className='st__cond-lbl'>Threshold %</span>
-                                            <input type='number' min='0' max='100' step='1'
-                                                className='st__cond-input'
-                                                value={cfg.condition}
-                                                disabled={isRunning}
-                                                onChange={e => updateCardCfg(card.id, { condition: +e.target.value })} />
-                                        </div>
                                     </div>
 
                                     {/* Per-card params */}
@@ -855,6 +1261,7 @@ const AutoTrades: React.FC = () => {
                                                 disabled={isRunning}
                                                 onChange={e => updateCardCfg(card.id, { stake: +e.target.value })} />
                                         </div>
+
                                         <div className='st__param'>
                                             <label>Ticks</label>
                                             <input type='number' min='1' max='10' step='1' value={cfg.ticks}
@@ -867,6 +1274,49 @@ const AutoTrades: React.FC = () => {
                                                 disabled={isRunning}
                                                 onChange={e => updateCardCfg(card.id, { martingale: +e.target.value })} />
                                         </div>
+                                    </div>
+
+                                    {/* Per-card batch controls */}
+                                    <div className={`st__batch-panel ${cfg.bulkEnabled ? 'active' : ''}`}>
+                                        <div className='st__batch-header'>
+                                            <div>
+                                                <strong>Batch trade</strong>
+                                                <span>Open matching contracts from one entry signal</span>
+                                            </div>
+                                            <button
+                                                type='button'
+                                                className={`st__batch-toggle ${cfg.bulkEnabled ? 'on' : ''}`}
+                                                disabled={isRunning}
+                                                aria-pressed={cfg.bulkEnabled}
+                                                onClick={() => updateCardCfg(card.id, { bulkEnabled: !cfg.bulkEnabled })}
+                                            >
+                                                {cfg.bulkEnabled ? 'ON' : 'OFF'}
+                                            </button>
+                                        </div>
+                                        {cfg.bulkEnabled && (
+                                            <>
+                                                <div className='st__batch-fields'>
+                                                    <label>
+                                                        Positions (editable)
+                                                        <NumberField
+                                                            value={cfg.bulkCount}
+                                                            min={1}
+                                                            max={100}
+                                                            onCommit={n => updateCardCfg(card.id, { bulkCount: n })}
+                                                            className='st__batch-count'
+                                                        />
+                                                    </label>
+                                                    <div className='st__batch-total'>
+                                                        <span>Total stake</span>
+                                                        <strong>${(cfg.stake * cfg.bulkCount).toFixed(2)}</strong>
+                                                    </div>
+                                                </div>
+                                                <p className='st__batch-note'>
+                                                    {cfg.bulkCount} positions · ${cfg.stake.toFixed(2)} each · {cfg.ticks} tick{cfg.ticks === 1 ? '' : 's'}.
+                                                    All use this card's same symbol, entry signal, barrier and exit duration.
+                                                </p>
+                                            </>
+                                        )}
                                     </div>
 
                                     {/* Session stats */}
@@ -884,6 +1334,10 @@ const AutoTrades: React.FC = () => {
                                     {/* Run button */}
                                     <button
                                         className={`st__run-btn ${isRunning ? 'stop' : ''}`}
+                                        disabled={!isRunning && (!connected || !authorized)}
+                                        title={!connected || !authorized
+                                            ? 'Log in to a demo or real account before starting'
+                                            : undefined}
                                         onClick={() => toggleSmartCard(card.id)}
                                     >
                                         {isRunning ? '⏹ Stop Auto Trading' : '▶ Start Auto Trading'}
@@ -1056,7 +1510,8 @@ const AutoTrades: React.FC = () => {
                             }} className='autotrades__printer-clear'>🗑 Clear</button>
                             <button onClick={() => {
                                 const lines = transactions.map(t =>
-                                    `${t.time}\t${t.symbol}\t${t.contract}\t${t.profit >= 0 ? '+' : ''}${t.profit.toFixed(2)}`
+                                     `${t.time}\t${t.symbol}\t${t.contract}\t${t.profit == null ? 'OPEN' : `${t.profit >= 0 ? '+' : ''}${t.profit.toFixed(2)}`
+                                     }`
                                 ).join('\n');
                                 const blob = new Blob([`Time\tSymbol\tContract\tP/L\n${lines}`], { type: 'text/plain' });
                                 const url = URL.createObjectURL(blob);
@@ -1071,7 +1526,7 @@ const AutoTrades: React.FC = () => {
                                         <span className='time'>{t.time}</span>
                                         <span className='sym'>{t.symbol}</span>
                                         <span className='ctype'>{t.contract}</span>
-                                        <span className='pl'>{t.profit >= 0 ? '+' : ''}{t.profit.toFixed(2)}</span>
+                                         <span className='pl'>{t.profit == null ? 'OPEN' : `${t.profit >= 0 ? '+' : ''}${t.profit.toFixed(2)}`}</span>
                                     </div>
                                 ))
                             }
@@ -1159,8 +1614,8 @@ const AutoTrades: React.FC = () => {
                                                 <span className='autotrades__txn-type'>{t.contract}</span>
                                             </div>
                                             <div className='autotrades__txn-right'>
-                                                <span className={`autotrades__txn-pl ${t.profit >= 0 ? 'pos' : 'neg'}`}>
-                                                    {t.profit >= 0 ? '+' : ''}{t.profit.toFixed(2)}
+                                             <span className={`autotrades__txn-pl ${t.profit == null ? 'pending' : t.profit >= 0 ? 'pos' : 'neg'}`}>
+                                                     {t.profit == null ? 'OPEN' : `${t.profit >= 0 ? '+' : ''}${t.profit.toFixed(2)}`}
                                                 </span>
                                                 <span className='autotrades__txn-time'>{t.time}</span>
                                             </div>

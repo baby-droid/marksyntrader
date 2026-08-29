@@ -1,0 +1,816 @@
+Yes. For your Deriv third-party site, I would define **Batch Trading** as an execution system that takes one trading signal and converts it into a controlled group of contracts, executes them, tracks each contract independently, and then produces one combined batch result.
+
+## 1. Core batch-trading logic
+
+```text
+                 ┌──────────────────┐
+                 │  MARKET / SIGNAL  │
+                 └────────┬─────────┘
+                          ↓
+                 ┌──────────────────┐
+                 │  SIGNAL VALIDATE │
+                 └────────┬─────────┘
+                          ↓
+                 ┌──────────────────┐
+                 │   RISK CHECK     │
+                 └────────┬─────────┘
+                          ↓
+                 ┌──────────────────┐
+                 │ CREATE BATCH     │
+                 └────────┬─────────┘
+                          ↓
+              ┌─────────────────────────┐
+              │ GENERATE CONTRACT ORDERS│
+              └────────────┬────────────┘
+                           ↓
+                    ┌──────────────┐
+                    │ EXECUTE BATCH│
+                    └──────┬───────┘
+                           ↓
+             ┌─────────────┼─────────────┐
+             ↓             ↓             ↓
+          BUY #1        BUY #2        BUY #N
+             ↓             ↓             ↓
+          Contract      Contract      Contract
+             │             │             │
+             └─────────────┼─────────────┘
+                           ↓
+                 ┌──────────────────┐
+                 │ MONITOR CONTRACTS│
+                 └────────┬─────────┘
+                          ↓
+                 ┌──────────────────┐
+                 │ SETTLEMENT       │
+                 └────────┬─────────┘
+                          ↓
+                 ┌──────────────────┐
+                 │ BATCH RESULT     │
+                 └──────────────────┘
+```
+
+---
+
+# 2. Batch configuration
+
+The user should first configure the batch:
+
+```text
+BATCH TRADING
+
+Market:          Volatility 100 (1s)
+Contract:        Over 2
+Duration:        2 ticks
+Stake/Contract:  $1.00
+
+Number of trades:
+[ 10 ]
+
+Execution:
+[●] Parallel
+
+Maximum batch loss:
+$5.00
+
+[ CREATE BATCH ]
+```
+
+Internally:
+
+```javascript
+const batchConfig = {
+    symbol: "1HZ100V",
+    contractType: "DIGITOVER",
+    barrier: "2",
+    duration: 2,
+    durationUnit: "t",
+    stake: 1,
+    quantity: 10,
+    executionMode: "parallel",
+    maxLoss: 5
+};
+```
+
+---
+
+# 3. Create the batch
+
+When the user presses **BUY 10**, don't immediately treat the entire operation as one contract.
+
+Create a parent batch:
+
+```javascript
+const batch = {
+    batchId: generateBatchId(),
+
+    status: "CREATED",
+
+    symbol: "1HZ100V",
+
+    contractType: "DIGITOVER",
+
+    barrier: "2",
+
+    duration: 2,
+
+    durationUnit: "t",
+
+    stakePerContract: 1,
+
+    quantity: 10,
+
+    totalStake: 10,
+
+    executed: 0,
+
+    won: 0,
+
+    lost: 0,
+
+    profit: 0,
+
+    contracts: []
+};
+```
+
+Example:
+
+```text
+BATCH-000184
+────────────────────────
+
+Quantity:       10
+Stake:          $1
+Total stake:    $10
+
+Status:         CREATED
+Executed:       0/10
+Won:            0
+Lost:           0
+```
+
+---
+
+# 4. Generate individual orders
+
+The batch manager then creates individual order objects.
+
+```javascript
+function createOrders(batch) {
+
+    const orders = [];
+
+    for (let i = 0; i < batch.quantity; i++) {
+
+        orders.push({
+            orderId: `${batch.batchId}-${i + 1}`,
+
+            batchId: batch.batchId,
+
+            index: i + 1,
+
+            status: "PENDING",
+
+            symbol: batch.symbol,
+
+            contractType: batch.contractType,
+
+            barrier: batch.barrier,
+
+            duration: batch.duration,
+
+            durationUnit: batch.durationUnit,
+
+            stake: batch.stakePerContract,
+
+            contractId: null,
+
+            transactionId: null,
+
+            payout: 0,
+
+            profit: 0
+        });
+
+    }
+
+    return orders;
+}
+```
+
+You now have:
+
+```text
+BATCH-000184
+
+├── ORDER-01
+├── ORDER-02
+├── ORDER-03
+├── ORDER-04
+├── ORDER-05
+├── ORDER-06
+├── ORDER-07
+├── ORDER-08
+├── ORDER-09
+└── ORDER-10
+```
+
+---
+
+# 5. Batch execution engine
+
+The central function should be:
+
+```javascript
+async function executeBatch(batch) {
+
+    batch.status = "EXECUTING";
+
+    const orders = createOrders(batch);
+
+    batch.contracts = orders;
+
+    const results = await Promise.allSettled(
+        orders.map(order => executeOrder(order))
+    );
+
+    processBatchResults(batch, results);
+
+    return batch;
+}
+```
+
+This gives you concurrent execution rather than:
+
+```text
+BUY
+wait
+BUY
+wait
+BUY
+wait
+```
+
+Instead:
+
+```text
+BUY #1 ────────→
+BUY #2 ────────→
+BUY #3 ────────→
+BUY #4 ────────→
+BUY #5 ────────→
+```
+
+The system should still respect Deriv's API limits, available balance, and the actual execution response rather than assuming every request succeeds.
+
+---
+
+# 6. Individual order execution
+
+Each order follows:
+
+```text
+PENDING
+   ↓
+REQUEST PROPOSAL
+   ↓
+PROPOSAL RECEIVED
+   ↓
+PRICE VALIDATION
+   ↓
+BUY REQUEST
+   ↓
+BUY RESPONSE
+   ↓
+CONTRACT ID
+   ↓
+MONITOR
+   ↓
+SETTLED
+```
+
+Function:
+
+```javascript
+async function executeOrder(order) {
+
+    try {
+
+        order.status = "PROPOSAL_REQUESTED";
+
+        const proposal = await requestProposal(order);
+
+        order.proposalId = proposal.id;
+
+        order.status = "PROPOSAL_RECEIVED";
+
+        validateProposal(proposal, order);
+
+        order.status = "BUYING";
+
+        const purchase = await buyContract({
+            proposalId: proposal.id,
+            price: proposal.ask_price
+        });
+
+        order.contractId = purchase.contract_id;
+        order.transactionId = purchase.transaction_id;
+
+        order.status = "OPEN";
+
+        await monitorContract(order);
+
+        return order;
+
+    } catch (error) {
+
+        order.status = "FAILED";
+
+        order.error = error.message;
+
+        throw error;
+    }
+}
+```
+
+---
+
+# 7. Proposal stage
+
+For each order:
+
+```javascript
+async function requestProposal(order) {
+
+    return derivRequest({
+        proposal: 1,
+
+        amount: order.stake,
+
+        basis: "stake",
+
+        contract_type: order.contractType,
+
+        currency: "USD",
+
+        duration: order.duration,
+
+        duration_unit: order.durationUnit,
+
+        barrier: order.barrier,
+
+        underlying_symbol: order.symbol
+    });
+}
+```
+
+The proposal should be treated as **temporary pricing information**.
+
+Don't assume a proposal price remains valid indefinitely.
+
+---
+
+# 8. Buy stage
+
+After receiving the proposal:
+
+```javascript
+async function buyContract({ proposalId, price }) {
+
+    return derivRequest({
+        buy: proposalId,
+        price: price
+    });
+}
+```
+
+The returned contract ID becomes the primary identifier for monitoring that trade.
+
+---
+
+# 9. Contract monitoring
+
+Immediately after successful purchase:
+
+```javascript
+async function monitorContract(order) {
+
+    subscribeToContract(order.contractId);
+
+    return new Promise((resolve, reject) => {
+
+        contractListeners[order.contractId] = {
+
+            update(data) {
+
+                updateOrderFromContract(order, data);
+
+                if (data.is_sold || data.status === "won" ||
+                    data.status === "lost") {
+
+                    resolve(order);
+                }
+            },
+
+            error(error) {
+                reject(error);
+            }
+
+        };
+
+    });
+}
+```
+
+Your UI can therefore show:
+
+```text
+BATCH #000184
+
+#01  ● OPEN
+#02  ● OPEN
+#03  ✓ WON
+#04  ✕ LOST
+#05  ● OPEN
+#06  ✓ WON
+#07  ● OPEN
+#08  ● OPEN
+#09  ✓ WON
+#10  ● OPEN
+```
+
+---
+
+# 10. Batch result processor
+
+Once all orders settle:
+
+```javascript
+function processBatchResults(batch, results) {
+
+    batch.executed = 0;
+    batch.won = 0;
+    batch.lost = 0;
+    batch.failed = 0;
+    batch.profit = 0;
+
+    for (const result of results) {
+
+        if (result.status === "fulfilled") {
+
+            const order = result.value;
+
+            batch.executed++;
+
+            if (order.status === "WON") {
+                batch.won++;
+            }
+
+            if (order.status === "LOST") {
+                batch.lost++;
+            }
+
+            batch.profit += order.profit;
+
+        } else {
+
+            batch.failed++;
+        }
+    }
+
+    batch.totalStake =
+        batch.executed * batch.stakePerContract;
+
+    batch.status = "COMPLETED";
+
+    return batch;
+}
+```
+
+---
+
+# 11. Example
+
+Suppose:
+
+```text
+10 contracts
+$1 each
+```
+
+Results:
+
+```text
+#1 WIN  +$0.90
+#2 WIN  +$0.90
+#3 LOSS -$1.00
+#4 WIN  +$0.90
+#5 LOSS -$1.00
+#6 WIN  +$0.90
+#7 WIN  +$0.90
+#8 LOSS -$1.00
+#9 WIN  +$0.90
+#10 WIN +$0.90
+```
+
+Your batch engine calculates:
+
+```text
+Contracts:       10
+Executed:        10
+
+Wins:             7
+Losses:           3
+
+Stake:           $10.00
+Payout:           $7.30 + returned stake depending on contract settlement model
+Net P/L:         calculated from actual settlement responses
+```
+
+**Do not hard-code payout calculations.** Use the actual payout/profit information returned by Deriv because contract pricing varies.
+
+---
+
+# 12. Risk-control layer
+
+This should sit **before execution**, not after.
+
+```javascript
+function validateBatch(batch, account) {
+
+    if (batch.quantity <= 0)
+        throw new Error("Invalid quantity");
+
+    if (batch.quantity > 100)
+        throw new Error("Batch quantity exceeds configured limit");
+
+    const requiredStake =
+        batch.quantity * batch.stakePerContract;
+
+    if (requiredStake > account.balance)
+        throw new Error("Insufficient balance");
+
+    if (requiredStake > account.maxBatchStake)
+        throw new Error("Batch risk limit exceeded");
+
+    return true;
+}
+```
+
+For example:
+
+```text
+Balance:              $100
+
+Stake:                $1
+Quantity:             20
+
+Required:             $20
+
+Maximum batch risk:   $25
+
+              ✓ APPROVED
+```
+
+---
+
+# 13. Stop/kill switch
+
+Your batch engine needs an emergency stop.
+
+```javascript
+let tradingEnabled = true;
+
+function stopBatch(batch) {
+
+    tradingEnabled = false;
+
+    batch.status = "STOP_REQUESTED";
+
+    cancelPendingOrders(batch);
+
+    return batch;
+}
+```
+
+But there is an important distinction:
+
+**Stopping the batch does not magically close already purchased contracts.**
+
+It should mean:
+
+```text
+STOP
+ ↓
+Do not create new orders
+ ↓
+Do not execute pending orders
+ ↓
+Continue tracking already purchased contracts
+```
+
+That prevents your UI from losing track of existing positions.
+
+---
+
+# 14. Batch state machine
+
+I recommend these states:
+
+```text
+CREATED
+   ↓
+VALIDATING
+   ↓
+APPROVED
+   ↓
+EXECUTING
+   ↓
+PARTIALLY_EXECUTED
+   ↓
+MONITORING
+   ↓
+SETTLING
+   ↓
+COMPLETED
+```
+
+Failure states:
+
+```text
+VALIDATION_FAILED
+EXECUTION_FAILED
+PARTIAL_FAILURE
+CANCELLED
+```
+
+An individual order has:
+
+```text
+PENDING
+   ↓
+PROPOSAL_REQUESTED
+   ↓
+PROPOSAL_RECEIVED
+   ↓
+BUYING
+   ↓
+OPEN
+   ↓
+WON / LOST
+```
+
+or:
+
+```text
+FAILED
+```
+
+---
+
+# 15. Batch dashboard
+
+Your UI should have **two levels**.
+
+### Level 1 — Batch
+
+```text
+┌─────────────────────────────────────────┐
+│ BATCH #000184                           │
+├─────────────────────────────────────────┤
+│ Market       V100 1s                    │
+│ Contract     Over 2                     │
+│ Duration     2 ticks                    │
+│ Stake        $1                         │
+│ Quantity     10                         │
+│                                         │
+│ Progress     ████████░░ 8/10            │
+│                                         │
+│ WIN          6                           │
+│ LOSS         2                           │
+│ OPEN         2                           │
+│                                         │
+│ P/L          +$3.40                     │
+│                                         │
+│ [ STOP BATCH ]                          │
+└─────────────────────────────────────────┘
+```
+
+### Level 2 — Individual contracts
+
+```text
+ORDER       CONTRACT       STATUS      P/L
+------------------------------------------------
+#001        12345678       WON        +$0.90
+#002        12345679       WON        +$0.90
+#003        12345680       LOST       -$1.00
+#004        12345681       WON        +$0.90
+#005        12345682       OPEN        --
+#006        12345683       WON        +$0.90
+#007        12345684       LOST       -$1.00
+#008        12345685       OPEN        --
+#009        12345686       WON        +$0.90
+#010        12345687       WON        +$0.90
+```
+
+---
+
+# 16. The most important function
+
+Ultimately your application can expose one high-level function:
+
+```javascript
+async function batchTrade(config) {
+
+    // 1. Validate
+    validateConfig(config);
+
+    // 2. Check account
+    const account = await getAccount();
+
+    // 3. Create batch
+    const batch = createBatch(config);
+
+    // 4. Risk check
+    validateBatch(batch, account);
+
+    // 5. Generate orders
+    batch.contracts = createOrders(batch);
+
+    // 6. Execute
+    await executeBatch(batch);
+
+    // 7. Monitor
+    await waitForBatchSettlement(batch);
+
+    // 8. Calculate results
+    calculateBatchStatistics(batch);
+
+    // 9. Save
+    await saveBatch(batch);
+
+    // 10. Return
+    return batch;
+}
+```
+
+Then your trading strategy only needs to call:
+
+```javascript
+await batchTrade({
+    symbol: "1HZ100V",
+    contractType: "DIGITOVER",
+    barrier: "2",
+    duration: 2,
+    durationUnit: "t",
+    stake: 1,
+    quantity: 10
+});
+```
+
+---
+
+## 17. For your strategy engine
+
+The best architecture for your existing Deriv bot is:
+
+```text
+                  MARKET TICKS
+                       ↓
+                ┌─────────────┐
+                │ SIGNAL ENGINE│
+                └──────┬──────┘
+                       ↓
+               "BUY OVER 2"
+                       ↓
+                ┌─────────────┐
+                │ BATCH ENGINE│
+                └──────┬──────┘
+                       ↓
+          ┌────────────┴────────────┐
+          ↓                         ↓
+     RISK MANAGER             ORDER BUILDER
+          │                         │
+          └────────────┬────────────┘
+                       ↓
+                 EXECUTION QUEUE
+                       ↓
+              ┌────────┼────────┐
+              ↓        ↓        ↓
+            BUY 1    BUY 2    BUY N
+              │        │        │
+              └────────┼────────┘
+                       ↓
+                 CONTRACT TRACKER
+                       ↓
+                  SETTLEMENT
+                       ↓
+                 BATCH ANALYZER
+                       ↓
+          ┌────────────┼─────────────┐
+          ↓            ↓             ↓
+      TRANSACTIONS   JOURNAL      STATISTICS
+```
+
+This separation is important: **the strategy decides what to trade; the batch engine decides how many contracts to execute; the execution layer communicates with Deriv; and the contract tracker determines what actually happened.**
+
+If you're building this into the **AhmedSynTrader-style interface you've been working on**, this architecture also lets you add buttons such as **BUY 1, BUY 5, BUY 10, BUY 20, CUSTOM**, while keeping the underlying execution engine exactly the same.

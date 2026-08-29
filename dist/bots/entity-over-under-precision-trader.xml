@@ -1,0 +1,343 @@
+<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
+  <variables>
+    <variable id="oupt_stake">stake</variable>
+    <variable id="oupt_init">initial_stake</variable>
+    <variable id="oupt_mart">martingale</variable>
+    <variable id="oupt_dir">direction</variable>
+    <variable id="oupt_phase">recovery_phase</variable>
+    <variable id="oupt_lstreak">loss_streak</variable>
+    <variable id="oupt_tp">take_profit</variable>
+    <variable id="oupt_sl">stop_loss</variable>
+    <variable id="oupt_profit">session_profit</variable>
+  </variables>
+
+  <!-- ═══════════════════════════════════════════════════════════════════
+       ENTITY OVER-UNDER PRECISION TRADER
+       Phase 0 (normal): DIGITOVER 2 → on loss switch to DIGITUNDER 7 equiv.
+       Phase 1 (recovery): DIGITUNDER → switch back on win
+       Phase 2 (deep recovery): DIGITDIFF — highest win rate fallback
+       3 consecutive losses → advance recovery_phase
+       Martingale 2x on loss | Reset on win | TP $3 / SL $30
+  ═══════════════════════════════════════════════════════════════════ -->
+  <block type="trade_definition" id="oupt_def" deletable="false" x="0" y="60">
+    <statement name="TRADE_OPTIONS">
+      <block type="trade_definition_market" id="oupt_mkt" deletable="false" movable="false">
+        <field name="MARKET_LIST">synthetic_index</field>
+        <field name="SUBMARKET_LIST">random_index</field>
+        <field name="SYMBOL_LIST">1HZ50V</field>
+        <next>
+          <block type="trade_definition_tradetype" id="oupt_tt" deletable="false" movable="false">
+            <field name="TRADETYPECAT_LIST">digits</field>
+            <field name="TRADETYPE_LIST">overunder</field>
+            <next>
+              <block type="trade_definition_contracttype" id="oupt_ct" deletable="false" movable="false">
+                <field name="TYPE_LIST">DIGITOVER</field>
+                <next>
+                  <block type="trade_definition_duration" id="oupt_dur" deletable="false" movable="false">
+                    <field name="DURATIONTYPE_LIST">t</field>
+                    <value name="DURATION">
+                      <shadow type="math_number_positive" id="oupt_dur_v">
+                        <field name="NUM">1</field>
+                      </shadow>
+                    </value>
+                    <next>
+                      <block type="trade_definition_candleinterval" id="oupt_ci" deletable="false" movable="false">
+                        <field name="CANDLEINTERVAL_LIST">60</field>
+                        <next>
+                          <block type="trade_definition_restartbuysell" id="oupt_rbs" deletable="false" movable="false">
+                            <field name="TIME_MACHINE_ENABLED">FALSE</field>
+                            <next>
+                              <block type="trade_definition_restartonerror" id="oupt_roe" deletable="false" movable="false">
+                                <field name="RESTARTONERROR">TRUE</field>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="INITIALIZATION">
+      <block type="variables_set" id="oupt_i1">
+        <field name="VAR" id="oupt_stake">stake</field>
+        <value name="VALUE">
+          <block type="math_number" id="oupt_i1v"><field name="NUM">0.5</field></block>
+        </value>
+        <next>
+          <block type="variables_set" id="oupt_i2">
+            <field name="VAR" id="oupt_init">initial_stake</field>
+            <value name="VALUE">
+              <block type="math_number" id="oupt_i2v"><field name="NUM">0.5</field></block>
+            </value>
+            <next>
+              <block type="variables_set" id="oupt_i3">
+                <field name="VAR" id="oupt_mart">martingale</field>
+                <value name="VALUE">
+                  <block type="math_number" id="oupt_i3v"><field name="NUM">2</field></block>
+                </value>
+                <next>
+                  <!-- direction: 0=OVER, 1=UNDER, 2=DIFFER -->
+                  <block type="variables_set" id="oupt_i4">
+                    <field name="VAR" id="oupt_dir">direction</field>
+                    <value name="VALUE">
+                      <block type="math_number" id="oupt_i4v"><field name="NUM">0</field></block>
+                    </value>
+                    <next>
+                      <!-- recovery_phase 0,1,2 mirrors direction cycling -->
+                      <block type="variables_set" id="oupt_i5">
+                        <field name="VAR" id="oupt_phase">recovery_phase</field>
+                        <value name="VALUE">
+                          <block type="math_number" id="oupt_i5v"><field name="NUM">0</field></block>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="oupt_i6">
+                            <field name="VAR" id="oupt_lstreak">loss_streak</field>
+                            <value name="VALUE">
+                              <block type="math_number" id="oupt_i6v"><field name="NUM">0</field></block>
+                            </value>
+                            <next>
+                              <block type="variables_set" id="oupt_i7">
+                                <field name="VAR" id="oupt_tp">take_profit</field>
+                                <value name="VALUE">
+                                  <block type="math_number" id="oupt_i7v"><field name="NUM">3</field></block>
+                                </value>
+                                <next>
+                                  <block type="variables_set" id="oupt_i8">
+                                    <field name="VAR" id="oupt_sl">stop_loss</field>
+                                    <value name="VALUE">
+                                      <block type="math_number" id="oupt_i8v"><field name="NUM">30</field></block>
+                                    </value>
+                                    <next>
+                                      <block type="variables_set" id="oupt_i9">
+                                        <field name="VAR" id="oupt_profit">session_profit</field>
+                                        <value name="VALUE">
+                                          <block type="math_number" id="oupt_i9v"><field name="NUM">0</field></block>
+                                        </value>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+
+  <!-- ═══ BEFORE PURCHASE — direction: 0=OVER, 1=UNDER, 2=DIFFER ═══ -->
+  <block type="before_purchase" id="oupt_bp" collapsed="false" deletable="false" x="0" y="600">
+    <statement name="BEFOREPURCHASE_STACK">
+      <block type="controls_if" id="oupt_bp_if">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="1" else="1"></mutation>
+        <value name="IF0">
+          <block type="logic_compare" id="oupt_bp_cmp0">
+            <field name="OP">EQ</field>
+            <value name="A">
+              <block type="variables_get" id="oupt_bp_g0"><field name="VAR" id="oupt_dir">direction</field></block>
+            </value>
+            <value name="B">
+              <block type="math_number" id="oupt_bp_n0"><field name="NUM">0</field></block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO0">
+          <!-- OVER phase: purchase DIGITOVER -->
+          <block type="timeout" id="oupt_bp_t0">
+            <statement name="TIMEOUTSTACK">
+              <block type="purchase" id="oupt_bp_p0">
+                <field name="PURCHASE_LIST">DIGITOVER</field>
+              </block>
+            </statement>
+            <value name="SECONDS">
+              <block type="math_number" id="oupt_bp_t0v"><field name="NUM">-0.00001</field></block>
+            </value>
+          </block>
+        </statement>
+        <value name="IF1">
+          <block type="logic_compare" id="oupt_bp_cmp1">
+            <field name="OP">EQ</field>
+            <value name="A">
+              <block type="variables_get" id="oupt_bp_g1"><field name="VAR" id="oupt_dir">direction</field></block>
+            </value>
+            <value name="B">
+              <block type="math_number" id="oupt_bp_n1"><field name="NUM">1</field></block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO1">
+          <!-- UNDER phase: purchase DIGITUNDER -->
+          <block type="timeout" id="oupt_bp_t1">
+            <statement name="TIMEOUTSTACK">
+              <block type="purchase" id="oupt_bp_p1">
+                <field name="PURCHASE_LIST">DIGITUNDER</field>
+              </block>
+            </statement>
+            <value name="SECONDS">
+              <block type="math_number" id="oupt_bp_t1v"><field name="NUM">-0.00001</field></block>
+            </value>
+          </block>
+        </statement>
+        <statement name="ELSE">
+          <!-- DIFFER recovery phase -->
+          <block type="timeout" id="oupt_bp_t2">
+            <statement name="TIMEOUTSTACK">
+              <block type="purchase" id="oupt_bp_p2">
+                <field name="PURCHASE_LIST">DIGITDIFF</field>
+              </block>
+            </statement>
+            <value name="SECONDS">
+              <block type="math_number" id="oupt_bp_t2v"><field name="NUM">-0.00001</field></block>
+            </value>
+          </block>
+        </statement>
+      </block>
+    </statement>
+  </block>
+
+  <!-- ═══ AFTER PURCHASE ═══ -->
+  <block type="after_purchase" id="oupt_ap" collapsed="false" deletable="false" x="0" y="920">
+    <statement name="AFTERPURCHASE_STACK">
+      <block type="controls_if" id="oupt_ap_if">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+        <value name="IF0">
+          <block type="contract_check_result" id="oupt_ap_win">
+            <field name="CHECK_RESULT">win</field>
+          </block>
+        </value>
+        <statement name="DO0">
+          <!-- WIN: reset stake, loss_streak; flip direction OVER↔UNDER after each win -->
+          <block type="variables_set" id="oupt_ap_w1">
+            <field name="VAR" id="oupt_stake">stake</field>
+            <value name="VALUE">
+              <block type="variables_get" id="oupt_ap_w1v"><field name="VAR" id="oupt_init">initial_stake</field></block>
+            </value>
+            <next>
+              <block type="variables_set" id="oupt_ap_w2">
+                <field name="VAR" id="oupt_lstreak">loss_streak</field>
+                <value name="VALUE">
+                  <block type="math_number" id="oupt_ap_w2v"><field name="NUM">0</field></block>
+                </value>
+                <next>
+                  <!-- Flip direction OVER↔UNDER (if diff, go back to OVER) -->
+                  <block type="controls_if" id="oupt_ap_wdir">
+                    <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="1" else="1"></mutation>
+                    <value name="IF0">
+                      <block type="logic_compare" id="oupt_ap_wdir_c0">
+                        <field name="OP">EQ</field>
+                        <value name="A"><block type="variables_get" id="oupt_ap_wdir_g0"><field name="VAR" id="oupt_dir">direction</field></block></value>
+                        <value name="B"><block type="math_number" id="oupt_ap_wdir_n0"><field name="NUM">0</field></block></value>
+                      </block>
+                    </value>
+                    <statement name="DO0">
+                      <block type="variables_set" id="oupt_ap_wdir_s0">
+                        <field name="VAR" id="oupt_dir">direction</field>
+                        <value name="VALUE"><block type="math_number" id="oupt_ap_wdir_s0v"><field name="NUM">1</field></block></value>
+                      </block>
+                    </statement>
+                    <value name="IF1">
+                      <block type="logic_compare" id="oupt_ap_wdir_c1">
+                        <field name="OP">EQ</field>
+                        <value name="A"><block type="variables_get" id="oupt_ap_wdir_g1"><field name="VAR" id="oupt_dir">direction</field></block></value>
+                        <value name="B"><block type="math_number" id="oupt_ap_wdir_n1"><field name="NUM">1</field></block></value>
+                      </block>
+                    </value>
+                    <statement name="DO1">
+                      <block type="variables_set" id="oupt_ap_wdir_s1">
+                        <field name="VAR" id="oupt_dir">direction</field>
+                        <value name="VALUE"><block type="math_number" id="oupt_ap_wdir_s1v"><field name="NUM">0</field></block></value>
+                      </block>
+                    </statement>
+                    <statement name="ELSE">
+                      <!-- was in DIFFER recovery, win → go back to OVER -->
+                      <block type="variables_set" id="oupt_ap_wdir_se">
+                        <field name="VAR" id="oupt_dir">direction</field>
+                        <value name="VALUE"><block type="math_number" id="oupt_ap_wdir_sev"><field name="NUM">0</field></block></value>
+                      </block>
+                    </statement>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </statement>
+        <statement name="ELSE">
+          <!-- LOSS: martingale + loss_streak++ + check phase switch -->
+          <block type="variables_set" id="oupt_ap_l1">
+            <field name="VAR" id="oupt_stake">stake</field>
+            <value name="VALUE">
+              <block type="math_arithmetic" id="oupt_ap_l1_arith">
+                <field name="OP">MULTIPLY</field>
+                <value name="A">
+                  <shadow type="math_number" id="oupt_ap_l1_as"><field name="NUM">1</field></shadow>
+                  <block type="variables_get" id="oupt_ap_l1_a"><field name="VAR" id="oupt_stake">stake</field></block>
+                </value>
+                <value name="B">
+                  <shadow type="math_number" id="oupt_ap_l1_bs"><field name="NUM">1</field></shadow>
+                  <block type="variables_get" id="oupt_ap_l1_b"><field name="VAR" id="oupt_mart">martingale</field></block>
+                </value>
+              </block>
+            </value>
+            <next>
+              <block type="math_change" id="oupt_ap_l2">
+                <field name="VAR" id="oupt_lstreak">loss_streak</field>
+                <value name="DELTA">
+                  <shadow type="math_number" id="oupt_ap_l2_v"><field name="NUM">1</field></shadow>
+                </value>
+                <next>
+                  <!-- After 3 losses → switch to DIFFER recovery mode -->
+                  <block type="controls_if" id="oupt_ap_l3">
+                    <value name="IF0">
+                      <block type="logic_compare" id="oupt_ap_l3_cmp">
+                        <field name="OP">GTE</field>
+                        <value name="A">
+                          <block type="variables_get" id="oupt_ap_l3_g"><field name="VAR" id="oupt_lstreak">loss_streak</field></block>
+                        </value>
+                        <value name="B">
+                          <block type="math_number" id="oupt_ap_l3_n"><field name="NUM">3</field></block>
+                        </value>
+                      </block>
+                    </value>
+                    <statement name="DO0">
+                      <block type="variables_set" id="oupt_ap_l3_dir">
+                        <field name="VAR" id="oupt_dir">direction</field>
+                        <value name="VALUE">
+                          <block type="math_number" id="oupt_ap_l3_dir_v"><field name="NUM">2</field></block>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="oupt_ap_l3_streak_reset">
+                            <field name="VAR" id="oupt_lstreak">loss_streak</field>
+                            <value name="VALUE">
+                              <block type="math_number" id="oupt_ap_l3_sr_v"><field name="NUM">0</field></block>
+                            </value>
+                          </block>
+                        </next>
+                      </block>
+                    </statement>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </statement>
+      </block>
+      <next>
+        <block type="trade_again" id="oupt_ta"></block>
+      </next>
+    </statement>
+  </block>
+</xml>

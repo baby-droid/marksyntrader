@@ -1,0 +1,526 @@
+<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
+  <variables>
+    <variable id="odcm_stake">stake</variable>
+    <variable id="odcm_init">initial_stake</variable>
+    <variable id="odcm_mart">martingale</variable>
+    <variable id="odcm_tp">take_profit</variable>
+    <variable id="odcm_sl">stop_loss</variable>
+    <variable id="odcm_phase">cycle_phase</variable>
+    <variable id="odcm_lstr">loss_streak</variable>
+    <variable id="odcm_ob">over_barrier</variable>
+    <variable id="odcm_ub">under_barrier</variable>
+    <variable id="odcm_cb">current_barrier</variable>
+  </variables>
+
+  <!-- ═══════════════════════════════════════════════════════════════════
+       OMNI DIGIT CYCLE MASTER
+       ─────────────────────────────────────────────────────────────────
+       Cycle: EVEN (0) → ODD (1) → OVER barrier (2) → UNDER barrier (3) → DIFF (4) → repeat
+       OVER barrier rotates  1 → 2 → 3 → 1  on each phase-2 WIN
+       UNDER barrier rotates 8 → 7 → 6 → 8  on each phase-3 WIN
+       3 consecutive losses in any non-DIFF phase → emergency jump to DIFF recovery
+       3 consecutive losses in DIFF phase         → full reset back to EVEN, stake reset
+       Martingale 2.2x on every loss | Reset to initial on win
+       TP $5 / SL $50 | Market: V75 1s (Volatility 75 Index 1s)
+  ═══════════════════════════════════════════════════════════════════ -->
+  <block type="trade_definition" id="odcm_def" deletable="false" x="0" y="60">
+    <statement name="TRADE_OPTIONS">
+      <block type="trade_definition_market" id="odcm_mkt" deletable="false" movable="false">
+        <field name="MARKET_LIST">synthetic_index</field>
+        <field name="SUBMARKET_LIST">random_index</field>
+        <field name="SYMBOL_LIST">1HZ75V</field>
+        <next>
+          <block type="trade_definition_tradetype" id="odcm_tt" deletable="false" movable="false">
+            <field name="TRADETYPECAT_LIST">digits</field>
+            <field name="TRADETYPE_LIST">overunder</field>
+            <next>
+              <block type="trade_definition_contracttype" id="odcm_ct" deletable="false" movable="false">
+                <field name="TYPE_LIST">DIGITOVER</field>
+                <next>
+                  <block type="trade_definition_candleinterval" id="odcm_ci" deletable="false" movable="false">
+                    <field name="CANDLEINTERVAL_LIST">60</field>
+                    <next>
+                      <block type="trade_definition_restartbuysell" id="odcm_rbs" deletable="false" movable="false">
+                        <field name="TIME_MACHINE_ENABLED">FALSE</field>
+                        <next>
+                          <block type="trade_definition_restartonerror" id="odcm_roe" deletable="false" movable="false">
+                            <field name="RESTARTONERROR">TRUE</field>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="INITIALIZATION">
+      <block type="variables_set" id="odcm_i1">
+        <field name="VAR" id="odcm_stake">stake</field>
+        <value name="VALUE"><block type="math_number" id="odcm_i1v"><field name="NUM">0.5</field></block></value>
+        <next>
+          <block type="variables_set" id="odcm_i2">
+            <field name="VAR" id="odcm_init">initial_stake</field>
+            <value name="VALUE"><block type="math_number" id="odcm_i2v"><field name="NUM">0.5</field></block></value>
+            <next>
+              <block type="variables_set" id="odcm_i3">
+                <field name="VAR" id="odcm_mart">martingale</field>
+                <value name="VALUE"><block type="math_number" id="odcm_i3v"><field name="NUM">2.2</field></block></value>
+                <next>
+                  <block type="variables_set" id="odcm_i4">
+                    <field name="VAR" id="odcm_tp">take_profit</field>
+                    <value name="VALUE"><block type="math_number" id="odcm_i4v"><field name="NUM">5</field></block></value>
+                    <next>
+                      <block type="variables_set" id="odcm_i5">
+                        <field name="VAR" id="odcm_sl">stop_loss</field>
+                        <value name="VALUE"><block type="math_number" id="odcm_i5v"><field name="NUM">50</field></block></value>
+                        <next>
+                          <block type="variables_set" id="odcm_i6">
+                            <field name="VAR" id="odcm_phase">cycle_phase</field>
+                            <value name="VALUE"><block type="math_number" id="odcm_i6v"><field name="NUM">0</field></block></value>
+                            <next>
+                              <block type="variables_set" id="odcm_i7">
+                                <field name="VAR" id="odcm_lstr">loss_streak</field>
+                                <value name="VALUE"><block type="math_number" id="odcm_i7v"><field name="NUM">0</field></block></value>
+                                <next>
+                                  <block type="variables_set" id="odcm_i8">
+                                    <field name="VAR" id="odcm_ob">over_barrier</field>
+                                    <value name="VALUE"><block type="math_number" id="odcm_i8v"><field name="NUM">1</field></block></value>
+                                    <next>
+                                      <block type="variables_set" id="odcm_i9">
+                                        <field name="VAR" id="odcm_ub">under_barrier</field>
+                                        <value name="VALUE"><block type="math_number" id="odcm_i9v"><field name="NUM">8</field></block></value>
+                                        <next>
+                                          <block type="variables_set" id="odcm_i10">
+                                            <field name="VAR" id="odcm_cb">current_barrier</field>
+                                            <value name="VALUE"><block type="math_number" id="odcm_i10v"><field name="NUM">2</field></block></value>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="SUBMARKET">
+      <block type="trade_definition_tradeoptions" id="odcm_opts">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
+        <field name="DURATIONTYPE_LIST">t</field>
+        <value name="DURATION">
+          <shadow type="math_number_positive" id="odcm_dur_s"><field name="NUM">1</field></shadow>
+        </value>
+        <value name="PREDICTION">
+          <shadow type="math_number_positive" id="odcm_pred_s"><field name="NUM">2</field></shadow>
+          <block type="variables_get" id="odcm_pred_g">
+            <field name="VAR" id="odcm_cb">current_barrier</field>
+          </block>
+        </value>
+        <value name="AMOUNT">
+          <shadow type="math_number_positive" id="odcm_amt_s"><field name="NUM">0.5</field></shadow>
+          <block type="variables_get" id="odcm_amt_g">
+            <field name="VAR" id="odcm_stake">stake</field>
+          </block>
+        </value>
+      </block>
+    </statement>
+  </block>
+
+  <!-- ═══ BEFORE PURCHASE — Set barrier and choose contract by cycle_phase ═══ -->
+  <block type="before_purchase" id="odcm_bp" collapsed="false" deletable="false" x="0" y="750">
+    <statement name="BEFOREPURCHASE_STACK">
+      <block type="controls_if" id="odcm_bp_if">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="3" else="1"></mutation>
+
+        <!-- phase 0: DIGITEVEN -->
+        <value name="IF0">
+          <block type="logic_compare" id="odcm_bp_c0">
+            <field name="OP">EQ</field>
+            <value name="A"><block type="variables_get" id="odcm_bp_g0"><field name="VAR" id="odcm_phase">cycle_phase</field></block></value>
+            <value name="B"><block type="math_number" id="odcm_bp_n0"><field name="NUM">0</field></block></value>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="timeout" id="odcm_bp_t0">
+            <statement name="TIMEOUTSTACK">
+              <block type="purchase" id="odcm_bp_p0"><field name="PURCHASE_LIST">DIGITEVEN</field></block>
+            </statement>
+            <value name="SECONDS"><block type="math_number" id="odcm_bp_t0v"><field name="NUM">-0.00001</field></block></value>
+          </block>
+        </statement>
+
+        <!-- phase 1: DIGITODD -->
+        <value name="IF1">
+          <block type="logic_compare" id="odcm_bp_c1">
+            <field name="OP">EQ</field>
+            <value name="A"><block type="variables_get" id="odcm_bp_g1"><field name="VAR" id="odcm_phase">cycle_phase</field></block></value>
+            <value name="B"><block type="math_number" id="odcm_bp_n1"><field name="NUM">1</field></block></value>
+          </block>
+        </value>
+        <statement name="DO1">
+          <block type="timeout" id="odcm_bp_t1">
+            <statement name="TIMEOUTSTACK">
+              <block type="purchase" id="odcm_bp_p1"><field name="PURCHASE_LIST">DIGITODD</field></block>
+            </statement>
+            <value name="SECONDS"><block type="math_number" id="odcm_bp_t1v"><field name="NUM">-0.00001</field></block></value>
+          </block>
+        </statement>
+
+        <!-- phase 2: DIGITOVER with rotating barrier (1→2→3→1) -->
+        <value name="IF2">
+          <block type="logic_compare" id="odcm_bp_c2">
+            <field name="OP">EQ</field>
+            <value name="A"><block type="variables_get" id="odcm_bp_g2"><field name="VAR" id="odcm_phase">cycle_phase</field></block></value>
+            <value name="B"><block type="math_number" id="odcm_bp_n2"><field name="NUM">2</field></block></value>
+          </block>
+        </value>
+        <statement name="DO2">
+          <block type="variables_set" id="odcm_bp_ob_set">
+            <field name="VAR" id="odcm_cb">current_barrier</field>
+            <value name="VALUE"><block type="variables_get" id="odcm_bp_ob_get"><field name="VAR" id="odcm_ob">over_barrier</field></block></value>
+            <next>
+              <block type="timeout" id="odcm_bp_t2">
+                <statement name="TIMEOUTSTACK">
+                  <block type="purchase" id="odcm_bp_p2"><field name="PURCHASE_LIST">DIGITOVER</field></block>
+                </statement>
+                <value name="SECONDS"><block type="math_number" id="odcm_bp_t2v"><field name="NUM">-0.00001</field></block></value>
+              </block>
+            </next>
+          </block>
+        </statement>
+
+        <!-- phase 3: DIGITUNDER with rotating barrier (8→7→6→8) -->
+        <value name="IF3">
+          <block type="logic_compare" id="odcm_bp_c3">
+            <field name="OP">EQ</field>
+            <value name="A"><block type="variables_get" id="odcm_bp_g3"><field name="VAR" id="odcm_phase">cycle_phase</field></block></value>
+            <value name="B"><block type="math_number" id="odcm_bp_n3"><field name="NUM">3</field></block></value>
+          </block>
+        </value>
+        <statement name="DO3">
+          <block type="variables_set" id="odcm_bp_ub_set">
+            <field name="VAR" id="odcm_cb">current_barrier</field>
+            <value name="VALUE"><block type="variables_get" id="odcm_bp_ub_get"><field name="VAR" id="odcm_ub">under_barrier</field></block></value>
+            <next>
+              <block type="timeout" id="odcm_bp_t3">
+                <statement name="TIMEOUTSTACK">
+                  <block type="purchase" id="odcm_bp_p3"><field name="PURCHASE_LIST">DIGITUNDER</field></block>
+                </statement>
+                <value name="SECONDS"><block type="math_number" id="odcm_bp_t3v"><field name="NUM">-0.00001</field></block></value>
+              </block>
+            </next>
+          </block>
+        </statement>
+
+        <!-- phase 4 (ELSE): DIGITDIFF — recovery, barrier=5, ~90% win rate -->
+        <statement name="ELSE">
+          <block type="variables_set" id="odcm_bp_diff_set">
+            <field name="VAR" id="odcm_cb">current_barrier</field>
+            <value name="VALUE"><block type="math_number" id="odcm_bp_diff_v"><field name="NUM">5</field></block></value>
+            <next>
+              <block type="timeout" id="odcm_bp_t4">
+                <statement name="TIMEOUTSTACK">
+                  <block type="purchase" id="odcm_bp_p4"><field name="PURCHASE_LIST">DIGITDIFF</field></block>
+                </statement>
+                <value name="SECONDS"><block type="math_number" id="odcm_bp_t4v"><field name="NUM">-0.00001</field></block></value>
+              </block>
+            </next>
+          </block>
+        </statement>
+      </block>
+    </statement>
+  </block>
+
+  <!-- ═══ AFTER PURCHASE — Martingale, barrier cycling, phase advancement, TP/SL ═══ -->
+  <block type="after_purchase" id="odcm_ap" collapsed="false" deletable="false" x="0" y="1150">
+    <statement name="AFTERPURCHASE_STACK">
+      <!-- TP/SL guard first -->
+      <block type="controls_if" id="odcm_ap_tpsl">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" else="0"></mutation>
+        <value name="IF0">
+          <block type="logic_operation" id="odcm_ap_tpsl_or">
+            <field name="OP">OR</field>
+            <value name="A">
+              <block type="logic_compare" id="odcm_ap_tp_cmp">
+                <field name="OP">GTE</field>
+                <value name="A"><block type="total_profit" id="odcm_ap_tp_prof"></block></value>
+                <value name="B"><block type="variables_get" id="odcm_ap_tp_g"><field name="VAR" id="odcm_tp">take_profit</field></block></value>
+              </block>
+            </value>
+            <value name="B">
+              <block type="logic_compare" id="odcm_ap_sl_cmp">
+                <field name="OP">LTE</field>
+                <value name="A"><block type="total_profit" id="odcm_ap_sl_prof"></block></value>
+                <value name="B">
+                  <block type="math_single" id="odcm_ap_sl_neg">
+                    <field name="OP">NEG</field>
+                    <value name="NUM">
+                      <shadow type="math_number" id="odcm_ap_sl_neg_s"><field name="NUM">9</field></shadow>
+                      <block type="variables_get" id="odcm_ap_sl_g"><field name="VAR" id="odcm_sl">stop_loss</field></block>
+                    </value>
+                  </block>
+                </value>
+              </block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="notify" id="odcm_ap_tpsl_notify">
+            <field name="NOTIFICATION_TYPE">info</field>
+            <field name="NOTIFICATION_SOUND">earned-money</field>
+            <value name="MESSAGE">
+              <shadow type="text" id="odcm_ap_tpsl_msg_s"><field name="TEXT">abc</field></shadow>
+              <block type="text" id="odcm_ap_tpsl_msg"><field name="TEXT">🏁 OMNI CYCLE MASTER: TP/SL reached — session ended</field></block>
+            </value>
+          </block>
+        </statement>
+      </block>
+      <next>
+        <!-- WIN / LOSS logic -->
+        <block type="controls_if" id="odcm_ap_wl">
+          <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+          <!-- ── WIN ── -->
+          <value name="IF0">
+            <block type="contract_check_result" id="odcm_ap_win_chk"><field name="CHECK_RESULT">win</field></block>
+          </value>
+          <statement name="DO0">
+            <!-- reset stake to initial -->
+            <block type="variables_set" id="odcm_ap_w_stake">
+              <field name="VAR" id="odcm_stake">stake</field>
+              <value name="VALUE"><block type="variables_get" id="odcm_ap_w_stkv"><field name="VAR" id="odcm_init">initial_stake</field></block></value>
+              <next>
+                <!-- reset loss_streak -->
+                <block type="variables_set" id="odcm_ap_w_lstr">
+                  <field name="VAR" id="odcm_lstr">loss_streak</field>
+                  <value name="VALUE"><block type="math_number" id="odcm_ap_w_lstr_v"><field name="NUM">0</field></block></value>
+                  <next>
+                    <!-- if phase==2: advance over_barrier (1→2→3→1) -->
+                    <block type="controls_if" id="odcm_ap_w_ob_if">
+                      <value name="IF0">
+                        <block type="logic_compare" id="odcm_ap_w_ob_cmp">
+                          <field name="OP">EQ</field>
+                          <value name="A"><block type="variables_get" id="odcm_ap_w_ob_ph"><field name="VAR" id="odcm_phase">cycle_phase</field></block></value>
+                          <value name="B"><block type="math_number" id="odcm_ap_w_ob_n"><field name="NUM">2</field></block></value>
+                        </block>
+                      </value>
+                      <statement name="DO0">
+                        <block type="controls_if" id="odcm_ap_ob_cyc">
+                          <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                          <value name="IF0">
+                            <block type="logic_compare" id="odcm_ap_ob_cyc_cmp">
+                              <field name="OP">LT</field>
+                              <value name="A"><block type="variables_get" id="odcm_ap_ob_cyc_g"><field name="VAR" id="odcm_ob">over_barrier</field></block></value>
+                              <value name="B"><block type="math_number" id="odcm_ap_ob_cyc_n"><field name="NUM">3</field></block></value>
+                            </block>
+                          </value>
+                          <statement name="DO0">
+                            <block type="math_change" id="odcm_ap_ob_inc">
+                              <field name="VAR" id="odcm_ob">over_barrier</field>
+                              <value name="DELTA"><shadow type="math_number" id="odcm_ap_ob_inc_v"><field name="NUM">1</field></shadow></value>
+                            </block>
+                          </statement>
+                          <statement name="ELSE">
+                            <block type="variables_set" id="odcm_ap_ob_rst">
+                              <field name="VAR" id="odcm_ob">over_barrier</field>
+                              <value name="VALUE"><block type="math_number" id="odcm_ap_ob_rst_v"><field name="NUM">1</field></block></value>
+                            </block>
+                          </statement>
+                        </block>
+                      </statement>
+                    </block>
+                    <next>
+                      <!-- if phase==3: advance under_barrier (8→7→6→8) -->
+                      <block type="controls_if" id="odcm_ap_w_ub_if">
+                        <value name="IF0">
+                          <block type="logic_compare" id="odcm_ap_w_ub_cmp">
+                            <field name="OP">EQ</field>
+                            <value name="A"><block type="variables_get" id="odcm_ap_w_ub_ph"><field name="VAR" id="odcm_phase">cycle_phase</field></block></value>
+                            <value name="B"><block type="math_number" id="odcm_ap_w_ub_n"><field name="NUM">3</field></block></value>
+                          </block>
+                        </value>
+                        <statement name="DO0">
+                          <block type="controls_if" id="odcm_ap_ub_cyc">
+                            <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                            <value name="IF0">
+                              <block type="logic_compare" id="odcm_ap_ub_cyc_cmp">
+                                <field name="OP">GT</field>
+                                <value name="A"><block type="variables_get" id="odcm_ap_ub_cyc_g"><field name="VAR" id="odcm_ub">under_barrier</field></block></value>
+                                <value name="B"><block type="math_number" id="odcm_ap_ub_cyc_n"><field name="NUM">6</field></block></value>
+                              </block>
+                            </value>
+                            <statement name="DO0">
+                              <block type="math_change" id="odcm_ap_ub_dec">
+                                <field name="VAR" id="odcm_ub">under_barrier</field>
+                                <value name="DELTA"><shadow type="math_number" id="odcm_ap_ub_dec_v"><field name="NUM">-1</field></shadow></value>
+                              </block>
+                            </statement>
+                            <statement name="ELSE">
+                              <block type="variables_set" id="odcm_ap_ub_rst">
+                                <field name="VAR" id="odcm_ub">under_barrier</field>
+                                <value name="VALUE"><block type="math_number" id="odcm_ap_ub_rst_v"><field name="NUM">8</field></block></value>
+                              </block>
+                            </statement>
+                          </block>
+                        </statement>
+                      </block>
+                      <next>
+                        <!-- advance phase: if < 4 → phase+1, else → 0 -->
+                        <block type="controls_if" id="odcm_ap_ph_adv">
+                          <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                          <value name="IF0">
+                            <block type="logic_compare" id="odcm_ap_ph_adv_cmp">
+                              <field name="OP">LT</field>
+                              <value name="A"><block type="variables_get" id="odcm_ap_ph_adv_g"><field name="VAR" id="odcm_phase">cycle_phase</field></block></value>
+                              <value name="B"><block type="math_number" id="odcm_ap_ph_adv_n"><field name="NUM">4</field></block></value>
+                            </block>
+                          </value>
+                          <statement name="DO0">
+                            <block type="math_change" id="odcm_ap_ph_inc">
+                              <field name="VAR" id="odcm_phase">cycle_phase</field>
+                              <value name="DELTA"><shadow type="math_number" id="odcm_ap_ph_inc_v"><field name="NUM">1</field></shadow></value>
+                            </block>
+                          </statement>
+                          <statement name="ELSE">
+                            <block type="variables_set" id="odcm_ap_ph_wrap">
+                              <field name="VAR" id="odcm_phase">cycle_phase</field>
+                              <value name="VALUE"><block type="math_number" id="odcm_ap_ph_wrap_v"><field name="NUM">0</field></block></value>
+                            </block>
+                          </statement>
+                        </block>
+                      </next>
+                    </next>
+                  </next>
+                </next>
+              </block>
+            </next>
+          </block>
+        </statement>
+
+        <!-- ── LOSS ── -->
+        <statement name="ELSE">
+          <!-- stake *= martingale -->
+          <block type="variables_set" id="odcm_ap_l_stk">
+            <field name="VAR" id="odcm_stake">stake</field>
+            <value name="VALUE">
+              <block type="math_arithmetic" id="odcm_ap_l_mult">
+                <field name="OP">MULTIPLY</field>
+                <value name="A">
+                  <shadow type="math_number" id="odcm_ap_l_as"><field name="NUM">1</field></shadow>
+                  <block type="variables_get" id="odcm_ap_l_ag"><field name="VAR" id="odcm_stake">stake</field></block>
+                </value>
+                <value name="B">
+                  <shadow type="math_number" id="odcm_ap_l_bs"><field name="NUM">1</field></shadow>
+                  <block type="variables_get" id="odcm_ap_l_bg"><field name="VAR" id="odcm_mart">martingale</field></block>
+                </value>
+              </block>
+            </value>
+            <next>
+              <!-- loss_streak++ -->
+              <block type="math_change" id="odcm_ap_l_lstr_inc">
+                <field name="VAR" id="odcm_lstr">loss_streak</field>
+                <value name="DELTA"><shadow type="math_number" id="odcm_ap_l_lstr_dv"><field name="NUM">1</field></shadow></value>
+                <next>
+                  <!-- 3 losses AND not in DIFF: emergency jump to DIFF -->
+                  <block type="controls_if" id="odcm_ap_l_emg">
+                    <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                    <value name="IF0">
+                      <block type="logic_operation" id="odcm_ap_l_emg_cond">
+                        <field name="OP">AND</field>
+                        <value name="A">
+                          <block type="logic_compare" id="odcm_ap_l_emg_c1">
+                            <field name="OP">GTE</field>
+                            <value name="A"><block type="variables_get" id="odcm_ap_l_emg_g1"><field name="VAR" id="odcm_lstr">loss_streak</field></block></value>
+                            <value name="B"><block type="math_number" id="odcm_ap_l_emg_n1"><field name="NUM">3</field></block></value>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <block type="logic_compare" id="odcm_ap_l_emg_c2">
+                            <field name="OP">NEQ</field>
+                            <value name="A"><block type="variables_get" id="odcm_ap_l_emg_g2"><field name="VAR" id="odcm_phase">cycle_phase</field></block></value>
+                            <value name="B"><block type="math_number" id="odcm_ap_l_emg_n2"><field name="NUM">4</field></block></value>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                    <statement name="DO0">
+                      <!-- jump to DIFF phase, reset streak -->
+                      <block type="variables_set" id="odcm_ap_l_emg_ph">
+                        <field name="VAR" id="odcm_phase">cycle_phase</field>
+                        <value name="VALUE"><block type="math_number" id="odcm_ap_l_emg_ph_v"><field name="NUM">4</field></block></value>
+                        <next>
+                          <block type="variables_set" id="odcm_ap_l_emg_lstr">
+                            <field name="VAR" id="odcm_lstr">loss_streak</field>
+                            <value name="VALUE"><block type="math_number" id="odcm_ap_l_emg_lstr_v"><field name="NUM">0</field></block></value>
+                          </block>
+                        </next>
+                      </block>
+                    </statement>
+                    <!-- already in DIFF + 3 losses: full reset -->
+                    <statement name="ELSE">
+                      <block type="controls_if" id="odcm_ap_l_full_rst_if">
+                        <value name="IF0">
+                          <block type="logic_operation" id="odcm_ap_l_fr_cond">
+                            <field name="OP">AND</field>
+                            <value name="A">
+                              <block type="logic_compare" id="odcm_ap_l_fr_c1">
+                                <field name="OP">GTE</field>
+                                <value name="A"><block type="variables_get" id="odcm_ap_l_fr_g1"><field name="VAR" id="odcm_lstr">loss_streak</field></block></value>
+                                <value name="B"><block type="math_number" id="odcm_ap_l_fr_n1"><field name="NUM">3</field></block></value>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="logic_compare" id="odcm_ap_l_fr_c2">
+                                <field name="OP">EQ</field>
+                                <value name="A"><block type="variables_get" id="odcm_ap_l_fr_g2"><field name="VAR" id="odcm_phase">cycle_phase</field></block></value>
+                                <value name="B"><block type="math_number" id="odcm_ap_l_fr_n2"><field name="NUM">4</field></block></value>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <statement name="DO0">
+                          <block type="variables_set" id="odcm_ap_l_fr_ph">
+                            <field name="VAR" id="odcm_phase">cycle_phase</field>
+                            <value name="VALUE"><block type="math_number" id="odcm_ap_l_fr_ph_v"><field name="NUM">0</field></block></value>
+                            <next>
+                              <block type="variables_set" id="odcm_ap_l_fr_stk">
+                                <field name="VAR" id="odcm_stake">stake</field>
+                                <value name="VALUE"><block type="variables_get" id="odcm_ap_l_fr_stk_g"><field name="VAR" id="odcm_init">initial_stake</field></block></value>
+                                <next>
+                                  <block type="variables_set" id="odcm_ap_l_fr_lstr">
+                                    <field name="VAR" id="odcm_lstr">loss_streak</field>
+                                    <value name="VALUE"><block type="math_number" id="odcm_ap_l_fr_lstr_v"><field name="NUM">0</field></block></value>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </statement>
+                      </block>
+                    </statement>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </statement>
+      </block>
+      <next>
+        <block type="trade_again" id="odcm_ta"></block>
+      </next>
+    </statement>
+  </block>
+</xml>

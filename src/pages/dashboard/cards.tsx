@@ -1,4 +1,4 @@
-// @ts-nocheck — vendored bot code with known upstream type gaps; see AGENTS.md
+2// @ts-nocheck — vendored bot code with known upstream type gaps; see AGENTS.md
 // TODO: Complete MobX integration for popup functionality
 // Some code is kept commented out pending popup integration
 import React from 'react';
@@ -64,19 +64,9 @@ const Cards = observer(({ is_mobile, has_dashboard_strategies }: TCardProps) => 
             ) : (
                 <DerivLightMyComputerIcon height='48px' width='48px' />
             ),
-            content: is_mobile ? <Localize i18n_default_text='Local' /> : <Localize i18n_default_text='My computer' />,
+            content: <Localize i18n_default_text='Import a Bot' />,
             callback: () => {
                 openFileLoader();
-                /* [AI] - Analytics event tracking removed - see migrate-docs/MONITORING_PACKAGES.md for re-implementation guide */
-                /* [/AI] */
-            },
-        },
-        {
-            id: 'google-drive',
-            icon: <DerivLightGoogleDriveIcon height='48px' width='48px' />,
-            content: <Localize i18n_default_text='Google Drive' />,
-            callback: () => {
-                openGoogleDriveDialog();
                 /* [AI] - Analytics event tracking removed - see migrate-docs/MONITORING_PACKAGES.md for re-implementation guide */
                 /* [/AI] */
             },
@@ -85,26 +75,16 @@ const Cards = observer(({ is_mobile, has_dashboard_strategies }: TCardProps) => 
             id: 'bot-builder',
             icon: <DerivLightBotBuilderIcon height='48px' width='48px' />,
             content: <Localize i18n_default_text='Bot Builder' />,
-            callback: () => {
-                setActiveTab(DBOT_TABS.BOT_BUILDER);
-                /* [AI] - Analytics event tracking removed - see migrate-docs/MONITORING_PACKAGES.md for re-implementation guide */
-                /* [/AI] */
-            },
+            callback: () => setActiveTab(DBOT_TABS.BOT_BUILDER),
         },
         {
             id: 'quick-strategy',
             icon: <DerivLightQuickStrategyIcon height='48px' width='48px' />,
             content: <Localize i18n_default_text='Quick strategy' />,
-            callback: () => {
-                setActiveTab(DBOT_TABS.BOT_BUILDER);
-                setFormVisibility(true);
-                /* [AI] - Analytics event tracking removed - see migrate-docs/MONITORING_PACKAGES.md for re-implementation guide */
-                /* [/AI] */
-            },
+            callback: () => setActiveTab(DBOT_TABS.AUTO_TRADES),
         },
     ]
-        // Hide the Google Drive tile when the feature isn't configured (no GD_* env vars).
-        .filter(action => action.id !== 'google-drive' || is_google_drive_configured);
+        // Keep the three primary dashboard actions visible on mobile and desktop.
 
     return React.useMemo(
         () => (
@@ -127,6 +107,15 @@ const Cards = observer(({ is_mobile, has_dashboard_strategies }: TCardProps) => 
                                 className={classNames('tab__dashboard__table__block', {
                                     'tab__dashboard__table__block--minimized': has_dashboard_strategies && is_mobile,
                                 })}
+                                role='button'
+                                tabIndex={0}
+                                onClick={callback}
+                                onKeyDown={e => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault();
+                                        callback();
+                                    }
+                                }}
                             >
                                 <div
                                     className={classNames('tab__dashboard__table__images', {
@@ -136,9 +125,6 @@ const Cards = observer(({ is_mobile, has_dashboard_strategies }: TCardProps) => 
                                     height='8rem'
                                     icon={icon}
                                     id={id}
-                                    onClick={() => {
-                                        callback();
-                                    }}
                                 >
                                     {icon}
                                 </div>

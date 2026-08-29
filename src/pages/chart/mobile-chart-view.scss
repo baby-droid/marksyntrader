@@ -250,7 +250,6 @@
         bottom: 0;
         transform: translate(-50%, 50%);
     }
-
     &--final {
         background: #f59e0b;
         color: #000;
@@ -434,6 +433,34 @@
     align-items: center;
     gap: 6px;
     padding: 10px 12px;
+}
+
+.mcv-panel__ai-btn {
+    flex-shrink: 0;
+    border: 0;
+    border-radius: 8px;
+    padding: 7px 10px;
+    background: linear-gradient(135deg, #1769ff, #00a550);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    &.active { box-shadow: 0 0 0 2px rgba(23,105,255,.22); }
+}
+
+.mcv-panel__ai {
+    max-height: 500px;
+    opacity: 1;
+    overflow: visible;
+    transition: max-height 0.2s ease, opacity 0.15s ease;
+}
+
+.mcv-panel__ai--closed {
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+    pointer-events: none;
 }
 
 /* Directly editable stake number input */
@@ -633,12 +660,89 @@
 .mcv-sheet__item-check { font-size: 16px; color: #6366f1; font-weight: 800; }
 
 /* ── Duration sheet ──────────────────────────────────────────────────────── */
+
+/* Unit selector row */
+.mcv-dur__units {
+    display: flex;
+    gap: 6px;
+    padding: 10px 18px 6px;
+    flex-wrap: wrap;
+}
+.mcv-dur__unit-btn {
+    flex: 1;
+    min-width: 64px;
+    padding: 7px 10px;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+    background: #f9fafb;
+    color: #6b7280;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+    text-align: center;
+    transition: all 0.12s;
+    &:active { background: #e5e7eb; }
+    &.active {
+        background: #0e3348;
+        color: #fff;
+        border-color: #0e3348;
+    }
+}
+
+/* Quick picks / Custom tabs */
+.mcv-dur__tabs {
+    display: flex;
+    background: #f3f4f6;
+    border-radius: 8px;
+    padding: 3px;
+    margin: 4px 18px 8px;
+}
+.mcv-dur__tab {
+    flex: 1;
+    padding: 6px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: #9ca3af;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+    text-align: center;
+    transition: all 0.15s;
+    &.active { background: #fff; color: #0e3348; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+}
+
+/* Quick pick grid — 2 columns */
+.mcv-dur__grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    padding: 4px 18px 10px;
+}
+.mcv-dur__opt {
+    height: 44px;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+    background: #f9fafb;
+    font-size: 14px;
+    font-weight: 600;
+    color: #374151;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.1s;
+    &.active { background: #0e3348; color: #fff; border-color: #0e3348; }
+    &:active:not(.active) { background: #e5e7eb; }
+}
+
+/* Custom input */
 .mcv-dur {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 24px;
-    padding: 20px 18px 10px;
+    gap: 16px;
+    padding: 10px 18px;
 }
 .mcv-dur__adj {
     width: 40px;
@@ -657,33 +761,30 @@
     transition: background 0.1s;
     &:active { background: #e5e7eb; }
 }
-.mcv-dur__val {
-    font-size: 18px;
-    font-weight: 800;
+.mcv-dur__custom-inp {
+    flex: 1;
+    max-width: 120px;
+    height: 44px;
+    border: 2px solid #e5e7eb;
+    border-radius: 10px;
+    background: #fff;
+    font-size: 20px;
+    font-weight: 900;
     color: #111827;
-    min-width: 100px;
     text-align: center;
-}
-.mcv-dur__grid {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 8px;
-    padding: 4px 18px 16px;
-}
-.mcv-dur__opt {
-    height: 40px;
-    border-radius: 8px;
-    border: 1px solid #e5e7eb;
-    background: #f9fafb;
-    font-size: 15px;
-    font-weight: 600;
-    color: #374151;
-    cursor: pointer;
+    outline: none;
     font-family: inherit;
-    transition: background 0.1s;
-
-    &.active { background: #0e3348; color: #fff; border-color: #0e3348; }
-    &:active:not(.active) { background: #e5e7eb; }
+    font-variant-numeric: tabular-nums;
+    &:focus { border-color: #0e3348; }
+    &::-webkit-inner-spin-button,
+    &::-webkit-outer-spin-button { -webkit-appearance: none; }
+}
+.mcv-dur__range-hint {
+    text-align: center;
+    font-size: 11px;
+    color: #9ca3af;
+    font-weight: 500;
+    padding: 0 18px 8px;
 }
 .mcv-dur__apply {
     display: block;

@@ -85,6 +85,15 @@ body {
                 }
             }
 
+            // Navigation is intentionally provided by the three-dash drawer.
+            // Keep Tabs mounted so active content still switches correctly,
+            // but remove the duplicate horizontal menu from the page.
+            &--drawer-only {
+                > .dc-tabs__list {
+                    display: none;
+                }
+            }
+
             &__content {
                 @include mobile-or-tablet-screen {
                     width: 100%;

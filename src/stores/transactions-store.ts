@@ -57,7 +57,8 @@ export default class TransactionsStore {
     is_transaction_details_modal_open = false;
 
     get transactions(): TTransaction[] {
-        if (this.core?.client?.loginid) return this.elements[this.core?.client?.loginid] ?? [];
+        const accountId = this.core?.client?.loginid || localStorage.getItem('active_loginid');
+        if (accountId) return this.elements[accountId] ?? [];
         return [];
     }
 
@@ -65,7 +66,10 @@ export default class TransactionsStore {
         let total_runs = 0;
         // Filter out only contract transactions and remove dividers
         const trxs = this.transactions.filter(
-            trx => trx.type === transaction_elements.CONTRACT && typeof trx.data === 'object'
+            trx =>
+                trx.type === transaction_elements.CONTRACT &&
+                typeof trx.data === 'object' &&
+                !(trx.data as any).is_virtual_hook
         );
         const statistics = trxs.reduce(
             (stats, { data }) => {
@@ -102,6 +106,54 @@ export default class TransactionsStore {
         return statistics;
     }
 
+    /**
+     * Add a simulated scalper hook to the native Bot Builder transaction feed.
+     * It is deliberately marked separately from real contracts so the native
+     * summary never includes its stake, wins/losses, payout, or P/L.
+     */
+    pushVirtualHook(data: {
+        id: number;
+        time: string;
+        market: string;
+        result: 'won' | 'lost';
+        exitDigit?: number | null;
+        hookType?: string;
+    }) {
+        const current_account = this.core?.client?.loginid as string;
+        if (!current_account) return;
+
+        const hookResult = data.result === 'won' ? 'profit' : 'loss';
+        const contract: any = {
+            is_virtual_hook: true,
+            hook_result: hookResult,
+            hook_type: data.hookType || 'Virtual Hook',
+            contract_id: -Math.abs(data.id),
+            transaction_ids: { buy: -Math.abs(data.id), sell: -Math.abs(data.id) },
+            date_start: data.time,
+            display_name: data.market,
+            underlying_symbol: data.market,
+            contract_type: 'VIRTUAL_HOOK',
+            currency: 'USD',
+            entry_spot: '',
+            exit_spot: data.exitDigit == null ? '' : String(data.exitDigit),
+            buy_price: 0,
+            payout: 0,
+            bid_price: 0,
+            profit: 0,
+            is_completed: true,
+            run_id: `virtual-hook-${data.id}`,
+        };
+
+        if (!this.elements[current_account]) {
+            this.elements = { ...this.elements, [current_account]: [] };
+        }
+        this.elements[current_account] = [
+            { type: transaction_elements.CONTRACT, data: contract },
+            ...this.elements[current_account],
+        ].slice(0, 5000);
+        this.elements = { ...this.elements };
+    }
+
     toggleTransactionDetailsModal = (is_open: boolean) => {
         this.is_transaction_details_modal_open = is_open;
     };
@@ -112,8 +164,12 @@ export default class TransactionsStore {
 
     pushTransaction(data: TContractInfo) {
         const is_completed = isEnded(data as ProposalOpenContract);
-        const { run_id } = this.root_store.run_panel;
-        const current_account = this.core?.client?.loginid as string;
+        // Auto Trades supplies a batch ID so its contracts are grouped in the
+        // native Bot Builder transaction page. Regular Bot Builder contracts
+        // continue using the current run-panel run ID.
+        const run_id = (data as any).batch_id || this.root_store.run_panel.run_id;
+        const current_account = (this.core?.client?.loginid || localStorage.getItem('active_loginid')) as string;
+        if (!current_account || !data?.contract_id) return;
 
         const contract: TContractInfo = {
             ...data,
@@ -187,6 +243,14 @@ export default class TransactionsStore {
 
     registerReactions() {
         const { client } = this.core;
+        const autoTradeListener = (event: CustomEvent) => {
+            if (event.detail?.contract_id) {
+                this.onBotContractEvent(event.detail);
+            }
+        };
+        if (typeof window !== 'undefined') {
+            window.addEventListener('auto-trade:contract', autoTradeListener as EventListener);
+        }
 
         // Write transactions to session storage on each change in transaction elements.
         const disposeTransactionElementsListener = reaction(
@@ -209,6 +273,9 @@ export default class TransactionsStore {
         return () => {
             disposeTransactionElementsListener();
             disposeRecoverContracts();
+            if (typeof window !== 'undefined') {
+                window.removeEventListener('auto-trade:contract', autoTradeListener as EventListener);
+            }
         };
     }
 

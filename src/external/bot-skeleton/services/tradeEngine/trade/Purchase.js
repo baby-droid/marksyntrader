@@ -1,4 +1,5 @@
-import { getExecutionSpeed, getExecutionSpeedDelay, SPEED_PURCHASES_PER_TICK } from '../../../../../utils/execution-speed';
+import { getExecutionSpeed, getExecutionSpeedDelay, isFastExecutionEnabled, getPurchasesPerTick, SPEED_PURCHASES_PER_TICK } from '../../../../../utils/execution-speed';
+import { recordTradeMeta } from '../../../../../utils/trade-metadata';
 import { isBotPaused } from '../../../../../utils/bot-pause-flag';
 import { LogTypes } from '../../../constants/messages';
 import { api_base } from '../../api/api-base';
@@ -37,8 +38,8 @@ export function sellAllSideContracts() {
 function _acquireBuySlot() {
     const speed = getExecutionSpeed();
     const limit  = _buyRateLimit[speed] ?? 1;
-    // In crazy / turbo mode skip the throttle entirely — resolve immediately.
-    if (limit === 0) return Promise.resolve();
+    // In crazy / turbo / Fast mode skip the throttle entirely — resolve immediately.
+    if (limit === 0 || isFastExecutionEnabled()) return Promise.resolve();
     const now    = Date.now();
     // Remove timestamps older than 1 second
     _buyTimestamps = _buyTimestamps.filter(t => now - t < 1000);
@@ -59,11 +60,11 @@ function _acquireBuySlot() {
 // at a time, and is not safe to share across concurrent contracts. Side
 // purchases still go through the real API, settle independently, and show up
 // normally in transactions/reports/balance.
-function fireSidePurchase(tradeOptions, contract_type) {
+function fireSidePurchase(tradeOptions, contract_type, tradeOptionsOverride = tradeOptions) {
     // Do NOT fire side purchases while the bot is paused.
     if (isBotPaused()) return;
     try {
-        const trade_option = tradeOptionToBuy(contract_type, tradeOptions);
+        const trade_option = tradeOptionToBuy(contract_type, tradeOptionsOverride);
         _acquireBuySlot()
             .then(() => api_base.api.send(trade_option))
             .then(response => {
@@ -100,7 +101,9 @@ export default Engine =>
             // trade-again, martingale), the rest are independent side purchases
             // fired at the same instant for extra throughput.
             const speed = getExecutionSpeed();
-            const purchases_per_tick = SPEED_PURCHASES_PER_TICK[speed] ?? 1;
+            // Use the effective per-tick count so Fast Execution's 50 side
+            // purchases fire on top of whichever tier is active.
+            const purchases_per_tick = getPurchasesPerTick();
             if (purchases_per_tick > 1 && this.tradeOptions) {
                 for (let i = 0; i < purchases_per_tick - 1; i++) {
                     fireSidePurchase(this.tradeOptions, contract_type);
@@ -120,7 +123,58 @@ export default Engine =>
             return this._executePurchase(contract_type);
         }
 
-        _executePurchase(contract_type) {
+        purchaseMultiple(contract_types = []) {
+            if (this.store.getState().scope !== BEFORE_PURCHASE || isBotPaused()) {
+                return Promise.resolve();
+            }
+
+            const specs = contract_types
+                .map(spec => typeof spec === 'string' ? { contract_type: spec } : spec)
+                .filter(spec => spec?.contract_type);
+            const unique_specs = specs.filter((spec, index, all) =>
+                all.findIndex(candidate =>
+                    candidate.contract_type === spec.contract_type &&
+                    candidate.prediction === spec.prediction
+                ) === index
+            );
+            if (!unique_specs.length) return Promise.resolve();
+
+            /* A prediction supplied by the XML purchase block is intentionally
+               bought directly. Proposals are created once by Bot.start(), so
+               selecting a different barrier after the first settlement would
+               otherwise reuse the first phase's proposal and stop the bot. */
+            const hasDynamicOptions = unique_specs.some(spec =>
+                spec.dynamic === true || spec.prediction !== undefined
+            );
+            if (hasDynamicOptions) {
+                unique_specs.slice(1).forEach(spec => {
+                    fireSidePurchase(this.tradeOptions, spec.contract_type, {
+                        ...this.tradeOptions,
+                        amount: spec.amount ?? this.tradeOptions.amount,
+                        prediction: spec.prediction,
+                    });
+                });
+                return this._executePurchase(
+                    unique_specs[0].contract_type,
+                    {
+                        ...this.tradeOptions,
+                        amount: unique_specs[0].amount ?? this.tradeOptions.amount,
+                        prediction: unique_specs[0].prediction,
+                    },
+                    true
+                );
+            }
+
+            // The first contract follows the normal tracked lifecycle. The
+            // remaining contracts are independent same-tick purchases.
+            unique_specs.slice(1).forEach(spec => {
+                fireSidePurchase(this.tradeOptions, spec.contract_type);
+            });
+
+            return this.purchase(unique_specs[0].contract_type);
+        }
+
+        _executePurchase(contract_type, tradeOptions = this.tradeOptions, forceDirect = false) {
             const onSuccess = response => {
                 const { buy } = response;
 
@@ -130,10 +184,25 @@ export default Engine =>
                     buy,
                 });
 
+                // Record speed mode + page/bot context for this contract
+                try {
+                    recordTradeMeta(buy.contract_id, {
+                        speed: getExecutionSpeed(),
+                        fast:  isFastExecutionEnabled(),
+                    });
+                } catch { /* non-fatal */ }
+
                 this.contractId = buy.contract_id;
                 this.store.dispatch(purchaseSuccessful());
 
-                if (this.is_proposal_subscription_required) {
+                // Dynamic Multiple Purchase entries are bought directly from
+                // the phase-specific parameters. Refreshing the old proposal
+                // subscription here races the next before_purchase handoff
+                // and can leave the interpreter waiting in the previous
+                // phase. The next Bot.start() refreshes proposals when the
+                // phase or stake changes; keep the eager refresh for the
+                // normal proposal-based purchase path.
+                if (this.is_proposal_subscription_required && !forceDirect) {
                     this.renewProposalsOnPurchase();
                 }
 
@@ -152,8 +221,11 @@ export default Engine =>
             // In Crazy/Turbo mode bypass the proposal-wait round-trip: use direct
             // buy parameters instead of a pre-fetched proposal ID. This eliminates
             // the proposal→wait→buy latency that was the main throughput bottleneck.
+            // Fast Execution bypasses the proposal round-trip just like Crazy/Turbo —
+            // the biggest single source of purchase latency.
             const useDirectBuy =
-                (speed === 'crazy' || speed === 'turbo' || speed === 'supersonic') &&
+                forceDirect ||
+                (isFastExecutionEnabled() || speed === 'crazy' || speed === 'turbo' || speed === 'supersonic') &&
                 !this.options.timeMachineEnabled;
 
             if (this.is_proposal_subscription_required && !useDirectBuy) {
@@ -200,7 +272,7 @@ export default Engine =>
             // ── Direct-buy path (Crazy/Turbo, or no payout block) ──
             // Build the buy request from current trade options — no proposal ID
             // needed. The rate-limiter slot ensures we stay within API limits.
-            const trade_option = tradeOptionToBuy(contract_type, this.tradeOptions);
+            const trade_option = tradeOptionToBuy(contract_type, tradeOptions);
             const action = () => _acquireBuySlot().then(() =>
                 api_base.api.send(trade_option)
             );
@@ -209,7 +281,7 @@ export default Engine =>
 
             contractStatus({
                 id: 'contract.purchase_sent',
-                data: this.tradeOptions.amount,
+                data: tradeOptions.amount,
             });
 
             if (!this.options.timeMachineEnabled) {

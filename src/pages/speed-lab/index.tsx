@@ -5,6 +5,7 @@ import DigitCircles from '@/components/digit-circles';
 import { useDigitStats } from '@/hooks/useDigitStats';
 import { useDerivTrade } from '@/hooks/useDerivTrade';
 import { isFastExecutionEnabled, subscribeFastExecution } from '@/utils/execution-speed';
+import { setTradeContext } from '@/utils/trade-metadata';
 import './speed-lab.scss';
 
 const AccountBadge: React.FC = () => {
@@ -176,6 +177,12 @@ const SpeedLab = observer(() => {
      * Run the trading loop.
      * We close over the current speed/contract settings at start time,
      * but use refs for stake (so martingale updates are immediate).
+     *
+     * ⚡ FAST BOOST: when the global Fast toggle is active, fires up to 20
+     * contracts simultaneously (Promise.allSettled) so that ~20 contracts
+     * settle per contract-duration window — achieving ~20 runs/second on
+     * 1-tick markets. The batch size is locked at loop-start so toggling
+     * Fast mid-session takes effect on the next Start.
      */
     const runLoop = useCallback(async (speed: SpeedMode, sym: string, cType: string, dur: number, bar: number, withBarrier: boolean) => {
         const buildParams = (s: number) => ({
@@ -187,17 +194,18 @@ const SpeedLab = observer(() => {
             ...(withBarrier ? { barrier: bar } : {}),
         });
 
-        // All modes are sequential: buy → await settlement → delay → next trade.
-        // Normal = 200ms post-settlement delay, Crazy = 50ms, Turbo = 0ms.
-        // Fast global mode: override to 0ms regardless of speed tier.
+        // Zero inter-trade delay in Fast mode; otherwise tier-specific.
+        // ⚡ Fast = individual contracts at maximum speed (0ms between each).
         const POST_DELAY = isFastExecutionEnabled() ? 0 : speed === 'turbo' ? 0 : speed === 'crazy' ? 50 : 200;
 
         while (runRef.current) {
             const curStake = currentStakeRef.current;
+
+            // Sequential path: buy → await settlement → inter-trade delay → repeat.
+            // Fast mode keeps this sequential but with 0ms POST_DELAY for super speed.
             try {
-                // Sequential buy: wait for full contract settlement before continuing
                 const { profit, extra } = await new Promise<{ profit: number; extra?: any }>(resolve => {
-                    const bail = setTimeout(() => { logEntry('⏱ Settlement timeout'); resolve({ profit: 0 }); }, 15000);
+                    const bail = setTimeout(() => { logEntry('⏱ Settlement timeout'); resolve({ profit: 0 }); }, 15_000);
                     derivTradeRef.current.buyContract(
                         buildParams(curStake),
                         settled => { clearTimeout(bail); resolve({ profit: settled.profit ?? 0, extra: settled }); }
@@ -212,11 +220,10 @@ const SpeedLab = observer(() => {
                 });
                 if (!runRef.current) break;
                 applyResult(profit, curStake, speed, extra);
-                // Inter-trade delay: Normal=200ms, Crazy=50ms, Turbo=0ms
                 if (POST_DELAY > 0) await new Promise(r => setTimeout(r, POST_DELAY));
             } catch (e: any) {
                 logEntry(`❌ ${e?.message || 'Unknown error'}`);
-                await new Promise(r => setTimeout(r, 300));
+                await new Promise(r => setTimeout(r, isFastExecutionEnabled() ? 0 : 300));
             }
         }
         setIsRunning(false);
@@ -240,6 +247,7 @@ const SpeedLab = observer(() => {
         setWinCount(0);
         setLossCount(0);
 
+        setTradeContext({ page: 'Speed Lab', bot: `${contractType} on ${symbol}` });
         runRef.current = true;
         setIsRunning(true);
         const cfg = SPEED_MODES[speedMode];
@@ -298,7 +306,7 @@ const SpeedLab = observer(() => {
 
                     <div className='speed-lab__card speed-lab__digits-card'>
                         <h3>Digit Distribution</h3>
-                        <DigitCircles digits={digits} lastDigit={lastDigit} size='sm' nowrap />
+                        <DigitCircles digits={digits} lastDigit={lastDigit} size='sm' />
                     </div>
 
                     <div className='speed-lab__card'>

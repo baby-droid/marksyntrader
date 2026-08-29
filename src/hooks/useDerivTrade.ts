@@ -6,6 +6,7 @@ import {
     isAuthorized$,
 } from '@/external/bot-skeleton/services/api/observables/connection-status-stream';
 import { publishMasterTrade, getMasterSource } from '@/utils/trade-bus';
+import { observer } from '@/external/bot-skeleton/utils/observer';
 import {
     isFastExecutionEnabled,
     recordPhase,
@@ -61,6 +62,9 @@ export interface BuyParams {
     stake: number;
     barrier?: number | string;
     currency?: string;
+    // Extra app metadata is copied onto the native contract event so
+    // Bot Builder's transaction store can group Auto Trades positions.
+    metadata?: Record<string, unknown>;
 }
 
 const NEEDS_BARRIER = new Set(['DIGITOVER','DIGITUNDER','DIGITMATCH','DIGITDIFF']);
@@ -73,6 +77,7 @@ function getLastDigit(quote: number, pipSize = 2): number {
 export function useDerivTrade() {
     const tickCallbacksRef = useRef<Map<string, (t: TickData) => void>>(new Map());
     const pocCallbacksRef = useRef<Map<number, (c: SettledContract) => void>>(new Map());
+    const contractMetaRef = useRef<Map<number, any>>(new Map());
     const [connected, setConnected] = useState(connectionStatus$.value === CONNECTION_STATUS.OPENED);
     const [balance, setBalance] = useState<number | null>(null);
     const [currency, setCurrency] = useState('USD');
@@ -121,16 +126,23 @@ export function useDerivTrade() {
 
             if (d.tick) {
                 recordTick(); // count tick for Fast mode tick-rate display
-                const q = d.tick.quote;
-                const ps = d.tick.pip_size ?? 2;
+                const q = Number(d.tick.quote);
+                const epoch = Number(d.tick.epoch);
+                const ps = Number(d.tick.pip_size ?? 2);
+                /* Deriv can emit a partial tick while a subscription is being
+                   attached/re-attached. Never forward that payload: scalpers
+                   and charts both use epoch as the ordering/entry anchor. */
+                if (!Number.isFinite(q) || !Number.isFinite(epoch) || !Number.isFinite(ps) || ps < 0) return;
                 const tick: TickData = {
                     symbol: d.tick.symbol,
                     digit: getLastDigit(q, ps),
                     quote: q,
-                    epoch: d.tick.epoch,
+                    epoch,
                     pip_size: ps,
                 };
-                tickCallbacksRef.current.get(d.tick.symbol)?.(tick);
+                if (typeof d.tick.symbol === 'string' && d.tick.symbol) {
+                    tickCallbacksRef.current.get(d.tick.symbol)?.(tick);
+                }
             }
 
             if (d.proposal_open_contract) {
@@ -138,13 +150,14 @@ export function useDerivTrade() {
                 const cid = Number(poc.contract_id);
                 if (poc.is_sold || poc.status === 'won' || poc.status === 'lost') {
                     const cb = pocCallbacksRef.current.get(cid);
+                    const meta = contractMetaRef.current.get(cid);
+                    const profit = parseFloat(poc.profit ?? '0');
+                    // Use the definitive status from the API; fall back to profit sign.
+                    const status: 'won' | 'lost' =
+                        poc.status === 'won' ? 'won'
+                        : poc.status === 'lost' ? 'lost'
+                        : profit > 0 ? 'won' : 'lost';
                     if (cb) {
-                        const profit = parseFloat(poc.profit ?? '0');
-                        // Use the definitive status from the API; fall back to profit sign
-                        const status: 'won' | 'lost' =
-                            poc.status === 'won' ? 'won'
-                            : poc.status === 'lost' ? 'lost'
-                            : profit > 0 ? 'won' : 'lost';
                         cb({
                             contract_id: cid,
                             profit,
@@ -154,8 +167,44 @@ export function useDerivTrade() {
                             buy_price: poc.buy_price,
                             pip_size: poc.pip_size != null ? Number(poc.pip_size) : undefined,
                         });
-                        pocCallbacksRef.current.delete(cid);
                     }
+                    // Keep the native transaction page authoritative even if
+                    // the local waiting promise timed out or was interrupted.
+                    if (meta) {
+                        const settledContract = {
+                            ...meta,
+                            transaction_ids: { ...meta.transaction_ids, sell: cid },
+                            is_sold: true,
+                            is_completed: true,
+                            status,
+                            profit,
+                            payout: profit > 0 ? Number(poc.payout ?? meta.buy_price + profit) : 0,
+                            bid_price: Number(poc.bid_price ?? 0),
+                            entry_spot: poc.entry_spot,
+                            exit_spot: poc.exit_spot,
+                            entry_tick_time: poc.entry_tick_time,
+                            exit_tick_time: poc.exit_tick_time,
+                        };
+                        observer.emit('bot.contract', settledContract);
+                        window.dispatchEvent(new CustomEvent('auto-trade:contract', {
+                            detail: settledContract,
+                        }));
+                        window.dispatchEvent(new CustomEvent('chart:trade-settled', {
+                            detail: {
+                                contractId: cid,
+                                symbol: meta.underlying_symbol,
+                                contractType: meta.contract_type,
+                                won: status === 'won',
+                                profit,
+                                barrier: meta.barrier,
+                                exitDigit: poc.exit_tick_display_value
+                                    ? parseInt(String(poc.exit_tick_display_value).replace('.', '').slice(-1), 10)
+                                    : undefined,
+                            },
+                        }));
+                        contractMetaRef.current.delete(cid);
+                    }
+                    pocCallbacksRef.current.delete(cid);
                 }
             }
         });
@@ -192,6 +241,7 @@ export function useDerivTrade() {
                 stake,
                 barrier,
                 currency: cur,
+                metadata,
             } = params;
 
             const cur_ = cur || currency || 'USD';
@@ -271,6 +321,40 @@ export function useDerivTrade() {
             if (!contract_id) {
                 throw new Error('Buy failed — no contract ID returned');
             }
+
+            const contractMeta = {
+                id: contract_id,
+                contract_id,
+                transaction_ids: { buy: contract_id },
+                underlying_symbol: symbol,
+                display_name: symbol,
+                contract_type,
+                currency: cur_,
+                buy_price: Number(buyRes?.buy?.buy_price ?? stake),
+                payout: 0,
+                bid_price: 0,
+                profit: 0,
+                is_sold: false,
+                status: 'open',
+                date_start: Math.floor(Date.now() / 1000),
+                barrier,
+                duration,
+                duration_unit,
+                ...(metadata || {}),
+            };
+            contractMetaRef.current.set(contract_id, contractMeta);
+            observer.emit('bot.contract', contractMeta);
+            window.dispatchEvent(new CustomEvent('auto-trade:contract', {
+                detail: contractMeta,
+            }));
+            window.dispatchEvent(new CustomEvent('chart:trade-started', {
+                detail: {
+                    contractId: contract_id,
+                    ticks: duration,
+                    symbol,
+                    contractType: contract_type,
+                },
+            }));
 
             // Step 3 — subscribe to settlement notifications
             // In Fast mode: subscribe is fire-and-forget (never blocks the caller)

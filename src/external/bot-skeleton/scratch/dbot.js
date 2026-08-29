@@ -342,7 +342,15 @@ class DBot {
             }
             function BinaryBotPrivateTickAnalysis() {
                 var currentTickTime = Bot.getLastTick(true);
-                while (currentTickTime === 'MarketIsClosed') {
+                /* During first-trade startup/reconnect the tick service can
+                   briefly return no last tick. Treat it like a feed wait,
+                   rather than dereferencing undefined. */
+                while (
+                    currentTickTime === 'MarketIsClosed' ||
+                    !currentTickTime ||
+                    typeof currentTickTime !== 'object' ||
+                    currentTickTime.epoch == null
+                ) {
                     sleep(5);
                     currentTickTime = Bot.getLastTick(true);
                 }

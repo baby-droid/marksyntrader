@@ -3,6 +3,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import { publishMasterTrade, getMasterSource } from '@/utils/trade-bus';
+import ChartAiControl from './chart-ai';
 
 /* ── Symbol display names ─────────────────────────────────────────────────── */
 const SYMBOL_NAMES: Record<string, string> = {
@@ -64,19 +65,42 @@ function sortActiveSymbols(list: Array<{symbol: string; display_name: string}>) 
     });
 }
 
+/* ── Duration unit metadata ───────────────────────────────────────────────── */
+type DurUnit = 't' | 's' | 'm' | 'h';
+
+const DUR_UNIT_LABELS: Record<DurUnit, string> = {
+    t: 'Ticks', s: 'Seconds', m: 'Minutes', h: 'Hours',
+};
+
+/** Quick-pick presets for each duration unit */
+const DUR_QUICK_PICKS: Record<DurUnit, number[]> = {
+    t: [1, 2, 3, 4, 5, 6, 8, 10],
+    s: [15, 30, 60, 120, 300, 600],
+    m: [1, 2, 5, 10, 30, 60],
+    h: [1, 2, 4, 8, 12, 24],
+};
+
+/** Min / Max for each unit — matched to Deriv synthetic-index limits */
+const DUR_RANGE: Record<DurUnit, { min: number; max: number }> = {
+    t: { min: 1,  max: 10  },
+    s: { min: 15, max: 3600 },
+    m: { min: 1,  max: 60  },
+    h: { min: 1,  max: 24  },
+};
+
 /* ── Trade type groups ────────────────────────────────────────────────────── */
 const TRADE_GROUPS = [
-    { id: 'over_under',   label: 'Over / Under',       icon: '↑↓', typeA: 'DIGITOVER',  typeB: 'DIGITUNDER',  needsBarrier: true,  isAccumulator: false, durationUnit: 't', minDur: 1,  maxDur: 10  },
-    { id: 'even_odd',     label: 'Even / Odd',          icon: '⚡', typeA: 'DIGITEVEN',  typeB: 'DIGITODD',    needsBarrier: false, isAccumulator: false, durationUnit: 't', minDur: 1,  maxDur: 10  },
-    { id: 'match_differ', label: 'Match / Differ',      icon: '🎯', typeA: 'DIGITMATCH', typeB: 'DIGITDIFF',   needsBarrier: true,  isAccumulator: false, durationUnit: 't', minDur: 1,  maxDur: 10  },
-    { id: 'accumulator',  label: 'Accumulator',         icon: '📊', typeA: 'ACCU',       typeB: 'ACCU',        needsBarrier: false, isAccumulator: true,  durationUnit: 't', minDur: 1,  maxDur: 10  },
-    { id: 'rise_fall',    label: 'Rise / Fall',         icon: '📈', typeA: 'CALL',       typeB: 'PUT',         needsBarrier: false, isAccumulator: false, durationUnit: 't', minDur: 1,  maxDur: 10  },
-    { id: 'higher_lower', label: 'Higher / Lower',      icon: '📊', typeA: 'CALL',       typeB: 'PUT',         needsBarrier: false, isAccumulator: false, durationUnit: 'm', minDur: 1,  maxDur: 60  },
-    { id: 'asian',        label: 'Asian Up / Down',     icon: '🌏', typeA: 'ASIANU',     typeB: 'ASIAND',      needsBarrier: false, isAccumulator: false, durationUnit: 't', minDur: 5,  maxDur: 10  },
-    { id: 'touch',        label: 'Touch / No Touch',    icon: '✋', typeA: 'ONETOUCH',   typeB: 'NOTOUCH',     needsBarrier: false, isAccumulator: false, durationUnit: 'm', minDur: 1,  maxDur: 60  },
-    { id: 'reset',        label: 'Reset Call / Put',    icon: '🔄', typeA: 'RESETCALL',  typeB: 'RESETPUT',    needsBarrier: false, isAccumulator: false, durationUnit: 't', minDur: 5,  maxDur: 10  },
-    { id: 'highlow',      label: 'High / Low Tick',     icon: '🔝', typeA: 'TICKHIGH',   typeB: 'TICKLOW',     needsBarrier: false, isAccumulator: false, durationUnit: 't', minDur: 5,  maxDur: 10  },
-    { id: 'runhighlow',   label: 'Run High / Run Low',  icon: '🏃', typeA: 'RUNHIGH',    typeB: 'RUNLOW',      needsBarrier: false, isAccumulator: false, durationUnit: 't', minDur: 1,  maxDur: 10  },
+    { id: 'over_under',   label: 'Over / Under',       icon: '↑↓', typeA: 'DIGITOVER',  typeB: 'DIGITUNDER',  needsBarrier: true,  isAccumulator: false, durationUnit: 't' as DurUnit, minDur: 1,  maxDur: 10, supportedUnits: ['t'] as DurUnit[]                },
+    { id: 'even_odd',     label: 'Even / Odd',          icon: '⚡', typeA: 'DIGITEVEN',  typeB: 'DIGITODD',    needsBarrier: false, isAccumulator: false, durationUnit: 't' as DurUnit, minDur: 1,  maxDur: 10, supportedUnits: ['t'] as DurUnit[]                },
+    { id: 'match_differ', label: 'Match / Differ',      icon: '🎯', typeA: 'DIGITMATCH', typeB: 'DIGITDIFF',   needsBarrier: true,  isAccumulator: false, durationUnit: 't' as DurUnit, minDur: 1,  maxDur: 10, supportedUnits: ['t'] as DurUnit[]                },
+    { id: 'accumulator',  label: 'Accumulator',         icon: '📊', typeA: 'ACCU',       typeB: 'ACCU',        needsBarrier: false, isAccumulator: true,  durationUnit: 't' as DurUnit, minDur: 1,  maxDur: 10, supportedUnits: ['t'] as DurUnit[]                },
+    { id: 'rise_fall',    label: 'Rise / Fall',         icon: '📈', typeA: 'CALL',       typeB: 'PUT',         needsBarrier: false, isAccumulator: false, durationUnit: 't' as DurUnit, minDur: 1,  maxDur: 10, supportedUnits: ['t', 's', 'm', 'h'] as DurUnit[] },
+    { id: 'higher_lower', label: 'Higher / Lower',      icon: '📊', typeA: 'CALL',       typeB: 'PUT',         needsBarrier: false, isAccumulator: false, durationUnit: 'm' as DurUnit, minDur: 1,  maxDur: 60, supportedUnits: ['m', 'h'] as DurUnit[]           },
+    { id: 'asian',        label: 'Asian Up / Down',     icon: '🌏', typeA: 'ASIANU',     typeB: 'ASIAND',      needsBarrier: false, isAccumulator: false, durationUnit: 't' as DurUnit, minDur: 5,  maxDur: 10, supportedUnits: ['t'] as DurUnit[]                },
+    { id: 'touch',        label: 'Touch / No Touch',    icon: '✋', typeA: 'ONETOUCH',   typeB: 'NOTOUCH',     needsBarrier: false, isAccumulator: false, durationUnit: 'm' as DurUnit, minDur: 1,  maxDur: 60, supportedUnits: ['m', 'h'] as DurUnit[]           },
+    { id: 'reset',        label: 'Reset Call / Put',    icon: '🔄', typeA: 'RESETCALL',  typeB: 'RESETPUT',    needsBarrier: false, isAccumulator: false, durationUnit: 't' as DurUnit, minDur: 5,  maxDur: 10, supportedUnits: ['t'] as DurUnit[]                },
+    { id: 'highlow',      label: 'High / Low Tick',     icon: '🔝', typeA: 'TICKHIGH',   typeB: 'TICKLOW',     needsBarrier: false, isAccumulator: false, durationUnit: 't' as DurUnit, minDur: 5,  maxDur: 10, supportedUnits: ['t'] as DurUnit[]                },
+    { id: 'runhighlow',   label: 'Run High / Run Low',  icon: '🏃', typeA: 'RUNHIGH',    typeB: 'RUNLOW',      needsBarrier: false, isAccumulator: false, durationUnit: 't' as DurUnit, minDur: 1,  maxDur: 10, supportedUnits: ['t'] as DurUnit[]                },
 ];
 
 /* ── Account badge ────────────────────────────────────────────────────────── */
@@ -103,6 +127,7 @@ interface ChartTradePanelProps {
     symbol: string;
     onSymbolChange?: (s: string) => void;
     currentDigit: number | null;
+    pcts?: number[];
     currentPrice: number | null;
     priceChange: number;
     pipSize: number;
@@ -115,6 +140,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
     symbol,
     onSymbolChange,
     currentDigit,
+    pcts = [],
     currentPrice,
     priceChange,
     pipSize,
@@ -159,15 +185,20 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
     const [groupId, setGroupId]       = useState(TRADE_GROUPS[0].id);
     const group = TRADE_GROUPS.find(g => g.id === groupId) ?? TRADE_GROUPS[0];
 
-    const [ticks,      setTicks]      = useState(2);
+    const [ticks,        setTicks]       = useState(2);
+    const [durationUnit, setDurationUnit] = useState<DurUnit>(TRADE_GROUPS[0].supportedUnits[0]);
+    const [durTab,       setDurTab]      = useState<'quick' | 'custom'>('quick');
+    const [customDurRaw, setCustomDurRaw] = useState('');
     const [stake,      setStake]      = useState(10.00);
     const [stakeRaw,   setStakeRaw]   = useState('10');   // raw string for the input — can be empty
     const [growthRate, setGrowthRate] = useState(0.03); // Accumulator growth rate: 1%, 2%, 3%, 4%, 5%
     const [stakeMode, setStakeMode]   = useState<'stake' | 'payout'>('stake');
+    const [allowEquals, setAllowEquals] = useState(false);
     const [loading,   setLoading]     = useState<'over' | 'under' | 'accu' | null>(null);
     const [accumContractId, setAccumContractId] = useState<number | null>(null);
     const [result,    setResult]      = useState<{ ok: boolean; msg: string } | null>(null);
     const [displayCur, setDisplayCur] = useState(getDisplayCurrency());
+    const [aiEnabled, setAiEnabled] = useState(false);
 
     // Accumulator-specific extras
     const [accumTakeProfitEnabled, setAccumTakeProfitEnabled] = useState(false);
@@ -196,8 +227,17 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
     useEffect(() => subscribeCurrency(() => setDisplayCur(getDisplayCurrency())), []);
 
     useEffect(() => {
-        setTicks(t => Math.min(Math.max(t, group.minDur), group.maxDur));
-    }, [group]);
+        // When group changes: reset to first supported unit, reset ticks to group min
+        const firstUnit = group.supportedUnits[0];
+        setDurationUnit(firstUnit);
+        setDurTab('quick');
+        const range = firstUnit === 't'
+            ? { min: group.minDur, max: group.maxDur }
+            : DUR_RANGE[firstUnit];
+        setTicks(range.min);
+        setCustomDurRaw('');
+        setAllowEquals(false);
+    }, [group.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
     /* ── Payout fetch (600ms debounce) — also warms the buy proposal cache ── */
     // Caching the proposal IDs lets buy() skip a full round-trip to Deriv and
@@ -205,17 +245,20 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
     const warmProposalCache = useCallback(async () => {
         const api = (api_base as any).api;
         if (!api || !symbol) return;
+        // Allow-equals switches CALL→CALLE and PUT→PUTE (Rise/Fall group only)
+        const effTypeA = (group.id === 'rise_fall' && allowEquals) ? 'CALLE' : group.typeA;
+        const effTypeB = (group.id === 'rise_fall' && allowEquals) ? 'PUTE'  : group.typeB;
         const base: any = {
             proposal: 1, amount: stake, basis: 'stake',
             currency: getDisplayCurrency() || 'USD',
-            duration: ticks, duration_unit: group.durationUnit,
+            duration: ticks, duration_unit: durationUnit,
             underlying_symbol: symbol,
         };
         if (group.needsBarrier) base.barrier = String(barrier);
         try {
             const [aRes, bRes] = await Promise.all([
-                api.send({ ...base, contract_type: group.typeA }),
-                api.send({ ...base, contract_type: group.typeB }),
+                api.send({ ...base, contract_type: effTypeA }),
+                api.send({ ...base, contract_type: effTypeB }),
             ]);
             const aPayout = Number(aRes?.proposal?.payout ?? 0);
             const bPayout = Number(bRes?.proposal?.payout ?? 0);
@@ -224,7 +267,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             setOverPct(aPayout > 0 ? ((aPayout - stake) / stake) * 100 : null);
             setUnderPct(bPayout > 0 ? ((bPayout - stake) / stake) * 100 : null);
             // Cache proposal IDs for instant buy (valid ~30s on Deriv; use 25s)
-            const cacheKey = `${group.id}|${barrier}|${ticks}|${stake}|${symbol}`;
+            const cacheKey = `${group.id}|${barrier}|${ticks}|${durationUnit}|${allowEquals}|${stake}|${symbol}`;
             if (aRes?.proposal?.id || bRes?.proposal?.id) {
                 cachedProposalRef.current = {
                     key:      cacheKey,
@@ -239,7 +282,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             setOverPayout(null); setUnderPayout(null);
             setOverPct(null);   setUnderPct(null);
         }
-    }, [symbol, stake, ticks, barrier, group]);
+    }, [symbol, stake, ticks, durationUnit, allowEquals, barrier, group]);
 
     const fetchPayouts = useCallback(() => {
         if (payoutTimerRef.current) clearTimeout(payoutTimerRef.current);
@@ -337,23 +380,34 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
     const isJumpMarket = /^JD/i.test(symbol);
 
     /* ── Buy ─────────────────────────────────────────────────────────────── */
-    const buy = useCallback(async (side: 'over' | 'under') => {
-        if (loading) return;
+    const buy = useCallback(async (
+        side: 'over' | 'under',
+        overrides: { ticks?: number; stake?: number; barrier?: number } = {},
+    ): Promise<number | null> => {
+        if (loading) return null;
         const api = (api_base as any).api;
-        if (!api) { setResult({ ok: false, msg: '❌ Not connected' }); return; }
+        if (!api) { setResult({ ok: false, msg: '❌ Not connected' }); return null; }
+        const effectiveTicks = overrides.ticks ?? ticks;
+        const effectiveStake = overrides.stake ?? stake;
+        const effectiveBarrier = overrides.barrier ?? barrier;
+        const isOverrideBuy = overrides.ticks != null || overrides.stake != null;
         setLoading(side);
         setResult(null);
-        const contractType = side === 'over' ? group.typeA : group.typeB;
+        let purchasedContractId: number | null = null;
+        // Allow-equals: CALL→CALLE, PUT→PUTE for Rise/Fall
+        const contractType = side === 'over'
+            ? (group.id === 'rise_fall' && allowEquals ? 'CALLE' : group.typeA)
+            : (group.id === 'rise_fall' && allowEquals ? 'PUTE'  : group.typeB);
 
         const buildProposalReq = () => {
             const req: any = {
-                proposal: 1, amount: stake, basis: 'stake',
+                proposal: 1, amount: effectiveStake, basis: 'stake',
                 contract_type: contractType,
                 currency: getDisplayCurrency() || 'USD',
-                duration: ticks, duration_unit: group.durationUnit,
+                duration: effectiveTicks, duration_unit: durationUnit,
                 underlying_symbol: symbol,
             };
-            if (group.needsBarrier) req.barrier = String(barrier);
+            if (group.needsBarrier) req.barrier = String(effectiveBarrier);
             return req;
         };
 
@@ -363,13 +417,13 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             // change. Reusing the cached ID means the buy message hits the server
             // on the very next WebSocket frame — no extra proposal latency — so
             // the contract enters on the tick the user is currently watching.
-            const cacheKey = `${group.id}|${barrier}|${ticks}|${stake}|${symbol}`;
+            const cacheKey = `${group.id}|${effectiveBarrier}|${effectiveTicks}|${durationUnit}|${allowEquals}|${effectiveStake}|${symbol}`;
             const cached   = cachedProposalRef.current;
             let proposalId: string | null = null;
             let askPrice:   number        = stake;
             let usedCache                 = false;
 
-            if (cached?.key === cacheKey && cached.expiry > Date.now()) {
+            if (!isOverrideBuy && cached?.key === cacheKey && cached.expiry > Date.now()) {
                 proposalId = side === 'over' ? cached.overId : cached.underId;
                 askPrice   = side === 'over' ? cached.overAsk : cached.underAsk;
                 if (proposalId) {
@@ -389,9 +443,9 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             // ── PRE-SIGNAL (copy-trading timing fix) ──────────────────────────
             try {
                 publishMasterTrade({
-                    symbol, contract_type: contractType, stake,
-                    duration: ticks, duration_unit: group.durationUnit,
-                    ...(group.needsBarrier ? { barrier: String(barrier) } : {}),
+                    symbol, contract_type: contractType, stake: effectiveStake,
+                    duration: effectiveTicks, duration_unit: durationUnit,
+                    ...(group.needsBarrier ? { barrier: String(effectiveBarrier) } : {}),
                     source: getMasterSource(), time: Date.now(),
                 });
             } catch { /* never block trade */ }
@@ -409,9 +463,10 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             if (buyRes?.error) throw new Error(buyRes.error.message);
 
             const contractId = buyRes?.buy?.contract_id;
+            purchasedContractId = contractId != null ? Number(contractId) : null;
             setResult({ ok: true, msg: `✅ #${contractId}` });
             window.dispatchEvent(new CustomEvent('chart:trade-started', {
-                detail: { contractId: Number(contractId), ticks },
+                detail: { contractId: Number(contractId), ticks: effectiveTicks },
             }));
 
             // Re-warm the proposal cache immediately so the next buy is also instant
@@ -445,7 +500,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                 // never fall back to the old rawStream.slice() path which was the
                 // root cause of 1s markets counting the entry-spot tick as T1.
                 let savedEntryTime = 0;
-                let lastDispatchedLen = 0;
+                let entryTimeDispatched = false; // fire chart:trade-entry exactly once
 
                 settleSub.subscribe({
                     next: (res: any) => {
@@ -454,48 +509,32 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
 
                         if (!pocSubId && res.subscription?.id) pocSubId = res.subscription.id;
 
-                        if (Array.isArray(poc.tick_stream) && poc.tick_stream.length > 0) {
-                            // ── Entry-tick stripping ──────────────────────────────────────
-                            // Deriv includes the "spot at purchase" tick in tick_stream[0]
-                            // with epoch === entry_tick_time for all market types (plain
-                            // Volatility, 1s, Bear/Bull, Jump, Boom/Crash/Step/RB).
-                            // Filter it out so T1 always labels the first genuine
-                            // determination tick after entry.
-                            //
-                            // FIX — lock in entry_tick_time on first non-zero occurrence:
-                            // On the very first POC response entry_tick_time may be 0.
-                            // The previous rawStream.slice() fallback accidentally included
-                            // the entry-spot tick as T1 on 1s markets (1 tick contract,
-                            // rawStream.length=1 → slice(0) returned the entry spot).
-                            // New approach: defer dispatching until entry_tick_time arrives;
-                            // never fall back to rawStream.slice() — this is safe because
-                            // for 1s markets the entry_tick_time arrives on the 2nd POC
-                            // message (within ~1s) and the contract hasn't settled yet.
+                        // ── Lock in entry_tick_time (Deriv API: epoch of the entry tick) ──
+                        // Counting rule (chart-wrapper owns the actual count):
+                        //   epoch >= entry_tick_time → T-tick (entry tick = T1)
+                        //   epoch <  entry_tick_time → pre-contract, skip
+                        // entry_tick_time may be 0 on the FIRST POC message (server timing);
+                        // if so, fall back to tick_stream[0].epoch (same value once set).
+                        if (savedEntryTime === 0) {
                             const pocEntryTime: number = poc.entry_tick_time ?? 0;
-                            if (pocEntryTime > 0 && savedEntryTime === 0) {
+                            if (pocEntryTime > 0) {
                                 savedEntryTime = pocEntryTime;
+                            } else if (Array.isArray(poc.tick_stream)) {
+                                const firstTick = poc.tick_stream.find((tick: any) => Number.isFinite(Number(tick?.epoch)));
+                                savedEntryTime = firstTick ? Number(firstTick.epoch) : 0;
                             }
-
-                            const rawStream = poc.tick_stream as any[];
-                            // Use the locked-in entry time. If it hasn't arrived yet
-                            // (savedEntryTime === 0), return empty to defer — do NOT
-                            // use rawStream.slice() which can include the entry spot.
-                            const postEntryStream = savedEntryTime > 0
-                                ? rawStream.filter((t: any) => t.epoch > savedEntryTime)
-                                : [];
-
-                            // Only dispatch when there are genuinely new post-entry ticks
-                            if (postEntryStream.length > 0 && postEntryStream.length > lastDispatchedLen) {
-                                lastDispatchedLen = postEntryStream.length;
-                                window.dispatchEvent(new CustomEvent('chart:trade-tick', {
-                                    detail: {
-                                        contractId: cid,
-                                        tickStream: postEntryStream,
-                                        totalTicks: ticks,
-                                    },
+                            // Dispatch chart:trade-entry exactly once so chart-wrapper can
+                            // immediately anchor its live-tick buffer to the correct epoch.
+                            if (savedEntryTime > 0 && !entryTimeDispatched) {
+                                entryTimeDispatched = true;
+                                window.dispatchEvent(new CustomEvent('chart:trade-entry', {
+                                    detail: { contractId: cid, entryEpoch: savedEntryTime },
                                 }));
                             }
                         }
+
+                        // Settlement is handled below; tick labelling is now driven by
+                        // chart-wrapper's live-tick path (real-time, no API roundtrip).
 
                         if (poc.status === 'won' || poc.status === 'lost') {
                             const won       = poc.status === 'won';
@@ -505,7 +544,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                             const exitDigit = exitStr
                                 ? parseInt(exitStr[exitStr.length - 1], 10) : null;
                             window.dispatchEvent(new CustomEvent('chart:trade-settled', {
-                                detail: { won, profit, exitDigit, barrier, contractType, contractId: cid },
+                                detail: { won, profit, exitDigit, barrier: effectiveBarrier, contractType, contractId: cid },
                             }));
                             forgetPoc();
                         }
@@ -517,27 +556,52 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             try {
                 if (contractId) {
                     publishMasterTrade({
-                        symbol, contract_type: contractType, stake,
-                        duration: ticks, duration_unit: group.durationUnit,
-                        ...(group.needsBarrier ? { barrier: String(barrier) } : {}),
+                        symbol, contract_type: contractType, stake: effectiveStake,
+                        duration: effectiveTicks, duration_unit: durationUnit,
+                        ...(group.needsBarrier ? { barrier: String(effectiveBarrier) } : {}),
                         source: getMasterSource(), time: Date.now(), contract_id: Number(contractId),
                     });
                 }
             } catch { /* never block */ }
         } catch (e: any) {
             setResult({ ok: false, msg: `❌ ${e.message}` });
+            return null;
         } finally {
             setLoading(null);
             setTimeout(() => setResult(null), 4000);
         }
-    }, [loading, group, barrier, ticks, stake, symbol, warmProposalCache]);
+        return purchasedContractId;
+    }, [loading, group, allowEquals, barrier, ticks, durationUnit, stake, symbol, warmProposalCache]);
 
     /* ── Label helpers ───────────────────────────────────────────────────── */
     const overLabel  = group.id === 'over_under' ? 'Over'   : group.id === 'even_odd' ? 'Even'  : group.id === 'asian' ? 'Asian Up'   : group.id === 'touch' ? 'Touch'    : group.id === 'reset' ? 'Reset ↑' : group.id === 'highlow' ? 'High Tick'  : group.id === 'runhighlow' ? 'Run High' : group.id === 'match_differ' ? 'Matches' : 'Rise';
     const underLabel = group.id === 'over_under' ? 'Under'  : group.id === 'even_odd' ? 'Odd'   : group.id === 'asian' ? 'Asian Down' : group.id === 'touch' ? 'No Touch' : group.id === 'reset' ? 'Reset ↓' : group.id === 'highlow' ? 'Low Tick'   : group.id === 'runhighlow' ? 'Run Low'  : group.id === 'match_differ' ? 'Differs' : 'Fall';
 
     const digitRows = [[0, 1, 2, 3, 4], [9, 8, 7, 6, 5]];
-    const tickButtons = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].filter(n => n >= group.minDur && n <= group.maxDur);
+
+    /* ── Duration picker helpers ─────────────────────────────────────────── */
+    const durRange = durationUnit === 't'
+        ? { min: group.minDur, max: group.maxDur }
+        : DUR_RANGE[durationUnit];
+
+    // Quick-pick buttons, filtered to the active unit's allowed range
+    const durQuickPicks = DUR_QUICK_PICKS[durationUnit].filter(
+        n => n >= durRange.min && n <= durRange.max
+    );
+
+    /** Display string for the duration display field */
+    const durDisplayVal = `${ticks} ${DUR_UNIT_LABELS[durationUnit].toLowerCase()}`;
+
+    /** Called when user switches duration unit tab */
+    const handleUnitChange = (unit: DurUnit) => {
+        setDurationUnit(unit);
+        setDurTab('quick');
+        setCustomDurRaw('');
+        const range = unit === 't' ? { min: group.minDur, max: group.maxDur } : DUR_RANGE[unit];
+        // pick first quick-pick that fits, otherwise range.min
+        const picks = DUR_QUICK_PICKS[unit].filter(n => n >= range.min && n <= range.max);
+        setTicks(picks.length > 0 ? picks[0] : range.min);
+    };
 
     /* ════════════════════════════════════════════════════════════════════ */
     return (
@@ -675,42 +739,97 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                 </div>
             )}
 
-            {/* ── Ticks / Duration ──────────────────────────────────── */}
+            {/* ── Duration Picker ───────────────────────────────────── */}
             {!group.isAccumulator && (
-            <div className='ctp__section ctp__section--ticks'>
+            <div className='ctp__section ctp__section--duration'>
+                {/* Header row: label + current value display */}
                 <div className='ctp__section-label'>
-                    {group.durationUnit === 't' ? '⏱ Ticks (Duration)' : '⏱ Minutes (Duration)'}
-                    <span className='ctp__section-val'>{ticks}{group.durationUnit === 't' ? 't' : 'm'}</span>
+                    ⏱ Duration
+                    <span className='ctp__dur-display'>{durDisplayVal}</span>
                 </div>
-                {group.durationUnit === 't' ? (
-                    <div className='ctp__tick-row'>
-                        {tickButtons.map(n => (
+                <div className='ctp__dur-picker'>
+                    {/* Left sidebar: unit selector */}
+                    <div className='ctp__dur-units'>
+                        {group.supportedUnits.map(unit => (
                             <button
-                                key={n}
-                                className={`ctp__tick-btn${ticks === n ? ' active' : ''}`}
-                                onClick={() => setTicks(n)}
+                                key={unit}
+                                className={`ctp__dur-unit-btn${durationUnit === unit ? ' active' : ''}`}
+                                onClick={() => handleUnitChange(unit)}
                             >
-                                {n}
+                                {DUR_UNIT_LABELS[unit]}
                             </button>
                         ))}
                     </div>
-                ) : (
-                    <>
-                        <input
-                            type='range' min={group.minDur} max={group.maxDur} step={1}
-                            value={ticks}
-                            onChange={e => setTicks(Number(e.target.value))}
-                            className='ctp__slider'
-                        />
-                        <div className='ctp__slider-marks'>
-                            {[group.minDur, Math.round((group.minDur + group.maxDur) / 2), group.maxDur].map(n => (
-                                <span key={n} className={ticks === n ? 'active' : ''}>{n}</span>
-                            ))}
+                    {/* Right area: Quick picks / Custom tabs + content */}
+                    <div className='ctp__dur-right'>
+                        <div className='ctp__dur-tabs'>
+                            <button
+                                className={`ctp__dur-tab${durTab === 'quick' ? ' active' : ''}`}
+                                onClick={() => setDurTab('quick')}
+                            >Quick picks</button>
+                            <button
+                                className={`ctp__dur-tab${durTab === 'custom' ? ' active' : ''}`}
+                                onClick={() => { setDurTab('custom'); setCustomDurRaw(String(ticks)); }}
+                            >Custom</button>
                         </div>
-                    </>
-                )}
+                        {durTab === 'quick' ? (
+                            <div className='ctp__dur-picks'>
+                                {durQuickPicks.map(n => (
+                                    <button
+                                        key={n}
+                                        className={`ctp__dur-pick-btn${ticks === n ? ' active' : ''}`}
+                                        onClick={() => setTicks(n)}
+                                    >
+                                        {n} {durationUnit === 't' ? (n === 1 ? 'tick' : 'ticks')
+                                             : durationUnit === 's' ? (n === 1 ? 'sec' : 'secs')
+                                             : durationUnit === 'm' ? (n === 1 ? 'min' : 'mins')
+                                             : (n === 1 ? 'hr' : 'hrs')}
+                                    </button>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className='ctp__dur-custom'>
+                                <div className='ctp__dur-custom-row'>
+                                    <button className='ctp__dur-custom-adj' onClick={() => {
+                                        const next = Math.max(durRange.min, ticks - 1);
+                                        setTicks(next); setCustomDurRaw(String(next));
+                                    }}>−</button>
+                                    <input
+                                        className='ctp__dur-custom-inp'
+                                        type='text'
+                                        inputMode='numeric'
+                                        value={customDurRaw}
+                                        placeholder={String(durRange.min)}
+                                        onFocus={e => e.target.select()}
+                                        onChange={e => {
+                                            const raw = e.target.value.replace(/[^\d]/g, '');
+                                            setCustomDurRaw(raw);
+                                            const v = parseInt(raw, 10);
+                                            if (!isNaN(v)) setTicks(v);
+                                        }}
+                                        onBlur={() => {
+                                            const v = parseInt(customDurRaw, 10);
+                                            const clamped = isNaN(v)
+                                                ? durRange.min
+                                                : Math.min(Math.max(v, durRange.min), durRange.max);
+                                            setTicks(clamped);
+                                            setCustomDurRaw(String(clamped));
+                                        }}
+                                    />
+                                    <button className='ctp__dur-custom-adj' onClick={() => {
+                                        const next = Math.min(durRange.max, ticks + 1);
+                                        setTicks(next); setCustomDurRaw(String(next));
+                                    }}>+</button>
+                                </div>
+                                <div className='ctp__dur-custom-range'>
+                                    {durRange.min}–{durRange.max} {DUR_UNIT_LABELS[durationUnit].toLowerCase()}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
             </div>
-            )}{/* /!group.isAccumulator ticks section */}
+            )}{/* /!group.isAccumulator duration section */}
 
             {/* ── Last Digit Prediction ─────────────────────────────── */}
             {group.needsBarrier && (
@@ -788,7 +907,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                 </div>
                 {/* Preset quick-select chips — click to apply, click active to clear */}
                 <div className='ctp__stake-presets'>
-                    {[0.35, 1, 2, 10, 50].map(p => {
+                    {[0.35, 1, 2, 10].map(p => {
                         const isActive = stake === p;
                         return (
                             <button
@@ -805,7 +924,30 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                             </button>
                         );
                     })}
+                    <button
+                        className={`ctp__preset ctp__preset--ai${aiEnabled ? ' active' : ''}`}
+                        onClick={() => setAiEnabled(v => !v)}
+                        title='Open AI market scanner'
+                    >
+                        AI
+                    </button>
                 </div>
+            </div>
+
+            <div className={`ctp__ai-slot${aiEnabled ? '' : ' ctp__ai-slot--closed'}`}>
+                <ChartAiControl
+                    symbol={symbol}
+                    group={group}
+                    barrier={barrier}
+                    currentDigit={currentDigit}
+                    ticks={ticks}
+                    durationUnit={durationUnit}
+                    stake={stake}
+                    onStakeChange={next => { setStake(next); setStakeRaw(String(next)); }}
+                    pcts={pcts}
+                    onAutoTrade={(side, aiTicks, aiStake, aiBarrier) => buy(side, { ticks: aiTicks, stake: aiStake, barrier: aiBarrier })}
+                    tradeBusy={!!loading}
+                />
             </div>
 
             {/* ── Result feedback ───────────────────────────────────── */}

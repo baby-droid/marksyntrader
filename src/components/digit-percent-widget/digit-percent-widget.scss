@@ -40,8 +40,29 @@
         padding: 0;
 
         @media (max-width: 420px) {
-            width: calc(100vw - 0.4rem);
+            width: min(18.75rem, calc(100vw - 1rem));
+            max-height: min(76vh, 34rem);
         }
+    }
+
+    @media (max-width: 600px) {
+        &__panel {
+            border-radius: 10px;
+            box-shadow: 0 8px 28px rgba(15, 23, 42, 0.24);
+        }
+
+        &__drag-header {
+            padding: 0.55rem 0.7rem;
+        }
+
+        &__drag-title { font-size: 0.9rem; }
+        &__header { margin-inline: 0.7rem; }
+        &__select { font-size: 0.9rem; min-width: 0; }
+        &__ticks-input { width: 4rem; font-size: 0.9rem; }
+        &__stats100 { margin-inline: 0.7rem; }
+        &__row-section { padding-inline: 0.7rem; }
+        &__ticks-row { margin-inline: 0.7rem; font-size: 0.9rem; }
+        &__ticks-label { min-width: 5.4rem; }
     }
 
     /* Drag handle header with title + X close */

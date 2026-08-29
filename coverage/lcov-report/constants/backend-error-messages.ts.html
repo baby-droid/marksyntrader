@@ -1,0 +1,1321 @@
+
+<!doctype html>
+<html lang="en">
+
+<head>
+    <title>Code coverage report for constants/backend-error-messages.ts</title>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="../prettify.css" />
+    <link rel="stylesheet" href="../base.css" />
+    <link rel="shortcut icon" type="image/x-icon" href="../favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style type='text/css'>
+        .coverage-summary .sorter {
+            background-image: url(../sort-arrow-sprite.png);
+        }
+    </style>
+</head>
+    
+<body>
+<div class='wrapper'>
+    <div class='pad1'>
+        <h1><a href="../index.html">All files</a> / <a href="index.html">constants</a> backend-error-messages.ts</h1>
+        <div class='clearfix'>
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">6.55% </span>
+                <span class="quiet">Statements</span>
+                <span class='fraction'>27/412</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">100% </span>
+                <span class="quiet">Branches</span>
+                <span class='fraction'>0/0</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">0% </span>
+                <span class="quiet">Functions</span>
+                <span class='fraction'>0/3</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">6.55% </span>
+                <span class="quiet">Lines</span>
+                <span class='fraction'>27/412</span>
+            </div>
+        
+            
+        </div>
+        <p class="quiet">
+            Press <em>n</em> or <em>j</em> to go to the next uncovered block, <em>b</em>, <em>p</em> or <em>k</em> for the previous block.
+        </p>
+        <template id="filterTemplate">
+            <div class="quiet">
+                Filter:
+                <input type="search" id="fileSearch">
+            </div>
+        </template>
+    </div>
+    <div class='status-line low'></div>
+    <pre><table class="coverage">
+<tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
+<a name='L2'></a><a href='#L2'>2</a>
+<a name='L3'></a><a href='#L3'>3</a>
+<a name='L4'></a><a href='#L4'>4</a>
+<a name='L5'></a><a href='#L5'>5</a>
+<a name='L6'></a><a href='#L6'>6</a>
+<a name='L7'></a><a href='#L7'>7</a>
+<a name='L8'></a><a href='#L8'>8</a>
+<a name='L9'></a><a href='#L9'>9</a>
+<a name='L10'></a><a href='#L10'>10</a>
+<a name='L11'></a><a href='#L11'>11</a>
+<a name='L12'></a><a href='#L12'>12</a>
+<a name='L13'></a><a href='#L13'>13</a>
+<a name='L14'></a><a href='#L14'>14</a>
+<a name='L15'></a><a href='#L15'>15</a>
+<a name='L16'></a><a href='#L16'>16</a>
+<a name='L17'></a><a href='#L17'>17</a>
+<a name='L18'></a><a href='#L18'>18</a>
+<a name='L19'></a><a href='#L19'>19</a>
+<a name='L20'></a><a href='#L20'>20</a>
+<a name='L21'></a><a href='#L21'>21</a>
+<a name='L22'></a><a href='#L22'>22</a>
+<a name='L23'></a><a href='#L23'>23</a>
+<a name='L24'></a><a href='#L24'>24</a>
+<a name='L25'></a><a href='#L25'>25</a>
+<a name='L26'></a><a href='#L26'>26</a>
+<a name='L27'></a><a href='#L27'>27</a>
+<a name='L28'></a><a href='#L28'>28</a>
+<a name='L29'></a><a href='#L29'>29</a>
+<a name='L30'></a><a href='#L30'>30</a>
+<a name='L31'></a><a href='#L31'>31</a>
+<a name='L32'></a><a href='#L32'>32</a>
+<a name='L33'></a><a href='#L33'>33</a>
+<a name='L34'></a><a href='#L34'>34</a>
+<a name='L35'></a><a href='#L35'>35</a>
+<a name='L36'></a><a href='#L36'>36</a>
+<a name='L37'></a><a href='#L37'>37</a>
+<a name='L38'></a><a href='#L38'>38</a>
+<a name='L39'></a><a href='#L39'>39</a>
+<a name='L40'></a><a href='#L40'>40</a>
+<a name='L41'></a><a href='#L41'>41</a>
+<a name='L42'></a><a href='#L42'>42</a>
+<a name='L43'></a><a href='#L43'>43</a>
+<a name='L44'></a><a href='#L44'>44</a>
+<a name='L45'></a><a href='#L45'>45</a>
+<a name='L46'></a><a href='#L46'>46</a>
+<a name='L47'></a><a href='#L47'>47</a>
+<a name='L48'></a><a href='#L48'>48</a>
+<a name='L49'></a><a href='#L49'>49</a>
+<a name='L50'></a><a href='#L50'>50</a>
+<a name='L51'></a><a href='#L51'>51</a>
+<a name='L52'></a><a href='#L52'>52</a>
+<a name='L53'></a><a href='#L53'>53</a>
+<a name='L54'></a><a href='#L54'>54</a>
+<a name='L55'></a><a href='#L55'>55</a>
+<a name='L56'></a><a href='#L56'>56</a>
+<a name='L57'></a><a href='#L57'>57</a>
+<a name='L58'></a><a href='#L58'>58</a>
+<a name='L59'></a><a href='#L59'>59</a>
+<a name='L60'></a><a href='#L60'>60</a>
+<a name='L61'></a><a href='#L61'>61</a>
+<a name='L62'></a><a href='#L62'>62</a>
+<a name='L63'></a><a href='#L63'>63</a>
+<a name='L64'></a><a href='#L64'>64</a>
+<a name='L65'></a><a href='#L65'>65</a>
+<a name='L66'></a><a href='#L66'>66</a>
+<a name='L67'></a><a href='#L67'>67</a>
+<a name='L68'></a><a href='#L68'>68</a>
+<a name='L69'></a><a href='#L69'>69</a>
+<a name='L70'></a><a href='#L70'>70</a>
+<a name='L71'></a><a href='#L71'>71</a>
+<a name='L72'></a><a href='#L72'>72</a>
+<a name='L73'></a><a href='#L73'>73</a>
+<a name='L74'></a><a href='#L74'>74</a>
+<a name='L75'></a><a href='#L75'>75</a>
+<a name='L76'></a><a href='#L76'>76</a>
+<a name='L77'></a><a href='#L77'>77</a>
+<a name='L78'></a><a href='#L78'>78</a>
+<a name='L79'></a><a href='#L79'>79</a>
+<a name='L80'></a><a href='#L80'>80</a>
+<a name='L81'></a><a href='#L81'>81</a>
+<a name='L82'></a><a href='#L82'>82</a>
+<a name='L83'></a><a href='#L83'>83</a>
+<a name='L84'></a><a href='#L84'>84</a>
+<a name='L85'></a><a href='#L85'>85</a>
+<a name='L86'></a><a href='#L86'>86</a>
+<a name='L87'></a><a href='#L87'>87</a>
+<a name='L88'></a><a href='#L88'>88</a>
+<a name='L89'></a><a href='#L89'>89</a>
+<a name='L90'></a><a href='#L90'>90</a>
+<a name='L91'></a><a href='#L91'>91</a>
+<a name='L92'></a><a href='#L92'>92</a>
+<a name='L93'></a><a href='#L93'>93</a>
+<a name='L94'></a><a href='#L94'>94</a>
+<a name='L95'></a><a href='#L95'>95</a>
+<a name='L96'></a><a href='#L96'>96</a>
+<a name='L97'></a><a href='#L97'>97</a>
+<a name='L98'></a><a href='#L98'>98</a>
+<a name='L99'></a><a href='#L99'>99</a>
+<a name='L100'></a><a href='#L100'>100</a>
+<a name='L101'></a><a href='#L101'>101</a>
+<a name='L102'></a><a href='#L102'>102</a>
+<a name='L103'></a><a href='#L103'>103</a>
+<a name='L104'></a><a href='#L104'>104</a>
+<a name='L105'></a><a href='#L105'>105</a>
+<a name='L106'></a><a href='#L106'>106</a>
+<a name='L107'></a><a href='#L107'>107</a>
+<a name='L108'></a><a href='#L108'>108</a>
+<a name='L109'></a><a href='#L109'>109</a>
+<a name='L110'></a><a href='#L110'>110</a>
+<a name='L111'></a><a href='#L111'>111</a>
+<a name='L112'></a><a href='#L112'>112</a>
+<a name='L113'></a><a href='#L113'>113</a>
+<a name='L114'></a><a href='#L114'>114</a>
+<a name='L115'></a><a href='#L115'>115</a>
+<a name='L116'></a><a href='#L116'>116</a>
+<a name='L117'></a><a href='#L117'>117</a>
+<a name='L118'></a><a href='#L118'>118</a>
+<a name='L119'></a><a href='#L119'>119</a>
+<a name='L120'></a><a href='#L120'>120</a>
+<a name='L121'></a><a href='#L121'>121</a>
+<a name='L122'></a><a href='#L122'>122</a>
+<a name='L123'></a><a href='#L123'>123</a>
+<a name='L124'></a><a href='#L124'>124</a>
+<a name='L125'></a><a href='#L125'>125</a>
+<a name='L126'></a><a href='#L126'>126</a>
+<a name='L127'></a><a href='#L127'>127</a>
+<a name='L128'></a><a href='#L128'>128</a>
+<a name='L129'></a><a href='#L129'>129</a>
+<a name='L130'></a><a href='#L130'>130</a>
+<a name='L131'></a><a href='#L131'>131</a>
+<a name='L132'></a><a href='#L132'>132</a>
+<a name='L133'></a><a href='#L133'>133</a>
+<a name='L134'></a><a href='#L134'>134</a>
+<a name='L135'></a><a href='#L135'>135</a>
+<a name='L136'></a><a href='#L136'>136</a>
+<a name='L137'></a><a href='#L137'>137</a>
+<a name='L138'></a><a href='#L138'>138</a>
+<a name='L139'></a><a href='#L139'>139</a>
+<a name='L140'></a><a href='#L140'>140</a>
+<a name='L141'></a><a href='#L141'>141</a>
+<a name='L142'></a><a href='#L142'>142</a>
+<a name='L143'></a><a href='#L143'>143</a>
+<a name='L144'></a><a href='#L144'>144</a>
+<a name='L145'></a><a href='#L145'>145</a>
+<a name='L146'></a><a href='#L146'>146</a>
+<a name='L147'></a><a href='#L147'>147</a>
+<a name='L148'></a><a href='#L148'>148</a>
+<a name='L149'></a><a href='#L149'>149</a>
+<a name='L150'></a><a href='#L150'>150</a>
+<a name='L151'></a><a href='#L151'>151</a>
+<a name='L152'></a><a href='#L152'>152</a>
+<a name='L153'></a><a href='#L153'>153</a>
+<a name='L154'></a><a href='#L154'>154</a>
+<a name='L155'></a><a href='#L155'>155</a>
+<a name='L156'></a><a href='#L156'>156</a>
+<a name='L157'></a><a href='#L157'>157</a>
+<a name='L158'></a><a href='#L158'>158</a>
+<a name='L159'></a><a href='#L159'>159</a>
+<a name='L160'></a><a href='#L160'>160</a>
+<a name='L161'></a><a href='#L161'>161</a>
+<a name='L162'></a><a href='#L162'>162</a>
+<a name='L163'></a><a href='#L163'>163</a>
+<a name='L164'></a><a href='#L164'>164</a>
+<a name='L165'></a><a href='#L165'>165</a>
+<a name='L166'></a><a href='#L166'>166</a>
+<a name='L167'></a><a href='#L167'>167</a>
+<a name='L168'></a><a href='#L168'>168</a>
+<a name='L169'></a><a href='#L169'>169</a>
+<a name='L170'></a><a href='#L170'>170</a>
+<a name='L171'></a><a href='#L171'>171</a>
+<a name='L172'></a><a href='#L172'>172</a>
+<a name='L173'></a><a href='#L173'>173</a>
+<a name='L174'></a><a href='#L174'>174</a>
+<a name='L175'></a><a href='#L175'>175</a>
+<a name='L176'></a><a href='#L176'>176</a>
+<a name='L177'></a><a href='#L177'>177</a>
+<a name='L178'></a><a href='#L178'>178</a>
+<a name='L179'></a><a href='#L179'>179</a>
+<a name='L180'></a><a href='#L180'>180</a>
+<a name='L181'></a><a href='#L181'>181</a>
+<a name='L182'></a><a href='#L182'>182</a>
+<a name='L183'></a><a href='#L183'>183</a>
+<a name='L184'></a><a href='#L184'>184</a>
+<a name='L185'></a><a href='#L185'>185</a>
+<a name='L186'></a><a href='#L186'>186</a>
+<a name='L187'></a><a href='#L187'>187</a>
+<a name='L188'></a><a href='#L188'>188</a>
+<a name='L189'></a><a href='#L189'>189</a>
+<a name='L190'></a><a href='#L190'>190</a>
+<a name='L191'></a><a href='#L191'>191</a>
+<a name='L192'></a><a href='#L192'>192</a>
+<a name='L193'></a><a href='#L193'>193</a>
+<a name='L194'></a><a href='#L194'>194</a>
+<a name='L195'></a><a href='#L195'>195</a>
+<a name='L196'></a><a href='#L196'>196</a>
+<a name='L197'></a><a href='#L197'>197</a>
+<a name='L198'></a><a href='#L198'>198</a>
+<a name='L199'></a><a href='#L199'>199</a>
+<a name='L200'></a><a href='#L200'>200</a>
+<a name='L201'></a><a href='#L201'>201</a>
+<a name='L202'></a><a href='#L202'>202</a>
+<a name='L203'></a><a href='#L203'>203</a>
+<a name='L204'></a><a href='#L204'>204</a>
+<a name='L205'></a><a href='#L205'>205</a>
+<a name='L206'></a><a href='#L206'>206</a>
+<a name='L207'></a><a href='#L207'>207</a>
+<a name='L208'></a><a href='#L208'>208</a>
+<a name='L209'></a><a href='#L209'>209</a>
+<a name='L210'></a><a href='#L210'>210</a>
+<a name='L211'></a><a href='#L211'>211</a>
+<a name='L212'></a><a href='#L212'>212</a>
+<a name='L213'></a><a href='#L213'>213</a>
+<a name='L214'></a><a href='#L214'>214</a>
+<a name='L215'></a><a href='#L215'>215</a>
+<a name='L216'></a><a href='#L216'>216</a>
+<a name='L217'></a><a href='#L217'>217</a>
+<a name='L218'></a><a href='#L218'>218</a>
+<a name='L219'></a><a href='#L219'>219</a>
+<a name='L220'></a><a href='#L220'>220</a>
+<a name='L221'></a><a href='#L221'>221</a>
+<a name='L222'></a><a href='#L222'>222</a>
+<a name='L223'></a><a href='#L223'>223</a>
+<a name='L224'></a><a href='#L224'>224</a>
+<a name='L225'></a><a href='#L225'>225</a>
+<a name='L226'></a><a href='#L226'>226</a>
+<a name='L227'></a><a href='#L227'>227</a>
+<a name='L228'></a><a href='#L228'>228</a>
+<a name='L229'></a><a href='#L229'>229</a>
+<a name='L230'></a><a href='#L230'>230</a>
+<a name='L231'></a><a href='#L231'>231</a>
+<a name='L232'></a><a href='#L232'>232</a>
+<a name='L233'></a><a href='#L233'>233</a>
+<a name='L234'></a><a href='#L234'>234</a>
+<a name='L235'></a><a href='#L235'>235</a>
+<a name='L236'></a><a href='#L236'>236</a>
+<a name='L237'></a><a href='#L237'>237</a>
+<a name='L238'></a><a href='#L238'>238</a>
+<a name='L239'></a><a href='#L239'>239</a>
+<a name='L240'></a><a href='#L240'>240</a>
+<a name='L241'></a><a href='#L241'>241</a>
+<a name='L242'></a><a href='#L242'>242</a>
+<a name='L243'></a><a href='#L243'>243</a>
+<a name='L244'></a><a href='#L244'>244</a>
+<a name='L245'></a><a href='#L245'>245</a>
+<a name='L246'></a><a href='#L246'>246</a>
+<a name='L247'></a><a href='#L247'>247</a>
+<a name='L248'></a><a href='#L248'>248</a>
+<a name='L249'></a><a href='#L249'>249</a>
+<a name='L250'></a><a href='#L250'>250</a>
+<a name='L251'></a><a href='#L251'>251</a>
+<a name='L252'></a><a href='#L252'>252</a>
+<a name='L253'></a><a href='#L253'>253</a>
+<a name='L254'></a><a href='#L254'>254</a>
+<a name='L255'></a><a href='#L255'>255</a>
+<a name='L256'></a><a href='#L256'>256</a>
+<a name='L257'></a><a href='#L257'>257</a>
+<a name='L258'></a><a href='#L258'>258</a>
+<a name='L259'></a><a href='#L259'>259</a>
+<a name='L260'></a><a href='#L260'>260</a>
+<a name='L261'></a><a href='#L261'>261</a>
+<a name='L262'></a><a href='#L262'>262</a>
+<a name='L263'></a><a href='#L263'>263</a>
+<a name='L264'></a><a href='#L264'>264</a>
+<a name='L265'></a><a href='#L265'>265</a>
+<a name='L266'></a><a href='#L266'>266</a>
+<a name='L267'></a><a href='#L267'>267</a>
+<a name='L268'></a><a href='#L268'>268</a>
+<a name='L269'></a><a href='#L269'>269</a>
+<a name='L270'></a><a href='#L270'>270</a>
+<a name='L271'></a><a href='#L271'>271</a>
+<a name='L272'></a><a href='#L272'>272</a>
+<a name='L273'></a><a href='#L273'>273</a>
+<a name='L274'></a><a href='#L274'>274</a>
+<a name='L275'></a><a href='#L275'>275</a>
+<a name='L276'></a><a href='#L276'>276</a>
+<a name='L277'></a><a href='#L277'>277</a>
+<a name='L278'></a><a href='#L278'>278</a>
+<a name='L279'></a><a href='#L279'>279</a>
+<a name='L280'></a><a href='#L280'>280</a>
+<a name='L281'></a><a href='#L281'>281</a>
+<a name='L282'></a><a href='#L282'>282</a>
+<a name='L283'></a><a href='#L283'>283</a>
+<a name='L284'></a><a href='#L284'>284</a>
+<a name='L285'></a><a href='#L285'>285</a>
+<a name='L286'></a><a href='#L286'>286</a>
+<a name='L287'></a><a href='#L287'>287</a>
+<a name='L288'></a><a href='#L288'>288</a>
+<a name='L289'></a><a href='#L289'>289</a>
+<a name='L290'></a><a href='#L290'>290</a>
+<a name='L291'></a><a href='#L291'>291</a>
+<a name='L292'></a><a href='#L292'>292</a>
+<a name='L293'></a><a href='#L293'>293</a>
+<a name='L294'></a><a href='#L294'>294</a>
+<a name='L295'></a><a href='#L295'>295</a>
+<a name='L296'></a><a href='#L296'>296</a>
+<a name='L297'></a><a href='#L297'>297</a>
+<a name='L298'></a><a href='#L298'>298</a>
+<a name='L299'></a><a href='#L299'>299</a>
+<a name='L300'></a><a href='#L300'>300</a>
+<a name='L301'></a><a href='#L301'>301</a>
+<a name='L302'></a><a href='#L302'>302</a>
+<a name='L303'></a><a href='#L303'>303</a>
+<a name='L304'></a><a href='#L304'>304</a>
+<a name='L305'></a><a href='#L305'>305</a>
+<a name='L306'></a><a href='#L306'>306</a>
+<a name='L307'></a><a href='#L307'>307</a>
+<a name='L308'></a><a href='#L308'>308</a>
+<a name='L309'></a><a href='#L309'>309</a>
+<a name='L310'></a><a href='#L310'>310</a>
+<a name='L311'></a><a href='#L311'>311</a>
+<a name='L312'></a><a href='#L312'>312</a>
+<a name='L313'></a><a href='#L313'>313</a>
+<a name='L314'></a><a href='#L314'>314</a>
+<a name='L315'></a><a href='#L315'>315</a>
+<a name='L316'></a><a href='#L316'>316</a>
+<a name='L317'></a><a href='#L317'>317</a>
+<a name='L318'></a><a href='#L318'>318</a>
+<a name='L319'></a><a href='#L319'>319</a>
+<a name='L320'></a><a href='#L320'>320</a>
+<a name='L321'></a><a href='#L321'>321</a>
+<a name='L322'></a><a href='#L322'>322</a>
+<a name='L323'></a><a href='#L323'>323</a>
+<a name='L324'></a><a href='#L324'>324</a>
+<a name='L325'></a><a href='#L325'>325</a>
+<a name='L326'></a><a href='#L326'>326</a>
+<a name='L327'></a><a href='#L327'>327</a>
+<a name='L328'></a><a href='#L328'>328</a>
+<a name='L329'></a><a href='#L329'>329</a>
+<a name='L330'></a><a href='#L330'>330</a>
+<a name='L331'></a><a href='#L331'>331</a>
+<a name='L332'></a><a href='#L332'>332</a>
+<a name='L333'></a><a href='#L333'>333</a>
+<a name='L334'></a><a href='#L334'>334</a>
+<a name='L335'></a><a href='#L335'>335</a>
+<a name='L336'></a><a href='#L336'>336</a>
+<a name='L337'></a><a href='#L337'>337</a>
+<a name='L338'></a><a href='#L338'>338</a>
+<a name='L339'></a><a href='#L339'>339</a>
+<a name='L340'></a><a href='#L340'>340</a>
+<a name='L341'></a><a href='#L341'>341</a>
+<a name='L342'></a><a href='#L342'>342</a>
+<a name='L343'></a><a href='#L343'>343</a>
+<a name='L344'></a><a href='#L344'>344</a>
+<a name='L345'></a><a href='#L345'>345</a>
+<a name='L346'></a><a href='#L346'>346</a>
+<a name='L347'></a><a href='#L347'>347</a>
+<a name='L348'></a><a href='#L348'>348</a>
+<a name='L349'></a><a href='#L349'>349</a>
+<a name='L350'></a><a href='#L350'>350</a>
+<a name='L351'></a><a href='#L351'>351</a>
+<a name='L352'></a><a href='#L352'>352</a>
+<a name='L353'></a><a href='#L353'>353</a>
+<a name='L354'></a><a href='#L354'>354</a>
+<a name='L355'></a><a href='#L355'>355</a>
+<a name='L356'></a><a href='#L356'>356</a>
+<a name='L357'></a><a href='#L357'>357</a>
+<a name='L358'></a><a href='#L358'>358</a>
+<a name='L359'></a><a href='#L359'>359</a>
+<a name='L360'></a><a href='#L360'>360</a>
+<a name='L361'></a><a href='#L361'>361</a>
+<a name='L362'></a><a href='#L362'>362</a>
+<a name='L363'></a><a href='#L363'>363</a>
+<a name='L364'></a><a href='#L364'>364</a>
+<a name='L365'></a><a href='#L365'>365</a>
+<a name='L366'></a><a href='#L366'>366</a>
+<a name='L367'></a><a href='#L367'>367</a>
+<a name='L368'></a><a href='#L368'>368</a>
+<a name='L369'></a><a href='#L369'>369</a>
+<a name='L370'></a><a href='#L370'>370</a>
+<a name='L371'></a><a href='#L371'>371</a>
+<a name='L372'></a><a href='#L372'>372</a>
+<a name='L373'></a><a href='#L373'>373</a>
+<a name='L374'></a><a href='#L374'>374</a>
+<a name='L375'></a><a href='#L375'>375</a>
+<a name='L376'></a><a href='#L376'>376</a>
+<a name='L377'></a><a href='#L377'>377</a>
+<a name='L378'></a><a href='#L378'>378</a>
+<a name='L379'></a><a href='#L379'>379</a>
+<a name='L380'></a><a href='#L380'>380</a>
+<a name='L381'></a><a href='#L381'>381</a>
+<a name='L382'></a><a href='#L382'>382</a>
+<a name='L383'></a><a href='#L383'>383</a>
+<a name='L384'></a><a href='#L384'>384</a>
+<a name='L385'></a><a href='#L385'>385</a>
+<a name='L386'></a><a href='#L386'>386</a>
+<a name='L387'></a><a href='#L387'>387</a>
+<a name='L388'></a><a href='#L388'>388</a>
+<a name='L389'></a><a href='#L389'>389</a>
+<a name='L390'></a><a href='#L390'>390</a>
+<a name='L391'></a><a href='#L391'>391</a>
+<a name='L392'></a><a href='#L392'>392</a>
+<a name='L393'></a><a href='#L393'>393</a>
+<a name='L394'></a><a href='#L394'>394</a>
+<a name='L395'></a><a href='#L395'>395</a>
+<a name='L396'></a><a href='#L396'>396</a>
+<a name='L397'></a><a href='#L397'>397</a>
+<a name='L398'></a><a href='#L398'>398</a>
+<a name='L399'></a><a href='#L399'>399</a>
+<a name='L400'></a><a href='#L400'>400</a>
+<a name='L401'></a><a href='#L401'>401</a>
+<a name='L402'></a><a href='#L402'>402</a>
+<a name='L403'></a><a href='#L403'>403</a>
+<a name='L404'></a><a href='#L404'>404</a>
+<a name='L405'></a><a href='#L405'>405</a>
+<a name='L406'></a><a href='#L406'>406</a>
+<a name='L407'></a><a href='#L407'>407</a>
+<a name='L408'></a><a href='#L408'>408</a>
+<a name='L409'></a><a href='#L409'>409</a>
+<a name='L410'></a><a href='#L410'>410</a>
+<a name='L411'></a><a href='#L411'>411</a>
+<a name='L412'></a><a href='#L412'>412</a>
+<a name='L413'></a><a href='#L413'>413</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { localize } from '@deriv-com/translations';
+import { sanitizeParameterValue } from '../utils/xss-protection';
+&nbsp;
+/**
+ * Converts backend parameter format to frontend format and maps parameters
+ * @param message - The backend error message
+ * @param errorResponse - The complete error response containing code_args, details, etc.
+ * @returns Processed parameters object
+ */
+const processBackendParameters = <span class="fstat-no" title="function not covered" >(message: string, errorResponse?: Record&lt;string, any&gt;) =&gt; {</span>
+<span class="cstat-no" title="statement not covered" >    if (!errorResponse) return {};</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >    const params: Record&lt;string, any&gt; = {};</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >    // Handle new code_args array format</span>
+<span class="cstat-no" title="statement not covered" >    if (errorResponse.code_args &amp;&amp; Array.isArray(errorResponse.code_args)) {</span>
+<span class="cstat-no" title="statement not covered" >        errorResponse.code_args.forEach((value: any, index: number) =&gt; {</span>
+<span class="cstat-no" title="statement not covered" >            // Clean up parameter values by removing ALL trailing dots to prevent double dots</span>
+<span class="cstat-no" title="statement not covered" >            let cleanValue = String(value);</span>
+<span class="cstat-no" title="statement not covered" >            // Remove all trailing dots (not just one)</span>
+<span class="cstat-no" title="statement not covered" >            cleanValue = cleanValue.replace(/\.+$/, '');</span>
+<span class="cstat-no" title="statement not covered" >            // Apply XSS protection</span>
+<span class="cstat-no" title="statement not covered" >            params[`param${index + 1}`] = sanitizeParameterValue(cleanValue);</span>
+<span class="cstat-no" title="statement not covered" >        });</span>
+<span class="cstat-no" title="statement not covered" >    }</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >    // Handle legacy format for backward compatibility</span>
+<span class="cstat-no" title="statement not covered" >    if (errorResponse.details) {</span>
+<span class="cstat-no" title="statement not covered" >        const details = errorResponse.details;</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >        // Handle common parameter mappings from legacy backend error message format</span>
+<span class="cstat-no" title="statement not covered" >        if (details._1 !== undefined) {</span>
+<span class="cstat-no" title="statement not covered" >            params.param1 = sanitizeParameterValue(String(details._1).replace(/\.+$/, ''));</span>
+<span class="cstat-no" title="statement not covered" >        }</span>
+<span class="cstat-no" title="statement not covered" >        if (details._2 !== undefined) {</span>
+<span class="cstat-no" title="statement not covered" >            params.param2 = sanitizeParameterValue(String(details._2).replace(/\.+$/, ''));</span>
+<span class="cstat-no" title="statement not covered" >        }</span>
+<span class="cstat-no" title="statement not covered" >        if (details._3 !== undefined) {</span>
+<span class="cstat-no" title="statement not covered" >            params.param3 = sanitizeParameterValue(String(details._3).replace(/\.+$/, ''));</span>
+<span class="cstat-no" title="statement not covered" >        }</span>
+<span class="cstat-no" title="statement not covered" >        if (details._4 !== undefined) {</span>
+<span class="cstat-no" title="statement not covered" >            params.param4 = sanitizeParameterValue(String(details._4).replace(/\.+$/, ''));</span>
+<span class="cstat-no" title="statement not covered" >        }</span>
+<span class="cstat-no" title="statement not covered" >        if (details._5 !== undefined) {</span>
+<span class="cstat-no" title="statement not covered" >            params.param5 = sanitizeParameterValue(String(details._5).replace(/\.+$/, ''));</span>
+<span class="cstat-no" title="statement not covered" >        }</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >        // Also include any named parameters from details</span>
+<span class="cstat-no" title="statement not covered" >        Object.keys(details).forEach(key =&gt; {</span>
+<span class="cstat-no" title="statement not covered" >            if (!key.startsWith('_')) {</span>
+<span class="cstat-no" title="statement not covered" >                params[key] = sanitizeParameterValue(String(details[key]).replace(/\.+$/, ''));</span>
+<span class="cstat-no" title="statement not covered" >            }</span>
+<span class="cstat-no" title="statement not covered" >        });</span>
+<span class="cstat-no" title="statement not covered" >    }</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >    // Handle direct parameter mapping (for backward compatibility)</span>
+<span class="cstat-no" title="statement not covered" >    if (!errorResponse.code_args &amp;&amp; !errorResponse.details) {</span>
+<span class="cstat-no" title="statement not covered" >        // Handle common parameter mappings from legacy format</span>
+<span class="cstat-no" title="statement not covered" >        if (errorResponse._1 !== undefined) {</span>
+<span class="cstat-no" title="statement not covered" >            params.param1 = sanitizeParameterValue(String(errorResponse._1).replace(/\.+$/, ''));</span>
+<span class="cstat-no" title="statement not covered" >        }</span>
+<span class="cstat-no" title="statement not covered" >        if (errorResponse._2 !== undefined) {</span>
+<span class="cstat-no" title="statement not covered" >            params.param2 = sanitizeParameterValue(String(errorResponse._2).replace(/\.+$/, ''));</span>
+<span class="cstat-no" title="statement not covered" >        }</span>
+<span class="cstat-no" title="statement not covered" >        if (errorResponse._3 !== undefined) {</span>
+<span class="cstat-no" title="statement not covered" >            params.param3 = sanitizeParameterValue(String(errorResponse._3).replace(/\.+$/, ''));</span>
+<span class="cstat-no" title="statement not covered" >        }</span>
+<span class="cstat-no" title="statement not covered" >        if (errorResponse._4 !== undefined) {</span>
+<span class="cstat-no" title="statement not covered" >            params.param4 = sanitizeParameterValue(String(errorResponse._4).replace(/\.+$/, ''));</span>
+<span class="cstat-no" title="statement not covered" >        }</span>
+<span class="cstat-no" title="statement not covered" >        if (errorResponse._5 !== undefined) {</span>
+<span class="cstat-no" title="statement not covered" >            params.param5 = sanitizeParameterValue(String(errorResponse._5).replace(/\.+$/, ''));</span>
+<span class="cstat-no" title="statement not covered" >        }</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >        // Also include any named parameters</span>
+<span class="cstat-no" title="statement not covered" >        Object.keys(errorResponse).forEach(key =&gt; {</span>
+<span class="cstat-no" title="statement not covered" >            if (!key.startsWith('_') &amp;&amp; !['code', 'subcode', 'message'].includes(key)) {</span>
+<span class="cstat-no" title="statement not covered" >                params[key] = sanitizeParameterValue(String(errorResponse[key]).replace(/\.+$/, ''));</span>
+<span class="cstat-no" title="statement not covered" >            }</span>
+<span class="cstat-no" title="statement not covered" >        });</span>
+<span class="cstat-no" title="statement not covered" >    }</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >    return params;</span>
+<span class="cstat-no" title="statement not covered" >};</span>
+&nbsp;
+// Backend error code mappings for localization
+export const getBackendErrorMessages = <span class="fstat-no" title="function not covered" >() =&gt; ({</span>
+<span class="cstat-no" title="statement not covered" >    // Bot-skeleton specific errors</span>
+<span class="cstat-no" title="statement not covered" >    RateLimit: localize('You are rate limited for: {{message_type}}, retrying in {{delay}}s (ID: {{request}})'),</span>
+<span class="cstat-no" title="statement not covered" >    DisconnectError: localize('You are disconnected, retrying in {{delay}}s'),</span>
+<span class="cstat-no" title="statement not covered" >    RequestFailed: localize('Request failed for: {{message_type}}, retrying in {{delay}}s'),</span>
+<span class="cstat-no" title="statement not covered" >    InputValidationFailed: localize('Invalid input provided'),</span>
+<span class="cstat-no" title="statement not covered" >    DurationValidationFailed: localize('Duration must be a positive integer'),</span>
+<span class="cstat-no" title="statement not covered" >    AmountValidationFailed: localize('Amount must be a positive number.'),</span>
+<span class="cstat-no" title="statement not covered" >    ProposalsNotReady: localize('Proposals are not ready'),</span>
+<span class="cstat-no" title="statement not covered" >    SelectedProposalNotExist: localize('Selected proposal does not exist'),</span>
+<span class="cstat-no" title="statement not covered" >    ContractBuyValidationError: localize('Contract purchase validation failed'),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidOfferings: localize('Contract cannot be sold at this time'),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidSellContractProposal: localize('Invalid sell contract proposal'),</span>
+<span class="cstat-no" title="statement not covered" >    UnrecognisedRequest: localize('Unrecognised request'),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidContractProposal: localize('Invalid contract proposal'),</span>
+<span class="cstat-no" title="statement not covered" >    NotInitialized: localize('Bot.init is not called'),</span>
+<span class="cstat-no" title="statement not covered" >    CallError: localize('API call error occurred'),</span>
+<span class="cstat-no" title="statement not covered" >    WrongResponse: localize('Unexpected API response'),</span>
+<span class="cstat-no" title="statement not covered" >    GetProposalFailure: localize('Failed to get proposal'),</span>
+<span class="cstat-no" title="statement not covered" >    PositiveIntegerExpected: localize('A positive integer is expected'),</span>
+<span class="cstat-no" title="statement not covered" >    OptionError: localize('Option validation error occurred'),</span>
+<span class="cstat-no" title="statement not covered" >    LoginError: localize('Please log in to continue'),</span>
+<span class="cstat-no" title="statement not covered" >    CandleExpected: localize('A valid candle is expected'),</span>
+<span class="cstat-no" title="statement not covered" >    CandleListExpected: localize('A valid candle list is expected'),</span>
+<span class="cstat-no" title="statement not covered" >    CustomLimitsReached: localize('Custom trading limits have been reached'),</span>
+<span class="cstat-no" title="statement not covered" >    AlreadySubscribed: localize('Already subscribed to this data stream'),</span>
+<span class="cstat-no" title="statement not covered" >    MaxTradesReached: localize('Maximum number of trades reached'),</span>
+<span class="cstat-no" title="statement not covered" >    MaxLossReached: localize('Maximum loss amount reached'),</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >    // Backend API errors</span>
+<span class="cstat-no" title="statement not covered" >    AccountBalanceExceedsLimit: localize(</span>
+<span class="cstat-no" title="statement not covered" >        'Sorry, your account cash balance is too high ({{param1}}). Your maximum account balance is {{param2}}.'</span>
+<span class="cstat-no" title="statement not covered" >    ),</span>
+<span class="cstat-no" title="statement not covered" >    AlreadyExpired: localize('This contract has already expired.'),</span>
+<span class="cstat-no" title="statement not covered" >    AuthorizationRequired: localize('Please log in.'),</span>
+<span class="cstat-no" title="statement not covered" >    BarrierNotAllowed: localize('Barrier is not allowed for this contract type.'),</span>
+<span class="cstat-no" title="statement not covered" >    BarrierNotInRange: localize('Barrier is not an integer in range of {{param1}} to {{param2}}.'),</span>
+<span class="cstat-no" title="statement not covered" >    BarrierOutOfRange: localize('Barrier is out of acceptable range.'),</span>
+<span class="cstat-no" title="statement not covered" >    BarrierValidationError: localize('Barrier can only be up to {{param1}} decimal places.'),</span>
+<span class="cstat-no" title="statement not covered" >    BetExpired: localize('The contract has expired.'),</span>
+<span class="cstat-no" title="statement not covered" >    CancelIsBetter: localize(</span>
+<span class="cstat-no" title="statement not covered" >        'The spot price has moved. We have not closed this contract because your profit is negative and deal cancellation is active. Cancel your contract to get your full stake back.'</span>
+<span class="cstat-no" title="statement not covered" >    ),</span>
+<span class="cstat-no" title="statement not covered" >    CannotCancelContract: localize('Deal cancellation is not available for this contract.'),</span>
+<span class="cstat-no" title="statement not covered" >    CannotValidateContract: localize('Cannot validate contract.'),</span>
+<span class="cstat-no" title="statement not covered" >    ClientContractProfitLimitExceeded: localize('Maximum daily profit limit exceeded for this contract.'),</span>
+<span class="cstat-no" title="statement not covered" >    ClientUnderlyingVolumeLimitReached: localize(</span>
+<span class="cstat-no" title="statement not covered" >        'You will exceed the maximum exposure limit for this market if you purchase this contract. Please close some of your positions and try again.'</span>
+<span class="cstat-no" title="statement not covered" >    ),</span>
+<span class="cstat-no" title="statement not covered" >    ClientUnwelcome: localize('Sorry, your account is not authorised for any further contract purchases.'),</span>
+<span class="cstat-no" title="statement not covered" >    ClientVolumeLimitReached: localize(</span>
+<span class="cstat-no" title="statement not covered" >        'You will exceed the maximum exposure limit if you purchase this contract. Please close some of your positions and try again.'</span>
+<span class="cstat-no" title="statement not covered" >    ),</span>
+<span class="cstat-no" title="statement not covered" >    CompanyWideLimitExceeded: localize(</span>
+<span class="cstat-no" title="statement not covered" >        'No further trading is allowed on this contract type for the current trading session For more info, refer to our terms and conditions.'</span>
+<span class="cstat-no" title="statement not covered" >    ),</span>
+<span class="cstat-no" title="statement not covered" >    ContractAlreadySold: localize('This contract has been sold.'),</span>
+<span class="cstat-no" title="statement not covered" >    ContractAlreadyStarted: localize('Start time is in the past.'),</span>
+<span class="cstat-no" title="statement not covered" >    ContractExpiryNotAllowed: localize('Contract may not expire between {{param1}} and {{param2}}.'),</span>
+<span class="cstat-no" title="statement not covered" >    ContractNotFound: localize('This contract was not found among your open positions.'),</span>
+<span class="cstat-no" title="statement not covered" >    ContractUpdateDisabled: localize('Update of stop loss and take profit is not available at the moment.'),</span>
+<span class="cstat-no" title="statement not covered" >    ContractUpdateFailure: localize('Invalid contract update parameters.'),</span>
+<span class="cstat-no" title="statement not covered" >    ContractUpdateNotAllowed: localize(</span>
+<span class="cstat-no" title="statement not covered" >        "This contract cannot be updated once you've made your purchase.This feature is not available for this contract type."</span>
+<span class="cstat-no" title="statement not covered" >    ),</span>
+<span class="cstat-no" title="statement not covered" >    ContractUpdateTooFrequent: localize('Only one update per second is allowed.'),</span>
+<span class="cstat-no" title="statement not covered" >    CrossMarketIntraday: localize('Intraday contracts may not cross market open.'),</span>
+<span class="cstat-no" title="statement not covered" >    DailyProfitLimitExceeded: localize('No further trading is allowed for the current trading session.'),</span>
+<span class="cstat-no" title="statement not covered" >    DailyTurnoverLimitExceeded: localize(</span>
+<span class="cstat-no" title="statement not covered" >        'Purchasing this contract will cause you to exceed your daily turnover limit of {{param1}} {{param2}}.'</span>
+<span class="cstat-no" title="statement not covered" >    ),</span>
+<span class="cstat-no" title="statement not covered" >    DealCancellationBlackout: localize('Deal cancellation is not available from {{param1}} to {{param2}}.'),</span>
+<span class="cstat-no" title="statement not covered" >    DealCancellationExpired: localize(</span>
+<span class="cstat-no" title="statement not covered" >        'Deal cancellation period has expired. Your contract can only be cancelled while deal cancellation is active.'</span>
+<span class="cstat-no" title="statement not covered" >    ),</span>
+<span class="cstat-no" title="statement not covered" >    DealCancellationNotAvailable: localize('Deal cancellation is not available for this asset.'),</span>
+<span class="cstat-no" title="statement not covered" >    DealCancellationNotBought: localize(</span>
+<span class="cstat-no" title="statement not covered" >        'This contract does not include deal cancellation. Your contract can only be cancelled when you select deal cancellation in your purchase.'</span>
+<span class="cstat-no" title="statement not covered" >    ),</span>
+<span class="cstat-no" title="statement not covered" >    DigitOutOfRange: localize('Digit must be in the range of {{param1}} to {{param2}}.'),</span>
+<span class="cstat-no" title="statement not covered" >    DuplicateExpiry: localize('Please enter only {{param1}} or {{param2}}.'),</span>
+<span class="cstat-no" title="statement not covered" >    EitherStopLossOrCancel: localize(</span>
+<span class="cstat-no" title="statement not covered" >        'You may use either stop loss or deal cancellation, but not both. Please select either one.'</span>
+<span class="cstat-no" title="statement not covered" >    ),</span>
+<span class="cstat-no" title="statement not covered" >    EitherTakeProfitOrCancel: localize(</span>
+<span class="cstat-no" title="statement not covered" >        'You may use either take profit or deal cancellation, but not both. Please select either one.'</span>
+<span class="cstat-no" title="statement not covered" >    ),</span>
+<span class="cstat-no" title="statement not covered" >    EntryTickMissing: localize('Waiting for entry tick.'),</span>
+<span class="cstat-no" title="statement not covered" >    FutureStartTime: localize('Start time is in the future.'),</span>
+<span class="cstat-no" title="statement not covered" >    GeneralError: localize('A general error has occurred.'),</span>
+<span class="cstat-no" title="statement not covered" >    GrowthRateOutOfRange: localize('Growth rate is not in acceptable range. Accepts {{param1}}.'),</span>
+<span class="cstat-no" title="statement not covered" >    IncorrectBarrierOffsetDecimals: localize(</span>
+<span class="cstat-no" title="statement not covered" >        '{{param1}} barrier offset can not have more than {{param2}} decimal places.'</span>
+<span class="cstat-no" title="statement not covered" >    ),</span>
+<span class="cstat-no" title="statement not covered" >    IncorrectPayoutDecimals: localize('Payout can not have more than {{param1}} decimal places.'),</span>
+<span class="cstat-no" title="statement not covered" >    IncorrectStakeDecimals: localize('Stake can not have more than {{param1}} decimal places.'),</span>
+<span class="cstat-no" title="statement not covered" >    InsufficientBalance: localize('Your account balance is insufficient to buy this contract.'),</span>
+<span class="cstat-no" title="statement not covered" >    IntegerBarrierRequired: localize('Barrier must be an integer.'),</span>
+<span class="cstat-no" title="statement not covered" >    IntegerSelectedTickRequired: localize('Selected tick must be an integer.'),</span>
+<span class="cstat-no" title="statement not covered" >    InternalServerError: localize('Sorry, an error occurred while processing your request.'),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidAmount: localize('Amount provided can not have more than {{param1}} decimal places.'),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidBarrier: localize('Invalid barrier.'),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidBarrierDifferentType: localize(</span>
+<span class="cstat-no" title="statement not covered" >        'Invalid barrier (Barrier type must be the same for double-barrier contracts).'</span>
+<span class="cstat-no" title="statement not covered" >    ),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidBarrierDouble: localize('Invalid barrier (Double barrier input is expected).'),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidBarrierForSpot: localize('Barrier must be at least {{param1}} away from the spot.'),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidBarrierMixedBarrier: localize('Invalid barrier (Contract can have only one type of barrier).'),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidBarrierPredefined: localize('Barriers available are {{param1}}.'),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidBarrierRange: localize('Barriers must be on either side of the spot.'),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidBarrierSingle: localize('Invalid barrier (Single barrier input is expected).'),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidBarrierUndef: localize('Invalid barrier.'),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidContractType: localize('Invalid contract type.'),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidDatePricing: localize('This contract cannot be properly validated at this time.'),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidDealCancellation: localize('Deal cancellation is not offered at this duration.'),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidExpiry: localize('Invalid input (duration or date_expiry) for this contract type ({{param1}}).'),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidExpiryTime: localize('Invalid expiry time.'),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidHighBarrier: localize('High barrier must be higher than low barrier.'),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidHighLowBarrierRange: localize('High barrier is out of acceptable range. Please adjust the high barrier.'),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidInput: localize('{{param1}} is not a valid input for contract type {{param2}}.'),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidInputAsset: localize('Trading is not offered for this asset.'),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidLowBarrierRange: localize('Low barrier is out of acceptable range. Please adjust the low barrier.'),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidMinStake: localize("Please enter a stake amount that's at least {{param1}}."),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidNonBinaryPrice: localize('Contract price cannot be zero.'),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidPayoutCurrency: localize('Invalid payout currency'),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidPayoutPerPoint: localize('Available payout per points are {{param1}}.'),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidPrice: localize('Price provided can not have more than {{param1}} decimal places.'),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidRequest: localize('Invalid request.'),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidStake: localize('Invalid stake/payout.'),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidtoBuy: localize(</span>
+<span class="cstat-no" title="statement not covered" >        'Minimum stake of {{param1}} and maximum payout of {{param2}}. Current payout is {{param3}}.'</span>
+<span class="cstat-no" title="statement not covered" >    ),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidStakeMoreThanPrice: localize("Contract's stake amount is more than the maximum purchase price."),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidStartEnd: localize('Start time {{param1}} must be before end time {{param2}}'),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidStopOut: localize(</span>
+<span class="cstat-no" title="statement not covered" >        'Invalid stop out. Stop out must be {{param1}} than current spot price. Please adjust stake or multiplier.'</span>
+<span class="cstat-no" title="statement not covered" >    ),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidStyle: localize('Invalid style.'),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidSymbol: localize('Invalid symbol.'),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidTickExpiry: localize('Invalid duration (tick) for contract type ({{param1}}).'),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidToken: localize('Your token has expired or is invalid.'),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidUpdateArgument: localize('Only a hash reference input is accepted.'),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidUpdateValue: localize('Please enter a number or a null value.'),</span>
+<span class="cstat-no" title="statement not covered" >    InvalidVolatility: localize('We could not process this contract at this time.'),</span>
+<span class="cstat-no" title="statement not covered" >    LimitOrderAmountTooHigh: localize('Enter an amount equal to or lower than {{param1}}.'),</span>
+<span class="cstat-no" title="statement not covered" >    LimitOrderAmountTooLow: localize('Enter an amount equal to or higher than {{param1}}.'),</span>
+<span class="cstat-no" title="statement not covered" >    LimitOrderIncorrectDecimal: localize('Only {{param1}} decimal places allowed.'),</span>
+<span class="cstat-no" title="statement not covered" >    MarketIsClosed: localize('This market is presently closed. Market will open at {{param1}}.'),</span>
+<span class="cstat-no" title="statement not covered" >    MaxAggregateOpenStakeExceeded: localize(</span>
+<span class="cstat-no" title="statement not covered" >        'No further trading is allowed on this growth rate and instrument. Please try again later or alternatively try on other instrument or growth rate.'</span>
+<span class="cstat-no" title="statement not covered" >    ),</span>
+<span class="cstat-no" title="statement not covered" >    MissingBasisSpot: localize('Basis spot is not defined.'),</span>
+<span class="cstat-no" title="statement not covered" >    MissingConfig: localize('Missing configuration for {{param1}} and {{param2}} with expiry type {{param3}}'),</span>
+<span class="cstat-no" title="statement not covered" >    MissingContractId: localize('Contract id is required.'),</span>
+<span class="cstat-no" title="statement not covered" >    MissingEither: localize('Please specify either {{param1}} or {{param2}}.'),</span>
+<span class="cstat-no" title="statement not covered" >    MissingMarketData: localize('Trading is suspended due to missing market data.'),</span>
+<span class="cstat-no" title="statement not covered" >    MissingRequiredContractConfig: localize('Missing required contract config.'),</span>
+<span class="cstat-no" title="statement not covered" >    MissingRequiredContractParams: localize('Missing required contract parameters ({{param1}}).'),</span>
+<span class="cstat-no" title="statement not covered" >    MissingRequiredDigit: localize('Missing required contract parameters (last digit prediction for digit contracts).'),</span>
+<span class="cstat-no" title="statement not covered" >    MissingRequiredSelectedTick: localize('Missing required contract parameters (selected tick).'),</span>
+<span class="cstat-no" title="statement not covered" >    MissingSpotMarketData: localize('Trading is suspended due to missing market (spot too far) data.'),</span>
+<span class="cstat-no" title="statement not covered" >    MissingTickMarketData: localize('Trading is suspended due to missing market (tick) data.'),</span>
+<span class="cstat-no" title="statement not covered" >    MissingVanillaFinancialConfig: localize('Missing vanilla option configuration for financial symbols'),</span>
+<span class="cstat-no" title="statement not covered" >    MissingVolatilityMarketData: localize('Trading is suspended due to missing market (volatility) data.'),</span>
+<span class="cstat-no" title="statement not covered" >    MultiplierOutOfRange: localize('Multiplier is not in acceptable range. Accepts {{param1}}.'),</span>
+<span class="cstat-no" title="statement not covered" >    MultiplierRangeDisabled: localize('Multiplier is not in acceptable range.'),</span>
+<span class="cstat-no" title="statement not covered" >    NeedAbsoluteBarrier: localize('Contracts more than 24 hours in duration would need an absolute barrier.'),</span>
+<span class="cstat-no" title="statement not covered" >    NegativeContractBarrier: localize(</span>
+<span class="cstat-no" title="statement not covered" >        'Barrier offset {{param1}} exceeded quote price, contract barrier must be positive.'</span>
+<span class="cstat-no" title="statement not covered" >    ),</span>
+<span class="cstat-no" title="statement not covered" >    NegativeTakeProfit: localize('Negative take profit value is not accepted'),</span>
+<span class="cstat-no" title="statement not covered" >    NoBusiness: localize('This contract is unavailable on this account.'),</span>
+<span class="cstat-no" title="statement not covered" >    NoBusinessMultiplier: localize(</span>
+<span class="cstat-no" title="statement not covered" >        'Trading multiplier options on {{param1}} is disabled. Please choose another market.'</span>
+<span class="cstat-no" title="statement not covered" >    ),</span>
+<span class="cstat-no" title="statement not covered" >    NoCurrencySet: localize('Please set the currency of your account.'),</span>
+<span class="cstat-no" title="statement not covered" >    NoOpenPosition: localize('This contract was not found among your open positions.'),</span>
+<span class="cstat-no" title="statement not covered" >    NoReturn: localize('This contract offers no return.'),</span>
+<span class="cstat-no" title="statement not covered" >    NonDeterminedBarriers: localize('Barriers could not be determined.'),</span>
+<span class="cstat-no" title="statement not covered" >    NotDefaultCurrency: localize('The provided currency {{param1}} is not the default currency.'),</span>
+<span class="cstat-no" title="statement not covered" >    OfferingsInvalidSymbol: localize("There's no contract available for this symbol."),</span>
+<span class="cstat-no" title="statement not covered" >    OfferingsSymbolRequired: localize('Symbol is required.'),</span>
+<span class="cstat-no" title="statement not covered" >    OldMarketData: localize('Trading is suspended due to missing market (old) data.'),</span>
+<span class="cstat-no" title="statement not covered" >    OpenPositionLimit: localize(</span>
+<span class="cstat-no" title="statement not covered" >        'Sorry, you cannot hold more than {{param1}} contracts at a given time. Please wait until some contracts have closed and try again.'</span>
+<span class="cstat-no" title="statement not covered" >    ),</span>
+<span class="cstat-no" title="statement not covered" >    OpenPositionLimitExceeded: localize(</span>
+<span class="cstat-no" title="statement not covered" >        'You have open positions of this asset and trade type. Close or wait for them to settle first.'</span>
+<span class="cstat-no" title="statement not covered" >    ),</span>
+<span class="cstat-no" title="statement not covered" >    OpenPositionPayoutLimit: localize(</span>
+<span class="cstat-no" title="statement not covered" >        'Sorry, the aggregate payouts of contracts on your account cannot exceed {{param1}} {{param2}}.'</span>
+<span class="cstat-no" title="statement not covered" >    ),</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >    OrderUpdateNotAllowed: localize('Only updates to these parameters are allowed {{param1}}.'),</span>
+<span class="cstat-no" title="statement not covered" >    OutdatedVolatilityData: localize('Trading is suspended due to missing market (out-of-date volatility) data.'),</span>
+<span class="cstat-no" title="statement not covered" >    PastExpiryTime: localize('Expiry time cannot be in the past.'),</span>
+<span class="cstat-no" title="statement not covered" >    PastStartTime: localize('Start time is in the past.'),</span>
+<span class="cstat-no" title="statement not covered" >    PayoutLimitExceeded: localize('Maximum payout allowed is {{param1}}.'),</span>
+<span class="cstat-no" title="statement not covered" >    PayoutLimits: localize(</span>
+<span class="cstat-no" title="statement not covered" >        'Minimum stake of {{param1}} and maximum payout of {{param2}}. Current payout is {{param3}}.'</span>
+<span class="cstat-no" title="statement not covered" >    ),</span>
+<span class="cstat-no" title="statement not covered" >    PermissionDenied: localize('Permission denied.'),</span>
+<span class="cstat-no" title="statement not covered" >    PriceMoved: localize(</span>
+<span class="cstat-no" title="statement not covered" >        'The underlying market has moved too much since you priced the contract. The contract {{param4}} has changed from {{param2}} {{param1}} to {{param3}} {{param1}}.'</span>
+<span class="cstat-no" title="statement not covered" >    ),</span>
+<span class="cstat-no" title="statement not covered" >    ProductSpecificTurnoverLimitExceeded: localize(</span>
+<span class="cstat-no" title="statement not covered" >        "You've reached the maximum daily stake for this trade type. Choose another trade type, or wait until {{param1}} {{param2}} {{param3}} {{param4}} {{param5}} UTC tomorrow for the daily limit to reset."</span>
+<span class="cstat-no" title="statement not covered" >    ),</span>
+<span class="cstat-no" title="statement not covered" >    PromoCodeLimitExceeded: localize(</span>
+<span class="cstat-no" title="statement not covered" >        'Your account has exceeded the trading limit with free promo code, please deposit if you wish to continue trading.'</span>
+<span class="cstat-no" title="statement not covered" >    ),</span>
+<span class="cstat-no" title="statement not covered" >    RateLimitExceeded: localize('Rate limit exceeded.'),</span>
+<span class="cstat-no" title="statement not covered" >    RefundBuyForMissingData: localize(</span>
+<span class="cstat-no" title="statement not covered" >        'There was a market data disruption during the contract period. For real-money accounts we will attempt to correct this and settle the contract properly, otherwise the contract will be cancelled and refunded. Virtual-money contracts will be cancelled and refunded.'</span>
+<span class="cstat-no" title="statement not covered" >    ),</span>
+<span class="cstat-no" title="statement not covered" >    ResaleNotOffered: localize('Resale of this contract is not offered.'),</span>
+<span class="cstat-no" title="statement not covered" >    ResaleNotOfferedHolidays: localize(</span>
+<span class="cstat-no" title="statement not covered" >        'Resale of this contract is not offered due to market holidays during contract period.'</span>
+<span class="cstat-no" title="statement not covered" >    ),</span>
+<span class="cstat-no" title="statement not covered" >    ResalePathDependentNotAllowed: localize('Resale not available during rollover time.'),</span>
+<span class="cstat-no" title="statement not covered" >    ResetBarrierError: localize('Non atm barrier is not allowed for reset contract.'),</span>
+<span class="cstat-no" title="statement not covered" >    ResetFixedExpiryError: localize('Fixed expiry for reset contract is not allowed.'),</span>
+<span class="cstat-no" title="statement not covered" >    RoundingExceedPermittedEpsilon: localize('Only a maximum of two decimal points are allowed for the amount.'),</span>
+<span class="cstat-no" title="statement not covered" >    SameBarriersNotAllowed: localize('High and low barriers must be different.'),</span>
+<span class="cstat-no" title="statement not covered" >    SameExpiryStartTime: localize('Expiry time cannot be equal to start time.'),</span>
+<span class="cstat-no" title="statement not covered" >    SameStartSellTime: localize('Contract cannot be sold at this time. Please try again.'),</span>
+<span class="cstat-no" title="statement not covered" >    SameTradingDayExpiry: localize(</span>
+<span class="cstat-no" title="statement not covered" >        'Contracts on this market with a duration of under 24 hours must expire on the same trading day.'</span>
+<span class="cstat-no" title="statement not covered" >    ),</span>
+<span class="cstat-no" title="statement not covered" >    SelectedTickNumberLimits: localize('Tick prediction must be between {{param1}} and {{param2}}.'),</span>
+<span class="cstat-no" title="statement not covered" >    SellAtEntryTick: localize('Contract cannot be sold at entry tick. Please wait for the next tick.'),</span>
+<span class="cstat-no" title="statement not covered" >    SellFailureDueToUpdate: localize('Sell failed because contract was updated.'),</span>
+<span class="cstat-no" title="statement not covered" >    SellPriceLowerThanStake: localize('Sell price must be higher than stake {{param1}}.'),</span>
+<span class="cstat-no" title="statement not covered" >    SpecificOpenPositionLimitExceeded: localize(</span>
+<span class="cstat-no" title="statement not covered" >        'You have exceeded the open position limit for contracts of this type.'</span>
+<span class="cstat-no" title="statement not covered" >    ),</span>
+<span class="cstat-no" title="statement not covered" >    StakeLimitExceeded: localize('Maximum stake allowed is {{param1}}.'),</span>
+<span class="cstat-no" title="statement not covered" >    StakeLimits: localize('Minimum stake of {{param1}} and maximum payout of {{param2}}. Current stake is {{param3}}.'),</span>
+<span class="cstat-no" title="statement not covered" >    StakeTooLow: localize(</span>
+<span class="cstat-no" title="statement not covered" >        "This contract's price is {{param2}} {{param1}}. Contracts purchased from {{param3}} must have a purchase price above {{param4}} {{param1}}. Please accordingly increase the contract amount to meet this minimum stake."</span>
+<span class="cstat-no" title="statement not covered" >    ),</span>
+<span class="cstat-no" title="statement not covered" >    Suspendedlogin: localize(</span>
+<span class="cstat-no" title="statement not covered" >        "We can't take you to your account right now due to system maintenance. Please try again later."</span>
+<span class="cstat-no" title="statement not covered" >    ),</span>
+<span class="cstat-no" title="statement not covered" >    SymbolMissingInBetMarketTable: localize('Trading is suspended for this instrument.'),</span>
+<span class="cstat-no" title="statement not covered" >    SingleTickNumberLimits: localize('Number of ticks must be {{param1}}.'),</span>
+<span class="cstat-no" title="statement not covered" >    TicksNumberLimits: localize('Number of ticks must be between {{param1}} and {{param2}}.'),</span>
+<span class="cstat-no" title="statement not covered" >    TooManyHolidays: localize('Too many market holidays during the contract period.'),</span>
+<span class="cstat-no" title="statement not covered" >    TradeTemporarilyUnavailable: localize('This trade is temporarily unavailable.'),</span>
+<span class="cstat-no" title="statement not covered" >    TradingConfigError: localize('Sorry, an error occurred while processing your request.'),</span>
+<span class="cstat-no" title="statement not covered" >    TradingDayEndExpiry: localize(</span>
+<span class="cstat-no" title="statement not covered" >        'Contracts on this market with a duration of more than 24 hours must expire at the end of a trading day.'</span>
+<span class="cstat-no" title="statement not covered" >    ),</span>
+<span class="cstat-no" title="statement not covered" >    TradingDayExpiry: localize('The contract must expire on a trading day.'),</span>
+<span class="cstat-no" title="statement not covered" >    TradingDisabled: localize('Trading is disabled for this account.'),</span>
+<span class="cstat-no" title="statement not covered" >    TradingDurationNotAllowed: localize('Trading is not offered for this duration.'),</span>
+<span class="cstat-no" title="statement not covered" >    TradingHoursExpiry: localize('Contract must expire during trading hours.'),</span>
+<span class="cstat-no" title="statement not covered" >    TradingNotAvailable: localize('Trading is not available from {{param1}} to {{param2}}.'),</span>
+<span class="cstat-no" title="statement not covered" >    TradingSuspendedSpecificHours: localize(</span>
+<span class="cstat-no" title="statement not covered" >        'Trading on forex contracts with duration less than 5 hours is not available from {{param1}} to {{param2}}'</span>
+<span class="cstat-no" title="statement not covered" >    ),</span>
+<span class="cstat-no" title="statement not covered" >    TransactionTimeTooOld: localize('Cannot create contract.'),</span>
+<span class="cstat-no" title="statement not covered" >    TransactionTimeTooYoung: localize('Cannot create contract.'),</span>
+<span class="cstat-no" title="statement not covered" >    UpdateStopLossNotAllowed: localize('You may update your stop loss amount after deal cancellation has expired.'),</span>
+<span class="cstat-no" title="statement not covered" >    UpdateTakeProfitNotAllowed: localize('You may update your take profit amount after deal cancellation has expired.'),</span>
+<span class="cstat-no" title="statement not covered" >    WaitForContractSettlement: localize(</span>
+<span class="cstat-no" title="statement not covered" >        'Please wait for contract settlement. The final settlement price may differ from the indicative price.'</span>
+<span class="cstat-no" title="statement not covered" >    ),</span>
+<span class="cstat-no" title="statement not covered" >    WrongAmountTypeOne: localize('Basis must be {{param1}} for this contract.'),</span>
+<span class="cstat-no" title="statement not covered" >    WrongAmountTypeTwo: localize('Basis can either be {{param1}} or {{param2}} for this contract.'),</span>
+<span class="cstat-no" title="statement not covered" >    ZeroAbsoluteBarrier: localize('Barrier cannot be zero.'),</span>
+});
+&nbsp;
+/**
+ * Helper function to get localized error message by error code
+ * @param errorCode - The backend error code
+ * @param errorResponse - The complete error response containing code_args, details, etc.
+ * @returns Localized error message
+ */
+export const getLocalizedErrorMessage = <span class="fstat-no" title="function not covered" >(errorCode: string, errorResponse?: Record&lt;string, any&gt;): string =&gt; {</span>
+<span class="cstat-no" title="statement not covered" >    const errorMessages = getBackendErrorMessages();</span>
+<span class="cstat-no" title="statement not covered" >    let message = errorMessages[errorCode as keyof typeof errorMessages];</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >    if (!message) {</span>
+<span class="cstat-no" title="statement not covered" >        // Log unknown error codes for monitoring and improvement</span>
+<span class="cstat-no" title="statement not covered" >        console.warn(`Unknown error code encountered: ${errorCode}`, {</span>
+<span class="cstat-no" title="statement not covered" >            errorCode,</span>
+<span class="cstat-no" title="statement not covered" >            errorResponse,</span>
+<span class="cstat-no" title="statement not covered" >            availableErrorCodes: Object.keys(errorMessages).slice(0, 10), // Log first 10 for reference</span>
+<span class="cstat-no" title="statement not covered" >        });</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >        // If no predefined message, use the backend message if available</span>
+<span class="cstat-no" title="statement not covered" >        message = errorResponse?.message || localize('An error occurred. Please try again.');</span>
+<span class="cstat-no" title="statement not covered" >    }</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >    // Handle direct replacement of [_1], [_2], [_3] format with code_args values</span>
+<span class="cstat-no" title="statement not covered" >    if (errorResponse?.code_args &amp;&amp; Array.isArray(errorResponse.code_args)) {</span>
+<span class="cstat-no" title="statement not covered" >        errorResponse.code_args.forEach((value: any, index: number) =&gt; {</span>
+<span class="cstat-no" title="statement not covered" >            const placeholder = `[_${index + 1}]`;</span>
+<span class="cstat-no" title="statement not covered" >            message = message.replace(new RegExp(`\\${placeholder}`, 'g'), value);</span>
+<span class="cstat-no" title="statement not covered" >        });</span>
+<span class="cstat-no" title="statement not covered" >    }</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >    // Process backend parameters for {{param}} format</span>
+<span class="cstat-no" title="statement not covered" >    const processedParams = processBackendParameters(message, errorResponse);</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >    // For messages that already have parameter placeholders, replace them directly</span>
+<span class="cstat-no" title="statement not covered" >    // instead of using localize() which adds "..." for unknown translation keys</span>
+<span class="cstat-no" title="statement not covered" >    let finalMessage = message;</span>
+<span class="cstat-no" title="statement not covered" >    if (processedParams &amp;&amp; Object.keys(processedParams).length &gt; 0) {</span>
+<span class="cstat-no" title="statement not covered" >        Object.keys(processedParams).forEach(key =&gt; {</span>
+<span class="cstat-no" title="statement not covered" >            const placeholder = `{{${key}}}`;</span>
+<span class="cstat-no" title="statement not covered" >            finalMessage = finalMessage.replace(new RegExp(placeholder, 'g'), processedParams[key]);</span>
+<span class="cstat-no" title="statement not covered" >        });</span>
+<span class="cstat-no" title="statement not covered" >    } else {</span>
+<span class="cstat-no" title="statement not covered" >        // Only use localize() for static messages without dynamic parameters</span>
+<span class="cstat-no" title="statement not covered" >        finalMessage = localize(message, processedParams);</span>
+<span class="cstat-no" title="statement not covered" >    }</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >    return finalMessage;</span>
+<span class="cstat-no" title="statement not covered" >};</span>
+&nbsp;
+/**
+ * Type definition for backend error codes
+ */
+export type BackendErrorCode = keyof ReturnType&lt;typeof getBackendErrorMessages&gt;;
+&nbsp;</pre></td></tr></table></pre>
+
+                <div class='push'></div><!-- for sticky footer -->
+            </div><!-- /wrapper -->
+            <div class='footer quiet pad2 space-top1 center small'>
+                Code coverage generated by
+                <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
+                at 2026-08-13T00:39:10.148Z
+            </div>
+        <script src="../prettify.js"></script>
+        <script>
+            window.onload = function () {
+                prettyPrint();
+            };
+        </script>
+        <script src="../sorter.js"></script>
+        <script src="../block-navigation.js"></script>
+    </body>
+</html>
+    

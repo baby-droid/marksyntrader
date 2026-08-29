@@ -6,6 +6,7 @@ import { publishMasterTrade, getMasterSource } from '@/utils/trade-bus';
 
 export interface TradeResult {
   id: string;
+  contract_id?: string;
   type: string;
   stake: number;
   profit: number;
@@ -13,6 +14,31 @@ export interface TradeResult {
   time: number;
   entry_spot?: number;
   exit_spot?: number;
+  batchId?: string;
+  batchIndex?: number;
+  batchTotal?: number;
+  transaction_id?: string;
+}
+
+export interface BatchParams {
+  symbol: string;
+  contract_type: string;
+  stake: number;
+  duration: number;
+  duration_unit?: string;
+  barrier?: string | number;
+  currency?: string;
+  count: number;
+}
+
+export interface BatchEvent {
+  phase: 'created' | 'bought' | 'settled' | 'failed';
+  batchId: string;
+  index?: number;
+  total: number;
+  contract?: any;
+  result?: TradeResult;
+  error?: string;
 }
 
 export interface UseDerivTradingReturn {
@@ -24,6 +50,7 @@ export interface UseDerivTradingReturn {
   winCount: number;
   lossCount: number;
   buyContract: (params: BuyParams) => Promise<TradeResult | null>;
+  buyBatch: (params: BatchParams, onEvent?: (event: BatchEvent) => void) => Promise<BatchEvent[]>;
   buyBothDirections: (params: BuyParams) => Promise<void>;
   clearResults: () => void;
   subscribeBalance: () => void;
@@ -159,20 +186,34 @@ export function useDerivTrading(): UseDerivTradingReturn {
     }
   }, [currency, subscribeBalance]);
 
-  const monitorContract = useCallback((contractId: string, type: string, stake: number) => {
+  const monitorContract = useCallback((
+    contractId: string,
+    type: string,
+    stake: number,
+    batchMeta: {
+      batchId?: string;
+      batchIndex?: number;
+      batchTotal?: number;
+      buyTransactionId?: string;
+    } = {},
+    onEvent?: (event: BatchEvent) => void
+  ) => {
     let obs: any;
+    let hasSettled = false;
     try {
       obs = api_base.api.subscribe({ proposal_open_contract: 1, contract_id: parseInt(contractId, 10) });
       const sub = obs.subscribe({
         next: (res: any) => {
           const poc = res?.proposal_open_contract;
           if (!poc) return;
-          if (poc.is_sold || poc.status === 'won' || poc.status === 'lost') {
+          if (!hasSettled && (poc.is_sold || poc.status === 'won' || poc.status === 'lost')) {
+            hasSettled = true;
             const rawProfit = parseFloat(poc.profit || '0');
             const profit = applyCommission(rawProfit);
             const won = poc.status === 'won' || profit > 0;
             const result: TradeResult = {
               id: contractId,
+              contract_id: contractId,
               type,
               stake,
               profit,
@@ -180,6 +221,8 @@ export function useDerivTrading(): UseDerivTradingReturn {
               time: Date.now(),
               entry_spot: poc.entry_spot,
               exit_spot: poc.exit_spot,
+              transaction_id: poc.transaction_ids?.buy || batchMeta.buyTransactionId,
+              ...batchMeta,
             };
             setTradeResults(prev => [result, ...prev].slice(0, 200));
             setTotalProfit(prev => prev + profit);
@@ -187,15 +230,157 @@ export function useDerivTrading(): UseDerivTradingReturn {
             else setLossCount(prev => prev + 1);
             setBalance(prev => prev !== null ? prev + profit : null);
             activeContracts.current.delete(contractId);
+            if (onEvent && batchMeta.batchId) {
+              onEvent({
+                phase: 'settled',
+                batchId: batchMeta.batchId,
+                index: batchMeta.batchIndex,
+                total: batchMeta.batchTotal || 1,
+                contract: poc,
+                result,
+              });
+            }
             try { sub.unsubscribe(); } catch (_) {}
           }
         },
-        error: () => {},
+        error: (error: any) => {
+          if (!hasSettled && onEvent && batchMeta.batchId) {
+            onEvent({
+              phase: 'failed',
+              batchId: batchMeta.batchId,
+              index: batchMeta.batchIndex,
+              total: batchMeta.batchTotal || 1,
+              error: error?.message || 'Contract monitoring failed',
+            });
+          }
+        },
       });
     } catch (e) {
       console.error('monitorContract error', e);
     }
   }, []);
+
+  /**
+   * Execute a fixed batch through exactly one purchase path:
+   * create one proposal per contract concurrently, buy every valid proposal
+   * concurrently, then monitor each returned contract independently.
+   *
+   * The API can still assign slightly different execution spots; concurrency
+   * minimizes client-side skew without claiming identical execution.
+   */
+  const buyBatch = useCallback(async (params: BatchParams, onEvent?: (event: BatchEvent) => void) => {
+    const {
+      symbol, contract_type, stake, duration, duration_unit = 't',
+      barrier, currency: cur = currency, count,
+    } = params;
+    const total = Math.max(1, Math.min(100, Math.floor(count)));
+    const batchId = `BATCH-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+    const events: BatchEvent[] = [];
+    const emit = (event: BatchEvent) => {
+      events.push(event);
+      onEvent?.(event);
+    };
+
+    setIsTrading(true);
+    emit({ phase: 'created', batchId, total });
+    try {
+      const proposalReq: any = {
+        proposal: 1,
+        amount: stake,
+        basis: 'stake',
+        contract_type,
+        currency: cur,
+        duration,
+        duration_unit,
+        underlying_symbol: symbol,
+      };
+      if (barrier !== undefined) proposalReq.barrier = String(barrier);
+
+      const proposalResults = await Promise.all(
+        Array.from({ length: total }, (_, index) =>
+          Promise.resolve()
+            .then(() => api_base.api.send({ ...proposalReq }))
+            .then((response: any) => ({ status: 'fulfilled', response, index }))
+            .catch((error: any) => ({ status: 'rejected', error, index }))
+        )
+      );
+      const proposals = proposalResults
+        .filter(({ status, response }: any) => status === 'fulfilled' && response?.proposal?.id && !response?.error)
+        .map(({ response, index }: any) => ({ response, index }));
+
+      proposalResults.forEach(({ status, response, error, index }: any) => {
+        if (status === 'rejected' || response?.error || !response?.proposal?.id) {
+          emit({
+            phase: 'failed',
+            batchId,
+            index,
+            total,
+            error: error?.message || response?.error?.message || 'Proposal failed',
+          });
+        }
+      });
+
+      if (!proposals.length) return events;
+
+      // No buyContract calls here: these are the only buy requests in the batch.
+      const buyResults = await Promise.all(
+        proposals.map(({ response, index }) =>
+          Promise.resolve()
+            .then(() => api_base.api.send({
+              buy: response.proposal.id,
+              price: Number(response.proposal.ask_price ?? stake),
+            }))
+            .then((buyResponse: any) => ({ status: 'fulfilled', buyResponse, index }))
+            .catch((error: any) => ({ status: 'rejected', error, index }))
+        )
+      );
+
+      buyResults.forEach(({ status, buyResponse, error, index }: any) => {
+        const buy = buyResponse?.buy;
+        if (status === 'rejected' || !buy?.contract_id) {
+          emit({
+            phase: 'failed',
+            batchId,
+            index,
+            total,
+            error: error?.message || buyResponse?.error?.message || 'Buy returned no contract ID',
+          });
+          return;
+        }
+
+        const contractId = String(buy.contract_id);
+        activeContracts.current.add(contractId);
+        const boughtResult: TradeResult = {
+          id: contractId,
+          contract_id: contractId,
+          type: contract_type,
+          stake: Number(buy.buy_price ?? stake),
+          profit: 0,
+          won: false,
+          time: Date.now(),
+          batchId,
+          batchIndex: index,
+          batchTotal: total,
+          transaction_id: String(buy.transaction_id || buyResponse?.transaction_id || `${batchId}-${index}`),
+        };
+        emit({ phase: 'bought', batchId, index, total, contract: buy, result: boughtResult });
+        monitorContract(contractId, contract_type, Number(buy.buy_price ?? stake), {
+          batchId,
+          batchIndex: index,
+          batchTotal: total,
+          buyTransactionId: boughtResult.transaction_id,
+        }, emit);
+      });
+
+      subscribeBalance();
+      return events;
+    } catch (error: any) {
+      emit({ phase: 'failed', batchId, total, error: error?.message || 'Batch execution failed' });
+      return events;
+    } finally {
+      setIsTrading(false);
+    }
+  }, [currency, monitorContract, subscribeBalance]);
 
   const buyBothDirections = useCallback(async (params: BuyParams) => {
     // Hedge: buy CALL and PUT simultaneously at same tick
@@ -221,6 +406,7 @@ export function useDerivTrading(): UseDerivTradingReturn {
     winCount,
     lossCount,
     buyContract,
+    buyBatch,
     buyBothDirections,
     clearResults,
     subscribeBalance,

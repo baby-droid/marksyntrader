@@ -175,6 +175,18 @@
         }
     }
 
+    &__hook-label {
+        color: #7c3aed;
+        font-size: 11px;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    &__hook-result {
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
     $grid-items: (
         string.unquote('trade-type'),
         string.unquote('entry-spot'),

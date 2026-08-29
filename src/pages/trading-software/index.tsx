@@ -53,7 +53,9 @@ function LiveTicker({ symbol }: { symbol: string }) {
                 sub.subscribe((res: any) => {
                     if (res?.tick) {
                         const p = Number(res.tick.quote);
-                        setTicks(prev => [...prev.slice(-59), { epoch: res.tick.epoch, price: p }]);
+                        const epoch = Number(res.tick.epoch);
+                        if (!Number.isFinite(p) || !Number.isFinite(epoch)) return;
+                        setTicks(prev => [...prev.slice(-59), { epoch, price: p }]);
                     }
                 });
             } catch {}

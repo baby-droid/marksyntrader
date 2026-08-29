@@ -361,6 +361,19 @@
   }
 }
 
+@media (max-width: 600px) {
+    .speed-lab__digits-card .digit-circles__row {
+        display: grid !important;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 6px !important;
+        width: 100%;
+    }
+
+    .speed-lab__digits-card .digit-circles__wrapper {
+        min-width: 0;
+    }
+}
+
 @keyframes turboGlow {
   0%, 100% { box-shadow: 0 4px 18px rgba(76,125,255,0.35); }
   50% { box-shadow: 0 4px 28px rgba(76,125,255,0.7), 0 0 40px rgba(76,125,255,0.2); }
@@ -390,11 +403,65 @@
 /* ─── Mobile Responsive (extra) ─── */
 @media (max-width: 600px) {
   .speed-lab {
-    padding: 1rem;
+    padding: 0.65rem 0.55rem 5.5rem;
     max-width: 100%;
+    background: #fff;
+    overflow-x: hidden;
 
-    &__header { flex-direction: column; gap: 0.8rem; h1 { font-size: 1.8rem; } }
-    &__balance { font-size: 1.4rem; padding: 0.6rem 1rem; }
+    &__header {
+      flex-direction: row;
+      align-items: center;
+      gap: 0.5rem;
+      margin: 0 0 0.65rem;
+      padding: 0.55rem 0.7rem;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+      h1 { font-size: 1.05rem; }
+      p { font-size: 0.7rem; }
+    }
+    &__balance { margin-left: auto; font-size: 0.85rem; padding: 0.35rem 0.55rem; }
+
+    &__mode-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.35rem;
+      margin-bottom: 0.4rem;
+    }
+
+    &__mode-btn {
+      min-width: 0;
+      padding: 0.55rem 0.25rem;
+      border-width: 1px;
+      border-radius: 7px;
+      font-size: 0.75rem;
+    }
+
+    &__mode-desc {
+      margin-bottom: 0.55rem;
+      padding: 0.4rem 0.55rem;
+      font-size: 0.72rem;
+    }
+
+    &__body { display: block; }
+    &__card {
+      border-radius: 8px;
+      padding: 0.7rem;
+      margin-bottom: 0.55rem;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+      h3 { font-size: 0.8rem; margin-bottom: 0.55rem; }
+      select { padding: 0.5rem 0.6rem; font-size: 0.85rem; margin-bottom: 0.55rem; }
+    }
+    &__price strong { font-size: 1.35rem; }
+    &__types { gap: 0.35rem; }
+    &__type-btn { padding: 0.5rem 0.3rem; font-size: 0.78rem; }
+    &__params { gap: 0.45rem; label { font-size: 0.72rem; input { padding: 0.45rem; font-size: 0.9rem; } } }
+    &__run-row { gap: 0.45rem; margin-bottom: 0.65rem; }
+    &__run-btn, &__buy-btn { padding: 0.75rem 0.55rem; font-size: 0.95rem; border-radius: 7px; }
+    &__stats { gap: 0.35rem; }
+    &__stat { padding: 0.55rem 0.3rem; span { font-size: 0.67rem; } strong { font-size: 1rem; } }
+    &__log { height: 10rem; font-size: 0.75rem; }
+    &__trades { max-height: 13rem; }
 
     &__config-grid {
       grid-template-columns: 1fr !important;

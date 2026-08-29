@@ -314,6 +314,7 @@
   /* ── Body ── */
   &__body {
     display: flex; flex: 1; overflow: hidden;
+    position: relative;
   }
 
   /* Left sidebar */
@@ -323,10 +324,18 @@
     overflow-y: auto; padding: 0.8rem 0;
 
     @media (max-width: 600px) {
-      width: 100%;
-      border-right: none;
-      border-bottom: 1px solid #e5e7eb;
-      max-height: 200px;
+      position: absolute;
+      inset: 0 auto 0 0;
+      z-index: 30;
+      width: min(86vw, 320px);
+      max-height: none;
+      border-right: 1px solid #d1d5db;
+      border-bottom: none;
+      box-shadow: 8px 0 24px rgba(15, 23, 42, 0.18);
+      transform: translateX(-105%);
+      transition: transform 0.2s ease;
+
+      &.is-open { transform: translateX(0); }
     }
   }
 
@@ -337,7 +346,50 @@
   }
 
   @media (max-width: 600px) {
-    &__body { flex-direction: column; overflow-y: auto; }
+    &__body {
+      flex-direction: row;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    &__terminal-col {
+      width: 100%;
+      min-width: 0;
+      align-items: center;
+      padding: 0.55rem;
+    }
+
+    &__terminal-col > * {
+      width: min(100%, 560px);
+    }
+
+    &__settings-handle {
+      position: fixed;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 10020;
+      width: 28px;
+      height: 58px;
+      border: 1px solid #2563eb;
+      border-left: 0;
+      border-radius: 0 12px 12px 0;
+      background: #1d4ed8;
+      color: #fff;
+      font-size: 1.25rem;
+      font-weight: 900;
+      line-height: 1;
+      cursor: pointer;
+      box-shadow: 3px 0 12px rgba(29, 78, 216, 0.35);
+    }
+
+    &__settings-handle.is-open {
+      left: min(86vw, 320px);
+      background: #fff;
+      color: #1d4ed8;
+      border-left: 1px solid #2563eb;
+      border-radius: 0 10px 10px 0;
+    }
   }
 }
 
@@ -394,6 +446,16 @@
 }
 .sb-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
 .sb-unit { font-size: 0.7rem; color: #9ca3af; }
+.sb-touch-preview {
+  display: block;
+  margin-top: 0.18rem;
+  padding: 0.2rem 0.35rem;
+  border-radius: 0.3rem;
+  background: rgba(124, 58, 237, 0.08);
+  color: #6d28d9;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
 .sb-badge {
   display: inline-flex; align-items: center; padding: 0.2rem 0.6rem;
   background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe;
@@ -987,6 +1049,15 @@
   }
 }
 
+.sb-stat--virtual {
+  color: #7c3aed;
+  border-color: rgba(124, 58, 237, 0.3);
+}
+
+.sb-journal__hook {
+  font-weight: 800;
+}
+
 /* AND / CONDITION label */
 .sb-condition-label {
   font-size: 0.7rem;
@@ -1163,6 +1234,397 @@
     border: 1px solid rgba(239,68,68,0.5); color: #f87171;
     transition: background 0.15s, border-color 0.15s;
     &:hover { background: rgba(239,68,68,0.12); border-color: rgba(239,68,68,0.8); }
+  }
+}
+
+/* ════════════════════════════════════════════════════
+   Virtual Hook — diagram + chip styles
+   ════════════════════════════════════════════════════ */
+
+.sb-vhook-diagram {
+  display: flex; align-items: center; gap: 0.35rem;
+  flex-wrap: wrap;
+  padding: 0.65rem 0.8rem;
+  background: rgba(168, 85, 247, 0.06);
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  border-radius: 0.6rem;
+  margin-bottom: 0.8rem;
+}
+
+.sb-vhook-chip {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  font-size: 0.72rem; font-weight: 800;
+  font-family: 'Orbitron', monospace;
+  letter-spacing: 0;
+
+  &--loss {
+    background: rgba(239, 68, 68, 0.18);
+    border: 1.5px solid rgba(239, 68, 68, 0.55);
+    color: #f87171;
+  }
+  &--win {
+    background: rgba(34, 197, 94, 0.15);
+    border: 1.5px solid rgba(34, 197, 94, 0.5);
+    color: #4ade80;
+  }
+  &--real {
+    background: rgba(168, 85, 247, 0.18);
+    border: 1.5px solid rgba(168, 85, 247, 0.55);
+    color: #c084fc;
+    width: auto; padding: 0 0.55rem;
+    border-radius: 1rem;
+    font-size: 0.65rem;
+  }
+}
+
+.sb-vhook-arrow {
+  color: #64748b;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+/* Purple hint variant */
+.sb-hint--purple {
+  background: rgba(168, 85, 247, 0.06);
+  border-left: 3px solid rgba(168, 85, 247, 0.4);
+  border-radius: 0 0.35rem 0.35rem 0;
+  padding: 0.55rem 0.75rem;
+  color: #c4b5fd;
+  margin-bottom: 0.75rem;
+  strong { color: #a855f7; }
+}
+
+/* Amber hint variant — Virtual Hook Alternative */
+.sb-hint--amber {
+  background: rgba(245, 158, 11, 0.06);
+  border-left: 3px solid rgba(245, 158, 11, 0.4);
+  border-radius: 0 0.35rem 0.35rem 0;
+  padding: 0.55rem 0.75rem;
+  color: #fcd34d;
+  margin-bottom: 0.75rem;
+  strong { color: #f59e0b; }
+}
+
+/* Cool-off session settings and live countdown */
+.sb-hint--cooloff {
+  background: rgba(6, 182, 212, 0.06);
+  border-left: 3px solid rgba(6, 182, 212, 0.45);
+  border-radius: 0 0.35rem 0.35rem 0;
+  padding: 0.55rem 0.75rem;
+  color: #a5f3fc;
+  margin-bottom: 0.75rem;
+  strong { color: #22d3ee; }
+}
+
+.sb-cooloff-card {
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 0.55rem;
+  padding: 0.75rem;
+  margin-top: 0.7rem;
+  background: rgba(15, 23, 42, 0.32);
+
+  &--short { border-color: rgba(6, 182, 212, 0.28); }
+  &--long { border-color: rgba(99, 102, 241, 0.28); }
+
+  &__heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    color: #e2e8f0;
+    font-size: 0.82rem;
+    letter-spacing: 0.03em;
+  }
+}
+
+.sb-cooloff-overlay {
+  /* Keep the pause notice visible even when the terminal column has its own
+     stacking context or the detail panel is scrolled. */
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(2, 6, 23, 0.7);
+  backdrop-filter: blur(5px);
+}
+
+.sb-cooloff-modal {
+  width: min(360px, 100%);
+  padding: 1.4rem 1.25rem 1.2rem;
+  border: 1px solid rgba(34, 211, 238, 0.42);
+  border-radius: 0.85rem;
+  text-align: center;
+  color: #e2e8f0;
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.98), rgba(8, 47, 73, 0.96));
+  box-shadow: 0 0 40px rgba(6, 182, 212, 0.2);
+  animation: sb-modal-in 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  &__pulse {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px; height: 42px;
+    margin-bottom: 0.5rem;
+    border-radius: 50%;
+    color: #082f49;
+    background: #22d3ee;
+    box-shadow: 0 0 0 8px rgba(34, 211, 238, 0.12);
+    animation: sb-cooloff-pulse 1.4s ease-in-out infinite;
+  }
+
+  &__eyebrow {
+    font: 700 0.65rem 'Share Tech Mono', monospace;
+    letter-spacing: 0.14em;
+    color: #67e8f9;
+  }
+
+  &__title {
+    margin-top: 0.35rem;
+    font: 900 1rem 'Orbitron', monospace;
+    color: #f8fafc;
+  }
+
+  &__reason {
+    margin-top: 0.45rem;
+    color: #94a3b8;
+    font-size: 0.78rem;
+  }
+
+  &__timer {
+    margin: 0.8rem 0 0.35rem;
+    font: 900 2.3rem 'Orbitron', monospace;
+    color: #22d3ee;
+    span {
+      display: block;
+      margin-top: 0.15rem;
+      font: 700 0.62rem 'Share Tech Mono', monospace;
+      letter-spacing: 0.16em;
+      color: #94a3b8;
+    }
+  }
+
+  &__hint {
+    color: #86efac;
+    font-size: 0.72rem;
+  }
+
+  &__progress {
+    height: 4px;
+    margin-top: 0.85rem;
+    overflow: hidden;
+    border-radius: 4px;
+    background: rgba(148, 163, 184, 0.2);
+    span {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #06b6d4, #818cf8);
+      transition: width 0.25s ease;
+    }
+  }
+}
+
+@keyframes sb-cooloff-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); box-shadow: 0 0 0 12px rgba(34, 211, 238, 0.04); }
+}
+
+/* VHA diagram — amber tint */
+.sb-vhook-diagram--alt {
+  background: rgba(245, 158, 11, 0.06);
+  border-color: rgba(245, 158, 11, 0.2);
+}
+
+/* ════════════════════════════════════════════════════
+   Stealth Mode — status pills
+   ════════════════════════════════════════════════════ */
+
+.sb-stealth-status {
+  display: flex; flex-wrap: wrap; gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+
+.sb-stealth-pill {
+  display: inline-flex; align-items: center;
+  padding: 0.22rem 0.65rem;
+  background: rgba(6, 182, 212, 0.1);
+  border: 1px solid rgba(6, 182, 212, 0.3);
+  border-radius: 2rem;
+  font-size: 0.72rem; font-weight: 700;
+  color: #22d3ee;
+  font-family: 'Share Tech Mono', monospace;
+}
+
+/* ════════════════════════════════════════════════════
+   Virtual transactions — row + badge styling
+   ════════════════════════════════════════════════════ */
+
+.sb-tx-virtual {
+  opacity: 0.86;
+  background: rgba(168, 85, 247, 0.04) !important;
+  border-left: 3px solid rgba(168, 85, 247, 0.35);
+
+  td { color: #94a3b8 !important; }
+}
+
+.sb-virtual-badge {
+  display: inline-flex; align-items: center;
+  padding: 0.1rem 0.42rem;
+  background: rgba(168, 85, 247, 0.18);
+  border: 1px solid rgba(168, 85, 247, 0.45);
+  border-radius: 0.3rem;
+  font-size: 0.6rem; font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #c084fc;
+  margin-right: 0.35rem;
+  font-family: 'Orbitron', monospace;
+  vertical-align: middle;
+}
+
+.sb-tx-virtual-stake { color: #94a3b8 !important; font-weight: 800; }
+
+.sb-result-virtual {
+  color: #a855f7 !important;
+  font-style: italic;
+}
+
+.sb-tx-virtual-pnl {
+  color: #94a3b8 !important;
+  font-style: italic;
+}
+
+/* On phones the report tabs belong immediately below the bot heading.
+   Keep them in normal flow so they cannot sit behind the terminal/sidebar. */
+@media (max-width: 600px) {
+  /* Keep the category picker vertically scrollable so lower folders
+     (Even/Odd, Odd/Even, etc.) are reachable on short phone screens. */
+  .scalper-bots {
+    min-height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .scalper-bots__folders {
+    flex: none;
+    min-height: 0;
+    grid-auto-rows: minmax(104px, auto);
+    gap: 0;
+    padding-bottom: 1.5rem;
+    overflow: visible;
+  }
+
+  /* Keep all category folders compact enough that the final row starts
+     inside the first phone viewport. */
+  .sb-folder {
+    min-height: 104px;
+    gap: 0.3rem;
+    padding: 0.45rem 0.25rem;
+
+    &__icon {
+      width: 72px;
+      height: 52px;
+
+      svg {
+        width: 72px;
+        height: 52px;
+      }
+    }
+
+    &__label {
+      font-size: 0.72rem;
+      letter-spacing: 0.04em;
+      line-height: 1.05;
+    }
+
+    &__count {
+      font-size: 0.66rem;
+      margin-top: 0;
+    }
+  }
+
+  /*
+   * The app's dark-green main navigation is rendered above the page content
+   * on phones. Keep the scalper report tabs in a separate, normal-flow layer
+   * below that navigation instead of allowing their labels/drop control to
+   * slide underneath it.
+   */
+  .scalper-bots {
+    position: relative;
+    z-index: 0;
+  }
+
+  .sb-detail {
+    overflow-y: auto;
+    overflow-x: hidden;
+    position: relative;
+    // Do not create a lower stacking context: the report tabs must be able
+    // to rise above the app-wide page navigation.
+    z-index: auto;
+  }
+
+  .sb-detail__header { order: 1; }
+  .sb-detail__body {
+    order: 3;
+    flex: none;
+    min-height: 430px;
+    overflow: visible;
+  }
+  .sb-tabs {
+    order: 2;
+    /*
+     * The report tabs (Summary / Transactions / Journal) are useful on
+     * desktop, but on phones they sit between the bot controls and the
+     * actual transaction/run surface and hide most of it. Keep the main
+     * scalper transaction view unobstructed on mobile.
+     */
+    display: none;
+  }
+  .sb-tabs__nav {
+    position: static;
+    background: #fff;
+    min-height: 2.8rem;
+    z-index: 10051;
+  }
+  .sb-tabs__panel {
+    min-height: 180px;
+    overflow-x: auto;
+  }
+  .sb-summary__stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.7rem;
+  }
+  .sb-tx-table {
+    min-width: 680px;
+    font-size: 0.72rem;
+  }
+
+  .sb-folder {
+    gap: 0.45rem;
+    min-height: 142px;
+
+    &__icon {
+      width: 82px;
+      height: 66px;
+      transform: scale(0.72);
+      transform-origin: center;
+      margin: -0.45rem 0;
+    }
+
+    &__label {
+      font-size: 0.72rem;
+      letter-spacing: 0.045em;
+    }
+
+    &__count {
+      font-size: 0.65rem;
+      margin-top: -0.2rem;
+    }
   }
 }
 

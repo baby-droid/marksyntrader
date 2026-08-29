@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { observer } from 'mobx-react-lite';
 import SpeedControl from '@/components/speed-control/speed-control';
 import { useStore } from '@/hooks/useStore';
+import { useDevice } from '@deriv-com/ui';
 import './floating-run-button.scss';
 
 const STORAGE_KEY = 'floating_run_btn_pos';
@@ -24,6 +25,7 @@ function savePos(pos: { x: number; y: number }) {
 
 const FloatingRunButton: React.FC = observer(() => {
     const { run_panel } = useStore();
+    const { isDesktop } = useDevice();
     const {
         is_running,
         is_paused: paused,
@@ -110,6 +112,11 @@ const FloatingRunButton: React.FC = observer(() => {
     const showPause  = is_running && !paused;
     const showResume = is_running && paused;
     const showStop   = is_running;
+
+    // The mobile run bar owns the idle/run affordance on supported pages.
+    // Keeping this floating surface hidden while idle prevents the old
+    // "○ Bot Idle" pill from covering page content on every mobile tab.
+    if (!isDesktop && !is_running) return null;
 
     return (
         <div

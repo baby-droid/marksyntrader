@@ -42,14 +42,125 @@ function getLastDigit(price: number, ps: number): number {
  */
 const digitToPercent = (d: number): string => `${d * 10 + 5}%`;
 
+/* ── Market settlement info ────────────────────────────────────────────────
+ *  Describes tick speed, P/L settlement mechanism, and supported contract
+ *  types for each synthetic index family.
+ *
+ *  Source: https://developers.deriv.com/llms/contract-types.md
+ *
+ *  Bear / Bull  — trending synthetic indices. No digit contracts; price
+ *                 comparison decides win/loss (exit > entry → Rise wins).
+ *  Boom / Crash — spike-event indices. A spike occurs ~every N ticks.
+ *                 Boom spikes UP; Crash spikes DOWN. Rise/Fall only.
+ *  Jump         — volatility with rare large jumps. Full digit + Rise/Fall.
+ *  1s Vol (1HZ) — 1 tick per second. All digit and Rise/Fall contract types.
+ *  Plain Vol    — ~1 tick per 2 s. Full contract suite including Touch/Asian.
+ *  Step         — moves in fixed 0.1 steps; digit contracts available.
+ *  Range Break  — breakout synthetic; Rise/Fall and Touch only.
+ * ────────────────────────────────────────────────────────────────────────── */
+interface MarketSettlementInfo {
+    tickSpeed:  string;
+    settlement: string;
+    contracts:  string;
+    color:      string;
+    isDigit:    boolean;   // whether digit contracts are available
+}
+function getMarketSettlementInfo(sym: string): MarketSettlementInfo {
+    const s = sym.toUpperCase();
+    if (/^1HZ/.test(s)) {
+        const n = s.match(/\d+/)?.[0] ?? '';
+        return {
+            tickSpeed:  '1 sec / tick',
+            settlement: `Last digit of exit price vs barrier · ${n ? `Vol ${n}` : '1s Market'}`,
+            contracts:  'Digits (Over/Under, Match/Differ, Even/Odd) · Rise/Fall · Accumulators',
+            color:      '#1E88FF',
+            isDigit:    true,
+        };
+    }
+    if (/^R_/.test(s)) {
+        const n = s.match(/\d+/)?.[0] ?? '';
+        return {
+            tickSpeed:  '~2 sec / tick',
+            settlement: `Last digit of exit price vs barrier · Volatility ${n} Index`,
+            contracts:  'Digits · Rise/Fall · Touch · Asian · Reset · Run High/Low · Accumulators',
+            color:      '#1E88FF',
+            isDigit:    true,
+        };
+    }
+    if (s === 'RDBEAR') return {
+        tickSpeed:  '~2 sec / tick',
+        settlement: 'Exit price vs entry price — Bear trends DOWN ~90% of ticks — Rise/Fall P/L',
+        contracts:  'Rise/Fall · Higher/Lower · Touch · No Touch  ·  ⚠ Digit contracts unavailable',
+        color:      '#FF3D57',
+        isDigit:    false,
+    };
+    if (s === 'RDBULL') return {
+        tickSpeed:  '~2 sec / tick',
+        settlement: 'Exit price vs entry price — Bull trends UP ~90% of ticks — Rise/Fall P/L',
+        contracts:  'Rise/Fall · Higher/Lower · Touch · No Touch  ·  ⚠ Digit contracts unavailable',
+        color:      '#00C853',
+        isDigit:    false,
+    };
+    if (/^JD/.test(s)) {
+        const n = s.match(/\d+/)?.[0] ?? '';
+        return {
+            tickSpeed:  '~2 sec / tick',
+            settlement: `Last digit OR price movement · Jump ${n} — occasional large price jumps`,
+            contracts:  'Digits · Rise/Fall',
+            color:      '#FF9800',
+            isDigit:    true,
+        };
+    }
+    if (/^BOOM/.test(s)) {
+        const n = s.match(/\d+/)?.[0] ?? '?';
+        return {
+            tickSpeed:  '~2 sec / tick',
+            settlement: `Spike UP ~every ${n} ticks · exit price vs entry price decides P/L`,
+            contracts:  'Rise/Fall · Touch only  ·  ⚠ Digit contracts unavailable',
+            color:      '#00C853',
+            isDigit:    false,
+        };
+    }
+    if (/^CRASH/.test(s)) {
+        const n = s.match(/\d+/)?.[0] ?? '?';
+        return {
+            tickSpeed:  '~2 sec / tick',
+            settlement: `Spike DOWN ~every ${n} ticks · exit price vs entry price decides P/L`,
+            contracts:  'Rise/Fall · Touch only  ·  ⚠ Digit contracts unavailable',
+            color:      '#FF3D57',
+            isDigit:    false,
+        };
+    }
+    if (/^STP/i.test(s)) return {
+        tickSpeed:  '~2 sec / tick',
+        settlement: 'Moves in fixed steps of 0.1 · last digit of exit price vs barrier',
+        contracts:  'Digits · Rise/Fall',
+        color:      '#9C27B0',
+        isDigit:    true,
+    };
+    if (/^RB/i.test(s)) {
+        const n = s.match(/\d+/)?.[0] ?? '?';
+        return {
+            tickSpeed:  '~2 sec / tick',
+            settlement: `Breaks out of range every ~${n} ticks · exit price vs entry`,
+            contracts:  'Rise/Fall · Touch only  ·  ⚠ Digit contracts unavailable',
+            color:      '#FF9800',
+            isDigit:    false,
+        };
+    }
+    return {
+        tickSpeed:  '~2 sec / tick',
+        settlement: 'Varies by contract type',
+        contracts:  'Digits · Rise/Fall',
+        color:      '#888',
+        isDigit:    true,
+    };
+}
+
 interface PendingTrade {
     id: string;
     totalTicks: number;
     countedTicks: number;
-    /** True on the first live tick after purchase — that tick is the entry spot
-     *  and must NOT increment countedTicks (it should be "skipped"). Cleared
-     *  after the first tick is seen so subsequent ticks count normally. */
-    skipNextTick: boolean;
 }
 
 /* ════════════════════════════════════════════════════════════════════════════ */
@@ -95,105 +206,110 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
     const contractTickDigitsRef = useRef<Map<string, number[]>>(new Map());
     const [tickDigitSnapshot, setTickDigitSnapshot] = useState<Map<string, number[]>>(new Map());
 
+    // entryEpochRef: stores the authoritative entry_tick_time per contract once POC
+    // provides it.  0 = not yet known (POC hasn't arrived yet).
+    // tickBufferRef: accumulates live ticks (epoch+digit) received before the entry
+    // epoch is known, so we can retroactively assign T1, T2, … when it arrives.
+    const entryEpochRef = useRef<Map<string, number>>(new Map());
+    const tickBufferRef = useRef<Map<string, { epoch: number; digit: number }[]>>(new Map());
+
     /* Trade events */
     useEffect(() => {
+        // ── New trade purchased ────────────────────────────────────────────
         const handleStarted = (e: CustomEvent) => {
             const { contractId, ticks } = e.detail;
-            const trade: PendingTrade = { id: String(contractId), totalTicks: ticks, countedTicks: 0 };
-            contractTickDigitsRef.current.set(String(contractId), []);
-            pendingTradesRef.current = [...pendingTradesRef.current, trade];
-            setPendingTrades([...pendingTradesRef.current]);
-            setTickDigitSnapshot(new Map(contractTickDigitsRef.current));
-        };
-
-        // ── Authoritative tick update from proposal_open_contract ──────────────
-        // Deriv's POC subscription sends a message on EVERY state change (price
-        // update, status change, new tick). Each message carries the FULL
-        // cumulative tick_stream from entry. This means:
-        //   • Many consecutive POC messages may carry the same tick_stream length
-        //     (price changed but no new settlement tick yet).
-        //   • WebSocket delivery order is not guaranteed under load — an older
-        //     message with 2 ticks can arrive AFTER a newer one with 3 ticks.
-        //
-        // Monotonic guard: only accept the update if the incoming stream is at
-        // least as long as what we already have. This discards stale/short
-        // duplicates and prevents previously shown T-labels from disappearing.
-        const handleTradeTick = (e: CustomEvent) => {
-            const { contractId, tickStream, totalTicks } = e.detail;
             const id = String(contractId);
-
-            // Extract last digits from the authoritative tick_display_value field
-            const digits: number[] = (tickStream as any[]).map((t: any) => {
-                const dv: string = t.tick_display_value ?? String(t.tick ?? '');
-                const clean = dv.replace('.', '');
-                return parseInt(clean[clean.length - 1] ?? '0', 10);
-            });
-
-            // Monotonic guard — discard if this stream is shorter than what we
-            // already have (stale out-of-order delivery from WebSocket).
-            const currentLen = contractTickDigitsRef.current.get(id)?.length ?? 0;
-            if (digits.length < currentLen) return;
-
-            // No-op guard — skip React state churn if nothing actually changed.
-            if (digits.length === currentLen) {
-                // Still update totalTicks if it changed (contract duration adjust)
-                const existing = pendingTradesRef.current.find(t => t.id === id);
-                if (!existing || existing.totalTicks === (totalTicks ?? existing.totalTicks)) return;
-            }
-
-            contractTickDigitsRef.current.set(id, digits);
-            setTickDigitSnapshot(new Map(contractTickDigitsRef.current));
-
-            pendingTradesRef.current = pendingTradesRef.current.map(t =>
-                t.id === id
-                    ? { ...t, countedTicks: digits.length, totalTicks: totalTicks ?? t.totalTicks }
-                    : t
-            );
+            contractTickDigitsRef.current.set(id, []);
+            entryEpochRef.current.set(id, 0);      // 0 = entry epoch not yet known
+            tickBufferRef.current.set(id, []);      // pre-entry live-tick buffer
+            pendingTradesRef.current = [...pendingTradesRef.current, { id, totalTicks: ticks, countedTicks: 0 }];
             setPendingTrades([...pendingTradesRef.current]);
+            setTickDigitSnapshot(new Map(contractTickDigitsRef.current));
         };
 
+        // ── Entry epoch received from POC (chart:trade-entry, fired once) ──
+        // This is the authoritative entry_tick_time from Deriv.
+        //
+        // Counting rule (applies to ALL market types):
+        //   epoch >= entryEpoch  →  T-tick (the entry tick itself is T1)
+        //   epoch <  entryEpoch  →  pre-contract tick, skip
+        //
+        // Deriv returns different entry_tick_time values per market family:
+        //   1s Vol / Jump  : entry_tick_time = epoch of the tick just BEFORE T1
+        //                    (so the entry tick IS T1, T2 follows, etc.)
+        //   Plain Vol / Bear / Bull : entry_tick_time = epoch of T1 itself
+        //                    (so T1 is the entry tick, T2 follows, etc.)
+        // Using >= for both means the entry tick is always included as T1,
+        // which is the correct behaviour for all markets.
+        const handleTradeEntry = (e: CustomEvent) => {
+            const { contractId, entryEpoch } = e.detail;
+            const id = String(contractId);
+            entryEpochRef.current.set(id, entryEpoch);
+
+            // Drain buffer: retroactively assign T-labels for any live ticks that
+            // arrived before we knew the entry epoch.
+            const buffer = tickBufferRef.current.get(id) ?? [];
+            tickBufferRef.current.delete(id);
+            const postEntry = buffer.filter(t => t.epoch >= entryEpoch);
+            if (postEntry.length > 0) {
+                const trade = pendingTradesRef.current.find(t => t.id === id);
+                if (trade) {
+                    const digits = postEntry.map(t => t.digit).slice(0, trade.totalTicks);
+                    contractTickDigitsRef.current.set(id, digits);
+                    setTickDigitSnapshot(new Map(contractTickDigitsRef.current));
+                    pendingTradesRef.current = pendingTradesRef.current.map(t =>
+                        t.id === id ? { ...t, countedTicks: digits.length } : t
+                    );
+                    setPendingTrades([...pendingTradesRef.current]);
+                }
+            }
+        };
+
+        // ── Contract settled ───────────────────────────────────────────────
         const handleSettlement = (e: CustomEvent) => {
             const { won, profit, exitDigit, barrier: tradedBarrier, contractId } = e.detail;
             const digit = exitDigit ?? tradedBarrier;
 
-            if (contractId != null) {
-                pendingTradesRef.current = pendingTradesRef.current.filter(t => t.id !== String(contractId));
-                setPendingTrades([...pendingTradesRef.current]);
+            const cleanupId = (id: string) => {
+                entryEpochRef.current.delete(id);
+                tickBufferRef.current.delete(id);
                 setTimeout(() => {
-                    contractTickDigitsRef.current.delete(String(contractId));
+                    contractTickDigitsRef.current.delete(id);
                     setTickDigitSnapshot(new Map(contractTickDigitsRef.current));
                 }, 5100);
+            };
+
+            if (contractId != null) {
+                const id = String(contractId);
+                pendingTradesRef.current = pendingTradesRef.current.filter(t => t.id !== id);
+                setPendingTrades([...pendingTradesRef.current]);
+                cleanupId(id);
             } else {
                 const removed = pendingTradesRef.current[0];
                 pendingTradesRef.current = pendingTradesRef.current.slice(1);
                 setPendingTrades([...pendingTradesRef.current]);
-                if (removed) {
-                    setTimeout(() => {
-                        contractTickDigitsRef.current.delete(removed.id);
-                        setTickDigitSnapshot(new Map(contractTickDigitsRef.current));
-                    }, 5100);
-                }
+                if (removed) cleanupId(removed.id);
             }
 
             if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
             setLastTrade({ digit, won });
             highlightTimerRef.current = setTimeout(() => setLastTrade(null), 5000);
 
-            const id = String(Date.now()) + Math.random();
-            setTradeFlags(prev => [...prev, { id, won, profit }]);
+            const flagId = String(Date.now()) + Math.random();
+            setTradeFlags(prev => [...prev, { id: flagId, won, profit }]);
             const t = setTimeout(() => {
-                setTradeFlags(prev => prev.filter(f => f.id !== id));
-                flagTimersRef.current.delete(id);
+                setTradeFlags(prev => prev.filter(f => f.id !== flagId));
+                flagTimersRef.current.delete(flagId);
             }, 5500);
-            flagTimersRef.current.set(id, t);
+            flagTimersRef.current.set(flagId, t);
         };
 
         window.addEventListener('chart:trade-started', handleStarted as any);
-        window.addEventListener('chart:trade-tick',    handleTradeTick as any);
+        window.addEventListener('chart:trade-entry',   handleTradeEntry as any);
         window.addEventListener('chart:trade-settled', handleSettlement as any);
         return () => {
             window.removeEventListener('chart:trade-started', handleStarted as any);
-            window.removeEventListener('chart:trade-tick',    handleTradeTick as any);
+            window.removeEventListener('chart:trade-entry',   handleTradeEntry as any);
             window.removeEventListener('chart:trade-settled', handleSettlement as any);
             if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
             flagTimersRef.current.forEach(t => clearTimeout(t));
@@ -348,10 +464,47 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                         applyDigit(d);
                     }
 
-                    // POC (proposal_open_contract) is the sole authority for countedTicks.
-                    // Do NOT increment countedTicks here — on fast markets (1s, Jump) the
-                    // live-tick path races ahead of POC, causing the counter to jump forward
-                    // then snap backwards when the authoritative POC value arrives.
+                    // ── Live-tick T-label update (epoch-anchored, real-time) ──────
+                    // Counting rule (same as handleTradeEntry above):
+                    //   epoch >= entryEpoch → T-tick (entry tick is T1)
+                    //   epoch <  entryEpoch → pre-contract, skip
+                    //
+                    // entry_tick_time comes from POC (chart:trade-entry event).
+                    // Before it arrives we buffer live ticks; when it arrives the
+                    // buffer is drained (handleTradeEntry) and subsequent live ticks
+                    // update labels on the same frame as currentDigit — zero lag.
+                    if (pendingTradesRef.current.length > 0) {
+                        let digitMapChanged = false;
+                        pendingTradesRef.current = pendingTradesRef.current.map(t => {
+                            const entryEpoch = entryEpochRef.current.get(t.id) ?? 0;
+
+                            if (entryEpoch === 0) {
+                                // Entry epoch not yet known — buffer this tick so we can
+                                // retroactively assign labels once POC delivers entry_tick_time.
+                                const buf = tickBufferRef.current.get(t.id);
+                                if (buf) buf.push({ epoch, digit: d });
+                                return t;
+                            }
+
+                            if (epoch < entryEpoch) {
+                                // Pre-contract tick — skip.
+                                return t;
+                            }
+
+                            // epoch >= entryEpoch → genuine T-tick (entry tick = T1), update instantly
+                            const existing = contractTickDigitsRef.current.get(t.id) ?? [];
+                            if (existing.length < t.totalTicks) {
+                                contractTickDigitsRef.current.set(t.id, [...existing, d]);
+                                digitMapChanged = true;
+                                return { ...t, countedTicks: existing.length + 1 };
+                            }
+                            return t;
+                        });
+                        if (digitMapChanged) {
+                            setTickDigitSnapshot(new Map(contractTickDigitsRef.current));
+                        }
+                        setPendingTrades([...pendingTradesRef.current]);
+                    }
                 },
                 error: () => {
                     if (!alive) return;
@@ -500,7 +653,17 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                                 <div
                                     className={`cdo__triangle-pointer${currentDigit === null ? ' cdo__triangle-pointer--hidden' : ''}`}
                                     style={{ left: currentDigit !== null ? digitToPercent(currentDigit) : '-100px' }}
-                                />
+                                >
+                                    {/* T-badge rides the triangle — shows current T-number for active trades */}
+                                    {pendingTrades.length > 0 && pendingTrades[0].countedTicks > 0 && currentDigit !== null && (
+                                        <div className='cdo__t-badge'>
+                                            T{pendingTrades[0].countedTicks}
+                                            {pendingTrades[0].countedTicks === pendingTrades[0].totalTicks && (
+                                                <span className='cdo__t-badge__star'>★</span>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
 
                         {/* ② Circles row */}
@@ -544,6 +707,24 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                         </div>{/* /cdo__right */}
                     </div>{/* /cdo__body */}
                 </div>{/* /cdo */}
+
+                {/* ── Market settlement info strip ────────────────────────── */}
+                {(() => {
+                    const mi = getMarketSettlementInfo(symbol);
+                    return (
+                        <div
+                            className={`cdo__market-strip${!mi.isDigit ? ' cdo__market-strip--no-digit' : ''}`}
+                            style={{ '--strip-color': mi.color } as React.CSSProperties}
+                        >
+                            <span className='cdo__market-strip__speed'>{mi.tickSpeed}</span>
+                            <span className='cdo__market-strip__sep'>·</span>
+                            <span className='cdo__market-strip__settle'>{mi.settlement}</span>
+                            <span className='cdo__market-strip__sep'>·</span>
+                            <span className='cdo__market-strip__contracts'>{mi.contracts}</span>
+                        </div>
+                    );
+                })()}
+
             </div>{/* /cw-left */}
 
             {/* ── RIGHT: trade panel ────────────────────────────────────── */}
@@ -552,6 +733,7 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                     symbol={symbol}
                     onSymbolChange={(s) => chart_store.onSymbolChange(s)}
                     currentDigit={currentDigit}
+                    pcts={pcts}
                     currentPrice={currentPrice}
                     priceChange={priceChange}
                     pipSize={pipSize}

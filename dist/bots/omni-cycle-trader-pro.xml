@@ -1,0 +1,475 @@
+<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
+  <variables>
+    <variable id="octp_stake">stake</variable>
+    <variable id="octp_init">initial_stake</variable>
+    <variable id="octp_mart">martingale</variable>
+    <variable id="octp_phase">cycle_phase</variable>
+    <variable id="octp_lstreak">loss_streak</variable>
+    <variable id="octp_tp">take_profit</variable>
+    <variable id="octp_sl">stop_loss</variable>
+    <variable id="octp_profit">session_profit</variable>
+    <variable id="octp_wins">wins_count</variable>
+  </variables>
+
+  <!--
+    ═══════════════════════════════════════════════════════════════════════
+    OMNI CYCLE TRADER PRO
+    ─────────────────────────────────────────────────────────────────────
+    7-Phase rotation on V75 1s (supports all digit & directional types)
+
+    Phase 0 → DIGITEVEN   (50/50 parity play)
+    Phase 1 → DIGITODD    (parity reversal)
+    Phase 2 → DIGITOVER   (barrier from trade definition)
+    Phase 3 → DIGITUNDER  (barrier from trade definition)
+    Phase 4 → DIGITDIFF   (differs — ~40% win, high payout)
+    Phase 5 → CALL / Rise (directional)
+    Phase 6 → PUT  / Fall (directional)
+
+    WIN  → advance phase (phase = (phase+1) % 7), reset stake & streak
+    LOSS → stake × 2 martingale, loss_streak++
+           if loss_streak >= 3 → recovery: reset to phase 0, reset streak
+
+    TP $10  |  SL $50  |  Market V75 1s  |  Martingale 2×
+    ═══════════════════════════════════════════════════════════════════════
+  -->
+
+  <block type="trade_definition" id="octp_def" deletable="false" x="0" y="60">
+    <statement name="TRADE_OPTIONS">
+      <block type="trade_definition_market" id="octp_mkt" deletable="false" movable="false">
+        <field name="MARKET_LIST">synthetic_index</field>
+        <field name="SUBMARKET_LIST">random_index</field>
+        <field name="SYMBOL_LIST">1HZ75V</field>
+        <next>
+          <block type="trade_definition_tradetype" id="octp_tt" deletable="false" movable="false">
+            <field name="TRADETYPECAT_LIST">digits</field>
+            <field name="TRADETYPE_LIST">overunder</field>
+            <next>
+              <block type="trade_definition_contracttype" id="octp_ct" deletable="false" movable="false">
+                <field name="TYPE_LIST">DIGITEVEN</field>
+                <next>
+                  <block type="trade_definition_candleinterval" id="octp_ci" deletable="false" movable="false">
+                    <field name="CANDLEINTERVAL_LIST">60</field>
+                    <next>
+                      <block type="trade_definition_restartbuysell" id="octp_rbs" deletable="false" movable="false">
+                        <field name="TIME_MACHINE_ENABLED">FALSE</field>
+                        <next>
+                          <block type="trade_definition_restartonerror" id="octp_roe" deletable="false" movable="false">
+                            <field name="RESTARTONERROR">TRUE</field>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+
+    <statement name="INITIALIZATION">
+      <!-- stake = 0.50 -->
+      <block type="variables_set" id="octp_i1">
+        <field name="VAR" id="octp_stake">stake</field>
+        <value name="VALUE"><block type="math_number" id="octp_i1v"><field name="NUM">0.5</field></block></value>
+        <next>
+          <!-- initial_stake = 0.50 -->
+          <block type="variables_set" id="octp_i2">
+            <field name="VAR" id="octp_init">initial_stake</field>
+            <value name="VALUE"><block type="math_number" id="octp_i2v"><field name="NUM">0.5</field></block></value>
+            <next>
+              <!-- martingale = 2 -->
+              <block type="variables_set" id="octp_i3">
+                <field name="VAR" id="octp_mart">martingale</field>
+                <value name="VALUE"><block type="math_number" id="octp_i3v"><field name="NUM">2</field></block></value>
+                <next>
+                  <!-- cycle_phase = 0 (EVEN) -->
+                  <block type="variables_set" id="octp_i4">
+                    <field name="VAR" id="octp_phase">cycle_phase</field>
+                    <value name="VALUE"><block type="math_number" id="octp_i4v"><field name="NUM">0</field></block></value>
+                    <next>
+                      <!-- loss_streak = 0 -->
+                      <block type="variables_set" id="octp_i5">
+                        <field name="VAR" id="octp_lstreak">loss_streak</field>
+                        <value name="VALUE"><block type="math_number" id="octp_i5v"><field name="NUM">0</field></block></value>
+                        <next>
+                          <!-- take_profit = 10 -->
+                          <block type="variables_set" id="octp_i6">
+                            <field name="VAR" id="octp_tp">take_profit</field>
+                            <value name="VALUE"><block type="math_number" id="octp_i6v"><field name="NUM">10</field></block></value>
+                            <next>
+                              <!-- stop_loss = 50 -->
+                              <block type="variables_set" id="octp_i7">
+                                <field name="VAR" id="octp_sl">stop_loss</field>
+                                <value name="VALUE"><block type="math_number" id="octp_i7v"><field name="NUM">50</field></block></value>
+                                <next>
+                                  <!-- session_profit = 0 -->
+                                  <block type="variables_set" id="octp_i8">
+                                    <field name="VAR" id="octp_profit">session_profit</field>
+                                    <value name="VALUE"><block type="math_number" id="octp_i8v"><field name="NUM">0</field></block></value>
+                                    <next>
+                                      <!-- wins_count = 0 -->
+                                      <block type="variables_set" id="octp_i9">
+                                        <field name="VAR" id="octp_wins">wins_count</field>
+                                        <value name="VALUE"><block type="math_number" id="octp_i9v"><field name="NUM">0</field></block></value>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+
+    <!-- ── SUBMARKET — conditional trade options per phase ────────────── -->
+    <statement name="SUBMARKET">
+      <block type="controls_if" id="octp_sub_if">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="1" else="1"></mutation>
+
+        <!-- Phase 2 (DIGITOVER): prediction 2 — digit > 2, ~70% win rate -->
+        <value name="IF0">
+          <block type="logic_compare" id="octp_sub_cmp2">
+            <field name="OP">EQ</field>
+            <value name="A"><block type="variables_get" id="octp_sub_g2"><field name="VAR" id="octp_phase">cycle_phase</field></block></value>
+            <value name="B"><block type="math_number" id="octp_sub_n2"><field name="NUM">2</field></block></value>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="trade_definition_tradeoptions" id="octp_sub_over">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
+            <field name="DURATIONTYPE_LIST">t</field>
+            <value name="DURATION">
+              <shadow type="math_number_positive" id="octp_sub_over_dur">
+                <field name="NUM">1</field>
+              </shadow>
+            </value>
+            <value name="AMOUNT">
+              <shadow type="math_number_positive" id="octp_sub_over_amt_s">
+                <field name="NUM">0.35</field>
+              </shadow>
+              <block type="variables_get" id="octp_sub_over_amt">
+                <field name="VAR" id="octp_stake">stake</field>
+              </block>
+            </value>
+            <value name="PREDICTION">
+              <shadow type="math_number" id="octp_sub_over_pred">
+                <field name="NUM">2</field>
+              </shadow>
+            </value>
+          </block>
+        </statement>
+
+        <!-- Phase 3 (DIGITUNDER): prediction 7 — digit < 7, ~70% win rate -->
+        <value name="IF1">
+          <block type="logic_compare" id="octp_sub_cmp3">
+            <field name="OP">EQ</field>
+            <value name="A"><block type="variables_get" id="octp_sub_g3"><field name="VAR" id="octp_phase">cycle_phase</field></block></value>
+            <value name="B"><block type="math_number" id="octp_sub_n3"><field name="NUM">3</field></block></value>
+          </block>
+        </value>
+        <statement name="DO1">
+          <block type="trade_definition_tradeoptions" id="octp_sub_under">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
+            <field name="DURATIONTYPE_LIST">t</field>
+            <value name="DURATION">
+              <shadow type="math_number_positive" id="octp_sub_under_dur">
+                <field name="NUM">1</field>
+              </shadow>
+            </value>
+            <value name="AMOUNT">
+              <shadow type="math_number_positive" id="octp_sub_under_amt_s">
+                <field name="NUM">0.35</field>
+              </shadow>
+              <block type="variables_get" id="octp_sub_under_amt">
+                <field name="VAR" id="octp_stake">stake</field>
+              </block>
+            </value>
+            <value name="PREDICTION">
+              <shadow type="math_number" id="octp_sub_under_pred">
+                <field name="NUM">7</field>
+              </shadow>
+            </value>
+          </block>
+        </statement>
+
+        <!-- ELSE: Phases 0,1,4,5,6 — no prediction needed (EVEN, ODD, DIFF, CALL, PUT) -->
+        <statement name="ELSE">
+          <block type="trade_definition_tradeoptions" id="octp_sub_default">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="false"></mutation>
+            <field name="DURATIONTYPE_LIST">t</field>
+            <value name="DURATION">
+              <shadow type="math_number_positive" id="octp_sub_def_dur">
+                <field name="NUM">1</field>
+              </shadow>
+            </value>
+            <value name="AMOUNT">
+              <shadow type="math_number_positive" id="octp_sub_def_amt_s">
+                <field name="NUM">0.35</field>
+              </shadow>
+              <block type="variables_get" id="octp_sub_def_amt">
+                <field name="VAR" id="octp_stake">stake</field>
+              </block>
+            </value>
+          </block>
+        </statement>
+      </block>
+    </statement>
+  </block>
+
+  <!-- ═══ BEFORE PURCHASE — Route to correct contract type by phase ═══ -->
+  <block type="before_purchase" id="octp_bp" collapsed="false" deletable="false" x="0" y="680">
+    <statement name="BEFOREPURCHASE_STACK">
+      <block type="controls_if" id="octp_bp_if0">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="5" else="1"></mutation>
+
+        <!-- Phase 0: DIGITEVEN -->
+        <value name="IF0">
+          <block type="logic_compare" id="octp_bp_cmp0">
+            <field name="OP">EQ</field>
+            <value name="A"><block type="variables_get" id="octp_bp_g0"><field name="VAR" id="octp_phase">cycle_phase</field></block></value>
+            <value name="B"><block type="math_number" id="octp_bp_n0"><field name="NUM">0</field></block></value>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="timeout" id="octp_bp_t0">
+            <statement name="TIMEOUTSTACK">
+              <block type="purchase" id="octp_bp_p0"><field name="PURCHASE_LIST">DIGITEVEN</field></block>
+            </statement>
+            <value name="SECONDS"><block type="math_number" id="octp_bp_t0v"><field name="NUM">-0.00001</field></block></value>
+          </block>
+        </statement>
+
+        <!-- Phase 1: DIGITODD -->
+        <value name="IF1">
+          <block type="logic_compare" id="octp_bp_cmp1">
+            <field name="OP">EQ</field>
+            <value name="A"><block type="variables_get" id="octp_bp_g1"><field name="VAR" id="octp_phase">cycle_phase</field></block></value>
+            <value name="B"><block type="math_number" id="octp_bp_n1"><field name="NUM">1</field></block></value>
+          </block>
+        </value>
+        <statement name="DO1">
+          <block type="timeout" id="octp_bp_t1">
+            <statement name="TIMEOUTSTACK">
+              <block type="purchase" id="octp_bp_p1"><field name="PURCHASE_LIST">DIGITODD</field></block>
+            </statement>
+            <value name="SECONDS"><block type="math_number" id="octp_bp_t1v"><field name="NUM">-0.00001</field></block></value>
+          </block>
+        </statement>
+
+        <!-- Phase 2: DIGITOVER (Over 1-3 range via trade definition barrier) -->
+        <value name="IF2">
+          <block type="logic_compare" id="octp_bp_cmp2">
+            <field name="OP">EQ</field>
+            <value name="A"><block type="variables_get" id="octp_bp_g2"><field name="VAR" id="octp_phase">cycle_phase</field></block></value>
+            <value name="B"><block type="math_number" id="octp_bp_n2"><field name="NUM">2</field></block></value>
+          </block>
+        </value>
+        <statement name="DO2">
+          <block type="timeout" id="octp_bp_t2">
+            <statement name="TIMEOUTSTACK">
+              <block type="purchase" id="octp_bp_p2"><field name="PURCHASE_LIST">DIGITOVER</field></block>
+            </statement>
+            <value name="SECONDS"><block type="math_number" id="octp_bp_t2v"><field name="NUM">-0.00001</field></block></value>
+          </block>
+        </statement>
+
+        <!-- Phase 3: DIGITUNDER (Under 8-6 range via trade definition barrier) -->
+        <value name="IF3">
+          <block type="logic_compare" id="octp_bp_cmp3">
+            <field name="OP">EQ</field>
+            <value name="A"><block type="variables_get" id="octp_bp_g3"><field name="VAR" id="octp_phase">cycle_phase</field></block></value>
+            <value name="B"><block type="math_number" id="octp_bp_n3"><field name="NUM">3</field></block></value>
+          </block>
+        </value>
+        <statement name="DO3">
+          <block type="timeout" id="octp_bp_t3">
+            <statement name="TIMEOUTSTACK">
+              <block type="purchase" id="octp_bp_p3"><field name="PURCHASE_LIST">DIGITUNDER</field></block>
+            </statement>
+            <value name="SECONDS"><block type="math_number" id="octp_bp_t3v"><field name="NUM">-0.00001</field></block></value>
+          </block>
+        </statement>
+
+        <!-- Phase 4: DIGITDIFF (Differs — high payout recovery) -->
+        <value name="IF4">
+          <block type="logic_compare" id="octp_bp_cmp4">
+            <field name="OP">EQ</field>
+            <value name="A"><block type="variables_get" id="octp_bp_g4"><field name="VAR" id="octp_phase">cycle_phase</field></block></value>
+            <value name="B"><block type="math_number" id="octp_bp_n4"><field name="NUM">4</field></block></value>
+          </block>
+        </value>
+        <statement name="DO4">
+          <block type="timeout" id="octp_bp_t4">
+            <statement name="TIMEOUTSTACK">
+              <block type="purchase" id="octp_bp_p4"><field name="PURCHASE_LIST">DIGITDIFF</field></block>
+            </statement>
+            <value name="SECONDS"><block type="math_number" id="octp_bp_t4v"><field name="NUM">-0.00001</field></block></value>
+          </block>
+        </statement>
+
+        <!-- Phase 5: CALL (Rise) -->
+        <value name="IF5">
+          <block type="logic_compare" id="octp_bp_cmp5">
+            <field name="OP">EQ</field>
+            <value name="A"><block type="variables_get" id="octp_bp_g5"><field name="VAR" id="octp_phase">cycle_phase</field></block></value>
+            <value name="B"><block type="math_number" id="octp_bp_n5"><field name="NUM">5</field></block></value>
+          </block>
+        </value>
+        <statement name="DO5">
+          <block type="timeout" id="octp_bp_t5">
+            <statement name="TIMEOUTSTACK">
+              <block type="purchase" id="octp_bp_p5"><field name="PURCHASE_LIST">CALL</field></block>
+            </statement>
+            <value name="SECONDS"><block type="math_number" id="octp_bp_t5v"><field name="NUM">-0.00001</field></block></value>
+          </block>
+        </statement>
+
+        <!-- Phase 6 (ELSE): PUT (Fall) -->
+        <statement name="ELSE">
+          <block type="timeout" id="octp_bp_t6">
+            <statement name="TIMEOUTSTACK">
+              <block type="purchase" id="octp_bp_p6"><field name="PURCHASE_LIST">PUT</field></block>
+            </statement>
+            <value name="SECONDS"><block type="math_number" id="octp_bp_t6v"><field name="NUM">-0.00001</field></block></value>
+          </block>
+        </statement>
+      </block>
+    </statement>
+  </block>
+
+  <!-- ═══ AFTER PURCHASE — Martingale, phase advance, TP/SL ═══ -->
+  <block type="after_purchase" id="octp_ap" collapsed="false" deletable="false" x="0" y="960">
+    <statement name="AFTERPURCHASE_STACK">
+      <block type="controls_if" id="octp_ap_if">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+
+        <!-- IF WIN -->
+        <value name="IF0">
+          <block type="contract_check_result" id="octp_ap_win_chk">
+            <field name="CHECK_RESULT">win</field>
+          </block>
+        </value>
+        <statement name="DO0">
+          <!-- wins_count++ -->
+          <block type="math_change" id="octp_ap_w_wins">
+            <field name="VAR" id="octp_wins">wins_count</field>
+            <value name="DELTA"><shadow type="math_number" id="octp_ap_w_wins_v"><field name="NUM">1</field></shadow></value>
+            <next>
+              <!-- reset stake to initial -->
+              <block type="variables_set" id="octp_ap_w_stake">
+                <field name="VAR" id="octp_stake">stake</field>
+                <value name="VALUE"><block type="variables_get" id="octp_ap_w_stake_g"><field name="VAR" id="octp_init">initial_stake</field></block></value>
+                <next>
+                  <!-- reset loss_streak -->
+                  <block type="variables_set" id="octp_ap_w_streak">
+                    <field name="VAR" id="octp_lstreak">loss_streak</field>
+                    <value name="VALUE"><block type="math_number" id="octp_ap_w_streak_v"><field name="NUM">0</field></block></value>
+                    <next>
+                      <!-- advance phase: if phase < 6 → phase+1 else phase=0 -->
+                      <block type="controls_if" id="octp_ap_w_phase">
+                        <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                        <value name="IF0">
+                          <block type="logic_compare" id="octp_ap_w_phase_cmp">
+                            <field name="OP">LT</field>
+                            <value name="A"><block type="variables_get" id="octp_ap_w_phase_g"><field name="VAR" id="octp_phase">cycle_phase</field></block></value>
+                            <value name="B"><block type="math_number" id="octp_ap_w_phase_n"><field name="NUM">6</field></block></value>
+                          </block>
+                        </value>
+                        <statement name="DO0">
+                          <block type="math_change" id="octp_ap_w_phase_inc">
+                            <field name="VAR" id="octp_phase">cycle_phase</field>
+                            <value name="DELTA"><shadow type="math_number" id="octp_ap_w_phase_inc_v"><field name="NUM">1</field></shadow></value>
+                          </block>
+                        </statement>
+                        <statement name="ELSE">
+                          <block type="variables_set" id="octp_ap_w_phase_reset">
+                            <field name="VAR" id="octp_phase">cycle_phase</field>
+                            <value name="VALUE"><block type="math_number" id="octp_ap_w_phase_reset_v"><field name="NUM">0</field></block></value>
+                          </block>
+                        </statement>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </statement>
+
+        <!-- ELSE (LOSS) -->
+        <statement name="ELSE">
+          <!-- stake *= martingale (2×) -->
+          <block type="variables_set" id="octp_ap_l_stake">
+            <field name="VAR" id="octp_stake">stake</field>
+            <value name="VALUE">
+              <block type="math_arithmetic" id="octp_ap_l_stake_arith">
+                <field name="OP">MULTIPLY</field>
+                <value name="A">
+                  <shadow type="math_number" id="octp_ap_l_stake_as"><field name="NUM">1</field></shadow>
+                  <block type="variables_get" id="octp_ap_l_stake_a"><field name="VAR" id="octp_stake">stake</field></block>
+                </value>
+                <value name="B">
+                  <shadow type="math_number" id="octp_ap_l_stake_bs"><field name="NUM">2</field></shadow>
+                  <block type="variables_get" id="octp_ap_l_stake_b"><field name="VAR" id="octp_mart">martingale</field></block>
+                </value>
+              </block>
+            </value>
+            <next>
+              <!-- loss_streak++ -->
+              <block type="math_change" id="octp_ap_l_streak">
+                <field name="VAR" id="octp_lstreak">loss_streak</field>
+                <value name="DELTA"><shadow type="math_number" id="octp_ap_l_streak_v"><field name="NUM">1</field></shadow></value>
+                <next>
+                  <!-- if loss_streak >= 3: recovery → reset to phase 0, reset streak, reset stake -->
+                  <block type="controls_if" id="octp_ap_l_recovery">
+                    <value name="IF0">
+                      <block type="logic_compare" id="octp_ap_l_recovery_cmp">
+                        <field name="OP">GTE</field>
+                        <value name="A"><block type="variables_get" id="octp_ap_l_recovery_g"><field name="VAR" id="octp_lstreak">loss_streak</field></block></value>
+                        <value name="B"><block type="math_number" id="octp_ap_l_recovery_n"><field name="NUM">3</field></block></value>
+                      </block>
+                    </value>
+                    <statement name="DO0">
+                      <!-- reset to phase 0 (EVEN — recovery) -->
+                      <block type="variables_set" id="octp_ap_l_phase0">
+                        <field name="VAR" id="octp_phase">cycle_phase</field>
+                        <value name="VALUE"><block type="math_number" id="octp_ap_l_phase0_v"><field name="NUM">0</field></block></value>
+                        <next>
+                          <block type="variables_set" id="octp_ap_l_streak_reset">
+                            <field name="VAR" id="octp_lstreak">loss_streak</field>
+                            <value name="VALUE"><block type="math_number" id="octp_ap_l_streak_reset_v"><field name="NUM">0</field></block></value>
+                            <next>
+                              <!-- reset stake to initial on recovery -->
+                              <block type="variables_set" id="octp_ap_l_stake_reset">
+                                <field name="VAR" id="octp_stake">stake</field>
+                                <value name="VALUE"><block type="variables_get" id="octp_ap_l_stake_reset_g"><field name="VAR" id="octp_init">initial_stake</field></block></value>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </statement>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </statement>
+      </block>
+      <next>
+        <block type="trade_again" id="octp_ta"></block>
+      </next>
+    </statement>
+  </block>
+</xml>

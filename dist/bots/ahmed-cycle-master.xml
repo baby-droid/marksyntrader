@@ -1,0 +1,739 @@
+<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
+  <variables>
+    <variable id="CM_stake">stake</variable>
+    <variable id="CM_init_stake">initial_stake</variable>
+    <variable id="CM_martingale">Martingale</variable>
+    <variable id="CM_cycleStep">cycleStep</variable>
+    <variable id="CM_lossStreak">lossStreak</variable>
+    <variable id="CM_curPred">currentPrediction</variable>
+    <variable id="CM_totalprofit">totalprofit</variable>
+    <variable id="CM_totalloss">totalloss</variable>
+    <variable id="CM_text">text</variable>
+    <variable id="CM_text2">text2</variable>
+  </variables>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       TRADE DEFINITION — market: V50 1s, base type: digits/evenodd
+       The actual contract type is overridden per-phase in before_purchase.
+       ═══════════════════════════════════════════════════════════════ -->
+  <block type="trade_definition" id="CM_trade_def" deletable="false" x="0" y="60">
+    <statement name="TRADE_OPTIONS">
+      <block type="trade_definition_market" id="CM_mkt" deletable="false" movable="false">
+        <field name="MARKET_LIST">synthetic_index</field>
+        <field name="SUBMARKET_LIST">random_index</field>
+        <field name="SYMBOL_LIST">1HZ50V</field>
+        <next>
+          <block type="trade_definition_tradetype" id="CM_ttype" deletable="false" movable="false">
+            <field name="TRADETYPECAT_LIST">digits</field>
+            <field name="TRADETYPE_LIST">evenodd</field>
+            <next>
+              <block type="trade_definition_contracttype" id="CM_ctype" deletable="false" movable="false">
+                <field name="TYPE_LIST">both</field>
+                <next>
+                  <block type="trade_definition_candleinterval" id="CM_candle" deletable="false" movable="false">
+                    <field name="CANDLEINTERVAL_LIST">60</field>
+                    <next>
+                      <block type="trade_definition_restartbuysell" id="CM_restart" deletable="false" movable="false">
+                        <field name="TIME_MACHINE_ENABLED">FALSE</field>
+                        <next>
+                          <block type="trade_definition_restartonerror" id="CM_err" deletable="false" movable="false">
+                            <field name="RESTARTONERROR">TRUE</field>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+
+    <!-- ── INITIALIZATION ──────────────────────────────────────────── -->
+    <statement name="INITIALIZATION">
+      <block type="variables_set" id="CM_set_stake">
+        <field name="VAR" id="CM_stake">stake</field>
+        <value name="VALUE">
+          <block type="math_number" id="CM_n_stake">
+            <field name="NUM">0.50</field>
+          </block>
+        </value>
+        <next>
+          <block type="variables_set" id="CM_set_init">
+            <field name="VAR" id="CM_init_stake">initial_stake</field>
+            <value name="VALUE">
+              <block type="math_number" id="CM_n_init">
+                <field name="NUM">0.50</field>
+              </block>
+            </value>
+            <next>
+              <block type="variables_set" id="CM_set_mg">
+                <field name="VAR" id="CM_martingale">Martingale</field>
+                <value name="VALUE">
+                  <block type="math_number" id="CM_n_mg">
+                    <field name="NUM">2.0</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="variables_set" id="CM_set_step">
+                    <field name="VAR" id="CM_cycleStep">cycleStep</field>
+                    <value name="VALUE">
+                      <block type="math_number" id="CM_n_step">
+                        <field name="NUM">1</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="CM_set_loss">
+                        <field name="VAR" id="CM_lossStreak">lossStreak</field>
+                        <value name="VALUE">
+                          <block type="math_number" id="CM_n_loss">
+                            <field name="NUM">0</field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="CM_set_pred">
+                            <field name="VAR" id="CM_curPred">currentPrediction</field>
+                            <value name="VALUE">
+                              <block type="math_number" id="CM_n_pred">
+                                <field name="NUM">0</field>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="variables_set" id="CM_set_tp">
+                                <field name="VAR" id="CM_totalprofit">totalprofit</field>
+                                <value name="VALUE">
+                                  <block type="math_number" id="CM_n_tp">
+                                    <field name="NUM">5</field>
+                                  </block>
+                                </value>
+                                <next>
+                                  <block type="variables_set" id="CM_set_sl">
+                                    <field name="VAR" id="CM_totalloss">totalloss</field>
+                                    <value name="VALUE">
+                                      <block type="math_number" id="CM_n_sl">
+                                        <field name="NUM">20</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+
+    <!-- ── SUBMARKET — conditional trade options per cycle phase ──── -->
+    <statement name="SUBMARKET">
+      <block type="controls_if" id="CM_sub_if">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="4" else="1"></mutation>
+
+        <!-- Phase 2: DIGITOVER prediction 1 -->
+        <value name="IF0">
+          <block type="logic_compare" id="CM_if_step2">
+            <field name="OP">EQ</field>
+            <value name="A">
+              <block type="variables_get" id="CM_get_step_2a">
+                <field name="VAR" id="CM_cycleStep">cycleStep</field>
+              </block>
+            </value>
+            <value name="B">
+              <block type="math_number" id="CM_n2">
+                <field name="NUM">2</field>
+              </block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="trade_definition_tradeoptions" id="CM_opts_over1">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
+            <field name="DURATIONTYPE_LIST">t</field>
+            <value name="DURATION">
+              <shadow type="math_number_positive" id="CM_dur_over1">
+                <field name="NUM">1</field>
+              </shadow>
+            </value>
+            <value name="AMOUNT">
+              <shadow type="math_number_positive" id="CM_amt_over1s">
+                <field name="NUM">0.35</field>
+              </shadow>
+              <block type="variables_get" id="CM_get_stake_o1">
+                <field name="VAR" id="CM_stake">stake</field>
+              </block>
+            </value>
+            <value name="PREDICTION">
+              <shadow type="math_number" id="CM_pred_1">
+                <field name="NUM">1</field>
+              </shadow>
+            </value>
+          </block>
+        </statement>
+
+        <!-- Phase 3: DIGITUNDER prediction 8 -->
+        <value name="IF1">
+          <block type="logic_compare" id="CM_if_step3">
+            <field name="OP">EQ</field>
+            <value name="A">
+              <block type="variables_get" id="CM_get_step_3a">
+                <field name="VAR" id="CM_cycleStep">cycleStep</field>
+              </block>
+            </value>
+            <value name="B">
+              <block type="math_number" id="CM_n3">
+                <field name="NUM">3</field>
+              </block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO1">
+          <block type="trade_definition_tradeoptions" id="CM_opts_under8">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
+            <field name="DURATIONTYPE_LIST">t</field>
+            <value name="DURATION">
+              <shadow type="math_number_positive" id="CM_dur_under8">
+                <field name="NUM">1</field>
+              </shadow>
+            </value>
+            <value name="AMOUNT">
+              <shadow type="math_number_positive" id="CM_amt_under8s">
+                <field name="NUM">0.35</field>
+              </shadow>
+              <block type="variables_get" id="CM_get_stake_u8">
+                <field name="VAR" id="CM_stake">stake</field>
+              </block>
+            </value>
+            <value name="PREDICTION">
+              <shadow type="math_number" id="CM_pred_8">
+                <field name="NUM">8</field>
+              </shadow>
+            </value>
+          </block>
+        </statement>
+
+        <!-- Phase 4: DIGITOVER prediction 3 -->
+        <value name="IF2">
+          <block type="logic_compare" id="CM_if_step4">
+            <field name="OP">EQ</field>
+            <value name="A">
+              <block type="variables_get" id="CM_get_step_4a">
+                <field name="VAR" id="CM_cycleStep">cycleStep</field>
+              </block>
+            </value>
+            <value name="B">
+              <block type="math_number" id="CM_n4">
+                <field name="NUM">4</field>
+              </block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO2">
+          <block type="trade_definition_tradeoptions" id="CM_opts_over3">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
+            <field name="DURATIONTYPE_LIST">t</field>
+            <value name="DURATION">
+              <shadow type="math_number_positive" id="CM_dur_over3">
+                <field name="NUM">1</field>
+              </shadow>
+            </value>
+            <value name="AMOUNT">
+              <shadow type="math_number_positive" id="CM_amt_over3s">
+                <field name="NUM">0.35</field>
+              </shadow>
+              <block type="variables_get" id="CM_get_stake_o3">
+                <field name="VAR" id="CM_stake">stake</field>
+              </block>
+            </value>
+            <value name="PREDICTION">
+              <shadow type="math_number" id="CM_pred_3">
+                <field name="NUM">3</field>
+              </shadow>
+            </value>
+          </block>
+        </statement>
+
+        <!-- Phase 5: DIGITUNDER prediction 6 -->
+        <value name="IF3">
+          <block type="logic_compare" id="CM_if_step5">
+            <field name="OP">EQ</field>
+            <value name="A">
+              <block type="variables_get" id="CM_get_step_5a">
+                <field name="VAR" id="CM_cycleStep">cycleStep</field>
+              </block>
+            </value>
+            <value name="B">
+              <block type="math_number" id="CM_n5">
+                <field name="NUM">5</field>
+              </block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO3">
+          <block type="trade_definition_tradeoptions" id="CM_opts_under6">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
+            <field name="DURATIONTYPE_LIST">t</field>
+            <value name="DURATION">
+              <shadow type="math_number_positive" id="CM_dur_under6">
+                <field name="NUM">1</field>
+              </shadow>
+            </value>
+            <value name="AMOUNT">
+              <shadow type="math_number_positive" id="CM_amt_under6s">
+                <field name="NUM">0.35</field>
+              </shadow>
+              <block type="variables_get" id="CM_get_stake_u6">
+                <field name="VAR" id="CM_stake">stake</field>
+              </block>
+            </value>
+            <value name="PREDICTION">
+              <shadow type="math_number" id="CM_pred_6">
+                <field name="NUM">6</field>
+              </shadow>
+            </value>
+          </block>
+        </statement>
+
+        <!-- Phase 6: DIGITDIFF prediction 5 — digit ≠ 5, ~90% win rate -->
+        <value name="IF4">
+          <block type="logic_compare" id="CM_if_step6">
+            <field name="OP">EQ</field>
+            <value name="A">
+              <block type="variables_get" id="CM_get_step_6a">
+                <field name="VAR" id="CM_cycleStep">cycleStep</field>
+              </block>
+            </value>
+            <value name="B">
+              <block type="math_number" id="CM_n6">
+                <field name="NUM">6</field>
+              </block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO4">
+          <block type="trade_definition_tradeoptions" id="CM_opts_diff5">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
+            <field name="DURATIONTYPE_LIST">t</field>
+            <value name="DURATION">
+              <shadow type="math_number_positive" id="CM_dur_diff5">
+                <field name="NUM">1</field>
+              </shadow>
+            </value>
+            <value name="AMOUNT">
+              <shadow type="math_number_positive" id="CM_amt_diff5s">
+                <field name="NUM">0.35</field>
+              </shadow>
+              <block type="variables_get" id="CM_get_stake_d5">
+                <field name="VAR" id="CM_stake">stake</field>
+              </block>
+            </value>
+            <value name="PREDICTION">
+              <shadow type="math_number" id="CM_pred_5">
+                <field name="NUM">5</field>
+              </shadow>
+            </value>
+          </block>
+        </statement>
+
+        <!-- ELSE: Phase 1(EVEN), 7(CALL), 8(ODD recovery) -->
+        <statement name="ELSE">
+          <block type="trade_definition_tradeoptions" id="CM_opts_default">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="false"></mutation>
+            <field name="DURATIONTYPE_LIST">t</field>
+            <value name="DURATION">
+              <shadow type="math_number_positive" id="CM_dur_def">
+                <field name="NUM">1</field>
+              </shadow>
+            </value>
+            <value name="AMOUNT">
+              <shadow type="math_number_positive" id="CM_amt_defs">
+                <field name="NUM">0.35</field>
+              </shadow>
+              <block type="variables_get" id="CM_get_stake_def">
+                <field name="VAR" id="CM_stake">stake</field>
+              </block>
+            </value>
+          </block>
+        </statement>
+      </block>
+    </statement>
+  </block>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       BEFORE PURCHASE — select contract type per cycle phase
+       Phase 1: DIGITEVEN  Phase 2: DIGITOVER(1)  Phase 3: DIGITUNDER(8)
+       Phase 4: DIGITOVER(3)  Phase 5: DIGITUNDER(6)  Phase 6: DIGITDIFF(5)
+       Phase 7: CALL (Rise)   Phase 8: DIGITODD (recovery)
+       ═══════════════════════════════════════════════════════════════ -->
+  <block type="before_purchase" id="CM_before" deletable="false" x="0" y="886">
+    <statement name="BEFOREPURCHASE_STACK">
+      <block type="controls_if" id="CM_bp_if">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="6" else="1"></mutation>
+
+        <!-- Step 1: DIGITEVEN -->
+        <value name="IF0">
+          <block type="logic_compare" id="CM_bp_if1">
+            <field name="OP">EQ</field>
+            <value name="A"><block type="variables_get" id="CM_bp_get1"><field name="VAR" id="CM_cycleStep">cycleStep</field></block></value>
+            <value name="B"><block type="math_number" id="CM_bp_n1"><field name="NUM">1</field></block></value>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="purchase" id="CM_buy_even">
+            <field name="PURCHASE_LIST">DIGITEVEN</field>
+          </block>
+        </statement>
+
+        <!-- Step 2: DIGITOVER prediction 1 -->
+        <value name="IF1">
+          <block type="logic_compare" id="CM_bp_if2">
+            <field name="OP">EQ</field>
+            <value name="A"><block type="variables_get" id="CM_bp_get2"><field name="VAR" id="CM_cycleStep">cycleStep</field></block></value>
+            <value name="B"><block type="math_number" id="CM_bp_n2"><field name="NUM">2</field></block></value>
+          </block>
+        </value>
+        <statement name="DO1">
+          <block type="purchase" id="CM_buy_over1">
+            <field name="PURCHASE_LIST">DIGITOVER</field>
+          </block>
+        </statement>
+
+        <!-- Step 3: DIGITUNDER prediction 8 -->
+        <value name="IF2">
+          <block type="logic_compare" id="CM_bp_if3">
+            <field name="OP">EQ</field>
+            <value name="A"><block type="variables_get" id="CM_bp_get3"><field name="VAR" id="CM_cycleStep">cycleStep</field></block></value>
+            <value name="B"><block type="math_number" id="CM_bp_n3"><field name="NUM">3</field></block></value>
+          </block>
+        </value>
+        <statement name="DO2">
+          <block type="purchase" id="CM_buy_under8">
+            <field name="PURCHASE_LIST">DIGITUNDER</field>
+          </block>
+        </statement>
+
+        <!-- Step 4: DIGITOVER prediction 3 -->
+        <value name="IF3">
+          <block type="logic_compare" id="CM_bp_if4">
+            <field name="OP">EQ</field>
+            <value name="A"><block type="variables_get" id="CM_bp_get4"><field name="VAR" id="CM_cycleStep">cycleStep</field></block></value>
+            <value name="B"><block type="math_number" id="CM_bp_n4"><field name="NUM">4</field></block></value>
+          </block>
+        </value>
+        <statement name="DO3">
+          <block type="purchase" id="CM_buy_over3">
+            <field name="PURCHASE_LIST">DIGITOVER</field>
+          </block>
+        </statement>
+
+        <!-- Step 5: DIGITUNDER prediction 6 -->
+        <value name="IF4">
+          <block type="logic_compare" id="CM_bp_if5">
+            <field name="OP">EQ</field>
+            <value name="A"><block type="variables_get" id="CM_bp_get5"><field name="VAR" id="CM_cycleStep">cycleStep</field></block></value>
+            <value name="B"><block type="math_number" id="CM_bp_n5"><field name="NUM">5</field></block></value>
+          </block>
+        </value>
+        <statement name="DO4">
+          <block type="purchase" id="CM_buy_under6">
+            <field name="PURCHASE_LIST">DIGITUNDER</field>
+          </block>
+        </statement>
+
+        <!-- Step 6: DIGITDIFF prediction 5 -->
+        <value name="IF5">
+          <block type="logic_compare" id="CM_bp_if6">
+            <field name="OP">EQ</field>
+            <value name="A"><block type="variables_get" id="CM_bp_get6"><field name="VAR" id="CM_cycleStep">cycleStep</field></block></value>
+            <value name="B"><block type="math_number" id="CM_bp_n6"><field name="NUM">6</field></block></value>
+          </block>
+        </value>
+        <statement name="DO5">
+          <block type="purchase" id="CM_buy_diff">
+            <field name="PURCHASE_LIST">DIGITDIFF</field>
+          </block>
+        </statement>
+
+        <!-- Step 7: CALL (Rise) -->
+        <value name="IF6">
+          <block type="logic_compare" id="CM_bp_if7">
+            <field name="OP">EQ</field>
+            <value name="A"><block type="variables_get" id="CM_bp_get7"><field name="VAR" id="CM_cycleStep">cycleStep</field></block></value>
+            <value name="B"><block type="math_number" id="CM_bp_n7"><field name="NUM">7</field></block></value>
+          </block>
+        </value>
+        <statement name="DO6">
+          <block type="purchase" id="CM_buy_call">
+            <field name="PURCHASE_LIST">CALL</field>
+          </block>
+        </statement>
+
+        <!-- ELSE / Step 8: DIGITODD — recovery phase -->
+        <statement name="ELSE">
+          <block type="purchase" id="CM_buy_odd">
+            <field name="PURCHASE_LIST">DIGITODD</field>
+          </block>
+        </statement>
+      </block>
+    </statement>
+  </block>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       AFTER PURCHASE — TP/SL guard, win/loss handling, cycle advance
+       ═══════════════════════════════════════════════════════════════ -->
+  <block type="after_purchase" id="CM_after" collapsed="false" x="714" y="60">
+    <statement name="AFTERPURCHASE_STACK">
+
+      <!-- ── 1. Take-Profit guard ──────────────────────────────────── -->
+      <block type="controls_if" id="CM_ap_tp">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="1" else="1"></mutation>
+        <value name="IF0">
+          <block type="logic_compare" id="CM_tp_cmp">
+            <field name="OP">GTE</field>
+            <value name="A"><block type="total_profit" id="CM_total_p"></block></value>
+            <value name="B">
+              <block type="variables_get" id="CM_get_tp">
+                <field name="VAR" id="CM_totalprofit">totalprofit</field>
+              </block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="notify" id="CM_tp_notify">
+            <field name="NOTIFICATION_TYPE">info</field>
+            <field name="NOTIFICATION_SOUND">earned-money</field>
+            <value name="MESSAGE">
+              <shadow type="text" id="CM_tp_msg">
+                <field name="TEXT">🎉 Cycle Master — Take Profit reached! Bot stopped.</field>
+              </shadow>
+            </value>
+          </block>
+        </statement>
+
+        <!-- ── 2. Stop-Loss guard ──────────────────────────────────── -->
+        <value name="IF1">
+          <block type="logic_compare" id="CM_sl_cmp">
+            <field name="OP">LTE</field>
+            <value name="A"><block type="total_profit" id="CM_total_p2"></block></value>
+            <value name="B">
+              <block type="math_single" id="CM_sl_neg">
+                <field name="OP">NEG</field>
+                <value name="NUM">
+                  <shadow type="math_number" id="CM_sl_shadow">
+                    <field name="NUM">20</field>
+                  </shadow>
+                  <block type="variables_get" id="CM_get_sl">
+                    <field name="VAR" id="CM_totalloss">totalloss</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO1">
+          <block type="notify" id="CM_sl_notify">
+            <field name="NOTIFICATION_TYPE">error</field>
+            <field name="NOTIFICATION_SOUND">error</field>
+            <value name="MESSAGE">
+              <shadow type="text" id="CM_sl_msg">
+                <field name="TEXT">🛑 Cycle Master — Stop Loss hit! Bot stopped.</field>
+              </shadow>
+            </value>
+          </block>
+        </statement>
+
+        <!-- ── 3. Normal trade handling (else branch) ─────────────── -->
+        <statement name="ELSE">
+          <block type="controls_if" id="CM_win_loss_if">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+            <value name="IF0">
+              <block type="contract_check_result" id="CM_win_check">
+                <field name="CHECK_RESULT">win</field>
+              </block>
+            </value>
+
+            <!-- WIN: reset stake, advance cycle, clear loss streak -->
+            <statement name="DO0">
+              <block type="notify" id="CM_win_notify">
+                <field name="NOTIFICATION_TYPE">info</field>
+                <field name="NOTIFICATION_SOUND">earned-money</field>
+                <value name="MESSAGE">
+                  <shadow type="text" id="CM_win_msg">
+                    <field name="TEXT">abc</field>
+                  </shadow>
+                  <block type="contract_check_result" id="CM_win_res">
+                    <field name="CHECK_RESULT">win</field>
+                  </block>
+                </value>
+                <next>
+                  <!-- Reset stake to initial -->
+                  <block type="variables_set" id="CM_win_reset_stake">
+                    <field name="VAR" id="CM_stake">stake</field>
+                    <value name="VALUE">
+                      <block type="variables_get" id="CM_get_init_w">
+                        <field name="VAR" id="CM_init_stake">initial_stake</field>
+                      </block>
+                    </value>
+                    <next>
+                      <!-- Clear loss streak -->
+                      <block type="variables_set" id="CM_win_clear_loss">
+                        <field name="VAR" id="CM_lossStreak">lossStreak</field>
+                        <value name="VALUE">
+                          <block type="math_number" id="CM_win_zero"><field name="NUM">0</field></block>
+                        </value>
+                        <next>
+                          <!-- Advance cycleStep: step = (step % 8) + 1 -->
+                          <block type="variables_set" id="CM_win_advance_step">
+                            <field name="VAR" id="CM_cycleStep">cycleStep</field>
+                            <value name="VALUE">
+                              <block type="math_arithmetic" id="CM_advance_arith">
+                                <field name="OP">ADD</field>
+                                <value name="A">
+                                  <shadow type="math_number" id="CM_adv_a">
+                                    <field name="NUM">1</field>
+                                  </shadow>
+                                  <block type="math_modulo" id="CM_adv_mod">
+                                    <value name="DIVIDEND">
+                                      <shadow type="math_number" id="CM_adv_div_s">
+                                        <field name="NUM">0</field>
+                                      </shadow>
+                                      <block type="variables_get" id="CM_adv_step">
+                                        <field name="VAR" id="CM_cycleStep">cycleStep</field>
+                                      </block>
+                                    </value>
+                                    <value name="DIVISOR">
+                                      <shadow type="math_number" id="CM_adv_mod_n">
+                                        <field name="NUM">8</field>
+                                      </shadow>
+                                    </value>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <shadow type="math_number" id="CM_adv_b">
+                                    <field name="NUM">0</field>
+                                  </shadow>
+                                </value>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="trade_again" id="CM_win_trade_again"></block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </statement>
+
+            <!-- LOSS: martingale stake, increment streak, check recovery -->
+            <statement name="ELSE">
+              <block type="notify" id="CM_loss_notify">
+                <field name="NOTIFICATION_TYPE">error</field>
+                <field name="NOTIFICATION_SOUND">error</field>
+                <value name="MESSAGE">
+                  <shadow type="text" id="CM_loss_msg">
+                    <field name="TEXT">abc</field>
+                  </shadow>
+                  <block type="contract_check_result" id="CM_loss_res">
+                    <field name="CHECK_RESULT">loss</field>
+                  </block>
+                </value>
+                <next>
+                  <!-- Multiply stake by Martingale -->
+                  <block type="variables_set" id="CM_loss_mg_stake">
+                    <field name="VAR" id="CM_stake">stake</field>
+                    <value name="VALUE">
+                      <block type="math_arithmetic" id="CM_loss_mg_arith">
+                        <field name="OP">MULTIPLY</field>
+                        <value name="A">
+                          <shadow type="math_number" id="CM_lma_a"><field name="NUM">1</field></shadow>
+                          <block type="variables_get" id="CM_lma_stake">
+                            <field name="VAR" id="CM_stake">stake</field>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <shadow type="math_number" id="CM_lma_b"><field name="NUM">2</field></shadow>
+                          <block type="variables_get" id="CM_lma_mg">
+                            <field name="VAR" id="CM_martingale">Martingale</field>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                    <next>
+                      <!-- Increment loss streak -->
+                      <block type="variables_set" id="CM_loss_inc_streak">
+                        <field name="VAR" id="CM_lossStreak">lossStreak</field>
+                        <value name="VALUE">
+                          <block type="math_arithmetic" id="CM_loss_streak_arith">
+                            <field name="OP">ADD</field>
+                            <value name="A">
+                              <shadow type="math_number" id="CM_lsa_a"><field name="NUM">1</field></shadow>
+                              <block type="variables_get" id="CM_lsa_streak">
+                                <field name="VAR" id="CM_lossStreak">lossStreak</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <shadow type="math_number" id="CM_lsa_b"><field name="NUM">1</field></shadow>
+                            </value>
+                          </block>
+                        </value>
+                        <next>
+                          <!-- Recovery trigger: 3+ consecutive losses → switch to DIGITODD (step 8) -->
+                          <block type="controls_if" id="CM_loss_recovery">
+                            <value name="IF0">
+                              <block type="logic_compare" id="CM_recovery_cmp">
+                                <field name="OP">GTE</field>
+                                <value name="A">
+                                  <block type="variables_get" id="CM_rec_streak">
+                                    <field name="VAR" id="CM_lossStreak">lossStreak</field>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <block type="math_number" id="CM_rec_n3"><field name="NUM">3</field></block>
+                                </value>
+                              </block>
+                            </value>
+                            <statement name="DO0">
+                              <!-- Set cycleStep to 8 (DIGITODD recovery) and reset streak -->
+                              <block type="variables_set" id="CM_set_recovery_step">
+                                <field name="VAR" id="CM_cycleStep">cycleStep</field>
+                                <value name="VALUE">
+                                  <block type="math_number" id="CM_rec_step8"><field name="NUM">8</field></block>
+                                </value>
+                                <next>
+                                  <block type="variables_set" id="CM_reset_streak_rec">
+                                    <field name="VAR" id="CM_lossStreak">lossStreak</field>
+                                    <value name="VALUE">
+                                      <block type="math_number" id="CM_rec_zero"><field name="NUM">0</field></block>
+                                    </value>
+                                  </block>
+                                </next>
+                              </block>
+                            </statement>
+                            <next>
+                              <block type="trade_again" id="CM_loss_trade_again"></block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </statement>
+          </block>
+        </statement>
+      </block>
+    </statement>
+  </block>
+</xml>

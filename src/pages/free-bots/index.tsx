@@ -4,22 +4,83 @@ import { observer } from 'mobx-react-lite';
 import { useStore } from '@/hooks/useStore';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { api_base } from '@/external/bot-skeleton';
+import { isFastExecutionEnabled } from '@/utils/execution-speed';
+import { setTradeContext } from '@/utils/trade-metadata';
 import './free-bots.scss';
 
 const FREE_BOTS = [
   {
+    id: 'differs-edge-scanner',
+    name: 'Differs Edge Scanner — Recovery Matrix',
+    description: '🧠 Scans the latest digit, rotates Differs → Over 1 → Over 2 → Differs → Under 8 → Under 7, then uses Even/Odd recovery after a loss. Includes 2× stake recovery.',
+    category: 'Scanner', market: 'V50 1s', type: 'Multi-Strategy', prediction: 'SCAN',
+    xmlFile: '/bots/differs-edge-scanner.xml',
+    badge: 'SCAN 🧠', badgeColor: '#34d399', icon: '🔎', winRate: '—',
+  },
+  {
     id: 'ahmed-auto-even',
-    name: 'AHMED AUTO EVEN',
-    description: 'Smart DIGITEVEN bot — streak reversal + low-% odd digit entry, martingale, TP/SL',
-    category: 'even-odd',
+    name: 'AHMED AUTO EVEN — Streak Reversal',
+    description: '🎯 Detects an odd-digit streak or low odd digits, then buys DIGIT EVEN. Includes real purchase/trade-again flow, notifications, 2× martingale, TP and SL.',
+    category: 'Even/Odd', market: 'V25 1s', type: 'DIGITEVEN', prediction: 'EVEN',
     xmlFile: '/bots/ahmed-auto-even.xml',
+    badge: 'AUTO EVEN', badgeColor: '#34d399', icon: '✅', winRate: '—',
   },
   {
     id: 'ahmed-auto-odd',
-    name: 'AHMED AUTO ODD',
-    description: 'Smart DIGITODD bot — streak reversal + low-% even digit entry, martingale, TP/SL',
-    category: 'even-odd',
+    name: 'AHMED AUTO ODD — Streak Reversal',
+    description: '🎯 Detects an even-digit streak or low even digits, then buys DIGIT ODD. Includes real purchase/trade-again flow, notifications, 2× martingale, TP and SL.',
+    category: 'Even/Odd', market: 'V25 1s', type: 'DIGITODD', prediction: 'ODD',
     xmlFile: '/bots/ahmed-auto-odd.xml',
+    badge: 'AUTO ODD', badgeColor: '#60a5fa', icon: '🔢', winRate: '—',
+  },
+  // ── Recovery barrier bots ────────────────────────────────────────────────
+  {
+    id: 'recovery-over1-over3',
+    name: 'Over 1 → Recovery Over 3',
+    description: '🎯 Waits for a confirmed digit pattern, trades OVER 1, then switches to OVER 3 after a loss. Configured stake, martingale, TP/SL and restart blocks.',
+    category: 'Over/Under', market: 'V50 1s', type: 'DIGITOVER', prediction: '1 → 3',
+    xmlFile: '/bots/over1.xml',
+    badge: 'RECOVERY', badgeColor: '#34d399', icon: '↗', winRate: '—',
+  },
+  {
+    id: 'recovery-over2-over3',
+    name: 'Over 2 → Recovery Over 3',
+    description: '🎯 Pattern-confirmed OVER 2 entry with automatic OVER 3 recovery barrier after a loss, plus martingale and session limits.',
+    category: 'Over/Under', market: 'V50 1s', type: 'DIGITOVER', prediction: '2 → 3',
+    xmlFile: '/bots/over2.xml',
+    badge: 'RECOVERY', badgeColor: '#34d399', icon: '↗', winRate: '—',
+  },
+  {
+    id: 'recovery-over3-over4',
+    name: 'Over 3 → Recovery Over 4',
+    description: '🎯 Pattern-confirmed OVER 3 entry with automatic OVER 4 recovery barrier after a loss, stake progression and restart controls.',
+    category: 'Over/Under', market: 'V50 1s', type: 'DIGITOVER', prediction: '3 → 4',
+    xmlFile: '/bots/over3.xml',
+    badge: 'RECOVERY', badgeColor: '#34d399', icon: '↗', winRate: '—',
+  },
+  {
+    id: 'recovery-under8-under6',
+    name: 'Under 8 → Recovery Under 6',
+    description: '🎯 Pattern-confirmed UNDER 8 entry with automatic UNDER 6 recovery barrier after a loss, martingale and session limits.',
+    category: 'Over/Under', market: 'V100 1s', type: 'DIGITUNDER', prediction: '8 → 6',
+    xmlFile: '/bots/under8.xml',
+    badge: 'RECOVERY', badgeColor: '#60a5fa', icon: '↘', winRate: '—',
+  },
+  {
+    id: 'recovery-under7-under6',
+    name: 'Under 7 → Recovery Under 6',
+    description: '🎯 Pattern-confirmed UNDER 7 entry with automatic UNDER 6 recovery barrier after a loss, martingale and restart controls.',
+    category: 'Over/Under', market: 'V100 1s', type: 'DIGITUNDER', prediction: '7 → 6',
+    xmlFile: '/bots/under7.xml',
+    badge: 'RECOVERY', badgeColor: '#60a5fa', icon: '↘', winRate: '—',
+  },
+  {
+    id: 'recovery-under6-under5',
+    name: 'Under 6 → Recovery Under 5',
+    description: '🎯 Pattern-confirmed UNDER 6 entry with automatic UNDER 5 recovery barrier after a loss, stake progression and session limits.',
+    category: 'Over/Under', market: 'V100 1s', type: 'DIGITUNDER', prediction: '6 → 5',
+    xmlFile: '/bots/under6.xml',
+    badge: 'RECOVERY', badgeColor: '#60a5fa', icon: '↘', winRate: '—',
   },
   // ── NEW signature bots — Omni Cycle Trader Pro & Smart Entry Pattern Pro V2 ─
   {
@@ -119,6 +180,32 @@ const FREE_BOTS = [
     category: 'Over/Under', market: 'V100 1s', type: 'DIGITUNDER', prediction: '3',
     xmlFile: '/bots/syn-under3-best-killer.xml',
     badge: 'BEST ⚡', badgeColor: '#add8e6', icon: '⚡', winRate: '~71%',
+  },
+  // ── Newly uploaded bots ───────────────────────────────────────────────────
+  {
+    id: 'even-multiple-scalper-upload',
+    name: 'Even Multiple Scalper',
+    description: 'Uploaded EVEN multiple scalper strategy. Loads into Bot Builder using the original XML asset.',
+    category: 'Even/Odd', market: 'Deriv Volatility', type: 'DIGITEVEN', prediction: 'EVEN',
+    xmlFile: '/bots/even-multiple-scalper-upload.xml',
+    badge: 'UPLOADED', badgeColor: '#34d399', icon: '2️⃣', winRate: '—',
+  },
+  {
+    id: 'ahmed-speed-bot-even-odd-v3-upload',
+    name: 'Ahmed Speed Bot Even/Odd v3',
+    description: 'Uploaded Ahmed Speed Bot Even/Odd v3 strategy.',
+    category: 'Even/Odd', market: 'Deriv Volatility', type: 'DIGITEVEN/DIGITODD', prediction: 'EVEN/ODD',
+    // The uploaded file is empty; use the existing valid copy so the card remains runnable.
+    xmlFile: '/bots/ahmed-syn-even-odd.xml',
+    badge: 'UPLOADED', badgeColor: '#60a5fa', icon: '⚡', winRate: '—',
+  },
+  {
+    id: 'mr-vunja-deriv-v2026-upload',
+    name: 'MR VUNJA DERIV V2026',
+    description: 'Uploaded MR VUNJA DERIV V2026 strategy.',
+    category: 'Over/Under', market: 'Deriv Volatility', type: 'Multi-Strategy', prediction: 'AUTO',
+    xmlFile: '/bots/mr-vunja-deriv-v2026.xml',
+    badge: 'UPLOADED', badgeColor: '#a78bfa', icon: '🧩', winRate: '—',
   },
   {
     id: 'syn-over1-market-killer',
@@ -235,7 +322,7 @@ const FREE_BOTS = [
   },
 ];
 
-const CATEGORIES = ['All', 'Cycle', 'Even/Odd', 'Over/Under'];
+const CATEGORIES = ['All', 'Scanner', 'Cycle', 'Even/Odd', 'Over/Under'];
 
 // Market Killer Prime V1 — market rotation for Trade Restart
 const MKP_MARKETS = [
@@ -333,7 +420,7 @@ const FreeBots = observer(() => {
         await run_panel.onRunButtonClick();
         return;
       } catch {
-        if (attempt < 5) await new Promise(r => setTimeout(r, 500));
+        if (attempt < 5) await new Promise(r => setTimeout(r, isFastExecutionEnabled() ? 0 : 500));
       }
     }
   }, [store]);
@@ -370,6 +457,7 @@ const FreeBots = observer(() => {
   }, [store, loadXmlIntoWorkspace]);
 
   const handleLoadAndRun = useCallback(async (bot: typeof FREE_BOTS[0]) => {
+    setTradeContext({ page: 'Free Bots', bot: bot.name });
     setLoadingId(bot.id);
     try {
       const res = await fetch(bot.xmlFile);
@@ -392,7 +480,7 @@ const FreeBots = observer(() => {
       }
       setLoadedId(bot.id);
       setTimeout(() => setLoadedId(null), 4000);
-      if (loaded) setTimeout(() => autoRun(), 900);
+      if (loaded) setTimeout(() => autoRun(), isFastExecutionEnabled() ? 0 : 900);
     } catch (e) {
       console.error('Load & Run error', e);
       store?.dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING);
