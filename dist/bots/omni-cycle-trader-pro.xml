@@ -132,97 +132,29 @@
       </block>
     </statement>
 
-    <!-- ── SUBMARKET — conditional trade options per phase ────────────── -->
+    <!-- ── SUBMARKET — single tradeoptions, prediction=2 covers OVER/DIFF phases ── -->
     <statement name="SUBMARKET">
-      <block type="controls_if" id="octp_sub_if">
-        <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="1" else="1"></mutation>
-
-        <!-- Phase 2 (DIGITOVER): prediction 2 — digit > 2, ~70% win rate -->
-        <value name="IF0">
-          <block type="logic_compare" id="octp_sub_cmp2">
-            <field name="OP">EQ</field>
-            <value name="A"><block type="variables_get" id="octp_sub_g2"><field name="VAR" id="octp_phase">cycle_phase</field></block></value>
-            <value name="B"><block type="math_number" id="octp_sub_n2"><field name="NUM">2</field></block></value>
+      <block type="trade_definition_tradeoptions" id="octp_sub_single" deletable="false" movable="false">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
+        <field name="DURATIONTYPE_LIST">t</field>
+        <value name="DURATION">
+          <shadow type="math_number_positive" id="octp_sub_dur_s">
+            <field name="NUM">1</field>
+          </shadow>
+        </value>
+        <value name="AMOUNT">
+          <shadow type="math_number_positive" id="octp_sub_amt_s">
+            <field name="NUM">0.35</field>
+          </shadow>
+          <block type="variables_get" id="octp_sub_amt">
+            <field name="VAR" id="octp_stake">stake</field>
           </block>
         </value>
-        <statement name="DO0">
-          <block type="trade_definition_tradeoptions" id="octp_sub_over">
-            <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
-            <field name="DURATIONTYPE_LIST">t</field>
-            <value name="DURATION">
-              <shadow type="math_number_positive" id="octp_sub_over_dur">
-                <field name="NUM">1</field>
-              </shadow>
-            </value>
-            <value name="AMOUNT">
-              <shadow type="math_number_positive" id="octp_sub_over_amt_s">
-                <field name="NUM">0.35</field>
-              </shadow>
-              <block type="variables_get" id="octp_sub_over_amt">
-                <field name="VAR" id="octp_stake">stake</field>
-              </block>
-            </value>
-            <value name="PREDICTION">
-              <shadow type="math_number" id="octp_sub_over_pred">
-                <field name="NUM">2</field>
-              </shadow>
-            </value>
-          </block>
-        </statement>
-
-        <!-- Phase 3 (DIGITUNDER): prediction 7 — digit < 7, ~70% win rate -->
-        <value name="IF1">
-          <block type="logic_compare" id="octp_sub_cmp3">
-            <field name="OP">EQ</field>
-            <value name="A"><block type="variables_get" id="octp_sub_g3"><field name="VAR" id="octp_phase">cycle_phase</field></block></value>
-            <value name="B"><block type="math_number" id="octp_sub_n3"><field name="NUM">3</field></block></value>
-          </block>
+        <value name="PREDICTION">
+          <shadow type="math_number" id="octp_sub_pred_s">
+            <field name="NUM">2</field>
+          </shadow>
         </value>
-        <statement name="DO1">
-          <block type="trade_definition_tradeoptions" id="octp_sub_under">
-            <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
-            <field name="DURATIONTYPE_LIST">t</field>
-            <value name="DURATION">
-              <shadow type="math_number_positive" id="octp_sub_under_dur">
-                <field name="NUM">1</field>
-              </shadow>
-            </value>
-            <value name="AMOUNT">
-              <shadow type="math_number_positive" id="octp_sub_under_amt_s">
-                <field name="NUM">0.35</field>
-              </shadow>
-              <block type="variables_get" id="octp_sub_under_amt">
-                <field name="VAR" id="octp_stake">stake</field>
-              </block>
-            </value>
-            <value name="PREDICTION">
-              <shadow type="math_number" id="octp_sub_under_pred">
-                <field name="NUM">7</field>
-              </shadow>
-            </value>
-          </block>
-        </statement>
-
-        <!-- ELSE: Phases 0,1,4,5,6 — no prediction needed (EVEN, ODD, DIFF, CALL, PUT) -->
-        <statement name="ELSE">
-          <block type="trade_definition_tradeoptions" id="octp_sub_default">
-            <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="false"></mutation>
-            <field name="DURATIONTYPE_LIST">t</field>
-            <value name="DURATION">
-              <shadow type="math_number_positive" id="octp_sub_def_dur">
-                <field name="NUM">1</field>
-              </shadow>
-            </value>
-            <value name="AMOUNT">
-              <shadow type="math_number_positive" id="octp_sub_def_amt_s">
-                <field name="NUM">0.35</field>
-              </shadow>
-              <block type="variables_get" id="octp_sub_def_amt">
-                <field name="VAR" id="octp_stake">stake</field>
-              </block>
-            </value>
-          </block>
-        </statement>
       </block>
     </statement>
   </block>
@@ -242,12 +174,7 @@
           </block>
         </value>
         <statement name="DO0">
-          <block type="timeout" id="octp_bp_t0">
-            <statement name="TIMEOUTSTACK">
-              <block type="purchase" id="octp_bp_p0"><field name="PURCHASE_LIST">DIGITEVEN</field></block>
-            </statement>
-            <value name="SECONDS"><block type="math_number" id="octp_bp_t0v"><field name="NUM">-0.00001</field></block></value>
-          </block>
+          <block type="purchase" id="octp_bp_p0"><field name="PURCHASE_LIST">DIGITEVEN</field></block>
         </statement>
 
         <!-- Phase 1: DIGITODD -->
@@ -259,12 +186,7 @@
           </block>
         </value>
         <statement name="DO1">
-          <block type="timeout" id="octp_bp_t1">
-            <statement name="TIMEOUTSTACK">
-              <block type="purchase" id="octp_bp_p1"><field name="PURCHASE_LIST">DIGITODD</field></block>
-            </statement>
-            <value name="SECONDS"><block type="math_number" id="octp_bp_t1v"><field name="NUM">-0.00001</field></block></value>
-          </block>
+          <block type="purchase" id="octp_bp_p1"><field name="PURCHASE_LIST">DIGITODD</field></block>
         </statement>
 
         <!-- Phase 2: DIGITOVER (Over 1-3 range via trade definition barrier) -->
@@ -276,15 +198,10 @@
           </block>
         </value>
         <statement name="DO2">
-          <block type="timeout" id="octp_bp_t2">
-            <statement name="TIMEOUTSTACK">
-              <block type="purchase" id="octp_bp_p2"><field name="PURCHASE_LIST">DIGITOVER</field></block>
-            </statement>
-            <value name="SECONDS"><block type="math_number" id="octp_bp_t2v"><field name="NUM">-0.00001</field></block></value>
-          </block>
+          <block type="purchase" id="octp_bp_p2"><field name="PURCHASE_LIST">DIGITOVER</field></block>
         </statement>
 
-        <!-- Phase 3: DIGITUNDER (Under 8-6 range via trade definition barrier) -->
+        <!-- Phase 3: DIGITDIFF (digit ≠ 2, ~90% win rate — recovery phase) -->
         <value name="IF3">
           <block type="logic_compare" id="octp_bp_cmp3">
             <field name="OP">EQ</field>
@@ -293,12 +210,7 @@
           </block>
         </value>
         <statement name="DO3">
-          <block type="timeout" id="octp_bp_t3">
-            <statement name="TIMEOUTSTACK">
-              <block type="purchase" id="octp_bp_p3"><field name="PURCHASE_LIST">DIGITUNDER</field></block>
-            </statement>
-            <value name="SECONDS"><block type="math_number" id="octp_bp_t3v"><field name="NUM">-0.00001</field></block></value>
-          </block>
+          <block type="purchase" id="octp_bp_p3"><field name="PURCHASE_LIST">DIGITDIFF</field></block>
         </statement>
 
         <!-- Phase 4: DIGITDIFF (Differs — high payout recovery) -->
@@ -310,15 +222,10 @@
           </block>
         </value>
         <statement name="DO4">
-          <block type="timeout" id="octp_bp_t4">
-            <statement name="TIMEOUTSTACK">
-              <block type="purchase" id="octp_bp_p4"><field name="PURCHASE_LIST">DIGITDIFF</field></block>
-            </statement>
-            <value name="SECONDS"><block type="math_number" id="octp_bp_t4v"><field name="NUM">-0.00001</field></block></value>
-          </block>
+          <block type="purchase" id="octp_bp_p4"><field name="PURCHASE_LIST">DIGITEVEN</field></block>
         </statement>
 
-        <!-- Phase 5: CALL (Rise) -->
+        <!-- Phase 5: DIGITODD -->
         <value name="IF5">
           <block type="logic_compare" id="octp_bp_cmp5">
             <field name="OP">EQ</field>
@@ -327,22 +234,12 @@
           </block>
         </value>
         <statement name="DO5">
-          <block type="timeout" id="octp_bp_t5">
-            <statement name="TIMEOUTSTACK">
-              <block type="purchase" id="octp_bp_p5"><field name="PURCHASE_LIST">CALL</field></block>
-            </statement>
-            <value name="SECONDS"><block type="math_number" id="octp_bp_t5v"><field name="NUM">-0.00001</field></block></value>
-          </block>
+          <block type="purchase" id="octp_bp_p5"><field name="PURCHASE_LIST">DIGITODD</field></block>
         </statement>
 
-        <!-- Phase 6 (ELSE): PUT (Fall) -->
+        <!-- Phase 6 (ELSE): DIGITOVER (repeat high-confidence play) -->
         <statement name="ELSE">
-          <block type="timeout" id="octp_bp_t6">
-            <statement name="TIMEOUTSTACK">
-              <block type="purchase" id="octp_bp_p6"><field name="PURCHASE_LIST">PUT</field></block>
-            </statement>
-            <value name="SECONDS"><block type="math_number" id="octp_bp_t6v"><field name="NUM">-0.00001</field></block></value>
-          </block>
+          <block type="purchase" id="octp_bp_p6"><field name="PURCHASE_LIST">DIGITOVER</field></block>
         </statement>
       </block>
     </statement>
