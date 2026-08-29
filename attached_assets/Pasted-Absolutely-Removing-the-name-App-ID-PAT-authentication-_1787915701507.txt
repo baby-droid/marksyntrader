@@ -1,0 +1,939 @@
+Absolutely. Removing the **name, App ID, PAT, authentication, and Deriv-specific credentials**, the system is essentially this **logic architecture**:
+
+# Automated Multi-Strategy Trading Logic
+
+## 1. Core engine
+
+```text
+MARKET DATA
+    ↓
+Load 1,000 ticks
+    ↓
+Maintain rolling 1,000-tick history
+    ↓
+Analyze:
+  • 20 ticks
+  • 50 ticks
+  • 100 ticks
+  • 1,000 ticks
+    ↓
+Calculate distributions
+    ↓
+Detect patterns
+    ↓
+Generate candidate entries
+    ↓
+Virtual validation
+    ↓
+Signal scoring
+    ↓
+Risk validation
+    ↓
+ENTRY SIGNAL
+    ↓
+EXECUTE
+```
+
+---
+
+# 2. Market-analysis engine
+
+For every market independently, maintain:
+
+```text
+1000 ticks
+100 tick window
+50 tick window
+20 tick window
+```
+
+The 1,000 ticks provide the **market baseline**.
+
+The shorter windows determine what is happening **right now**.
+
+The engine compares:
+
+```text
+20T ↔ 50T ↔ 100T ↔ 1000T
+```
+
+A signal becomes stronger when the windows agree.
+
+---
+
+# 3. Digit-distribution engine
+
+Track every digit from 0–9.
+
+```text
+0 = x%
+1 = x%
+2 = x%
+3 = x%
+4 = x%
+5 = x%
+6 = x%
+7 = x%
+8 = x%
+9 = x%
+```
+
+Calculate this for:
+
+```text
+20 ticks
+50 ticks
+100 ticks
+1000 ticks
+```
+
+The engine identifies:
+
+* highest-frequency digits
+* lowest-frequency digits
+* increasing digits
+* decreasing digits
+* repeated digits
+* missing/rare digits
+* digit retention
+* digit clustering
+* parity imbalance
+
+---
+
+# 4. EVEN / ODD logic
+
+## ODD candidate
+
+Look for:
+
+```text
+3–5 odd digits ≥ ~10.5%
+```
+
+while several even digits are weak:
+
+```text
+even digits < ~10–10.4%
+```
+
+Then check:
+
+```text
+Odd percentage ≥ 55%
+```
+
+and preferably:
+
+```text
+Odd percentage increasing
+```
+
+Example:
+
+```text
+Odd:
+
+51%
+52%
+54%
+55%
+57%
+```
+
+is stronger than:
+
+```text
+Odd:
+
+58%
+57%
+55%
+53%
+```
+
+### Entry selection
+
+When Odd qualifies, examine:
+
+```text
+lowest even %
+highest even %
+recent even digit
+next digit sequence
+```
+
+Then use the strongest candidate entry point.
+
+---
+
+# 5. EVEN logic
+
+Mirror the same model.
+
+Look for:
+
+```text
+3–5 even digits ≥ ~10.5%
+```
+
+while odd digits are weak.
+
+Then:
+
+```text
+Even ≥ 55%
+```
+
+and preferably increasing.
+
+Entry uses:
+
+```text
+lowest odd %
+highest odd %
+recent odd digit
+short-term sequence
+```
+
+---
+
+# 6. Parity pattern detection
+
+Detect sequences such as:
+
+```text
+E → E → O
+E → E → O → O
+
+O → O → E
+O → O → E → E
+```
+
+These become **entry candidates**, not automatic trades.
+
+The sequence must agree with distribution.
+
+---
+
+# 7. Balanced parity mode
+
+If:
+
+```text
+Even ≈ Odd
+```
+
+don't continuously trade.
+
+Instead:
+
+```text
+Find one very clean setup
+        ↓
+Execute one scalp
+        ↓
+WIN → STOP
+LOSS → controlled recovery validation
+        ↓
+WIN → STOP
+```
+
+---
+
+# 8. MATCHES logic
+
+For Matches:
+
+```text
+Find dominant digit
+       ↓
+Measure its frequency
+       ↓
+Check whether concentration is increasing
+       ↓
+Check recurrence
+       ↓
+Check short-window confirmation
+```
+
+Example:
+
+```text
+1000T: digit 7 = 10.2%
+100T:  digit 7 = 12.0%
+50T:   digit 7 = 13.4%
+20T:   digit 7 = 15.0%
+```
+
+Increasing concentration creates a stronger Match candidate.
+
+---
+
+# 9. DIFFERS logic
+
+For Differs, look for the opposite structure:
+
+```text
+No strong dominant digit
++
+high digit dispersion
++
+candidate digit weakening
++
+short-term diversity
+```
+
+If one digit becomes unusually dominant, Differs becomes less attractive.
+
+---
+
+# 10. OVER / UNDER engine
+
+For an Over barrier:
+
+```text
+OVER X
+```
+
+identify the losing range:
+
+```text
+0 → X
+```
+
+Example:
+
+```text
+OVER 3
+```
+
+means monitor:
+
+```text
+0, 1, 2, 3
+```
+
+Then calculate:
+
+* frequency
+* touches
+* clustering
+* recent concentration
+* weakening
+* retention above barrier
+
+---
+
+# 11. Touch logic
+
+For every barrier, count touches in the most recent 10 ticks.
+
+Example:
+
+```text
+OVER 3
+
+10 ticks:
+
+0–3
+7
+0–3
+8
+5
+0–3
+9
+6
+0–3
+```
+
+The losing region touched:
+
+```text
+4 times
+```
+
+This becomes a candidate condition.
+
+Your basic range:
+
+```text
+2–5 qualifying touches
+```
+
+can be configurable.
+
+---
+
+# 12. Retention logic
+
+Don't only count whether a digit above the barrier appeared.
+
+Measure whether it **stays/continues above the barrier**.
+
+Example:
+
+```text
+4 → 7 → 6 → 8
+```
+
+is stronger than:
+
+```text
+4 → 2 → 3 → 1
+```
+
+because the first sequence demonstrates stronger above-barrier retention.
+
+---
+
+# 13. OVER 6 logic
+
+For:
+
+```text
+OVER 6
+```
+
+losing digits:
+
+```text
+0 1 2 3 4 5 6
+```
+
+The engine looks for:
+
+```text
+losing-side weakness
++
+1–2 touches above 6
++
+above-6 digit strength
++
+retention
++
+short-term confirmation
+```
+
+Then it selects the strongest above-barrier digit as an entry context.
+
+The same architecture is reversed for Under.
+
+---
+
+# 14. RISE / FALL logic
+
+Use price movement rather than digit parity.
+
+Calculate:
+
+```text
+up moves
+down moves
+```
+
+across:
+
+```text
+20T
+50T
+100T
+1000T
+```
+
+Example:
+
+```text
+20T  → UP 65%
+50T  → UP 61%
+100T → UP 58%
+```
+
+If the directional bias is consistent and increasing:
+
+```text
+RISE candidate
+```
+
+If the opposite happens:
+
+```text
+FALL candidate
+```
+
+---
+
+# 15. ONLY UPS / ONLY DOWNS
+
+Use stricter directional filtering.
+
+Check:
+
+```text
+directional dominance
++
+consecutive movement
++
+counter-movement frequency
++
+short-term acceleration
++
+market chop
+```
+
+Reject signals when the market is excessively alternating.
+
+---
+
+# 16. HIGH TICK / LOW TICK
+
+Calculate the recent price range:
+
+```text
+HIGH
+ │
+ │ current position
+ │
+ │
+LOW
+```
+
+Then combine:
+
+```text
+range position
++
+recent movement
++
+direction
++
+short-term momentum
+```
+
+to determine whether High Tick or Low Tick has a valid setup.
+
+---
+
+# 17. Adaptive tick selection
+
+The engine can dynamically choose:
+
+```text
+1 tick
+2 ticks
+3 ticks
+4 ticks
+5 ticks
+```
+
+based on:
+
+```text
+signal strength
+market structure
+strategy
+volatility
+recent outcomes
+pattern stability
+```
+
+The duration should **not** automatically increase merely because of a loss.
+
+---
+
+# 18. Signal scoring
+
+Every candidate receives a score.
+
+Conceptually:
+
+```text
+Distribution       +25
+Short-term trend   +20
+Pattern            +15
+100T confirmation  +15
+50T confirmation   +10
+20T confirmation   +10
+Retention          +5
+----------------------
+TOTAL              100
+```
+
+Then establish:
+
+```text
+Minimum score = configurable
+```
+
+For example:
+
+```text
+<70%  → NO TRADE
+70–79 → WATCH
+80–89 → STRONG
+90+   → VERY STRONG
+```
+
+---
+
+# 19. Multi-window confirmation
+
+A signal should ideally pass:
+
+```text
+1000T context
+      ↓
+100T confirmation
+      ↓
+50T confirmation
+      ↓
+20T entry timing
+```
+
+The 1,000 ticks answer:
+
+> Is this behavior unusual within the broader market?
+
+The 100 ticks answer:
+
+> Is the current distribution supporting it?
+
+The 50 ticks answer:
+
+> Is the setup developing?
+
+The 20 ticks answer:
+
+> Is the entry happening now?
+
+---
+
+# 20. Virtual trade validation
+
+Before actual execution:
+
+```text
+SIGNAL CANDIDATE
+       ↓
+Virtual trade #1
+       ↓
+Virtual trade #2
+```
+
+Your rule:
+
+```text
+WIN + WIN
+   ↓
+VALIDATED
+   ↓
+EXECUTE
+```
+
+If:
+
+```text
+WIN + LOSS
+```
+
+or:
+
+```text
+LOSS + WIN
+```
+
+the signal is rejected and the engine starts validation again.
+
+---
+
+# 21. RUN execution gate
+
+The Run button controls whether validated signals can become executions.
+
+### RUN OFF
+
+```text
+Analyze
+Scan
+Generate signals
+Display signals
+
+NO EXECUTION
+```
+
+### RUN ON
+
+```text
+Analyze
+ ↓
+Signal
+ ↓
+Validation
+ ↓
+Risk check
+ ↓
+Execution
+```
+
+---
+
+# 22. Loss engine
+
+After every loss:
+
+```text
+LOSS
+ ↓
+Record pre-loss profit/equity
+ ↓
+Calculate actual deficit
+ ↓
+Check whether deficit is recovered
+```
+
+The system should distinguish:
+
+```text
+normal loss
+recovery loss
+consecutive losses
+```
+
+---
+
+# 23. Recovery logic
+
+If the previous profit has not been recovered:
+
+```text
+Calculate recovery amount
+        ↓
+Calculate required stake
+        ↓
+Apply maximum recovery limit
+        ↓
+Revalidate signal
+```
+
+Never:
+
+```text
+LOSS → blindly double → LOSS → blindly double
+```
+
+Instead:
+
+```text
+LOSS
+ ↓
+REVALIDATE
+ ↓
+CLEAN SIGNAL?
+ ↓
+YES → controlled recovery
+NO → WAIT
+```
+
+---
+
+# 24. Opposite-side logic
+
+After a loss:
+
+```text
+ODD
+ ↓
+Check EVEN
+```
+
+```text
+EVEN
+ ↓
+Check ODD
+```
+
+```text
+OVER
+ ↓
+Check UNDER
+```
+
+```text
+UNDER
+ ↓
+Check OVER
+```
+
+```text
+RISE
+ ↓
+Check FALL
+```
+
+```text
+FALL
+ ↓
+Check RISE
+```
+
+and similarly for the other strategy pairs.
+
+**The opposite side must independently qualify.**
+
+A loss alone is never considered a signal to reverse.
+
+---
+
+# 25. 3–4 consecutive losses
+
+If:
+
+```text
+LOSS
+LOSS
+LOSS
+```
+
+or:
+
+```text
+LOSS
+LOSS
+LOSS
+LOSS
+```
+
+then switch to:
+
+```text
+RE-SCAN
+ ↓
+Recalculate distribution
+ ↓
+Recalculate pattern
+ ↓
+Check opposite side
+ ↓
+Check another market
+ ↓
+Check another duration
+ ↓
+Reset signal validation
+```
+
+The bot should stop blindly repeating the failed setup.
+
+---
+
+# 26. Market selection
+
+The scanner continuously ranks markets.
+
+```text
+Market A → 84%
+Market B → 91%  ← selected
+Market C → 76%
+Market D → 63%
+```
+
+Selection should consider:
+
+```text
+signal score
+data quality
+pattern stability
+distribution strength
+recent performance
+loss state
+```
+
+---
+
+# 27. Final entry decision
+
+The final decision is:
+
+```text
+MARKET QUALIFIES?
+       ↓
+STRATEGY QUALIFIES?
+       ↓
+DISTRIBUTION QUALIFIES?
+       ↓
+PATTERN QUALIFIES?
+       ↓
+SHORT WINDOWS CONFIRM?
+       ↓
+VIRTUAL VALIDATION PASSES?
+       ↓
+RISK PASSES?
+       ↓
+RUN ENABLED?
+       ↓
+        YES
+         ↓
+     EXECUTE
+```
+
+If **any critical condition fails**:
+
+```text
+NO TRADE
+```
+
+---
+
+# 28. Complete logic in one flow
+
+```text
+                    MARKET DATA
+                         ↓
+                    1,000 TICKS
+                         ↓
+              ┌──────────┴──────────┐
+              ↓                     ↓
+        DIGIT ANALYSIS         PRICE ANALYSIS
+              ↓                     ↓
+       20 / 50 / 100 / 1000     20 / 50 / 100
+              ↓                     ↓
+              └──────────┬──────────┘
+                         ↓
+                  STRATEGY ENGINE
+                         ↓
+        ┌────────────────┼────────────────┐
+        ↓                ↓                ↓
+    EVEN/ODD       MATCH/DIFF       OVER/UNDER
+        ↓                ↓                ↓
+    RISE/FALL       UP/DOWN         HIGH/LOW
+        └────────────────┬────────────────┘
+                         ↓
+                  PATTERN ENGINE
+                         ↓
+                 SIGNAL SCORING
+                         ↓
+               MULTI-WINDOW CHECK
+                         ↓
+                 VIRTUAL TRADES
+                         ↓
+                    RISK CHECK
+                         ↓
+                   RUN ENABLED?
+                    /       \
+                  NO         YES
+                  ↓           ↓
+                WAIT       EXECUTE
+                              ↓
+                         WIN / LOSS
+                          /       \
+                       WIN        LOSS
+                       ↓            ↓
+                    RESET       RECOVERY
+                                    ↓
+                              OPPOSITE CHECK
+                                    ↓
+                               RE-SCAN
+                                    ↓
+                              NEXT SIGNAL
+```
+
+That is the **logic-only specification** of the system, with the branding, App ID, PAT, login credentials, and other identifying information removed.
