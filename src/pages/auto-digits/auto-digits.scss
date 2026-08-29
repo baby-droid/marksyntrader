@@ -91,6 +91,17 @@
 .ad-stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem 0.4rem; padding-top: 0.75rem; }
 .ad-stat-grid div { display: grid; gap: 0.2rem; }
 .ad-stat-grid strong { color: #e0f2fe; font: 700 0.72rem ui-monospace, monospace; }
+.ad-quick-actions__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem; margin-top: 0.65rem; }
+.ad-quick-actions__grid .ad-button { margin-top: 0; min-height: 2.15rem; padding: 0.35rem; }
+.ad-button--start { color: #6ee7b7; border-color: rgba(52, 211, 153, 0.5); background: rgba(16, 185, 129, 0.14); }
+.ad-button--pause { color: #fcd34d; border-color: rgba(251, 191, 36, 0.5); background: rgba(245, 158, 11, 0.12); }
+.ad-button--stop, .ad-button--close { color: #fda4af; border-color: rgba(251, 113, 133, 0.45); background: rgba(244, 63, 94, 0.1); }
+.ad-button:disabled { opacity: 0.45; cursor: not-allowed; }
+.ad-quick-actions__message { min-height: 2.2rem; margin: 0.6rem 0 0; color: #7dd3fc; font-size: 0.6rem; line-height: 1.35; }
+.ad-config { display: grid; gap: 0.55rem; }
+.ad-config > label, .ad-config__two-up label { display: grid; gap: 0.25rem; color: #7894b8; font-size: 0.6rem; }
+.ad-config select, .ad-config .num-field { width: 100%; min-height: 1.8rem; box-sizing: border-box; }
+.ad-config__two-up { display: grid; grid-template-columns: 1fr 1fr; gap: 0.45rem; }
 .ad-recovery__row, .ad-status__line, .ad-next__line { display: flex; justify-content: space-between; gap: 0.4rem; padding: 0.45rem 0; border-bottom: 1px solid rgba(86, 126, 181, 0.12); }
 .ad-recovery__row strong, .ad-recovery__row b, .ad-status__line b, .ad-next__line strong { color: #dbeafe; font-size: 0.67rem; text-align: right; }
 .ad-recovery__bar, .ad-pressure__bar { height: 0.32rem; margin: 0.45rem 0; border-radius: 1rem; background: #122746; overflow: hidden; }
@@ -156,6 +167,13 @@
 .ad-strategy__reason { color: #7f9cc0; line-height: 1.4; font-size: 0.63rem; padding: 0.4rem 0; max-width: 70%; }
 .ad-strategy ul { display: grid; gap: 0.4rem; margin: 0.55rem 0 0; padding: 0.55rem 0 0 0.9rem; border-top: 1px solid rgba(86, 126, 181, 0.18); list-style: none; color: #607da4; font-size: 0.61rem; }
 .ad-strategy li::before { content: '○'; margin-right: 0.4rem; color: #607da4; } .ad-strategy li.done { color: #c8dff7; } .ad-strategy li.done::before { content: '✓'; color: #34d399; }
+.ad-windows { display: grid; gap: 0.1rem; }
+.ad-windows__row { display: grid; grid-template-columns: 2rem 1fr auto; align-items: center; gap: 0.35rem; padding: 0.45rem 0; border-bottom: 1px solid rgba(86, 126, 181, 0.12); color: #7894b8; font-size: 0.6rem; }
+.ad-windows__row > b { color: #67e8f9; font: 700 0.65rem ui-monospace, monospace; }
+.ad-windows__row > strong { color: #fbbf24; font: 700 0.65rem ui-monospace, monospace; }
+.ad-windows__row em { color: #7894b8; font-style: normal; font-weight: 400; }
+.ad-windows__foot { padding-top: 0.55rem; color: #7894b8; font-size: 0.6rem; }
+.ad-windows__foot b { color: #fbbf24; }
 .ad-pressure__headline { display: flex; justify-content: space-between; padding-top: 0.8rem; color: #dbeafe; font-size: 0.65rem; font-weight: 800; }
 .ad-pressure__headline strong { color: #34d399; }
 .ad-pressure__bar { display: flex; height: 0.55rem; margin: 0.55rem 0 0.3rem; }
@@ -170,6 +188,8 @@
 
 .auto-digits__footer { display: flex; gap: 1.2rem; flex-wrap: wrap; margin-top: 0.65rem; padding: 0.5rem 0.7rem; border-radius: 0.45rem; color: #5979a3; font-size: 0.58rem; }
 .auto-digits__footer-status { margin-left: auto; color: #34d399; font-weight: 800; }
+.auto-digits__toolbar .auto-digits__window-picker { margin-right: auto; }
+.auto-digits__mode-buttons { flex-wrap: wrap; justify-content: flex-end; }
 
 @media (max-width: 1050px) {
     .auto-digits__grid { grid-template-columns: minmax(11rem, 0.8fr) minmax(23rem, 1.7fr); }
@@ -187,6 +207,7 @@
     .auto-digits__toolbar label select { width: 100%; }
     .auto-digits__mode-buttons { width: 100%; margin-left: 0; }
     .auto-digits__mode-buttons button { flex: 1; }
+    .ad-quick-actions__grid { gap: 0.3rem; }
     .auto-digits__grid { display: flex; flex-direction: column; }
     .auto-digits__column { width: 100%; }
     .auto-digits__column--left, .auto-digits__column--right { display: grid; grid-template-columns: 1fr 1fr; }

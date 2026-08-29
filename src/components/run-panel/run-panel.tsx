@@ -196,7 +196,6 @@ const DrawerContent = ({ active_index, is_drawer_open, active_tour, setActiveTab
             <div style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
                 <Tabs active_index={active_index} onTabItemClick={setActiveTabIndex} top>
                     <div id='db-run-panel-tab__summary' label={<Localize i18n_default_text='Summary' />}>
-                        <DigitPercentWidget />
                         <Summary is_drawer_open={is_drawer_open} />
                     </div>
                     <div id='db-run-panel-tab__transactions' label={<Localize i18n_default_text='Transactions' />}>
@@ -204,7 +203,6 @@ const DrawerContent = ({ active_index, is_drawer_open, active_tour, setActiveTab
                         <Transactions is_drawer_open={is_drawer_open} />
                     </div>
                     <div id='db-run-panel-tab__journal' label={<Localize i18n_default_text='Journal' />}>
-                        <DigitPercentWidget />
                         <Journal />
                     </div>
                 </Tabs>

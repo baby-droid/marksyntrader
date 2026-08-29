@@ -11,6 +11,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '@/hooks/useStore';
 import { useDerivTrade } from '@/hooks/useDerivTrade';
 import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
+import NumberField from '@/components/number-field';
 import './auto-digits.scss';
 
 const MARKETS = [
@@ -38,6 +39,7 @@ type Signal = {
     confidence: number;
     reason: string;
     side: 'even' | 'odd' | 'over' | 'under' | 'differs' | 'rise' | 'fall';
+    score: number;
 };
 type TradeRow = {
     id: string;
@@ -58,6 +60,21 @@ const getDigit = (price: number, pipSize: number) => {
     const value = Number(price).toFixed(pipSize).replace('.', '');
     return Number(value[value.length - 1]);
 };
+
+const analyzeDigits = (values: number[]) => {
+    const counts = new Array(10).fill(0);
+    values.forEach(digit => {
+        if (digit >= 0 && digit <= 9) counts[digit] += 1;
+    });
+    return {
+        counts,
+        pcts: counts.map(count => values.length ? count / values.length * 100 : 0),
+        evenPct: values.length ? counts.filter((_, digit) => digit % 2 === 0).reduce((sum, count) => sum + count, 0) / values.length * 100 : 0,
+        oddPct: values.length ? counts.filter((_, digit) => digit % 2 !== 0).reduce((sum, count) => sum + count, 0) / values.length * 100 : 0,
+    };
+};
+
+const clampScore = (value: number) => Math.max(0, Math.min(100, Math.round(value)));
 
 const formatMoney = (value: number, currency: string) =>
     `${value >= 0 ? '+' : ''}${fromUsd(value).toFixed(2)} ${currency}`;
@@ -99,6 +116,8 @@ const AutoDigits: React.FC = () => {
     const [barrier, setBarrier] = useState(3);
     const [stake, setStake] = useState(0.5);
     const [duration, setDuration] = useState(1);
+    const [minimumScore, setMinimumScore] = useState(70);
+    const [entryLogic, setEntryLogic] = useState<'confluence' | 'reversal' | 'momentum'>('confluence');
     const [digits, setDigits] = useState<number[]>([]);
     const [prices, setPrices] = useState<number[]>([]);
     const [currentDigit, setCurrentDigit] = useState<number | null>(null);
@@ -119,6 +138,8 @@ const AutoDigits: React.FC = () => {
     const latestEpochRef = useRef(0);
     const previousQuoteRef = useRef<number | null>(null);
     const previousDigitRef = useRef<number | null>(null);
+    const lastQuoteRef = useRef<number | null>(null);
+    const lastDigitRef = useRef<number | null>(null);
     const virtualPendingRef = useRef<any>(null);
     const virtualStreakRef = useRef(0);
     const lastValidatedEpochRef = useRef(0);
@@ -143,8 +164,14 @@ const AutoDigits: React.FC = () => {
             .filter(digit => Number.isFinite(digit) && digit >= 0 && digit <= 9);
         setDigits(next.slice(-1000));
         setPrices(raw.slice(-80));
-        if (next.length) setCurrentDigit(next[next.length - 1]);
-        if (raw.length) setCurrentPrice(raw[raw.length - 1]);
+        if (next.length) {
+            setCurrentDigit(next[next.length - 1]);
+            lastDigitRef.current = next[next.length - 1];
+        }
+        if (raw.length) {
+            setCurrentPrice(raw[raw.length - 1]);
+            lastQuoteRef.current = raw[raw.length - 1];
+        }
     }, []);
 
     // Load the broad distribution through the same authenticated connection.
@@ -184,8 +211,10 @@ const AutoDigits: React.FC = () => {
             }
             const digit = getDigit(tick.quote, pipSizeRef.current);
             rawPricesRef.current = [...rawPricesRef.current, tick.quote].slice(-1000);
-            previousQuoteRef.current = currentPrice;
-            previousDigitRef.current = currentDigit;
+            previousQuoteRef.current = lastQuoteRef.current;
+            previousDigitRef.current = lastDigitRef.current;
+            lastQuoteRef.current = tick.quote;
+            lastDigitRef.current = digit;
             latestEpochRef.current = tick.epoch;
             setCurrentPrice(tick.quote);
             setCurrentDigit(digit);
@@ -211,63 +240,135 @@ const AutoDigits: React.FC = () => {
         shortDigits.forEach(digit => { result[digit] += 1; });
         return result;
     }, [shortDigits]);
+    const windowAnalysis = useMemo(() => WINDOWS.reduce((result, size) => {
+        result[size] = analyzeDigits(digits.slice(-size));
+        return result;
+    }, {} as Record<number, ReturnType<typeof analyzeDigits>>), [digits]);
+    const parityTrend = useMemo(() => {
+        const target = windowAnalysis[20].oddPct >= windowAnalysis[20].evenPct ? 'odd' : 'even';
+        const values = WINDOWS.slice().reverse().map(size => target === 'odd' ? windowAnalysis[size].oddPct : windowAnalysis[size].evenPct);
+        const increasing = values.every((value, index) => index === 0 || value >= values[index - 1] - 1);
+        const agreement = values.filter(value => value >= 50).length / values.length * 100;
+        return { target, increasing, agreement, values };
+    }, [windowAnalysis]);
+    const patternStats = useMemo(() => {
+        const recent = digits.slice(-12);
+        const parity = recent.map(digit => digit % 2 === 0 ? 'E' : 'O');
+        const last = parity[parity.length - 1];
+        let run = 0;
+        for (let index = parity.length - 1; index >= 0 && parity[index] === last; index -= 1) run += 1;
+        const sameDigitRun = recent.length ? recent.slice().reverse().findIndex(digit => digit !== recent[recent.length - 1]) : -1;
+        return {
+            parity,
+            last,
+            run,
+            sameDigitRun: sameDigitRun < 0 ? recent.length : sameDigitRun,
+            sequenceCandidate: parity.slice(-3).join('') === 'OOE' || parity.slice(-3).join('') === 'EEO',
+        };
+    }, [digits]);
+    const matchStats = useMemo(() => {
+        const recent = digits.slice(-20);
+        const recentCounts = analyzeDigits(recent).counts;
+        const target = recentCounts.indexOf(Math.max(...recentCounts));
+        const longestCluster = recent.reduce((best, digit, index) => {
+            if (index === 0) return 1;
+            let length = 1;
+            for (let cursor = index - 1; cursor >= 0 && recent[cursor] === digit; cursor -= 1) length += 1;
+            return Math.max(best, length);
+        }, 0);
+        return {
+            target,
+            concentration: recent.length ? recentCounts[target] / recent.length * 100 : 0,
+            longestCluster,
+            recurrence: recent.slice(-6).filter(digit => digit === target).length,
+        };
+    }, [digits]);
     const signal = useMemo<Signal>(() => {
-        const recent = digits.slice(-10);
-        if (!recent.length) return { ready: false, type: 'WAIT', label: 'Waiting for distribution', confidence: 0, reason: 'Collecting authenticated tick data', side: 'even' };
+        const recent = digits.slice(-20);
+        const makeSignal = (candidate: Omit<Signal, 'ready' | 'confidence' | 'score'> & { score: number }) => {
+            const score = clampScore(candidate.score);
+            const ready = recent.length >= 20 && score >= minimumScore;
+            return { ...candidate, score, confidence: score, ready };
+        };
+        if (!recent.length) {
+            return {
+                ready: false, type: 'WAIT', label: 'Waiting for distribution', confidence: 0,
+                score: 0, reason: 'Collecting authenticated tick data', side: 'even',
+            };
+        }
+
+        const parityTarget = windowAnalysis[20].oddPct >= windowAnalysis[20].evenPct ? 'odd' : 'even';
+        const parityValues = WINDOWS.map(size => parityTarget === 'odd' ? windowAnalysis[size].oddPct : windowAnalysis[size].evenPct);
+        const parityAgreement = parityValues.filter(value => value >= 50).length / WINDOWS.length;
+        const parityEdge = Math.max(...parityValues) - 50;
+        const latestParity = recent.slice(-3).map(digit => digit % 2 ? 'odd' : 'even');
+        const oppositeStreak = latestParity.length === 3 && latestParity.every(value => value !== parityTarget);
+
         if (strategy === 'parity') {
-            const odds = recent.filter(digit => digit % 2 !== 0).length;
-            const evens = recent.length - odds;
-            const streak = recent.slice(-3);
-            if (streak.length === 3 && streak.every(digit => digit % 2 !== 0)) {
-                return { ready: true, type: 'DIGITEVEN', label: 'Even', confidence: 91, reason: 'Three consecutive odd ticks — reversal entry', side: 'even' };
-            }
-            if (streak.length === 3 && streak.every(digit => digit % 2 === 0)) {
-                return { ready: true, type: 'DIGITODD', label: 'Odd', confidence: 91, reason: 'Three consecutive even ticks — reversal entry', side: 'odd' };
-            }
-            const dominant = evenPct >= oddPct ? 'even' : 'odd';
-            const dominantPct = Math.max(evenPct, oddPct);
-            const shortEven = shortDigits.filter(digit => digit % 2 === 0).length / Math.max(shortDigits.length, 1) * 100;
-            const increasing = dominant === 'even' ? shortEven >= evenPct : (100 - shortEven) >= oddPct;
-            return {
-                ready: dominantPct >= 55 && increasing,
-                type: dominant === 'even' ? 'DIGITEVEN' : 'DIGITODD',
-                label: dominant === 'even' ? 'Even' : 'Odd',
-                confidence: Math.min(99, Math.round(dominantPct + (increasing ? 12 : 0))),
-                reason: `${dominantPct.toFixed(1)}% ${dominant} distribution${increasing ? ' and increasing' : ''}`,
-                side: dominant,
-            };
+            const targetScore = 45 + parityEdge * 2 + parityAgreement * 25
+                + (oppositeStreak && entryLogic !== 'momentum' ? 12 : 0)
+                + (parityTrend.increasing && entryLogic !== 'reversal' ? 8 : 0);
+            return makeSignal({
+                type: parityTarget === 'even' ? 'DIGITEVEN' : 'DIGITODD',
+                label: parityTarget === 'even' ? 'Even' : 'Odd',
+                reason: `${parityTarget} leads across ${Math.round(parityAgreement * 100)}% of windows${oppositeStreak ? ' · reversal confirmed' : ''}`,
+                side: parityTarget,
+                score: targetScore,
+            });
         }
+
         if (strategy === 'over-under') {
-            const lowTouches = recent.filter(digit => digit <= barrier).length;
-            const highTouches = recent.filter(digit => digit > barrier).length;
+            const regionPcts = WINDOWS.map(size => {
+                const values = digits.slice(-size);
+                return values.length ? values.filter(digit => digit > barrier).length / values.length * 100 : 0;
+            });
+            const overScore = 45 + (Math.max(...regionPcts) - 50) * 1.8
+                + regionPcts.filter(value => value >= 50).length / WINDOWS.length * 25;
+            const underScore = 45 + (50 - Math.min(...regionPcts)) * 1.8
+                + regionPcts.filter(value => value <= 50).length / WINDOWS.length * 25;
+            const over = overScore >= underScore;
             const last = recent[recent.length - 1];
-            if (lowTouches >= 2 && lowTouches <= 5 && last <= barrier) {
-                return { ready: true, type: 'DIGITOVER', label: `Over ${barrier}`, barrier, confidence: 82, reason: `${lowTouches} touches in the losing region (0–${barrier}) — retention reversal`, side: 'over' };
-            }
-            if (highTouches >= 2 && highTouches <= 5 && last > barrier) {
-                return { ready: true, type: 'DIGITUNDER', label: `Under ${barrier}`, barrier, confidence: 82, reason: `${highTouches} touches above ${barrier} — retention reversal`, side: 'under' };
-            }
-            return { ready: false, type: 'WAIT', label: `Over / Under ${barrier}`, barrier, confidence: Math.round(Math.max(lowTouches, highTouches) * 10), reason: 'Waiting for 2–5 confirmed region touches', side: 'over' };
+            const touches = recent.filter(digit => over ? digit <= barrier : digit > barrier).length;
+            return makeSignal({
+                type: over ? 'DIGITOVER' : 'DIGITUNDER',
+                label: over ? `Over ${barrier}` : `Under ${barrier}`,
+                barrier,
+                reason: `${touches} recent opposing-region touches · ${over ? 'over' : 'under'} pressure agrees across the windows`,
+                side: over ? 'over' : 'under',
+                score: Math.max(overScore, underScore) + (last <= barrier === over ? 8 : 0),
+            });
         }
+
         if (strategy === 'differs') {
-            const last = recent[recent.length - 1];
-            const repeats = recent.slice(-4).filter(digit => digit === last).length;
-            return {
-                ready: repeats >= 2,
+            const target = matchStats.target;
+            const concentrationScore = Math.min(35, matchStats.concentration * 0.9);
+            const clusterScore = Math.min(25, matchStats.longestCluster * 6);
+            const recurrenceScore = Math.min(20, matchStats.recurrence * 4);
+            return makeSignal({
                 type: 'DIGITDIFF',
-                label: `Differs ${last}`,
-                barrier: last,
-                confidence: repeats >= 2 ? 84 : 42,
-                reason: repeats >= 2 ? `${repeats} recent touches on ${last} — differs entry` : 'Waiting for a repeated digit touch',
+                label: `Differs ${target}`,
+                barrier: target,
+                reason: `${matchStats.concentration.toFixed(0)}% concentration on ${target} · cluster ${matchStats.longestCluster} · ${matchStats.recurrence} recent repeats`,
                 side: 'differs',
-            };
+                score: 35 + concentrationScore + clusterScore + recurrenceScore
+                    + (entryLogic === 'reversal' ? 8 : 0),
+            });
         }
-        const rising = prices.length >= 4 && prices.slice(-4).every((price, index, array) => index === 0 || price >= array[index - 1]);
-        const falling = prices.length >= 4 && prices.slice(-4).every((price, index, array) => index === 0 || price <= array[index - 1]);
-        return rising || falling
-            ? { ready: true, type: rising ? 'CALL' : 'PUT', label: rising ? 'Rise' : 'Fall', confidence: 78, reason: `Four-tick ${rising ? 'up' : 'down'} momentum confirmed`, side: rising ? 'rise' : 'fall' }
-            : { ready: false, type: 'WAIT', label: 'Rise / Fall', confidence: 36, reason: 'Waiting for four-tick momentum', side: 'rise' };
-    }, [strategy, digits, prices, evenPct, oddPct, shortDigits, barrier]);
+
+        const priceSlices = [4, 20, 50].map(size => prices.slice(-size));
+        const risingWindows = priceSlices.filter(values => values.length >= 4 && values.every((price, index) => index === 0 || price >= values[index - 1])).length;
+        const fallingWindows = priceSlices.filter(values => values.length >= 4 && values.every((price, index) => index === 0 || price <= values[index - 1])).length;
+        const rising = risingWindows >= fallingWindows;
+        const directionScore = 48 + Math.max(risingWindows, fallingWindows) * 15
+            + (entryLogic === 'momentum' ? 10 : 0);
+        return makeSignal({
+            type: rising ? 'CALL' : 'PUT',
+            label: rising ? 'Rise' : 'Fall',
+            reason: `${Math.max(risingWindows, fallingWindows)}/3 price windows confirm ${rising ? 'up' : 'down'} momentum`,
+            side: rising ? 'rise' : 'fall',
+            score: directionScore,
+        });
+    }, [strategy, digits, prices, barrier, minimumScore, entryLogic, windowAnalysis, parityTrend, matchStats]);
 
     const signalRef = useRef(signal);
     useEffect(() => { signalRef.current = signal; }, [signal]);
@@ -382,6 +483,55 @@ const AutoDigits: React.FC = () => {
         setValidationMessage(scannerOn ? 'Scanner reset — collecting a fresh two-step validation' : 'Scanner idle — enable Scan to validate entries');
     };
 
+    const startBot = () => {
+        setScannerOn(true);
+        setAutoTrading(authorized);
+        setValidationMessage(authorized
+            ? 'Bot started — scanning, validating two real ticks, and trading qualified entries'
+            : 'Scanner started — log in to enable real contracts');
+    };
+
+    const pauseBot = () => {
+        setScannerOn(false);
+        setAutoTrading(false);
+        virtualPendingRef.current = null;
+        setValidationMessage('Bot paused — open contracts remain active; press Start Bot to resume scanning');
+    };
+
+    const stopBot = () => {
+        setScannerOn(false);
+        setAutoTrading(false);
+        virtualPendingRef.current = null;
+        virtualStreakRef.current = 0;
+        lastValidatedEpochRef.current = 0;
+        setValidationMessage('Bot stopped — no new entries will be validated');
+    };
+
+    const closeAllContracts = useCallback(async () => {
+        if (!authorized || !send) {
+            setValidationMessage('Close All requires an authenticated account');
+            return;
+        }
+        setValidationMessage('Close All — checking your open contracts…');
+        try {
+            const response = await send({ portfolio: 1 });
+            const contracts = response?.portfolio?.contracts || [];
+            const ids = contracts
+                .filter(contract => contract?.is_valid_to_sell !== false)
+                .map(contract => Number(contract?.contract_id ?? contract?.id))
+                .filter(Number.isFinite);
+            if (!ids.length) {
+                setValidationMessage('Close All — there are no open contracts to close');
+                return;
+            }
+            const results = await Promise.allSettled(ids.map(contractId => send({ sell: contractId, price: 0 })));
+            const closed = results.filter(result => result.status === 'fulfilled').length;
+            setValidationMessage(`Close All — requested ${closed}/${ids.length} open contract${ids.length === 1 ? '' : 's'}`);
+        } catch (error) {
+            setValidationMessage(`Close All failed — ${error?.message || 'the account connection rejected the request'}`);
+        }
+    }, [authorized, send]);
+
     const topDigits = [...pcts.keys()].sort((a, b) => pcts[b] - pcts[a]).slice(0, 3);
     const lowDigits = [...pcts.keys()].sort((a, b) => pcts[a] - pcts[b]).slice(0, 3);
     const pressure = Math.max(evenPct, oddPct);
@@ -410,12 +560,6 @@ const AutoDigits: React.FC = () => {
             </header>
 
             <div className='auto-digits__toolbar'>
-                <label>
-                    <span>MARKET</span>
-                    <select value={symbol} onChange={event => setSymbol(event.target.value)}>
-                        {MARKETS.map(market => <option key={market.value} value={market.value}>{market.label}</option>)}
-                    </select>
-                </label>
                 <div className='auto-digits__window-picker'>
                     <span>ANALYSIS WINDOW</span>
                     <div>{WINDOWS.map(windowSize => (
@@ -424,33 +568,49 @@ const AutoDigits: React.FC = () => {
                         </button>
                     ))}</div>
                 </div>
-                <label>
-                    <span>STRATEGY</span>
-                    <select value={strategy} onChange={event => setStrategy(event.target.value as Strategy)}>
-                        <option value='parity'>Parity pattern scanner</option>
-                        <option value='over-under'>Touch reversal / Over-Under</option>
-                        <option value='differs'>Differs edge</option>
-                        <option value='rise-fall'>Rise / Fall momentum</option>
-                    </select>
-                </label>
-                {(strategy === 'over-under') && (
-                    <label className='auto-digits__barrier'>
-                        <span>BARRIER</span>
-                        <input type='number' min='0' max='8' value={barrier} onChange={event => setBarrier(Math.max(0, Math.min(8, Number(event.target.value))))} />
-                    </label>
-                )}
                 <div className='auto-digits__mode-buttons'>
-                    <button className={`auto-digits__scan-toggle ${scannerOn ? 'is-on' : ''}`} onClick={() => setScannerOn(value => !value)}>
-                        <span>{scannerOn ? '●' : '○'}</span> {scannerOn ? 'SCANNING' : 'START SCAN'}
-                    </button>
-                    <button className={`auto-digits__trade-toggle ${autoTrading ? 'is-on' : ''}`} onClick={() => setAutoTrading(value => !value)} disabled={!authorized}>
-                        {autoTrading ? 'AUTO TRADE ON' : 'AUTO TRADE OFF'}
-                    </button>
+                    <button className='auto-digits__scan-toggle' onClick={startBot}>▶ START BOT</button>
+                    <button className='auto-digits__scan-toggle' onClick={pauseBot}>Ⅱ PAUSE BOT</button>
+                    <button className='auto-digits__trade-toggle' onClick={stopBot}>■ STOP BOT</button>
+                    <button className='auto-digits__trade-toggle' onClick={closeAllContracts} disabled={!authorized}>✕ CLOSE ALL</button>
                 </div>
             </div>
 
             <main className='auto-digits__grid'>
                 <aside className='auto-digits__column auto-digits__column--left'>
+                    <section className='ad-panel ad-quick-actions'>
+                        <div className='ad-panel__title'>QUICK ACTIONS <span>{scannerOn ? 'ACTIVE' : 'IDLE'}</span></div>
+                        <div className='ad-quick-actions__grid'>
+                            <button className='ad-button ad-button--start' onClick={startBot}>▶ Start Bot</button>
+                            <button className='ad-button ad-button--pause' onClick={pauseBot}>Ⅱ Pause Bot</button>
+                            <button className='ad-button ad-button--stop' onClick={stopBot}>■ Stop Bot</button>
+                            <button className='ad-button ad-button--close' onClick={closeAllContracts} disabled={!authorized}>✕ Close All</button>
+                        </div>
+                        <p className='ad-quick-actions__message'>{validationMessage}</p>
+                    </section>
+                    <section className='ad-panel ad-config'>
+                        <div className='ad-panel__title'>BOT CONFIGURATION <span>{authorized ? 'ACCOUNT READY' : 'LOGIN REQUIRED'}</span></div>
+                        <label><span>Market</span><select value={symbol} onChange={event => setSymbol(event.target.value)}>{MARKETS.map(market => <option key={market.value} value={market.value}>{market.label}</option>)}</select></label>
+                        <label><span>Strategy</span><select value={strategy} onChange={event => setStrategy(event.target.value as Strategy)}>
+                            <option value='parity'>Parity pattern scanner</option>
+                            <option value='over-under'>Touch reversal / Over-Under</option>
+                            <option value='differs'>Differs edge</option>
+                            <option value='rise-fall'>Rise / Fall momentum</option>
+                        </select></label>
+                        {strategy === 'over-under' && <label><span>Barrier (0–8)</span><NumberField value={barrier} min={0} max={8} onCommit={setBarrier} /></label>}
+                        <div className='ad-config__two-up'>
+                            <label><span>Stake</span><NumberField value={stake} min={MIN_STAKE} max={1000} onCommit={value => { setStake(value); runningStakeRef.current = value; }} /></label>
+                            <label><span>Duration (ticks)</span><NumberField value={duration} min={1} max={5} onCommit={setDuration} /></label>
+                        </div>
+                        <div className='ad-config__two-up'>
+                            <label><span>Minimum score</span><NumberField value={minimumScore} min={0} max={100} onCommit={setMinimumScore} /></label>
+                            <label><span>Entry logic</span><select value={entryLogic} onChange={event => setEntryLogic(event.target.value as typeof entryLogic)}>
+                                <option value='confluence'>Confluence</option>
+                                <option value='reversal'>Reversal</option>
+                                <option value='momentum'>Momentum</option>
+                            </select></label>
+                        </div>
+                    </section>
                     <section className='ad-panel ad-account'>
                         <div className='ad-panel__title'>ACCOUNT OVERVIEW <span className='ad-panel__live'>● LIVE</span></div>
                         <div className='ad-account__balance'><small>Balance</small><strong>{balance == null ? '—' : fmt(balance)}</strong></div>
@@ -536,7 +696,7 @@ const AutoDigits: React.FC = () => {
                     <section className='ad-panel ad-strategy'>
                         <div className='ad-panel__title'>CURRENT STRATEGY</div>
                         <div className='ad-strategy__name'>{signal.label}</div>
-                        <div className='ad-score'><strong>{signal.confidence || 0}</strong><span>/100<br />SCORE</span></div>
+                        <div className='ad-score'><strong>{signal.score || 0}</strong><span>/100<br />SCORE</span></div>
                         <div className='ad-strategy__ready'>{signal.ready ? 'READY TO VALIDATE' : 'WAITING FOR ENTRY'}</div>
                         <div className='ad-strategy__reason'>{signal.reason}</div>
                         <ul>
@@ -545,6 +705,19 @@ const AutoDigits: React.FC = () => {
                             <li className={signal.ready ? 'done' : ''}>Entry confirmation</li>
                             <li className={virtualStreakRef.current >= 2 ? 'done' : ''}>Two virtual wins</li>
                         </ul>
+                    </section>
+                    <section className='ad-panel ad-windows'>
+                        <div className='ad-panel__title'>MULTI-WINDOW ANALYSIS <span>INDEPENDENT</span></div>
+                        {WINDOWS.map(size => {
+                            const analysis = windowAnalysis[size];
+                            const top = analysis.counts.indexOf(Math.max(...analysis.counts));
+                            return <div className='ad-windows__row' key={size}>
+                                <b>{size >= 1000 ? '1K' : size}</b>
+                                <span>E {analysis.evenPct.toFixed(0)}% · O {analysis.oddPct.toFixed(0)}%</span>
+                                <strong>{top} <em>{analysis.pcts[top].toFixed(0)}%</em></strong>
+                            </div>;
+                        })}
+                        <div className='ad-windows__foot'>Minimum entry score: <b>{minimumScore}/100</b></div>
                     </section>
                     <section className='ad-panel ad-pressure'>
                         <div className='ad-panel__title'>MARKET PRESSURE</div>
@@ -560,8 +733,8 @@ const AutoDigits: React.FC = () => {
                         <div className='ad-next__line'><span>Stake</span><strong>{fmt(runningStakeRef.current)}</strong></div>
                         <div className='ad-next__line'><span>Duration</span><strong>{duration} tick</strong></div>
                         <div className='ad-next__controls'>
-                            <label>Stake<input type='number' min={MIN_STAKE} step='0.01' value={stake} onChange={event => { const next = Math.max(MIN_STAKE, Number(event.target.value)); setStake(next); runningStakeRef.current = next; }} /></label>
-                            <label>Ticks<input type='number' min='1' max='5' value={duration} onChange={event => setDuration(Math.max(1, Math.min(5, Number(event.target.value))))} /></label>
+                            <label>Stake<NumberField value={stake} min={MIN_STAKE} max={1000} onCommit={value => { setStake(value); runningStakeRef.current = value; }} /></label>
+                            <label>Ticks<NumberField value={duration} min={1} max={5} onCommit={setDuration} /></label>
                         </div>
                     </section>
                     <section className='ad-panel ad-results'>
