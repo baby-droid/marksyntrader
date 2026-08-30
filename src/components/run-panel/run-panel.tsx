@@ -19,6 +19,7 @@ import { useStore } from '@/hooks/useStore';
 import { Localize, localize } from '@deriv-com/translations';
 import { useDevice } from '@deriv-com/ui';
 import ThemedScrollbars from '../shared_ui/themed-scrollbars';
+import { sellAllSideContracts } from '@/external/bot-skeleton/services/tradeEngine/trade/Purchase';
 
 type TStatisticsTile = {
     content: React.ElementType | string;
@@ -48,6 +49,7 @@ type TDrawerHeader = {
 
 type TDrawerContent = {
     active_index: number;
+    active_tab: number;
     is_drawer_open: boolean;
     active_tour: string;
     setActiveTabIndex: () => void;
@@ -175,7 +177,76 @@ const DrawerHeader = ({ is_clear_stat_disabled, is_mobile, is_drawer_open, onCle
         />
     );
 
-const DrawerContent = ({ active_index, is_drawer_open, active_tour, setActiveTabIndex, ...props }: TDrawerContent) => {
+const BotBuilderControls = observer(() => {
+    const { run_panel } = useStore();
+    const [config, setConfig] = React.useState(() => {
+        try {
+            return JSON.parse(localStorage.getItem('bot-builder-config') || '{}');
+        } catch {
+            return {};
+        }
+    });
+
+    const defaults = {
+        market: 'Volatility 100 (1s)',
+        strategy: 'Odd',
+        stake: '1.00',
+        minScore: '70',
+        duration: '2',
+        entryLogic: 'Multi-window confluence',
+        martingale: '2.0',
+    };
+    const values = { ...defaults, ...config };
+    const update = (key: string, value: string) => {
+        const next = { ...values, [key]: value };
+        setConfig(next);
+        localStorage.setItem('bot-builder-config', JSON.stringify(next));
+        window.dispatchEvent(new CustomEvent('bot-builder-config-change', { detail: next }));
+    };
+    const run = run_panel as any;
+
+    return (
+        <section className='run-panel__bot-builder'>
+            <div className='run-panel__bot-builder-heading'>
+                <div>
+                    <span>BOT BUILDER</span>
+                    <strong>Quick Actions</strong>
+                </div>
+                <span className={`run-panel__bot-builder-status ${run.is_running ? 'is-running' : ''}`}>
+                    {run.is_running ? (run.is_paused ? 'PAUSED' : 'RUNNING') : 'READY'}
+                </span>
+            </div>
+            <div className='run-panel__quick-actions'>
+                <button className='is-start' onClick={() => run.onRunButtonClick()} disabled={run.is_running}>▶ Start</button>
+                <button className='is-stop' onClick={() => run.onStopButtonClick()} disabled={!run.is_stop_button_visible}>■ Stop</button>
+                <button className='is-pause' onClick={() => run.is_paused ? run.onResumeButtonClick() : run.onPauseButtonClick()} disabled={!run.is_running}>
+                    {run.is_paused ? '▶ Resume' : 'Ⅱ Pause'}
+                </button>
+                <button className='is-close' onClick={() => { sellAllSideContracts(); run.onStopButtonClick(); }}>× Close All</button>
+            </div>
+            <div className='run-panel__bot-config'>
+                <div className='run-panel__bot-config-title'>Bot Configuration <small>applies to the next run</small></div>
+                <label>Market<select value={values.market} onChange={e => update('market', e.target.value)}>
+                    {['Volatility 10 (1s)', 'Volatility 25 (1s)', 'Volatility 50 (1s)', 'Volatility 100 (1s)', 'Jump 10', 'Jump 50', 'Jump 100'].map(item => <option key={item}>{item}</option>)}
+                </select></label>
+                <div className='run-panel__bot-config-grid'>
+                    <label>Strategy<select value={values.strategy} onChange={e => update('strategy', e.target.value)}>
+                        {['Odd', 'Even', 'Matches', 'Differs', 'Over', 'Under', 'Rise', 'Fall'].map(item => <option key={item}>{item}</option>)}
+                    </select></label>
+                    <label>Stake<input inputMode='decimal' value={values.stake} onChange={e => update('stake', e.target.value)} /></label>
+                    <label>Min score<input type='number' min='50' max='95' value={values.minScore} onChange={e => update('minScore', e.target.value)} /></label>
+                    <label>Duration<select value={values.duration} onChange={e => update('duration', e.target.value)}>{[1, 2, 3, 4, 5].map(item => <option key={item} value={item}>{item} ticks</option>)}</select></label>
+                    <label>Entry logic<select value={values.entryLogic} onChange={e => update('entryLogic', e.target.value)}>
+                        {['Multi-window confluence', 'Distribution pressure', 'Touch and retention', 'Pattern radar'].map(item => <option key={item}>{item}</option>)}
+                    </select></label>
+                    <label>Martingale<input type='number' min='1' max='5' step='0.1' value={values.martingale} onChange={e => update('martingale', e.target.value)} /></label>
+                </div>
+            </div>
+        </section>
+    );
+});
+
+const DrawerContent = ({ active_index, active_tab, is_drawer_open, active_tour, setActiveTabIndex, ...props }: TDrawerContent) => {
     const { isDesktop } = useDevice();
     // Use the useBlockScroll hook to prevent body scrolling when drawer is open on mobile
 
@@ -194,6 +265,7 @@ const DrawerContent = ({ active_index, is_drawer_open, active_tour, setActiveTab
     return (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
             <div style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
+                {active_tab === DBOT_TABS.BOT_BUILDER && <BotBuilderControls />}
                 <Tabs active_index={active_index} onTabItemClick={setActiveTabIndex} top>
                     <div id='db-run-panel-tab__summary' label={<Localize i18n_default_text='Summary' />}>
                         <Summary is_drawer_open={is_drawer_open} />
@@ -392,6 +464,7 @@ const RunPanel = observer(() => {
     const content = (
         <DrawerContent
             active_index={active_index}
+            active_tab={active_tab}
             currency={currency}
             is_drawer_open={is_drawer_open}
             is_mobile={!isDesktop}

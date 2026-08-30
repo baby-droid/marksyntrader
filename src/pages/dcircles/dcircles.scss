@@ -69,6 +69,38 @@
   font-size: .75rem;
 }
 
+.dc-add-market__button {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  min-height: 2.1rem;
+  padding: .5rem .72rem;
+  border: 1px solid #7b61d9;
+  border-radius: .42rem;
+  background: #f2efff;
+  color: #5f48b6;
+  cursor: pointer;
+  font-size: .7rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.dc-add-market__button span {
+  display: inline-grid;
+  width: 1rem;
+  height: 1rem;
+  place-items: center;
+  border-radius: 50%;
+  background: #7b61d9;
+  color: #fff;
+  font-size: .9rem;
+  line-height: 1;
+}
+
+.dc-add-market__button:hover,
+.dc-add-market__button.is-open { background: #e7e1ff; }
+.dc-add-market__button:disabled { cursor: not-allowed; opacity: .45; }
+
 .dc-page__count {
   padding: .55rem .7rem;
   border: 1px solid #dce3ee;
@@ -478,4 +510,23 @@
   .dc-metrics-grid { grid-template-columns: 1fr; }
   .dc-metric-group { padding: .6rem .55rem; }
   .dc-trade-buttons { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (prefers-color-scheme: dark) {
+  .dc-page { background: #0c1422; color: #e7edf7; }
+  .dc-page__header h1, .dc-card__title-row h3, .dc-card__quote strong { color: #f4f7fb; }
+  .dc-page__header p, .dc-page__eyebrow, .dc-label, .dc-card__symbol { color: #91a0b7; }
+  .dc-add-market select, .dc-threshold input, .dc-form-row input,
+  .dc-page__count, .dc-icon-btn, .dc-reset { border-color: #2b3a52; background: #121e30; color: #dce6f4; }
+  .dc-add-market__button { border-color: #8d78e6; background: #241e49; color: #c9bcff; }
+  .dc-add-market__button:hover, .dc-add-market__button.is-open { background: #302660; }
+  .dc-page__count { color: #a9b7ca; }
+  .dc-card, .dc-rail, .dc-summary { border-color: #2b3a52; background: #121e30; }
+  .dc-card__header, .dc-journal-row { border-color: #25334a; }
+  .dc-card__quote, .dc-metric-group { background: #101b2b; }
+  .dc-card__title-row h3, .dc-record b { color: #e7edf7; }
+  .dc-record.won { border-color: #245941; background: #10261d; }
+  .dc-record.lost { border-color: #5b3035; background: #2a171b; }
+  .dc-record p, .dc-journal-row p { color: #a9b7ca; }
+  .dc-notice { border-color: #245941; background: #10261d; color: #75d59e; }
 }

@@ -163,6 +163,7 @@ const AutoDigits = observer(() => {
     const [logicMode, setLogicMode] = useState('confluence');
     const [minScore, setMinScore] = useState(70);
     const [stake, setStake] = useState('1.00');
+    const [martingale, setMartingale] = useState(2);
     const [duration, setDuration] = useState(2);
     const [autoDuration, setAutoDuration] = useState(true);
     const [run, setRun] = useState(false);
@@ -191,6 +192,7 @@ const AutoDigits = observer(() => {
     const validationRef = useRef({ key: '', wins: 0, attempt: 0, readyEpoch: 0 });
     const subscriptionRef = useRef<() => void>(() => {});
     const stakeRef = useRef(1);
+    const martingaleRef = useRef(2);
     const lossStreakRef = useRef(0);
     const nextIdRef = useRef(0);
     const lastCandidateRef = useRef<Candidate | null>(null);
@@ -199,6 +201,9 @@ const AutoDigits = observer(() => {
     useEffect(() => {
         stakeRef.current = Math.max(0.35, Number(stake) || 0.35);
     }, [stake]);
+    useEffect(() => {
+        martingaleRef.current = Math.max(1, Math.min(5, Number(martingale) || 1));
+    }, [martingale]);
 
     const addLog = useCallback((message: string) => {
         setLog(previous => [`${formatTime()}  ${message}`, ...previous].slice(0, 18));
@@ -376,7 +381,12 @@ const AutoDigits = observer(() => {
         const tradeDuration = autoDuration
             ? Math.max(1, Math.min(5, nextCandidate.score >= 90 ? 1 : nextCandidate.score >= 82 ? 2 : nextCandidate.score >= 74 ? 3 : 4))
             : duration;
-        const contractStake = Math.min(stakeRef.current, Math.max(0.35, stakeRef.current * Math.pow(2, Math.min(lossStreakRef.current, 4))));
+        // Recovery is bounded and user-configurable. A multiplier of 1 keeps
+        // the engine flat; every other value is capped at 16x the base stake.
+        const contractStake = Math.min(
+            stakeRef.current * 16,
+            Math.max(0.35, stakeRef.current * Math.pow(martingaleRef.current, Math.min(lossStreakRef.current, 4)))
+        );
         realInFlightRef.current = true;
         const rowId = `ad-${Date.now()}-${++nextIdRef.current}`;
         setTrades(previousTrades => [{ id: rowId, time: formatTime(), strategy: nextCandidate.label, contract: nextCandidate.contractType, stake: contractStake, profit: 0, status: 'OPEN' }, ...previousTrades].slice(0, 30));
@@ -428,7 +438,7 @@ const AutoDigits = observer(() => {
             setStatus(error?.message || 'Trade request failed');
             addLog(`TRADE ERROR — ${error?.message || 'request rejected'}`);
         });
-    }, [addLog, analyze, authorized, autoDuration, buyContract, currency, displayCur, duration, minScore, strategy, symbol]);
+    }, [addLog, analyze, authorized, autoDuration, buyContract, currency, displayCur, duration, martingale, minScore, strategy, symbol]);
 
     useEffect(() => {
         mountedRef.current = true;
@@ -559,7 +569,8 @@ const AutoDigits = observer(() => {
                     <section className='ad-panel ad-recovery'>
                         <div className='ad-panel__label'>LOSS RECOVERY ENGINE</div>
                         <div className='ad-recovery__line'><span>Current loss streak</span><strong>{lossStreak}</strong></div>
-                        <div className='ad-recovery__line'><span>Next stake</span><strong>{fromUsd(Math.min(stakeRef.current * Math.pow(2, Math.min(lossStreak, 4)), stakeRef.current * 16)).toFixed(2)} {displayCur}</strong></div>
+                        <div className='ad-recovery__line'><span>Next stake</span><strong>{fromUsd(Math.min(stakeRef.current * 16, stakeRef.current * Math.pow(martingale, Math.min(lossStreak, 4)))).toFixed(2)} {displayCur}</strong></div>
+                        <div className='ad-recovery__line'><span>Multiplier</span><strong>{martingale.toFixed(1)}× <small>(max 16×)</small></strong></div>
                         <div className='ad-recovery__line'><span>Mode</span><b>{lossStreak >= 3 ? 'RE-SCAN' : lossStreak ? 'CONTROLLED' : 'NORMAL'}</b></div>
                         <button className='ad-outline-btn' onClick={resetEngine}>RESET RISK STATE</button>
                     </section>
@@ -570,6 +581,7 @@ const AutoDigits = observer(() => {
                         <label>STRATEGY<select value={strategy} onChange={event => setStrategy(event.target.value as StrategyValue)}>{['Parity', 'Digits', 'Barrier', 'Direction', 'Range'].map(group => <optgroup key={group} label={group}>{STRATEGIES.filter(item => item.group === group).map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</optgroup>)}</select></label>
                         {['OVER', 'UNDER', 'MATCHES', 'DIFFERS'].includes(strategy) && <label>BARRIER<input type='number' min='0' max='9' value={barrier} onChange={event => setBarrier(Math.max(0, Math.min(9, Number(event.target.value) || 0)))} /></label>}
                         <div className='ad-control-row'><label>STAKE<input inputMode='decimal' value={stake} onChange={event => setStake(event.target.value)} /></label><label>MIN SCORE<input type='number' min='50' max='95' value={minScore} onChange={event => setMinScore(Math.max(50, Math.min(95, Number(event.target.value) || 70)))} /></label></div>
+                        <label>MARTINGALE<input type='number' min='1' max='5' step='0.1' value={martingale} onChange={event => setMartingale(Math.max(1, Math.min(5, Number(event.target.value) || 1)))} /><small className='ad-field-note'>Controlled recovery multiplier, capped at 16×</small></label>
                         <div className='ad-duration-row'><span>DURATION</span><button className={autoDuration ? 'is-active' : ''} onClick={() => setAutoDuration(true)}>AUTO {activeDuration}T</button>{[1, 2, 3, 4, 5].map(value => <button key={value} className={!autoDuration && duration === value ? 'is-active' : ''} onClick={() => { setAutoDuration(false); setDuration(value); }}>{value}T</button>)}</div>
                         <label>ENTRY LOGIC<select value={logicMode} onChange={event => setLogicMode(event.target.value)}>{LOGIC_MODES.map(mode => <option key={mode.value} value={mode.value}>{mode.label}</option>)}</select></label>
                     </section>

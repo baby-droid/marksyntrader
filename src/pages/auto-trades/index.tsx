@@ -652,15 +652,24 @@ const AutoTrades: React.FC = () => {
                 overProb: sample.filter(d => d > cfg.barrier).length / Math.max(1, sample.length) * 100,
             };
         }
-        // Matches means the recent digits are identical; Differs means at least
-        // two different digits appeared in the selected window.
+        // Matches uses concentration, recurrence and clustering rather than
+        // requiring an unrealistic all-identical window. Differs is the
+        // dispersion side of the same decision.
         const freq = Array.from({ length: 10 }, (_, i) => last.filter(d => d === i).length);
-        const minDigit = freq.indexOf(Math.min(...freq));
-        const isMatch = sample.length > 0 && sample.every(d => d === sample[0]);
+        const dominantCount = Math.max(...freq, 0);
+        const dominantDigit = freq.indexOf(dominantCount);
+        const matchConcentration = last.length ? (dominantCount / last.length) * 100 : 0;
+        const recentHalf = last.slice(-Math.max(3, Math.floor(last.length / 2)));
+        const recurrence = recentHalf.filter(d => d === dominantDigit).length;
+        const clusters = sample.length > 1
+            ? sample.slice(1).filter((digit, index) => digit === sample[index]).length
+            : 0;
+        const isMatch = sample.length >= 2 && matchConcentration >= 20 && recurrence >= 2 && (clusters > 0 || matchConcentration >= 30);
+        const isDiffer = sample.length >= 2 && (new Set(sample).size >= 4 || matchConcentration < 20);
         return {
             contract: matchesAction('Buy Matches') ? 'DIGITMATCH' : 'DIGITDIFF',
-            barrier: matchesAction('Buy Matches') ? sample[0] : minDigit,
-            meetsCondition: cfg.ifValue === 'Matches' ? isMatch : new Set(sample).size > 1,
+            barrier: matchesAction('Buy Matches') ? dominantDigit : dominantDigit,
+            meetsCondition: cfg.ifValue === 'Matches' ? isMatch : isDiffer,
             freq,
         };
     }, []);
@@ -1011,7 +1020,11 @@ const AutoTrades: React.FC = () => {
                 const minFreq = Math.min(...freq);
                 const leastFreqDigit = freq.indexOf(minFreq);
                 const matchProb = n > 0 ? (freq[mostFreqDigit] / n) * 100 : 10;
-                const differProb = 100 - (n > 0 ? (freq[leastFreqDigit] / n) * 100 : 10);
+                 const differProb = n > 0 ? 100 - (freq[mostFreqDigit] / n) * 100 : 90;
+                 const matchConcentration = n > 0 ? (freq[mostFreqDigit] / n) * 100 : 0;
+                 const recentHalf = last.slice(-Math.max(3, Math.floor(last.length / 2)));
+                 const recurrence = recentHalf.filter(d => d === mostFreqDigit).length;
+                 const matchClusterCount = last10.slice(1).filter((d, i) => d === last10[i]).length;
                 const last10 = smartDigits.slice(-10);
                  const evenOddPattern = last10.map(d => d % 2 === 0 ? 'E' : 'O');
                  const evenOddStreak = (() => {
@@ -1177,25 +1190,24 @@ const AutoTrades: React.FC = () => {
                                                     Current streak: <strong>{last10.length ? `${evenOddStreak} ${last10[last10.length - 1] % 2 === 0 ? 'Even' : 'Odd'}` : '—'}</strong>
                                                 </div>
                                             )}
-                                            {card.id === 'matchdiffer' && (
-                                                <div className='st__freq-dist'>
-                                                    <div className='st__freq-label'>Digit Frequency Distribution</div>
-                                                    <div className='st__freq-bars'>
-                                                        {freq.map((cnt, d) => {
-                                                            const pct = n > 0 ? (cnt / n) * 100 : 10;
-                                                            return (
-                                                                <div key={d} className='st__freq-col'>
-                                                                    <div className='st__freq-bar-wrap'>
-                                                                        <div className={`st__freq-bar ${d === leastFreqDigit ? 'pred' : ''}`}
-                                                                            style={{ height: `${Math.max(4, pct * 2)}px` }} />
-                                                                    </div>
-                                                                    <span className='st__freq-d'>{d}</span>
-                                                                </div>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                </div>
-                                            )}
+                                             {card.id === 'matchdiffer' && (
+                                                 <div className='st__freq-dist'>
+                                                     <div className='st__freq-label'>Digit Distribution · {n} ticks</div>
+                                                     <div className='st__freq-circles'>
+                                                         {freq.map((cnt, d) => {
+                                                             const digitPct = n > 0 ? (cnt / n) * 100 : 0;
+                                                             const rank = [...freq].sort((a, b) => b - a).indexOf(cnt);
+                                                             const tone = d === mostFreqDigit ? 'dominant' : rank <= 2 ? 'active' : cnt === 0 ? 'empty' : 'quiet';
+                                                             return <div key={d} className='st__freq-circle-wrap'><span className={`st__freq-circle ${tone}`}>{d}</span><small>{digitPct.toFixed(0)}%</small></div>;
+                                                         })}
+                                                     </div>
+                                                     <div className='st__match-evidence'>
+                                                         <span>Concentration <b>{matchConcentration.toFixed(0)}%</b></span>
+                                                         <span>Recurrence <b>{recurrence}×</b></span>
+                                                         <span>Clusters <b>{matchClusterCount}</b></span>
+                                                     </div>
+                                                 </div>
+                                             )}
                                         </div>
                                     )}
 

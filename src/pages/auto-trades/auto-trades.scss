@@ -1251,13 +1251,61 @@
     }
 
     // ── Frequency distribution
-    &__freq-dist { margin-top: 6px; }
+    &__freq-dist {
+        margin-top: 8px;
+        padding: 8px;
+        border: 1px solid rgba(148, 163, 184, .25);
+        border-radius: 8px;
+        background: #fff;
+    }
     &__freq-label {
         font-size: 10px;
         font-weight: 700;
-        color: rgba(255,255,255,0.3);
+        color: #64748b;
         text-transform: uppercase;
         margin-bottom: 4px;
+    }
+    &__freq-circles {
+        display: grid;
+        grid-template-columns: repeat(10, minmax(0, 1fr));
+        gap: 4px;
+        align-items: start;
+    }
+    &__freq-circle-wrap {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+        min-width: 0;
+        small { color: #64748b; font-size: 8px; font-weight: 700; }
+    }
+    &__freq-circle {
+        display: grid;
+        width: 24px;
+        height: 24px;
+        place-items: center;
+        border: 1px solid #dbe3ee;
+        border-radius: 50%;
+        background: #f8fafc;
+        color: #475569;
+        font-size: 10px;
+        font-weight: 800;
+        &.dominant { border-color: #16a36b; background: #d9f7e8; color: #087244; box-shadow: 0 0 0 2px rgba(22,163,107,.12); }
+        &.active { border-color: #5b8def; background: #e4edff; color: #2858b7; }
+        &.quiet { background: #f1f5f9; color: #64748b; }
+        &.empty { border-style: dashed; background: #fff; color: #cbd5e1; }
+    }
+    &__match-evidence {
+        display: flex;
+        justify-content: space-between;
+        gap: 4px;
+        margin-top: 8px;
+        padding-top: 6px;
+        border-top: 1px solid #e2e8f0;
+        color: #64748b;
+        font-size: 9px;
+        span { white-space: nowrap; }
+        b { color: #334155; }
     }
     &__freq-bars {
         display: flex;

@@ -527,6 +527,7 @@ const CircleAnalyzer = observer(() => {
   const [displayCur, setDisplayCur] = useState(getDisplayCurrency());
   const [notice, setNotice] = useState('');
   const [tradeLock, setTradeLock] = useState(false);
+  const [showAddMarket, setShowAddMarket] = useState(false);
 
   useEffect(() => subscribeCurrency(() => setDisplayCur(getDisplayCurrency())), []);
 
@@ -614,13 +615,24 @@ const CircleAnalyzer = observer(() => {
           <p>Live digit distribution, parity flow, barriers and direction across your selected markets.</p>
         </div>
         <div className='dc-page__controls'>
-          <label className='dc-add-market'>
-            <span>Add market</span>
-            <select value='' onChange={e => addMarket(e.target.value)}>
-              <option value=''>Choose a market…</option>
-              {availableMarkets.map(market => <option key={market.value} value={market.value}>{market.label}</option>)}
-            </select>
-          </label>
+          <button
+            className={`dc-add-market__button ${showAddMarket ? 'is-open' : ''}`}
+            onClick={() => setShowAddMarket(value => !value)}
+            disabled={!availableMarkets.length}
+            aria-expanded={showAddMarket}
+            title={availableMarkets.length ? 'Add a market card' : 'All markets are already visible'}
+          >
+            <span>+</span> Add market
+          </button>
+          {showAddMarket && availableMarkets.length > 0 && (
+            <label className='dc-add-market'>
+              <span>Choose a market</span>
+              <select value='' onChange={e => { addMarket(e.target.value); setShowAddMarket(false); }}>
+                <option value=''>Choose a market…</option>
+                {availableMarkets.map(market => <option key={market.value} value={market.value}>{market.label}</option>)}
+              </select>
+            </label>
+          )}
           <span className='dc-page__count'>{symbols.length} cards active</span>
         </div>
       </header>
