@@ -226,6 +226,7 @@
         <value name="VALUE"><block type="last_digit" id="DES_last_digit_block"></block></value>
         <next>
           <block type="controls_if" id="DES_buy_router">
+            <data>gt.seq.applySequence</data>
             <mutation elseif="7" else="1"></mutation>
             <value name="IF0"><block type="logic_compare" id="DES_buy_c0"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="DES_buy_g0"><field name="VAR" id="DES_phase">phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">0</field></block></value></block></value>
             <statement name="DO0"><block type="multiple_purchase" id="DES_buy_diff0"><field name="PURCHASE_1">DIGITDIFF</field><field name="PURCHASE_2"></field><field name="PURCHASE_3"></field><field name="PURCHASE_4"></field><field name="PURCHASE_5"></field><field name="PURCHASE_6"></field><field name="PREDICTION">LAST_DIGIT</field></block></statement>

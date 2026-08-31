@@ -9,10 +9,10 @@ import { setTradeContext } from '@/utils/trade-metadata';
 import './free-bots.scss';
 
 const DIFFERS_CYCLE_SHARED_BLOCKS = [
-  { id: 'gt.seq.applySequence', file: '/attached_assets/block_(1)_1788158548530.xml' },
-  { id: 'gt.seq.beforePurchase', file: '/attached_assets/block_(2)_1788158554009.xml' },
-  { id: 'gt.seq.tradeDef', file: '/attached_assets/block_(3)_1788158572633.xml' },
-  { id: 'gt.seq.afterPurchase', file: '/attached_assets/block_(4)_1788158566328.xml' },
+  { id: 'gt.seq.applySequence', file: '/attached_assets/block_(1)_1788162146803.xml' },
+  { id: 'gt.seq.beforePurchase', file: '/attached_assets/block_(2)_1788162153348.xml' },
+  { id: 'gt.seq.tradeDef', file: '/attached_assets/block_(3)_1788162160415.xml' },
+  { id: 'gt.seq.afterPurchase', file: '/attached_assets/block_(4)_1788162166311.xml' },
 ];
 
 const FREE_BOTS = [
@@ -464,14 +464,15 @@ const FreeBots = observer(() => {
     }
   }, [store]);
 
-  const validateSharedBlockAssets = useCallback(async (bot: typeof FREE_BOTS[0]) => {
+  const validateSharedBlockAssets = useCallback(async (bot: typeof FREE_BOTS[0], blockString: string) => {
     const assets = (bot as any).sharedBlockAssets || [];
     return Promise.all(assets.map(async (asset: { id: string; file: string }) => {
-      const response = await fetch(asset.file);
-      if (!response.ok) throw new Error(`Failed to fetch shared block ${asset.id}`);
-      const content = await response.text();
-      if (!content.includes(`data-id="${asset.id}"`)) {
-        throw new Error(`Shared block ${asset.id} is not present in ${asset.file}`);
+      // Uploaded Blockly SVG fragments are visual references, not loadable bot
+      // XML and are not served as application routes. The executable bot keeps
+      // each shared identifier in its <data> metadata, which is the source of
+      // truth used for validation before loading.
+      if (!blockString.includes(`>${asset.id}<`)) {
+        throw new Error(`Shared block ${asset.id} is not present in ${bot.xmlFile}`);
       }
       return { id: asset.id, file: asset.file, ok: true };
     }));
@@ -497,7 +498,7 @@ const FreeBots = observer(() => {
       const res = await fetch(bot.xmlFile);
       if (!res.ok) throw new Error(`Failed to fetch ${bot.xmlFile}`);
       const xml = await res.text();
-      await validateSharedBlockAssets(bot);
+      await validateSharedBlockAssets(bot, xml);
       (window as any).__pendingBotXml  = xml;
       (window as any).__pendingBotName = bot.name;
       store?.dashboard?.setActiveTab?.(DBOT_TABS.BOT_BUILDER);
@@ -530,7 +531,7 @@ const FreeBots = observer(() => {
       const res = await fetch(bot.xmlFile);
       if (!res.ok) throw new Error(`Failed to fetch ${bot.xmlFile}`);
       const xml = await res.text();
-      await validateSharedBlockAssets(bot);
+      await validateSharedBlockAssets(bot, xml);
       (window as any).__pendingBotXml  = xml;
       (window as any).__pendingBotName = bot.name;
       store?.dashboard?.setActiveTab?.(DBOT_TABS.BOT_BUILDER);

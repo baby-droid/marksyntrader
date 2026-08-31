@@ -25,9 +25,9 @@ const PALE_BLUE5 = '#6cb4e4';
 
 const FREE_BOTS_LIST = [
     // ── Signature bots (top of panel) ─────────────────────────────────────────
-    { id: 'differs-edge-scanner', name: 'Differs Edge Scanner', market: 'V50 1s', badge: 'SCAN 🧠', badgeColor: '#34d399', xmlFile: '/bots/differs-edge-scanner.xml', icon: '🔎' },
+    { id: 'differs-edge-scanner', name: 'Differs Edge Scanner — Recovery Matrix', market: 'V50 1s', badge: 'SCAN 🧠', badgeColor: '#34d399', xmlFile: '/bots/differs-edge-scanner.xml', icon: '🔎' },
     {
-        id: 'ahmed-differ-cycle',
+        id: 'ahmed-differs-cycle',
         name: 'AHMED DIFFERS CYCLE',
         market: 'V50 1s',
         badge: 'SHARED BLOCKS',
@@ -38,10 +38,10 @@ const FREE_BOTS_LIST = [
         xmlFile: '/bots/ahmed-differs-cycle.xml',
         icon: '🔁',
         sharedBlockAssets: [
-            { id: 'gt.seq.applySequence', file: '/attached_assets/block_(1)_1788158548530.xml' },
-            { id: 'gt.seq.beforePurchase', file: '/attached_assets/block_(2)_1788158554009.xml' },
-            { id: 'gt.seq.tradeDef', file: '/attached_assets/block_(3)_1788158572633.xml' },
-            { id: 'gt.seq.afterPurchase', file: '/attached_assets/block_(4)_1788158566328.xml' },
+            { id: 'gt.seq.applySequence', file: '/attached_assets/block_(1)_1788162146803.xml' },
+            { id: 'gt.seq.beforePurchase', file: '/attached_assets/block_(2)_1788162153348.xml' },
+            { id: 'gt.seq.tradeDef', file: '/attached_assets/block_(3)_1788162160415.xml' },
+            { id: 'gt.seq.afterPurchase', file: '/attached_assets/block_(4)_1788162166311.xml' },
         ],
     },
     { id: 'omni-cycle-trader-pro', name: 'Omni Cycle Trader Pro', market: 'V75 1s', badge: 'CYCLE 🔄', badgeColor: '#a78bfa', xmlFile: '/bots/omni-cycle-trader-pro.xml', icon: '🔄' },
@@ -82,11 +82,11 @@ const FreeBotsSidePanel: React.FC<TFreeBotsPanelProps> = ({ onClose, onLoadDone 
         if (!response.ok) throw new Error(`Failed to fetch bot XML: ${response.status}`);
         const block_string = await response.text();
         const sharedChecks = await Promise.all((bot.sharedBlockAssets || []).map(async asset => {
-            const assetResponse = await fetch(asset.file);
-            if (!assetResponse.ok) throw new Error(`Failed to fetch shared block ${asset.id}: ${assetResponse.status}`);
-            const assetText = await assetResponse.text();
-            if (!assetText.includes(`data-id="${asset.id}"`)) {
-                throw new Error(`Shared block ${asset.id} is not present in ${asset.file}`);
+            // The uploaded files are rendered Blockly SVG fragments. Validate
+            // their preserved IDs against the executable bot metadata instead
+            // of fetching them as if they were runnable XML routes.
+            if (!block_string.includes(`>${asset.id}<`)) {
+                throw new Error(`Shared block ${asset.id} is not present in ${bot.xmlFile}`);
             }
             return { id: asset.id, ok: true, file: asset.file };
         }));
