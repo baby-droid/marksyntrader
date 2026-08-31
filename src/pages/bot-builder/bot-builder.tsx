@@ -28,11 +28,14 @@ const FREE_BOTS_LIST = [
     { id: 'differs-edge-scanner', name: 'Differs Edge Scanner', market: 'V50 1s', badge: 'SCAN 🧠', badgeColor: '#34d399', xmlFile: '/bots/differs-edge-scanner.xml', icon: '🔎' },
     {
         id: 'ahmed-differ-cycle',
-        name: 'AHMED DIFFER CYCLE',
+        name: 'AHMED DIFFERS CYCLE',
         market: 'V50 1s',
         badge: 'SHARED BLOCKS',
         badgeColor: '#f59e0b',
-        xmlFile: '/bots/ahmed-differ-cycle.xml',
+        // The complete executable cycle is maintained in the canonical
+        // Differs XML: Differs → Over 1 → Over 2 → Differs → Under 8 →
+        // Under 7, followed by parity recovery on a loss.
+        xmlFile: '/bots/differs-edge-scanner.xml',
         icon: '🔁',
         sharedBlockAssets: [
             { id: 'gt.seq.tradeDef', file: '/attached_assets/block_(3)_1788157539069.xml' },
