@@ -5,6 +5,7 @@
     <variable id="adc_initial">initial_stake</variable>
     <variable id="adc_martingale">martingale</variable>
     <variable id="adc_phase">cycle_phase</variable>
+    <variable id="adc_recovery">recovery_mode</variable>
     <variable id="adc_digit">last_digit</variable>
     <variable id="adc_previous_parity">previous_parity</variable>
     <variable id="adc_parity_streak">parity_streak</variable>
@@ -14,8 +15,8 @@
     AHMED DIFFERS CYCLE
     Normal cycle: DIGITDIFF → DIGITOVER 1 → DIGITOVER 2 → DIGITDIFF →
     DIGITUNDER 8 → DIGITUNDER 7, then the six-step cycle restarts.
-    Recovery gate: after three evens, buy DIGITODD; after three odds, buy
-    DIGITEVEN. A mixed parity sequence returns to Differs.
+    Loss recovery is separate from the normal cycle: after three evens, buy
+    DIGITODD; after three odds, buy DIGITEVEN. No loss path falls back to Differs.
     One-tick contracts, 2.1x recovery, and continuous trade_again flow.
   -->
   <block type="trade_definition" id="adc_trade_definition" deletable="false" x="0" y="60">
@@ -70,13 +71,19 @@
                     <field name="VAR" id="adc_phase">cycle_phase</field>
                     <value name="VALUE"><block type="math_number" id="adc_phase_value"><field name="NUM">0</field></block></value>
                     <next>
-                      <block type="variables_set" id="adc_set_previous_parity">
-                        <field name="VAR" id="adc_previous_parity">previous_parity</field>
-                        <value name="VALUE"><block type="math_number" id="adc_previous_parity_value"><field name="NUM">-1</field></block></value>
+                      <block type="variables_set" id="adc_set_recovery">
+                        <field name="VAR" id="adc_recovery">recovery_mode</field>
+                        <value name="VALUE"><block type="math_number" id="adc_recovery_value"><field name="NUM">-1</field></block></value>
                         <next>
-                          <block type="variables_set" id="adc_set_parity_streak">
-                            <field name="VAR" id="adc_parity_streak">parity_streak</field>
-                            <value name="VALUE"><block type="math_number" id="adc_parity_streak_value"><field name="NUM">0</field></block></value>
+                          <block type="variables_set" id="adc_set_previous_parity">
+                            <field name="VAR" id="adc_previous_parity">previous_parity</field>
+                            <value name="VALUE"><block type="math_number" id="adc_previous_parity_value"><field name="NUM">-1</field></block></value>
+                            <next>
+                              <block type="variables_set" id="adc_set_parity_streak">
+                                <field name="VAR" id="adc_parity_streak">parity_streak</field>
+                                <value name="VALUE"><block type="math_number" id="adc_parity_streak_value"><field name="NUM">0</field></block></value>
+                              </block>
+                            </next>
                           </block>
                         </next>
                       </block>
@@ -124,26 +131,39 @@
                 <field name="VAR" id="adc_previous_parity">previous_parity</field>
                 <value name="VALUE"><block type="math_modulo" id="adc_store_parity_modulo"><value name="DIVIDEND"><block type="variables_get" id="adc_store_digit"><field name="VAR" id="adc_digit">last_digit</field></block></value><value name="DIVISOR"><shadow type="math_number"><field name="NUM">2</field></shadow></value></block></value>
                 <next>
-                  <block type="controls_if" id="adc_sequence_controller">
-                    <data>gt.seq.applySequence</data>
-                    <mutation elseif="7" else="1"/>
-                    <value name="IF0"><block type="logic_compare" id="adc_phase_differs_test"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="adc_phase_differs_get"><field name="VAR" id="adc_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">0</field></block></value></block></value>
-                    <statement name="DO0"><block type="multiple_purchase" id="adc_purchase_differs"><field name="PURCHASE_1">DIGITDIFF</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/><field name="PREDICTION">LAST_DIGIT</field></block></statement>
-                    <value name="IF1"><block type="logic_compare" id="adc_phase_odd_test"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="adc_phase_odd_get"><field name="VAR" id="adc_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">1</field></block></value></block></value>
-                    <statement name="DO1"><block type="multiple_purchase" id="adc_purchase_over1"><field name="PURCHASE_1">DIGITOVER</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/><field name="PREDICTION">1</field></block></statement>
-                    <value name="IF2"><block type="logic_compare" id="adc_phase_even_test"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="adc_phase_even_get"><field name="VAR" id="adc_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">2</field></block></value></block></value>
-                    <statement name="DO2"><block type="multiple_purchase" id="adc_purchase_over2"><field name="PURCHASE_1">DIGITOVER</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/><field name="PREDICTION">2</field></block></statement>
-                     <value name="IF3"><block type="logic_compare" id="adc_phase_differs_middle_test"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="adc_phase_differs_middle_get"><field name="VAR" id="adc_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">3</field></block></value></block></value>
-                     <statement name="DO3"><block type="multiple_purchase" id="adc_purchase_differs_middle"><field name="PURCHASE_1">DIGITDIFF</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/><field name="PREDICTION">LAST_DIGIT</field></block></statement>
-                     <value name="IF4"><block type="logic_compare" id="adc_phase_under8_test"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="adc_phase_under8_get"><field name="VAR" id="adc_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">4</field></block></value></block></value>
-                     <statement name="DO4"><block type="multiple_purchase" id="adc_purchase_under8"><field name="PURCHASE_1">DIGITUNDER</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/><field name="PREDICTION">8</field></block></statement>
-                     <value name="IF5"><block type="logic_compare" id="adc_phase_under7_test"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="adc_phase_under7_get"><field name="VAR" id="adc_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">5</field></block></value></block></value>
-                     <statement name="DO5"><block type="multiple_purchase" id="adc_purchase_under7"><field name="PURCHASE_1">DIGITUNDER</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/><field name="PREDICTION">7</field></block></statement>
-                      <value name="IF6"><block type="logic_compare" id="adc_phase_odd_recovery_test"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="adc_phase_odd_recovery_get"><field name="VAR" id="adc_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">6</field></block></value></block></value>
-                      <statement name="DO6"><block type="multiple_purchase" id="adc_purchase_odd"><field name="PURCHASE_1">DIGITODD</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/></block></statement>
-                      <value name="IF7"><block type="logic_compare" id="adc_phase_even_recovery_test"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="adc_phase_even_recovery_get"><field name="VAR" id="adc_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">7</field></block></value></block></value>
-                      <statement name="DO7"><block type="multiple_purchase" id="adc_purchase_even"><field name="PURCHASE_1">DIGITEVEN</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/></block></statement>
-                    <statement name="ELSE"><block type="multiple_purchase" id="adc_fallback_differs"><field name="PURCHASE_1">DIGITDIFF</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/><field name="PREDICTION">LAST_DIGIT</field></block></statement>
+                  <block type="controls_if" id="adc_recovery_controller">
+                    <mutation else="1"/>
+                    <value name="IF0"><block type="logic_compare" id="adc_recovery_active_test"><field name="OP">GTE</field><value name="A"><block type="variables_get" id="adc_recovery_active"><field name="VAR" id="adc_recovery">recovery_mode</field></block></value><value name="B"><block type="math_number" id="adc_recovery_zero"><field name="NUM">0</field></block></value></block></value>
+                    <statement name="DO0">
+                      <block type="controls_if" id="adc_recovery_purchase">
+                        <mutation else="1"/>
+                        <value name="IF0"><block type="logic_compare" id="adc_recovery_odd_test"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="adc_recovery_mode_get"><field name="VAR" id="adc_recovery">recovery_mode</field></block></value><value name="B"><block type="math_number" id="adc_recovery_odd_value"><field name="NUM">0</field></block></value></block></value>
+                        <statement name="DO0">
+                          <block type="variables_set" id="adc_clear_odd_recovery"><field name="VAR" id="adc_recovery">recovery_mode</field><value name="VALUE"><block type="math_number"><field name="NUM">-1</field></block></value><next><block type="multiple_purchase" id="adc_purchase_odd"><field name="PURCHASE_1">DIGITODD</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/></block></next></block>
+                        </statement>
+                        <statement name="ELSE">
+                          <block type="variables_set" id="adc_clear_even_recovery"><field name="VAR" id="adc_recovery">recovery_mode</field><value name="VALUE"><block type="math_number"><field name="NUM">-1</field></block></value><next><block type="multiple_purchase" id="adc_purchase_even"><field name="PURCHASE_1">DIGITEVEN</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/></block></next></block>
+                        </statement>
+                      </block>
+                    </statement>
+                    <statement name="ELSE">
+                      <block type="controls_if" id="adc_sequence_controller">
+                        <data>gt.seq.applySequence</data>
+                        <mutation elseif="5"/>
+                        <value name="IF0"><block type="logic_compare" id="adc_phase_differs_test"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="adc_phase_differs_get"><field name="VAR" id="adc_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">0</field></block></value></block></value>
+                        <statement name="DO0"><block type="multiple_purchase" id="adc_purchase_differs"><field name="PURCHASE_1">DIGITDIFF</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/><field name="PREDICTION">LAST_DIGIT</field></block></statement>
+                        <value name="IF1"><block type="logic_compare" id="adc_phase_odd_test"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="adc_phase_odd_get"><field name="VAR" id="adc_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">1</field></block></value></block></value>
+                        <statement name="DO1"><block type="multiple_purchase" id="adc_purchase_over1"><field name="PURCHASE_1">DIGITOVER</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/><field name="PREDICTION">1</field></block></statement>
+                        <value name="IF2"><block type="logic_compare" id="adc_phase_even_test"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="adc_phase_even_get"><field name="VAR" id="adc_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">2</field></block></value></block></value>
+                        <statement name="DO2"><block type="multiple_purchase" id="adc_purchase_over2"><field name="PURCHASE_1">DIGITOVER</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/><field name="PREDICTION">2</field></block></statement>
+                        <value name="IF3"><block type="logic_compare" id="adc_phase_differs_middle_test"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="adc_phase_differs_middle_get"><field name="VAR" id="adc_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">3</field></block></value></block></value>
+                        <statement name="DO3"><block type="multiple_purchase" id="adc_purchase_differs_middle"><field name="PURCHASE_1">DIGITDIFF</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/><field name="PREDICTION">LAST_DIGIT</field></block></statement>
+                        <value name="IF4"><block type="logic_compare" id="adc_phase_under8_test"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="adc_phase_under8_get"><field name="VAR" id="adc_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">4</field></block></value></block></value>
+                        <statement name="DO4"><block type="multiple_purchase" id="adc_purchase_under8"><field name="PURCHASE_1">DIGITUNDER</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/><field name="PREDICTION">8</field></block></statement>
+                        <value name="IF5"><block type="logic_compare" id="adc_phase_under7_test"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="adc_phase_under7_get"><field name="VAR" id="adc_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">5</field></block></value></block></value>
+                        <statement name="DO5"><block type="multiple_purchase" id="adc_purchase_under7"><field name="PURCHASE_1">DIGITUNDER</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/><field name="PREDICTION">7</field></block></statement>
+                      </block>
+                    </statement>
                   </block>
                 </next>
               </block>
@@ -175,11 +195,11 @@
                   <block type="controls_if" id="adc_contrarian_parity">
                     <mutation else="1"/>
                     <value name="IF0"><block type="logic_compare" id="adc_loss_even_test"><field name="OP">EQ</field><value name="A"><block type="math_modulo" id="adc_loss_modulo"><value name="DIVIDEND"><block type="variables_get" id="adc_loss_digit"><field name="VAR" id="adc_digit">last_digit</field></block></value><value name="DIVISOR"><shadow type="math_number"><field name="NUM">2</field></shadow></value></block></value><value name="B"><block type="math_number"><field name="NUM">0</field></block></value></block></value>
-                    <statement name="DO0"><block type="variables_set" id="adc_even_to_odd"><field name="VAR" id="adc_phase">cycle_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">7</field></block></value></block></statement>
-                    <statement name="ELSE"><block type="variables_set" id="adc_odd_to_even"><field name="VAR" id="adc_phase">cycle_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">8</field></block></value></block></statement>
+                     <statement name="DO0"><block type="variables_set" id="adc_even_to_odd"><field name="VAR" id="adc_recovery">recovery_mode</field><value name="VALUE"><block type="math_number"><field name="NUM">0</field></block></value></block></statement>
+                     <statement name="ELSE"><block type="variables_set" id="adc_odd_to_even"><field name="VAR" id="adc_recovery">recovery_mode</field><value name="VALUE"><block type="math_number"><field name="NUM">1</field></block></value></block></statement>
                   </block>
                 </statement>
-                <statement name="ELSE"><block type="variables_set" id="adc_no_streak_differs"><field name="VAR" id="adc_phase">cycle_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">0</field></block></value></block></statement>
+                <statement name="ELSE"><block type="variables_set" id="adc_no_streak_recovery"><field name="VAR" id="adc_recovery">recovery_mode</field><value name="VALUE"><block type="math_number"><field name="NUM">-1</field></block></value></block></statement>
               </block>
             </next>
           </block>
