@@ -6,6 +6,8 @@ description: Strategy sequence and recovery behavior for the loadable Differs/Ov
 ## Rule
 The Differs Edge Scanner is an XML-driven Bot Builder strategy. It captures the latest digit before each purchase, rotates through Differs (prediction = scanned digit), Over 2, Over 3, Differs, Under 7, and Under 6. After a loss, three consecutive evens select Odd recovery and three consecutive odds select Even recovery; mixed parity returns to Differs.
 
+AHMED DIFFERS CYCLE is a separate XML matrix: Differs → Over 1 → Over 2 → Under 8 → Under 7, with the same loss-only parity recovery. The Free Bots AI guide scans authenticated market feeds, chooses the strongest recent market and dominant Differs barrier, and only enables guided load/run when its current entry pattern is ready; refresh guidance after each three-run cycle.
+
 **Why:** The user wanted one bot combining the specified digit contracts with a market-entry scan and parity recovery, while preserving the app’s single XML trading engine.
 
 **How to apply:** Keep the XML loadable through both Free Bots and Bot Builder. A win resets stake and advances the six-step main rotation; a loss multiplies stake by 2. Recovery is only armed when the tracked parity streak reaches three, and every result continues through `trade_again`.

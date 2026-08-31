@@ -6,6 +6,8 @@ import { DBOT_TABS } from '@/constants/bot-contents';
 import { api_base, load, save_types } from '@/external/bot-skeleton';
 import { isFastExecutionEnabled } from '@/utils/execution-speed';
 import { setTradeContext } from '@/utils/trade-metadata';
+import AiCycleGuide from '@/components/ai-cycle-guide/ai-cycle-guide';
+import { DiffersCycleBotId, patchGuidedCycleXml } from '@/utils/differs-cycle';
 import './free-bots.scss';
 
 const DIFFERS_CYCLE_SHARED_BLOCKS = [
@@ -524,13 +526,28 @@ const FreeBots = observer(() => {
     }
   }, [store, loadXmlIntoWorkspace, validateSharedBlockAssets]);
 
-  const handleLoadAndRun = useCallback(async (bot: typeof FREE_BOTS[0]) => {
+  const handleLoadAndRun = useCallback(async (
+    bot: typeof FREE_BOTS[0],
+    guidance?: { symbol: string; differDigit: number },
+  ) => {
     setTradeContext({ page: 'Free Bots', bot: bot.name });
     setLoadingId(bot.id);
     try {
       const res = await fetch(bot.xmlFile);
       if (!res.ok) throw new Error(`Failed to fetch ${bot.xmlFile}`);
-      const xml = await res.text();
+      let xml = await res.text();
+      if (guidance) {
+        xml = patchGuidedCycleXml(xml, guidance.symbol, guidance.differDigit);
+        (window as any).__aiCycleGuidance = {
+          botId: bot.id,
+          symbol: guidance.symbol,
+          differDigit: guidance.differDigit,
+          updatedAt: Date.now(),
+        };
+        window.dispatchEvent(new CustomEvent('ai:cycle-guidance', {
+          detail: (window as any).__aiCycleGuidance,
+        }));
+      }
       await validateSharedBlockAssets(bot, xml);
       (window as any).__pendingBotXml  = xml;
       (window as any).__pendingBotName = bot.name;
@@ -557,6 +574,15 @@ const FreeBots = observer(() => {
       setLoadingId(null);
     }
   }, [store, loadXmlIntoWorkspace, autoRun, validateSharedBlockAssets]);
+
+  const handleLoadGuided = useCallback((
+    botId: DiffersCycleBotId,
+    symbol: string,
+    differDigit: number,
+  ) => {
+    const bot = FREE_BOTS.find(item => item.id === botId);
+    if (bot) void handleLoadAndRun(bot, { symbol, differDigit });
+  }, [handleLoadAndRun]);
 
   // ── Market Killer Prime V1 — Direct Purchase ────────────────────────────────
   const mkpPurchase = useCallback(async () => {
@@ -671,6 +697,8 @@ const FreeBots = observer(() => {
           <p>{FREE_BOTS.length} professional bots • Click "Load Bot" to open in Bot Builder</p>
         </div>
       </div>
+
+      <AiCycleGuide onLoadGuided={handleLoadGuided} />
 
       <div className='free-bots__filters'>
         <div className='free-bots__search-box'>

@@ -34,14 +34,9 @@
     position: fixed;
     top: 7.2rem;
     right: 1.4rem;
-    width: min(22rem, calc(100vw - 2rem));
-    padding: 0.8rem;
-    border: 1px solid #9ac8ef;
-    border-radius: 0.7rem;
-    background: linear-gradient(145deg, #f8fcff, #edf7ff);
+    width: min(30rem, calc(100vw - 2rem));
+    padding: 0;
     color: #152238;
-    box-shadow: 0 10px 30px rgba(15, 35, 65, 0.25);
-    font-family: Inter, sans-serif;
     font-size: 0.78rem;
 }
 
