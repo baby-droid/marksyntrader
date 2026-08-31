@@ -192,7 +192,10 @@ const DrawerContent = ({ active_index, is_drawer_open, active_tour, setActiveTab
     }, [is_drawer_open, isDesktop]);
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+        <div
+            className='run-panel__drawer-content'
+            style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}
+        >
             <div style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
                 <Tabs active_index={active_index} onTabItemClick={setActiveTabIndex} top>
                     <div id='db-run-panel-tab__summary' label={<Localize i18n_default_text='Summary' />}>

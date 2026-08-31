@@ -280,12 +280,14 @@
     }
 
     &__analyzer-trigger {
+        position: absolute;
+        top: 3.7rem;
+        left: 1.2rem;
         display: grid;
         grid-template-columns: repeat(2, 5px);
         grid-template-rows: repeat(2, 5px);
         gap: 3px;
-        align-self: flex-start;
-        margin: 0.35rem 1.6rem 0.55rem;
+        margin: 0;
         padding: 5px;
         border: 1px solid var(--border-normal, #d6dadb);
         border-radius: 5px;
@@ -303,6 +305,10 @@
             border-color: #7b3fe4;
             box-shadow: 0 0 0 2px rgba(123, 63, 228, 0.12);
         }
+    }
+
+    &__drawer-content {
+        position: relative;
     }
 
     &__buttons {
