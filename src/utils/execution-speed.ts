@@ -14,7 +14,8 @@
  * Both values are shared app-wide (speed toggle beside Run, the floating AI,
  * and the trade engine all read them) and persisted so they survive reloads.
  * A-SPEED BOOST is a session-level preset that keeps the Normal tier's
- * one-purchase-per-tick behavior while enabling Fast's zero-delay pacing.
+ * one-purchase-per-tick behavior while using its own zero-delay/direct-buy
+ * path. It deliberately turns the separate Fast toggle OFF while active.
  */
 export type ExecutionSpeed = 'normal' | 'crazy' | 'turbo';
 
@@ -22,8 +23,7 @@ const STORAGE_KEY = 'execution_speed';
 const FAST_EXEC_STORAGE_KEY = 'fast_execution_enabled';
 
 // Inter-trade delay (ms) applied by the engine between purchases per speed,
-// BEFORE the independent Fast Execution toggle is taken into account (see
-// getExecutionSpeedDelay below, which forces 0 when Fast Execution is on).
+// BEFORE Fast or A-SPEED zero-delay overrides are taken into account.
 export const SPEED_DELAY_MS: Record<ExecutionSpeed, number> = {
     normal: 200,  // reduced from 1000ms — fast like dBot.deriv.com
     crazy: 0,     // no artificial delay — fires the instant the engine is ready
@@ -94,11 +94,13 @@ export const isASpeedBoostEnabled = (): boolean => aSpeedBoostEnabled;
  * wait — no matter which speed tier (Normal/Crazy/Turbo) is selected.
  */
 export const getExecutionSpeedDelay = (): number =>
-    fastExecutionEnabled ? 0 : SPEED_DELAY_MS[current];
+    fastExecutionEnabled || aSpeedBoostEnabled ? 0 : SPEED_DELAY_MS[current];
 
 /** Effective max concurrent in-flight contracts — the higher of the active tier or Fast Execution's cap. */
 export const getMaxInflight = (): number =>
-    fastExecutionEnabled ? Math.max(SPEED_MAX_INFLIGHT[current], FAST_EXEC_MAX_INFLIGHT) : SPEED_MAX_INFLIGHT[current];
+    fastExecutionEnabled || aSpeedBoostEnabled
+        ? Math.max(SPEED_MAX_INFLIGHT[current], FAST_EXEC_MAX_INFLIGHT)
+        : SPEED_MAX_INFLIGHT[current];
 
 /** Effective purchases fired per tick. Fast mode never inherits Turbo fan-out. */
 export const getPurchasesPerTick = (): number =>
@@ -108,7 +110,7 @@ export const getPurchasesPerTick = (): number =>
 
 /** True when the engine should skip the proposal round-trip and buy directly. */
 export const useDirectBuyForSpeed = (): boolean =>
-    fastExecutionEnabled || current === 'crazy' || current === 'turbo';
+    aSpeedBoostEnabled || fastExecutionEnabled || current === 'crazy' || current === 'turbo';
 
 export const setExecutionSpeed = (speed: ExecutionSpeed): void => {
     // While A-SPEED BOOST is active, the preset owns the Normal tier. This
@@ -124,7 +126,7 @@ export const setExecutionSpeed = (speed: ExecutionSpeed): void => {
 };
 
 export const setFastExecutionEnabled = (enabled: boolean): void => {
-    fastExecutionEnabled = aSpeedBoostEnabled ? true : enabled;
+    fastExecutionEnabled = aSpeedBoostEnabled ? false : enabled;
     try {
         localStorage.setItem(FAST_EXEC_STORAGE_KEY, fastExecutionEnabled ? '1' : '0');
     } catch {
@@ -150,7 +152,9 @@ export const setASpeedBoostEnabled = (enabled: boolean): void => {
         fastBeforeASpeed = fastExecutionEnabled;
         aSpeedBoostEnabled = true;
         setExecutionSpeed('normal');
-        setFastExecutionEnabled(true);
+        // A-SPEED has its own execution path. Keep the separate Fast toggle
+        // visibly off so the two presets cannot be active at once.
+        setFastExecutionEnabled(false);
     } else {
         aSpeedBoostEnabled = false;
         setFastExecutionEnabled(fastBeforeASpeed ?? false);

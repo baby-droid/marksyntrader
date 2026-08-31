@@ -5,7 +5,7 @@ import {
     connectionStatus$,
     isAuthorized$,
 } from '@/external/bot-skeleton/services/api/observables/connection-status-stream';
-import { publishMasterTrade, getMasterSource } from '@/utils/trade-bus';
+import { publishMasterTrade, getMasterSource, createTradeKey } from '@/utils/trade-bus';
 import { observer } from '@/external/bot-skeleton/utils/observer';
 import {
     isFastExecutionEnabled,
@@ -264,6 +264,7 @@ export function useDerivTrade() {
             if (needsBarrier && barrier !== undefined && barrier !== null) {
                 proposalReq.barrier = String(barrier);
             }
+            const tradeKey = createTradeKey('ui');
 
             let proposalRes: any;
             try {
@@ -300,6 +301,7 @@ export function useDerivTrade() {
                     barrier,
                     source: getMasterSource(),
                     time:   Date.now(),
+                    trade_key: tradeKey,
                     // no contract_id yet — engine deduplicates by fingerprint
                 });
             } catch { /* never let copy-trade errors affect the master trade */ }
@@ -323,6 +325,23 @@ export function useDerivTrade() {
             if (!contract_id) {
                 throw new Error('Buy failed — no contract ID returned');
             }
+
+            // Confirm the identity after the buy so the transaction-stream
+            // fallback cannot duplicate this already pre-signaled trade.
+            try {
+                publishMasterTrade({
+                    symbol,
+                    contract_type,
+                    stake,
+                    duration,
+                    duration_unit,
+                    barrier,
+                    source: getMasterSource(),
+                    time: Date.now(),
+                    contract_id,
+                    trade_key: tradeKey,
+                });
+            } catch { /* never let copy-trade errors affect the master trade */ }
 
             const contractMeta = {
                 id: contract_id,

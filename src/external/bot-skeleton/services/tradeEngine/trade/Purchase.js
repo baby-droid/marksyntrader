@@ -226,11 +226,11 @@ export default Engine =>
             // In Crazy/Turbo mode bypass the proposal-wait round-trip: use direct
             // buy parameters instead of a pre-fetched proposal ID. This eliminates
             // the proposal→wait→buy latency that was the main throughput bottleneck.
-            // Fast Execution bypasses the proposal round-trip just like Crazy/Turbo —
-            // the biggest single source of purchase latency.
+            // Fast Execution and A-SPEED bypass the proposal round-trip just like
+            // Crazy/Turbo — the biggest single source of purchase latency.
             const useDirectBuy =
                 forceDirect ||
-                (isFastExecutionEnabled() || speed === 'crazy' || speed === 'turbo' || speed === 'supersonic') &&
+                (isFastExecutionEnabled() || isASpeedBoostEnabled() || speed === 'crazy' || speed === 'turbo' || speed === 'supersonic') &&
                 !this.options.timeMachineEnabled;
 
             if (this.is_proposal_subscription_required && !useDirectBuy) {

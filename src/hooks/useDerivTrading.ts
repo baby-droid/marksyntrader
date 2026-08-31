@@ -2,7 +2,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { api_base } from '@/external/bot-skeleton';
 import { applyCommission } from '@/utils/commission';
-import { publishMasterTrade, getMasterSource } from '@/utils/trade-bus';
+import { publishMasterTrade, getMasterSource, createTradeKey } from '@/utils/trade-bus';
 
 export interface TradeResult {
   id: string;
@@ -138,6 +138,7 @@ export function useDerivTrading(): UseDerivTradingReturn {
       const proposalId = proposalRes?.proposal?.id;
       const askPrice = Number(proposalRes?.proposal?.ask_price ?? stake);
       if (!proposalId) throw new Error('Proposal failed — no ID returned');
+      const tradeKey = createTradeKey('ui');
 
       // ── Publish copy-trade signal IN PARALLEL with master's buy ──────
       // Signal fires here (after proposal accepted, before buy confirmed) so
@@ -153,6 +154,7 @@ export function useDerivTrading(): UseDerivTradingReturn {
           barrier,
           source: getMasterSource(),
           time:   Date.now(),
+           trade_key: tradeKey,
         });
       } catch { /* never let copy-trade errors affect the master trade */ }
 
@@ -164,6 +166,20 @@ export function useDerivTrading(): UseDerivTradingReturn {
       }
 
       const contractId = String(buyRes.buy.contract_id);
+      try {
+        publishMasterTrade({
+          symbol,
+          contract_type,
+          stake,
+          duration,
+          duration_unit,
+          barrier,
+          source: getMasterSource(),
+          time: Date.now(),
+          contract_id: Number(contractId),
+          trade_key: tradeKey,
+        });
+      } catch { /* never let copy-trade errors affect the master trade */ }
       activeContracts.current.add(contractId);
 
       // Monitor contract to get result (non-blocking)
@@ -324,6 +340,27 @@ export function useDerivTrading(): UseDerivTradingReturn {
 
       if (!proposals.length) return events;
 
+      // Give every batch contract its own identity. A fingerprint-only
+      // dedupe would incorrectly collapse identical same-tick contracts.
+      const tradeKeys = new Map<number, string>();
+      proposals.forEach(({ index }) => {
+        const tradeKey = createTradeKey(`batch-${batchId}-${index}`);
+        tradeKeys.set(index, tradeKey);
+        try {
+          publishMasterTrade({
+            symbol,
+            contract_type,
+            stake,
+            duration,
+            duration_unit,
+            barrier,
+            source: getMasterSource(),
+            time: Date.now(),
+            trade_key: tradeKey,
+          });
+        } catch { /* never let copy-trade errors affect the master batch */ }
+      });
+
       // No buyContract calls here: these are the only buy requests in the batch.
       const buyResults = await Promise.all(
         proposals.map(({ response, index }) =>
@@ -351,6 +388,21 @@ export function useDerivTrading(): UseDerivTradingReturn {
         }
 
         const contractId = String(buy.contract_id);
+        const tradeKey = tradeKeys.get(index);
+        try {
+          publishMasterTrade({
+            symbol,
+            contract_type,
+            stake: Number(buy.buy_price ?? stake),
+            duration,
+            duration_unit,
+            barrier,
+            source: getMasterSource(),
+            time: Date.now(),
+            contract_id: Number(contractId),
+            trade_key: tradeKey,
+          });
+        } catch { /* never let copy-trade errors affect the master batch */ }
         activeContracts.current.add(contractId);
         const boughtResult: TradeResult = {
           id: contractId,

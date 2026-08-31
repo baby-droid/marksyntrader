@@ -7,7 +7,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
-import { publishMasterTrade, getMasterSource } from '@/utils/trade-bus';
+import { publishMasterTrade, getMasterSource, createTradeKey } from '@/utils/trade-bus';
 import ChartAiControl from './chart-ai';
 import './mobile-chart-view.scss';
 
@@ -560,6 +560,7 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                 askPrice   = Number(pr?.proposal?.ask_price ?? stake);
                 if (!proposalId) throw new Error('Proposal failed');
             }
+            const tradeKey = createTradeKey('mobile-chart');
 
             // PRE-signal for copy trading (before buy so follower gets same tick)
             try {
@@ -567,7 +568,7 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                     symbol, contract_type: contractType, stake: effectiveStake,
                     duration: effectiveTicks, duration_unit: durationUnit,
                     ...(group.needsBarrier ? { barrier: String(effectiveBarrier) } : {}),
-                    source: getMasterSource(), time: Date.now(),
+                     source: getMasterSource(), time: Date.now(), trade_key: tradeKey,
                 });
             } catch { /* non-fatal */ }
 
@@ -664,7 +665,7 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                     symbol, contract_type: contractType, stake: effectiveStake,
                     duration: effectiveTicks, duration_unit: durationUnit,
                     ...(group.needsBarrier ? { barrier: String(effectiveBarrier) } : {}),
-                    source: getMasterSource(), time: Date.now(), contract_id: Number(contractId),
+                     source: getMasterSource(), time: Date.now(), contract_id: Number(contractId), trade_key: tradeKey,
                 });
             } catch { /* non-fatal */ }
         } catch (e: any) {

@@ -2,7 +2,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
-import { publishMasterTrade, getMasterSource } from '@/utils/trade-bus';
+import { publishMasterTrade, getMasterSource, createTradeKey } from '@/utils/trade-bus';
 import ChartAiControl from './chart-ai';
 
 /* ── Symbol display names ─────────────────────────────────────────────────── */
@@ -338,9 +338,35 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             const proposalId = pr?.proposal?.id;
             const askPrice   = Number(pr?.proposal?.ask_price ?? stake);
             if (!proposalId) throw new Error('Proposal failed');
+            const tradeKey = createTradeKey('chart-accu');
+            try {
+                publishMasterTrade({
+                    symbol,
+                    contract_type: 'ACCU',
+                    stake,
+                    growth_rate: growthRate,
+                    limit_order: proposalReq.limit_order,
+                    source: getMasterSource(),
+                    time: Date.now(),
+                    trade_key: tradeKey,
+                });
+            } catch { /* never block the accumulator purchase */ }
             const buyRes = await api.send({ buy: proposalId, price: askPrice });
             if (buyRes?.error) throw new Error(buyRes.error.message);
             const contractId = Number(buyRes?.buy?.contract_id);
+            try {
+                publishMasterTrade({
+                    symbol,
+                    contract_type: 'ACCU',
+                    stake,
+                    growth_rate: growthRate,
+                    limit_order: proposalReq.limit_order,
+                    source: getMasterSource(),
+                    time: Date.now(),
+                    contract_id: contractId,
+                    trade_key: tradeKey,
+                });
+            } catch { /* never block the accumulator purchase */ }
             setAccumContractId(contractId);
             setResult({ ok: true, msg: `✅ Accumulator #${contractId} running` });
         } catch (e: any) {
@@ -439,6 +465,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                 askPrice   = Number(pr?.proposal?.ask_price ?? stake);
                 if (!proposalId) throw new Error('Proposal failed');
             }
+            const tradeKey = createTradeKey('chart');
 
             // ── PRE-SIGNAL (copy-trading timing fix) ──────────────────────────
             try {
@@ -446,7 +473,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                     symbol, contract_type: contractType, stake: effectiveStake,
                     duration: effectiveTicks, duration_unit: durationUnit,
                     ...(group.needsBarrier ? { barrier: String(effectiveBarrier) } : {}),
-                    source: getMasterSource(), time: Date.now(),
+                     source: getMasterSource(), time: Date.now(), trade_key: tradeKey,
                 });
             } catch { /* never block trade */ }
 
@@ -552,7 +579,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                         symbol, contract_type: contractType, stake: effectiveStake,
                         duration: effectiveTicks, duration_unit: durationUnit,
                         ...(group.needsBarrier ? { barrier: String(effectiveBarrier) } : {}),
-                        source: getMasterSource(), time: Date.now(), contract_id: Number(contractId),
+                         source: getMasterSource(), time: Date.now(), contract_id: Number(contractId), trade_key: tradeKey,
                     });
                 }
             } catch { /* never block */ }

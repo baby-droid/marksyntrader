@@ -6,6 +6,7 @@ import { DBOT_TABS } from '@/constants/bot-contents';
 import { api_base, load, save_types } from '@/external/bot-skeleton';
 import { isFastExecutionEnabled } from '@/utils/execution-speed';
 import { setTradeContext } from '@/utils/trade-metadata';
+import { createTradeKey, getMasterSource, publishMasterTrade } from '@/utils/trade-bus';
 import AiCycleGuide from '@/components/ai-cycle-guide/ai-cycle-guide';
 import { DiffersCycleBotId, GuidedCycleSettings, patchGuidedCycleXml } from '@/utils/differs-cycle';
 import './free-bots.scss';
@@ -607,10 +608,39 @@ const FreeBots = observer(() => {
       const askPrice   = Number(pr?.proposal?.ask_price ?? stake);
       if (!proposalId) throw new Error('No proposal received');
 
+      const tradeKey = createTradeKey('market-killer-prime');
+      try {
+        publishMasterTrade({
+          symbol,
+          contract_type: 'DIGITOVER',
+          stake,
+          duration: ticks,
+          duration_unit: 't',
+          barrier: '2',
+          source: getMasterSource(),
+          time: Date.now(),
+          trade_key: tradeKey,
+        });
+      } catch { /* never block the direct purchase */ }
+
       // 2. Buy
       const buyRes = await api.send({ buy: proposalId, price: askPrice });
       if (buyRes?.error) throw new Error(buyRes.error.message);
       const contractId = buyRes?.buy?.contract_id;
+      try {
+        publishMasterTrade({
+          symbol,
+          contract_type: 'DIGITOVER',
+          stake,
+          duration: ticks,
+          duration_unit: 't',
+          barrier: '2',
+          source: getMasterSource(),
+          time: Date.now(),
+          contract_id: Number(contractId),
+          trade_key: tradeKey,
+        });
+      } catch { /* never block the direct purchase */ }
       setMkpResult({ ok: true, msg: `✅ Contract #${contractId} opened on ${MKP_MARKETS[mkpMarketIdxRef.current].label}` });
       setMkpContractOpen(true);
 
