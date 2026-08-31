@@ -35,7 +35,7 @@ const FREE_BOTS_LIST = [
         // The complete executable cycle is maintained in the canonical
         // Differs XML: Differs → Over 1 → Over 2 → Differs → Under 8 →
         // Under 7, followed by parity recovery on a loss.
-        xmlFile: '/bots/differs-edge-scanner.xml',
+        xmlFile: '/bots/ahmed-differs-cycle.xml',
         icon: '🔁',
         sharedBlockAssets: [
             { id: 'gt.seq.applySequence', file: '/attached_assets/block_(1)_1788158548530.xml' },

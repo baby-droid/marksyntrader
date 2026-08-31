@@ -30,7 +30,7 @@ const FREE_BOTS = [
     name: 'AHMED DIFFERS CYCLE',
     description: '🔁 Shared-block cycle: DIFFERS → OVER 1 → OVER 2 → DIFFERS → UNDER 8 → UNDER 7, then Even/Odd parity recovery after a loss. Includes 2× stake recovery.',
     category: 'Scanner', market: 'V50 1s', type: 'Multi-Strategy', prediction: 'CYCLE',
-    xmlFile: '/bots/differs-edge-scanner.xml',
+    xmlFile: '/bots/ahmed-differs-cycle.xml',
     badge: 'AHMED CYCLE', badgeColor: '#f59e0b', icon: '🔁', winRate: '—',
     sharedBlockAssets: DIFFERS_CYCLE_SHARED_BLOCKS,
   },
