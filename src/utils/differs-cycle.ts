@@ -15,6 +15,13 @@ export type DiffersCycleDefinition = {
     recovery: string;
 };
 
+export type GuidedCycleSettings = {
+    stake: number;
+    initialStake: number;
+    martingale: number;
+    ticks: number;
+};
+
 export const DIFFERS_SCAN_MARKETS = [
     { label: 'Volatility 10', symbol: 'R_10' },
     { label: 'Volatility 25', symbol: 'R_25' },
@@ -114,11 +121,39 @@ export function entryPatternReady(points: ScanPoint[], step: DiffersCycleStep, d
     return false;
 }
 
-export function patchGuidedCycleXml(xml: string, symbol: string, differDigit: number): string {
+function escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function patchVariableNumber(xml: string, variableName: string, value: number): string {
+    const name = escapeRegExp(variableName);
+    const pattern = new RegExp(
+        `(<block type="variables_set"[^>]*>\\s*<field name="VAR"[^>]*>${name}</field>[\\s\\S]*?<field name="NUM">)[^<]*(</field>)`,
+        'g',
+    );
+    return xml.replace(pattern, `$1${value}$2`);
+}
+
+export function patchGuidedCycleXml(
+    xml: string,
+    symbol: string,
+    differDigit: number,
+    settings?: GuidedCycleSettings,
+): string {
     let guided = xml.replace(
         /(<field name="SYMBOL_LIST">)[^<]*/,
         `$1${symbol}`,
     );
+
+    if (settings) {
+        guided = patchVariableNumber(guided, 'stake', settings.stake);
+        guided = patchVariableNumber(guided, 'initial_stake', settings.initialStake);
+        guided = patchVariableNumber(guided, 'martingale', settings.martingale);
+        guided = guided.replace(
+            /(<value name="DURATION">[\s\S]*?<field name="NUM">)[^<]*(<\/field>)/,
+            `$1${settings.ticks}$2`,
+        );
+    }
 
     // Differs uses the AI-selected dominant digit as its barrier when the
     // strategy is loaded. Subsequent cycles can be reloaded with a new scan.

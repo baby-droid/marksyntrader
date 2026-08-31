@@ -7,7 +7,7 @@ import { api_base, load, save_types } from '@/external/bot-skeleton';
 import { isFastExecutionEnabled } from '@/utils/execution-speed';
 import { setTradeContext } from '@/utils/trade-metadata';
 import AiCycleGuide from '@/components/ai-cycle-guide/ai-cycle-guide';
-import { DiffersCycleBotId, patchGuidedCycleXml } from '@/utils/differs-cycle';
+import { DiffersCycleBotId, GuidedCycleSettings, patchGuidedCycleXml } from '@/utils/differs-cycle';
 import './free-bots.scss';
 
 const FREE_BOTS = [
@@ -519,7 +519,7 @@ const FreeBots = observer(() => {
 
   const handleLoadAndRun = useCallback(async (
     bot: typeof FREE_BOTS[0],
-    guidance?: { symbol: string; differDigit: number },
+    guidance?: { symbol: string; differDigit: number; settings?: GuidedCycleSettings },
   ) => {
     setTradeContext({ page: 'Free Bots', bot: bot.name });
     setLoadingId(bot.id);
@@ -528,11 +528,12 @@ const FreeBots = observer(() => {
       if (!res.ok) throw new Error(`Failed to fetch ${bot.xmlFile}`);
       let xml = await res.text();
       if (guidance) {
-        xml = patchGuidedCycleXml(xml, guidance.symbol, guidance.differDigit);
+        xml = patchGuidedCycleXml(xml, guidance.symbol, guidance.differDigit, guidance.settings);
         (window as any).__aiCycleGuidance = {
           botId: bot.id,
           symbol: guidance.symbol,
           differDigit: guidance.differDigit,
+          settings: guidance.settings,
           updatedAt: Date.now(),
         };
         window.dispatchEvent(new CustomEvent('ai:cycle-guidance', {
@@ -570,9 +571,10 @@ const FreeBots = observer(() => {
     botId: DiffersCycleBotId,
     symbol: string,
     differDigit: number,
+    settings: GuidedCycleSettings,
   ) => {
     const bot = FREE_BOTS.find(item => item.id === botId);
-    if (bot) void handleLoadAndRun(bot, { symbol, differDigit });
+    if (bot) void handleLoadAndRun(bot, { symbol, differDigit, settings });
   }, [handleLoadAndRun]);
 
   // ── Market Killer Prime V1 — Direct Purchase ────────────────────────────────

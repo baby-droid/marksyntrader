@@ -9,19 +9,26 @@ import {
     DIFFERS_SCAN_MARKETS,
     DiffersCycleBotId,
     DiffersCycleStep,
+    GuidedCycleSettings,
     ScanPoint,
     bestDifferDigit,
     digitFromQuote,
     digitPercentages,
     entryPatternReady,
 } from '@/utils/differs-cycle';
+import NumberField from '@/components/number-field';
 import './ai-cycle-guide.scss';
 
 const WINDOW_SIZE = 50;
 const MIN_READY_TICKS = 12;
 
 type Props = {
-    onLoadGuided?: (botId: DiffersCycleBotId, symbol: string, differDigit: number) => void | Promise<void>;
+    onLoadGuided?: (
+        botId: DiffersCycleBotId,
+        symbol: string,
+        differDigit: number,
+        settings: GuidedCycleSettings,
+    ) => void | Promise<void>;
 };
 
 type MarketSnapshot = {
@@ -46,6 +53,12 @@ const AiCycleGuide: React.FC<Props> = ({ onLoadGuided }) => {
     const [scanning, setScanning] = useState(false);
     const [status, setStatus] = useState('Ready to scan authenticated market feeds');
     const [markets, setMarkets] = useState<Record<string, MarketSnapshot>>(emptyMarkets);
+    const [settings, setSettings] = useState<GuidedCycleSettings>({
+        stake: 0.35,
+        initialStake: 0.35,
+        martingale: 2,
+        ticks: 1,
+    });
     const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
     const [runCount, setRunCount] = useState(0);
     const [lastCycle, setLastCycle] = useState(0);
@@ -77,7 +90,17 @@ const AiCycleGuide: React.FC<Props> = ({ onLoadGuided }) => {
         : bestMarket;
     const currentStep: DiffersCycleStep = definition.steps[runCount % definition.steps.length];
     const differDigit = activeMarket?.differDigit ?? null;
-    const entryReady = activeMarket?.snapshot?.points?.length >= MIN_READY_TICKS
+    const settingsValid = Number.isFinite(settings.stake)
+        && settings.stake >= 0.35
+        && Number.isFinite(settings.initialStake)
+        && settings.initialStake >= 0.35
+        && Number.isFinite(settings.martingale)
+        && settings.martingale >= 1
+        && settings.martingale <= 10
+        && Number.isFinite(settings.ticks)
+        && settings.ticks >= 1
+        && settings.ticks <= 10;
+    const entryReady = settingsValid && activeMarket?.snapshot?.points?.length >= MIN_READY_TICKS
         ? entryPatternReady(activeMarket.snapshot.points, currentStep, differDigit)
         : false;
 
@@ -187,9 +210,13 @@ const AiCycleGuide: React.FC<Props> = ({ onLoadGuided }) => {
 
     const loadGuided = useCallback(() => {
         if (!activeMarket?.symbol || differDigit === null) return;
-        void onLoadGuided?.(botId, activeMarket.symbol, differDigit);
+        if (!settingsValid) {
+            setStatus('Check stake, initial stake, martingale, and ticks before entering');
+            return;
+        }
+        void onLoadGuided?.(botId, activeMarket.symbol, differDigit, settings);
         setStatus(`Loaded ${definition.name} · ${activeMarket.label} · Differs ${differDigit}`);
-    }, [activeMarket, botId, definition.name, differDigit, onLoadGuided]);
+    }, [activeMarket, botId, definition.name, differDigit, onLoadGuided, settings, settingsValid]);
 
     return (
         <section className='ai-cycle-guide' aria-label='AI Engine market scanner'>
@@ -221,12 +248,56 @@ const AiCycleGuide: React.FC<Props> = ({ onLoadGuided }) => {
                 <span className='recovery'>{definition.recovery.replace('Loss → pattern check → ', 'Loss → ')}</span>
             </div>
 
+            <div className='ai-cycle-guide__settings' aria-label='AI Engine trade settings'>
+                <div className='ai-cycle-guide__settings-title'>TRADE SETTINGS</div>
+                <label>
+                    <span>Stake (USD)</span>
+                    <NumberField
+                        value={settings.stake}
+                        min={0.35}
+                        max={1000}
+                        placeholder='0.35'
+                        onCommit={stake => setSettings(previous => ({ ...previous, stake }))}
+                    />
+                </label>
+                <label>
+                    <span>Initial stake (USD)</span>
+                    <NumberField
+                        value={settings.initialStake}
+                        min={0.35}
+                        max={1000}
+                        placeholder='0.35'
+                        onCommit={initialStake => setSettings(previous => ({ ...previous, initialStake }))}
+                    />
+                </label>
+                <label>
+                    <span>Martingale (×)</span>
+                    <NumberField
+                        value={settings.martingale}
+                        min={1}
+                        max={10}
+                        placeholder='2'
+                        onCommit={martingale => setSettings(previous => ({ ...previous, martingale }))}
+                    />
+                </label>
+                <label>
+                    <span>Ticks</span>
+                    <NumberField
+                        value={settings.ticks}
+                        min={1}
+                        max={10}
+                        placeholder='1'
+                        onCommit={ticks => setSettings(previous => ({ ...previous, ticks: Math.round(ticks) }))}
+                    />
+                </label>
+            </div>
+
             <div className='ai-cycle-guide__controls'>
                 <button type='button' className='scan-btn' onClick={scanning ? stopScan : startScan}>
                     {scanning ? '⏹ Stop scan' : '⌕ Scan market'}
                 </button>
                 {onLoadGuided && (
-                    <button type='button' className='load-btn' disabled={!entryReady} onClick={loadGuided}>
+                    <button type='button' className='load-btn' disabled={!entryReady || !settingsValid} onClick={loadGuided}>
                         📂 Load &amp; Run when ready
                     </button>
                 )}
@@ -234,7 +305,7 @@ const AiCycleGuide: React.FC<Props> = ({ onLoadGuided }) => {
 
             <div className='ai-cycle-guide__status'>
                 <span className={entryReady ? 'ready' : ''} />
-                <b>{entryReady ? `Entry met · fire ${currentStep.label}` : status}</b>
+                <b>{!settingsValid ? 'Check trade settings' : entryReady ? `Entry met · fire ${currentStep.label}` : status}</b>
             </div>
 
             <div className='ai-cycle-guide__metrics'>

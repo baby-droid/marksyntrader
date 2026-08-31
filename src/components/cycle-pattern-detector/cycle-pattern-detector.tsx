@@ -6,7 +6,7 @@ import { DBOT_TABS } from '@/constants/bot-contents';
 import { api_base, load, save_types } from '@/external/bot-skeleton';
 import { isFastExecutionEnabled } from '@/utils/execution-speed';
 import { setTradeContext } from '@/utils/trade-metadata';
-import { patchGuidedCycleXml, DiffersCycleBotId } from '@/utils/differs-cycle';
+import { patchGuidedCycleXml, DiffersCycleBotId, GuidedCycleSettings } from '@/utils/differs-cycle';
 import './cycle-pattern-detector.scss';
 
 const GUIDED_BOTS: Record<DiffersCycleBotId, { name: string; xmlFile: string }> = {
@@ -29,6 +29,7 @@ const CyclePatternDetector: React.FC = () => {
         botId: DiffersCycleBotId,
         symbol: string,
         differDigit: number,
+        settings: GuidedCycleSettings,
     ) => {
         const bot = GUIDED_BOTS[botId];
         const runPanel: any = store?.run_panel;
@@ -43,7 +44,7 @@ const CyclePatternDetector: React.FC = () => {
         try {
             const response = await fetch(bot.xmlFile);
             if (!response.ok) throw new Error(`Failed to fetch ${bot.xmlFile}`);
-            const xml = patchGuidedCycleXml(await response.text(), symbol, differDigit);
+            const xml = patchGuidedCycleXml(await response.text(), symbol, differDigit, settings);
 
             (window as any).__pendingBotXml = xml;
             (window as any).__pendingBotName = bot.name;
@@ -51,6 +52,7 @@ const CyclePatternDetector: React.FC = () => {
                 botId,
                 symbol,
                 differDigit,
+                settings,
                 updatedAt: Date.now(),
             };
             window.dispatchEvent(new CustomEvent('ai:cycle-guidance', {

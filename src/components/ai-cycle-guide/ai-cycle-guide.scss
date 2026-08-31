@@ -40,6 +40,43 @@
         span.active { background: rgba(52, 211, 153, 0.18); color: #6ee7b7; }
         span.recovery { color: #fbbf24; background: rgba(245,158,11,0.12); }
     }
+    &__settings {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0.45rem;
+        margin-top: 0.7rem;
+        padding: 0.55rem;
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 0.5rem;
+        background: rgba(0,0,0,0.14);
+        label { min-width: 0; }
+        label > span {
+            display: block;
+            margin-bottom: 0.25rem;
+            color: rgba(232,244,252,0.55);
+            font: 0.58rem 'Orbitron', monospace;
+            white-space: nowrap;
+        }
+        .num-field {
+            width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
+            padding: 0.38rem 0.42rem;
+            border: 1px solid rgba(255,255,255,0.14);
+            border-radius: 0.3rem;
+            outline: none;
+            background: rgba(255,255,255,0.06);
+            color: #f8fafc;
+            font: 700 0.76rem 'Rajdhani', sans-serif;
+            &:focus { border-color: #00c8ff; box-shadow: 0 0 0 2px rgba(0,200,255,0.12); }
+        }
+    }
+    &__settings-title {
+        grid-column: 1 / -1;
+        color: #00d4ff;
+        font: 700 0.58rem 'Orbitron', monospace;
+        letter-spacing: 0.12em;
+    }
     &__controls { gap: 0.5rem; margin-top: 0.75rem; }
     .scan-btn, .load-btn {
         flex: 1; padding: 0.5rem 0.65rem; border: 0; border-radius: 0.45rem; color: #fff; cursor: pointer;
@@ -63,4 +100,5 @@
 @media (max-width: 600px) {
     .ai-cycle-guide__metrics { grid-template-columns: repeat(2, 1fr); }
     .ai-cycle-guide__bot-tabs { flex-direction: column; }
+    .ai-cycle-guide__settings { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
