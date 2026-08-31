@@ -11,8 +11,8 @@
   <!--
     DIFFERS EDGE SCANNER
     Main rotation: Differs → Over 2 → Over 3 → Differs → Under 7 → Under 6.
-    On a loss after three consecutive evens, recovery buys Odd. After three
-    consecutive odds, recovery buys Even. Mixed parity returns to Differs.
+    Wins advance the phase cycle; losses multiply the stake and restart phase 0.
+    This bot intentionally uses the phase cycle only.
     Every contract is one tick and every result continues with trade_again.
   -->
   <block type="trade_definition" id="des_definition" deletable="false" x="0" y="60">
