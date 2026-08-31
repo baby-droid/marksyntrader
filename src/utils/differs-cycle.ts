@@ -59,7 +59,6 @@ export const DIFFERS_CYCLE_DEFINITIONS: Record<DiffersCycleBotId, DiffersCycleDe
             { label: 'Differs', side: 'differs' },
             { label: 'Under 8', side: 'under', barrier: 8 },
             { label: 'Under 7', side: 'under', barrier: 7 },
-            { label: 'Differs', side: 'differs' },
         ],
         recovery: 'Loss → pattern check → Even/Odd recovery',
     },

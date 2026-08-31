@@ -59,12 +59,13 @@ describe('AI cycle pattern detector', () => {
         );
         expect(xml).toContain('DIGITDIFF');
         expect(xml).toContain('Normal cycle: DIGITDIFF → DIGITOVER 1 → DIGITOVER 2 → DIGITDIFF →');
-        expect(xml).toContain('DIGITUNDER 8 → DIGITUNDER 7 → DIGITDIFF.');
+        expect(xml).toContain('DIGITUNDER 8 → DIGITUNDER 7, then the six-step cycle restarts.');
         expect(xml).toContain('after three evens, buy DIGITODD');
         expect(xml).toContain('DIGITEVEN');
-        expect(xml).toContain('adc_phase_differs_final_test');
         expect(xml).toContain('adc_phase_odd_recovery_test');
         expect(xml).toContain('adc_phase_even_recovery_test');
+        expect(xml).not.toContain('adc_phase_differs_final_test');
+        expect(xml).not.toContain('adc_purchase_differs_final');
         expect(xml).toContain('trade_again');
     });
 
@@ -73,7 +74,7 @@ describe('AI cycle pattern detector', () => {
             'Differs', 'Over 2', 'Over 3', 'Differs', 'Under 7', 'Under 6',
         ]);
         expect(DIFFERS_CYCLE_DEFINITIONS['ahmed-differs-cycle'].steps.map(step => step.label)).toEqual([
-            'Differs', 'Over 1', 'Over 2', 'Differs', 'Under 8', 'Under 7', 'Differs',
+            'Differs', 'Over 1', 'Over 2', 'Differs', 'Under 8', 'Under 7',
         ]);
 
         const points = (digits: number[]) => digits.map((digit, index) => ({
