@@ -89,6 +89,21 @@
 .chart-ai__sides span { margin-left: auto; color: #64748b; white-space: nowrap; }
 .chart-ai__entry { display: flex; flex-direction: column; gap: 2px; padding: 5px 7px 2px; color: #285d9f; line-height: 1.3; }
 .chart-ai__entry b { color: #152238; font-size: 10px; }
+.chart-ai__cycle-route {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0 7px 5px;
+    padding: 5px 7px;
+    border: 1px solid #9bd7c3;
+    border-radius: 6px;
+    background: linear-gradient(135deg, #effff7, #e8f4ff);
+    color: #17634e;
+    line-height: 1.3;
+}
+.chart-ai__cycle-route strong { color: #0755a1; font-size: 10px; }
+.chart-ai__cycle-route span { font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chart-ai__cycle-route small { color: #637083; font-size: 9px; }
 .chart-ai__entry span { color: #637083; }
 .chart-ai__entry-map {
     color: #285d9f !important;

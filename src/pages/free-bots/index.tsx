@@ -19,7 +19,7 @@ const FREE_BOTS = [
   {
     id: 'differs-edge-scanner',
     name: 'Differs Edge Scanner — Recovery Matrix',
-    description: '🧠 Scans the latest digit, rotates Differs → Over 1 → Over 2 → Differs → Under 8 → Under 7, then uses Even/Odd recovery after a loss. Includes 2× stake recovery.',
+    description: '🧠 Scans the latest digit, rotates Differs → Over 2 → Over 3 → Differs → Under 7 → Under 6, then uses three-parity Even/Odd recovery after a loss. Includes 2× stake recovery.',
     category: 'Scanner', market: 'V50 1s', type: 'Multi-Strategy', prediction: 'SCAN',
     xmlFile: '/bots/differs-edge-scanner.xml',
     badge: 'SCAN 🧠', badgeColor: '#34d399', icon: '🔎', winRate: '—',
@@ -28,7 +28,7 @@ const FREE_BOTS = [
   {
     id: 'ahmed-differs-cycle',
     name: 'AHMED DIFFERS CYCLE',
-    description: '🔁 Shared-block cycle: DIFFERS → OVER 1 → OVER 2 → DIFFERS → UNDER 8 → UNDER 7, then Even/Odd parity recovery after a loss. Includes 2× stake recovery.',
+    description: '🔁 Shared-block cycle: DIFFERS with three-parity recovery — 3 evens → ODD, 3 odds → EVEN. One-tick contracts with 2× stake recovery.',
     category: 'Scanner', market: 'V10 1s', type: 'Multi-Strategy', prediction: 'CYCLE',
     xmlFile: '/bots/ahmed-differs-cycle.xml',
     badge: 'AHMED CYCLE', badgeColor: '#f59e0b', icon: '🔁', winRate: '—',

@@ -17,14 +17,14 @@
     Entry scan: captures the latest market digit before every purchase.
     Main rotation:
       0 DIFFERS (prediction = latest digit)
-      1 OVER 1
-      2 OVER 2
+      1 OVER 2
+      2 OVER 3
       3 DIFFERS (prediction = latest digit)
-      4 UNDER 8
-      5 UNDER 7
+      4 UNDER 7
+      5 UNDER 6
     Loss recovery:
-      latest digit even -> EVEN
-      latest digit odd  -> ODD
+      three evens -> ODD
+      three odds  -> EVEN
     Stake: 0.50 base, 2x after loss, reset after win.
     This is a pattern/entry filter, not a guarantee of profit.
   -->
@@ -149,24 +149,24 @@
           <block type="logic_compare" id="DES_sub_c1"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="DES_sub_g1"><field name="VAR" id="DES_phase">phase</field></block></value><value name="B"><block type="math_number" id="DES_sub_n1"><field name="NUM">1</field></block></value></block>
         </value>
         <statement name="DO1">
-          <block type="trade_definition_tradeoptions" id="DES_opts_over1">
+          <block type="trade_definition_tradeoptions" id="DES_opts_over2">
             <mutation has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
             <field name="DURATIONTYPE_LIST">t</field>
             <value name="DURATION"><shadow type="math_number_positive"><field name="NUM">1</field></shadow></value>
             <value name="AMOUNT"><shadow type="math_number_positive"><field name="NUM">0.5</field></shadow><block type="variables_get" id="DES_amt1"><field name="VAR" id="DES_stake">stake</field></block></value>
-            <value name="PREDICTION"><shadow type="math_number"><field name="NUM">1</field></shadow></value>
+            <value name="PREDICTION"><shadow type="math_number"><field name="NUM">2</field></shadow></value>
           </block>
         </statement>
         <value name="IF2">
           <block type="logic_compare" id="DES_sub_c2"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="DES_sub_g2"><field name="VAR" id="DES_phase">phase</field></block></value><value name="B"><block type="math_number" id="DES_sub_n2"><field name="NUM">2</field></block></value></block>
         </value>
         <statement name="DO2">
-          <block type="trade_definition_tradeoptions" id="DES_opts_over2">
+          <block type="trade_definition_tradeoptions" id="DES_opts_over3">
             <mutation has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
             <field name="DURATIONTYPE_LIST">t</field>
             <value name="DURATION"><shadow type="math_number_positive"><field name="NUM">1</field></shadow></value>
             <value name="AMOUNT"><shadow type="math_number_positive"><field name="NUM">0.5</field></shadow><block type="variables_get" id="DES_amt2"><field name="VAR" id="DES_stake">stake</field></block></value>
-            <value name="PREDICTION"><shadow type="math_number"><field name="NUM">2</field></shadow></value>
+            <value name="PREDICTION"><shadow type="math_number"><field name="NUM">3</field></shadow></value>
           </block>
         </statement>
         <value name="IF3">
@@ -185,24 +185,24 @@
           <block type="logic_compare" id="DES_sub_c4"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="DES_sub_g4"><field name="VAR" id="DES_phase">phase</field></block></value><value name="B"><block type="math_number" id="DES_sub_n4"><field name="NUM">4</field></block></value></block>
         </value>
         <statement name="DO4">
-          <block type="trade_definition_tradeoptions" id="DES_opts_under8">
+          <block type="trade_definition_tradeoptions" id="DES_opts_under7">
             <mutation has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
             <field name="DURATIONTYPE_LIST">t</field>
             <value name="DURATION"><shadow type="math_number_positive"><field name="NUM">1</field></shadow></value>
             <value name="AMOUNT"><shadow type="math_number_positive"><field name="NUM">0.5</field></shadow><block type="variables_get" id="DES_amt4"><field name="VAR" id="DES_stake">stake</field></block></value>
-            <value name="PREDICTION"><shadow type="math_number"><field name="NUM">8</field></shadow></value>
+            <value name="PREDICTION"><shadow type="math_number"><field name="NUM">7</field></shadow></value>
           </block>
         </statement>
         <value name="IF5">
           <block type="logic_compare" id="DES_sub_c5"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="DES_sub_g5"><field name="VAR" id="DES_phase">phase</field></block></value><value name="B"><block type="math_number" id="DES_sub_n5"><field name="NUM">5</field></block></value></block>
         </value>
         <statement name="DO5">
-          <block type="trade_definition_tradeoptions" id="DES_opts_under7">
+          <block type="trade_definition_tradeoptions" id="DES_opts_under6">
             <mutation has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
             <field name="DURATIONTYPE_LIST">t</field>
             <value name="DURATION"><shadow type="math_number_positive"><field name="NUM">1</field></shadow></value>
             <value name="AMOUNT"><shadow type="math_number_positive"><field name="NUM">0.5</field></shadow><block type="variables_get" id="DES_amt5"><field name="VAR" id="DES_stake">stake</field></block></value>
-            <value name="PREDICTION"><shadow type="math_number"><field name="NUM">7</field></shadow></value>
+            <value name="PREDICTION"><shadow type="math_number"><field name="NUM">6</field></shadow></value>
           </block>
         </statement>
         <statement name="ELSE">
@@ -231,15 +231,15 @@
             <value name="IF0"><block type="logic_compare" id="DES_buy_c0"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="DES_buy_g0"><field name="VAR" id="DES_phase">phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">0</field></block></value></block></value>
             <statement name="DO0"><block type="multiple_purchase" id="DES_buy_diff0"><field name="PURCHASE_1">DIGITDIFF</field><field name="PURCHASE_2"></field><field name="PURCHASE_3"></field><field name="PURCHASE_4"></field><field name="PURCHASE_5"></field><field name="PURCHASE_6"></field><field name="PREDICTION">LAST_DIGIT</field></block></statement>
             <value name="IF1"><block type="logic_compare" id="DES_buy_c1"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="DES_buy_g1"><field name="VAR" id="DES_phase">phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">1</field></block></value></block></value>
-            <statement name="DO1"><block type="multiple_purchase" id="DES_buy_over1"><field name="PURCHASE_1">DIGITOVER</field><field name="PURCHASE_2"></field><field name="PURCHASE_3"></field><field name="PURCHASE_4"></field><field name="PURCHASE_5"></field><field name="PURCHASE_6"></field><field name="PREDICTION">1</field></block></statement>
+             <statement name="DO1"><block type="multiple_purchase" id="DES_buy_over2"><field name="PURCHASE_1">DIGITOVER</field><field name="PURCHASE_2"></field><field name="PURCHASE_3"></field><field name="PURCHASE_4"></field><field name="PURCHASE_5"></field><field name="PURCHASE_6"></field><field name="PREDICTION">2</field></block></statement>
             <value name="IF2"><block type="logic_compare" id="DES_buy_c2"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="DES_buy_g2"><field name="VAR" id="DES_phase">phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">2</field></block></value></block></value>
-            <statement name="DO2"><block type="multiple_purchase" id="DES_buy_over2"><field name="PURCHASE_1">DIGITOVER</field><field name="PURCHASE_2"></field><field name="PURCHASE_3"></field><field name="PURCHASE_4"></field><field name="PURCHASE_5"></field><field name="PURCHASE_6"></field><field name="PREDICTION">2</field></block></statement>
+             <statement name="DO2"><block type="multiple_purchase" id="DES_buy_over3"><field name="PURCHASE_1">DIGITOVER</field><field name="PURCHASE_2"></field><field name="PURCHASE_3"></field><field name="PURCHASE_4"></field><field name="PURCHASE_5"></field><field name="PURCHASE_6"></field><field name="PREDICTION">3</field></block></statement>
             <value name="IF3"><block type="logic_compare" id="DES_buy_c3"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="DES_buy_g3"><field name="VAR" id="DES_phase">phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">3</field></block></value></block></value>
             <statement name="DO3"><block type="multiple_purchase" id="DES_buy_diff3"><field name="PURCHASE_1">DIGITDIFF</field><field name="PURCHASE_2"></field><field name="PURCHASE_3"></field><field name="PURCHASE_4"></field><field name="PURCHASE_5"></field><field name="PURCHASE_6"></field><field name="PREDICTION">LAST_DIGIT</field></block></statement>
             <value name="IF4"><block type="logic_compare" id="DES_buy_c4"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="DES_buy_g4"><field name="VAR" id="DES_phase">phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">4</field></block></value></block></value>
-            <statement name="DO4"><block type="multiple_purchase" id="DES_buy_under8"><field name="PURCHASE_1">DIGITUNDER</field><field name="PURCHASE_2"></field><field name="PURCHASE_3"></field><field name="PURCHASE_4"></field><field name="PURCHASE_5"></field><field name="PURCHASE_6"></field><field name="PREDICTION">8</field></block></statement>
+             <statement name="DO4"><block type="multiple_purchase" id="DES_buy_under7"><field name="PURCHASE_1">DIGITUNDER</field><field name="PURCHASE_2"></field><field name="PURCHASE_3"></field><field name="PURCHASE_4"></field><field name="PURCHASE_5"></field><field name="PURCHASE_6"></field><field name="PREDICTION">7</field></block></statement>
             <value name="IF5"><block type="logic_compare" id="DES_buy_c5"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="DES_buy_g5"><field name="VAR" id="DES_phase">phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">5</field></block></value></block></value>
-            <statement name="DO5"><block type="multiple_purchase" id="DES_buy_under7"><field name="PURCHASE_1">DIGITUNDER</field><field name="PURCHASE_2"></field><field name="PURCHASE_3"></field><field name="PURCHASE_4"></field><field name="PURCHASE_5"></field><field name="PURCHASE_6"></field><field name="PREDICTION">7</field></block></statement>
+             <statement name="DO5"><block type="multiple_purchase" id="DES_buy_under6"><field name="PURCHASE_1">DIGITUNDER</field><field name="PURCHASE_2"></field><field name="PURCHASE_3"></field><field name="PURCHASE_4"></field><field name="PURCHASE_5"></field><field name="PURCHASE_6"></field><field name="PREDICTION">6</field></block></statement>
             <value name="IF6"><block type="logic_compare" id="DES_buy_c6"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="DES_buy_g6"><field name="VAR" id="DES_phase">phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">6</field></block></value></block></value>
             <statement name="DO6"><block type="multiple_purchase" id="DES_buy_even"><field name="PURCHASE_1">DIGITEVEN</field><field name="PURCHASE_2"></field><field name="PURCHASE_3"></field><field name="PURCHASE_4"></field><field name="PURCHASE_5"></field><field name="PURCHASE_6"></field><field name="PREDICTION">NONE</field></block></statement>
             <value name="IF7"><block type="logic_compare" id="DES_buy_c7"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="DES_buy_g7"><field name="VAR" id="DES_phase">phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">7</field></block></value></block></value>

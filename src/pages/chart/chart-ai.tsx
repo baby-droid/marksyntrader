@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import NumberField from '@/components/number-field';
+import { AI_CYCLE_ROUTE, barrierReturnPattern } from '@/utils/cycle-pattern';
 import './chart-ai.scss';
 
 const MIN_STAKE = 0.35;
@@ -755,6 +756,7 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
     const [aiTicks, setAiTicks] = useState(clamp(Number(ticks) || 1, 1, MAX_CONFIRM_TICKS));
     const [bestTicks, setBestTicks] = useState<number | null>(null);
     const [executionMode, setExecutionMode] = useState<'ticks' | 'touches'>('ticks');
+    const [cyclePatternEnabled, setCyclePatternEnabled] = useState(false);
     const [confirmTouches, setConfirmTouches] = useState(TOUCH_CONFIRM_DEFAULT);
     const [confirmCount, setConfirmCount] = useState(0);
     const [strategiesOpen, setStrategiesOpen] = useState(false);
@@ -796,6 +798,7 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
     const strategiesRef = useRef(strategies);
     const allowARef = useRef(allowA);
     const allowBRef = useRef(allowB);
+    const cycleIndexRef = useRef(0);
 
     const setPhase = (next: string) => {
         entryPhaseRef.current = next;
@@ -875,6 +878,7 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
         entryWaitTicksRef.current = 0;
         confirmCountRef.current = 0;
         reversePendingRef.current = false;
+        cycleIndexRef.current = 0;
         setBestTicks(null);
         setConfirmCount(0);
         setPhase('idle');
@@ -967,6 +971,24 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                              || cooldownRef.current > 0
                              || autoAttemptRef.current
                          ) return;
+
+                         if (
+                             active.cyclePattern
+                             && barrierReturnPattern(
+                                 digitsRef.current,
+                                 Number(active.barrier),
+                                 active.side,
+                             )
+                         ) {
+                             const cycleSignal = { ...active, duration: 1 };
+                             signalRef.current = cycleSignal;
+                             setSignal(cycleSignal);
+                             setBestTicks(1);
+                             setEntryDigit(null);
+                             setPhase('waiting');
+                             setStatus(`${active.cycleLabel} pattern returned · one-tick entry ready`);
+                             return;
+                         }
 
                          if (executionModeRef.current === 'touches') {
                              const previousDigit = digitsRef.current[digitsRef.current.length - 2] ?? null;
@@ -1190,7 +1212,7 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
             if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
             if (refreshClockRef.current) clearInterval(refreshClockRef.current);
         };
-        }, [enabled, symbol, executionMode]);
+        }, [enabled, symbol, executionMode, cyclePatternEnabled]);
 
     const windowPcts = useMemo(() => pctsFor(digitsRef.current), [sample]);
     const circlePcts = pcts.length ? pcts : windowPcts;
@@ -1200,11 +1222,44 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
         if (tradingFinishedRef.current) return;
         if (signalRef.current) return;
         const durationLimit = autoRotate ? AUTO_TICK_LIMIT : aiTicks;
-        const candidates = [
-            allowA && evaluateSide(digitsRef.current, pricesRef.current, pcts, 'over', barrier, durationLimit, autoRotate, symbol, group),
-            allowB && evaluateSide(digitsRef.current, pricesRef.current, pcts, 'under', barrier, durationLimit, autoRotate, symbol, group),
-        ].filter(Boolean);
-        const next = candidates.sort((a, b) => b.confidence - a.confidence)[0] ?? null;
+        let next: any = null;
+        if (cyclePatternEnabled && group?.id === 'over_under') {
+            const orderedRoutes = AI_CYCLE_ROUTE.map((_, offset) =>
+                AI_CYCLE_ROUTE[(cycleIndexRef.current + offset) % AI_CYCLE_ROUTE.length],
+            );
+            for (const route of orderedRoutes) {
+                const allowed = route.side === 'over' ? allowA : allowB;
+                if (!allowed) continue;
+                const candidate = evaluateSide(
+                    digitsRef.current,
+                    pricesRef.current,
+                    pcts,
+                    route.side,
+                    route.barrier,
+                    1,
+                    false,
+                    symbol,
+                    group,
+                );
+                if (candidate) {
+                    next = {
+                        ...candidate,
+                        cyclePattern: true,
+                        cycleLabel: route.label,
+                        duration: 1,
+                        entryDigit: null,
+                        note: `${route.label} · two setup touches, barrier cross, return · one tick`,
+                    };
+                    break;
+                }
+            }
+        } else {
+            const candidates = [
+                allowA && evaluateSide(digitsRef.current, pricesRef.current, pcts, 'over', barrier, durationLimit, autoRotate, symbol, group),
+                allowB && evaluateSide(digitsRef.current, pricesRef.current, pcts, 'under', barrier, durationLimit, autoRotate, symbol, group),
+            ].filter(Boolean);
+            next = candidates.sort((a, b) => b.confidence - a.confidence)[0] ?? null;
+        }
         signalRef.current = next;
         setSignal(next);
         defaultSignalRef.current = next;
@@ -1220,7 +1275,7 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
         } else {
             setStatus(`No ${marketThreshold(symbol).toFixed(1)}% condition yet · waiting for next tick`);
         }
-    }, [enabled, scanning, sample, group, barrier, aiTicks, autoRotate, allowA, allowB, pcts, symbol]);
+    }, [enabled, scanning, sample, group, barrier, aiTicks, autoRotate, allowA, allowB, pcts, symbol, cyclePatternEnabled]);
 
     useEffect(() => {
         if (!enabled || !signal || entryPhase !== 'waiting' || tradeBusy || activeContractRef.current || autoAttemptRef.current) return;
@@ -1305,6 +1360,7 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                 entryIndexRef.current += 1;
             }
             const settledSignal = signalRef.current ?? defaultSignalRef.current;
+            const wasCycleTrade = Boolean(settledSignal?.cyclePattern);
             if (settledSignal) {
                 const rotatedEntry = chooseEntryDigit(
                     settledSignal.side,
@@ -1323,7 +1379,10 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
             setBatchCount(nextBatch);
             const runLimitReached = runsEnabled && runCount + 1 >= runs;
             const stopLossReached = stopLossEnabled && lossCount + (won ? 0 : 1) >= stopLoss;
-            const batchComplete = nextBatch >= batchLimit;
+            // The cycle is continuous; its route must not be interrupted by
+            // the normal batch cooldown. Explicit run and stop-loss limits
+            // below still stop it when the user enables them.
+            const batchComplete = !cyclePatternEnabled && nextBatch >= batchLimit;
             const lossRescanReached = !won
                 && lossStreakRef.current >= LOSS_RESCAN_LIMIT
                 && !runLimitReached
@@ -1432,6 +1491,17 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                 setSignal(null);
                 setPhase('idle');
                 setStatus(`Batch complete · cooling off ${COOLDOWN_TICKS} ticks`);
+            } else if (wasCycleTrade && cyclePatternEnabled) {
+                cycleIndexRef.current = (cycleIndexRef.current + 1) % AI_CYCLE_ROUTE.length;
+                signalRef.current = null;
+                defaultSignalRef.current = null;
+                setSignal(null);
+                setEntryDigit(null);
+                setPhase('idle');
+                setStatus(
+                    `Cycle complete · searching ${AI_CYCLE_ROUTE[cycleIndexRef.current].label} ` +
+                    'for the next one-tick return',
+                );
             } else {
                 setAiStake(next);
                 setPhase('analysing');
@@ -1441,7 +1511,7 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
         };
         window.addEventListener('chart:trade-settled', onSettlement as any);
         return () => window.removeEventListener('chart:trade-settled', onSettlement as any);
-    }, [enabled, fullMargin, fixedStake, martingaleEnabled, martingale, runsEnabled, runs, stopLossEnabled, stopLoss, runCount, lossCount, recovery, batchLimit]);
+    }, [enabled, fullMargin, fixedStake, martingaleEnabled, martingale, runsEnabled, runs, stopLossEnabled, stopLoss, runCount, lossCount, recovery, batchLimit, cyclePatternEnabled]);
 
     const threshold = marketThreshold(symbol);
     const sideA = groupSideLabel(group, 'over');
@@ -1569,6 +1639,18 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                         <button className={runsEnabled ? 'active' : ''} onClick={() => setRunsEnabled(v => !v)}>Runs {runsEnabled ? 'ON' : 'OFF'}</button>
                         <button className={stopLossEnabled ? 'active' : ''} onClick={() => setStopLossEnabled(v => !v)}>Stop loss {stopLossEnabled ? 'ON' : 'OFF'}</button>
                         <button className={martingaleEnabled ? 'active' : ''} onClick={() => setMartingaleEnabled(v => !v)}>Martingale {martingaleEnabled ? 'ON' : 'OFF'}</button>
+                        <button
+                            className={cyclePatternEnabled ? 'active' : ''}
+                            disabled={group?.id !== 'over_under'}
+                            onClick={() => {
+                                if (group?.id !== 'over_under') return;
+                                setCyclePatternEnabled(v => !v);
+                                setExecutionMode('ticks');
+                            }}
+                            title='Search Over 2, Under 7, Over 1, and Under 2 using one-tick return entries'
+                        >
+                            Cycle pattern {cyclePatternEnabled ? 'ON' : 'OFF'}
+                        </button>
                     </div>
                     <div className='chart-ai__settings'>
                         <label>{executionMode === 'touches' ? 'Best ticks' : 'Best ticks'}
@@ -1619,6 +1701,17 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                         </label>
                         <span className='chart-ai__stake-readout'>Next stake {aiStake.toFixed(2)}</span>
                     </div>
+                    {cyclePatternEnabled && group?.id === 'over_under' && (
+                        <div className='chart-ai__cycle-route' role='status'>
+                            <strong>AI Engine Cycle Pattern Detector</strong>
+                            <span>{AI_CYCLE_ROUTE.map((route, index) => (
+                                <React.Fragment key={route.label}>
+                                    {index > 0 ? ' → ' : ''}{route.label}
+                                </React.Fragment>
+                            ))}</span>
+                            <small>One tick: two setup touches below, cross above, then return to the barrier or below.</small>
+                        </div>
+                    )}
                     <div className='chart-ai__strategy-picker'>
                         <span className='chart-ai__strategy-label'>Strategies used</span>
                         <button

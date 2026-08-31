@@ -13,6 +13,7 @@ import Summary from '@/components/summary';
 import TradeAnimation from '@/components/trade-animation';
 import Transactions from '@/components/transactions';
 import DigitPercentWidget from '@/components/digit-percent-widget/digit-percent-widget';
+import CyclePatternDetector from '@/components/cycle-pattern-detector/cycle-pattern-detector';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { popover_zindex } from '@/constants/z-indexes';
 import { useStore } from '@/hooks/useStore';
@@ -224,6 +225,7 @@ const DrawerContent = ({ active_index, is_drawer_open, active_tour, setActiveTab
             >
                 <span /><span /><span /><span />
             </button>
+            <CyclePatternDetector />
             {(is_drawer_open || active_tour) && (
                 <div style={{ flexShrink: 0 }}>
                     <StatisticsSummary {...props} />

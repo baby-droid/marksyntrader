@@ -33,8 +33,8 @@ const FREE_BOTS_LIST = [
         badge: 'SHARED BLOCKS',
         badgeColor: '#f59e0b',
         // The complete executable cycle is maintained in the canonical
-        // Differs XML: Differs → Over 1 → Over 2 → Differs → Under 8 →
-        // Under 7, followed by parity recovery on a loss.
+        // Differs XML: Differs with three-parity recovery — three evens
+        // select Odd and three odds select Even.
         xmlFile: '/bots/ahmed-differs-cycle.xml',
         icon: '🔁',
         sharedBlockAssets: [
