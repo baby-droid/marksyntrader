@@ -79,19 +79,14 @@ export function useDerivTrading(): UseDerivTradingReturn {
 
   const subscribeBalance = useCallback(async () => {
     try {
-      if (balanceSubRef.current) {
-        try { balanceSubRef.current.unsubscribe(); } catch (_) {}
+      // APIBase owns the authenticated balance stream. This hook only asks
+      // for a snapshot, preventing AlreadySubscribed when multiple pages use
+      // useDerivTrading at the same time.
+      const res = await api_base.api.send({ balance: 1 });
+      if (res?.balance?.balance != null) {
+        setBalance(parseFloat(res.balance.balance));
+        setCurrency(res.balance.currency || 'USD');
       }
-      const obs = api_base.api.subscribe({ balance: 1, account: 'current' });
-      balanceSubRef.current = obs.subscribe({
-        next: (res: any) => {
-          if (res?.balance?.balance != null) {
-            setBalance(parseFloat(res.balance.balance));
-            setCurrency(res.balance.currency || 'USD');
-          }
-        },
-        error: () => {},
-      });
     } catch (e) {
       // Try one-shot balance call
       try {
@@ -105,6 +100,13 @@ export function useDerivTrading(): UseDerivTradingReturn {
   }, []);
 
   useEffect(() => {
+    const messageSub = api_base.api?.onMessage()?.subscribe(({ data }: any) => {
+      if (data?.balance?.balance != null) {
+        setBalance(parseFloat(data.balance.balance));
+        setCurrency(data.balance.currency || 'USD');
+      }
+    });
+    balanceSubRef.current = messageSub;
     subscribeBalance();
     return () => {
       if (balanceSubRef.current) {

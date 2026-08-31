@@ -82,7 +82,7 @@ export function useDerivTrade() {
     const [balance, setBalance] = useState<number | null>(null);
     const [currency, setCurrency] = useState('USD');
     const [authorized, setAuthorized] = useState(isAuthorized$.value);
-    const balanceSubscribedRef = useRef(false);
+    const balanceRequestedRef = useRef(false);
     const mountedRef = useRef(true);
 
     useEffect(() => {
@@ -94,9 +94,11 @@ export function useDerivTrade() {
         const authSub = isAuthorized$.subscribe(isAuth => {
             if (!mountedRef.current) return;
             setAuthorized(isAuth);
-            if (isAuth && !balanceSubscribedRef.current) {
-                balanceSubscribedRef.current = true;
-                (api_base.api?.send as unknown as ((data: unknown) => Promise<any>) | undefined)?.({ balance: 1, subscribe: 1 })?.catch(() => {});
+            if (isAuth && !balanceRequestedRef.current) {
+                balanceRequestedRef.current = true;
+                // APIBase owns the live balance stream. Request a snapshot here
+                // instead of opening another subscription for every hook instance.
+                (api_base.api?.send as unknown as ((data: unknown) => Promise<any>) | undefined)?.({ balance: 1 })?.catch(() => {});
                 // Start ping monitor once authenticated so Fast mode diagnostics are live
                 try {
                     const sendFn = (msg: object) =>
