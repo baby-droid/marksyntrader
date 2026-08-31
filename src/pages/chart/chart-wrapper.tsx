@@ -228,19 +228,8 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
         };
 
         // ── Entry epoch received from POC (chart:trade-entry, fired once) ──
-        // This is the authoritative entry_tick_time from Deriv.
-        //
-        // Counting rule (applies to ALL market types):
-        //   epoch >= entryEpoch  →  T-tick (the entry tick itself is T1)
-        //   epoch <  entryEpoch  →  pre-contract tick, skip
-        //
-        // Deriv returns different entry_tick_time values per market family:
-        //   1s Vol / Jump  : entry_tick_time = epoch of the tick just BEFORE T1
-        //                    (so the entry tick IS T1, T2 follows, etc.)
-        //   Plain Vol / Bear / Bull : entry_tick_time = epoch of T1 itself
-        //                    (so T1 is the entry tick, T2 follows, etc.)
-        // Using >= for both means the entry tick is always included as T1,
-        // which is the correct behaviour for all markets.
+        // This is the authoritative entry/spot time from Deriv. Only ticks
+        // strictly after it are duration ticks; the entry/spot tick is excluded.
         const handleTradeEntry = (e: CustomEvent) => {
             const { contractId, entryEpoch } = e.detail;
             const id = String(contractId);
@@ -250,7 +239,7 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
             // arrived before we knew the entry epoch.
             const buffer = tickBufferRef.current.get(id) ?? [];
             tickBufferRef.current.delete(id);
-            const postEntry = buffer.filter(t => t.epoch >= entryEpoch);
+            const postEntry = buffer.filter(t => t.epoch > entryEpoch);
             if (postEntry.length > 0) {
                 const trade = pendingTradesRef.current.find(t => t.id === id);
                 if (trade) {
@@ -465,11 +454,8 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                     }
 
                     // ── Live-tick T-label update (epoch-anchored, real-time) ──────
-                    // Counting rule (same as handleTradeEntry above):
-                    //   epoch >= entryEpoch → T-tick (entry tick is T1)
-                    //   epoch <  entryEpoch → pre-contract, skip
-                    //
-                    // entry_tick_time comes from POC (chart:trade-entry event).
+                    // Count only ticks strictly after the entry/spot time.
+                    // The entry/spot time comes from the POC chart:trade-entry event.
                     // Before it arrives we buffer live ticks; when it arrives the
                     // buffer is drained (handleTradeEntry) and subsequent live ticks
                     // update labels on the same frame as currentDigit — zero lag.
@@ -486,12 +472,12 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                                 return t;
                             }
 
-                            if (epoch < entryEpoch) {
-                                // Pre-contract tick — skip.
+                            if (epoch <= entryEpoch) {
+                                // Entry/spot and pre-contract ticks are not duration ticks.
                                 return t;
                             }
 
-                            // epoch >= entryEpoch → genuine T-tick (entry tick = T1), update instantly
+                            // epoch > entryEpoch → genuine post-entry T-tick, update instantly
                             const existing = contractTickDigitsRef.current.get(t.id) ?? [];
                             if (existing.length < t.totalTicks) {
                                 contractTickDigitsRef.current.set(t.id, [...existing, d]);

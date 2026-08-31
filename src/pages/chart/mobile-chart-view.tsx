@@ -495,11 +495,8 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
     }, [warmProposalCache]);
 
     /* ── Market type (informational) ─────────────────────────────────────── */
-    // Tick counting rule (driven by chart-wrapper.tsx, which owns pendingTrades):
-    //   epoch >= entry_tick_time → T-tick (entry tick itself = T1)
-    //   epoch <  entry_tick_time → pre-contract tick, skip
-    // Deriv returns different entry_tick_time values per market family so the
-    // same >= rule naturally produces the correct T1 for every market type.
+    // Tick counting is driven by chart-wrapper.tsx: only epochs strictly after
+    // the authoritative entry/spot time are duration ticks.
     const is1sMarket   = /^1HZ/i.test(symbol);
     const isJumpMarket = /^JD/i.test(symbol);
 
@@ -615,9 +612,9 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                 // new settlement tick lands. Without this, the same tick_stream fires
                 // dozens of chart:trade-tick events per real tick, causing redundant
                 // processing and potential race overwrites in chart-wrapper.
-                // savedEntryTime: locked in once POC provides a non-zero
-                // entry_tick_time. Prevents the old rawStream.slice() fallback
-                // from labelling the entry-spot tick as T1 on 1s markets.
+                // savedEntryTime: lock the authoritative spot time when available,
+                // falling back to entry_tick_time. Until Deriv provides either
+                // value, keep buffering live ticks rather than guessing.
                 let savedEntryTime = 0;
                 let entryTimeDispatched = false; // fire chart:trade-entry exactly once
 
@@ -627,19 +624,13 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                         if (!poc) return;
                         if (!pocSubId && res.subscription?.id) pocSubId = res.subscription.id;
 
-                        // ── Lock in entry_tick_time once (same logic as PC panel) ──────
-                        // Counting rule (chart-wrapper owns the count):
-                        //   epoch >= entry_tick_time → T-tick (entry tick = T1)
-                        //   epoch <  entry_tick_time → pre-contract, skip
-                        // entry_tick_time may be 0 on the first POC message; fall back to
-                        // tick_stream[0].epoch (identical value once available).
+                        // ── Lock in the authoritative entry/spot time ───────────────
+                        // chart-wrapper counts only epochs strictly after this time,
+                        // so the entry/spot tick is never counted as a duration tick.
                         if (savedEntryTime === 0) {
-                            const pocEntryTime: number = poc.entry_tick_time ?? 0;
+                            const pocEntryTime = Number(poc.entry_spot_time ?? poc.entry_tick_time ?? 0);
                             if (pocEntryTime > 0) {
                                 savedEntryTime = pocEntryTime;
-                            } else if (Array.isArray(poc.tick_stream)) {
-                                const firstTick = poc.tick_stream.find((tick: any) => Number.isFinite(Number(tick?.epoch)));
-                                savedEntryTime = firstTick ? Number(firstTick.epoch) : 0;
                             }
                             if (savedEntryTime > 0 && !entryTimeDispatched) {
                                 entryTimeDispatched = true;

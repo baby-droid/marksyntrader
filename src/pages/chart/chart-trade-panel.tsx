@@ -494,11 +494,10 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                 // redundant chart:trade-tick events and potential race overwrites.
                 // We only fire the event when the post-entry stream is strictly longer
                 // than the last one we sent for this contract.
-                // savedEntryTime: locked-in the first time POC provides a non-zero
-                // entry_tick_time. On the very first POC message the field can be 0;
-                // subsequent messages carry the authoritative value. Once saved we
-                // never fall back to the old rawStream.slice() path which was the
-                // root cause of 1s markets counting the entry-spot tick as T1.
+                // savedEntryTime: lock the authoritative spot time when available,
+                // falling back to entry_tick_time. Until Deriv provides either
+                // value, keep buffering live ticks rather than guessing from the
+                // first tick_stream item.
                 let savedEntryTime = 0;
                 let entryTimeDispatched = false; // fire chart:trade-entry exactly once
 
@@ -509,19 +508,13 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
 
                         if (!pocSubId && res.subscription?.id) pocSubId = res.subscription.id;
 
-                        // ── Lock in entry_tick_time (Deriv API: epoch of the entry tick) ──
-                        // Counting rule (chart-wrapper owns the actual count):
-                        //   epoch >= entry_tick_time → T-tick (entry tick = T1)
-                        //   epoch <  entry_tick_time → pre-contract, skip
-                        // entry_tick_time may be 0 on the FIRST POC message (server timing);
-                        // if so, fall back to tick_stream[0].epoch (same value once set).
+                        // ── Lock in the authoritative entry/spot time ───────────────
+                        // chart-wrapper counts only epochs strictly after this time,
+                        // so the entry/spot tick is never counted as a duration tick.
                         if (savedEntryTime === 0) {
-                            const pocEntryTime: number = poc.entry_tick_time ?? 0;
+                            const pocEntryTime = Number(poc.entry_spot_time ?? poc.entry_tick_time ?? 0);
                             if (pocEntryTime > 0) {
                                 savedEntryTime = pocEntryTime;
-                            } else if (Array.isArray(poc.tick_stream)) {
-                                const firstTick = poc.tick_stream.find((tick: any) => Number.isFinite(Number(tick?.epoch)));
-                                savedEntryTime = firstTick ? Number(firstTick.epoch) : 0;
                             }
                             // Dispatch chart:trade-entry exactly once so chart-wrapper can
                             // immediately anchor its live-tick buffer to the correct epoch.

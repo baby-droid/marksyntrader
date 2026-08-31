@@ -2,6 +2,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { api_base } from '@/external/bot-skeleton';
+import { useDerivTrade } from '@/hooks/useDerivTrade';
 import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import './dcircles.scss';
 
@@ -521,6 +522,7 @@ function TradeRail({
 }
 
 const CircleAnalyzer = observer(() => {
+  const { buyContract: executeTrade, authorized, currency: accountCurrency } = useDerivTrade();
   const [symbols, setSymbols] = useState(DEFAULT_MARKETS);
   const [thresholds, setThresholds] = useState<Record<string, number>>({});
   const [selectedSymbol, setSelectedSymbol] = useState(DEFAULT_MARKETS[0]);
@@ -550,52 +552,42 @@ const CircleAnalyzer = observer(() => {
       setNotice('A contract is already being settled. Please wait.');
       return null;
     }
-    const api = api_base.api as any;
-    if (!api) {
+    if (!authorized) {
       setNotice('Connect a Deriv account before trading.');
       return null;
     }
     setTradeLock(true);
     try {
-      const request: any = {
-        proposal: 1, amount: stake, basis: 'stake', contract_type: contractType,
-        currency: 'USD', duration, duration_unit: 't', symbol: selectedSymbol,
-      };
-      if (barrier != null) request.barrier = String(barrier);
-      const proposal = await api.send(request);
-      if (proposal?.error) throw new Error(proposal.error.message);
-      const proposalId = proposal?.proposal?.id;
-      const askPrice = Number(proposal?.proposal?.ask_price ?? stake);
-      if (!proposalId) throw new Error('No proposal was returned');
-      const bought = await api.send({ buy: proposalId, price: askPrice });
-      if (bought?.error) throw new Error(bought.error.message);
-      const contractId = bought?.buy?.contract_id;
-      if (!contractId) throw new Error('No contract ID was returned');
-
-      const profit = await new Promise<number>((resolve, reject) => {
+      const record = await new Promise<TradeRecord | null>((resolve, reject) => {
         let settled = false;
-        let sub: any = null;
-        const finish = (value: number) => {
+        const settle = (result: any) => {
           if (settled) return;
           settled = true;
-          clearTimeout(timeout);
-          sub?.unsubscribe?.();
-          resolve(value);
+          const profit = Number(result?.profit ?? 0);
+          const record: TradeRecord = {
+            id: String(result?.contract_id ?? `${Date.now()}`),
+            symbol: selectedSymbol,
+            type: contractType,
+            barrier,
+            stake,
+            profit,
+            won: result?.status === 'won' || profit > 0,
+            time: new Date(),
+          };
+          setNotice(`${record.won ? 'Profit' : 'Loss'} ${fromUsd(profit).toFixed(2)} ${displayCur}`);
+          resolve(record);
         };
-        const timeout = setTimeout(() => reject(new Error('Settlement timed out')), 30000);
-        sub = api.onMessage?.()?.subscribe?.(({ data: message }: any) => {
-          const data = message?.data ?? message;
-          const poc = data?.proposal_open_contract;
-          if (!poc || Number(poc.contract_id) !== Number(contractId)) return;
-          if (poc.is_sold === 1 || poc.status === 'won' || poc.status === 'lost') finish(Number(poc.profit ?? 0));
-        });
-        api.send({ proposal_open_contract: 1, contract_id: contractId, subscribe: 1 }).catch(reject);
+        executeTrade({
+          symbol: selectedSymbol,
+          contract_type: contractType,
+          duration,
+          duration_unit: 't',
+          stake,
+          barrier,
+          currency: accountCurrency || displayCur,
+          metadata: { source: 'dcircles' },
+        }, settle).catch(reject);
       });
-      const record: TradeRecord = {
-        id: String(contractId), symbol: selectedSymbol, type: contractType, barrier,
-        stake, profit, won: profit > 0, time: new Date(),
-      };
-      setNotice(`${record.won ? 'Profit' : 'Loss'} ${fromUsd(profit).toFixed(2)} ${displayCur}`);
       return record;
     } catch (e: any) {
       setNotice(e?.message || 'Trade failed');
@@ -603,7 +595,7 @@ const CircleAnalyzer = observer(() => {
     } finally {
       setTradeLock(false);
     }
-  }, [displayCur, selectedSymbol, tradeLock]);
+  }, [accountCurrency, authorized, displayCur, executeTrade, selectedSymbol, tradeLock]);
 
   return (
     <div className='dc-page'>

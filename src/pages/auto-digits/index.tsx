@@ -4,6 +4,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useDerivTrade } from '@/hooks/useDerivTrade';
+import NumberField from '@/components/number-field';
 import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import { setTradeContext } from '@/utils/trade-metadata';
 import './auto-digits.scss';
@@ -526,6 +527,59 @@ const AutoDigits = observer(() => {
         addLog('RISK STATE RESET — baseline retained');
     };
 
+    const startBot = () => {
+        setRun(true);
+        setStatus(authorized ? 'Scanning and validating' : 'Login required before real execution');
+        addLog(authorized ? 'START BOT — virtual validation gate enabled' : 'START BOT — scanner active, execution waiting for authorization');
+    };
+
+    const pauseBot = () => {
+        setRun(false);
+        setStatus('PAUSED — open contracts remain active; no new entries will be sent');
+        addLog('PAUSE BOT — scanning paused without resetting risk state');
+    };
+
+    const stopBot = () => {
+        setRun(false);
+        validationRef.current = { key: '', wins: 0, attempt: 0, readyEpoch: 0 };
+        setValidation({ wins: 0, attempt: 0, state: 'IDLE' });
+        setStatus('STOPPED — press Start Bot to begin a fresh validation gate');
+        addLog('STOP BOT — validation gate cleared');
+    };
+
+    const closeAllContracts = async () => {
+        if (!authorized) {
+            setStatus('Login required before closing contracts');
+            addLog('CLOSE ALL — rejected because no account is authorized');
+            return;
+        }
+        try {
+            const response = await send({ portfolio: 1 });
+            if (response?.error) throw new Error(response.error.message || 'Portfolio request failed');
+            const contracts = Array.isArray(response?.portfolio?.contracts) ? response.portfolio.contracts : [];
+            const sellable = contracts.filter((contract: any) =>
+                contract?.contract_id != null &&
+                !contract?.is_sold &&
+                (contract?.is_valid_to_sell === 1 || contract?.is_valid_to_sell === true)
+            );
+            if (!sellable.length) {
+                setStatus('CLOSE ALL — no sellable open contracts found');
+                addLog('CLOSE ALL — portfolio is clear');
+                return;
+            }
+            const results = await Promise.allSettled(sellable.map((contract: any) =>
+                send({ sell: Number(contract.contract_id), price: 0 })
+            ));
+            const closed = results.filter(result => result.status === 'fulfilled' && !(result.value as any)?.error).length;
+            const failed = results.length - closed;
+            setStatus(failed ? `CLOSE ALL — ${closed} closed, ${failed} failed` : `CLOSE ALL — ${closed} contract${closed === 1 ? '' : 's'} closed`);
+            addLog(failed ? `CLOSE ALL — ${closed} closed, ${failed} sell requests failed` : `CLOSE ALL — ${closed} sell request${closed === 1 ? '' : 's'} completed`);
+        } catch (error: any) {
+            setStatus(`CLOSE ALL — ${error?.message || 'request failed'}`);
+            addLog(`CLOSE ALL ERROR — ${error?.message || 'portfolio request failed'}`);
+        }
+    };
+
     return (
         <div className='auto-digits'>
             <header className='auto-digits__topbar'>
@@ -568,10 +622,19 @@ const AutoDigits = observer(() => {
                         <div className='ad-panel__label'>BOT CONFIGURATION</div>
                         <label>MARKET<select value={symbol} onChange={event => setSymbol(event.target.value)}>{MARKETS.map(market => <option key={market.value} value={market.value}>{market.label}</option>)}</select></label>
                         <label>STRATEGY<select value={strategy} onChange={event => setStrategy(event.target.value as StrategyValue)}>{['Parity', 'Digits', 'Barrier', 'Direction', 'Range'].map(group => <optgroup key={group} label={group}>{STRATEGIES.filter(item => item.group === group).map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</optgroup>)}</select></label>
-                        {['OVER', 'UNDER', 'MATCHES', 'DIFFERS'].includes(strategy) && <label>BARRIER<input type='number' min='0' max='9' value={barrier} onChange={event => setBarrier(Math.max(0, Math.min(9, Number(event.target.value) || 0)))} /></label>}
-                        <div className='ad-control-row'><label>STAKE<input inputMode='decimal' value={stake} onChange={event => setStake(event.target.value)} /></label><label>MIN SCORE<input type='number' min='50' max='95' value={minScore} onChange={event => setMinScore(Math.max(50, Math.min(95, Number(event.target.value) || 70)))} /></label></div>
+                        {['OVER', 'UNDER', 'MATCHES', 'DIFFERS'].includes(strategy) && <label>BARRIER<NumberField value={barrier} min={0} max={9} onCommit={setBarrier} /></label>}
+                        <div className='ad-control-row'><label>STAKE<NumberField value={Number(stake) || 0.35} min={0.35} max={1000} onCommit={value => setStake(value.toFixed(2))} /></label><label>MIN SCORE<NumberField value={minScore} min={50} max={95} onCommit={setMinScore} /></label></div>
                         <div className='ad-duration-row'><span>DURATION</span><button className={autoDuration ? 'is-active' : ''} onClick={() => setAutoDuration(true)}>AUTO {activeDuration}T</button>{[1, 2, 3, 4, 5].map(value => <button key={value} className={!autoDuration && duration === value ? 'is-active' : ''} onClick={() => { setAutoDuration(false); setDuration(value); }}>{value}T</button>)}</div>
                         <label>ENTRY LOGIC<select value={logicMode} onChange={event => setLogicMode(event.target.value)}>{LOGIC_MODES.map(mode => <option key={mode.value} value={mode.value}>{mode.label}</option>)}</select></label>
+                    </section>
+                    <section className='ad-panel ad-quick-actions'>
+                        <div className='ad-panel__label'>QUICK ACTIONS</div>
+                        <div className='ad-quick-actions__grid'>
+                            <button className='ad-action ad-action--start' onClick={startBot} disabled={run}>Start Bot</button>
+                            <button className='ad-action ad-action--pause' onClick={pauseBot} disabled={!run}>Pause Bot</button>
+                            <button className='ad-action ad-action--stop' onClick={stopBot} disabled={!run && validation.state === 'IDLE'}>Stop Bot</button>
+                            <button className='ad-action ad-action--close' onClick={closeAllContracts}>Close All</button>
+                        </div>
                     </section>
                 </aside>
 
