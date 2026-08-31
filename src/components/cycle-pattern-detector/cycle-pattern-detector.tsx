@@ -38,7 +38,7 @@ const CyclePatternDetector: React.FC = () => {
             subscriptionRef.current?.unsubscribe?.();
             subscriptionRef.current = null;
             if (subscriptionIdRef.current && api_base.api) {
-                try { api_base.api.send({ forget: subscriptionIdRef.current }).catch(() => {}); } catch {}
+                try { api_base.api.send({ forget: subscriptionIdRef.current }); } catch {}
             }
             subscriptionIdRef.current = null;
         };

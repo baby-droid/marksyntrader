@@ -23,9 +23,9 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">23.1% </span>
+                <span class="strong">22.66% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>122/528</span>
+                <span class='fraction'>124/547</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">23.1% </span>
+                <span class="strong">22.66% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>122/528</span>
+                <span class='fraction'>124/547</span>
             </div>
         
             
@@ -591,7 +591,26 @@
 <a name='L526'></a><a href='#L526'>526</a>
 <a name='L527'></a><a href='#L527'>527</a>
 <a name='L528'></a><a href='#L528'>528</a>
-<a name='L529'></a><a href='#L529'>529</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
+<a name='L529'></a><a href='#L529'>529</a>
+<a name='L530'></a><a href='#L530'>530</a>
+<a name='L531'></a><a href='#L531'>531</a>
+<a name='L532'></a><a href='#L532'>532</a>
+<a name='L533'></a><a href='#L533'>533</a>
+<a name='L534'></a><a href='#L534'>534</a>
+<a name='L535'></a><a href='#L535'>535</a>
+<a name='L536'></a><a href='#L536'>536</a>
+<a name='L537'></a><a href='#L537'>537</a>
+<a name='L538'></a><a href='#L538'>538</a>
+<a name='L539'></a><a href='#L539'>539</a>
+<a name='L540'></a><a href='#L540'>540</a>
+<a name='L541'></a><a href='#L541'>541</a>
+<a name='L542'></a><a href='#L542'>542</a>
+<a name='L543'></a><a href='#L543'>543</a>
+<a name='L544'></a><a href='#L544'>544</a>
+<a name='L545'></a><a href='#L545'>545</a>
+<a name='L546'></a><a href='#L546'>546</a>
+<a name='L547'></a><a href='#L547'>547</a>
+<a name='L548'></a><a href='#L548'>548</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -670,6 +689,8 @@
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -680,6 +701,7 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -970,6 +992,22 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -1191,6 +1229,8 @@ class APIBase {
     // Separate handle for the live-balance message listener so it is always
     // torn down in init()/reinit paths before the old API instance is replaced.
     private balance_listener: { unsubscribe: () =&gt; void } | null = null;
+    private auth_subscriptions_api: TApiBaseApi | null = null;
+    private auth_subscriptions_promise: Promise&lt;void&gt; | null = null;
 &nbsp;
     // Constants for timeouts - extracted magic numbers for better maintainability
     private readonly ACTIVE_SYMBOLS_TIMEOUT_MS = 10000; // 10 seconds
@@ -1198,6 +1238,7 @@ class APIBase {
     private readonly MAX_RECONNECTION_ATTEMPTS = 5; // Maximum number of reconnection attempts before session reset
 &nbsp;
     unsubscribeAllSubscriptions = <span class="fstat-no" title="function not covered" >() =&gt; {</span>
+<span class="cstat-no" title="statement not covered" >        this.auth_subscriptions_api = null;</span>
 <span class="cstat-no" title="statement not covered" >        this.current_auth_subscriptions?.forEach(subscription_promise =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >            subscription_promise.then(({ subscription }) =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >                if (subscription?.id) {</span>
@@ -1498,10 +1539,16 @@ class APIBase {
 <span class="cstat-no" title="statement not covered" >    }</span>
 &nbsp;
 <span class="fstat-no" title="function not covered" >    async subscribe() {</span>
+<span class="cstat-no" title="statement not covered" >        if (!this.api) return;</span>
+<span class="cstat-no" title="statement not covered" >        if (this.auth_subscriptions_promise) return this.auth_subscriptions_promise;</span>
+<span class="cstat-no" title="statement not covered" >        if (this.auth_subscriptions_api === this.api &amp;&amp; this.current_auth_subscriptions.length &gt; 0) return;</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >        const active_api = this.api;</span>
+<span class="cstat-no" title="statement not covered" >        const subscribe_promise = (async () =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >        const subscribeToStream = (streamName: string) =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >            return doUntilDone(</span>
 <span class="cstat-no" title="statement not covered" >                () =&gt; {</span>
-<span class="cstat-no" title="statement not covered" >                    const subscription = this.api?.send({</span>
+<span class="cstat-no" title="statement not covered" >                    const subscription = active_api.send({</span>
 <span class="cstat-no" title="statement not covered" >                        [streamName]: 1,</span>
 <span class="cstat-no" title="statement not covered" >                        subscribe: 1,</span>
 <span class="cstat-no" title="statement not covered" >                    });</span>
@@ -1525,8 +1572,8 @@ class APIBase {
 <span class="cstat-no" title="statement not covered" >        // Stored separately from bot-trade subscriptions so it is always torn down</span>
 <span class="cstat-no" title="statement not covered" >        // in reinit/reconnect paths (see teardownBalanceListener).</span>
 <span class="cstat-no" title="statement not covered" >        this.teardownBalanceListener();</span>
-<span class="cstat-no" title="statement not covered" >        if (this.api) {</span>
-<span class="cstat-no" title="statement not covered" >            this.balance_listener = this.api.onMessage().subscribe(({ data }: any) =&gt; {</span>
+<span class="cstat-no" title="statement not covered" >        if (this.api === active_api) {</span>
+<span class="cstat-no" title="statement not covered" >            this.balance_listener = active_api.onMessage().subscribe(({ data }: any) =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >                if (data?.msg_type === 'balance' &amp;&amp; data?.balance) {</span>
 <span class="cstat-no" title="statement not covered" >                    const { loginid, balance: newBalance, currency } = data.balance;</span>
 <span class="cstat-no" title="statement not covered" >                    if (!loginid) return;</span>
@@ -1552,6 +1599,16 @@ class APIBase {
 <span class="cstat-no" title="statement not covered" >                    }</span>
 <span class="cstat-no" title="statement not covered" >                }</span>
 <span class="cstat-no" title="statement not covered" >            }) as any;</span>
+<span class="cstat-no" title="statement not covered" >            this.auth_subscriptions_api = active_api;</span>
+<span class="cstat-no" title="statement not covered" >        }</span>
+<span class="cstat-no" title="statement not covered" >        })();</span>
+<span class="cstat-no" title="statement not covered" >        this.auth_subscriptions_promise = subscribe_promise;</span>
+<span class="cstat-no" title="statement not covered" >        try {</span>
+<span class="cstat-no" title="statement not covered" >            await subscribe_promise;</span>
+<span class="cstat-no" title="statement not covered" >        } finally {</span>
+<span class="cstat-no" title="statement not covered" >            if (this.auth_subscriptions_promise === subscribe_promise) {</span>
+<span class="cstat-no" title="statement not covered" >                this.auth_subscriptions_promise = null;</span>
+<span class="cstat-no" title="statement not covered" >            }</span>
 <span class="cstat-no" title="statement not covered" >        }</span>
 <span class="cstat-no" title="statement not covered" >    }</span>
 &nbsp;
@@ -1654,7 +1711,7 @@ export const api_base = new APIBase();
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-08-13T00:39:10.148Z
+                at 2026-08-31T08:48:31.446Z
             </div>
         <script src="../../../../prettify.js"></script>
         <script>

@@ -121,7 +121,7 @@
             <next>
               <block type="variables_set" id="adc_store_previous_parity">
                 <field name="VAR" id="adc_previous_parity">previous_parity</field>
-                <value name="VALUE"><block type="math_modulo" id="adc_store_parity_modulo"><value name="DIVIDEND"><block type="variables_get" id="adc_store_digit"><field name="VAR" id="adc_digit">last_digit</field></block></value><value name="DIVISOR"><shadow type="math_number"><field name="NUM">2</field></shadow></value></block>
+                <value name="VALUE"><block type="math_modulo" id="adc_store_parity_modulo"><value name="DIVIDEND"><block type="variables_get" id="adc_store_digit"><field name="VAR" id="adc_digit">last_digit</field></block></value><value name="DIVISOR"><shadow type="math_number"><field name="NUM">2</field></shadow></value></block></value>
                 <next>
                   <block type="controls_if" id="adc_sequence_controller">
                     <data>gt.seq.applySequence</data>
@@ -163,7 +163,7 @@
                 <statement name="DO0">
                   <block type="controls_if" id="adc_contrarian_parity">
                     <mutation else="1"/>
-                    <value name="IF0"><block type="logic_compare" id="adc_loss_even_test"><field name="OP">EQ</field><value name="A"><block type="math_modulo" id="adc_loss_modulo"><value name="DIVIDEND"><block type="variables_get" id="adc_loss_digit"><field name="VAR" id="adc_digit">last_digit</field></block></value><value name="DIVISOR"><shadow type="math_number"><field name="NUM">2</field></shadow></block></value><value name="B"><block type="math_number"><field name="NUM">0</field></block></value></block></value>
+                    <value name="IF0"><block type="logic_compare" id="adc_loss_even_test"><field name="OP">EQ</field><value name="A"><block type="math_modulo" id="adc_loss_modulo"><value name="DIVIDEND"><block type="variables_get" id="adc_loss_digit"><field name="VAR" id="adc_digit">last_digit</field></block></value><value name="DIVISOR"><shadow type="math_number"><field name="NUM">2</field></shadow></value></block></value><value name="B"><block type="math_number"><field name="NUM">0</field></block></value></block></value>
                     <statement name="DO0"><block type="variables_set" id="adc_even_to_odd"><field name="VAR" id="adc_phase">cycle_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">1</field></block></value></block></statement>
                     <statement name="ELSE"><block type="variables_set" id="adc_odd_to_even"><field name="VAR" id="adc_phase">cycle_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">2</field></block></value></block></statement>
                   </block>
