@@ -163,9 +163,9 @@
     flex-shrink: 0;
 
     /* sits just above the top row */
-    &--top    { margin: 8px 0 0; }
+    &--top    { margin: 8px 0 -2px; }
     /* sits just below the bottom row */
-    &--bottom { margin: 0; }
+    &--bottom { margin: -2px 0 0; }
 }
 
 /* Base triangle — shared transition */

@@ -39,6 +39,7 @@
 - [Scalper TP/SL, deactivate limit, markets](scalper-tpsl-deactivate-markets.md) — tpGuard always true; loss_limit breaks outer loop (VPS stops); deactivate checks wins OR losses; symbolToSubmarket() helper; ALL_MARKETS includes Bear/Bull/Boom/Crash/Step/Range.
 - [Hedge independent martingale per leg](hedge-martingale-per-leg.md) — runningStakeA/BRef track per-leg current stake; win resets to base, loss multiplies only that leg's stake independently.
 - [Chart digit accuracy](chart-digit-accuracy.md) — use tick.pip_size from first live tick (not string-length); deduplicate history vs live by epoch Set; send `forget: subscriptionId` on cleanup (RxJS unsubscribe alone does not stop server stream).
+- [Chart settlement tick semantics](chart-settlement-ticks.md) — count the entry tick (`epoch >= entryEpoch`) and deduplicate each contract epoch; fast markets otherwise appear to skip two ticks.
 - [Copy-trading timing](copy-trading-timing.md) — publish pre-signal (no contract_id) BEFORE the buy so follower enters on the same tick; post-signal with contract_id registers mirroredContracts to block the backup path.
 - [Copy-trading parameter preservation](copy-trading-parameter-preservation.md) — POC accumulator limit orders are nested; normalize them before replay and never bulk-copy across currencies or custom ratios.
 - [SmartChart adapter init](smartchart-adapter-init.md) — adapter init effect must poll/retry until chart_api.api is ready; `chart_api.api` not in dep array so effect never re-runs if null on mount.

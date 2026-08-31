@@ -157,7 +157,7 @@
     /* ── ① Triangle track — exactly the height of the triangle arrow ── */
     &__triangle-track {
         position: relative;
-        height: 7px;       /* matches border-top-width of the pointer */
+         height: 9px;       /* matches border-top-width of the pointer */
         width: 100%;
         flex-shrink: 0;
         overflow: visible; /* let the pointer bleed down onto circles */

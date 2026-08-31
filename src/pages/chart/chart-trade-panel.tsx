@@ -400,8 +400,8 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
     }, [accumContractId, loading, stake]);
 
     /* ── Market type (informational) ─────────────────────────────────────── */
-    // Entry-tick stripping is now uniform: epoch > entry_tick_time removes the
-    // spot-at-purchase tick for every market type. No per-market slice needed.
+    // Entry-tick handling is uniform across market types; the chart counter
+    // includes the entry tick and ignores only ticks before the entry epoch.
     const is1sMarket   = /^1HZ/i.test(symbol);
     const isJumpMarket = /^JD/i.test(symbol);
 
@@ -522,7 +522,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                 // We only fire the event when the post-entry stream is strictly longer
                 // than the last one we sent for this contract.
                 // savedEntryTime: lock the authoritative spot time when available,
-                // falling back to entry_tick_time. Until Deriv provides either
+                // falling back to entry_spot_time. Until Deriv provides either
                 // value, keep buffering live ticks rather than guessing from the
                 // first tick_stream item.
                 let savedEntryTime = 0;
@@ -536,10 +536,11 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                         if (!pocSubId && res.subscription?.id) pocSubId = res.subscription.id;
 
                         // ── Lock in the authoritative entry/spot time ───────────────
-                        // chart-wrapper counts only epochs strictly after this time,
-                        // so the entry/spot tick is never counted as a duration tick.
+                        // chart-wrapper counts the entry tick and every following tick,
+                        // while ignoring only ticks that occurred before entry.
                         if (savedEntryTime === 0) {
-                            const pocEntryTime = Number(poc.entry_spot_time ?? poc.entry_tick_time ?? 0);
+                            const pocEntryTime =
+                                Number(poc.entry_tick_time) || Number(poc.entry_spot_time) || 0;
                             if (pocEntryTime > 0) {
                                 savedEntryTime = pocEntryTime;
                             }

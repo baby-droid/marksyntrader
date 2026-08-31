@@ -210,6 +210,7 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
     // epoch is known, so we can retroactively assign T1, T2, … when it arrives.
     const entryEpochRef = useRef<Map<string, number>>(new Map());
     const tickBufferRef = useRef<Map<string, { epoch: number; digit: number }[]>>(new Map());
+    const countedTickEpochsRef = useRef<Map<string, Set<number>>>(new Map());
 
     /* Trade events */
     useEffect(() => {
@@ -219,13 +220,14 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
             const id = String(contractId);
             entryEpochRef.current.set(id, 0);      // 0 = entry epoch not yet known
             tickBufferRef.current.set(id, []);      // pre-entry live-tick buffer
+            countedTickEpochsRef.current.set(id, new Set());
             pendingTradesRef.current = [...pendingTradesRef.current, { id, totalTicks: ticks, countedTicks: 0 }];
             setPendingTrades([...pendingTradesRef.current]);
         };
 
         // ── Entry epoch received from POC (chart:trade-entry, fired once) ──
-        // This is the authoritative entry/spot time from Deriv. Only ticks
-        // strictly after it are duration ticks; the entry/spot tick is excluded.
+        // This is the authoritative entry/spot time from Deriv. Ticks at or
+        // after it are settlement ticks; only earlier ticks are excluded.
         const handleTradeEntry = (e: CustomEvent) => {
             const { contractId, entryEpoch } = e.detail;
             const id = String(contractId);
@@ -235,11 +237,19 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
             // known still contribute to the settlement countdown.
             const buffer = tickBufferRef.current.get(id) ?? [];
             tickBufferRef.current.delete(id);
-            const postEntry = buffer.filter(t => t.epoch > entryEpoch);
+            const countedEpochs = countedTickEpochsRef.current.get(id) ?? new Set<number>();
+            const postEntry = buffer.filter(t =>
+                t.epoch >= entryEpoch && !countedEpochs.has(t.epoch)
+            );
             if (postEntry.length > 0) {
                 const trade = pendingTradesRef.current.find(t => t.id === id);
                 if (trade) {
-                    const countedTicks = Math.min(postEntry.length, trade.totalTicks);
+                    postEntry.forEach(t => countedEpochs.add(t.epoch));
+                    countedTickEpochsRef.current.set(id, countedEpochs);
+                    const countedTicks = Math.min(
+                        trade.countedTicks + postEntry.length,
+                        trade.totalTicks
+                    );
                     pendingTradesRef.current = pendingTradesRef.current.map(t =>
                         t.id === id ? { ...t, countedTicks } : t
                     );
@@ -256,6 +266,7 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
             const cleanupId = (id: string) => {
                 entryEpochRef.current.delete(id);
                 tickBufferRef.current.delete(id);
+                countedTickEpochsRef.current.delete(id);
             };
 
             if (contractId != null) {
@@ -444,7 +455,7 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                     }
 
                     // ── Live-tick settlement count (epoch-anchored, real-time) ──
-                    // Count only ticks strictly after the entry/spot time.
+                    // Count the entry tick and each following settlement tick.
                     // The entry/spot time comes from the POC chart:trade-entry event.
                     // Before it arrives we buffer live ticks; when it arrives the
                     // buffer is drained (handleTradeEntry) and subsequent live ticks
@@ -455,18 +466,22 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
 
                             if (entryEpoch === 0) {
                                 // Entry epoch not yet known — buffer this tick so we can
-                                // retroactively assign labels once POC delivers entry_tick_time.
+                                // retroactively count ticks once POC delivers entry_tick_time.
                                 const buf = tickBufferRef.current.get(t.id);
                                 if (buf) buf.push({ epoch, digit: d });
                                 return t;
                             }
 
-                            if (epoch <= entryEpoch) {
-                                // Entry/spot and pre-contract ticks are not duration ticks.
+                            if (epoch < entryEpoch) {
+                                // Only ticks before the entry tick are pre-contract.
                                 return t;
                             }
 
-                            // epoch > entryEpoch → genuine post-entry T-tick, update instantly
+                            // epoch >= entryEpoch → one settlement tick, update instantly.
+                            // Dedup by epoch because reconnects/POC updates can replay a tick.
+                            const countedEpochs = countedTickEpochsRef.current.get(t.id);
+                            if (!countedEpochs || countedEpochs.has(epoch)) return t;
+                            countedEpochs.add(epoch);
                             if (t.countedTicks < t.totalTicks) {
                                 return { ...t, countedTicks: t.countedTicks + 1 };
                             }
