@@ -93,4 +93,25 @@ describe('AI cycle pattern detector', () => {
         expect(patched).toContain('<field name="SYMBOL_LIST">1HZ50V</field>');
         expect(patched).toContain('<field name="PREDICTION">7</field>');
     });
+
+    it('patches AI Engine stake, initial stake, martingale, and tick settings', () => {
+        const source = `
+            <field name="SYMBOL_LIST">OLD</field>
+            <block type="variables_set"><field name="VAR">stake</field><value name="VALUE"><block type="math_number"><field name="NUM">0.5</field></block></value></block>
+            <block type="variables_set"><field name="VAR">initial_stake</field><value name="VALUE"><block type="math_number"><field name="NUM">0.5</field></block></value></block>
+            <block type="variables_set"><field name="VAR">martingale</field><value name="VALUE"><block type="math_number"><field name="NUM">2</field></block></value></block>
+            <value name="DURATION"><shadow type="math_number_positive"><field name="NUM">1</field></shadow></value>
+            <block type="multiple_purchase"><field name="PURCHASE_1">DIGITDIFF</field><field name="PREDICTION">LAST_DIGIT</field></block>
+        `;
+        const patched = patchGuidedCycleXml(source, '1HZ50V', 7, {
+            stake: 1.25,
+            initialStake: 0.75,
+            martingale: 2.4,
+            ticks: 3,
+        });
+        expect(patched).toContain('<field name="VAR">stake</field><value name="VALUE"><block type="math_number"><field name="NUM">1.25</field>');
+        expect(patched).toContain('<field name="VAR">initial_stake</field><value name="VALUE"><block type="math_number"><field name="NUM">0.75</field>');
+        expect(patched).toContain('<field name="VAR">martingale</field><value name="VALUE"><block type="math_number"><field name="NUM">2.4</field>');
+        expect(patched).toContain('<value name="DURATION"><shadow type="math_number_positive"><field name="NUM">3</field>');
+    });
 });
