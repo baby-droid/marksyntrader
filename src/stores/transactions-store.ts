@@ -18,6 +18,25 @@ type TElement = {
     [key: string]: TTransaction[];
 };
 
+const dedupeStoredElements = (elements: TElement): TElement =>
+    Object.fromEntries(Object.entries(elements || {}).map(([accountId, rows]) => {
+        const seen = new Set<string>();
+        const deduped = rows.filter(row => {
+            if (row.type !== transaction_elements.CONTRACT || typeof row.data === 'string') return true;
+            const contract = row.data as any;
+            const identity = contract?.contract_id != null
+                ? `contract:${contract.contract_id}`
+                : contract?.transaction_ids?.buy != null
+                    ? `buy:${contract.transaction_ids.buy}`
+                    : null;
+            if (!identity) return true;
+            if (seen.has(identity)) return false;
+            seen.add(identity);
+            return true;
+        });
+        return [accountId, deduped];
+    }));
+
 export default class TransactionsStore {
     root_store: RootStore;
     core: TStores;
@@ -49,7 +68,9 @@ export default class TransactionsStore {
     }
     TRANSACTION_CACHE = 'transaction_cache';
 
-    elements: TElement = getStoredItemsByUser(this.TRANSACTION_CACHE, this.core?.client?.loginid, []);
+    elements: TElement = dedupeStoredElements(
+        getStoredItemsByUser(this.TRANSACTION_CACHE, this.core?.client?.loginid, [])
+    );
     active_transaction_id: null | number = null;
     recovered_completed_transactions: number[] = [];
     recovered_transactions: number[] = [];
@@ -192,11 +213,19 @@ export default class TransactionsStore {
 
         const same_contract_index = this.elements[current_account]?.findIndex(c => {
             if (typeof c.data === 'string') return false;
-            return (
-                c.type === transaction_elements.CONTRACT &&
-                c.data?.transaction_ids &&
-                c.data.transaction_ids.buy === data.transaction_ids?.buy
-            );
+            if (c.type !== transaction_elements.CONTRACT) return false;
+            const existing = c.data as any;
+            const incoming = data as any;
+            // The same purchase reaches this store through both the native
+            // bot.contract observer and Auto Trades' browser event. Contract
+            // IDs are the canonical identity; the buy transaction id is only a
+            // fallback for older recovered payloads.
+            if (existing?.contract_id && incoming?.contract_id) {
+                return Number(existing.contract_id) === Number(incoming.contract_id);
+            }
+            const existingBuy = existing?.transaction_ids?.buy;
+            const incomingBuy = incoming?.transaction_ids?.buy;
+            return existingBuy != null && incomingBuy != null && existingBuy === incomingBuy;
         });
 
         if (same_contract_index === -1) {

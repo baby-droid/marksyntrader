@@ -203,7 +203,7 @@ const DrawerContent = ({ active_index, is_drawer_open, active_tour, setActiveTab
                         label={<Localize i18n_default_text='Transactions' />}
                     >
                         <div className='run-panel__transactions-tab'>
-                            <DigitPercentWidget />
+                            <DigitPercentWidget showTrigger={false} />
                             <Transactions is_drawer_open={is_drawer_open} />
                         </div>
                     </div>
@@ -212,6 +212,15 @@ const DrawerContent = ({ active_index, is_drawer_open, active_tour, setActiveTab
                     </div>
                 </Tabs>
             </div>
+            <button
+                type='button'
+                className='run-panel__analyzer-trigger'
+                title='Open Digit Analyzer'
+                aria-label='Open Digit Analyzer'
+                onClick={() => window.dispatchEvent(new CustomEvent('digit-analyzer:open'))}
+            >
+                <span /><span /><span /><span />
+            </button>
             {(is_drawer_open || active_tour) && (
                 <div style={{ flexShrink: 0 }}>
                     <StatisticsSummary {...props} />

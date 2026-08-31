@@ -279,6 +279,32 @@
         }
     }
 
+    &__analyzer-trigger {
+        display: grid;
+        grid-template-columns: repeat(2, 5px);
+        grid-template-rows: repeat(2, 5px);
+        gap: 3px;
+        align-self: flex-start;
+        margin: 0.35rem 1.6rem 0.55rem;
+        padding: 5px;
+        border: 1px solid var(--border-normal, #d6dadb);
+        border-radius: 5px;
+        background: var(--general-main-1, #fff);
+        cursor: pointer;
+
+        span {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: #7b3fe4;
+        }
+
+        &:hover {
+            border-color: #7b3fe4;
+            box-shadow: 0 0 0 2px rgba(123, 63, 228, 0.12);
+        }
+    }
+
     &__buttons {
         display: inline-flex !important;
         justify-content: space-between;

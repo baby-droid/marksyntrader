@@ -15,6 +15,7 @@ import SaveModal from '../dashboard/bot-list/save-modal';
 import BotBuilderTourHandler from '../tutorials/dbot-tours/bot-builder-tour';
 import QuickStrategy1 from './quick-strategy';
 import WorkspaceWrapper from './workspace-wrapper';
+import StrategyEngineChecker, { StrategyCheck } from './strategy-engine-checker';
 
 const PALE_BLUE = '#7ec8e3';
 const PALE_BLUE2 = '#89c4f4';
@@ -25,6 +26,20 @@ const PALE_BLUE5 = '#6cb4e4';
 const FREE_BOTS_LIST = [
     // ── Signature bots (top of panel) ─────────────────────────────────────────
     { id: 'differs-edge-scanner', name: 'Differs Edge Scanner', market: 'V50 1s', badge: 'SCAN 🧠', badgeColor: '#34d399', xmlFile: '/bots/differs-edge-scanner.xml', icon: '🔎' },
+    {
+        id: 'ahmed-differ-cycle',
+        name: 'AHMED DIFFER CYCLE',
+        market: 'V50 1s',
+        badge: 'SHARED BLOCKS',
+        badgeColor: '#f59e0b',
+        xmlFile: '/bots/ahmed-differ-cycle.xml',
+        icon: '🔁',
+        sharedBlockAssets: [
+            { id: 'gt.seq.tradeDef', file: '/attached_assets/block_(3)_1788157539069.xml' },
+            { id: 'gt.seq.beforePurchase', file: '/attached_assets/block_(2)_1788157532277.xml' },
+            { id: 'gt.seq.afterPurchase', file: '/attached_assets/block_(4)_1788157548478.xml' },
+        ],
+    },
     { id: 'omni-cycle-trader-pro', name: 'Omni Cycle Trader Pro', market: 'V75 1s', badge: 'CYCLE 🔄', badgeColor: '#a78bfa', xmlFile: '/bots/omni-cycle-trader-pro.xml', icon: '🔄' },
     { id: 'smart-entry-pattern-pro-v2', name: 'Smart Entry Pattern Pro V2', market: 'V25 1s', badge: 'SMART 🧠', badgeColor: '#34d399', xmlFile: '/bots/smart-entry-pattern-pro-v2.xml', icon: '🧠' },
     { id: 'ahmed-cycle-master', name: 'Ahmed Cycle Master', market: 'V50 1s', badge: 'CYCLE 🔄', badgeColor: '#a78bfa', xmlFile: '/bots/ahmed-cycle-master.xml', icon: '🔄' },
@@ -45,7 +60,7 @@ const FREE_BOTS_LIST = [
 type TFreeBotsPanelProps = {
     onClose: () => void;
     /** Called after XML is loaded into the workspace. shouldRun=true triggers auto-trade. */
-    onLoadDone: (shouldRun: boolean) => void;
+    onLoadDone: (shouldRun: boolean, bot?: any, check?: any) => void;
 };
 
 const FreeBotsSidePanel: React.FC<TFreeBotsPanelProps> = ({ onClose, onLoadDone }) => {
@@ -58,10 +73,19 @@ const FreeBotsSidePanel: React.FC<TFreeBotsPanelProps> = ({ onClose, onLoadDone 
      *  DBot `load()` pipeline — same path the Load Modal uses — so BlockConversion,
      *  removeLimitedBlocks, asyncClear, and clearWorkspaceAndLoadFromXml all run
      *  in the correct order and the trade engine receives properly initialised blocks. */
-    const fetchAndLoad = useCallback(async (bot: typeof FREE_BOTS_LIST[0]): Promise<void> => {
+    const fetchAndLoad = useCallback(async (bot: typeof FREE_BOTS_LIST[0]): Promise<any> => {
         const response = await fetch(bot.xmlFile);
         if (!response.ok) throw new Error(`Failed to fetch bot XML: ${response.status}`);
         const block_string = await response.text();
+        const sharedChecks = await Promise.all((bot.sharedBlockAssets || []).map(async asset => {
+            const assetResponse = await fetch(asset.file);
+            if (!assetResponse.ok) throw new Error(`Failed to fetch shared block ${asset.id}: ${assetResponse.status}`);
+            const assetText = await assetResponse.text();
+            if (!assetText.includes(`data-id="${asset.id}"`)) {
+                throw new Error(`Shared block ${asset.id} is not present in ${asset.file}`);
+            }
+            return { id: asset.id, ok: true, file: asset.file };
+        }));
 
         const workspace = (window as any).Blockly?.derivWorkspace;
         if (!workspace) {
@@ -130,6 +154,10 @@ const FreeBotsSidePanel: React.FC<TFreeBotsPanelProps> = ({ onClose, onLoadDone 
             showIncompatibleStrategyDialog: false,
             show_snackbar: false,
         });
+        return {
+            xmlBlocks: (block_string.match(/<block\b/g) || []).length,
+            sharedChecks,
+        };
     }, []);
 
     /** Load only — puts the bot into the builder then closes the panel. */
@@ -138,12 +166,12 @@ const FreeBotsSidePanel: React.FC<TFreeBotsPanelProps> = ({ onClose, onLoadDone 
         setActiveBotId(bot.id);
         setActionType('load');
         try {
-            await fetchAndLoad(bot);
+            const check = await fetchAndLoad(bot);
             setLoadedId(bot.id);
             // Show success briefly, then hand control back to parent
             setTimeout(() => {
                 setLoadedId(null);
-                onLoadDone(false); // false = load only, don't auto-run
+                 onLoadDone(false, bot, check); // false = load only, don't auto-run
             }, 1500);
         } catch (e) {
             console.error('Load bot error', e);
@@ -159,10 +187,10 @@ const FreeBotsSidePanel: React.FC<TFreeBotsPanelProps> = ({ onClose, onLoadDone 
         setActiveBotId(bot.id);
         setActionType('run');
         try {
-            await fetchAndLoad(bot);
+            const check = await fetchAndLoad(bot);
             // Signal parent immediately — parent is responsible for closing
             // panel and triggering the run in the correct order/lifecycle.
-            onLoadDone(true); // true = auto-run after panel closes
+            onLoadDone(true, bot, check); // true = auto-run after panel closes
         } catch (e) {
             console.error('Load & Run bot error', e);
             setActiveBotId(null);
@@ -355,6 +383,7 @@ const BotBuilder = observer(() => {
 
     const [showFreeBots, setShowFreeBots] = useState(false);
     const [showScanner, setShowScanner] = useState(false);
+    const [strategyCheck, setStrategyCheck] = useState<StrategyCheck | null>(null);
     // When true, fire onRunButtonClick as soon as the panel finishes unmounting
     const pendingAutoRun = React.useRef(false);
 
@@ -434,7 +463,15 @@ const BotBuilder = observer(() => {
     }, [showFreeBots]);
 
     /** Called by FreeBotsSidePanel once XML is loaded. */
-    const handleBotLoadDone = useCallback((shouldRun: boolean) => {
+    const handleBotLoadDone = useCallback((shouldRun: boolean, bot?: any, check?: any) => {
+        if (bot && check) {
+            setStrategyCheck({
+                botName: bot.name,
+                xmlBlocks: check.xmlBlocks || 0,
+                sharedChecks: check.sharedChecks || [],
+                updatedAt: new Date().toLocaleTimeString('en', { hour12: false }),
+            });
+        }
         if (shouldRun) {
             pendingAutoRun.current = true;
         }
@@ -522,6 +559,7 @@ const BotBuilder = observer(() => {
             </div>
             {/* AI Scanner floating panel — shown when scanner button is active */}
             {active_tab === 1 && showScanner && <AIScanner />}
+            {active_tab === 1 && <StrategyEngineChecker check={strategyCheck} />}
             {active_tab === 1 && <BotBuilderTourHandler is_mobile={!isDesktop} />}
             {/* removed this outside from toolbar becuase it needs to loaded seperately without dependency */}
             <LoadModal />

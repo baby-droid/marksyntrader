@@ -102,7 +102,7 @@ function computeStreamStats(ticks: number[], threshold: number) {
     };
 }
 
-const DigitPercentWidget: React.FC = () => {
+const DigitPercentWidget: React.FC<{ showTrigger?: boolean }> = ({ showTrigger = true }) => {
     const { connectionStatus } = useApiBase();
     const [open, setOpen] = useState(false);
     const [symbol, setSymbol] = useState(() => {
@@ -143,6 +143,12 @@ const DigitPercentWidget: React.FC = () => {
     });
     const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number; dragging: boolean } | null>(null);
     const panelRef = useRef<HTMLDivElement | null>(null);
+
+    useEffect(() => {
+        const openAnalyzer = () => setOpen(true);
+        window.addEventListener('digit-analyzer:open', openAnalyzer);
+        return () => window.removeEventListener('digit-analyzer:open', openAnalyzer);
+    }, []);
 
     useEffect(() => {
         if (panelPos) try { localStorage.setItem('digit_widget_pos', JSON.stringify(panelPos)); } catch {}
@@ -372,16 +378,18 @@ const DigitPercentWidget: React.FC = () => {
 
     return (
         <div className='digit-percent-widget'>
-            <button
-                className='digit-percent-widget__trigger'
-                title='Digit % Analyzer'
-                onClick={() => setOpen(o => !o)}
-            >
-                <span className='digit-percent-widget__dot' />
-                <span className='digit-percent-widget__dot' />
-                <span className='digit-percent-widget__dot' />
-                <span className='digit-percent-widget__dot' />
-            </button>
+            {showTrigger && (
+                <button
+                    className='digit-percent-widget__trigger'
+                    title='Digit % Analyzer'
+                    onClick={() => setOpen(o => !o)}
+                >
+                    <span className='digit-percent-widget__dot' />
+                    <span className='digit-percent-widget__dot' />
+                    <span className='digit-percent-widget__dot' />
+                    <span className='digit-percent-widget__dot' />
+                </button>
+            )}
 
             {open && createPortal(
                 <div
