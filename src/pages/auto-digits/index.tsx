@@ -63,6 +63,7 @@ type Candidate = {
     touches: number;
     retention: number;
     entryDigit?: number;
+    riskScore?: number;
 };
 type TradeRow = {
     id: string;
@@ -229,6 +230,7 @@ const AutoDigits = observer(() => {
     const recoveryDeficitRef = useRef(0);
     const tradePnlBeforeRef = useRef(0);
     const balancedTradeRef = useRef(false);
+    const recentResultsRef = useRef<Array<'W' | 'L'>>([]);
 
     useEffect(() => subscribeCurrency(() => setDisplayCur(getDisplayCurrency())), []);
     useEffect(() => {
@@ -343,8 +345,11 @@ const AutoDigits = observer(() => {
             const current = quotes[quotes.length - 1] || 0;
             const rangePosition = high === low ? 50 : ((current - low) / (high - low)) * 100;
             const isHigh = strategy === 'HIGH TICK';
-            score = Math.min(100, 35 + (isHigh ? rangePosition : 100 - rangePosition) * 0.55 + (directionPct(nextPoints, 20, isHigh ? 'up' : 'down') >= 55 ? 15 : 0));
-            reason = `${isHigh ? 'High' : 'Low'} range position ${rangePosition.toFixed(0)}% with short-term momentum confirmation`;
+            const rangeDirection = isHigh ? 'up' : 'down';
+            const shortMomentum = directionPct(nextPoints, 20, rangeDirection);
+            const baselineMomentum = directionPct(nextPoints, 1000, rangeDirection);
+            score = Math.min(100, 35 + (isHigh ? rangePosition : 100 - rangePosition) * 0.55 + (shortMomentum >= 55 ? 15 : 0) + (baselineMomentum >= 50 ? 5 : 0));
+            reason = `${isHigh ? 'High' : 'Low'} range position ${rangePosition.toFixed(0)}% with ${shortMomentum.toFixed(0)}% short / ${baselineMomentum.toFixed(0)}% baseline momentum`;
             retention = isHigh ? rangePosition : 100 - rangePosition;
         }
 
@@ -362,6 +367,9 @@ const AutoDigits = observer(() => {
             score += parityPattern ? 8 : 0;
             if ((strategy === 'ODD' || strategy === 'EVEN') && !parityPattern) score = Math.min(score, 69);
         }
+        const riskScore = recoveryDeficitRef.current < stakeRef.current * 16 && lossStreakRef.current < 4 ? 5 : 0;
+        score += riskScore;
+        if (!riskScore) score = 0;
         score = Math.round(Math.min(100, score));
         const confidence = score >= 90 ? 'VERY STRONG' : score >= 80 ? 'STRONG' : score >= minScore ? 'WATCH' : 'WAIT';
         return {
@@ -376,6 +384,7 @@ const AutoDigits = observer(() => {
             touches,
             retention,
             entryDigit,
+            riskScore,
         };
     }, [barrier, logicMode, minScore, strategy]);
 
@@ -429,8 +438,12 @@ const AutoDigits = observer(() => {
         validationRef.current = { key: '', wins: 0, attempt: validationState.attempt, readyEpoch: point.epoch };
         setValidation({ wins: 2, attempt: validationState.attempt, state: 'PASSED' });
         setStatus('Validation passed — sending contract');
+        const recentOutcomes = recentResultsRef.current.slice(-4).join('');
+        const isAlternatingOutcomes = recentOutcomes === 'WLWL' || recentOutcomes === 'LWLW';
         const tradeDuration = autoDuration
-            ? Math.max(1, Math.min(5, nextCandidate.score >= 90 ? 1 : nextCandidate.score >= 82 ? 2 : nextCandidate.score >= 74 ? 3 : 4))
+            ? (isAlternatingOutcomes
+                ? 2
+                : Math.max(1, Math.min(5, nextCandidate.score >= 90 ? 1 : nextCandidate.score >= 82 ? 2 : nextCandidate.score >= 74 ? 3 : 4)))
             : duration;
         const baseStake = stakeRef.current;
         const recoveryCeiling = baseStake * 16;
@@ -459,6 +472,7 @@ const AutoDigits = observer(() => {
             const nextPnl = pnlRef.current + profit;
             pnlRef.current = nextPnl;
             setPnl(nextPnl);
+            recentResultsRef.current = [...recentResultsRef.current, won ? 'W' : 'L'].slice(-8);
             if (won) {
                 lossStreakRef.current = 0;
                 setLossStreak(0);
@@ -492,6 +506,13 @@ const AutoDigits = observer(() => {
                 const nextDeficit = Math.max(0, baseline - nextPnl);
                 recoveryDeficitRef.current = nextDeficit;
                 setRecoveryDeficit(nextDeficit);
+                if (nextDeficit >= stakeRef.current * 16) {
+                    runningRef.current = false;
+                    setRun(false);
+                    setStatus('RECOVERY LIMIT — engine stopped; reset risk state before another run');
+                    addLog(`LOSS ${profit.toFixed(2)} ${displayCur} — recovery ceiling reached; execution stopped`);
+                    return;
+                }
                 if (nextLosses >= 3) {
                     const opposite = oppositeStrategy(strategy);
                     if (opposite) {
@@ -608,6 +629,7 @@ const AutoDigits = observer(() => {
         recoveryBaselineRef.current = null;
         recoveryDeficitRef.current = 0;
         setRecoveryDeficit(0);
+        recentResultsRef.current = [];
         pnlRef.current = 0;
         setPnl(0);
         setWins(0);
