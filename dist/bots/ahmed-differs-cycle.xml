@@ -12,24 +12,30 @@
     <data>gt.seq.tradeDef</data>
     <statement name="TRADE_OPTIONS">
       <block type="trade_definition_market" id="adc_market" deletable="false" movable="false">
+        <data>gt.seq.market</data>
         <field name="MARKET_LIST">synthetic_index</field>
         <field name="SUBMARKET_LIST">random_index</field>
-        <field name="SYMBOL_LIST">1HZ50V</field>
+        <field name="SYMBOL_LIST">1HZ10V</field>
         <next>
           <block type="trade_definition_tradetype" id="adc_trade_type" deletable="false" movable="false">
+            <data>gt.seq.tradetype</data>
             <field name="TRADETYPECAT_LIST">digits</field>
             <field name="TRADETYPE_LIST">overunder</field>
             <next>
               <block type="trade_definition_contracttype" id="adc_contract_type" deletable="false" movable="false">
+                <data>gt.seq.contracttype</data>
                 <field name="TYPE_LIST">both</field>
                 <next>
                   <block type="trade_definition_candleinterval" id="adc_candle" deletable="false" movable="false">
+                    <data>gt.seq.candle</data>
                     <field name="CANDLEINTERVAL_LIST">60</field>
                     <next>
                       <block type="trade_definition_restartbuysell" id="adc_restart" deletable="false" movable="false">
+                        <data>gt.seq.restartbs</data>
                         <field name="TIME_MACHINE_ENABLED">FALSE</field>
                         <next>
                           <block type="trade_definition_restartonerror" id="adc_restart_error" deletable="false" movable="false">
+                            <data>gt.seq.restarterr</data>
                             <field name="RESTARTONERROR">TRUE</field>
                           </block>
                         </next>
@@ -65,6 +71,33 @@
             </next>
           </block>
         </next>
+      </block>
+    </statement>
+    <statement name="SUBMARKET">
+      <block type="trade_definition_tradeoptions" id="adc_trade_options" deletable="false" movable="false">
+        <data>gt.seq.tradeoptions</data>
+        <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
+        <field name="DURATIONTYPE_LIST">t</field>
+        <value name="DURATION">
+          <shadow type="math_number_positive" id="adc_duration_shadow">
+            <field name="NUM">1</field>
+          </shadow>
+        </value>
+        <value name="AMOUNT">
+          <shadow type="math_number_positive" id="adc_amount_shadow">
+            <field name="NUM">1</field>
+          </shadow>
+          <block type="variables_get" id="adc_current_stake_option">
+            <data>gt.seq.getCurrentStake</data>
+            <field name="VAR" id="adc_stake">stake</field>
+          </block>
+        </value>
+        <value name="PREDICTION">
+          <shadow type="math_number_positive" id="adc_prediction_shadow">
+            <data>gt.seq.predictionShadow</data>
+            <field name="NUM">1</field>
+          </shadow>
+        </value>
       </block>
     </statement>
   </block>

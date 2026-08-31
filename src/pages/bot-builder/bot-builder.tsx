@@ -29,7 +29,7 @@ const FREE_BOTS_LIST = [
     {
         id: 'ahmed-differs-cycle',
         name: 'AHMED DIFFERS CYCLE',
-        market: 'V50 1s',
+        market: 'V10 1s',
         badge: 'SHARED BLOCKS',
         badgeColor: '#f59e0b',
         // The complete executable cycle is maintained in the canonical
@@ -38,10 +38,10 @@ const FREE_BOTS_LIST = [
         xmlFile: '/bots/ahmed-differs-cycle.xml',
         icon: '🔁',
         sharedBlockAssets: [
-            { id: 'gt.seq.applySequence', file: '/attached_assets/block_(1)_1788162146803.xml' },
-            { id: 'gt.seq.beforePurchase', file: '/attached_assets/block_(2)_1788162153348.xml' },
-            { id: 'gt.seq.tradeDef', file: '/attached_assets/block_(3)_1788162160415.xml' },
-            { id: 'gt.seq.afterPurchase', file: '/attached_assets/block_(4)_1788162166311.xml' },
+            { id: 'gt.seq.applySequence', file: '/attached_assets/block_(1)_1788162838185.xml' },
+            { id: 'gt.seq.beforePurchase', file: '/attached_assets/block_(2)_1788162844415.xml' },
+            { id: 'gt.seq.tradeDef', file: '/attached_assets/block_(3)_1788162852532.xml' },
+            { id: 'gt.seq.afterPurchase', file: '/attached_assets/block_(4)_1788162858212.xml' },
         ],
     },
     { id: 'omni-cycle-trader-pro', name: 'Omni Cycle Trader Pro', market: 'V75 1s', badge: 'CYCLE 🔄', badgeColor: '#a78bfa', xmlFile: '/bots/omni-cycle-trader-pro.xml', icon: '🔄' },
