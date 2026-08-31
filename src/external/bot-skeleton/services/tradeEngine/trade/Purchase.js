@@ -7,6 +7,12 @@ import { contractStatus, info, log } from '../utils/broadcast';
 import { doUntilDone, getUUID, recoverFromError, tradeOptionToBuy } from '../utils/helpers';
 import { purchaseSuccessful } from './state/actions';
 import { BEFORE_PURCHASE } from './state/constants';
+import {
+    createTradeKey,
+    getMasterSource,
+    normalizeLimitOrder,
+    publishMasterTrade,
+} from '../../../../../utils/trade-bus';
 
 let delayIndex = 0;
 let purchase_reference;
@@ -16,6 +22,58 @@ let purchase_reference;
 // for true zero-delay fire-and-forget (the API server enforces its own limits).
 let _buyTimestamps = [];
 const _buyRateLimit = { normal: 1, crazy: 0, turbo: 0, supersonic: 0 };
+
+/**
+ * Build the same copy-trade payload for every Bot Builder purchase path.
+ * Crazy/Turbo side purchases bypass OpenContract subscriptions, so they must
+ * publish here instead of relying only on the bot.contract bridge.
+ */
+function copySignalFromTradeOptions(tradeOptions, contract_type, contract_id, trade_key) {
+    const symbol = tradeOptions?.symbol;
+    const stake = Number(tradeOptions?.amount);
+    if (!symbol || !contract_type || !Number.isFinite(stake) || stake <= 0) return null;
+
+    const isAccumulator = String(contract_type).toUpperCase() === 'ACCU';
+    const signal = {
+        symbol,
+        contract_type,
+        stake,
+        ...(isAccumulator
+            ? {}
+            : {
+                duration: Number(tradeOptions?.duration ?? 1),
+                duration_unit: tradeOptions?.duration_unit ?? 't',
+            }),
+        ...(tradeOptions?.prediction !== undefined
+            ? { barrier: tradeOptions.prediction }
+            : tradeOptions?.barrierOffset !== undefined
+                ? { barrier: tradeOptions.barrierOffset }
+                : {}),
+        ...(tradeOptions?.growth_rate != null
+            ? { growth_rate: Number(tradeOptions.growth_rate) }
+            : {}),
+        ...(normalizeLimitOrder(tradeOptions?.limit_order)
+            ? { limit_order: normalizeLimitOrder(tradeOptions.limit_order) }
+            : {}),
+        source: getMasterSource(),
+        time: Date.now(),
+        ...(contract_id != null ? { contract_id: Number(contract_id) } : {}),
+        ...(trade_key ? { trade_key } : {}),
+    };
+    return signal;
+}
+
+function publishBotCopySignal(tradeOptions, contract_type, contract_id, trade_key) {
+    const key = trade_key ?? createTradeKey('bot');
+    const signal = copySignalFromTradeOptions(tradeOptions, contract_type, contract_id, key);
+    if (!signal) return key;
+    try {
+        publishMasterTrade(signal);
+    } catch {
+        // Copy-trading must never interrupt the master Bot Builder purchase.
+    }
+    return key;
+}
 
 // Side purchases (Crazy/Turbo's extra per-tick contracts) are NOT tracked by
 // the main single-contract state machine, so Stop/Terminate cannot see them
@@ -65,12 +123,17 @@ function fireSidePurchase(tradeOptions, contract_type, tradeOptionsOverride = tr
     if (isBotPaused()) return;
     try {
         const trade_option = tradeOptionToBuy(contract_type, tradeOptionsOverride);
+        // Publish before the direct buy so followers enter on the same tick.
+        // The confirmation below registers the contract ID for deduplication.
+        const tradeKey = createTradeKey('bot-side');
+        publishBotCopySignal(tradeOptionsOverride, contract_type, undefined, tradeKey);
         _acquireBuySlot()
             .then(() => api_base.api.send(trade_option))
             .then(response => {
                 const { buy } = response;
                 if (!buy) return;
                 if (buy.contract_id) _sideContractIds.add(buy.contract_id);
+                publishBotCopySignal(tradeOptionsOverride, contract_type, buy.contract_id, tradeKey);
                 contractStatus({ id: 'contract.purchase_received', data: buy.transaction_id, buy });
                 log(LogTypes.PURCHASE, { transaction_id: buy.transaction_id });
             })
@@ -180,6 +243,7 @@ export default Engine =>
         }
 
         _executePurchase(contract_type, tradeOptions = this.tradeOptions, forceDirect = false) {
+            let tradeKey = null;
             const onSuccess = response => {
                 const { buy } = response;
 
@@ -199,6 +263,12 @@ export default Engine =>
 
                 this.contractId = buy.contract_id;
                 this.store.dispatch(purchaseSuccessful());
+                // Confirm the pre-signal with the master contract ID. This lets
+                // copy-trading register the ID and block the later bot.contract
+                // or transaction-backup signal from buying a duplicate.
+                if (tradeKey) {
+                    publishBotCopySignal(tradeOptions, contract_type, buy.contract_id, tradeKey);
+                }
 
                 // Dynamic Multiple Purchase entries are bought directly from
                 // the phase-specific parameters. Refreshing the old proposal
@@ -236,6 +306,8 @@ export default Engine =>
             if (this.is_proposal_subscription_required && !useDirectBuy) {
                 // ── Original proposal-based path (Normal speed / timeMachine) ──
                 const { id, askPrice } = this.selectProposal(contract_type);
+                tradeKey = createTradeKey('bot');
+                publishBotCopySignal(tradeOptions, contract_type, undefined, tradeKey);
 
                 const action = () => _acquireBuySlot().then(() =>
                     api_base.api.send({ buy: id, price: askPrice })
@@ -278,6 +350,8 @@ export default Engine =>
             // Build the buy request from current trade options — no proposal ID
             // needed. The rate-limiter slot ensures we stay within API limits.
             const trade_option = tradeOptionToBuy(contract_type, tradeOptions);
+            tradeKey = createTradeKey('bot');
+            publishBotCopySignal(tradeOptions, contract_type, undefined, tradeKey);
             const action = () => _acquireBuySlot().then(() =>
                 api_base.api.send(trade_option)
             );
