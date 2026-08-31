@@ -58,13 +58,11 @@ interface DigitCircleProps {
     isCurrent: boolean;
     isWin: boolean;
     isLoss: boolean;
-    tickLabels: string[];
-    labelBelow?: boolean;
     onClick: () => void;
 }
 
 const DigitCircle: React.FC<DigitCircleProps> = ({
-    digit, pct, rank, isBarrier, isCurrent, isWin, isLoss, tickLabels, labelBelow, onClick,
+    digit, pct, rank, isBarrier, isCurrent, isWin, isLoss, onClick,
 }) => {
     const SIZE   = 76;
     const CX     = SIZE / 2;
@@ -82,23 +80,8 @@ const DigitCircle: React.FC<DigitCircleProps> = ({
     const ringStroke = isBarrier ? '#0e3348' : rankColors.ring;
     const textColor  = isBarrier ? '#fff' : '#000';
 
-    const hasT    = tickLabels.length > 0;
-    const isFinal = tickLabels.some(l => l.includes('★'));
-
-    const tLabelEl = hasT && (
-        <div className={[
-            'mcv-circle__tlabel',
-            labelBelow ? 'mcv-circle__tlabel--below' : '',
-            isFinal ? 'mcv-circle__tlabel--final' : '',
-        ].filter(Boolean).join(' ')}>
-            {tickLabels.map(l => l.replace('★', '')).join(' ')}
-        </div>
-    );
-
     return (
         <div className='mcv-circle' onClick={onClick}>
-            {/* Top row (0-4): label above; bottom row (5-9): label below */}
-            {!labelBelow && tLabelEl}
             <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
                 {/* Solid fill circle */}
                 <circle cx={CX} cy={CX} r={R} fill={fillColor} stroke={ringStroke} strokeWidth={SW} />
@@ -115,7 +98,6 @@ const DigitCircle: React.FC<DigitCircleProps> = ({
             <div className={`mcv-circle__pct${isBarrier ? ' mcv-circle__pct--barrier' : ''}`}>
                 {pct.toFixed(1)}%
             </div>
-            {labelBelow && tLabelEl}
         </div>
     );
 };
@@ -350,7 +332,6 @@ export interface MobileChartViewProps {
     barrier: number;
     onBarrierChange: (d: number) => void;
     pendingTrades: Array<{ id: string; totalTicks: number; countedTicks: number }>;
-    tickDigitSnapshot: Map<string, number[]>;
     lastTrade: { digit: number; won: boolean } | null;
     activeSymbols: Array<{ symbol: string; display_name: string }>;
 }
@@ -361,7 +342,7 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
     currentDigit, currentPrice, priceChange, pipSize,
     pcts, sorted,
     barrier, onBarrierChange,
-    pendingTrades, tickDigitSnapshot, lastTrade,
+    pendingTrades, lastTrade,
     activeSymbols,
 }) => {
     /* ── Trade state ──────────────────────────────────────────────────────── */
@@ -684,20 +665,6 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
     const overLabel  = OVER_LABELS[group.id]  ?? 'Rise';
     const underLabel = UNDER_LABELS[group.id] ?? 'Fall';
 
-    /* ── Tick-label map (from active trades) ──────────────────────────────── */
-    const digitTradeLabels = new Map<number, string[]>();
-    tickDigitSnapshot.forEach((digits, tradeId) => {
-        const pending = pendingTrades.find(t => t.id === tradeId);
-        digits.forEach((d, idx) => {
-            const tickNum = idx + 1;
-            const isLast  = pending ? tickNum === pending.totalTicks : true;
-            const label   = isLast ? `T${tickNum}★` : `T${tickNum}`;
-            const arr = digitTradeLabels.get(d) ?? [];
-            arr.push(label);
-            digitTradeLabels.set(d, arr);
-        });
-    });
-
     /* ── Triangle position ────────────────────────────────────────────────── */
     // triangleRow: 'top' (0-4) or 'bottom' (5-9)
     // trianglePos: 0-4 column index within the row
@@ -722,7 +689,7 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
     const ROW_TOP    = [0, 1, 2, 3, 4];
     const ROW_BOTTOM = [5, 6, 7, 8, 9];
 
-    const renderRow = (digits: number[], isBottom: boolean) => (
+    const renderRow = (digits: number[]) => (
         <div className='mcv-digits__row'>
             {digits.map(d => {
                 const pct   = pcts[d] ?? 0;
@@ -731,7 +698,6 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                 const isBarrier  = barrier === d;
                 const isWin  = lastTrade?.won === true  && lastTrade.digit === d;
                 const isLoss = lastTrade?.won === false && lastTrade.digit === d;
-                const tLabels = digitTradeLabels.get(d) ?? [];
                 return (
                     <DigitCircle
                         key={d}
@@ -742,8 +708,6 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                         isCurrent={isCurrent}
                         isWin={isWin}
                         isLoss={isLoss}
-                        tickLabels={tLabels}
-                        labelBelow={isBottom}
                         onClick={() => onBarrierChange(d)}
                     />
                 );
@@ -817,10 +781,10 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                 </div>
 
                 {/* Top row (0-4) */}
-                {renderRow(ROW_TOP, false)}
+                {renderRow(ROW_TOP)}
 
                 {/* Bottom row (5-9) */}
-                {renderRow(ROW_BOTTOM, true)}
+                {renderRow(ROW_BOTTOM)}
 
                 {/* Triangle BELOW bottom row — ▲ pointing UP at digit 5-9 */}
                 <div className='mcv-digits__pointer-row mcv-digits__pointer-row--bottom'>

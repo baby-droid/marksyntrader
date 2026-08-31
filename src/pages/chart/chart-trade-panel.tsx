@@ -34,7 +34,7 @@ function symbolName(s: string) { return SYMBOL_NAMES[s] ?? s; }
  * 10) Everything else alphabetically
  */
 function marketGroupOrder(sym: string): number {
-    const s = sym.toUpperCase();
+    const s = String(sym ?? '').toUpperCase();
     if (/^1HZ/.test(s))   return 0;
     if (/^R_/.test(s))    return 1;
     if (/BEAR/.test(s))   return 2;
