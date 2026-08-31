@@ -3,7 +3,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useStore } from '@/hooks/useStore';
 import { DBOT_TABS } from '@/constants/bot-contents';
-import { api_base } from '@/external/bot-skeleton';
+import { api_base, load, save_types } from '@/external/bot-skeleton';
 import { isFastExecutionEnabled } from '@/utils/execution-speed';
 import { setTradeContext } from '@/utils/trade-metadata';
 import './free-bots.scss';
@@ -404,7 +404,23 @@ const FreeBots = observer(() => {
 
   // ── Bot Builder load helpers ─────────────────────────────────────────────────
   const loadXmlIntoWorkspace = useCallback(async (bot: typeof FREE_BOTS[0], xml: string) => {
-    const workspace = (window as any).Blockly?.derivWorkspace;
+    let workspace = (window as any).Blockly?.derivWorkspace;
+    if (!workspace) {
+      await new Promise<void>((resolve, reject) => {
+        let attempts = 0;
+        const poll = setInterval(() => {
+          attempts += 1;
+          workspace = (window as any).Blockly?.derivWorkspace;
+          if (workspace) {
+            clearInterval(poll);
+            resolve();
+          } else if (attempts >= 100) {
+            clearInterval(poll);
+            reject(new Error('Bot Builder workspace unavailable after 10 seconds'));
+          }
+        }, 100);
+      });
+    }
     if (!workspace) return false;
     const lm: any = store?.load_modal;
     if (lm?.loadStrategyToBuilder) {
@@ -413,8 +429,28 @@ const FreeBots = observer(() => {
         return true;
       } catch {}
     }
+    // Keep the same official loader as the Bot Builder Free Bots panel when the
+    // load-modal store is not available on this page.
+    try {
+      await load({
+        block_string: xml,
+        drop_event: null,
+        file_name: bot.name,
+        strategy_id: bot.id,
+        from: save_types.LOCAL,
+        workspace,
+        showIncompatibleStrategyDialog: false,
+        show_snackbar: false,
+      });
+      workspace.strategy_to_load = xml;
+      return true;
+    } catch (err) {
+      console.warn('Official bot loader unavailable, using Blockly fallback', err);
+    }
     try {
       const B   = (window as any).Blockly;
+      workspace = B?.derivWorkspace;
+      if (!workspace) return false;
       const dom = B.Xml.textToDom(xml);
       B.derivWorkspace.asyncClear?.();
       B.Xml.domToWorkspace(dom, B.derivWorkspace);
@@ -464,7 +500,7 @@ const FreeBots = observer(() => {
       await validateSharedBlockAssets(bot);
       (window as any).__pendingBotXml  = xml;
       (window as any).__pendingBotName = bot.name;
-      store?.dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING);
+      store?.dashboard?.setActiveTab?.(DBOT_TABS.BOT_BUILDER);
       store?.run_panel?.toggleDrawer?.(true);
       let loaded = await loadXmlIntoWorkspace(bot, xml);
       if (!loaded) {
@@ -481,7 +517,7 @@ const FreeBots = observer(() => {
       setTimeout(() => setLoadedId(null), 3000);
     } catch (e) {
       console.error('Load bot error', e);
-      store?.dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING);
+      store?.dashboard?.setActiveTab?.(DBOT_TABS.BOT_BUILDER);
     } finally {
       setLoadingId(null);
     }
@@ -497,7 +533,7 @@ const FreeBots = observer(() => {
       await validateSharedBlockAssets(bot);
       (window as any).__pendingBotXml  = xml;
       (window as any).__pendingBotName = bot.name;
-      store?.dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING);
+      store?.dashboard?.setActiveTab?.(DBOT_TABS.BOT_BUILDER);
       store?.run_panel?.toggleDrawer?.(true);
       let loaded = await loadXmlIntoWorkspace(bot, xml);
       if (!loaded) {
@@ -515,7 +551,7 @@ const FreeBots = observer(() => {
       if (loaded) setTimeout(() => autoRun(), isFastExecutionEnabled() ? 0 : 900);
     } catch (e) {
       console.error('Load & Run error', e);
-      store?.dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING);
+      store?.dashboard?.setActiveTab?.(DBOT_TABS.BOT_BUILDER);
     } finally {
       setLoadingId(null);
     }

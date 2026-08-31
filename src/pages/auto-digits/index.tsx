@@ -30,6 +30,7 @@ const MARKETS = [
 ];
 
 const STRATEGIES = [
+    { value: 'AUTO', label: 'Auto — All Contract Types', group: 'Auto' },
     { value: 'EVEN', label: 'Even', group: 'Parity' },
     { value: 'ODD', label: 'Odd', group: 'Parity' },
     { value: 'MATCHES', label: 'Matches', group: 'Digits' },
@@ -52,11 +53,13 @@ const LOGIC_MODES = [
 ];
 
 type StrategyValue = typeof STRATEGIES[number]['value'];
+type ConcreteStrategy = Exclude<StrategyValue, 'AUTO'>;
 type TickPoint = { quote: number; digit: number; epoch: number };
 type Candidate = {
     score: number;
     label: string;
     contractType: string;
+    strategy?: ConcreteStrategy;
     barrier?: number;
     reason: string;
     confidence: string;
@@ -175,6 +178,82 @@ const oppositeStrategy = (strategy: StrategyValue): StrategyValue | null => ({
     'LOW TICK': 'HIGH TICK',
 }[strategy] || null);
 
+const AUTO_STRATEGIES: ConcreteStrategy[] = [
+    'OVER', 'UNDER', 'EVEN', 'ODD', 'MATCHES', 'DIFFERS',
+    'RISE', 'FALL', 'ONLY UPS', 'ONLY DOWNS', 'HIGH TICK', 'LOW TICK',
+];
+
+const chooseAutomaticStrategy = (points: TickPoint[]): ConcreteStrategy => {
+    if (points.length < 20) return 'OVER';
+
+    const p20 = percentagesFor(points, 20);
+    const p100 = percentagesFor(points, 100);
+    const recent = points.slice(-20);
+    const odd20 = p20.filter((_, digit) => digit % 2 !== 0).reduce((sum, value) => sum + value, 0);
+    const even20 = 100 - odd20;
+    const parityGap = Math.abs(odd20 - even20);
+    const dominant = p20.reduce((best, value, digit) => value > best.value ? { digit, value } : best, { digit: 0, value: 0 });
+    const diversity = p20.filter(value => value > 0).length;
+    const up20 = directionPct(points, 20, 'up');
+    const down20 = directionPct(points, 20, 'down');
+
+    const options: Array<{ strategy: ConcreteStrategy; score: number }> = [
+        { strategy: odd20 >= even20 ? 'ODD' : 'EVEN', score: 42 + parityGap * 1.7 },
+        { strategy: 'MATCHES', score: 30 + dominant.value * 2.7 + (dominant.value >= 14 ? 14 : 0) },
+        { strategy: 'DIFFERS', score: 32 + diversity * 3 + (dominant.value <= 13 ? 14 : 0) },
+        { strategy: 'RISE', score: 28 + Math.max(0, up20 - 50) * 1.25 },
+        { strategy: 'FALL', score: 28 + Math.max(0, down20 - 50) * 1.25 },
+        { strategy: 'ONLY UPS', score: 20 + Math.max(0, up20 - 60) * 1.15 },
+        { strategy: 'ONLY DOWNS', score: 20 + Math.max(0, down20 - 60) * 1.15 },
+        { strategy: 'HIGH TICK', score: 26 + Math.max(0, up20 - 50) * 0.65 },
+        { strategy: 'LOW TICK', score: 26 + Math.max(0, down20 - 50) * 0.65 },
+    ];
+
+    for (let candidateBarrier = 1; candidateBarrier <= 8; candidateBarrier += 1) {
+        const overWin = p20.slice(candidateBarrier + 1).reduce((sum, value) => sum + value, 0);
+        const underWin = p20.slice(0, candidateBarrier).reduce((sum, value) => sum + value, 0);
+        const overTouches = recent.filter(point => point.digit <= candidateBarrier).length;
+        const underTouches = recent.filter(point => point.digit >= candidateBarrier).length;
+        options.push({
+            strategy: 'OVER',
+            score: 25 + overWin * 0.8 + (overTouches >= 2 && overTouches <= 6 ? 14 : 0),
+        });
+        options.push({
+            strategy: 'UNDER',
+            score: 25 + underWin * 0.8 + (underTouches >= 2 && underTouches <= 6 ? 14 : 0),
+        });
+    }
+
+    return options.sort((a, b) => b.score - a.score)[0]?.strategy || AUTO_STRATEGIES[0];
+};
+
+const chooseAutomaticBarrier = (points: TickPoint[], selectedStrategy: ConcreteStrategy, fallback: number) => {
+    if (!['OVER', 'UNDER', 'MATCHES', 'DIFFERS'].includes(selectedStrategy)) return undefined;
+    if (!points.length) return fallback;
+
+    const p20 = percentagesFor(points, 20);
+    if (selectedStrategy === 'MATCHES' || selectedStrategy === 'DIFFERS') {
+        return p20.reduce((best, value, digit) => value > best.value ? { digit, value } : best, { digit: fallback, value: -1 }).digit;
+    }
+
+    let bestBarrier = fallback;
+    let bestScore = -Infinity;
+    for (let candidateBarrier = 1; candidateBarrier <= 8; candidateBarrier += 1) {
+        const winningStrength = selectedStrategy === 'OVER'
+            ? p20.slice(candidateBarrier + 1).reduce((sum, value) => sum + value, 0)
+            : p20.slice(0, candidateBarrier).reduce((sum, value) => sum + value, 0);
+        const losingTouches = selectedStrategy === 'OVER'
+            ? points.slice(-20).filter(point => point.digit <= candidateBarrier).length
+            : points.slice(-20).filter(point => point.digit >= candidateBarrier).length;
+        const score = winningStrength + (losingTouches >= 2 && losingTouches <= 6 ? 12 : 0);
+        if (score > bestScore) {
+            bestScore = score;
+            bestBarrier = candidateBarrier;
+        }
+    }
+    return bestBarrier;
+};
+
 const evaluateCandidate = (candidate: Candidate, strategy: StrategyValue, point: TickPoint, previous?: TickPoint) => {
     if (strategy === 'RISE' || strategy === 'ONLY UPS') return Boolean(previous && point.quote > previous.quote);
     if (strategy === 'FALL' || strategy === 'ONLY DOWNS') return Boolean(previous && point.quote < previous.quote);
@@ -188,7 +267,7 @@ const formatTime = () => new Date().toLocaleTimeString([], { hour: '2-digit', mi
 const AutoDigits = observer(() => {
     const { connected, authorized, balance, currency, send, subscribeTicks, buyContract } = useDerivTrade();
     const [symbol, setSymbol] = useState('1HZ100V');
-    const [strategy, setStrategy] = useState<StrategyValue>('ODD');
+    const [strategy, setStrategy] = useState<StrategyValue>('AUTO');
     const [barrier, setBarrier] = useState(3);
     const [logicMode, setLogicMode] = useState('confluence');
     const [minScore, setMinScore] = useState(70);
@@ -242,18 +321,29 @@ const AutoDigits = observer(() => {
     }, []);
 
     const analyze = useCallback((nextPoints: TickPoint[]): Candidate => {
+        const analysisStrategy: ConcreteStrategy = strategy === 'AUTO'
+            ? chooseAutomaticStrategy(nextPoints)
+            : strategy;
         const p1000 = percentagesFor(nextPoints, 1000);
         const p100 = percentagesFor(nextPoints, 100);
         const p50 = percentagesFor(nextPoints, 50);
         const p20 = percentagesFor(nextPoints, 20);
         const last10 = nextPoints.slice(-10);
         const last20 = nextPoints.slice(-20);
-        const barrierNumber = Math.max(0, Math.min(9, Number(barrier) || 0));
+        const barrierNumber = Math.max(
+            0,
+            Math.min(
+                9,
+                Number(strategy === 'AUTO'
+                    ? chooseAutomaticBarrier(nextPoints, analysisStrategy, barrier)
+                    : barrier) || 0
+            )
+        );
         const recentCounts = countsFor(nextPoints, 20).counts;
         const recentDominant = recentCounts.reduce((best, count, digit) => count > best.count ? { digit, count } : best, { digit: 0, count: 0 });
         const recurrence = recentDominant.count;
         const digitCluster = longestRun(last20.map(point => point.digit), digit => digit === recentDominant.digit);
-        const parityPattern = parityPatternMatches(nextPoints, strategy);
+        const parityPattern = parityPatternMatches(nextPoints, analysisStrategy);
         const odd1000 = p1000.filter((_, index) => index % 2 !== 0).reduce((a, b) => a + b, 0);
         const even1000 = 100 - odd1000;
         const balancedParity = Math.abs(odd1000 - even1000) <= 4;
@@ -264,69 +354,69 @@ const AutoDigits = observer(() => {
         let entryDigit: number | undefined;
 
         if (nextPoints.length < 20) {
-            return { score: 0, label: 'WARMING UP', contractType: strategyContract(strategy), reason: 'Collecting the 20-tick entry window', confidence: 'DATA', touches, retention };
+            return { score: 0, strategy: analysisStrategy, label: 'WARMING UP', contractType: strategyContract(analysisStrategy), reason: 'Collecting the 20-tick entry window', confidence: 'DATA', touches, retention };
         }
 
         if (nextPoints.length < 1000) {
-            return { score: 0, label: 'BUILDING BASELINE', contractType: strategyContract(strategy), reason: `Collecting the 1,000-tick baseline (${nextPoints.length}/1,000)`, confidence: 'DATA', touches, retention };
+            return { score: 0, strategy: analysisStrategy, label: 'BUILDING BASELINE', contractType: strategyContract(analysisStrategy), reason: `Collecting the 1,000-tick baseline (${nextPoints.length}/1,000)`, confidence: 'DATA', touches, retention };
         }
 
         const odd100 = p100.filter((_, index) => index % 2 !== 0).reduce((a, b) => a + b, 0);
         const even100 = 100 - odd100;
-        const parity = strategy === 'ODD' ? odd100 : even100;
-        const parityIncreasing = strategy === 'ODD'
+        const parity = analysisStrategy === 'ODD' ? odd100 : even100;
+        const parityIncreasing = analysisStrategy === 'ODD'
             ? odd100 >= (p50.filter((_, index) => index % 2 !== 0).reduce((a, b) => a + b, 0)) - 0.5
             : even100 >= (p50.filter((_, index) => index % 2 === 0).reduce((a, b) => a + b, 0)) - 0.5;
 
-        if (strategy === 'ODD' || strategy === 'EVEN') {
-            const wanted = strategy === 'ODD' ? [1, 3, 5, 7, 9] : [0, 2, 4, 6, 8];
-            const opposite = strategy === 'ODD' ? [0, 2, 4, 6, 8] : [1, 3, 5, 7, 9];
+        if (analysisStrategy === 'ODD' || analysisStrategy === 'EVEN') {
+            const wanted = analysisStrategy === 'ODD' ? [1, 3, 5, 7, 9] : [0, 2, 4, 6, 8];
+            const opposite = analysisStrategy === 'ODD' ? [0, 2, 4, 6, 8] : [1, 3, 5, 7, 9];
             const strong = wanted.filter(d => p1000[d] >= 10.5).length;
             const weak = opposite.filter(d => p1000[d] < 10.4).length;
             score = Math.min(100, 30 + (parity >= 55 ? 25 : Math.max(0, parity - 45)) + strong * 5 + weak * 3 + (parityIncreasing ? 8 : 0) + (parityPattern ? 8 : 0));
-            reason = `${strong} strong ${strategy.toLowerCase()} digits, ${weak} weak opposite digits; ${parity.toFixed(1)}% parity pressure; ${parityPattern ? 'sequence confirmed' : 'sequence waiting'}`;
+            reason = `${strong} strong ${analysisStrategy.toLowerCase()} digits, ${weak} weak opposite digits; ${parity.toFixed(1)}% parity pressure; ${parityPattern ? 'sequence confirmed' : 'sequence waiting'}`;
             entryDigit = opposite.sort((a, b) => p1000[a] - p1000[b])[0];
             if (balancedParity && !parityPattern) score = Math.min(score, 59);
-        } else if (strategy === 'MATCHES' || strategy === 'DIFFERS') {
+        } else if (analysisStrategy === 'MATCHES' || analysisStrategy === 'DIFFERS') {
             const sorted = p1000.map((value, digit) => ({ digit, value })).sort((a, b) => b.value - a.value);
             const dominant = sorted[0];
             const diversity = p20.filter(value => value > 0).length;
             const concentrationRising = p20[dominant.digit] >= p50[dominant.digit] && p50[dominant.digit] >= p100[dominant.digit];
-            entryDigit = strategy === 'MATCHES' ? dominant.digit : sorted[0].digit;
-            score = strategy === 'MATCHES'
+            entryDigit = analysisStrategy === 'MATCHES' ? dominant.digit : sorted[0].digit;
+            score = analysisStrategy === 'MATCHES'
                 ? Math.min(100, 34 + dominant.value * 2 + (concentrationRising ? 18 : 0) + (p20[dominant.digit] > 12 ? 10 : 0) + Math.min(10, recurrence * 1.5) + Math.min(8, digitCluster * 2))
                 : Math.min(100, 34 + diversity * 4 + (dominant.value < 14 ? 16 : 0) + (p20.filter(value => value > 0).length >= 8 ? 8 : 0) + Math.max(0, 10 - recurrence) + Math.max(0, 8 - digitCluster * 2));
-            reason = strategy === 'MATCHES'
+            reason = analysisStrategy === 'MATCHES'
                 ? `Digit ${dominant.digit} concentration is ${dominant.value.toFixed(1)}% with ${concentrationRising ? 'rising' : 'mixed'} short windows; recurrence ${recurrence}/20, cluster ${digitCluster}`
                 : `${diversity}/10 digits active; recurrence ${recurrence}/20, cluster ${digitCluster}; dispersion ${dominant.value < 14 ? 'healthy' : 'too concentrated'}`;
-        } else if (strategy === 'OVER' || strategy === 'UNDER') {
-            const losing = strategy === 'OVER'
+        } else if (analysisStrategy === 'OVER' || analysisStrategy === 'UNDER') {
+            const losing = analysisStrategy === 'OVER'
                 ? last10.filter(point => point.digit <= barrierNumber)
                 : last10.filter(point => point.digit >= barrierNumber);
             touches = losing.length;
-            const winning = strategy === 'OVER'
+            const winning = analysisStrategy === 'OVER'
                 ? last20.filter(point => point.digit > barrierNumber)
                 : last20.filter(point => point.digit < barrierNumber);
-            const winningRun = longestRun(last20.slice().reverse(), point => strategy === 'OVER' ? point.digit > barrierNumber : point.digit < barrierNumber);
+            const winningRun = longestRun(last20.slice().reverse(), point => analysisStrategy === 'OVER' ? point.digit > barrierNumber : point.digit < barrierNumber);
             retention = Math.min(100, winningRun * 25 + winning.length * 2);
-            const losingRate = strategy === 'OVER'
+            const losingRate = analysisStrategy === 'OVER'
                 ? p1000.slice(0, barrierNumber + 1).reduce((a, b) => a + b, 0)
                 : p1000.slice(barrierNumber, 10).reduce((a, b) => a + b, 0);
-            const winningStrength = strategy === 'OVER'
+            const winningStrength = analysisStrategy === 'OVER'
                 ? p20.slice(barrierNumber + 1).reduce((a, b) => a + b, 0)
                 : p20.slice(0, barrierNumber).reduce((a, b) => a + b, 0);
-            score = Math.min(100, 28 + (touches >= 2 && touches <= 5 ? 22 : 0) + (retention >= 50 ? 20 : retention / 3) + (losingRate < 55 ? 18 : 0) + (winningStrength >= 55 ? 12 : 0) + (p20.filter((value, digit) => strategy === 'OVER' ? digit > barrierNumber && value >= 10 : digit < barrierNumber && value >= 10).length * 3));
+            score = Math.min(100, 28 + (touches >= 2 && touches <= 5 ? 22 : 0) + (retention >= 50 ? 20 : retention / 3) + (losingRate < 55 ? 18 : 0) + (winningStrength >= 55 ? 12 : 0) + (p20.filter((value, digit) => analysisStrategy === 'OVER' ? digit > barrierNumber && value >= 10 : digit < barrierNumber && value >= 10).length * 3));
             reason = `${touches}/10 losing-region touches; ${retention}% retention; ${winningStrength.toFixed(0)}% winning-side strength`;
-            entryDigit = strategy === 'OVER'
+            entryDigit = analysisStrategy === 'OVER'
                 ? p20.map((value, digit) => ({ value, digit })).filter(item => item.digit > barrierNumber).sort((a, b) => b.value - a.value)[0]?.digit
                 : p20.map((value, digit) => ({ value, digit })).filter(item => item.digit < barrierNumber).sort((a, b) => b.value - a.value)[0]?.digit;
-        } else if (strategy === 'RISE' || strategy === 'FALL' || strategy === 'ONLY UPS' || strategy === 'ONLY DOWNS') {
-            const direction = strategy === 'RISE' || strategy === 'ONLY UPS' ? 'up' : 'down';
+        } else if (analysisStrategy === 'RISE' || analysisStrategy === 'FALL' || analysisStrategy === 'ONLY UPS' || analysisStrategy === 'ONLY DOWNS') {
+            const direction = analysisStrategy === 'RISE' || analysisStrategy === 'ONLY UPS' ? 'up' : 'down';
             const d20 = directionPct(nextPoints, 20, direction);
             const d50 = directionPct(nextPoints, 50, direction);
             const d100 = directionPct(nextPoints, 100, direction);
             const d1000 = directionPct(nextPoints, 1000, direction);
-            const strict = strategy === 'ONLY UPS' || strategy === 'ONLY DOWNS';
+            const strict = analysisStrategy === 'ONLY UPS' || analysisStrategy === 'ONLY DOWNS';
             let consecutive = 0;
             for (let index = nextPoints.length - 1; index > 0; index -= 1) {
                 const move = nextPoints[index].quote - nextPoints[index - 1].quote;
@@ -344,7 +434,7 @@ const AutoDigits = observer(() => {
             const high = Math.max(...quotes);
             const current = quotes[quotes.length - 1] || 0;
             const rangePosition = high === low ? 50 : ((current - low) / (high - low)) * 100;
-            const isHigh = strategy === 'HIGH TICK';
+            const isHigh = analysisStrategy === 'HIGH TICK';
             const rangeDirection = isHigh ? 'up' : 'down';
             const shortMomentum = directionPct(nextPoints, 20, rangeDirection);
             const baselineMomentum = directionPct(nextPoints, 1000, rangeDirection);
@@ -354,9 +444,9 @@ const AutoDigits = observer(() => {
         }
 
         if (logicMode === 'confluence') {
-            const parityWindowsAgree = strategy === 'ODD'
+            const parityWindowsAgree = analysisStrategy === 'ODD'
                 ? odd100 >= even100 && odd1000 >= even1000
-                : strategy === 'EVEN'
+                : analysisStrategy === 'EVEN'
                     ? even100 >= odd100 && even1000 >= odd1000
                     : true;
             score += parityWindowsAgree ? 6 : 0;
@@ -365,7 +455,7 @@ const AutoDigits = observer(() => {
         if (logicMode === 'touch' && touches >= 2) score += Math.min(8, touches);
         if (logicMode === 'pattern') {
             score += parityPattern ? 8 : 0;
-            if ((strategy === 'ODD' || strategy === 'EVEN') && !parityPattern) score = Math.min(score, 69);
+            if ((analysisStrategy === 'ODD' || analysisStrategy === 'EVEN') && !parityPattern) score = Math.min(score, 69);
         }
         const riskScore = recoveryDeficitRef.current < stakeRef.current * 16 && lossStreakRef.current < 4 ? 5 : 0;
         score += riskScore;
@@ -374,11 +464,12 @@ const AutoDigits = observer(() => {
         const confidence = score >= 90 ? 'VERY STRONG' : score >= 80 ? 'STRONG' : score >= minScore ? 'WATCH' : 'WAIT';
         return {
             score,
-            label: `${strategy}${entryDigit !== undefined ? ` ${entryDigit}` : ''}`,
-            contractType: strategyContract(strategy),
-            barrier: strategy === 'MATCHES'
+            strategy: analysisStrategy,
+            label: `${analysisStrategy}${entryDigit !== undefined ? ` ${entryDigit}` : ''}${strategy === 'AUTO' ? ' · AUTO' : ''}`,
+            contractType: strategyContract(analysisStrategy),
+            barrier: analysisStrategy === 'MATCHES'
                 ? (entryDigit ?? barrierNumber)
-                : ['OVER', 'UNDER', 'DIFFERS'].includes(strategy) ? barrierNumber : undefined,
+                : ['OVER', 'UNDER', 'DIFFERS'].includes(analysisStrategy) ? barrierNumber : undefined,
             reason,
             confidence,
             touches,
@@ -407,7 +498,8 @@ const AutoDigits = observer(() => {
             return;
         }
 
-        const candidateKey = `${strategy}:${nextCandidate.contractType}:${nextCandidate.barrier ?? 'none'}`;
+        const executionStrategy: ConcreteStrategy = nextCandidate.strategy || (strategy === 'AUTO' ? 'OVER' : strategy);
+        const candidateKey = `${executionStrategy}:${nextCandidate.contractType}:${nextCandidate.barrier ?? 'none'}`;
         const validationState = validationRef.current;
         if (!validationState.key || validationState.key !== candidateKey) {
             validationRef.current = { key: candidateKey, wins: 0, attempt: 1, readyEpoch: point.epoch };
@@ -418,7 +510,7 @@ const AutoDigits = observer(() => {
         }
         if (point.epoch <= validationState.readyEpoch) return;
 
-        const virtualWon = evaluateCandidate(nextCandidate, strategy, point, previous);
+        const virtualWon = evaluateCandidate(nextCandidate, executionStrategy, point, previous);
         if (!virtualWon) {
             validationRef.current = { key: '', wins: 0, attempt: validationState.attempt + 1, readyEpoch: point.epoch };
             setValidation({ wins: 0, attempt: validationState.attempt + 1, state: 'RESET' });
@@ -449,7 +541,7 @@ const AutoDigits = observer(() => {
         const recoveryCeiling = baseStake * 16;
         const contractStake = Math.min(recoveryCeiling, Math.max(0.35, baseStake + recoveryDeficitRef.current));
         tradePnlBeforeRef.current = pnlRef.current;
-        balancedTradeRef.current = (strategy === 'EVEN' || strategy === 'ODD') && Math.abs(oddPressure - evenPressure) <= 4;
+        balancedTradeRef.current = (executionStrategy === 'EVEN' || executionStrategy === 'ODD') && Math.abs(oddPressure - evenPressure) <= 4;
         realInFlightRef.current = true;
         const rowId = `ad-${Date.now()}-${++nextIdRef.current}`;
         setTrades(previousTrades => [{ id: rowId, time: formatTime(), strategy: nextCandidate.label, contract: nextCandidate.contractType, stake: contractStake, profit: 0, status: 'OPEN' }, ...previousTrades].slice(0, 30));
@@ -514,12 +606,12 @@ const AutoDigits = observer(() => {
                     return;
                 }
                 if (nextLosses >= 3) {
-                    const opposite = oppositeStrategy(strategy);
-                    if (opposite) {
+                    const opposite = oppositeStrategy(executionStrategy);
+                    if (opposite && strategy !== 'AUTO') {
                         setStrategy(opposite);
                         addLog(`LOSS ${profit.toFixed(2)} ${displayCur} — 3-loss re-scan: ${opposite}, next market, and adaptive duration`);
                     } else {
-                        addLog(`LOSS ${profit.toFixed(2)} ${displayCur} — 3-loss re-scan: windows, market, and adaptive duration`);
+                        addLog(`LOSS ${profit.toFixed(2)} ${displayCur} — auto re-scan: contract type, barrier, market, and duration`);
                     }
                     const currentMarketIndex = MARKETS.findIndex(market => market.value === symbol);
                     const nextMarket = MARKETS[(currentMarketIndex + 1 + MARKETS.length) % MARKETS.length];
@@ -622,6 +714,8 @@ const AutoDigits = observer(() => {
     const activeDuration = autoDuration
         ? Math.max(1, Math.min(5, candidate?.score >= 90 ? 1 : candidate?.score >= 82 ? 2 : candidate?.score >= 74 ? 3 : 4))
         : duration;
+    const selectedAutoStrategy = candidate?.strategy || 'AUTO';
+    const selectedAutoBarrier = candidate?.barrier;
 
     const resetEngine = () => {
         lossStreakRef.current = 0;
@@ -735,8 +829,14 @@ const AutoDigits = observer(() => {
                     <section className='ad-panel ad-controls'>
                         <div className='ad-panel__label'>BOT CONFIGURATION</div>
                         <label>MARKET<select value={symbol} onChange={event => setSymbol(event.target.value)}>{MARKETS.map(market => <option key={market.value} value={market.value}>{market.label}</option>)}</select></label>
-                        <label>STRATEGY<select value={strategy} onChange={event => setStrategy(event.target.value as StrategyValue)}>{['Parity', 'Digits', 'Barrier', 'Direction', 'Range'].map(group => <optgroup key={group} label={group}>{STRATEGIES.filter(item => item.group === group).map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</optgroup>)}</select></label>
-                        {['OVER', 'UNDER', 'MATCHES', 'DIFFERS'].includes(strategy) && <label>BARRIER<NumberField value={barrier} min={0} max={9} onCommit={setBarrier} /></label>}
+                        <label>STRATEGY<select value={strategy} onChange={event => { const value = event.target.value as StrategyValue; setStrategy(value); if (value === 'AUTO') setAutoDuration(true); }}>{['Auto', 'Parity', 'Digits', 'Barrier', 'Direction', 'Range'].map(group => <optgroup key={group} label={group}>{STRATEGIES.filter(item => item.group === group).map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</optgroup>)}</select></label>
+                        {strategy === 'AUTO' ? (
+                            <div className='ad-auto-selection'>
+                                <span>AUTO SELECTION</span>
+                                <strong>{selectedAutoStrategy}{selectedAutoBarrier != null ? ` · BARRIER ${selectedAutoBarrier}` : ''}</strong>
+                                <small>All contract types are scored on every new tick.</small>
+                            </div>
+                        ) : ['OVER', 'UNDER', 'MATCHES', 'DIFFERS'].includes(strategy) && <label>BARRIER<NumberField value={barrier} min={0} max={9} onCommit={setBarrier} /></label>}
                         <div className='ad-control-row'><label>STAKE<NumberField value={Number(stake) || 0.35} min={0.35} max={1000} onCommit={value => setStake(value.toFixed(2))} /></label><label>MIN SCORE<NumberField value={minScore} min={50} max={95} onCommit={setMinScore} /></label></div>
                         <div className='ad-duration-row'><span>DURATION</span><button className={autoDuration ? 'is-active' : ''} onClick={() => setAutoDuration(true)}>AUTO {activeDuration}T</button>{[1, 2, 3, 4, 5].map(value => <button key={value} className={!autoDuration && duration === value ? 'is-active' : ''} onClick={() => { setAutoDuration(false); setDuration(value); }}>{value}T</button>)}</div>
                         <label>ENTRY LOGIC<select value={logicMode} onChange={event => setLogicMode(event.target.value)}>{LOGIC_MODES.map(mode => <option key={mode.value} value={mode.value}>{mode.label}</option>)}</select></label>
@@ -787,7 +887,7 @@ const AutoDigits = observer(() => {
                     <div className='ad-three-col'>
                         <section className='ad-panel ad-recent'><div className='ad-panel__label'>RECENT TICKS <span>(LAST 30)</span></div><div className='ad-ticks'>{recentDigits.map((point, index) => <span key={`${point.epoch}-${index}`} className={point.digit % 2 === 0 ? 'even' : 'odd'}>{point.digit}</span>)}</div><div className='ad-parity-bar'><i style={{ width: `${oddPressure}%` }} /><span>ODD {oddPressure.toFixed(0)}%</span><b>EVEN {evenPressure.toFixed(0)}%</b></div></section>
                         <section className='ad-panel ad-validation'><div className='ad-panel__label'>VIRTUAL VALIDATION</div><div className='ad-validation__steps'><span className={validation.wins >= 1 ? 'done' : ''}><b>1</b> VIRTUAL {validation.wins >= 1 ? 'WIN' : 'READY'}</span><span className={validation.wins >= 2 ? 'done' : ''}><b>2</b> VIRTUAL {validation.wins >= 2 ? 'WIN' : 'WAITING'}</span><strong className={validation.state === 'PASSED' ? 'passed' : ''}>{validation.state === 'PASSED' ? 'PASSED' : 'GATE ACTIVE'}</strong></div></section>
-                        <section className='ad-panel ad-entry'><div className='ad-panel__label'>ENTRY DECISION</div><strong>{status}</strong><p>{logicMode === 'confluence' ? 'All windows are compared before an entry is accepted.' : LOGIC_MODES.find(mode => mode.value === logicMode)?.note}</p><div className='ad-entry__ticks'><span>Next contract</span><b>{candidate?.contractType || '—'} {candidate?.barrier ?? ''}</b><small>{activeDuration} ticks</small></div></section>
+                        <section className='ad-panel ad-entry'><div className='ad-panel__label'>ENTRY DECISION</div><strong>{status}</strong><p>{strategy === 'AUTO' ? 'Auto mode compares Over, Under, Even, Odd, Matches, Differs, Rise/Fall, and tick contracts before choosing the strongest entry.' : logicMode === 'confluence' ? 'All windows are compared before an entry is accepted.' : LOGIC_MODES.find(mode => mode.value === logicMode)?.note}</p><div className='ad-entry__ticks'><span>Next contract</span><b>{candidate?.contractType || '—'} {candidate?.barrier != null ? `· Barrier ${candidate.barrier}` : ''}</b><small>{activeDuration} ticks {autoDuration ? '· AUTO' : ''}</small></div></section>
                     </div>
                 </main>
 

@@ -29,6 +29,7 @@
     This is a pattern/entry filter, not a guarantee of profit.
   -->
   <block type="trade_definition" id="DES_definition" deletable="false" x="0" y="0">
+    <data>gt.seq.tradeDef</data>
     <statement name="TRADE_OPTIONS">
       <block type="trade_definition_market" id="DES_market" deletable="false" movable="false">
         <field name="MARKET_LIST">synthetic_index</field>
@@ -218,6 +219,7 @@
 
   <!-- Scan the latest digit, then purchase the contract selected by phase. -->
   <block type="before_purchase" id="DES_before" deletable="false" x="0" y="1200">
+    <data>gt.seq.beforePurchase</data>
     <statement name="BEFOREPURCHASE_STACK">
       <block type="variables_set" id="DES_capture">
         <field name="VAR" id="DES_lastDigit">last_digit</field>
@@ -252,6 +254,7 @@
        enters parity recovery; recovery wins resume the next phase, while
        recovery losses remain in parity recovery. -->
   <block type="after_purchase" id="DES_after" deletable="false" x="950" y="1200">
+    <data>gt.seq.afterPurchase</data>
     <statement name="AFTERPURCHASE_STACK">
       <block type="math_change" id="DES_update_pnl">
         <field name="VAR" id="DES_pnl">session_profit</field>

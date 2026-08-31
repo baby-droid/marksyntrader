@@ -295,6 +295,34 @@
     gap: 0.4rem;
 }
 
+.ad-auto-selection {
+    display: grid;
+    gap: 0.2rem;
+    padding: 0.5rem 0.55rem;
+    border: 1px solid rgba(53, 216, 233, 0.3);
+    border-radius: 6px;
+    background: linear-gradient(135deg, rgba(53, 216, 233, 0.1), rgba(57, 229, 140, 0.08));
+
+    span {
+        color: var(--ad-cyan);
+        font-size: 0.53rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+    }
+
+    strong {
+        color: #fff;
+        font-size: 0.76rem;
+        letter-spacing: 0.03em;
+    }
+
+    small {
+        color: var(--ad-muted);
+        font-size: 0.57rem;
+        line-height: 1.3;
+    }
+}
+
 .ad-duration-row {
     display: flex;
     align-items: center;
