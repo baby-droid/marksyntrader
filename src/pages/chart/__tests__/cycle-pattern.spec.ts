@@ -52,7 +52,7 @@ describe('AI cycle pattern detector', () => {
         expect(xml).toContain('trade_again');
     });
 
-    it('keeps Ahmedabad recovery on Differs plus contrarian parity', () => {
+    it('keeps Ahmedabad in parity recovery after every loss', () => {
         const xml = fs.readFileSync(
             path.resolve(__dirname, '../../../../public/bots/ahmed-differs-cycle.xml'),
             'utf8',
@@ -60,10 +60,17 @@ describe('AI cycle pattern detector', () => {
         expect(xml).toContain('DIGITDIFF');
         expect(xml).toContain('Normal cycle: DIGITDIFF → DIGITOVER 1 → DIGITOVER 2 → DIGITDIFF →');
         expect(xml).toContain('DIGITUNDER 8 → DIGITUNDER 7, then the six-step cycle restarts.');
-        expect(xml).toContain('after three evens, buy DIGITODD');
+        expect(xml).toContain('Every loss enters a parity-wait state');
+        expect(xml).toContain('After three evens, buy DIGITODD');
         expect(xml).toContain('DIGITEVEN');
-        expect(xml).toContain('adc_phase_odd_recovery_test');
-        expect(xml).toContain('adc_phase_even_recovery_test');
+        expect(xml).toContain('adc_recovery_ready');
+        expect(xml).toContain('adc_recovery_waiting_test');
+        expect(xml).toContain('adc_recovery_three_test');
+        expect(xml).toContain('adc_recovery_even_streak_test');
+        expect(xml).toContain('adc_normal_cycle_test');
+        expect(xml).toContain('adc_arm_parity_wait');
+        expect(xml).not.toContain('adc_phase_odd_recovery_test');
+        expect(xml).not.toContain('adc_phase_even_recovery_test');
         expect(xml).not.toContain('adc_phase_differs_final_test');
         expect(xml).not.toContain('adc_purchase_differs_final');
         expect(xml).toContain('trade_again');
