@@ -38,9 +38,10 @@ const FREE_BOTS_LIST = [
         xmlFile: '/bots/differs-edge-scanner.xml',
         icon: '🔁',
         sharedBlockAssets: [
-            { id: 'gt.seq.tradeDef', file: '/attached_assets/block_(3)_1788157539069.xml' },
-            { id: 'gt.seq.beforePurchase', file: '/attached_assets/block_(2)_1788157532277.xml' },
-            { id: 'gt.seq.afterPurchase', file: '/attached_assets/block_(4)_1788157548478.xml' },
+            { id: 'gt.seq.applySequence', file: '/attached_assets/block_(1)_1788158548530.xml' },
+            { id: 'gt.seq.beforePurchase', file: '/attached_assets/block_(2)_1788158554009.xml' },
+            { id: 'gt.seq.tradeDef', file: '/attached_assets/block_(3)_1788158572633.xml' },
+            { id: 'gt.seq.afterPurchase', file: '/attached_assets/block_(4)_1788158566328.xml' },
         ],
     },
     { id: 'omni-cycle-trader-pro', name: 'Omni Cycle Trader Pro', market: 'V75 1s', badge: 'CYCLE 🔄', badgeColor: '#a78bfa', xmlFile: '/bots/omni-cycle-trader-pro.xml', icon: '🔄' },

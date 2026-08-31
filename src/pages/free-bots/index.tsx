@@ -8,6 +8,13 @@ import { isFastExecutionEnabled } from '@/utils/execution-speed';
 import { setTradeContext } from '@/utils/trade-metadata';
 import './free-bots.scss';
 
+const DIFFERS_CYCLE_SHARED_BLOCKS = [
+  { id: 'gt.seq.applySequence', file: '/attached_assets/block_(1)_1788158548530.xml' },
+  { id: 'gt.seq.beforePurchase', file: '/attached_assets/block_(2)_1788158554009.xml' },
+  { id: 'gt.seq.tradeDef', file: '/attached_assets/block_(3)_1788158572633.xml' },
+  { id: 'gt.seq.afterPurchase', file: '/attached_assets/block_(4)_1788158566328.xml' },
+];
+
 const FREE_BOTS = [
   {
     id: 'differs-edge-scanner',
@@ -16,6 +23,16 @@ const FREE_BOTS = [
     category: 'Scanner', market: 'V50 1s', type: 'Multi-Strategy', prediction: 'SCAN',
     xmlFile: '/bots/differs-edge-scanner.xml',
     badge: 'SCAN 🧠', badgeColor: '#34d399', icon: '🔎', winRate: '—',
+    sharedBlockAssets: DIFFERS_CYCLE_SHARED_BLOCKS,
+  },
+  {
+    id: 'ahmed-differs-cycle',
+    name: 'AHMED DIFFERS CYCLE',
+    description: '🔁 Shared-block cycle: DIFFERS → OVER 1 → OVER 2 → DIFFERS → UNDER 8 → UNDER 7, then Even/Odd parity recovery after a loss. Includes 2× stake recovery.',
+    category: 'Scanner', market: 'V50 1s', type: 'Multi-Strategy', prediction: 'CYCLE',
+    xmlFile: '/bots/differs-edge-scanner.xml',
+    badge: 'AHMED CYCLE', badgeColor: '#f59e0b', icon: '🔁', winRate: '—',
+    sharedBlockAssets: DIFFERS_CYCLE_SHARED_BLOCKS,
   },
   {
     id: 'ahmed-auto-even',
@@ -411,6 +428,19 @@ const FreeBots = observer(() => {
     }
   }, [store]);
 
+  const validateSharedBlockAssets = useCallback(async (bot: typeof FREE_BOTS[0]) => {
+    const assets = (bot as any).sharedBlockAssets || [];
+    return Promise.all(assets.map(async (asset: { id: string; file: string }) => {
+      const response = await fetch(asset.file);
+      if (!response.ok) throw new Error(`Failed to fetch shared block ${asset.id}`);
+      const content = await response.text();
+      if (!content.includes(`data-id="${asset.id}"`)) {
+        throw new Error(`Shared block ${asset.id} is not present in ${asset.file}`);
+      }
+      return { id: asset.id, file: asset.file, ok: true };
+    }));
+  }, []);
+
   const autoRun = useCallback(async () => {
     const run_panel: any = store?.run_panel;
     if (!run_panel?.onRunButtonClick || run_panel.is_running) return;
@@ -431,6 +461,7 @@ const FreeBots = observer(() => {
       const res = await fetch(bot.xmlFile);
       if (!res.ok) throw new Error(`Failed to fetch ${bot.xmlFile}`);
       const xml = await res.text();
+      await validateSharedBlockAssets(bot);
       (window as any).__pendingBotXml  = xml;
       (window as any).__pendingBotName = bot.name;
       store?.dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING);
@@ -454,7 +485,7 @@ const FreeBots = observer(() => {
     } finally {
       setLoadingId(null);
     }
-  }, [store, loadXmlIntoWorkspace]);
+  }, [store, loadXmlIntoWorkspace, validateSharedBlockAssets]);
 
   const handleLoadAndRun = useCallback(async (bot: typeof FREE_BOTS[0]) => {
     setTradeContext({ page: 'Free Bots', bot: bot.name });
@@ -463,6 +494,7 @@ const FreeBots = observer(() => {
       const res = await fetch(bot.xmlFile);
       if (!res.ok) throw new Error(`Failed to fetch ${bot.xmlFile}`);
       const xml = await res.text();
+      await validateSharedBlockAssets(bot);
       (window as any).__pendingBotXml  = xml;
       (window as any).__pendingBotName = bot.name;
       store?.dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING);
@@ -487,7 +519,7 @@ const FreeBots = observer(() => {
     } finally {
       setLoadingId(null);
     }
-  }, [store, loadXmlIntoWorkspace, autoRun]);
+  }, [store, loadXmlIntoWorkspace, autoRun, validateSharedBlockAssets]);
 
   // ── Market Killer Prime V1 — Direct Purchase ────────────────────────────────
   const mkpPurchase = useCallback(async () => {
