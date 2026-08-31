@@ -13,6 +13,8 @@
  *
  * Both values are shared app-wide (speed toggle beside Run, the floating AI,
  * and the trade engine all read them) and persisted so they survive reloads.
+ * A-SPEED BOOST is a session-level preset that turns both axes to Turbo + Fast
+ * and restores the user's prior settings when switched off.
  */
 export type ExecutionSpeed = 'normal' | 'crazy' | 'turbo';
 
@@ -52,6 +54,11 @@ const FAST_EXEC_PURCHASES_PER_TICK = 1; // individual contracts — no bulk side
 
 const listeners = new Set<(speed: ExecutionSpeed) => void>();
 const fastExecListeners = new Set<(enabled: boolean) => void>();
+const aSpeedBoostListeners = new Set<(enabled: boolean) => void>();
+
+let aSpeedBoostEnabled = false;
+let speedBeforeASpeed: ExecutionSpeed | null = null;
+let fastBeforeASpeed: boolean | null = null;
 
 const readSpeed = (): ExecutionSpeed => {
     try {
@@ -78,6 +85,9 @@ export const getExecutionSpeed = (): ExecutionSpeed => current;
 
 export const isFastExecutionEnabled = (): boolean => fastExecutionEnabled;
 
+/** True while the header's app-wide A-SPEED BOOST preset is active. */
+export const isASpeedBoostEnabled = (): boolean => aSpeedBoostEnabled;
+
 /**
  * Effective inter-trade delay (ms). Fast Execution always wins — 0ms,
  * seamless, no cooldown, no contract-switch pause, no next-execution reload
@@ -101,9 +111,12 @@ export const useDirectBuyForSpeed = (): boolean =>
     fastExecutionEnabled || current === 'crazy' || current === 'turbo';
 
 export const setExecutionSpeed = (speed: ExecutionSpeed): void => {
-    current = speed;
+    // While A-SPEED BOOST is active, the preset owns the tier. This prevents
+    // another compact SpeedControl instance from silently downgrading the
+    // app-wide header toggle.
+    current = aSpeedBoostEnabled ? 'turbo' : speed;
     try {
-        localStorage.setItem(STORAGE_KEY, speed);
+        localStorage.setItem(STORAGE_KEY, current);
     } catch {
         /* localStorage unavailable */
     }
@@ -111,13 +124,42 @@ export const setExecutionSpeed = (speed: ExecutionSpeed): void => {
 };
 
 export const setFastExecutionEnabled = (enabled: boolean): void => {
-    fastExecutionEnabled = enabled;
+    fastExecutionEnabled = aSpeedBoostEnabled ? true : enabled;
     try {
-        localStorage.setItem(FAST_EXEC_STORAGE_KEY, enabled ? '1' : '0');
+        localStorage.setItem(FAST_EXEC_STORAGE_KEY, fastExecutionEnabled ? '1' : '0');
     } catch {
         /* localStorage unavailable */
     }
     fastExecListeners.forEach(fn => fn(enabled));
+};
+
+/**
+ * App-wide supersonic preset.
+ *
+ * This deliberately changes only client-side pacing: zero artificial delay,
+ * direct-buy paths, and the Turbo same-tick fan-out already used by the trade
+ * engine. Deriv remains the authority for tick delivery, rate limits, and
+ * accepted contracts, so this cannot create negative latency or bypass broker
+ * controls.
+ */
+export const setASpeedBoostEnabled = (enabled: boolean): void => {
+    if (enabled === aSpeedBoostEnabled) return;
+
+    if (enabled) {
+        speedBeforeASpeed = current;
+        fastBeforeASpeed = fastExecutionEnabled;
+        aSpeedBoostEnabled = true;
+        setExecutionSpeed('turbo');
+        setFastExecutionEnabled(true);
+    } else {
+        aSpeedBoostEnabled = false;
+        setFastExecutionEnabled(fastBeforeASpeed ?? false);
+        setExecutionSpeed(speedBeforeASpeed ?? 'normal');
+        speedBeforeASpeed = null;
+        fastBeforeASpeed = null;
+    }
+
+    aSpeedBoostListeners.forEach(fn => fn(aSpeedBoostEnabled));
 };
 
 export const subscribeExecutionSpeed = (fn: (speed: ExecutionSpeed) => void): (() => void) => {
@@ -131,6 +173,13 @@ export const subscribeFastExecution = (fn: (enabled: boolean) => void): (() => v
     fastExecListeners.add(fn);
     return () => {
         fastExecListeners.delete(fn);
+    };
+};
+
+export const subscribeASpeedBoost = (fn: (enabled: boolean) => void): (() => void) => {
+    aSpeedBoostListeners.add(fn);
+    return () => {
+        aSpeedBoostListeners.delete(fn);
     };
 };
 
