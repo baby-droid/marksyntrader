@@ -38,10 +38,12 @@ describe('AI cycle pattern detector', () => {
         expect(xml).toMatch(/PURCHASE_1">DIGITOVER[\s\S]*PREDICTION">3/);
         expect(xml).toMatch(/PURCHASE_1">DIGITUNDER[\s\S]*PREDICTION">7/);
         expect(xml).toMatch(/PURCHASE_1">DIGITUNDER[\s\S]*PREDICTION">6/);
-        expect(xml).toContain('parity_streak');
-        expect(xml).toContain('NUM">3');
+        expect(xml).not.toContain('previous_parity');
+        expect(xml).not.toContain('parity_streak');
         expect(xml).toContain('DIGITODD');
         expect(xml).toContain('DIGITEVEN');
+        expect(xml).toContain('des_phase6_test');
+        expect(xml).toContain('des_phase7_test');
         expect(xml).toContain('trade_again');
     });
 
@@ -51,8 +53,13 @@ describe('AI cycle pattern detector', () => {
             'utf8',
         );
         expect(xml).toContain('DIGITDIFF');
+        expect(xml).toContain('Normal cycle: DIGITDIFF → DIGITOVER 1 → DIGITOVER 2 → DIGITDIFF →');
+        expect(xml).toContain('DIGITUNDER 8 → DIGITUNDER 7 → DIGITDIFF.');
         expect(xml).toContain('after three evens, buy DIGITODD');
         expect(xml).toContain('DIGITEVEN');
+        expect(xml).toContain('adc_phase_6_test');
+        expect(xml).toContain('adc_phase_7_test');
+        expect(xml).toContain('adc_phase_8_test');
         expect(xml).toContain('trade_again');
     });
 });
