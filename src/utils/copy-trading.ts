@@ -20,7 +20,13 @@
  *  real_demo → listen to 'real' master trades → follower needs DEMO account
  */
 
-import { MasterTradeSignal, subscribeMasterTrades, getMasterSource, publishMasterTrade } from './trade-bus';
+import {
+    MasterTradeSignal,
+    subscribeMasterTrades,
+    getMasterSource,
+    publishMasterTrade,
+    normalizeLimitOrder,
+} from './trade-bus';
 // Auto-initialises the DBot→copy-trade bridge (bot.contract listener).
 // Must be imported here so it activates as soon as copy-trading loads.
 import './copy-trade-bridge';
@@ -778,9 +784,11 @@ class CopyEngine {
                         const duration_unit = isAccumulator ? undefined : (poc.duration_unit as string | undefined) ?? 't';
                         const barrier       = poc.barrier ?? undefined;
                         const growth_rate   = poc.growth_rate != null ? Number(poc.growth_rate) : undefined;
+                        const limit_order   = normalizeLimitOrder(poc.limit_order);
                         if (!symbol || !contract_type || stake <= 0) return;
                         publishMasterTrade({
                             symbol, contract_type, stake, duration, duration_unit, barrier, growth_rate,
+                            limit_order,
                             source: getMasterSource(),
                             time:   Date.now(),
                             contract_id,   // onMasterTrade will deduplicate via mirroredContracts
@@ -888,18 +896,26 @@ class CopyEngine {
 
         // Separate: bulk-eligible (same account type, ratio=1, commission tracked separately)
         // vs individual (custom ratio or mixed type)
-        const bulkGroup:     { f: Follower; conn: FollowerConn }[] = [];
+        const bulkGroups = new Map<string, { f: Follower; conn: FollowerConn }[]>();
         const individualGroup: { f: Follower; conn: FollowerConn }[] = [];
 
         for (const f of activeFollowers) {
             const conn = this.conns.get(f.id);
             if (!conn || conn.dead) continue;
-            // Use bulk-purchase when ratio=1 and WS isn't open (or as fallback)
             // Always prefer WS (already connected) — it supports per-follower ratio
             if (conn.ws?.readyState === WebSocket.OPEN) {
                 individualGroup.push({ f, conn });
+            } else if (Math.abs((f.ratio ?? 1) - 1) < 0.000001) {
+                // Bulk-purchase has one shared stake/currency for every account.
+                // Only ratio-1 followers can use it without changing the trade.
+                const currency = f.currency === '---' ? 'USD' : f.currency;
+                const group = bulkGroups.get(currency) ?? [];
+                group.push({ f, conn });
+                bulkGroups.set(currency, group);
             } else {
-                bulkGroup.push({ f, conn });
+                // Never silently send a ratio-1 trade to a custom-ratio follower
+                // while its private socket is reconnecting.
+                this.log(`⚠️ ${f.loginid}: waiting for reconnect; custom ratio trade was not scaled incorrectly.`);
             }
         }
 
@@ -981,7 +997,7 @@ class CopyEngine {
         }
 
         // ── Bulk-purchase (WS not open — fallback path) ───────────────────
-        if (bulkGroup.length > 0) {
+        for (const [bulkCurrency, bulkGroup] of bulkGroups) {
             const stake = Math.max(0.35, +(sig.stake).toFixed(2)); // ratio=1 for bulk
             const accounts = bulkGroup.map(({ f }) => ({
                 account_id: f.loginid,
@@ -991,7 +1007,7 @@ class CopyEngine {
                 amount:            stake,
                 basis:             'stake',
                 contract_type:     sig.contract_type,
-                currency:          'USD',
+                currency:          bulkCurrency,
                 underlying_symbol: sig.symbol,
             };
             if (sig.duration != null) contractParams.duration = sig.duration;
@@ -1006,9 +1022,14 @@ class CopyEngine {
                     if (!entry) continue;
                     if (r.ok) {
                         const cur = this.followers.find(x => x.id === entry.f.id);
-                        if (cur) this.updateFollower(entry.f.id, { replicated: cur.replicated + 1 });
-                            const durationLabel = sig.duration != null ? ` ${sig.duration}${sig.duration_unit ?? ''}` : '';
-                            this.log(`🔁 ${r.account_id}: ${sig.contract_type} ×${stake}${durationLabel} (bulk)`);
+                        if (cur) {
+                            this.updateFollower(entry.f.id, {
+                                replicated: cur.replicated + 1,
+                                commissionEarned: +(cur.commissionEarned + stake * (entry.f.commission ?? 0) / 100).toFixed(2),
+                            });
+                        }
+                        const durationLabel = sig.duration != null ? ` ${sig.duration}${sig.duration_unit ?? ''}` : '';
+                        this.log(`🔁 ${r.account_id}: ${sig.contract_type} ×${stake} ${bulkCurrency}${durationLabel} (bulk)`);
                     } else {
                         this.log(`❌ ${r.account_id}: ${r.error}`);
                     }

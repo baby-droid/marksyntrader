@@ -23,16 +23,16 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">94.91% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>112/118</span>
+                <span class='fraction'>118/118</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">27.27% </span>
+                <span class="strong">83.33% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>3/11</span>
+                <span class='fraction'>15/18</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">94.91% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>112/118</span>
+                <span class='fraction'>118/118</span>
             </div>
         
             
@@ -237,36 +237,36 @@
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">24x</span>
-<span class="cline-any cline-yes">24x</span>
-<span class="cline-any cline-yes">24x</span>
-<span class="cline-any cline-yes">24x</span>
-<span class="cline-any cline-yes">24x</span>
-<span class="cline-any cline-yes">24x</span>
-<span class="cline-any cline-yes">24x</span>
-<span class="cline-any cline-yes">24x</span>
-<span class="cline-any cline-yes">24x</span>
-<span class="cline-any cline-yes">24x</span>
-<span class="cline-any cline-yes">24x</span>
-<span class="cline-any cline-yes">24x</span>
-<span class="cline-any cline-yes">24x</span>
-<span class="cline-any cline-yes">24x</span>
-<span class="cline-any cline-yes">24x</span>
-<span class="cline-any cline-yes">24x</span>
-<span class="cline-any cline-yes">24x</span>
-<span class="cline-any cline-yes">24x</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-yes">24x</span>
-<span class="cline-any cline-yes">24x</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-yes">24x</span>
-<span class="cline-any cline-yes">24x</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-yes">24x</span>
-<span class="cline-any cline-yes">24x</span>
+<span class="cline-any cline-yes">79x</span>
+<span class="cline-any cline-yes">79x</span>
+<span class="cline-any cline-yes">79x</span>
+<span class="cline-any cline-yes">79x</span>
+<span class="cline-any cline-yes">79x</span>
+<span class="cline-any cline-yes">79x</span>
+<span class="cline-any cline-yes">79x</span>
+<span class="cline-any cline-yes">79x</span>
+<span class="cline-any cline-yes">79x</span>
+<span class="cline-any cline-yes">79x</span>
+<span class="cline-any cline-yes">79x</span>
+<span class="cline-any cline-yes">79x</span>
+<span class="cline-any cline-yes">79x</span>
+<span class="cline-any cline-yes">79x</span>
+<span class="cline-any cline-yes">79x</span>
+<span class="cline-any cline-yes">79x</span>
+<span class="cline-any cline-yes">79x</span>
+<span class="cline-any cline-yes">79x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">78x</span>
+<span class="cline-any cline-yes">79x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">77x</span>
+<span class="cline-any cline-yes">79x</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">74x</span>
+<span class="cline-any cline-yes">74x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -365,24 +365,24 @@ export const getDerivDomain = (service: Service): string =&gt; {
     const isProductionEnv = env === 'production';
     const isStagingEnv = env === 'preview' || env === 'staging';
     const isDev =
-        !env<span class="branch-0 cbranch-no" title="branch not covered" > &amp;&amp;</span>
+        !env &amp;&amp;
         (hostname.includes('dev-') || hostname.includes('localhost') || hostname.includes('127.0.0.1'));
-    const isStaging = isStagingEnv || (!isProductionEnv<span class="branch-0 cbranch-no" title="branch not covered" > &amp;&amp; !isDev<span class="branch-0 cbranch-no" title="branch not covered" > </span>&amp;&amp; hostname.includes('staging'))</span>;
+    const isStaging = isStagingEnv || (!isProductionEnv &amp;&amp; !isDev &amp;&amp; hostname.includes('staging'));
 &nbsp;
     const serviceConfig = domains[service];
 &nbsp;
     // Handle development environment for derivHome and derivDtrader
-    if (service === 'derivHome' &amp;&amp; isDev) <span class="branch-0 cbranch-no" title="branch not covered" >{</span>
-<span class="cstat-no" title="statement not covered" >        return 'https://dev-home.deriv.com';</span>
-<span class="cstat-no" title="statement not covered" >    }</span>
+    if (service === 'derivHome' &amp;&amp; isDev) {
+        return 'https://dev-home.deriv.com';
+    }
 &nbsp;
-    if (service === 'derivDtrader' &amp;&amp; isDev) <span class="branch-0 cbranch-no" title="branch not covered" >{</span>
-<span class="cstat-no" title="statement not covered" >        return 'https://dev-dtrader.deriv.com';</span>
-<span class="cstat-no" title="statement not covered" >    }</span>
+    if (service === 'derivDtrader' &amp;&amp; isDev) {
+        return 'https://dev-dtrader.deriv.com';
+    }
 &nbsp;
-    if (isStaging) <span class="branch-0 cbranch-no" title="branch not covered" >{</span>
-<span class="cstat-no" title="statement not covered" >        return typeof serviceConfig.staging === 'string' ? serviceConfig.staging : serviceConfig.staging[domainType];</span>
-<span class="cstat-no" title="statement not covered" >    }</span>
+    if (isStaging) {
+        return typeof serviceConfig.staging === 'string' ? serviceConfig.staging <span class="branch-0 cbranch-no" title="branch not covered" >: serviceConfig.staging[domainType];</span>
+    }
     return serviceConfig.production[domainType];
 };
 &nbsp;
@@ -424,7 +424,7 @@ export const standalone_routes = {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-08-31T08:48:31.446Z
+                at 2026-08-31T13:02:37.049Z
             </div>
         <script src="../../../../prettify.js"></script>
         <script>

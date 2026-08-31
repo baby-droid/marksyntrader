@@ -24,10 +24,12 @@ export interface BatchParams {
   symbol: string;
   contract_type: string;
   stake: number;
-  duration: number;
+  duration?: number;
   duration_unit?: string;
   barrier?: string | number;
   currency?: string;
+  growth_rate?: number;
+  limit_order?: { take_profit?: number; stop_loss?: number };
   count: number;
 }
 
@@ -60,10 +62,12 @@ export interface BuyParams {
   symbol: string;
   contract_type: string;
   stake: number;
-  duration: number;
+  duration?: number;
   duration_unit?: string;
   barrier?: string | number;
   currency?: string;
+  growth_rate?: number;
+  limit_order?: { take_profit?: number; stop_loss?: number };
 }
 
 export function useDerivTrading(): UseDerivTradingReturn {
@@ -116,7 +120,11 @@ export function useDerivTrading(): UseDerivTradingReturn {
   }, [subscribeBalance]);
 
   const buyContract = useCallback(async (params: BuyParams): Promise<TradeResult | null> => {
-    const { symbol, contract_type, stake, duration, duration_unit = 't', barrier, currency: cur = currency } = params;
+    const {
+      symbol, contract_type, stake, duration, duration_unit = 't', barrier,
+      currency: cur = currency, growth_rate, limit_order,
+    } = params;
+    const isAccumulator = String(contract_type).toUpperCase() === 'ACCU';
     try {
       setIsTrading(true);
       // Step 1: proposal → get ask_price and proposal ID
@@ -128,11 +136,13 @@ export function useDerivTrading(): UseDerivTradingReturn {
         basis: 'stake',
         contract_type,
         currency: cur,
-        duration,
-        duration_unit,
+        ...(duration != null && !isAccumulator ? { duration } : {}),
+        ...(duration_unit && !isAccumulator ? { duration_unit } : {}),
         underlying_symbol: symbol,
       };
       if (barrier !== undefined) proposalReq.barrier = String(barrier);
+      if (growth_rate != null) proposalReq.growth_rate = growth_rate;
+      if (limit_order) proposalReq.limit_order = limit_order;
       const proposalRes = await api_base.api.send(proposalReq);
       if (proposalRes?.error) throw proposalRes.error;
       const proposalId = proposalRes?.proposal?.id;
@@ -149,9 +159,11 @@ export function useDerivTrading(): UseDerivTradingReturn {
           symbol,
           contract_type,
           stake,
-          duration,
-          duration_unit,
+           ...(duration != null && !isAccumulator ? { duration } : {}),
+           ...(duration_unit && !isAccumulator ? { duration_unit } : {}),
           barrier,
+           growth_rate,
+           limit_order,
           source: getMasterSource(),
           time:   Date.now(),
            trade_key: tradeKey,
@@ -171,9 +183,11 @@ export function useDerivTrading(): UseDerivTradingReturn {
           symbol,
           contract_type,
           stake,
-          duration,
-          duration_unit,
+           ...(duration != null && !isAccumulator ? { duration } : {}),
+           ...(duration_unit && !isAccumulator ? { duration_unit } : {}),
           barrier,
+           growth_rate,
+           limit_order,
           source: getMasterSource(),
           time: Date.now(),
           contract_id: Number(contractId),
@@ -288,10 +302,11 @@ export function useDerivTrading(): UseDerivTradingReturn {
    */
   const buyBatch = useCallback(async (params: BatchParams, onEvent?: (event: BatchEvent) => void) => {
     const {
-      symbol, contract_type, stake, duration, duration_unit = 't',
-      barrier, currency: cur = currency, count,
+       symbol, contract_type, stake, duration, duration_unit = 't',
+       barrier, currency: cur = currency, growth_rate, limit_order, count,
     } = params;
     const total = Math.max(1, Math.min(100, Math.floor(count)));
+    const isAccumulator = String(contract_type).toUpperCase() === 'ACCU';
     const batchId = `BATCH-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
     const events: BatchEvent[] = [];
     const emit = (event: BatchEvent) => {
@@ -308,11 +323,13 @@ export function useDerivTrading(): UseDerivTradingReturn {
         basis: 'stake',
         contract_type,
         currency: cur,
-        duration,
-        duration_unit,
+         ...(duration != null && !isAccumulator ? { duration } : {}),
+         ...(duration_unit && !isAccumulator ? { duration_unit } : {}),
         underlying_symbol: symbol,
       };
       if (barrier !== undefined) proposalReq.barrier = String(barrier);
+       if (growth_rate != null) proposalReq.growth_rate = growth_rate;
+       if (limit_order) proposalReq.limit_order = limit_order;
 
       const proposalResults = await Promise.all(
         Array.from({ length: total }, (_, index) =>
@@ -351,9 +368,11 @@ export function useDerivTrading(): UseDerivTradingReturn {
             symbol,
             contract_type,
             stake,
-            duration,
-            duration_unit,
+             ...(duration != null && !isAccumulator ? { duration } : {}),
+             ...(duration_unit && !isAccumulator ? { duration_unit } : {}),
             barrier,
+             growth_rate,
+             limit_order,
             source: getMasterSource(),
             time: Date.now(),
             trade_key: tradeKey,
@@ -394,9 +413,11 @@ export function useDerivTrading(): UseDerivTradingReturn {
             symbol,
             contract_type,
             stake: Number(buy.buy_price ?? stake),
-            duration,
-            duration_unit,
+             ...(duration != null && !isAccumulator ? { duration } : {}),
+             ...(duration_unit && !isAccumulator ? { duration_unit } : {}),
             barrier,
+             growth_rate,
+             limit_order,
             source: getMasterSource(),
             time: Date.now(),
             contract_id: Number(contractId),

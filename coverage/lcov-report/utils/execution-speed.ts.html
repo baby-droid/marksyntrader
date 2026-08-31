@@ -23,9 +23,9 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">62.42% </span>
+                <span class="strong">61.63% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>196/314</span>
+                <span class='fraction'>196/318</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">62.42% </span>
+                <span class="strong">61.63% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>196/314</span>
+                <span class='fraction'>196/318</span>
             </div>
         
             
@@ -377,7 +377,11 @@
 <a name='L312'></a><a href='#L312'>312</a>
 <a name='L313'></a><a href='#L313'>313</a>
 <a name='L314'></a><a href='#L314'>314</a>
-<a name='L315'></a><a href='#L315'>315</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
+<a name='L315'></a><a href='#L315'>315</a>
+<a name='L316'></a><a href='#L316'>316</a>
+<a name='L317'></a><a href='#L317'>317</a>
+<a name='L318'></a><a href='#L318'>318</a>
+<a name='L319'></a><a href='#L319'>319</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -477,6 +481,8 @@
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -522,6 +528,8 @@
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -707,7 +715,8 @@
  * Both values are shared app-wide (speed toggle beside Run, the floating AI,
  * and the trade engine all read them) and persisted so they survive reloads.
  * A-SPEED BOOST is a session-level preset that keeps the Normal tier's
- * one-purchase-per-tick behavior while enabling Fast's zero-delay pacing.
+ * one-purchase-per-tick behavior while using its own zero-delay/direct-buy
+ * path. It deliberately turns the separate Fast toggle OFF while active.
  */
 export type ExecutionSpeed = 'normal' | 'crazy' | 'turbo';
 &nbsp;
@@ -715,8 +724,7 @@ const STORAGE_KEY = 'execution_speed';
 const FAST_EXEC_STORAGE_KEY = 'fast_execution_enabled';
 &nbsp;
 // Inter-trade delay (ms) applied by the engine between purchases per speed,
-// BEFORE the independent Fast Execution toggle is taken into account (see
-// getExecutionSpeedDelay below, which forces 0 when Fast Execution is on).
+// BEFORE Fast or A-SPEED zero-delay overrides are taken into account.
 export const SPEED_DELAY_MS: Record&lt;ExecutionSpeed, number&gt; = {
     normal: 200,  // reduced from 1000ms — fast like dBot.deriv.com
     crazy: 0,     // no artificial delay — fires the instant the engine is ready
@@ -787,11 +795,13 @@ export const isASpeedBoostEnabled = <span class="fstat-no" title="function not c
  * wait — no matter which speed tier (Normal/Crazy/Turbo) is selected.
  */
 export const getExecutionSpeedDelay = <span class="fstat-no" title="function not covered" >(): number =&gt;</span>
-    fastExecutionEnabled ? 0 : SPEED_DELAY_MS[current];
+    fastExecutionEnabled || aSpeedBoostEnabled ? 0 : SPEED_DELAY_MS[current];
 &nbsp;
 /** Effective max concurrent in-flight contracts — the higher of the active tier or Fast Execution's cap. */
 export const getMaxInflight = <span class="fstat-no" title="function not covered" >(): number =&gt;</span>
-    fastExecutionEnabled ? Math.max(SPEED_MAX_INFLIGHT[current], FAST_EXEC_MAX_INFLIGHT) : SPEED_MAX_INFLIGHT[current];
+<span class="cstat-no" title="statement not covered" >    fastExecutionEnabled || aSpeedBoostEnabled</span>
+<span class="cstat-no" title="statement not covered" >        ? Math.max(SPEED_MAX_INFLIGHT[current], FAST_EXEC_MAX_INFLIGHT)</span>
+        : SPEED_MAX_INFLIGHT[current];
 &nbsp;
 /** Effective purchases fired per tick. Fast mode never inherits Turbo fan-out. */
 export const getPurchasesPerTick = <span class="fstat-no" title="function not covered" >(): number =&gt;</span>
@@ -801,7 +811,7 @@ export const getPurchasesPerTick = <span class="fstat-no" title="function not co
 &nbsp;
 /** True when the engine should skip the proposal round-trip and buy directly. */
 export const useDirectBuyForSpeed = <span class="fstat-no" title="function not covered" >(): boolean =&gt;</span>
-    fastExecutionEnabled || current === 'crazy' || current === 'turbo';
+    aSpeedBoostEnabled || fastExecutionEnabled || current === 'crazy' || current === 'turbo';
 &nbsp;
 export const setExecutionSpeed = <span class="fstat-no" title="function not covered" >(speed: ExecutionSpeed): void =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >    // While A-SPEED BOOST is active, the preset owns the Normal tier. This</span>
@@ -817,7 +827,7 @@ export const setExecutionSpeed = <span class="fstat-no" title="function not cove
 <span class="cstat-no" title="statement not covered" >};</span>
 &nbsp;
 export const setFastExecutionEnabled = <span class="fstat-no" title="function not covered" >(enabled: boolean): void =&gt; {</span>
-<span class="cstat-no" title="statement not covered" >    fastExecutionEnabled = aSpeedBoostEnabled ? true : enabled;</span>
+<span class="cstat-no" title="statement not covered" >    fastExecutionEnabled = aSpeedBoostEnabled ? false : enabled;</span>
 <span class="cstat-no" title="statement not covered" >    try {</span>
 <span class="cstat-no" title="statement not covered" >        localStorage.setItem(FAST_EXEC_STORAGE_KEY, fastExecutionEnabled ? '1' : '0');</span>
 <span class="cstat-no" title="statement not covered" >    } catch {</span>
@@ -843,7 +853,9 @@ export const setASpeedBoostEnabled = <span class="fstat-no" title="function not 
 <span class="cstat-no" title="statement not covered" >        fastBeforeASpeed = fastExecutionEnabled;</span>
 <span class="cstat-no" title="statement not covered" >        aSpeedBoostEnabled = true;</span>
 <span class="cstat-no" title="statement not covered" >        setExecutionSpeed('normal');</span>
-<span class="cstat-no" title="statement not covered" >        setFastExecutionEnabled(true);</span>
+<span class="cstat-no" title="statement not covered" >        // A-SPEED has its own execution path. Keep the separate Fast toggle</span>
+<span class="cstat-no" title="statement not covered" >        // visibly off so the two presets cannot be active at once.</span>
+<span class="cstat-no" title="statement not covered" >        setFastExecutionEnabled(false);</span>
 <span class="cstat-no" title="statement not covered" >    } else {</span>
 <span class="cstat-no" title="statement not covered" >        aSpeedBoostEnabled = false;</span>
 <span class="cstat-no" title="statement not covered" >        setFastExecutionEnabled(fastBeforeASpeed ?? false);</span>
@@ -1012,7 +1024,7 @@ fastExecListeners.add((enabled) =&gt; { _pingRestartHook?.(enabled); });
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-08-31T08:48:31.446Z
+                at 2026-08-31T13:02:37.049Z
             </div>
         <script src="../prettify.js"></script>
         <script>

@@ -57,11 +57,13 @@ export type ContractType =
 export interface BuyParams {
     symbol: string;
     contract_type: ContractType | string;
-    duration: number;
+    duration?: number;
     duration_unit?: 't' | 's' | 'm' | 'h';
     stake: number;
     barrier?: number | string;
     currency?: string;
+    growth_rate?: number;
+    limit_order?: { take_profit?: number; stop_loss?: number };
     // Extra app metadata is copied onto the native contract event so
     // Bot Builder's transaction store can group Auto Trades positions.
     metadata?: Record<string, unknown>;
@@ -244,10 +246,13 @@ export function useDerivTrade() {
                 barrier,
                 currency: cur,
                 metadata,
+                growth_rate,
+                limit_order,
             } = params;
 
             const cur_ = cur || currency || 'USD';
             const needsBarrier = NEEDS_BARRIER.has(String(contract_type).toUpperCase());
+            const isAccumulator = String(contract_type).toUpperCase() === 'ACCU';
 
             // Step 1 — proposal (get an ask_price and a proposal ID)
             const t0 = performance.now();
@@ -257,13 +262,15 @@ export function useDerivTrade() {
                 basis: 'stake',
                 contract_type,
                 currency: cur_,
-                duration,
-                duration_unit,
+                ...(duration != null && !isAccumulator ? { duration } : {}),
+                ...(duration_unit && !isAccumulator ? { duration_unit } : {}),
                 underlying_symbol: symbol,
             };
             if (needsBarrier && barrier !== undefined && barrier !== null) {
                 proposalReq.barrier = String(barrier);
             }
+            if (growth_rate != null) proposalReq.growth_rate = growth_rate;
+            if (limit_order) proposalReq.limit_order = limit_order;
             const tradeKey = createTradeKey('ui');
 
             let proposalRes: any;
@@ -296,9 +303,11 @@ export function useDerivTrade() {
                     symbol,
                     contract_type,
                     stake,
-                    duration,
-                    duration_unit,
+                    ...(duration != null && !isAccumulator ? { duration } : {}),
+                    ...(duration_unit && !isAccumulator ? { duration_unit } : {}),
                     barrier,
+                    growth_rate,
+                    limit_order,
                     source: getMasterSource(),
                     time:   Date.now(),
                     trade_key: tradeKey,
@@ -333,9 +342,11 @@ export function useDerivTrade() {
                     symbol,
                     contract_type,
                     stake,
-                    duration,
-                    duration_unit,
+                    ...(duration != null && !isAccumulator ? { duration } : {}),
+                    ...(duration_unit && !isAccumulator ? { duration_unit } : {}),
                     barrier,
+                    growth_rate,
+                    limit_order,
                     source: getMasterSource(),
                     time: Date.now(),
                     contract_id,
@@ -361,6 +372,8 @@ export function useDerivTrade() {
                 barrier,
                 duration,
                 duration_unit,
+                growth_rate,
+                limit_order,
                 ...(metadata || {}),
             };
             contractMetaRef.current.set(contract_id, contractMeta);

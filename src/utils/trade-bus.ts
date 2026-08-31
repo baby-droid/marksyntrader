@@ -12,7 +12,7 @@ export interface MasterTradeSignal {
     duration_unit?: string;
     barrier?: string | number;
     growth_rate?: number;
-    limit_order?: { take_profit?: number };
+    limit_order?: { take_profit?: number; stop_loss?: number };
     /** 'real' or 'demo' — the master account the trade originated from. */
     source: 'real' | 'demo';
     time: number;
@@ -59,6 +59,30 @@ let tradeSequence = 0;
  * by the copy engine's safety fingerprint deduplication. */
 export const createTradeKey = (prefix = 'trade'): string =>
     `${prefix}-${Date.now()}-${++tradeSequence}`;
+
+/**
+ * Convert the limit_order shape returned by proposal_open_contract into the
+ * input shape accepted by proposal/buy requests. Deriv returns order values
+ * nested under order_amount, while buy requests use plain numbers.
+ */
+export function normalizeLimitOrder(input: any): MasterTradeSignal['limit_order'] | undefined {
+    if (!input || typeof input !== 'object') return undefined;
+
+    const readAmount = (value: any): number | undefined => {
+        const raw = value != null && typeof value === 'object'
+            ? (value.order_amount ?? value.value ?? value.amount)
+            : value;
+        const amount = Number(raw);
+        return Number.isFinite(amount) && amount > 0 ? amount : undefined;
+    };
+
+    const normalized: MasterTradeSignal['limit_order'] = {};
+    for (const key of ['take_profit', 'stop_loss'] as const) {
+        const amount = readAmount(input[key]);
+        if (amount != null) normalized[key] = amount;
+    }
+    return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
 
 export const publishMasterTrade = (signal: MasterTradeSignal): void => {
     listeners.forEach(l => {

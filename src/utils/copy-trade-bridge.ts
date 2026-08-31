@@ -14,7 +14,7 @@
  */
 
 import { observer as globalObserver } from '@/external/bot-skeleton/utils/observer';
-import { publishMasterTrade, getMasterSource } from './trade-bus';
+import { publishMasterTrade, getMasterSource, normalizeLimitOrder } from './trade-bus';
 
 /** Contract IDs already published — prevents double-publish on open + settled events. */
 const published = new Set<number>();
@@ -30,15 +30,10 @@ function onBotContract(contract: any): void {
     const cid = Number(contract.contract_id);
     if (!cid) return;
 
-    // Deduplicate — bot.contract can fire multiple times for the same open contract
+    // Deduplicate — bot.contract can fire multiple times for the same open contract.
+    // Do this only after validating the first event below: an early partial event
+    // must not permanently suppress the later complete contract payload.
     if (published.has(cid)) return;
-    published.add(cid);
-
-    // Evict the oldest entry once the set gets too large
-    if (published.size > MAX_PUBLISHED) {
-        const first = published.values().next().value as number;
-        published.delete(first);
-    }
 
     // Extract trade parameters from the proposal_open_contract object
     const symbol        = contract.underlying_symbol ?? contract.symbol;
@@ -48,12 +43,25 @@ function onBotContract(contract: any): void {
     // For tick contracts the POC field is `tick_count` (Deriv API) — NOT `ticks_count`.
     // `duration` is only set for time-based contracts (seconds/minutes/hours/days).
     // Fall back to `duration` for non-tick contracts; default 1 tick if nothing is found.
-    const duration      = Number(contract.tick_count ?? contract.duration ?? 1);
-    const duration_unit = (contract.duration_unit as string | undefined) ?? 't';
+    const isAccumulator = String(contract_type).toUpperCase() === 'ACCU';
+    const duration      = isAccumulator
+        ? undefined
+        : Number(contract.tick_count ?? contract.duration ?? 1);
+    const duration_unit = isAccumulator
+        ? undefined
+        : (contract.duration_unit as string | undefined) ?? 't';
     // barrier is optional — only present for digit / barrier contract types
     const barrier       = contract.barrier ?? undefined;
+    const growth_rate   = contract.growth_rate != null ? Number(contract.growth_rate) : undefined;
+    const limit_order   = normalizeLimitOrder(contract.limit_order);
 
     if (!symbol || !contract_type || stake <= 0) return;
+
+    published.add(cid);
+    if (published.size > MAX_PUBLISHED) {
+        const first = published.values().next().value as number;
+        published.delete(first);
+    }
 
     try {
         publishMasterTrade({
@@ -63,6 +71,8 @@ function onBotContract(contract: any): void {
             duration,
             duration_unit,
             barrier,
+            growth_rate,
+            limit_order,
             source:      getMasterSource(),
             time:        Date.now(),
             contract_id: cid,
