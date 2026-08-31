@@ -347,8 +347,8 @@ const AppHeader = observer(() => {
             })}
             aria-pressed={aSpeedBoost}
             title={aSpeedBoost
-                ? 'A-SPEED BOOST ON — Turbo direct-buy with zero intentional delay. Click to turn off.'
-                : 'Turn on A-SPEED BOOST — app-wide Turbo direct-buy with zero intentional delay.'}
+                ? 'A-SPEED BOOST ON — Normal one-purchase-per-tick with zero intentional delay. Click to turn off.'
+                : 'Turn on A-SPEED BOOST — Normal one-purchase-per-tick with zero intentional delay.'}
             onClick={handleASpeedBoost}
         >
             <span className='header__a-speed-btn__icon'>⚡</span>

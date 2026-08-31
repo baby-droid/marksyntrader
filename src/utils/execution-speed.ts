@@ -13,8 +13,8 @@
  *
  * Both values are shared app-wide (speed toggle beside Run, the floating AI,
  * and the trade engine all read them) and persisted so they survive reloads.
- * A-SPEED BOOST is a session-level preset that turns both axes to Turbo + Fast
- * and restores the user's prior settings when switched off.
+ * A-SPEED BOOST is a session-level preset that keeps the Normal tier's
+ * one-purchase-per-tick behavior while enabling Fast's zero-delay pacing.
  */
 export type ExecutionSpeed = 'normal' | 'crazy' | 'turbo';
 
@@ -111,10 +111,10 @@ export const useDirectBuyForSpeed = (): boolean =>
     fastExecutionEnabled || current === 'crazy' || current === 'turbo';
 
 export const setExecutionSpeed = (speed: ExecutionSpeed): void => {
-    // While A-SPEED BOOST is active, the preset owns the tier. This prevents
-    // another compact SpeedControl instance from silently downgrading the
-    // app-wide header toggle.
-    current = aSpeedBoostEnabled ? 'turbo' : speed;
+    // While A-SPEED BOOST is active, the preset owns the Normal tier. This
+    // prevents another compact SpeedControl instance from switching it to
+    // Crazy/Turbo and creating multi-contract fan-out.
+    current = aSpeedBoostEnabled ? 'normal' : speed;
     try {
         localStorage.setItem(STORAGE_KEY, current);
     } catch {
@@ -134,11 +134,11 @@ export const setFastExecutionEnabled = (enabled: boolean): void => {
 };
 
 /**
- * App-wide supersonic preset.
+ * App-wide single-per-tick speed preset.
  *
- * This deliberately changes only client-side pacing: zero artificial delay,
- * direct-buy paths, and the Turbo same-tick fan-out already used by the trade
- * engine. Deriv remains the authority for tick delivery, rate limits, and
+ * This deliberately keeps the Normal tier's one-contract-per-tick behavior
+ * and changes only client-side pacing: zero artificial delay and the direct
+ * buy path. Deriv remains the authority for tick delivery, rate limits, and
  * accepted contracts, so this cannot create negative latency or bypass broker
  * controls.
  */
@@ -149,7 +149,7 @@ export const setASpeedBoostEnabled = (enabled: boolean): void => {
         speedBeforeASpeed = current;
         fastBeforeASpeed = fastExecutionEnabled;
         aSpeedBoostEnabled = true;
-        setExecutionSpeed('turbo');
+        setExecutionSpeed('normal');
         setFastExecutionEnabled(true);
     } else {
         aSpeedBoostEnabled = false;
