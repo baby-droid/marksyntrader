@@ -5,6 +5,11 @@ import {
     nextCycleRouteIndex,
     parityRecoveryContract,
 } from '@/utils/cycle-pattern';
+import {
+    DIFFERS_CYCLE_DEFINITIONS,
+    entryPatternReady,
+    patchGuidedCycleXml,
+} from '@/utils/differs-cycle';
 import fs from 'fs';
 import path from 'path';
 
@@ -61,5 +66,30 @@ describe('AI cycle pattern detector', () => {
         expect(xml).toContain('adc_phase_odd_recovery_test');
         expect(xml).toContain('adc_phase_even_recovery_test');
         expect(xml).toContain('trade_again');
+    });
+
+    it('keeps the AI guide routes and entry gates bot-specific', () => {
+        expect(DIFFERS_CYCLE_DEFINITIONS['differs-edge-scanner'].steps.map(step => step.label)).toEqual([
+            'Differs', 'Over 2', 'Over 3', 'Differs', 'Under 7', 'Under 6',
+        ]);
+        expect(DIFFERS_CYCLE_DEFINITIONS['ahmed-differs-cycle'].steps.map(step => step.label)).toEqual([
+            'Differs', 'Over 1', 'Over 2', 'Differs', 'Under 8', 'Under 7', 'Differs',
+        ]);
+
+        const points = (digits: number[]) => digits.map((digit, index) => ({
+            digit,
+            quote: digit,
+            epoch: index,
+        }));
+        expect(entryPatternReady(points([9, 9, 4]), DIFFERS_CYCLE_DEFINITIONS['differs-edge-scanner'].steps[0], 9)).toBe(true);
+        expect(entryPatternReady(points([1, 2, 5, 2]), DIFFERS_CYCLE_DEFINITIONS['differs-edge-scanner'].steps[1], 9)).toBe(true);
+        expect(entryPatternReady(points([9, 8, 3, 8]), DIFFERS_CYCLE_DEFINITIONS['ahmed-differs-cycle'].steps[4], 9)).toBe(true);
+    });
+
+    it('patches the selected market and every Differs prediction for guided runs', () => {
+        const source = '<field name="SYMBOL_LIST">OLD</field><block type="multiple_purchase"><field name="PURCHASE_1">DIGITDIFF</field><field name="PREDICTION">LAST_DIGIT</field></block>';
+        const patched = patchGuidedCycleXml(source, '1HZ50V', 7);
+        expect(patched).toContain('<field name="SYMBOL_LIST">1HZ50V</field>');
+        expect(patched).toContain('<field name="PREDICTION">7</field>');
     });
 });

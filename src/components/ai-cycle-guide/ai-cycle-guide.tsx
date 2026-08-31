@@ -21,7 +21,7 @@ const WINDOW_SIZE = 50;
 const MIN_READY_TICKS = 12;
 
 type Props = {
-    onLoadGuided?: (botId: DiffersCycleBotId, symbol: string, differDigit: number) => void;
+    onLoadGuided?: (botId: DiffersCycleBotId, symbol: string, differDigit: number) => void | Promise<void>;
 };
 
 type MarketSnapshot = {
@@ -49,10 +49,12 @@ const AiCycleGuide: React.FC<Props> = ({ onLoadGuided }) => {
     const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
     const [runCount, setRunCount] = useState(0);
     const [lastCycle, setLastCycle] = useState(0);
+    const [cycleGuidance, setCycleGuidance] = useState<{ cycle: number; symbol: string; differDigit: number } | null>(null);
     const subscriptionsRef = useRef<any[]>([]);
     const subscriptionIdsRef = useRef<Set<string>>(new Set());
     const scanStartedRef = useRef(false);
     const seenContractsRef = useRef<Set<number>>(new Set());
+    const guidanceCycleRef = useRef(-1);
 
     const definition = DIFFERS_CYCLE_DEFINITIONS[botId];
     const selectedMarket = selectedSymbol ? markets[selectedSymbol] : null;
@@ -64,8 +66,14 @@ const AiCycleGuide: React.FC<Props> = ({ onLoadGuided }) => {
         })
         .sort((a, b) => b.score - a.score), [markets]);
     const bestMarket = rankedMarkets[0]?.score >= 0 ? rankedMarkets[0] : null;
+    const cycleIndex = Math.floor(runCount / 3);
+    const guidedMarket = cycleGuidance?.cycle === cycleIndex
+        ? DIFFERS_SCAN_MARKETS.find(market => market.symbol === cycleGuidance.symbol)
+        : null;
     const activeMarket = selectedMarket && selectedSymbol
         ? { ...DIFFERS_SCAN_MARKETS.find(market => market.symbol === selectedSymbol), snapshot: selectedMarket, differDigit: bestDifferDigit(selectedMarket.points) }
+        : guidedMarket
+            ? { ...guidedMarket, snapshot: markets[guidedMarket.symbol], differDigit: cycleGuidance?.differDigit ?? null }
         : bestMarket;
     const currentStep: DiffersCycleStep = definition.steps[runCount % definition.steps.length];
     const differDigit = activeMarket?.differDigit ?? null;
@@ -157,15 +165,29 @@ const AiCycleGuide: React.FC<Props> = ({ onLoadGuided }) => {
     }, [activeMarket?.symbol, definition.name]);
 
     useEffect(() => {
-        if (bestMarket && !selectedSymbol) {
-            setSelectedSymbol(bestMarket.symbol);
-            setStatus(`Best market: ${bestMarket.label} · Differs ${bestMarket.differDigit}`);
-        }
-    }, [bestMarket?.symbol, selectedSymbol]);
+        if (!bestMarket || bestMarket.differDigit === null || guidanceCycleRef.current === cycleIndex) return;
+        guidanceCycleRef.current = cycleIndex;
+        setCycleGuidance({
+            cycle: cycleIndex,
+            symbol: bestMarket.symbol,
+            differDigit: bestMarket.differDigit,
+        });
+        setSelectedSymbol(null);
+        setStatus(`Cycle ${cycleIndex + 1} guidance: ${bestMarket.label} · Differs ${bestMarket.differDigit}`);
+    }, [bestMarket?.symbol, bestMarket?.differDigit, cycleIndex]);
+
+    useEffect(() => {
+        setRunCount(0);
+        setLastCycle(0);
+        setCycleGuidance(null);
+        setSelectedSymbol(null);
+        guidanceCycleRef.current = -1;
+        seenContractsRef.current.clear();
+    }, [botId]);
 
     const loadGuided = useCallback(() => {
         if (!activeMarket?.symbol || differDigit === null) return;
-        onLoadGuided(botId, activeMarket.symbol, differDigit);
+        void onLoadGuided?.(botId, activeMarket.symbol, differDigit);
         setStatus(`Loaded ${definition.name} · ${activeMarket.label} · Differs ${differDigit}`);
     }, [activeMarket, botId, definition.name, differDigit, onLoadGuided]);
 
@@ -196,7 +218,7 @@ const AiCycleGuide: React.FC<Props> = ({ onLoadGuided }) => {
                         {step.label}
                     </span>
                 ))}
-                <span className='recovery'>Loss → Even/Odd</span>
+                <span className='recovery'>{definition.recovery.replace('Loss → pattern check → ', 'Loss → ')}</span>
             </div>
 
             <div className='ai-cycle-guide__controls'>

@@ -14,7 +14,7 @@ const FREE_BOTS = [
   {
     id: 'differs-edge-scanner',
     name: 'Differs Edge Scanner — Recovery Matrix',
-    description: '🧠 Scans the latest digit, rotates Differs → Over 2 → Over 3 → Differs → Under 7 → Under 6, then uses three-parity Even/Odd recovery after a loss. Includes 2× stake recovery.',
+    description: '🧠 Scans the latest digit, rotates Differs → Over 2 → Over 3 → Differs → Under 7 → Under 6, then checks the loss digit for Even/Odd recovery. Includes 2× stake recovery.',
     category: 'Scanner', market: 'V50 1s', type: 'Multi-Strategy', prediction: 'SCAN',
     xmlFile: '/bots/differs-edge-scanner.xml',
     badge: 'SCAN 🧠', badgeColor: '#34d399', icon: '🔎', winRate: '—',
