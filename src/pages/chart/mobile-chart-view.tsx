@@ -784,18 +784,18 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                 {/* Top row (0-4) */}
                 {renderRow(ROW_TOP)}
 
-                {/* Bottom row (5-9) */}
-                {renderRow(ROW_BOTTOM)}
-
-                {/* Triangle BELOW bottom row — ▲ pointing UP at digit 5-9 */}
+                {/* Triangle ABOVE bottom row — ▼ points DOWN at digit 5-9 */}
                 <div className='mcv-digits__pointer-row mcv-digits__pointer-row--bottom'>
                     {currentDigit !== null && triangleRow === 'bottom' && (
                         <div
-                            className='mcv-digits__triangle mcv-digits__triangle--up'
+                            className='mcv-digits__triangle mcv-digits__triangle--down'
                             style={{ left: triangleLeft }}
                         />
                     )}
                 </div>
+
+                {/* Bottom row (5-9) */}
+                {renderRow(ROW_BOTTOM)}
             </div>
 
             {/* ── Market navigation arrows ───────────────────────────────── */}

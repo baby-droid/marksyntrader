@@ -164,8 +164,8 @@
 
     /* sits just above the top row */
     &--top    { margin: 8px 0 -2px; }
-    /* sits just below the bottom row */
-    &--bottom { margin: -2px 0 0; }
+    /* sits between the rows, just above the bottom row */
+    &--bottom { margin: 0 0 -2px; }
 }
 
 /* Base triangle — shared transition */
