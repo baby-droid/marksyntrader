@@ -31,8 +31,8 @@ const ALL_MARKETS = [
   { label: 'Boom 300', value: 'BOOM300N' },
   { label: 'Boom 500', value: 'BOOM500' },
   { label: 'Boom 1000', value: 'BOOM1000' },
-  { label: 'Bear Market', value: 'BEAR' },
-  { label: 'Bull Market', value: 'BULL' },
+  { label: 'Bear Market', value: 'RDBEAR' },
+  { label: 'Bull Market', value: 'RDBULL' },
 ];
 
 const DEFAULT_MARKETS = ['1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V'];

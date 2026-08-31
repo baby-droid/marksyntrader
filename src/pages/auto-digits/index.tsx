@@ -104,6 +104,34 @@ const directionPct = (points: TickPoint[], size: number, direction: 'up' | 'down
     return (matches / (slice.length - 1)) * 100;
 };
 
+const longestRun = <T,>(values: T[], matches?: (value: T) => boolean) => {
+    let longest = 0;
+    let current = 0;
+    values.forEach(value => {
+        if (!matches || matches(value)) {
+            current += 1;
+            longest = Math.max(longest, current);
+        } else {
+            current = 0;
+        }
+    });
+    return longest;
+};
+
+const parityPatternMatches = (points: TickPoint[], strategy: StrategyValue) => {
+    if (strategy !== 'EVEN' && strategy !== 'ODD') return false;
+    const wantedEven = strategy === 'EVEN';
+    const parity = points.slice(-4).map(point => point.digit % 2 === 0);
+    const isWanted = (value: boolean) => value === wantedEven;
+    const isOpposite = (value: boolean) => value !== wantedEven;
+    const three = parity.slice(-3);
+    const four = parity.slice(-4);
+    return (
+        (three.length === 3 && isOpposite(three[0]) && isOpposite(three[1]) && isWanted(three[2])) ||
+        (four.length === 4 && isOpposite(four[0]) && isOpposite(four[1]) && isWanted(four[2]) && isWanted(four[3]))
+    );
+};
+
 const lastDigitMatches = (strategy: StrategyValue, digit: number, barrier: number) => {
     switch (strategy) {
         case 'EVEN': return digit % 2 === 0;
@@ -179,6 +207,7 @@ const AutoDigits = observer(() => {
     const [wins, setWins] = useState(0);
     const [losses, setLosses] = useState(0);
     const [lossStreak, setLossStreak] = useState(0);
+    const [recoveryDeficit, setRecoveryDeficit] = useState(0);
     const [validation, setValidation] = useState({ wins: 0, attempt: 0, state: 'IDLE' });
     const [displayCur, setDisplayCur] = useState(getDisplayCurrency());
 
@@ -195,6 +224,11 @@ const AutoDigits = observer(() => {
     const lossStreakRef = useRef(0);
     const nextIdRef = useRef(0);
     const lastCandidateRef = useRef<Candidate | null>(null);
+    const pnlRef = useRef(0);
+    const recoveryBaselineRef = useRef<number | null>(null);
+    const recoveryDeficitRef = useRef(0);
+    const tradePnlBeforeRef = useRef(0);
+    const balancedTradeRef = useRef(false);
 
     useEffect(() => subscribeCurrency(() => setDisplayCur(getDisplayCurrency())), []);
     useEffect(() => {
@@ -213,6 +247,14 @@ const AutoDigits = observer(() => {
         const last10 = nextPoints.slice(-10);
         const last20 = nextPoints.slice(-20);
         const barrierNumber = Math.max(0, Math.min(9, Number(barrier) || 0));
+        const recentCounts = countsFor(nextPoints, 20).counts;
+        const recentDominant = recentCounts.reduce((best, count, digit) => count > best.count ? { digit, count } : best, { digit: 0, count: 0 });
+        const recurrence = recentDominant.count;
+        const digitCluster = longestRun(last20.map(point => point.digit), digit => digit === recentDominant.digit);
+        const parityPattern = parityPatternMatches(nextPoints, strategy);
+        const odd1000 = p1000.filter((_, index) => index % 2 !== 0).reduce((a, b) => a + b, 0);
+        const even1000 = 100 - odd1000;
+        const balancedParity = Math.abs(odd1000 - even1000) <= 4;
         let score = 35;
         let reason = 'Waiting for enough confirmation';
         let touches = 0;
@@ -221,6 +263,10 @@ const AutoDigits = observer(() => {
 
         if (nextPoints.length < 20) {
             return { score: 0, label: 'WARMING UP', contractType: strategyContract(strategy), reason: 'Collecting the 20-tick entry window', confidence: 'DATA', touches, retention };
+        }
+
+        if (nextPoints.length < 1000) {
+            return { score: 0, label: 'BUILDING BASELINE', contractType: strategyContract(strategy), reason: `Collecting the 1,000-tick baseline (${nextPoints.length}/1,000)`, confidence: 'DATA', touches, retention };
         }
 
         const odd100 = p100.filter((_, index) => index % 2 !== 0).reduce((a, b) => a + b, 0);
@@ -235,9 +281,10 @@ const AutoDigits = observer(() => {
             const opposite = strategy === 'ODD' ? [0, 2, 4, 6, 8] : [1, 3, 5, 7, 9];
             const strong = wanted.filter(d => p1000[d] >= 10.5).length;
             const weak = opposite.filter(d => p1000[d] < 10.4).length;
-            score = Math.min(100, 35 + (parity >= 55 ? 25 : Math.max(0, parity - 45)) + strong * 5 + weak * 3 + (parityIncreasing ? 8 : 0));
-            reason = `${strong} strong ${strategy.toLowerCase()} digits, ${weak} weak opposite digits; ${parity.toFixed(1)}% parity pressure`;
+            score = Math.min(100, 30 + (parity >= 55 ? 25 : Math.max(0, parity - 45)) + strong * 5 + weak * 3 + (parityIncreasing ? 8 : 0) + (parityPattern ? 8 : 0));
+            reason = `${strong} strong ${strategy.toLowerCase()} digits, ${weak} weak opposite digits; ${parity.toFixed(1)}% parity pressure; ${parityPattern ? 'sequence confirmed' : 'sequence waiting'}`;
             entryDigit = opposite.sort((a, b) => p1000[a] - p1000[b])[0];
+            if (balancedParity && !parityPattern) score = Math.min(score, 59);
         } else if (strategy === 'MATCHES' || strategy === 'DIFFERS') {
             const sorted = p1000.map((value, digit) => ({ digit, value })).sort((a, b) => b.value - a.value);
             const dominant = sorted[0];
@@ -245,11 +292,11 @@ const AutoDigits = observer(() => {
             const concentrationRising = p20[dominant.digit] >= p50[dominant.digit] && p50[dominant.digit] >= p100[dominant.digit];
             entryDigit = strategy === 'MATCHES' ? dominant.digit : sorted[0].digit;
             score = strategy === 'MATCHES'
-                ? Math.min(100, 40 + dominant.value * 2 + (concentrationRising ? 18 : 0) + (p20[dominant.digit] > 12 ? 10 : 0))
-                : Math.min(100, 40 + diversity * 4 + (dominant.value < 14 ? 16 : 0) + (p20.filter(value => value > 0).length >= 8 ? 8 : 0));
+                ? Math.min(100, 34 + dominant.value * 2 + (concentrationRising ? 18 : 0) + (p20[dominant.digit] > 12 ? 10 : 0) + Math.min(10, recurrence * 1.5) + Math.min(8, digitCluster * 2))
+                : Math.min(100, 34 + diversity * 4 + (dominant.value < 14 ? 16 : 0) + (p20.filter(value => value > 0).length >= 8 ? 8 : 0) + Math.max(0, 10 - recurrence) + Math.max(0, 8 - digitCluster * 2));
             reason = strategy === 'MATCHES'
-                ? `Digit ${dominant.digit} concentration is ${dominant.value.toFixed(1)}% with ${concentrationRising ? 'rising' : 'mixed'} short windows`
-                : `${diversity}/10 digits active; no dominant digit above the dispersion limit`;
+                ? `Digit ${dominant.digit} concentration is ${dominant.value.toFixed(1)}% with ${concentrationRising ? 'rising' : 'mixed'} short windows; recurrence ${recurrence}/20, cluster ${digitCluster}`
+                : `${diversity}/10 digits active; recurrence ${recurrence}/20, cluster ${digitCluster}; dispersion ${dominant.value < 14 ? 'healthy' : 'too concentrated'}`;
         } else if (strategy === 'OVER' || strategy === 'UNDER') {
             const losing = strategy === 'OVER'
                 ? last10.filter(point => point.digit <= barrierNumber)
@@ -258,20 +305,16 @@ const AutoDigits = observer(() => {
             const winning = strategy === 'OVER'
                 ? last20.filter(point => point.digit > barrierNumber)
                 : last20.filter(point => point.digit < barrierNumber);
-            let run = 0;
-            winning.slice().reverse().some(point => {
-                if ((strategy === 'OVER' && point.digit > barrierNumber) || (strategy === 'UNDER' && point.digit < barrierNumber)) {
-                    run += 1;
-                    return false;
-                }
-                return true;
-            });
-            retention = Math.min(100, run * 25 + winning.length * 2);
+            const winningRun = longestRun(last20.slice().reverse(), point => strategy === 'OVER' ? point.digit > barrierNumber : point.digit < barrierNumber);
+            retention = Math.min(100, winningRun * 25 + winning.length * 2);
             const losingRate = strategy === 'OVER'
                 ? p1000.slice(0, barrierNumber + 1).reduce((a, b) => a + b, 0)
                 : p1000.slice(barrierNumber, 10).reduce((a, b) => a + b, 0);
-            score = Math.min(100, 30 + (touches >= 2 && touches <= 5 ? 22 : 0) + (retention >= 50 ? 20 : retention / 3) + (losingRate < 55 ? 18 : 0) + (p20.filter((value, digit) => strategy === 'OVER' ? digit > barrierNumber && value >= 10 : digit < barrierNumber && value >= 10).length * 3));
-            reason = `${touches}/10 losing-region touches; ${retention}% retention on the ${strategy === 'OVER' ? 'upper' : 'lower'} side`;
+            const winningStrength = strategy === 'OVER'
+                ? p20.slice(barrierNumber + 1).reduce((a, b) => a + b, 0)
+                : p20.slice(0, barrierNumber).reduce((a, b) => a + b, 0);
+            score = Math.min(100, 28 + (touches >= 2 && touches <= 5 ? 22 : 0) + (retention >= 50 ? 20 : retention / 3) + (losingRate < 55 ? 18 : 0) + (winningStrength >= 55 ? 12 : 0) + (p20.filter((value, digit) => strategy === 'OVER' ? digit > barrierNumber && value >= 10 : digit < barrierNumber && value >= 10).length * 3));
+            reason = `${touches}/10 losing-region touches; ${retention}% retention; ${winningStrength.toFixed(0)}% winning-side strength`;
             entryDigit = strategy === 'OVER'
                 ? p20.map((value, digit) => ({ value, digit })).filter(item => item.digit > barrierNumber).sort((a, b) => b.value - a.value)[0]?.digit
                 : p20.map((value, digit) => ({ value, digit })).filter(item => item.digit < barrierNumber).sort((a, b) => b.value - a.value)[0]?.digit;
@@ -280,6 +323,7 @@ const AutoDigits = observer(() => {
             const d20 = directionPct(nextPoints, 20, direction);
             const d50 = directionPct(nextPoints, 50, direction);
             const d100 = directionPct(nextPoints, 100, direction);
+            const d1000 = directionPct(nextPoints, 1000, direction);
             const strict = strategy === 'ONLY UPS' || strategy === 'ONLY DOWNS';
             let consecutive = 0;
             for (let index = nextPoints.length - 1; index > 0; index -= 1) {
@@ -287,8 +331,9 @@ const AutoDigits = observer(() => {
                 if ((direction === 'up' && move > 0) || (direction === 'down' && move < 0)) consecutive += 1;
                 else break;
             }
-            score = Math.min(100, 28 + (d20 >= (strict ? 65 : 55) ? 26 : 0) + (d50 >= 55 ? 18 : 0) + (d100 >= 53 ? 12 : 0) + Math.min(16, consecutive * 4));
-            reason = `${direction.toUpperCase()} pressure: ${d20.toFixed(0)}% / ${d50.toFixed(0)}% / ${d100.toFixed(0)}% across 20T, 50T, 100T`;
+            const chop = Math.min(d20, 100 - d20);
+            score = Math.min(100, 25 + (d20 >= (strict ? 65 : 55) ? 26 : 0) + (d50 >= 55 ? 18 : 0) + (d100 >= 53 ? 12 : 0) + (d1000 >= 50 ? 7 : 0) + Math.min(12, consecutive * 3) - (strict && chop > 42 ? 12 : 0));
+            reason = `${direction.toUpperCase()} pressure: ${d20.toFixed(0)}% / ${d50.toFixed(0)}% / ${d100.toFixed(0)}% / ${d1000.toFixed(0)}% across 20T–1,000T`;
             retention = Math.min(100, consecutive * 20);
         } else {
             const window = nextPoints.slice(-50);
@@ -303,10 +348,20 @@ const AutoDigits = observer(() => {
             retention = isHigh ? rangePosition : 100 - rangePosition;
         }
 
-        if (logicMode === 'confluence' && p20.length && p50.length && p100.length) score += 3;
-        if (logicMode === 'pressure' && p1000.length) score += 3;
-        if (logicMode === 'touch' && touches >= 2) score += 5;
-        if (logicMode === 'pattern' && last20.length >= 4) score += 3;
+        if (logicMode === 'confluence') {
+            const parityWindowsAgree = strategy === 'ODD'
+                ? odd100 >= even100 && odd1000 >= even1000
+                : strategy === 'EVEN'
+                    ? even100 >= odd100 && even1000 >= odd1000
+                    : true;
+            score += parityWindowsAgree ? 6 : 0;
+        }
+        if (logicMode === 'pressure' && p1000.length) score += Math.min(6, Math.abs(odd1000 - even1000) / 3);
+        if (logicMode === 'touch' && touches >= 2) score += Math.min(8, touches);
+        if (logicMode === 'pattern') {
+            score += parityPattern ? 8 : 0;
+            if ((strategy === 'ODD' || strategy === 'EVEN') && !parityPattern) score = Math.min(score, 69);
+        }
         score = Math.round(Math.min(100, score));
         const confidence = score >= 90 ? 'VERY STRONG' : score >= 80 ? 'STRONG' : score >= minScore ? 'WATCH' : 'WAIT';
         return {
@@ -377,7 +432,11 @@ const AutoDigits = observer(() => {
         const tradeDuration = autoDuration
             ? Math.max(1, Math.min(5, nextCandidate.score >= 90 ? 1 : nextCandidate.score >= 82 ? 2 : nextCandidate.score >= 74 ? 3 : 4))
             : duration;
-        const contractStake = Math.min(stakeRef.current, Math.max(0.35, stakeRef.current * Math.pow(2, Math.min(lossStreakRef.current, 4))));
+        const baseStake = stakeRef.current;
+        const recoveryCeiling = baseStake * 16;
+        const contractStake = Math.min(recoveryCeiling, Math.max(0.35, baseStake + recoveryDeficitRef.current));
+        tradePnlBeforeRef.current = pnlRef.current;
+        balancedTradeRef.current = (strategy === 'EVEN' || strategy === 'ODD') && Math.abs(oddPressure - evenPressure) <= 4;
         realInFlightRef.current = true;
         const rowId = `ad-${Date.now()}-${++nextIdRef.current}`;
         setTrades(previousTrades => [{ id: rowId, time: formatTime(), strategy: nextCandidate.label, contract: nextCandidate.contractType, stake: contractStake, profit: 0, status: 'OPEN' }, ...previousTrades].slice(0, 30));
@@ -397,30 +456,58 @@ const AutoDigits = observer(() => {
             const won = settled.status === 'won';
             const profit = Number(settled.profit || 0);
             setTrades(previousTrades => previousTrades.map(trade => trade.id === rowId ? { ...trade, profit, status: won ? 'WIN' : 'LOSS' } : trade));
-            setPnl(previousPnl => previousPnl + profit);
+            const nextPnl = pnlRef.current + profit;
+            pnlRef.current = nextPnl;
+            setPnl(nextPnl);
             if (won) {
                 lossStreakRef.current = 0;
                 setLossStreak(0);
                 setWins(previousWins => previousWins + 1);
-                setStatus('WIN — stake reset; scanning next setup');
-                addLog(`WIN +${profit.toFixed(2)} ${displayCur} — recovery cleared`);
+                const baseline = recoveryBaselineRef.current;
+                const recovered = baseline == null || nextPnl >= baseline;
+                if (recovered) {
+                    recoveryBaselineRef.current = null;
+                    recoveryDeficitRef.current = 0;
+                    setRecoveryDeficit(0);
+                } else {
+                    const remaining = Math.max(0, baseline - nextPnl);
+                    recoveryDeficitRef.current = remaining;
+                    setRecoveryDeficit(remaining);
+                }
+                if (balancedTradeRef.current) {
+                    runningRef.current = false;
+                    setRun(false);
+                    setStatus('BALANCED PARITY WIN — engine stopped after one qualified win');
+                } else {
+                    setStatus(recovered ? 'WIN — recovery cleared; scanning next setup' : 'WIN — partial recovery; revalidating');
+                }
+                addLog(`WIN +${profit.toFixed(2)} ${displayCur} — ${recovered ? 'recovery cleared' : 'partial recovery retained'}`);
             } else {
                 const nextLosses = lossStreakRef.current + 1;
                 lossStreakRef.current = nextLosses;
                 setLossStreak(nextLosses);
                 setLosses(previousLosses => previousLosses + 1);
+                const baseline = recoveryBaselineRef.current ?? tradePnlBeforeRef.current;
+                recoveryBaselineRef.current = baseline;
+                const nextDeficit = Math.max(0, baseline - nextPnl);
+                recoveryDeficitRef.current = nextDeficit;
+                setRecoveryDeficit(nextDeficit);
                 if (nextLosses >= 3) {
                     const opposite = oppositeStrategy(strategy);
                     if (opposite) {
                         setStrategy(opposite);
-                        addLog(`LOSS ${profit.toFixed(2)} ${displayCur} — 3-loss rule: switching scan to ${opposite}`);
+                        addLog(`LOSS ${profit.toFixed(2)} ${displayCur} — 3-loss re-scan: ${opposite}, next market, and adaptive duration`);
                     } else {
-                        addLog(`LOSS ${profit.toFixed(2)} ${displayCur} — 3-loss rule: full re-scan required`);
+                        addLog(`LOSS ${profit.toFixed(2)} ${displayCur} — 3-loss re-scan: windows, market, and adaptive duration`);
                     }
+                    const currentMarketIndex = MARKETS.findIndex(market => market.value === symbol);
+                    const nextMarket = MARKETS[(currentMarketIndex + 1 + MARKETS.length) % MARKETS.length];
+                    if (nextMarket && nextMarket.value !== symbol) setSymbol(nextMarket.value);
+                    validationRef.current = { key: '', wins: 0, attempt: validationState.attempt + 1, readyEpoch: point.epoch };
                 } else {
                     addLog(`LOSS ${profit.toFixed(2)} ${displayCur} — revalidate before controlled recovery`);
                 }
-                setStatus(nextLosses >= 3 ? 'Loss cluster — opposite-side re-scan' : 'LOSS — controlled recovery pending');
+                setStatus(nextLosses >= 3 ? 'Loss cluster — windows, market, and duration re-scan' : `LOSS — controlled recovery: ${fromUsd(nextDeficit).toFixed(2)} ${displayCur} at risk`);
             }
         }).catch(error => {
             realInFlightRef.current = false;
@@ -518,6 +605,10 @@ const AutoDigits = observer(() => {
     const resetEngine = () => {
         lossStreakRef.current = 0;
         setLossStreak(0);
+        recoveryBaselineRef.current = null;
+        recoveryDeficitRef.current = 0;
+        setRecoveryDeficit(0);
+        pnlRef.current = 0;
         setPnl(0);
         setWins(0);
         setLosses(0);
@@ -613,8 +704,9 @@ const AutoDigits = observer(() => {
                     <section className='ad-panel ad-recovery'>
                         <div className='ad-panel__label'>LOSS RECOVERY ENGINE</div>
                         <div className='ad-recovery__line'><span>Current loss streak</span><strong>{lossStreak}</strong></div>
-                        <div className='ad-recovery__line'><span>Next stake</span><strong>{fromUsd(Math.min(stakeRef.current * Math.pow(2, Math.min(lossStreak, 4)), stakeRef.current * 16)).toFixed(2)} {displayCur}</strong></div>
-                        <div className='ad-recovery__line'><span>Mode</span><b>{lossStreak >= 3 ? 'RE-SCAN' : lossStreak ? 'CONTROLLED' : 'NORMAL'}</b></div>
+                        <div className='ad-recovery__line'><span>Recovery deficit</span><strong>{fromUsd(recoveryDeficit).toFixed(2)} {displayCur}</strong></div>
+                        <div className='ad-recovery__line'><span>Next stake</span><strong>{fromUsd(Math.min(stakeRef.current * 16, Math.max(0.35, stakeRef.current + recoveryDeficit))).toFixed(2)} {displayCur}</strong></div>
+                        <div className='ad-recovery__line'><span>Mode</span><b>{lossStreak >= 3 ? 'RE-SCAN' : recoveryDeficit ? 'CONTROLLED' : 'NORMAL'}</b></div>
                         <button className='ad-outline-btn' onClick={resetEngine}>RESET RISK STATE</button>
                     </section>
 

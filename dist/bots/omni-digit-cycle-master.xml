@@ -50,7 +50,7 @@
                       </block>
                     </next>
                   </block>
-                </block>
+                </next>
               </block>
             </next>
           </block>
@@ -404,11 +404,10 @@
                       </next>
                     </next>
                   </next>
-                </next>
-              </block>
-            </next>
-          </block>
-        </statement>
+                </block>
+              </next>
+            </block>
+          </statement>
 
         <!-- ── LOSS ── -->
         <statement name="ELSE">
@@ -521,6 +520,7 @@
       <next>
         <block type="trade_again" id="odcm_ta"></block>
       </next>
-    </statement>
+    </next>
+  </statement>
   </block>
 </xml>

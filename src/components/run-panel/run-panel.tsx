@@ -198,9 +198,14 @@ const DrawerContent = ({ active_index, is_drawer_open, active_tour, setActiveTab
                     <div id='db-run-panel-tab__summary' label={<Localize i18n_default_text='Summary' />}>
                         <Summary is_drawer_open={is_drawer_open} />
                     </div>
-                    <div id='db-run-panel-tab__transactions' label={<Localize i18n_default_text='Transactions' />}>
-                        <DigitPercentWidget />
-                        <Transactions is_drawer_open={is_drawer_open} />
+                    <div
+                        id='db-run-panel-tab__transactions'
+                        label={<Localize i18n_default_text='Transactions' />}
+                    >
+                        <div className='run-panel__transactions-tab'>
+                            <DigitPercentWidget />
+                            <Transactions is_drawer_open={is_drawer_open} />
+                        </div>
                     </div>
                     <div id='db-run-panel-tab__journal' label={<Localize i18n_default_text='Journal' />}>
                         <Journal />
