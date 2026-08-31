@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import NumberField from '@/components/number-field';
-import { AI_CYCLE_ROUTE, barrierReturnPattern } from '@/utils/cycle-pattern';
+import { AI_CYCLE_ROUTE, barrierReturnPattern, nextCycleRouteIndex } from '@/utils/cycle-pattern';
 import './chart-ai.scss';
 
 const MIN_STAKE = 0.35;
@@ -1492,7 +1492,7 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                 setPhase('idle');
                 setStatus(`Batch complete · cooling off ${COOLDOWN_TICKS} ticks`);
             } else if (wasCycleTrade && cyclePatternEnabled) {
-                cycleIndexRef.current = (cycleIndexRef.current + 1) % AI_CYCLE_ROUTE.length;
+                cycleIndexRef.current = nextCycleRouteIndex(cycleIndexRef.current);
                 signalRef.current = null;
                 defaultSignalRef.current = null;
                 setSignal(null);

@@ -3,6 +3,7 @@ import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import {
     AI_CYCLE_ROUTE,
     barrierReturnPattern,
+    nextCycleRouteIndex,
     parityRecoveryContract,
 } from '@/utils/cycle-pattern';
 import './cycle-pattern-detector.scss';
@@ -65,7 +66,7 @@ const CyclePatternDetector: React.FC = () => {
                                 setLastSignal(`${currentRoute.label} return ready`);
                                 setStatus(`${currentRoute.label} · one-tick entry pattern detected`);
                                 setRouteIndex(index => {
-                                    const nextIndex = (index + 1) % AI_CYCLE_ROUTE.length;
+                                    const nextIndex = nextCycleRouteIndex(index);
                                     routeIndexRef.current = nextIndex;
                                     return nextIndex;
                                 });

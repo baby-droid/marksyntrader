@@ -41,3 +41,7 @@ export function barrierReturnPattern(
 export function cycleRouteLabels() {
     return AI_CYCLE_ROUTE.map(route => route.label);
 }
+
+export function nextCycleRouteIndex(index: number) {
+    return (Math.max(0, Math.floor(index)) + 1) % AI_CYCLE_ROUTE.length;
+}
