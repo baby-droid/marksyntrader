@@ -70,24 +70,6 @@
                   <block type="variables_set" id="adc_set_phase">
                     <field name="VAR" id="adc_phase">cycle_phase</field>
                     <value name="VALUE"><block type="math_number" id="adc_phase_value"><field name="NUM">0</field></block></value>
-                    <next>
-                      <block type="variables_set" id="adc_set_recovery">
-                        <field name="VAR" id="adc_recovery">recovery_mode</field>
-                        <value name="VALUE"><block type="math_number" id="adc_recovery_value"><field name="NUM">-1</field></block></value>
-                        <next>
-                          <block type="variables_set" id="adc_set_previous_parity">
-                            <field name="VAR" id="adc_previous_parity">previous_parity</field>
-                            <value name="VALUE"><block type="math_number" id="adc_previous_parity_value"><field name="NUM">-1</field></block></value>
-                            <next>
-                              <block type="variables_set" id="adc_set_parity_streak">
-                                <field name="VAR" id="adc_parity_streak">parity_streak</field>
-                                <value name="VALUE"><block type="math_number" id="adc_parity_streak_value"><field name="NUM">0</field></block></value>
-                              </block>
-                            </next>
-                          </block>
-                        </next>
-                      </block>
-                    </next>
                   </block>
                 </next>
               </block>
@@ -152,7 +134,7 @@
                         </statement>
                       </block>
                     </statement>
-                    <value name="IF1"><block type="logic_compare" id="adc_normal_cycle_test"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="adc_normal_cycle_mode"><field name="VAR" id="adc_recovery">recovery_mode</field></block></value><value name="B"><block type="math_number"><field name="NUM">-1</field></block></value></block></value>
+                    <value name="IF1"><block type="logic_compare" id="adc_normal_cycle_test"><field name="OP">NEQ</field><value name="A"><block type="variables_get" id="adc_normal_cycle_mode"><field name="VAR" id="adc_recovery">recovery_mode</field></block></value><value name="B"><block type="math_number"><field name="NUM">2</field></block></value></block></value>
                     <statement name="DO1">
                       <block type="controls_if" id="adc_sequence_controller">
                         <data>gt.seq.applySequence</data>

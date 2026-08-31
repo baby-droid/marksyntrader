@@ -57,6 +57,15 @@ describe('AI cycle pattern detector', () => {
             path.resolve(__dirname, '../../../../public/bots/ahmed-differs-cycle.xml'),
             'utf8',
         );
+        const initialization = xml.match(/<statement name="INITIALIZATION">([\s\S]*?)<\/statement>/)?.[1] ?? '';
+        expect(initialization).not.toContain('recovery_mode');
+        expect(initialization).not.toContain('previous_parity');
+        expect(initialization).not.toContain('parity_streak');
+        expect(xml.indexOf('id="adc_purchase_differs"')).toBeLessThan(xml.indexOf('id="adc_purchase_over1"'));
+        expect(xml.indexOf('id="adc_purchase_over1"')).toBeLessThan(xml.indexOf('id="adc_purchase_over2"'));
+        expect(xml.indexOf('id="adc_purchase_over2"')).toBeLessThan(xml.indexOf('id="adc_purchase_differs_middle"'));
+        expect(xml.indexOf('id="adc_purchase_differs_middle"')).toBeLessThan(xml.indexOf('id="adc_purchase_under8"'));
+        expect(xml.indexOf('id="adc_purchase_under8"')).toBeLessThan(xml.indexOf('id="adc_purchase_under7"'));
         expect(xml).toContain('DIGITDIFF');
         expect(xml).toContain('Normal cycle: DIGITDIFF → DIGITOVER 1 → DIGITOVER 2 → DIGITDIFF →');
         expect(xml).toContain('DIGITUNDER 8 → DIGITUNDER 7, then the six-step cycle restarts.');
