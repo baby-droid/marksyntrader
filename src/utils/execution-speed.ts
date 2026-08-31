@@ -41,10 +41,10 @@ export const SPEED_MAX_INFLIGHT: Record<ExecutionSpeed, number> = {
 const FAST_EXEC_MAX_INFLIGHT = 10_000;
 
 // Purchases fired per tick for each speed tier. Normal fires a single
-// purchase per tick (one contract at a time, as before). Crazy and Turbo
-// fire several purchases in parallel on the SAME tick, each an independent
-// contract. Fast Execution keeps purchases_per_tick = 1 (individual, not
-// bulk) — speed comes from 0ms delay + direct buy, not parallel firing.
+// purchase per tick. Crazy and Turbo retain their legacy multi-contract
+// fan-out when explicitly selected. Fast Execution is deliberately different:
+// it is a latency preset, not a volume preset, so it always allows exactly
+// one purchase per tick.
 export const SPEED_PURCHASES_PER_TICK: Record<ExecutionSpeed, number> = {
     normal: 1,
     crazy: 5,
@@ -100,10 +100,10 @@ export const getExecutionSpeedDelay = (): number =>
 export const getMaxInflight = (): number =>
     fastExecutionEnabled ? Math.max(SPEED_MAX_INFLIGHT[current], FAST_EXEC_MAX_INFLIGHT) : SPEED_MAX_INFLIGHT[current];
 
-/** Effective purchases fired per tick — the higher of the active tier or Fast Execution's throughput. */
+/** Effective purchases fired per tick. Fast mode never inherits Turbo fan-out. */
 export const getPurchasesPerTick = (): number =>
     fastExecutionEnabled
-        ? Math.max(SPEED_PURCHASES_PER_TICK[current], FAST_EXEC_PURCHASES_PER_TICK)
+        ? FAST_EXEC_PURCHASES_PER_TICK
         : SPEED_PURCHASES_PER_TICK[current];
 
 /** True when the engine should skip the proposal round-trip and buy directly. */
@@ -120,7 +120,7 @@ export const setExecutionSpeed = (speed: ExecutionSpeed): void => {
     } catch {
         /* localStorage unavailable */
     }
-    listeners.forEach(fn => fn(speed));
+    listeners.forEach(fn => fn(current));
 };
 
 export const setFastExecutionEnabled = (enabled: boolean): void => {
@@ -130,7 +130,7 @@ export const setFastExecutionEnabled = (enabled: boolean): void => {
     } catch {
         /* localStorage unavailable */
     }
-    fastExecListeners.forEach(fn => fn(enabled));
+    fastExecListeners.forEach(fn => fn(fastExecutionEnabled));
 };
 
 /**

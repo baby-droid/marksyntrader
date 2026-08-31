@@ -1,4 +1,4 @@
-import { getExecutionSpeed, getExecutionSpeedDelay, isFastExecutionEnabled, getPurchasesPerTick, SPEED_PURCHASES_PER_TICK } from '../../../../../utils/execution-speed';
+import { getExecutionSpeed, getExecutionSpeedDelay, isFastExecutionEnabled, isASpeedBoostEnabled, getPurchasesPerTick } from '../../../../../utils/execution-speed';
 import { recordTradeMeta } from '../../../../../utils/trade-metadata';
 import { isBotPaused } from '../../../../../utils/bot-pause-flag';
 import { LogTypes } from '../../../constants/messages';
@@ -95,14 +95,11 @@ export default Engine =>
             // before that check, so we guard here as well.
             if (isBotPaused()) return Promise.resolve();
 
-            // Speed-tier fan-out: Normal fires 1 purchase per tick (unchanged).
-            // Crazy fires 5 purchases in parallel per tick, Turbo fires 10 — the
-            // first drives the bot's normal single-contract flow (afterPurchase,
-            // trade-again, martingale), the rest are independent side purchases
-            // fired at the same instant for extra throughput.
+            // Speed-tier fan-out: Normal fires 1 purchase per tick. Explicit
+            // Crazy/Turbo can still use their legacy side-contract throughput,
+            // but A-SPEED BOOST is a latency preset and must remain one order
+            // per tick.
             const speed = getExecutionSpeed();
-            // Use the effective per-tick count so Fast Execution's 50 side
-            // purchases fire on top of whichever tier is active.
             const purchases_per_tick = getPurchasesPerTick();
             if (purchases_per_tick > 1 && this.tradeOptions) {
                 for (let i = 0; i < purchases_per_tick - 1; i++) {
@@ -139,15 +136,23 @@ export default Engine =>
             );
             if (!unique_specs.length) return Promise.resolve();
 
+            // Multiple Purchase is also used by strategy blocks that provide
+            // several same-tick contracts. A-SPEED BOOST explicitly means
+            // one contract for one tick, so keep only the first selected
+            // contract and do not create untracked side orders.
+            const effective_specs = isASpeedBoostEnabled()
+                ? unique_specs.slice(0, 1)
+                : unique_specs;
+
             /* A prediction supplied by the XML purchase block is intentionally
                bought directly. Proposals are created once by Bot.start(), so
                selecting a different barrier after the first settlement would
                otherwise reuse the first phase's proposal and stop the bot. */
-            const hasDynamicOptions = unique_specs.some(spec =>
+            const hasDynamicOptions = effective_specs.some(spec =>
                 spec.dynamic === true || spec.prediction !== undefined
             );
             if (hasDynamicOptions) {
-                unique_specs.slice(1).forEach(spec => {
+                effective_specs.slice(1).forEach(spec => {
                     fireSidePurchase(this.tradeOptions, spec.contract_type, {
                         ...this.tradeOptions,
                         amount: spec.amount ?? this.tradeOptions.amount,
@@ -155,11 +160,11 @@ export default Engine =>
                     });
                 });
                 return this._executePurchase(
-                    unique_specs[0].contract_type,
+                    effective_specs[0].contract_type,
                     {
                         ...this.tradeOptions,
-                        amount: unique_specs[0].amount ?? this.tradeOptions.amount,
-                        prediction: unique_specs[0].prediction,
+                        amount: effective_specs[0].amount ?? this.tradeOptions.amount,
+                        prediction: effective_specs[0].prediction,
                     },
                     true
                 );
@@ -167,11 +172,11 @@ export default Engine =>
 
             // The first contract follows the normal tracked lifecycle. The
             // remaining contracts are independent same-tick purchases.
-            unique_specs.slice(1).forEach(spec => {
+            effective_specs.slice(1).forEach(spec => {
                 fireSidePurchase(this.tradeOptions, spec.contract_type);
             });
 
-            return this.purchase(unique_specs[0].contract_type);
+            return this.purchase(effective_specs[0].contract_type);
         }
 
         _executePurchase(contract_type, tradeOptions = this.tradeOptions, forceDirect = false) {
