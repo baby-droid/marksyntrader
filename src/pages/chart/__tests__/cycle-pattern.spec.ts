@@ -57,9 +57,9 @@ describe('AI cycle pattern detector', () => {
         expect(xml).toContain('DIGITUNDER 8 → DIGITUNDER 7 → DIGITDIFF.');
         expect(xml).toContain('after three evens, buy DIGITODD');
         expect(xml).toContain('DIGITEVEN');
-        expect(xml).toContain('adc_phase_6_test');
-        expect(xml).toContain('adc_phase_7_test');
-        expect(xml).toContain('adc_phase_8_test');
+        expect(xml).toContain('adc_phase_differs_final_test');
+        expect(xml).toContain('adc_phase_odd_recovery_test');
+        expect(xml).toContain('adc_phase_even_recovery_test');
         expect(xml).toContain('trade_again');
     });
 });

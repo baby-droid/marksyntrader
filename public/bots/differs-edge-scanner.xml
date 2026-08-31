@@ -145,7 +145,7 @@
             <next>
               <block type="controls_if" id="des_recovery_router">
                 <mutation else="1"/>
-                <value name="IF0"><block type="logic_compare" id="des_even_loss_test"><field name="OP">EQ</field><value name="A"><block type="math_modulo" id="des_loss_modulo"><value name="DIVIDEND"><block type="variables_get" id="des_loss_digit"><field name="VAR" id="des_digit">last_digit</field></block></value><value name="DIVISOR"><shadow type="math_number"><field name="NUM">2</field></shadow></block></value><value name="B"><block type="math_number"><field name="NUM">0</field></block></value></block></value>
+                <value name="IF0"><block type="logic_compare" id="des_even_loss_test"><field name="OP">EQ</field><value name="A"><block type="math_modulo" id="des_loss_modulo"><value name="DIVIDEND"><block type="variables_get" id="des_loss_digit"><field name="VAR" id="des_digit">last_digit</field></block></value><value name="DIVISOR"><shadow type="math_number"><field name="NUM">2</field></shadow></value></block></value><value name="B"><block type="math_number"><field name="NUM">0</field></block></value></block></value>
                 <statement name="DO0"><block type="variables_set" id="des_even_to_odd"><field name="VAR" id="des_phase">phase</field><value name="VALUE"><block type="math_number" id="des_even_to_odd_phase"><field name="NUM">6</field></block></value></block></statement>
                 <statement name="ELSE"><block type="variables_set" id="des_odd_to_even"><field name="VAR" id="des_phase">phase</field><value name="VALUE"><block type="math_number" id="des_odd_to_even_phase"><field name="NUM">7</field></block></value></block></statement>
               </block>

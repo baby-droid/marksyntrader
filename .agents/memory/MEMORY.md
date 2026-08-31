@@ -50,6 +50,7 @@
 - [Auto Trades Even/Odd condition](auto-trades-evenodd.md) — the card gates entries on the latest N digits sharing the selected parity; UI dropdowns drive both the condition and buy contract.
 - [Auto Trades batch manager](auto-trades-batch-manager.md) — same-account batches use concurrent authenticated WebSocket buys; track each contract under a batch ID because REST bulk purchase targets multiple accounts.
 - [Differs Edge Scanner bot](differs-edge-scanner.md) — XML bot scans latest digit, rotates Differs/Over/Under phases, and uses Even/Odd parity recovery after losses.
+- [Differs cycle XML validation](differs-cycle-xml-validation.md) — Edge Scanner is phase-only with explicit parity recovery states; parse and synchronize public/dist copies after edits.
 - [AI cycle pattern detector](cycle-pattern-detector.md) — shared four-route one-tick cycle detector uses two setup touches, a barrier cross, and a return trigger.
 - [Auto-Digits scanner](auto-digits-scanner.md) — authenticated live tick distribution dashboard; two real-tick virtual validations precede buyContract trades, which emit native Bot Builder transaction events.
 - [Blockly SVG fragment imports](blockly-svg-fragments.md) — rendered Blockly SVG exports are not loadable bot XML; convert them to executable Blockly roots and preserve source IDs as data metadata.
