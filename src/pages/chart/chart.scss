@@ -188,25 +188,32 @@
 
 /* Keep the SmartChart action buttons visible beside the graph. The embedded
  * chart owns its zoom navigation, but its toolbar can otherwise be placed
- * behind the chart canvas by the surrounding workspace layout. */
+ * behind the chart canvas by the surrounding workspace layout.
+ *
+ * This is the compact right-side rail shown in the Smart Chart reference:
+ * chart type, views, drawing tools, indicators, and download/share. The
+ * controls remain SmartChart's native components so their menus and drawing
+ * state continue to be managed by the chart itself. */
 .dashboard__chart-wrapper {
-    .ciq-chart .sc-toolbar-widget {
+    .sc-toolbar-widget {
         align-items: center;
         background: transparent !important;
         border: 0 !important;
+        box-sizing: border-box;
         display: flex;
         flex-direction: column;
         gap: 8px;
         left: auto !important;
         overflow: visible;
         padding: 0 !important;
-        right: 12px !important;
+        pointer-events: auto;
+        right: max(12px, env(safe-area-inset-right)) !important;
         top: 72px !important;
         width: 40px !important;
-        z-index: 20 !important;
+        z-index: 520 !important;
     }
 
-    .ciq-chart .sc-toolbar-widget .ciq-menu .cq-menu-btn {
+    .sc-toolbar-widget .ciq-menu .cq-menu-btn {
         align-items: center;
         background: rgba(242, 243, 244, 0.94);
         border-radius: 50%;
@@ -217,15 +224,24 @@
         width: 40px;
     }
 
-    .ciq-chart .sc-toolbar-widget .ciq-menu .cq-menu-btn:hover {
+    .sc-toolbar-widget .ciq-menu .cq-menu-btn:hover,
+    .sc-toolbar-widget .ciq-menu .cq-menu-btn:focus-visible {
         background: #e2e5e7;
+        outline: 2px solid rgba(30, 136, 255, 0.45);
+        outline-offset: 2px;
+    }
+
+    /* Keep the right-rail popovers above the chart canvas and trade overlay. */
+    .sc-toolbar-widget .cq-menu-dropdown,
+    .sc-toolbar-widget .cq-modal-dropdown {
+        z-index: 9999 !important;
     }
 }
 
 @media screen and (max-width: 767px) {
-    .dashboard__chart-wrapper .ciq-chart .sc-toolbar-widget {
+    .dashboard__chart-wrapper .sc-toolbar-widget {
         left: auto !important;
-        right: 10px !important;
+        right: max(10px, env(safe-area-inset-right)) !important;
         top: 72px !important;
     }
 }
