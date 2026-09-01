@@ -158,14 +158,14 @@
 .mcv-digits__pointer-row {
     position: relative;
     width: 100%;
-    height: 20px;
+    height: 36px;
     overflow: visible;
     flex-shrink: 0;
 
     /* sits just above the top row */
     &--top    { margin: 8px 0 -2px; }
-    /* sits between the rows, just above the bottom row */
-    &--bottom { margin: 0 0 -2px; }
+    /* sits just below the bottom row */
+    &--bottom { margin: -2px 0 0; }
 }
 
 /* Base triangle — shared transition */
@@ -194,6 +194,42 @@
         border-top:    none;
         filter: drop-shadow(0 -2px 5px rgba(231,76,60,0.55));
     }
+}
+
+/* The active contract's tick number rides with the moving triangle. It is
+   positioned on the outside of the row so 0–4 and 5–9 mirror each other. */
+.mcv-digits__tick-badge {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 24px;
+    height: 17px;
+    padding: 0 5px;
+    border-radius: 4px;
+    background: #e74c3c;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 900;
+    line-height: 17px;
+    white-space: nowrap;
+    box-shadow: 0 2px 5px rgba(231, 76, 60, 0.35);
+    pointer-events: none;
+}
+
+.mcv-digits__triangle--down .mcv-digits__tick-badge {
+    bottom: 18px;
+}
+
+.mcv-digits__triangle--up .mcv-digits__tick-badge {
+    top: 18px;
+}
+
+.mcv-digits__tick-badge-star {
+    font-size: 9px;
+    line-height: 1;
 }
 
 /* ── Individual digit circle ────────────────────────────────────────────── */

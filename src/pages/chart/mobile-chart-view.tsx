@@ -679,6 +679,21 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
     const activeTrade = pendingTrades[0] ?? null;
     const activeTickCount = activeTrade?.countedTicks ?? 0;
     const activeTotalTicks = activeTrade?.totalTicks ?? 0;
+    const showTickBadge = !!activeTrade && activeTickCount > 0;
+
+    const renderTriangle = (direction: 'down' | 'up') => (
+        <div
+            className={`mcv-digits__triangle mcv-digits__triangle--${direction}`}
+            style={{ left: triangleLeft }}
+        >
+            {showTickBadge && (
+                <span className='mcv-digits__tick-badge'>
+                    T{activeTickCount}
+                    {activeTickCount === activeTotalTicks && <span className='mcv-digits__tick-badge-star'>★</span>}
+                </span>
+            )}
+        </div>
+    );
 
     /* ── Price display ────────────────────────────────────────────────────── */
     const priceStr  = currentPrice != null ? currentPrice.toFixed(pipSize) : '——';
@@ -771,31 +786,25 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
 
             {/* ── Digit circles ─────────────────────────────────────────── */}
             <div className='mcv-digits'>
-                {/* Triangle ABOVE top row — ▼ pointing DOWN at digit 0-4 */}
+                {/* 0–4: indicator and tick label above the top row */}
                 <div className='mcv-digits__pointer-row mcv-digits__pointer-row--top'>
                     {currentDigit !== null && triangleRow === 'top' && (
-                        <div
-                            className='mcv-digits__triangle mcv-digits__triangle--down'
-                            style={{ left: triangleLeft }}
-                        />
+                        renderTriangle('down')
                     )}
                 </div>
 
                 {/* Top row (0-4) */}
                 {renderRow(ROW_TOP)}
 
-                {/* Triangle ABOVE bottom row — ▼ points DOWN at digit 5-9 */}
-                <div className='mcv-digits__pointer-row mcv-digits__pointer-row--bottom'>
-                    {currentDigit !== null && triangleRow === 'bottom' && (
-                        <div
-                            className='mcv-digits__triangle mcv-digits__triangle--down'
-                            style={{ left: triangleLeft }}
-                        />
-                    )}
-                </div>
-
                 {/* Bottom row (5-9) */}
                 {renderRow(ROW_BOTTOM)}
+
+                {/* 5–9: indicator and tick label below the bottom row */}
+                <div className='mcv-digits__pointer-row mcv-digits__pointer-row--bottom'>
+                    {currentDigit !== null && triangleRow === 'bottom' && (
+                        renderTriangle('up')
+                    )}
+                </div>
             </div>
 
             {/* ── Market navigation arrows ───────────────────────────────── */}
