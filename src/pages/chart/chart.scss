@@ -195,6 +195,20 @@
  * controls remain SmartChart's native components so their menus and drawing
  * state continue to be managed by the chart itself. */
 .dashboard__chart-wrapper {
+    /* SmartChart creates an internal absolute canvas layer. Establish a
+       visible host stacking context so the controls can sit above it. */
+    isolation: isolate;
+    overflow: visible !important;
+    position: relative !important;
+
+    .smartcharts,
+    .smartcharts-desktop,
+    .smartcharts-mobile,
+    .ciq-chart-area,
+    .ciq-chart {
+        overflow: visible !important;
+    }
+
     .sc-toolbar-widget {
         align-items: center;
         background: transparent !important;
@@ -207,10 +221,14 @@
         overflow: visible;
         padding: 0 !important;
         pointer-events: auto;
-        right: max(12px, env(safe-area-inset-right)) !important;
+        position: absolute !important;
+        right: 12px !important;
         top: 72px !important;
+        bottom: auto !important;
         width: 40px !important;
-        z-index: 520 !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        z-index: 100000 !important;
     }
 
     .sc-toolbar-widget .ciq-menu .cq-menu-btn {
@@ -241,7 +259,7 @@
 @media screen and (max-width: 767px) {
     .dashboard__chart-wrapper .sc-toolbar-widget {
         left: auto !important;
-        right: max(10px, env(safe-area-inset-right)) !important;
+        right: 10px !important;
         top: 72px !important;
     }
 }
