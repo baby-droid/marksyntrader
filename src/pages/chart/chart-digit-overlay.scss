@@ -157,7 +157,7 @@
     /* ── ① Triangle track — exactly the height of the triangle arrow ── */
     &__triangle-track {
         position: relative;
-         height: 9px;       /* matches border-top-width of the pointer */
+         height: 15px;      /* leaves a clear gap between pointer and circles */
         width: 100%;
         flex-shrink: 0;
         overflow: visible; /* let the pointer bleed down onto circles */
@@ -553,7 +553,7 @@
         &__price-val      { font-size: 10px; }
         &__triangle-pointer { border-left-width: 6px; border-right-width: 6px; border-top-width: 9px; }
         &__tlabel         { font-size: 8px; height: 13px; line-height: 13px; }
-        &__triangle-track { height: 9px; }
+        &__triangle-track { height: 15px; }
     }
 
     /* Trade flag: slightly shorter bar on tablets */
@@ -602,7 +602,7 @@
         &__price-val      { font-size: 8px; }
         &__triangle-pointer { border-left-width: 5px; border-right-width: 5px; border-top-width: 8px; }
         &__tlabel         { font-size: 6px; }
-        &__triangle-track { height: 8px; }
+        &__triangle-track { height: 13px; }
     }
 
     /* Win/loss flag — compact bar on mobile (desktop chart only, mobile uses MobileChartView) */
