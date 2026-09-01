@@ -269,11 +269,10 @@
     &__circles {
         display: flex;
         flex: 1;
-        justify-content: flex-start;
+        justify-content: space-between;
         align-items: flex-start;
         padding: 0 1px;
-        gap: 3px;
-        overflow: visible;
+        gap: 2px; /* half the previous implicit spacing */
     }
 
     /* Individual digit item */
@@ -286,7 +285,7 @@
         cursor: pointer;
         user-select: none;
         min-width: 0;
-        flex: 0 0 clamp(44px, 4.4vw, 58px);
+        flex: 1;
     }
 
     /* Digit circle */
@@ -538,7 +537,6 @@
 @media (max-width: 1280px) {
     .cdo {
         &__circle         { width: clamp(34px, 3.5vw, 44px); height: clamp(34px, 3.5vw, 44px); font-size: clamp(11px, 1.1vw, 14px); }
-        &__item           { flex-basis: clamp(34px, 3.5vw, 44px); }
         &__pct            { font-size: clamp(7px, 0.7vw, 9px); }
     }
 }
@@ -550,8 +548,6 @@
     .cw-right { width: 40%; }
 
     .cdo {
-        &__circles        { gap: 2px; }
-        &__item           { flex-basis: clamp(30px, 3vw, 38px); }
         &__circle         { width: clamp(30px, 3vw, 38px); height: clamp(30px, 3vw, 38px); font-size: clamp(10px, 1vw, 13px); }
         &__pct            { font-size: clamp(6px, 0.65vw, 8px); }
         &__price-val      { font-size: 10px; }
@@ -601,8 +597,6 @@
 
     /* Digit stat circles — bigger on mobile to match Deriv reference */
     .cdo {
-        &__circles        { gap: 1px; }
-        &__item           { flex: 1 1 0; }
         &__circle         { width: 32px; height: 32px; font-size: 12px; }
         &__pct            { font-size: 7px; }
         &__price-val      { font-size: 8px; }
@@ -624,7 +618,6 @@
     .cw-left { height: 60vw; min-height: 200px; max-height: 280px; }
 
     .cdo {
-        &__circles        { gap: 0; }
         &__circle { width: 24px; height: 24px; font-size: 9px; }
         &__pct    { font-size: 5.5px; }
     }
