@@ -185,3 +185,45 @@
     left: 0;
     top: 0;
 }
+
+/* Keep the SmartChart action buttons visible beside the graph. The embedded
+ * chart owns its zoom navigation, but its toolbar can otherwise be placed
+ * behind the chart canvas by the surrounding workspace layout. */
+.dashboard__chart-wrapper {
+    .ciq-chart .sc-toolbar-widget {
+        align-items: center;
+        background: transparent !important;
+        border: 0 !important;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        left: 12px !important;
+        overflow: visible;
+        padding: 0 !important;
+        top: 104px !important;
+        width: 40px !important;
+        z-index: 20 !important;
+    }
+
+    .ciq-chart .sc-toolbar-widget .ciq-menu .cq-menu-btn {
+        align-items: center;
+        background: rgba(242, 243, 244, 0.94);
+        border-radius: 50%;
+        display: flex;
+        height: 40px;
+        justify-content: center;
+        padding: 0;
+        width: 40px;
+    }
+
+    .ciq-chart .sc-toolbar-widget .ciq-menu .cq-menu-btn:hover {
+        background: #e2e5e7;
+    }
+}
+
+@media screen and (max-width: 767px) {
+    .dashboard__chart-wrapper .ciq-chart .sc-toolbar-widget {
+        left: 10px !important;
+        top: 88px !important;
+    }
+}
