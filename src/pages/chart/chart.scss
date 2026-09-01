@@ -197,10 +197,11 @@
         display: flex;
         flex-direction: column;
         gap: 8px;
-        left: 12px !important;
+        left: auto !important;
         overflow: visible;
         padding: 0 !important;
-        top: 104px !important;
+        right: 12px !important;
+        top: 72px !important;
         width: 40px !important;
         z-index: 20 !important;
     }
@@ -223,7 +224,8 @@
 
 @media screen and (max-width: 767px) {
     .dashboard__chart-wrapper .ciq-chart .sc-toolbar-widget {
-        left: 10px !important;
-        top: 88px !important;
+        left: auto !important;
+        right: 10px !important;
+        top: 72px !important;
     }
 }
