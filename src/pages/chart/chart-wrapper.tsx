@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { observer } from 'mobx-react-lite';
 import { v4 as uuidv4 } from 'uuid';
 import { useStore } from '@/hooks/useStore';
@@ -167,6 +167,15 @@ interface PendingTrade {
 const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWrapperProps) => {
     const { client, chart_store } = useStore();
     const symbol = chart_store?.symbol || '1HZ100V';
+    const [tradeGroupId, setTradeGroupId] = useState('over_under');
+    const [accumulatorGrowthRate, setAccumulatorGrowthRate] = useState(0.03);
+
+    const handleTradeGroupChange = useCallback((groupId: string) => {
+        setTradeGroupId(groupId);
+    }, []);
+    const handleAccumulatorGrowthRateChange = useCallback((rate: number) => {
+        setAccumulatorGrowthRate(rate);
+    }, []);
 
     /* ── Mobile breakpoint detection ─────────────────────────────────────── */
     const [isMobileView, setIsMobileView] = useState(() => window.innerWidth <= 767);
@@ -573,7 +582,12 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
 
                 {/* Chart canvas — SmartChart renders its own market card inside */}
                 <div className='cw-chart-inner'>
-                    <Chart key={uniqueKey} show_digits_stats={false} />
+                    <Chart
+                        key={uniqueKey}
+                        show_digits_stats={false}
+                        showAccumulatorRange={tradeGroupId === 'accumulator'}
+                        accumulatorGrowthRate={accumulatorGrowthRate}
+                    />
 
                     {pendingTrades.map((t, i) => (
                         <div key={t.id} className='cdo-tick-counter' style={{ top: `${18 + i * 44}px` }}>
@@ -697,6 +711,8 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                     pipSize={pipSize}
                     barrier={barrier}
                     onBarrierChange={setBarrier}
+                    onTradeGroupChange={handleTradeGroupChange}
+                    onAccumulatorGrowthRateChange={handleAccumulatorGrowthRateChange}
                 />
             </div>
 

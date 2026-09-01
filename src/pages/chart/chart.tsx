@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import classNames from 'classnames';
 import { observer } from 'mobx-react-lite';
 /* [AI] - Analytics removed - rudderstack event tracking removed */
@@ -12,8 +12,36 @@ import { useDevice } from '@deriv-com/ui';
 import ToolbarWidgets from './toolbar-widgets';
 import '@deriv-com/smartcharts-champion/dist/smartcharts.css';
 
-const Chart = observer(({ show_digits_stats }: { show_digits_stats: boolean }) => {
-    const barriers: [] = [];
+const Chart = observer(({
+    show_digits_stats,
+    showAccumulatorRange = false,
+    accumulatorGrowthRate = 0.03,
+}: {
+    show_digits_stats: boolean;
+    showAccumulatorRange?: boolean;
+    accumulatorGrowthRate?: number;
+}) => {
+    // SmartChart's barrier layer is also the correct chart-native surface for
+    // the accumulator band: it stays attached to the live price scale while
+    // drawings remain managed by the official DrawTools control.
+    const accumulatorOffset = Math.max(
+        0.001,
+        Number((0.253 * (Number(accumulatorGrowthRate) || 0.03) / 0.03).toFixed(3))
+    );
+    const barriers = useMemo(() => showAccumulatorRange ? [{
+        key: 'accumulator-range',
+        color: '#1E88FF',
+        shadeColor: 'rgba(30, 136, 255, 0.10)',
+        shade: 'between',
+        high: accumulatorOffset,
+        low: -accumulatorOffset,
+        relative: true,
+        draggable: false,
+        hidePriceLines: false,
+        hideBarrierLine: false,
+        lineStyle: 'solid',
+        useInlineLabel: true,
+    }] : [], [accumulatorOffset, showAccumulatorRange]);
     const { common, ui } = useStore();
     const { chart_store, run_panel, dashboard } = useStore();
     const [isSafari, setIsSafari] = useState(false);

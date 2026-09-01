@@ -133,6 +133,8 @@ interface ChartTradePanelProps {
     pipSize: number;
     barrier: number;
     onBarrierChange: (d: number) => void;
+    onTradeGroupChange?: (groupId: string) => void;
+    onAccumulatorGrowthRateChange?: (rate: number) => void;
 }
 
 /* ════════════════════════════════════════════════════════════════════════════ */
@@ -146,6 +148,8 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
     pipSize,
     barrier,
     onBarrierChange,
+    onTradeGroupChange,
+    onAccumulatorGrowthRateChange,
 }) => {
     /* ── Active symbols list for market selector ──────────────────────────
        Load once on mount, then re-read whenever api_base populates the list
@@ -185,6 +189,10 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
     const [groupId, setGroupId]       = useState(TRADE_GROUPS[0].id);
     const group = TRADE_GROUPS.find(g => g.id === groupId) ?? TRADE_GROUPS[0];
 
+    useEffect(() => {
+        onTradeGroupChange?.(groupId);
+    }, [groupId, onTradeGroupChange]);
+
     const [ticks,        setTicks]       = useState(2);
     const [durationUnit, setDurationUnit] = useState<DurUnit>(TRADE_GROUPS[0].supportedUnits[0]);
     const [durTab,       setDurTab]      = useState<'quick' | 'custom'>('quick');
@@ -207,6 +215,12 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
     const [accumMaxPayout, setAccumMaxPayout] = useState<number | null>(null);
     const [accumMaxTicks,  setAccumMaxTicks]  = useState<number | null>(null);
     const accumProposalTimerRef = useRef<any>(null);
+
+    useEffect(() => {
+        if (group.isAccumulator) {
+            onAccumulatorGrowthRateChange?.(growthRate);
+        }
+    }, [group.isAccumulator, growthRate, onAccumulatorGrowthRate]);
 
     const [overPayout,  setOverPayout]  = useState<number | null>(null);
     const [underPayout, setUnderPayout] = useState<number | null>(null);
