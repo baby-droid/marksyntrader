@@ -256,11 +256,21 @@ const chooseAutomaticBarrier = (points: TickPoint[], selectedStrategy: ConcreteS
 };
 
 const evaluateCandidate = (candidate: Candidate, strategy: StrategyValue, point: TickPoint, previous?: TickPoint) => {
-    if (strategy === 'RISE' || strategy === 'ONLY UPS') return Boolean(previous && point.quote > previous.quote);
-    if (strategy === 'FALL' || strategy === 'ONLY DOWNS') return Boolean(previous && point.quote < previous.quote);
-    if (strategy === 'HIGH TICK') return Boolean(previous && point.quote >= previous.quote);
-    if (strategy === 'LOW TICK') return Boolean(previous && point.quote <= previous.quote);
-    return lastDigitMatches(strategy, point.digit, candidate.barrier ?? 5);
+    const contractType = String(candidate.contractType || strategyContract(strategy)).toUpperCase();
+    if (contractType === 'CALL' || contractType === 'RUNHIGH') return Boolean(previous && point.quote > previous.quote);
+    if (contractType === 'PUT' || contractType === 'RUNLOW') return Boolean(previous && point.quote < previous.quote);
+    if (contractType === 'TICKHIGH') return Boolean(previous && point.quote >= previous.quote);
+    if (contractType === 'TICKLOW') return Boolean(previous && point.quote <= previous.quote);
+
+    const contractStrategy: StrategyValue = ({
+        DIGITEVEN: 'EVEN',
+        DIGITODD: 'ODD',
+        DIGITMATCH: 'MATCHES',
+        DIGITDIFF: 'DIFFERS',
+        DIGITOVER: 'OVER',
+        DIGITUNDER: 'UNDER',
+    } as Record<string, StrategyValue>)[contractType] || strategy;
+    return lastDigitMatches(contractStrategy, point.digit, candidate.barrier ?? 5);
 };
 
 const formatTime = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -316,6 +326,17 @@ const AutoDigits = observer(() => {
     useEffect(() => {
         stakeRef.current = Math.max(0.35, Number(stake) || 0.35);
     }, [stake]);
+    useEffect(() => {
+        // A changed contract type or entry logic must not reuse a candidate
+        // calculated under the previous selection while the next market tick
+        // arrives. Clear both the ranked market candidates and virtual gate.
+        marketCandidatesRef.current = {};
+        lastCandidateRef.current = null;
+        validationRef.current = { key: '', wins: 0, attempt: 0, readyEpoch: 0 };
+        setCandidate(null);
+        setValidation({ wins: 0, attempt: 0, state: 'IDLE' });
+        setStatus('Re-scanning selected contract conditions');
+    }, [logicMode, minScore, strategy]);
 
     const addLog = useCallback((message: string) => {
         setLog(previous => [`${formatTime()}  ${message}`, ...previous].slice(0, 18));
@@ -510,7 +531,8 @@ const AutoDigits = observer(() => {
         }
 
         const executionStrategy: ConcreteStrategy = bestCandidate.strategy || (strategy === 'AUTO' ? 'OVER' : strategy);
-        const candidateKey = `${bestCandidate.symbol}:${executionStrategy}:${bestCandidate.contractType}:${bestCandidate.barrier ?? 'none'}`;
+        const selectedContractType = String(bestCandidate.contractType || strategyContract(executionStrategy)).toUpperCase();
+        const candidateKey = `${bestCandidate.symbol}:${selectedContractType}:${bestCandidate.barrier ?? 'none'}`;
         const validationState = validationRef.current;
         if (!validationState.key || validationState.key !== candidateKey) {
             validationRef.current = { key: candidateKey, wins: 0, attempt: 1, readyEpoch: point.epoch };
@@ -521,7 +543,10 @@ const AutoDigits = observer(() => {
         }
         if (point.epoch <= validationState.readyEpoch) return;
 
-        const virtualWon = evaluateCandidate(bestCandidate, executionStrategy, point, previous);
+        // Do not buy merely because the score passed the threshold. The live
+        // tick must satisfy the selected contract's condition using the
+        // barrier chosen for this market.
+        const virtualWon = evaluateCandidate({ ...bestCandidate, contractType: selectedContractType }, executionStrategy, point, previous);
         if (!virtualWon) {
             validationRef.current = { key: '', wins: 0, attempt: validationState.attempt + 1, readyEpoch: point.epoch };
             setValidation({ wins: 0, attempt: validationState.attempt + 1, state: 'RESET' });
