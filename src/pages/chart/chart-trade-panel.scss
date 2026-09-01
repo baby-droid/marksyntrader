@@ -17,16 +17,16 @@
     &.real { background: rgba(0,165,80,0.1);   color: #00a550; }
 }
 
-/* ── CTP root — half-width card, left-aligned in the right panel ────────────── */
-/* width:50% halves every section (market, contract, ticks, digit, stake,
-   over/under) while keeping them left-aligned. justify-content:space-between
-   distributes the empty space evenly between ALL sections so nothing is
-   cramped at the top and the large gap before the buttons disappears.          */
+/* ── CTP root — compact card, left-aligned in the right panel ──────────────── */
+/* Keep the sections grouped instead of distributing them through the full
+   viewport height. This lets market, duration, digit, stake, and buy controls
+   sit close together while retaining a readable card width. */
 .ctp {
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
-    width: 50%;
+    justify-content: flex-start;
+    gap: 4px;
+    width: min(50%, 280px);
     min-width: 210px;
     min-height: 100%;
 
@@ -39,7 +39,7 @@
     font-size: 13px;
     color: #0E0F11;
     background: #ffffff;
-    padding: 10px 0;
+    padding: 6px 0;
     box-sizing: border-box;
     border-radius: 14px;
     box-shadow: 0 2px 16px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.06);
@@ -48,7 +48,7 @@
 
 /* ── Section — no margin-bottom; space-between on .ctp handles all gaps ──────── */
 .ctp__section {
-    padding: 0 10px;
+    padding: 0 7px;
     margin-bottom: 0;
     flex-shrink: 0;
 }
@@ -71,7 +71,7 @@
 
 /* ── Market section ────────────────────────────────────────────────────────── */
 .ctp__section--market {
-    margin-bottom: 5px;
+    margin-bottom: 0;
 }
 
 .ctp__type-select--market {
@@ -85,11 +85,11 @@
 .ctp__market-display {
     display: flex;
     align-items: center;
-    gap: 6px;
-    height: 36px;
+    gap: 4px;
+    height: 31px;
     border: 1px solid #e0e0e0;
     border-radius: 12px;
-    padding: 0 10px;
+    padding: 0 7px;
     background: #fafafa;
 }
 
@@ -118,19 +118,19 @@
 
 /* ── Contract type ──────────────────────────────────────────────────────────── */
 .ctp__section--contract {
-    margin-bottom: 5px;
+    margin-bottom: 0;
 }
 
 .ctp__type-select {
     width: 100%;
-    height: 36px;
+    height: 31px;
     font-size: 13px;
     font-weight: 600;
     color: #0E0F11;
     background: #fff;
     border: 1px solid #e0e0e0;
-    border-radius: 12px;
-    padding: 0 10px;
+    border-radius: 9px;
+    padding: 0 7px;
     cursor: pointer;
     outline: none;
     font-family: inherit;
@@ -140,7 +140,7 @@
 
 /* ── Duration Picker ────────────────────────────────────────────────────────── */
 .ctp__section--duration {
-    margin-bottom: 5px;
+    margin-bottom: 0;
 }
 
 .ctp__dur-display {
@@ -155,7 +155,7 @@
 /* Main layout: sidebar + right area */
 .ctp__dur-picker {
     display: flex;
-    gap: 6px;
+    gap: 4px;
     align-items: stretch;
     min-height: 120px;
 }
@@ -165,7 +165,7 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
-    min-width: 60px;
+    min-width: 52px;
     flex-shrink: 0;
 }
 
@@ -207,7 +207,7 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
     min-width: 0;
 }
 
@@ -377,7 +377,7 @@
 
 /* ── Last Digit Prediction ──────────────────────────────────────────────────── */
 .ctp__section--digit {
-    margin-bottom: 5px;
+    margin-bottom: 1px;
 }
 
 .ctp__digits { display: flex; flex-direction: column; gap: 3px; }
@@ -406,7 +406,7 @@
 
 /* ── Stake ──────────────────────────────────────────────────────────────────── */
 .ctp__section--stake {
-    margin-bottom: 5px;
+    margin-bottom: 1px;
 }
 
 .ctp__stake-tabs {
@@ -436,14 +436,14 @@
 .ctp__stake-ctrl {
     display: flex;
     align-items: center;
-    gap: 6px;
-    margin-bottom: 6px;
+    gap: 4px;
+    margin-bottom: 3px;
 }
 
 .ctp__stake-adj {
-    width: 34px;
-    height: 34px;
-    border-radius: 10px;
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
     border: 1px solid #e0e0e0;
     background: #fff;
     color: #0E0F11;
@@ -462,19 +462,19 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 4px;
-    height: 34px;
+    gap: 3px;
+    height: 30px;
     border: 1px solid #e0e0e0;
-    border-radius: 10px;
+    border-radius: 8px;
     background: #fff;
     padding: 0 6px;
 }
 
 .ctp__stake-inp {
-    width: 54px;
+    width: 46px;
     border: none;
     background: transparent;
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 900;
     color: #0E0F11;
     text-align: center;
@@ -493,14 +493,14 @@
 
 .ctp__stake-presets {
     display: flex;
-    gap: 4px;
+    gap: 3px;
 }
 
 .ctp__preset {
     flex: 1;
     min-width: 0;
-    height: 30px;
-    border-radius: 12px;
+    height: 27px;
+    border-radius: 8px;
     border: 1px solid #e0e0e0;
     background: #f9f9f9;
     color: #0E0F11;
@@ -667,7 +667,7 @@
 /* ── Over / Under buttons ───────────────────────────────────────────────────── */
 .ctp__section--over,
 .ctp__section--under {
-    margin-bottom: 4px;
+    margin-bottom: 0;
 }
 
 .ctp__buy-btn {
@@ -739,7 +739,7 @@
 /* ── 1024 px: tablet / small laptop — narrow the card a bit ─────── */
 @media (max-width: 1024px) {
     .ctp {
-        width: 60%;          /* slightly wider on 40% right column */
+        width: min(60%, 260px); /* slightly wider on 40% right column */
         min-width: 180px;
     }
 }
