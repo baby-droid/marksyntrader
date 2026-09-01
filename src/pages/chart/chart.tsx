@@ -10,7 +10,6 @@ import { useStore } from '@/hooks/useStore';
 import { ChartTitle, SmartChart, TGranularity, TStateChangeListener } from '@deriv-com/smartcharts-champion';
 import { useDevice } from '@deriv-com/ui';
 import ToolbarWidgets from './toolbar-widgets';
-import '@deriv-com/smartcharts-champion/dist/smartcharts.css';
 
 const Chart = observer(({
     show_digits_stats,

@@ -220,7 +220,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
         if (group.isAccumulator) {
             onAccumulatorGrowthRateChange?.(growthRate);
         }
-    }, [group.isAccumulator, growthRate, onAccumulatorGrowthRate]);
+    }, [group.isAccumulator, growthRate, onAccumulatorGrowthRateChange]);
 
     const [overPayout,  setOverPayout]  = useState<number | null>(null);
     const [underPayout, setUnderPayout] = useState<number | null>(null);
