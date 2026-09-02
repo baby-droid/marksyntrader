@@ -58,3 +58,4 @@
 - [Auto-Digits scanner](auto-digits-scanner.md) — authenticated live tick distribution dashboard; two real-tick virtual validations precede buyContract trades, which emit native Bot Builder transaction events.
 - [Blockly SVG fragment imports](blockly-svg-fragments.md) — rendered Blockly SVG exports are not loadable bot XML; convert them to executable Blockly roots and preserve source IDs as data metadata.
 - [Ahmed Differs Cycle recovery](ahmed-differs-cycle-recovery.md) — every loss resets parity history and waits for three same-parity digits before the contrarian recovery buy.
+- [Blockly XML validation](blockly-xml-validation.md) — close child value/statement wrappers before parent blocks; parse XML and verify explicit block IDs after edits and builds.
