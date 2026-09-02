@@ -330,6 +330,7 @@ const AutoDigits = observer(() => {
     const [run, setRun] = useState(false);
     const [pipSize, setPipSize] = useState(2);
     const [points, setPoints] = useState<TickPoint[]>([]);
+    const [baselineReady, setBaselineReady] = useState(false);
     const [currentDigit, setCurrentDigit] = useState<number | null>(null);
     const [currentPrice, setCurrentPrice] = useState('');
     const [candidate, setCandidate] = useState<Candidate | null>(null);
@@ -354,6 +355,7 @@ const AutoDigits = observer(() => {
     const marketPointsRef = useRef<Record<string, TickPoint[]>>({});
     const rawHistoryByMarketRef = useRef<Record<string, number[]>>({});
     const historyEpochsByMarketRef = useRef<Record<string, number[]>>({});
+    const historyLoadedByMarketRef = useRef<Record<string, boolean>>({});
     const marketPipRefs = useRef<Record<string, number>>({});
     const marketCandidatesRef = useRef<Record<string, Candidate>>({});
     const activeSymbolRef = useRef('1HZ100V');
@@ -764,6 +766,10 @@ const AutoDigits = observer(() => {
             if (bestCandidate.symbol && bestCandidate.symbol !== previousActiveSymbol) setSymbol(bestCandidate.symbol);
             const activePoints = marketPointsRef.current[bestCandidate.symbol || marketSymbol] || nextPoints;
             setPoints(activePoints);
+            setBaselineReady(Boolean(
+                historyLoadedByMarketRef.current[bestCandidate.symbol || marketSymbol] &&
+                activePoints.length >= 1000,
+            ));
             setPipSize(marketPipRefs.current[bestCandidate.symbol || marketSymbol] || 2);
             setCurrentDigit(activePoints[activePoints.length - 1]?.digit ?? null);
             setCurrentPrice(activePoints[activePoints.length - 1]?.quote.toFixed(marketPipRefs.current[bestCandidate.symbol || marketSymbol] || 2) || '');
@@ -1104,11 +1110,13 @@ const AutoDigits = observer(() => {
         marketPointsRef.current = {};
         rawHistoryByMarketRef.current = {};
         historyEpochsByMarketRef.current = {};
+        historyLoadedByMarketRef.current = {};
         marketPipRefs.current = {};
         marketCandidatesRef.current = {};
         activeSymbolRef.current = marketSelectionRef.current === 'ALL' ? '1HZ100V' : marketSelectionRef.current;
         setSymbol(activeSymbolRef.current);
         setPoints([]);
+        setBaselineReady(false);
         setCurrentDigit(null);
         setCurrentPrice('');
         setCandidate(null);
@@ -1229,6 +1237,7 @@ const AutoDigits = observer(() => {
                         .map(Number)
                         .filter(Number.isFinite);
                     const epochs = (response?.history?.times || []).map(Number);
+                    historyLoadedByMarketRef.current[market.value] = prices.length >= 1000;
                     rawHistoryByMarketRef.current[market.value] = prices;
                     historyEpochsByMarketRef.current[market.value] = epochs;
                     const initialPip = marketPipRefs.current[market.value] ?? market.pipSize ?? 2;
@@ -1253,6 +1262,10 @@ const AutoDigits = observer(() => {
                 activeSymbolRef.current = initialSymbol;
                 setSymbol(initialSymbol);
                 setPoints(initialPoints);
+                setBaselineReady(Boolean(
+                    historyLoadedByMarketRef.current[initialSymbol] &&
+                    initialPoints.length >= 1000,
+                ));
                 setPipSize(marketPipRefs.current[initialSymbol] || 2);
                 setCurrentDigit(initialPoints[initialPoints.length - 1]?.digit ?? null);
                 setCurrentPrice(initialPoints.length
@@ -1263,9 +1276,15 @@ const AutoDigits = observer(() => {
                     marketCandidatesRef.current[initialSymbol] = initialCandidate;
                     setCandidate(initialCandidate);
                 }
-                setStatus(requestedSelection === 'ALL'
-                    ? `Baselines ready — scanning ${marketsToScan.length} open markets`
-                    : `Baseline ready — scanning ${selectedMarket?.label || marketsToScan[0].label}`);
+                const initialBaselineReady = Boolean(
+                    historyLoadedByMarketRef.current[initialSymbol] &&
+                    initialPoints.length >= 1000,
+                );
+                setStatus(initialBaselineReady
+                    ? requestedSelection === 'ALL'
+                        ? `Baselines ready — scanning ${marketsToScan.length} open markets`
+                        : `Baseline ready — scanning ${selectedMarket?.label || marketsToScan[0].label}`
+                    : `Live feed active — loading the 1,000-tick baseline for ${marketLabel(initialSymbol)}`);
                 armWatchdog(runGeneration, marketsToScan);
             } catch (error) {
                 if (!cancelled && runGeneration === generation && activeRef.current) {
@@ -1302,6 +1321,18 @@ const AutoDigits = observer(() => {
     }, [addLog, authorized, candidate, minScore, run]);
 
     const distribution = useMemo(() => percentagesFor(points, 1000), [points]);
+    const distributionCounts = useMemo(() => countsFor(points, 1000).counts, [points]);
+    const displayDistribution = useMemo(() => {
+        const rounded = distribution.map(value => Number(value.toFixed(1)));
+        const total = rounded.reduce((sum, value) => sum + value, 0);
+        if (!distribution.some(value => value > 0) || Math.abs(total - 100) < 0.001) return rounded;
+        const correctionDigit = distribution.reduce(
+            (bestDigit, value, digit) => value > distribution[bestDigit] ? digit : bestDigit,
+            0,
+        );
+        rounded[correctionDigit] = Number((rounded[correctionDigit] + (100 - total)).toFixed(1));
+        return rounded;
+    }, [distribution]);
     const shortDistribution = useMemo(() => percentagesFor(points, 100), [points]);
     const recentDigits = useMemo(() => points.slice(-30), [points]);
     const oddPressure = shortDistribution.filter((_, index) => index % 2 !== 0).reduce((a, b) => a + b, 0);
@@ -1495,16 +1526,16 @@ const AutoDigits = observer(() => {
 
                 <main className='auto-digits__main'>
                     <section className='ad-panel ad-distribution'>
-                        <div className='ad-section-heading'><div><div className='ad-panel__label'>DIGIT DISTRIBUTION <span>(1,000 TICKS)</span></div><h2>Market baseline <small>pip size {pipSize}</small></h2></div><div className='ad-live-readout'><span>LIVE DIGIT</span><strong>{currentDigit == null ? '—' : currentDigit}</strong><small>{currentPrice || 'Waiting for tick'}</small></div></div>
+                        <div className='ad-section-heading'><div><div className='ad-panel__label'>DIGIT DISTRIBUTION <span>(1,000 TICKS)</span></div><h2>Market baseline <small>pip size {pipSize} · {baselineReady ? '100% loaded' : 'loading baseline'}</small></h2></div><div className='ad-live-readout'><span>LIVE DIGIT</span><strong>{currentDigit == null ? '—' : currentDigit}</strong><small>{currentPrice || 'Waiting for tick'}</small></div></div>
                         <div className='ad-digit-grid'>
                             {distribution.map((percentage, digit) => {
                                 const isCurrent = currentDigit === digit;
                                 const isStrong = percentage >= 10.5;
                                 const isWeak = percentage < 9.5;
-                                return <div key={digit} className={`ad-digit ${isCurrent ? 'is-current' : ''} ${isStrong ? 'is-strong' : ''} ${isWeak ? 'is-weak' : ''}`}><div className='ad-digit__circle'><span>{digit}</span>{isCurrent && <i />}</div><strong>{percentage.toFixed(1)}%</strong><small>{Math.round((percentage / 100) * Math.max(points.length, 1000))} ticks</small></div>;
+                                return <div key={digit} className={`ad-digit ${isCurrent ? 'is-current' : ''} ${isStrong ? 'is-strong' : ''} ${isWeak ? 'is-weak' : ''}`}><div className='ad-digit__circle'><span>{digit}</span>{isCurrent && <i />}</div><strong>{displayDistribution[digit].toFixed(1)}%</strong><small>{distributionCounts[digit].toLocaleString()} ticks</small></div>;
                             })}
                         </div>
-                        <div className='ad-distribution-footer'><span className='ad-moving-pointer'><i /> moving pointer = current digit</span><span>{points.length.toLocaleString()} / 1,000 ticks loaded</span></div>
+                        <div className='ad-distribution-footer'><span className='ad-moving-pointer'><i /> moving pointer = current digit</span><span>{baselineReady ? '1,000 / 1,000 ticks · 100% distributed' : `${points.length.toLocaleString()} / 1,000 ticks · loading baseline`}</span></div>
                     </section>
 
                     <div className='ad-two-col'>
@@ -1514,7 +1545,7 @@ const AutoDigits = observer(() => {
                             <div className='ad-progress'><i style={{ width: `${candidate?.score || 0}%` }} /></div>
                             <div className='ad-strategy__meta'><span className={`ad-confidence confidence-${(candidate?.confidence || 'wait').toLowerCase().replace(' ', '-')}`}>{candidate?.confidence || 'WAIT'}</span><span>Threshold {minScore}</span></div>
                             <p className='ad-reason'>{candidate?.reason || 'The engine will compare the 20T, 50T, 100T, and 1,000T windows.'}</p>
-                            <div className='ad-checks'><span className={points.length >= 1000 ? 'pass' : ''}>Distribution baseline <b>{points.length >= 1000 ? 'READY' : 'BUILDING'}</b></span><span className={candidate?.score >= minScore ? 'pass' : ''}>Entry score <b>{candidate?.score >= minScore ? 'QUALIFIED' : 'WAITING'}</b></span><span className={validation.state === 'PASSED' ? 'pass' : ''}>Virtual gate <b>{validation.state}</b></span></div>
+                            <div className='ad-checks'><span className={baselineReady ? 'pass' : ''}>Distribution baseline <b>{baselineReady ? 'READY' : 'BUILDING'}</b></span><span className={candidate?.score >= minScore ? 'pass' : ''}>Entry score <b>{candidate?.score >= minScore ? 'QUALIFIED' : 'WAITING'}</b></span><span className={validation.state === 'PASSED' ? 'pass' : ''}>Virtual gate <b>{validation.state}</b></span></div>
                         </section>
                         <section className='ad-panel ad-pressure'>
                             <div className='ad-panel__label'>WINDOW PRESSURE</div>
@@ -1533,7 +1564,7 @@ const AutoDigits = observer(() => {
                 </main>
 
                 <aside className='auto-digits__rightbar'>
-                     <section className='ad-panel ad-engine-status'><div className='ad-panel__label'>BOT STATUS</div><div className={`ad-big-status ${run ? 'is-running' : ''}`}>{run ? 'RUNNING' : 'SCANNING'}</div><div className='ad-right-line'><span>Selected market</span><b>{marketSelection === 'ALL' ? `Auto scan · ${marketLabel(symbol)}` : markets.find(market => market.value === marketSelection)?.label || marketLabel(symbol)}</b></div><div className='ad-right-line'><span>Selection</span><b>{strategy === 'AUTO' ? 'All strategies + best score' : 'Condition + barrier'}</b></div><div className='ad-right-line'><span>Speed</span><b>Authenticated tick feed</b></div><div className='ad-right-line'><span>Data quality</span><b className={points.length >= 1000 ? 'positive' : ''}>{points.length >= 1000 ? '1,000T READY' : `${points.length}T`}</b></div><div className='ad-right-line'><span>Authorization</span><b className={authorized ? 'positive' : 'negative'}>{authorized ? 'DEMO / REAL' : 'LOGIN NEEDED'}</b></div></section>
+                     <section className='ad-panel ad-engine-status'><div className='ad-panel__label'>BOT STATUS</div><div className={`ad-big-status ${run ? 'is-running' : ''}`}>{run ? 'RUNNING' : 'SCANNING'}</div><div className='ad-right-line'><span>Selected market</span><b>{marketSelection === 'ALL' ? `Auto scan · ${marketLabel(symbol)}` : markets.find(market => market.value === marketSelection)?.label || marketLabel(symbol)}</b></div><div className='ad-right-line'><span>Selection</span><b>{strategy === 'AUTO' ? 'All strategies + best score' : 'Condition + barrier'}</b></div><div className='ad-right-line'><span>Speed</span><b>Authenticated tick feed</b></div><div className='ad-right-line'><span>Data quality</span><b className={baselineReady ? 'positive' : ''}>{baselineReady ? '1,000T READY · 100%' : `${points.length}T · LOADING`}</b></div><div className='ad-right-line'><span>Authorization</span><b className={authorized ? 'positive' : 'negative'}>{authorized ? 'DEMO / REAL' : 'LOGIN NEEDED'}</b></div></section>
                     <section className='ad-panel ad-log'><div className='ad-panel__label'>ENGINE JOURNAL</div><div className='ad-log__items'>{log.map((item, index) => <p key={`${item}-${index}`}>{item}</p>)}</div></section>
                     <section className='ad-panel ad-results'><div className='ad-panel__label'>RECENT RESULTS</div>{trades.length === 0 ? <p className='ad-empty'>No executed contracts yet. Run stays gated behind two virtual wins.</p> : trades.slice(0, 6).map(trade => <div className='ad-result' key={trade.id}><span>{trade.time}</span><b>{trade.strategy}</b><strong className={trade.status === 'WIN' ? 'positive' : trade.status === 'LOSS' ? 'negative' : ''}>{trade.status === 'OPEN' ? 'OPEN' : `${trade.profit >= 0 ? '+' : ''}${fromUsd(trade.profit).toFixed(2)}`}</strong></div>)}</section>
                 </aside>
