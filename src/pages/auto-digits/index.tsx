@@ -516,7 +516,7 @@ const AutoDigits = observer(() => {
                 ? p20.slice(barrierNumber + 1).reduce((a, b) => a + b, 0)
                 : p20.slice(0, barrierNumber).reduce((a, b) => a + b, 0);
             score = Math.min(100, 28 + (touches >= 2 && touches <= 5 ? 22 : 0) + (retention >= 50 ? 20 : retention / 3) + (losingRate < 55 ? 18 : 0) + (winningSideStrength >= 55 ? 12 : 0) + (p20.filter((value, digit) => analysisStrategy === 'OVER' ? digit > barrierNumber && value >= 10 : digit < barrierNumber && value >= 10).length * 3));
-            reason = `${touches}/10 losing-region touches; ${retention}% retention; ${winningStrength.toFixed(0)}% winning-side strength`;
+            reason = `${touches}/10 losing-region touches; ${retention}% retention; ${winningSideStrength.toFixed(0)}% winning-side strength`;
             entryDigit = analysisStrategy === 'OVER'
                 ? p20.map((value, digit) => ({ value, digit })).filter(item => item.digit > barrierNumber).sort((a, b) => b.value - a.value)[0]?.digit
                 : p20.map((value, digit) => ({ value, digit })).filter(item => item.digit < barrierNumber).sort((a, b) => b.value - a.value)[0]?.digit;

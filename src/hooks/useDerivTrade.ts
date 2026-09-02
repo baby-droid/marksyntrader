@@ -124,7 +124,16 @@ export function useDerivTrade() {
     useEffect(() => {
         // api_base.api may be created just after this hook mounts. Re-run when
         // the connection opens so lazy-loaded pages still receive live ticks.
-        const sub = connected ? api_base.api?.onMessage()?.subscribe(({ data: d }: { data: any }) => {
+        let sub: { unsubscribe: () => void } | undefined;
+        let attachedApi: typeof api_base.api = null;
+        let attachTimer: ReturnType<typeof setInterval> | undefined;
+
+        const attachMessageListener = () => {
+            if (!connected || !api_base.api) return;
+            if (attachedApi === api_base.api && sub) return;
+            sub?.unsubscribe?.();
+            attachedApi = api_base.api;
+            sub = attachedApi.onMessage()?.subscribe(({ data: d }: { data: any }) => {
             if (!d || typeof d !== 'object') return;
 
             if (d.balance && d.balance.balance != null && mountedRef.current) {
@@ -215,8 +224,24 @@ export function useDerivTrade() {
                     pocCallbacksRef.current.delete(cid);
                 }
             }
-        }) : undefined;
-        return () => sub?.unsubscribe?.();
+            });
+        };
+
+        attachMessageListener();
+        // connectionStatus$ can become OPENED just before api_base.api is
+        // assigned, or a reconnect can replace the API instance without
+        // changing the boolean connection state. Keep polling only until the
+        // current API listener is attached so no tick stream is missed.
+        if (connected) {
+            attachTimer = setInterval(attachMessageListener, 250);
+        }
+
+        return () => {
+            if (attachTimer) clearInterval(attachTimer);
+            sub?.unsubscribe?.();
+            sub = undefined;
+            attachedApi = null;
+        };
     }, [connected]);
 
     const send = useCallback((msg: object): Promise<any> => {
