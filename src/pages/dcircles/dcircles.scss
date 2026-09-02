@@ -11,12 +11,18 @@
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
+.dc-page__header,
+.dc-page__layout,
+.dc-notice {
+  width: min(100%, 1700px);
+  margin-inline: auto;
+}
+
 .dc-page__header {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: 1rem;
-  max-width: 1700px;
   margin: 0 auto 1rem;
 }
 
@@ -92,7 +98,6 @@
   display: flex;
   justify-content: space-between;
   gap: 1rem;
-  max-width: 1700px;
   margin: 0 auto .8rem;
   padding: .7rem .9rem;
   border: 1px solid #b8d9c8;
@@ -113,21 +118,21 @@
 
 .dc-page__layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 20rem;
+  grid-template-columns: minmax(0, 1fr) minmax(19rem, 22rem);
   align-items: start;
-  gap: 1rem;
-  max-width: 1700px;
-  margin: 0 auto;
+  gap: 1.15rem;
 }
 
 .dc-market-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: .85rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 27rem), 1fr));
+  align-items: start;
+  gap: 1rem;
 }
 
 .dc-market-slot {
   min-width: 0;
+  width: 100%;
   border-radius: .72rem;
   transition: box-shadow .2s ease;
 }
@@ -157,16 +162,26 @@
   border-bottom: 1px solid #edf0f5;
 }
 
+.dc-card__header > div:first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
 .dc-card__title-row {
   display: flex;
   align-items: center;
+  min-width: 0;
   gap: .55rem;
 }
 
 .dc-card__title-row h3 {
+  min-width: 0;
+  overflow: hidden;
   margin: 0;
   color: #1a2841;
   font-size: .9rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dc-card__symbol {
@@ -454,8 +469,8 @@
   to { transform: translateY(-3px); }
 }
 
-@media (max-width: 1200px) {
-  .dc-page__layout { grid-template-columns: minmax(0, 1fr) 18rem; }
+@media (max-width: 1250px) {
+  .dc-page__layout { grid-template-columns: minmax(0, 1fr) minmax(17rem, 20rem); }
   .dc-market-grid { grid-template-columns: 1fr; }
 }
 
@@ -465,7 +480,7 @@
   .dc-page__controls { align-items: stretch; }
   .dc-add-market { flex: 1; }
   .dc-add-market select { width: 100%; }
-  .dc-page__layout { display: flex; flex-direction: column; }
+  .dc-page__layout { display: flex; flex-direction: column; gap: .8rem; }
   .dc-market-grid, .dc-rail { width: 100%; }
   .dc-rail { position: static; }
   .dc-card__header { padding: .75rem .7rem .6rem; }
@@ -475,7 +490,10 @@
 @media (max-width: 500px) {
   .dc-page__controls { flex-direction: column; }
   .dc-page__count { text-align: center; }
-  .dc-card__quote { align-items: flex-end; }
+  .dc-card__header { align-items: flex-start; }
+  .dc-card__title-row { align-items: flex-start; flex-wrap: wrap; gap: .25rem .45rem; }
+  .dc-card__actions { flex-shrink: 0; }
+  .dc-card__quote { align-items: flex-end; gap: .35rem; padding-inline: .65rem; }
   .dc-digit-strip { gap: .08rem; padding-inline: .22rem; }
   .dc-digit__circle { width: 2.05rem; height: 2.05rem; }
   .dc-digit__circle b { font-size: .72rem; }
