@@ -28,8 +28,8 @@
         <field name="SYMBOL_LIST">1HZ50V</field>
         <next>
           <block type="trade_definition_tradetype" id="aoc_trade_type" deletable="false" movable="false">
-            <field name="TRADETYPECAT_LIST">digits</field>
-            <field name="TRADETYPE_LIST">overunder</field>
+            <field name="TRADETYPECAT_LIST">callput</field>
+            <field name="TRADETYPE_LIST">risefall</field>
             <next>
               <block type="trade_definition_contracttype" id="aoc_contract_type" deletable="false" movable="false">
                 <field name="TYPE_LIST">both</field>
