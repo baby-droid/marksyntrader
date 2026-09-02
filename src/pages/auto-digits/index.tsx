@@ -710,7 +710,12 @@ const AutoDigits = observer(() => {
 
         const start = async () => {
             try {
-                const activeSymbolsResponse = await send({ active_symbols: 'full', product_type: 'basic' });
+                // The current Deriv options WebSocket rejects `product_type` on
+                // active_symbols requests. The full response already contains
+                // the symbols needed by the scanner, including synthetic
+                // markets, so keep this request compatible with both public
+                // and authenticated sessions.
+                const activeSymbolsResponse = await send({ active_symbols: 'full' });
                 if (activeSymbolsResponse?.error) {
                     throw new Error(activeSymbolsResponse.error.message || 'Deriv active-symbols request failed');
                 }
