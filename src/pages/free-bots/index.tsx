@@ -24,7 +24,7 @@ const FREE_BOTS = [
   {
     id: 'ahmed-over-cycle',
     name: 'Ahmed Over Cycle',
-    description: '⚡ DIFFERS 0 → OVER 1 → OVER 2 → OVER 3 → directional reversal → DIFFERS 9 → UNDER 8 → UNDER 7 → UNDER 6. Two rises buy FALL; two falls buy RISE. Four-parity recovery follows losses.',
+    description: '⚡ DIFFERS 0 → OVER 1 → OVER 2 → OVER 3 → directional reversal → DIFFERS 9 → UNDER 8 → UNDER 7 → UNDER 6. Three or more rises buy FALL; three or more falls buy RISE. Four-parity recovery follows losses.',
     category: 'Cycle Recovery', market: 'V50 1s', type: 'Multi-Strategy', prediction: 'CYCLE',
     xmlFile: '/bots/ahmed-over-cycle.xml',
     badge: 'AHMED OVER', badgeColor: '#fb7185', icon: '⚡', winRate: '—',
