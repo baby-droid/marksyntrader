@@ -591,7 +591,11 @@ const AutoDigits = observer(() => {
         const recoveryCeiling = baseStake * 16;
         const contractStake = Math.min(recoveryCeiling, Math.max(0.35, baseStake + recoveryDeficitRef.current));
         tradePnlBeforeRef.current = pnlRef.current;
-        balancedTradeRef.current = (executionStrategy === 'EVEN' || executionStrategy === 'ODD') && Math.abs(oddPressure - evenPressure) <= 4;
+        const currentOddPressure = percentagesFor(marketPointsRef.current[bestCandidate.symbol || activeSymbolRef.current] || [], 100)
+            .filter((_, index) => index % 2 !== 0)
+            .reduce((a, b) => a + b, 0);
+        const currentEvenPressure = 100 - currentOddPressure;
+        balancedTradeRef.current = (executionStrategy === 'EVEN' || executionStrategy === 'ODD') && Math.abs(currentOddPressure - currentEvenPressure) <= 4;
         realInFlightRef.current = true;
         const rowId = `ad-${Date.now()}-${++nextIdRef.current}`;
         setTrades(previousTrades => [{ id: rowId, time: formatTime(), strategy: bestCandidate.label, contract: bestCandidate.contractType, stake: contractStake, profit: 0, status: 'OPEN' }, ...previousTrades].slice(0, 30));
@@ -707,6 +711,9 @@ const AutoDigits = observer(() => {
         const start = async () => {
             try {
                 const activeSymbolsResponse = await send({ active_symbols: 'full', product_type: 'basic' });
+                if (activeSymbolsResponse?.error) {
+                    throw new Error(activeSymbolsResponse.error.message || 'Deriv active-symbols request failed');
+                }
                 const discoveredMarkets = normalizeMarkets(activeSymbolsResponse);
                 const availableMarkets = discoveredMarkets.length ? discoveredMarkets : FALLBACK_MARKETS;
                 marketsRef.current = availableMarkets;
@@ -726,16 +733,52 @@ const AutoDigits = observer(() => {
                     : selectedMarket ? [selectedMarket] : [];
                 if (!marketsToScan.length) throw new Error('No open Deriv markets are available for this selection');
 
-                const responses = await Promise.all(marketsToScan.map(async market => ({
-                    market,
-                    response: await send({ ticks_history: market.value, count: 1000, end: 'latest', style: 'ticks' }),
-                })));
+                const responses = await Promise.all(marketsToScan.map(async market => {
+                    try {
+                        const response = await send({ ticks_history: market.value, count: 1000, end: 'latest', style: 'ticks' });
+                        if (response?.error) {
+                            addLog(`HISTORY SKIP — ${market.label}: ${response.error.message || 'request rejected'}`);
+                            return { market, response: null };
+                        }
+                        return { market, response };
+                    } catch (error: any) {
+                        addLog(`HISTORY SKIP — ${market.label}: ${error?.message || 'request failed'}`);
+                        return { market, response: null };
+                    }
+                }));
                 if (!activeRef.current) return;
                 responses.forEach(({ market, response }) => {
-                    rawHistoryByMarketRef.current[market.value] = (response?.history?.prices || [])
+                    const prices = (response?.history?.prices || [])
                         .map(Number)
                         .filter(Number.isFinite);
+                    rawHistoryByMarketRef.current[market.value] = prices;
+                    const initialPip = market.pipSize ?? 2;
+                    marketPipRefs.current[market.value] = initialPip;
+                    if (prices.length) {
+                        marketPointsRef.current[market.value] = prices.map((quote, index) => ({
+                            quote,
+                            digit: getDigit(quote, initialPip),
+                            epoch: index,
+                        })).slice(-1000);
+                    }
                 });
+                const initialSymbol = requestedSelection === 'ALL'
+                    ? (marketsToScan.find(market => market.value === '1HZ100V') || marketsToScan[0]).value
+                    : (selectedMarket || marketsToScan[0]).value;
+                const initialPoints = marketPointsRef.current[initialSymbol] || [];
+                activeSymbolRef.current = initialSymbol;
+                setSymbol(initialSymbol);
+                setPoints(initialPoints);
+                setPipSize(marketPipRefs.current[initialSymbol] || 2);
+                setCurrentDigit(initialPoints[initialPoints.length - 1]?.digit ?? null);
+                setCurrentPrice(initialPoints.length
+                    ? initialPoints[initialPoints.length - 1].quote.toFixed(marketPipRefs.current[initialSymbol] || 2)
+                    : '');
+                if (initialPoints.length) {
+                    const initialCandidate = { ...analyze(initialPoints), symbol: initialSymbol };
+                    marketCandidatesRef.current[initialSymbol] = initialCandidate;
+                    setCandidate(initialCandidate);
+                }
                 setStatus(requestedSelection === 'ALL'
                     ? `Baselines ready — scanning ${marketsToScan.length} open markets`
                     : `Baseline ready — scanning ${selectedMarket?.label || marketsToScan[0].label}`);
@@ -778,7 +821,7 @@ const AutoDigits = observer(() => {
             mountedRef.current = false;
             unsubscribers.forEach(unsubscribe => unsubscribe());
         };
-    }, [addLog, connected, processPoint, send, subscribeTicks, marketSelection]);
+    }, [addLog, analyze, connected, processPoint, send, subscribeTicks, marketSelection]);
 
     useEffect(() => {
         runningRef.current = run;
@@ -963,7 +1006,7 @@ const AutoDigits = observer(() => {
                     <div className='ad-two-col'>
                         <section className='ad-panel ad-strategy'>
                             <div className='ad-panel__label'>CURRENT STRATEGY</div>
-                            <div className='ad-strategy__headline'><strong>{candidate?.label || `${strategy}${['OVER', 'UNDER'].includes(strategy) ? ` ${barrier}` : ''}`}</strong><div className='ad-score'><b>{candidate?.score || 0}</b><span>/100</span></div></div>
+                            <div className='ad-strategy__headline'><strong>{candidate?.label || `${strategy}${['OVER', 'UNDER'].includes(strategy) ? ` ${candidate?.barrier ?? 3}` : ''}`}</strong><div className='ad-score'><b>{candidate?.score || 0}</b><span>/100</span></div></div>
                             <div className='ad-progress'><i style={{ width: `${candidate?.score || 0}%` }} /></div>
                             <div className='ad-strategy__meta'><span className={`ad-confidence confidence-${(candidate?.confidence || 'wait').toLowerCase().replace(' ', '-')}`}>{candidate?.confidence || 'WAIT'}</span><span>Threshold {minScore}</span></div>
                             <p className='ad-reason'>{candidate?.reason || 'The engine will compare the 20T, 50T, 100T, and 1,000T windows.'}</p>

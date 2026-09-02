@@ -78,6 +78,8 @@ function getLastDigit(quote: number, pipSize = 2): number {
 
 export function useDerivTrade() {
     const tickCallbacksRef = useRef<Map<string, (t: TickData) => void>>(new Map());
+    const tickSubscriptionsRef = useRef<Map<string, { token: number; id?: number }>>(new Map());
+    const nextTickSubscriptionTokenRef = useRef(0);
     const pocCallbacksRef = useRef<Map<number, (c: SettledContract) => void>>(new Map());
     const contractMetaRef = useRef<Map<number, any>>(new Map());
     const [connected, setConnected] = useState(connectionStatus$.value === CONNECTION_STATUS.OPENED);
@@ -120,7 +122,9 @@ export function useDerivTrade() {
     }, []);
 
     useEffect(() => {
-        const sub = api_base.api?.onMessage()?.subscribe(({ data: d }: { data: any }) => {
+        // api_base.api may be created just after this hook mounts. Re-run when
+        // the connection opens so lazy-loaded pages still receive live ticks.
+        const sub = connected ? api_base.api?.onMessage()?.subscribe(({ data: d }: { data: any }) => {
             if (!d || typeof d !== 'object') return;
 
             if (d.balance && d.balance.balance != null && mountedRef.current) {
@@ -211,9 +215,9 @@ export function useDerivTrade() {
                     pocCallbacksRef.current.delete(cid);
                 }
             }
-        });
+        }) : undefined;
         return () => sub?.unsubscribe?.();
-    }, []);
+    }, [connected]);
 
     const send = useCallback((msg: object): Promise<any> => {
         if (!api_base.api) return Promise.reject(new Error('Not connected'));
@@ -221,11 +225,29 @@ export function useDerivTrade() {
     }, []);
 
     const subscribeTicks = useCallback((symbol: string, cb: (t: TickData) => void) => {
+        const token = ++nextTickSubscriptionTokenRef.current;
+        const previous = tickSubscriptionsRef.current.get(symbol);
+        if (previous?.id != null) send({ forget: previous.id }).catch(() => {});
         tickCallbacksRef.current.set(symbol, cb);
-        send({ ticks: symbol, subscribe: 1 }).catch(() => {});
+        tickSubscriptionsRef.current.set(symbol, { token });
+        send({ ticks: symbol, subscribe: 1 }).then(response => {
+            const id = Number(response?.subscription?.id);
+            if (!Number.isFinite(id) || id <= 0) return;
+            const current = tickSubscriptionsRef.current.get(symbol);
+            if (current?.token === token) {
+                current.id = id;
+            } else {
+                // The subscription was replaced or cleaned up before Deriv
+                // returned its ID. Forget only this stream.
+                send({ forget: id }).catch(() => {});
+            }
+        }).catch(() => {});
         return () => {
+            const current = tickSubscriptionsRef.current.get(symbol);
+            if (current?.token !== token) return;
+            tickSubscriptionsRef.current.delete(symbol);
             tickCallbacksRef.current.delete(symbol);
-            send({ forget_all: 'ticks' }).catch(() => {});
+            if (current.id != null) send({ forget: current.id }).catch(() => {});
         };
     }, [send]);
 
