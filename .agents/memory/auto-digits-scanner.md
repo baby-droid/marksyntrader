@@ -21,11 +21,17 @@ In AUTO mode, score every supported concrete strategy (parity, digit, barrier, d
 
 **How to apply:** Keep the active-symbol request and tick subscriptions on the existing authenticated hook; never open a second public WebSocket for Auto-Digits.
 
-AUTO execution ranks live candidates rather than forcing a fixed rotation. After a loss, recovery is limited to Over/Under, Even/Odd, Rise/Fall; Matches is normal-mode only and needs an exceptional score.
+AUTO execution uses ordered baseline and near-take-profit plan phases, but never forces an unconfirmed trade. After a loss, recovery is limited to safe Over/Under, Even/Odd, Rise/Fall; Matches is near-TP only and needs an exceptional score.
 
-**Why:** Matches has a low hit rate and compounding it during recovery can rapidly consume the account; fixed rotation also sends stale or weak contracts.
+**Why:** Matches has a low hit rate and compounding it during recovery can rapidly consume the account; phase ordering provides coverage without sending stale or weak contracts.
 
-**How to apply:** Re-rank after every settlement, use the live score as the primary selector, use the configured order only for ties, and keep the recovery contract allowlist fail-closed.
+**How to apply:** Reset the phase/index after settlement transitions, consider near-TP risky barriers only when positive P/L reaches the configured threshold, and keep the recovery contract allowlist fail-closed.
+
+The All strategy entry mode combines applicable window, distribution, touch/retention, and pattern confirmations and caps the candidate below the minimum score if any required confirmation is missing.
+
+**Why:** A combined mode should tighten entry quality, not simply inflate a score by adding unrelated bonuses.
+
+**How to apply:** Keep specialized checks relevant to each contract family, require every applicable confirmation for All strategy, and retain the two live virtual wins before purchase.
 
 Auto-Digits risk controls should treat the manual stake as the base, cap each order by available balance and reserve percentage, enforce a session loss limit, and scale auto-stake down as take-profit progress increases.
 

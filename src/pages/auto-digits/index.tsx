@@ -84,6 +84,7 @@ const LOGIC_MODES = [
     { value: 'pressure', label: 'Distribution pressure', note: 'Strong and weak digit groups create the edge' },
     { value: 'touch', label: 'Touch and retention', note: 'Range touches followed by directional retention' },
     { value: 'pattern', label: 'Pattern radar', note: 'Recent sequences must confirm the distribution' },
+    { value: 'all', label: 'All strategy', note: 'Every applicable confirmation must agree before entry' },
 ];
 
 type StrategyValue = typeof STRATEGIES[number]['value'];
@@ -102,6 +103,8 @@ type Candidate = {
     retention: number;
     entryDigit?: number;
     riskScore?: number;
+    planIndex?: number;
+    autoPhase?: 'BASELINE' | 'NEAR TP' | 'RECOVERY';
 };
 type TradeRow = {
     id: string;
@@ -213,22 +216,50 @@ const oppositeStrategy = (strategy: StrategyValue): StrategyValue | null => ({
     'LOW TICK': 'HIGH TICK',
 }[strategy] || null);
 
-// AUTO ranks a fresh setup instead of forcing a time-based rotation. This
-// means the live tick data decides the entry, while the order is used only as
-// a deterministic tie-breaker when two candidates have the same score.
+type AutoRotationPlan = { strategy: ConcreteStrategy; barrier?: number };
+
+// AUTO uses an ordered plan, but never forces an unconfirmed trade. The
+// current phase determines which contracts are eligible and the live score
+// determines the best confirmed entry within that phase.
 const AUTO_STRATEGIES: ConcreteStrategy[] = [
     'EVEN', 'ODD', 'OVER', 'UNDER', 'DIFFERS', 'MATCHES',
     'RISE', 'FALL', 'ONLY UPS', 'ONLY DOWNS', 'HIGH TICK', 'LOW TICK',
 ];
 
-// Loss recovery deliberately excludes Matches, Differs, and the more
-// aggressive tick contracts. Matches have a low hit rate and can compound
-// losses quickly, so they are only considered after the account returns to
-// normal mode and the candidate is exceptionally strong.
-const AUTO_RECOVERY_STRATEGIES: ConcreteStrategy[] = [
-    'OVER', 'UNDER', 'EVEN', 'ODD', 'RISE', 'FALL',
+const AUTO_BASELINE_PLANS: AutoRotationPlan[] = [
+    ...[0, 1, 2, 3].map(barrier => ({ strategy: 'OVER' as ConcreteStrategy, barrier })),
+    ...[9, 8, 7, 6].map(barrier => ({ strategy: 'UNDER' as ConcreteStrategy, barrier })),
+    { strategy: 'EVEN' },
+    { strategy: 'ODD' },
+    { strategy: 'RISE' },
+    { strategy: 'FALL' },
+    { strategy: 'ONLY UPS' },
+    { strategy: 'ONLY DOWNS' },
+    { strategy: 'DIFFERS' },
+    { strategy: 'HIGH TICK' },
+    { strategy: 'LOW TICK' },
 ];
+
+const AUTO_NEAR_TP_PLANS: AutoRotationPlan[] = [
+    ...[4, 5, 6, 7, 8].map(barrier => ({ strategy: 'OVER' as ConcreteStrategy, barrier })),
+    ...[5, 4, 3, 2].map(barrier => ({ strategy: 'UNDER' as ConcreteStrategy, barrier })),
+    ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(barrier => ({ strategy: 'MATCHES' as ConcreteStrategy, barrier })),
+];
+
+const AUTO_RECOVERY_PLANS: AutoRotationPlan[] = [
+    ...[0, 1, 2, 3].map(barrier => ({ strategy: 'OVER' as ConcreteStrategy, barrier })),
+    ...[9, 8, 7, 6].map(barrier => ({ strategy: 'UNDER' as ConcreteStrategy, barrier })),
+    { strategy: 'EVEN' },
+    { strategy: 'ODD' },
+    { strategy: 'RISE' },
+    { strategy: 'FALL' },
+];
+
+const AUTO_RECOVERY_STRATEGIES: ConcreteStrategy[] = ['OVER', 'UNDER', 'EVEN', 'ODD', 'RISE', 'FALL'];
 const AUTO_MATCH_MIN_SCORE = 90;
+
+const autoPlansFor = (recovery: boolean, nearTakeProfit: boolean) =>
+    recovery ? AUTO_RECOVERY_PLANS : nearTakeProfit ? AUTO_NEAR_TP_PLANS : AUTO_BASELINE_PLANS;
 
 const autoStrategyRank = (strategy: ConcreteStrategy, recovery: boolean) => {
     const order = recovery ? AUTO_RECOVERY_STRATEGIES : AUTO_STRATEGIES;
@@ -341,6 +372,8 @@ const AutoDigits = observer(() => {
     const recentResultsRef = useRef<Array<'W' | 'L'>>([]);
     const marketSelectionRef = useRef('1HZ100V');
     const marketsRef = useRef<MarketOption[]>(FALLBACK_MARKETS);
+    const autoPlanIndexRef = useRef(0);
+    const autoPlanPhaseRef = useRef<'BASELINE' | 'NEAR TP' | 'RECOVERY'>('BASELINE');
     const recoveryStakeRef = useRef(1);
     const completedRunsRef = useRef(0);
     const balanceRef = useRef<number | null>(null);
@@ -356,6 +389,8 @@ const AutoDigits = observer(() => {
         validationRef.current = { key: '', wins: 0, attempt: 0, readyEpoch: 0 };
         setCandidate(null);
         setValidation({ wins: 0, attempt: 0, state: 'IDLE' });
+        autoPlanIndexRef.current = 0;
+        autoPlanPhaseRef.current = 'BASELINE';
         setStatus(marketSelection === 'ALL' ? 'Re-scanning all available markets' : 'Re-scanning selected market');
     }, [marketSelection]);
     useEffect(() => {
@@ -370,6 +405,8 @@ const AutoDigits = observer(() => {
         validationRef.current = { key: '', wins: 0, attempt: 0, readyEpoch: 0 };
         setCandidate(null);
         setValidation({ wins: 0, attempt: 0, state: 'IDLE' });
+        autoPlanIndexRef.current = 0;
+        autoPlanPhaseRef.current = 'BASELINE';
         setStatus('Re-scanning selected contract conditions');
     }, [logicMode, minScore, strategy]);
 
@@ -502,19 +539,40 @@ const AutoDigits = observer(() => {
             retention = isHigh ? rangePosition : 100 - rangePosition;
         }
 
-        if (logicMode === 'confluence') {
-            const parityWindowsAgree = analysisStrategy === 'ODD'
-                ? odd100 >= even100 && odd1000 >= even1000
-                : analysisStrategy === 'EVEN'
-                    ? even100 >= odd100 && even1000 >= odd1000
-                    : true;
-            score += parityWindowsAgree ? 6 : 0;
+        const parityWindowsAgree = analysisStrategy === 'ODD'
+            ? odd100 >= even100 && odd1000 >= even1000
+            : analysisStrategy === 'EVEN'
+                ? even100 >= odd100 && even1000 >= odd1000
+                : true;
+        const pressureDelta = Math.abs(odd1000 - even1000);
+        const baseScore = score;
+        const isParity = analysisStrategy === 'ODD' || analysisStrategy === 'EVEN';
+        const isBarrier = analysisStrategy === 'OVER' || analysisStrategy === 'UNDER';
+        // "All strategy" treats each signal as a confirmation, but only
+        // applies specialized checks where they make sense for the contract.
+        // This avoids requiring an Over/Under touch metric from Rise/Fall.
+        const confluenceConfirmed = isParity ? parityWindowsAgree : baseScore >= 65;
+        const pressureConfirmed = isParity ? pressureDelta >= 6 : baseScore >= 65;
+        const touchConfirmed = isBarrier ? touches >= 2 && retention >= 30 : baseScore >= 65;
+        const patternConfirmed = isParity ? parityPattern : baseScore >= 65;
+        const allStrategyConfirmed = confluenceConfirmed && pressureConfirmed && touchConfirmed && patternConfirmed;
+        const confluenceBonus = parityWindowsAgree ? 6 : 0;
+        const pressureBonus = p1000.length ? Math.min(6, pressureDelta / 3) : 0;
+        const touchBonus = touches >= 2 ? Math.min(8, touches) : 0;
+        const patternBonus = parityPattern ? 8 : 0;
+
+        if (logicMode === 'confluence' || logicMode === 'all') score += confluenceBonus;
+        if (logicMode === 'pressure' || logicMode === 'all') score += pressureBonus;
+        if (logicMode === 'touch' || logicMode === 'all') score += touchBonus;
+        if (logicMode === 'pattern' || logicMode === 'all') {
+            score += patternBonus;
+            if (isParity && !parityPattern) score = Math.min(score, 69);
         }
-        if (logicMode === 'pressure' && p1000.length) score += Math.min(6, Math.abs(odd1000 - even1000) / 3);
-        if (logicMode === 'touch' && touches >= 2) score += Math.min(8, touches);
-        if (logicMode === 'pattern') {
-            score += parityPattern ? 8 : 0;
-            if ((analysisStrategy === 'ODD' || analysisStrategy === 'EVEN') && !parityPattern) score = Math.min(score, 69);
+        if (logicMode === 'all' && !allStrategyConfirmed) {
+            score = Math.min(score, Math.max(0, minScore - 1));
+            reason += '; waiting for all confirmations';
+        } else if (logicMode === 'all') {
+            reason += '; all confirmations passed';
         }
         // Keep recovery candidates available after a few losses, but make the
         // engine fail closed after a sustained loss cluster. The execution
@@ -547,25 +605,44 @@ const AutoDigits = observer(() => {
 
     const analyze = useCallback((nextPoints: TickPoint[]): Candidate => {
         const inRecovery = lossStreakRef.current > 0;
-        const strategies = strategy === 'AUTO'
-            ? (inRecovery ? AUTO_RECOVERY_STRATEGIES : AUTO_STRATEGIES)
-            : [strategy];
-        const candidates = strategies.map(analysisStrategy =>
-            analyzeStrategy(nextPoints, analysisStrategy as ConcreteStrategy, strategy === 'AUTO')
-        );
-        const eligibleCandidates = candidates.filter(item =>
-            // Matches is considered only when its score is materially above
-            // the normal threshold because one wrong digit loses the stake.
-            item.strategy !== 'MATCHES' || item.score >= AUTO_MATCH_MIN_SCORE
-        );
-        const qualified = eligibleCandidates.filter(item => item.score >= minScore);
-        const ranked = [...(qualified.length ? qualified : eligibleCandidates)].sort((a, b) =>
-            b.score - a.score ||
-            autoStrategyRank(a.strategy as ConcreteStrategy, inRecovery) -
-            autoStrategyRank(b.strategy as ConcreteStrategy, inRecovery)
-        );
-        return ranked[0] || analyzeStrategy(nextPoints, inRecovery ? 'OVER' : 'EVEN', strategy === 'AUTO');
-    }, [analyzeStrategy, minScore, strategy]);
+        const nearTakeProfit = !inRecovery &&
+            pnlRef.current > 0 &&
+            pnlRef.current >= Math.max(0.01, Number(takeProfit) || 5) * 0.7;
+        const phase: 'BASELINE' | 'NEAR TP' | 'RECOVERY' = inRecovery
+            ? 'RECOVERY'
+            : nearTakeProfit ? 'NEAR TP' : 'BASELINE';
+
+        if (strategy === 'AUTO') {
+            const plans = autoPlansFor(inRecovery, nearTakeProfit);
+            if (autoPlanPhaseRef.current !== phase) {
+                autoPlanPhaseRef.current = phase;
+                autoPlanIndexRef.current = 0;
+                marketCandidatesRef.current = {};
+                lastCandidateRef.current = null;
+            }
+            const candidates = plans.map((plan, index) => ({
+                ...analyzeStrategy(nextPoints, plan.strategy, true, plan.barrier),
+                planIndex: index,
+                autoPhase: phase,
+            }));
+            const startIndex = autoPlanIndexRef.current % plans.length;
+            const orderedCandidates = candidates.map((_, offset) =>
+                candidates[(startIndex + offset) % candidates.length]
+            );
+            const eligibleCandidates = orderedCandidates.filter(item =>
+                item.strategy !== 'MATCHES' || item.score >= AUTO_MATCH_MIN_SCORE
+            );
+            const minimumScore = inRecovery ? Math.max(minScore, 78) : minScore;
+            // The plan is a preference, not a forced trade: use the first
+            // contract in the requested order that has met the live score
+            // and entry confirmation requirements.
+            const qualified = eligibleCandidates.filter(item => item.score >= minimumScore);
+            return qualified[0] || eligibleCandidates[0] ||
+                analyzeStrategy(nextPoints, inRecovery ? 'OVER' : 'EVEN', true);
+        }
+
+        return analyzeStrategy(nextPoints, strategy as ConcreteStrategy, false);
+    }, [analyzeStrategy, minScore, strategy, takeProfit]);
 
     const processPoint = useCallback((marketSymbol: string, point: TickPoint) => {
         const previousPoints = marketPointsRef.current[marketSymbol] || [];
@@ -725,6 +802,15 @@ const AutoDigits = observer(() => {
         setTradeContext({ page: 'Auto-Digits', bot: executionCandidate.label });
         if (safeContractStake < requestedStake) addLog(`STAKE CONTROLLED — ${requestedStake.toFixed(2)} → ${safeContractStake.toFixed(2)} ${displayCur} by goal/risk limits`);
         addLog(`EXECUTE — ${executionCandidate.contractType} ${executionCandidate.barrier ?? ''} on ${marketLabel(executionCandidate.symbol || '')} | ${safeContractStake.toFixed(2)} ${displayCur} | ${tradeDuration}T`);
+        if (strategy === 'AUTO' && Number.isInteger(executionCandidate.planIndex)) {
+            const planLength = executionCandidate.autoPhase === 'RECOVERY'
+                ? AUTO_RECOVERY_PLANS.length
+                : executionCandidate.autoPhase === 'NEAR TP'
+                    ? AUTO_NEAR_TP_PLANS.length
+                    : AUTO_BASELINE_PLANS.length;
+            autoPlanIndexRef.current = (Number(executionCandidate.planIndex) + 1) % planLength;
+            addLog(`AUTO PLAN — ${executionCandidate.autoPhase || 'BASELINE'} advanced to step ${autoPlanIndexRef.current + 1}/${planLength}`);
+        }
         buyContract({
             symbol: executionCandidate.symbol || activeSymbolRef.current,
             contract_type: executionCandidate.contractType,
@@ -1026,6 +1112,8 @@ const AutoDigits = observer(() => {
         setWins(0);
         setLosses(0);
         setTrades([]);
+        autoPlanIndexRef.current = 0;
+        autoPlanPhaseRef.current = 'BASELINE';
         validationRef.current = { key: '', wins: 0, attempt: 0, readyEpoch: 0 };
         setValidation({ wins: 0, attempt: 0, state: 'IDLE' });
         addLog('RISK STATE RESET — baseline retained');
@@ -1049,6 +1137,8 @@ const AutoDigits = observer(() => {
         completedRunsRef.current = 0;
         setCompletedRuns(0);
         recoveryStakeRef.current = stakeRef.current;
+        autoPlanIndexRef.current = 0;
+        autoPlanPhaseRef.current = 'BASELINE';
         setRun(true);
         setStatus(authorized ? 'Scanning and validating' : 'Login required before real execution');
         addLog(authorized ? 'START BOT — virtual validation gate enabled' : 'START BOT — scanner active, execution waiting for authorization');
@@ -1159,7 +1249,7 @@ const AutoDigits = observer(() => {
                         <div className='ad-auto-selection'>
                             <span>BEST ENTRY POLICY</span>
                             <strong>{selectedAutoStrategy}{selectedAutoBarrier != null ? ` · BARRIER ${selectedAutoBarrier}` : ''}</strong>
-                            <small>AUTO ranks live setups: Even/Odd, Over/Under, Differs, high-confidence Matches, Rise/Fall, Only Ups/Downs, then tick contracts. After a loss it uses only Over/Under, Even/Odd, Rise/Fall.</small>
+                            <small>AUTO sequence: Over 0–3, Under 9–6, Even/Odd, Rise/Fall, Only Ups/Downs, Differs, High/Low Tick. Near take-profit it enables Over 4–8, Under 5–2, then high-confidence Matches. Loss recovery returns to safe contracts only.</small>
                         </div>
                         <div className='ad-control-row'><label>STAKE<NumberField value={Number(stake) || 0.35} min={0.35} max={1000} onCommit={value => setStake(value.toFixed(2))} /></label><label>MIN SCORE<NumberField value={minScore} min={50} max={95} onCommit={setMinScore} /></label></div>
                         <div className='ad-duration-row'><span>DURATION</span><button className={autoDuration ? 'is-active' : ''} onClick={() => setAutoDuration(true)}>AUTO {activeDuration}T</button>{[1, 2, 3, 4, 5].map(value => <button key={value} className={!autoDuration && duration === value ? 'is-active' : ''} onClick={() => { setAutoDuration(false); setDuration(value); }}>{value}T</button>)}</div>
@@ -1223,7 +1313,7 @@ const AutoDigits = observer(() => {
                     <div className='ad-three-col'>
                         <section className='ad-panel ad-recent'><div className='ad-panel__label'>RECENT TICKS <span>(LAST 30)</span></div><div className='ad-ticks'>{recentDigits.map((point, index) => <span key={`${point.epoch}-${index}`} className={point.digit % 2 === 0 ? 'even' : 'odd'}>{point.digit}</span>)}</div><div className='ad-parity-bar'><i style={{ width: `${oddPressure}%` }} /><span>ODD {oddPressure.toFixed(0)}%</span><b>EVEN {evenPressure.toFixed(0)}%</b></div></section>
                         <section className='ad-panel ad-validation'><div className='ad-panel__label'>VIRTUAL VALIDATION</div><div className='ad-validation__steps'><span className={validation.wins >= 1 ? 'done' : ''}><b>1</b> VIRTUAL {validation.wins >= 1 ? 'WIN' : 'READY'}</span><span className={validation.wins >= 2 ? 'done' : ''}><b>2</b> VIRTUAL {validation.wins >= 2 ? 'WIN' : 'WAITING'}</span><strong className={validation.state === 'PASSED' ? 'passed' : ''}>{validation.state === 'PASSED' ? 'PASSED' : 'GATE ACTIVE'}</strong></div></section>
-                        <section className='ad-panel ad-entry'><div className='ad-panel__label'>ENTRY DECISION</div><strong>{status}</strong><p>{strategy === 'AUTO' ? (lossStreak > 0 ? 'Recovery mode: only Over, Under, Even, Odd, Rise, and Fall can pass. Matches, Differs, and tick contracts are blocked after a loss.' : 'Auto mode ranks live setups by score. Matches is only eligible with an exceptional score; direction and tick contracts remain available when they are the strongest setup.') : logicMode === 'confluence' ? 'All windows are compared before an entry is accepted.' : LOGIC_MODES.find(mode => mode.value === logicMode)?.note}</p><div className='ad-entry__ticks'><span>Next contract</span><b>{candidate?.contractType || '—'} {candidate?.barrier != null ? `· Barrier ${candidate.barrier}` : ''}</b><small>{activeDuration} ticks {autoDuration ? '· AUTO' : ''}</small></div></section>
+                        <section className='ad-panel ad-entry'><div className='ad-panel__label'>ENTRY DECISION</div><strong>{status}</strong><p>{strategy === 'AUTO' ? (lossStreak > 0 ? 'Recovery mode: only the safe barrier, parity, and Rise/Fall sequence can pass. Matches and risky tick contracts are blocked after a loss.' : 'Auto mode advances through the ordered barrier and contract phases, but only a live candidate that meets the score, entry condition, and virtual confirmation gate can trade.') : logicMode === 'all' ? 'Every applicable entry confirmation must agree before this contract can trade.' : logicMode === 'confluence' ? 'All windows are compared before an entry is accepted.' : LOGIC_MODES.find(mode => mode.value === logicMode)?.note}</p><div className='ad-entry__ticks'><span>Next contract</span><b>{candidate?.contractType || '—'} {candidate?.barrier != null ? `· Barrier ${candidate.barrier}` : ''}</b><small>{activeDuration} ticks {autoDuration ? '· AUTO' : ''}</small></div></section>
                     </div>
                 </main>
 
