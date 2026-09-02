@@ -1,0 +1,10 @@
+---
+name: Auto-Digits recovery order
+description: Ordered recovery behavior and payout-target sizing for Auto-Digits.
+---
+
+Recovery must stay linear across markets: Over 1, Over 2, Over 3, Under 8, Under 7, Under 6, then the safe parity/direction steps. Every market evaluates the same current step; the highest-scoring market may win only after the normal entry-condition and virtual-validation gates pass.
+
+**Why:** Ranking every recovery plan simultaneously causes the engine to mix barriers and markets, making recovery unpredictable and skipping the intended sequence.
+
+**How to apply:** Advance the plan index only after a real Deriv contract ID, keep recovery active while any deficit remains (including after partial wins), and size the next stake against the remaining deficit plus the base profit target using the configured 80% payout assumption while respecting reserve and loss limits.

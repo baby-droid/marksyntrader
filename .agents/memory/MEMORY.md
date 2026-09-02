@@ -63,3 +63,4 @@
 - [Auto-Digits active symbols API](auto-digits-active-symbols.md) — current Deriv options WebSocket rejects product_type on active_symbols; request full symbols without that field.
 - [Deriv tick observable teardown](auto-trades-feed-lifecycle.md) — unsubscribing a DerivAPIBasic stream owns the matching forget; manual forgets can duplicate requests and trigger rate limits.
 - [Auto-Digits feed lifecycle](auto-digits-feed-lifecycle.md) — attach authenticated live feeds before baseline history, cancel stale loaders, watchdog silent streams, and calculate digits with live pip_size plus epoch deduplication.
+- [Auto-Digits recovery order](auto-digits-recovery-order.md) — after a loss, evaluate one shared plan step across markets, trade only after entry confirmation, and advance Over 1–3 then Under 8–6 only after a real buy.
