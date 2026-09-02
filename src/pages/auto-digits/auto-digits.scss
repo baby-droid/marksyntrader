@@ -271,6 +271,15 @@
         &:focus { border-color: var(--ad-cyan); }
     }
 
+    .ad-control-hint {
+        color: var(--ad-muted);
+        font-size: 0.52rem;
+        font-weight: 500;
+        letter-spacing: normal;
+        line-height: 1.2;
+        text-transform: none;
+    }
+
     .num-field {
         width: 100%;
         min-width: 0;

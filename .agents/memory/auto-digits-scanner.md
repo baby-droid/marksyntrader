@@ -3,7 +3,7 @@ name: Auto-Digits scanner
 description: Design and trading integration rules for the Auto-Digits dashboard
 ---
 
-Auto-Digits is a scanner-first page, not a second WebSocket or independent trading engine. It uses the authenticated `useDerivTrade` stream, recalculates digits from the live pip size, validates a signal against the next real tick twice, and calls `buyContract` only after the two-step virtual gate passes.
+Auto-Digits is a scanner-first page, not a second WebSocket or independent trading engine. It uses the authenticated `useDerivTrade` stream, loads its market selector from Deriv's active-symbols response, recalculates digits from the live pip size, validates a signal against the next real tick twice, and calls `buyContract` only after the two-step virtual gate passes.
 
 **Why:** The page must trade on the user's already-authorized demo or real account and keep the native Bot Builder transaction surface authoritative.
 
@@ -14,3 +14,9 @@ When the selected contract type, entry logic, or score threshold changes, invali
 **Why:** A stale candidate can otherwise survive a configuration change and trade an old contract type or barrier under the new UI selection.
 
 **How to apply:** Clear the candidate map and validation state on configuration changes, build the validation key from market + contract type + barrier, and use that same resolved contract data for the live condition check.
+
+In AUTO mode, score every supported concrete strategy (parity, digit, barrier, direction, and tick/range) for each subscribed market, then select the highest score that clears the configured threshold. A selected market subscribes only to that symbol; scan-all subscribes to the open symbols returned by active_symbols.
+
+**Why:** The user expects AUTO to find whichever strategy is currently qualified instead of routing through a partial hardcoded heuristic or silently ignoring the chosen market.
+
+**How to apply:** Keep the active-symbol request and tick subscriptions on the existing authenticated hook; never open a second public WebSocket for Auto-Digits.

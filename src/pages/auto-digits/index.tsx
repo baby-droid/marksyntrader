@@ -9,7 +9,7 @@ import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency
 import { setTradeContext } from '@/utils/trade-metadata';
 import './auto-digits.scss';
 
-const MARKETS = [
+const FALLBACK_MARKETS = [
     { label: 'Volatility 10', value: 'R_10' },
     { label: 'Volatility 25', value: 'R_25' },
     { label: 'Volatility 50', value: 'R_50' },
@@ -28,6 +28,40 @@ const MARKETS = [
     { label: 'Boom 500', value: 'BOOM500' },
     { label: 'Crash 500', value: 'CRASH500' },
 ];
+
+type MarketOption = {
+    label: string;
+    value: string;
+    market?: string;
+    submarket?: string;
+    pipSize?: number;
+    isOpen?: boolean;
+};
+
+const normalizeMarkets = (response: any): MarketOption[] => {
+    const activeSymbols = Array.isArray(response?.active_symbols)
+        ? response.active_symbols
+        : Array.isArray(response)
+            ? response
+            : [];
+    const seen = new Set<string>();
+    return activeSymbols
+        .map((item: any) => {
+            const value = String(item?.symbol || item?.underlying_symbol || '').trim();
+            if (!value || seen.has(value)) return null;
+            seen.add(value);
+            return {
+                label: String(item?.display_name || item?.symbol || value),
+                value,
+                market: item?.market,
+                submarket: item?.submarket,
+                pipSize: Number.isFinite(Number(item?.pip_size)) ? Number(item.pip_size) : undefined,
+                isOpen: item?.exchange_is_open !== false && Number(item?.exchange_is_open) !== 0 && !item?.is_trading_suspended,
+            };
+        })
+        .filter(Boolean)
+        .sort((a: MarketOption, b: MarketOption) => a.label.localeCompare(b.label));
+};
 
 const STRATEGIES = [
     { value: 'AUTO', label: 'Auto — All Contract Types', group: 'Auto' },
@@ -184,50 +218,6 @@ const AUTO_STRATEGIES: ConcreteStrategy[] = [
     'RISE', 'FALL', 'ONLY UPS', 'ONLY DOWNS', 'HIGH TICK', 'LOW TICK',
 ];
 
-const chooseAutomaticStrategy = (points: TickPoint[]): ConcreteStrategy => {
-    if (points.length < 20) return 'OVER';
-
-    const p20 = percentagesFor(points, 20);
-    const p100 = percentagesFor(points, 100);
-    const recent = points.slice(-20);
-    const odd20 = p20.filter((_, digit) => digit % 2 !== 0).reduce((sum, value) => sum + value, 0);
-    const even20 = 100 - odd20;
-    const parityGap = Math.abs(odd20 - even20);
-    const dominant = p20.reduce((best, value, digit) => value > best.value ? { digit, value } : best, { digit: 0, value: 0 });
-    const diversity = p20.filter(value => value > 0).length;
-    const up20 = directionPct(points, 20, 'up');
-    const down20 = directionPct(points, 20, 'down');
-
-    const options: Array<{ strategy: ConcreteStrategy; score: number }> = [
-        { strategy: odd20 >= even20 ? 'ODD' : 'EVEN', score: 42 + parityGap * 1.7 },
-        { strategy: 'MATCHES', score: 30 + dominant.value * 2.7 + (dominant.value >= 14 ? 14 : 0) },
-        { strategy: 'DIFFERS', score: 32 + diversity * 3 + (dominant.value <= 13 ? 14 : 0) },
-        { strategy: 'RISE', score: 28 + Math.max(0, up20 - 50) * 1.25 },
-        { strategy: 'FALL', score: 28 + Math.max(0, down20 - 50) * 1.25 },
-        { strategy: 'ONLY UPS', score: 20 + Math.max(0, up20 - 60) * 1.15 },
-        { strategy: 'ONLY DOWNS', score: 20 + Math.max(0, down20 - 60) * 1.15 },
-        { strategy: 'HIGH TICK', score: 26 + Math.max(0, up20 - 50) * 0.65 },
-        { strategy: 'LOW TICK', score: 26 + Math.max(0, down20 - 50) * 0.65 },
-    ];
-
-    for (let candidateBarrier = 1; candidateBarrier <= 8; candidateBarrier += 1) {
-        const overWin = p20.slice(candidateBarrier + 1).reduce((sum, value) => sum + value, 0);
-        const underWin = p20.slice(0, candidateBarrier).reduce((sum, value) => sum + value, 0);
-        const overTouches = recent.filter(point => point.digit <= candidateBarrier).length;
-        const underTouches = recent.filter(point => point.digit >= candidateBarrier).length;
-        options.push({
-            strategy: 'OVER',
-            score: 25 + overWin * 0.8 + (overTouches >= 2 && overTouches <= 6 ? 14 : 0),
-        });
-        options.push({
-            strategy: 'UNDER',
-            score: 25 + underWin * 0.8 + (underTouches >= 2 && underTouches <= 6 ? 14 : 0),
-        });
-    }
-
-    return options.sort((a, b) => b.score - a.score)[0]?.strategy || AUTO_STRATEGIES[0];
-};
-
 const chooseAutomaticBarrier = (points: TickPoint[], selectedStrategy: ConcreteStrategy, fallback: number) => {
     if (!['OVER', 'UNDER', 'MATCHES', 'DIFFERS'].includes(selectedStrategy)) return undefined;
     if (!points.length) return fallback;
@@ -277,6 +267,8 @@ const formatTime = () => new Date().toLocaleTimeString([], { hour: '2-digit', mi
 
 const AutoDigits = observer(() => {
     const { connected, authorized, balance, currency, send, subscribeTicks, buyContract } = useDerivTrade();
+    const [markets, setMarkets] = useState<MarketOption[]>(FALLBACK_MARKETS);
+    const [marketSelection, setMarketSelection] = useState('1HZ100V');
     const [symbol, setSymbol] = useState('1HZ100V');
     const [strategy, setStrategy] = useState<StrategyValue>('AUTO');
     const [logicMode, setLogicMode] = useState('confluence');
@@ -321,8 +313,19 @@ const AutoDigits = observer(() => {
     const tradePnlBeforeRef = useRef(0);
     const balancedTradeRef = useRef(false);
     const recentResultsRef = useRef<Array<'W' | 'L'>>([]);
+    const marketSelectionRef = useRef('1HZ100V');
+    const marketsRef = useRef<MarketOption[]>(FALLBACK_MARKETS);
 
     useEffect(() => subscribeCurrency(() => setDisplayCur(getDisplayCurrency())), []);
+    useEffect(() => {
+        marketSelectionRef.current = marketSelection;
+        marketCandidatesRef.current = {};
+        lastCandidateRef.current = null;
+        validationRef.current = { key: '', wins: 0, attempt: 0, readyEpoch: 0 };
+        setCandidate(null);
+        setValidation({ wins: 0, attempt: 0, state: 'IDLE' });
+        setStatus(marketSelection === 'ALL' ? 'Re-scanning all available markets' : 'Re-scanning selected market');
+    }, [marketSelection]);
     useEffect(() => {
         stakeRef.current = Math.max(0.35, Number(stake) || 0.35);
     }, [stake]);
@@ -342,10 +345,10 @@ const AutoDigits = observer(() => {
         setLog(previous => [`${formatTime()}  ${message}`, ...previous].slice(0, 18));
     }, []);
 
-    const analyze = useCallback((nextPoints: TickPoint[]): Candidate => {
-        const analysisStrategy: ConcreteStrategy = strategy === 'AUTO'
-            ? chooseAutomaticStrategy(nextPoints)
-            : strategy;
+    const marketLabel = useCallback((marketSymbol: string) =>
+        marketsRef.current.find(market => market.value === marketSymbol)?.label || marketSymbol, []);
+
+    const analyzeStrategy = useCallback((nextPoints: TickPoint[], analysisStrategy: ConcreteStrategy, autoMode = false): Candidate => {
         const p1000 = percentagesFor(nextPoints, 1000);
         const p100 = percentagesFor(nextPoints, 100);
         const p50 = percentagesFor(nextPoints, 50);
@@ -487,7 +490,7 @@ const AutoDigits = observer(() => {
         return {
             score,
             strategy: analysisStrategy,
-            label: `${analysisStrategy}${entryDigit !== undefined ? ` ${entryDigit}` : ''}${strategy === 'AUTO' ? ' · AUTO' : ''}`,
+            label: `${analysisStrategy}${entryDigit !== undefined ? ` ${entryDigit}` : ''}${autoMode ? ' · AUTO' : ''}`,
             contractType: strategyContract(analysisStrategy),
             barrier: analysisStrategy === 'MATCHES'
                 ? (entryDigit ?? barrierNumber)
@@ -499,7 +502,17 @@ const AutoDigits = observer(() => {
             entryDigit,
             riskScore,
         };
-    }, [logicMode, minScore, strategy]);
+    }, [logicMode, minScore]);
+
+    const analyze = useCallback((nextPoints: TickPoint[]): Candidate => {
+        const strategies = strategy === 'AUTO' ? AUTO_STRATEGIES : [strategy];
+        const candidates = strategies.map(analysisStrategy =>
+            analyzeStrategy(nextPoints, analysisStrategy as ConcreteStrategy, strategy === 'AUTO')
+        );
+        const qualified = candidates.filter(item => item.score >= minScore);
+        return [...(qualified.length ? qualified : candidates)]
+            .sort((a, b) => b.score - a.score)[0] || analyzeStrategy(nextPoints, 'OVER', strategy === 'AUTO');
+    }, [analyzeStrategy, minScore, strategy]);
 
     const processPoint = useCallback((marketSymbol: string, point: TickPoint) => {
         const previousPoints = marketPointsRef.current[marketSymbol] || [];
@@ -513,8 +526,9 @@ const AutoDigits = observer(() => {
             .sort((a, b) => b.score - a.score)[0] || nextCandidate;
         const isActiveMarket = bestCandidate.symbol === marketSymbol;
         if (isActiveMarket || !lastCandidateRef.current) {
+            const previousActiveSymbol = activeSymbolRef.current;
             activeSymbolRef.current = bestCandidate.symbol || marketSymbol;
-            if (bestCandidate.symbol && bestCandidate.symbol !== symbol) setSymbol(bestCandidate.symbol);
+            if (bestCandidate.symbol && bestCandidate.symbol !== previousActiveSymbol) setSymbol(bestCandidate.symbol);
             const activePoints = marketPointsRef.current[bestCandidate.symbol || marketSymbol] || nextPoints;
             setPoints(activePoints);
             setPipSize(marketPipRefs.current[bestCandidate.symbol || marketSymbol] || 2);
@@ -538,7 +552,7 @@ const AutoDigits = observer(() => {
             validationRef.current = { key: candidateKey, wins: 0, attempt: 1, readyEpoch: point.epoch };
             setValidation({ wins: 0, attempt: 1, state: 'VIRTUAL 1' });
             setStatus('Validating signal virtually');
-            addLog(`VIRTUAL 1 queued — ${bestCandidate.label} on ${MARKETS.find(market => market.value === bestCandidate.symbol)?.label || bestCandidate.symbol} scored ${bestCandidate.score}/100`);
+            addLog(`VIRTUAL 1 queued — ${bestCandidate.label} on ${marketLabel(bestCandidate.symbol || '')} scored ${bestCandidate.score}/100`);
             return;
         }
         if (point.epoch <= validationState.readyEpoch) return;
@@ -577,12 +591,16 @@ const AutoDigits = observer(() => {
         const recoveryCeiling = baseStake * 16;
         const contractStake = Math.min(recoveryCeiling, Math.max(0.35, baseStake + recoveryDeficitRef.current));
         tradePnlBeforeRef.current = pnlRef.current;
-        balancedTradeRef.current = (executionStrategy === 'EVEN' || executionStrategy === 'ODD') && Math.abs(oddPressure - evenPressure) <= 4;
+        const currentOddPressure = percentagesFor(marketPointsRef.current[bestCandidate.symbol || activeSymbolRef.current] || [], 100)
+            .filter((_, index) => index % 2 !== 0)
+            .reduce((a, b) => a + b, 0);
+        const currentEvenPressure = 100 - currentOddPressure;
+        balancedTradeRef.current = (executionStrategy === 'EVEN' || executionStrategy === 'ODD') && Math.abs(currentOddPressure - currentEvenPressure) <= 4;
         realInFlightRef.current = true;
         const rowId = `ad-${Date.now()}-${++nextIdRef.current}`;
         setTrades(previousTrades => [{ id: rowId, time: formatTime(), strategy: bestCandidate.label, contract: bestCandidate.contractType, stake: contractStake, profit: 0, status: 'OPEN' }, ...previousTrades].slice(0, 30));
         setTradeContext({ page: 'Auto-Digits', bot: bestCandidate.label });
-        addLog(`EXECUTE — ${bestCandidate.contractType} ${bestCandidate.barrier ?? ''} on ${MARKETS.find(market => market.value === bestCandidate.symbol)?.label || bestCandidate.symbol} | ${contractStake.toFixed(2)} ${displayCur} | ${tradeDuration}T`);
+         addLog(`EXECUTE — ${bestCandidate.contractType} ${bestCandidate.barrier ?? ''} on ${marketLabel(bestCandidate.symbol || '')} | ${contractStake.toFixed(2)} ${displayCur} | ${tradeDuration}T`);
         buyContract({
             symbol: bestCandidate.symbol || activeSymbolRef.current,
             contract_type: bestCandidate.contractType,
@@ -662,17 +680,24 @@ const AutoDigits = observer(() => {
             setStatus(error?.message || 'Trade request failed');
             addLog(`TRADE ERROR — ${error?.message || 'request rejected'}`);
         });
-    }, [addLog, analyze, authorized, autoDuration, buyContract, currency, displayCur, duration, minScore, strategy, symbol]);
+    }, [addLog, analyze, authorized, autoDuration, buyContract, currency, displayCur, duration, marketLabel, minScore, strategy]);
 
     useEffect(() => {
         mountedRef.current = true;
         activeRef.current = true;
+        if (!connected) {
+            setStatus('Waiting for Deriv market connection');
+            return () => {
+                activeRef.current = false;
+                mountedRef.current = false;
+            };
+        }
         marketPointsRef.current = {};
         rawHistoryByMarketRef.current = {};
         marketPipRefs.current = {};
         marketCandidatesRef.current = {};
-        activeSymbolRef.current = '1HZ100V';
-        setSymbol('1HZ100V');
+        activeSymbolRef.current = marketSelectionRef.current === 'ALL' ? '1HZ100V' : marketSelectionRef.current;
+        setSymbol(activeSymbolRef.current);
         setPoints([]);
         setCurrentDigit(null);
         setCurrentPrice('');
@@ -685,19 +710,80 @@ const AutoDigits = observer(() => {
 
         const start = async () => {
             try {
-                const responses = await Promise.all(MARKETS.map(async market => ({
-                    market,
-                    response: await send({ ticks_history: market.value, count: 1000, end: 'latest', style: 'ticks' }),
-                })));
+                const activeSymbolsResponse = await send({ active_symbols: 'full', product_type: 'basic' });
+                if (activeSymbolsResponse?.error) {
+                    throw new Error(activeSymbolsResponse.error.message || 'Deriv active-symbols request failed');
+                }
+                const discoveredMarkets = normalizeMarkets(activeSymbolsResponse);
+                const availableMarkets = discoveredMarkets.length ? discoveredMarkets : FALLBACK_MARKETS;
+                marketsRef.current = availableMarkets;
+                setMarkets(availableMarkets);
+
+                const defaultMarket = availableMarkets.find(market => market.value === '1HZ100V') || availableMarkets[0];
+                const requestedSelection = marketSelectionRef.current;
+                const selectedMarket = requestedSelection === 'ALL'
+                    ? null
+                    : availableMarkets.find(market => market.value === requestedSelection) || defaultMarket;
+                if (requestedSelection !== 'ALL' && selectedMarket && requestedSelection !== selectedMarket.value) {
+                    marketSelectionRef.current = selectedMarket.value;
+                    setMarketSelection(selectedMarket.value);
+                }
+                const marketsToScan = requestedSelection === 'ALL'
+                    ? availableMarkets.filter(market => market.isOpen !== false)
+                    : selectedMarket ? [selectedMarket] : [];
+                if (!marketsToScan.length) throw new Error('No open Deriv markets are available for this selection');
+
+                const responses = await Promise.all(marketsToScan.map(async market => {
+                    try {
+                        const response = await send({ ticks_history: market.value, count: 1000, end: 'latest', style: 'ticks' });
+                        if (response?.error) {
+                            addLog(`HISTORY SKIP — ${market.label}: ${response.error.message || 'request rejected'}`);
+                            return { market, response: null };
+                        }
+                        return { market, response };
+                    } catch (error: any) {
+                        addLog(`HISTORY SKIP — ${market.label}: ${error?.message || 'request failed'}`);
+                        return { market, response: null };
+                    }
+                }));
                 if (!activeRef.current) return;
                 responses.forEach(({ market, response }) => {
-                    rawHistoryByMarketRef.current[market.value] = (response?.history?.prices || [])
+                    const prices = (response?.history?.prices || [])
                         .map(Number)
                         .filter(Number.isFinite);
+                    rawHistoryByMarketRef.current[market.value] = prices;
+                    const initialPip = market.pipSize ?? 2;
+                    marketPipRefs.current[market.value] = initialPip;
+                    if (prices.length) {
+                        marketPointsRef.current[market.value] = prices.map((quote, index) => ({
+                            quote,
+                            digit: getDigit(quote, initialPip),
+                            epoch: index,
+                        })).slice(-1000);
+                    }
                 });
-                setStatus('Baselines ready — scanning market conditions');
+                const initialSymbol = requestedSelection === 'ALL'
+                    ? (marketsToScan.find(market => market.value === '1HZ100V') || marketsToScan[0]).value
+                    : (selectedMarket || marketsToScan[0]).value;
+                const initialPoints = marketPointsRef.current[initialSymbol] || [];
+                activeSymbolRef.current = initialSymbol;
+                setSymbol(initialSymbol);
+                setPoints(initialPoints);
+                setPipSize(marketPipRefs.current[initialSymbol] || 2);
+                setCurrentDigit(initialPoints[initialPoints.length - 1]?.digit ?? null);
+                setCurrentPrice(initialPoints.length
+                    ? initialPoints[initialPoints.length - 1].quote.toFixed(marketPipRefs.current[initialSymbol] || 2)
+                    : '');
+                if (initialPoints.length) {
+                    const initialCandidate = { ...analyze(initialPoints), symbol: initialSymbol };
+                    marketCandidatesRef.current[initialSymbol] = initialCandidate;
+                    setCandidate(initialCandidate);
+                }
+                setStatus(requestedSelection === 'ALL'
+                    ? `Baselines ready — scanning ${marketsToScan.length} open markets`
+                    : `Baseline ready — scanning ${selectedMarket?.label || marketsToScan[0].label}`);
 
-                MARKETS.forEach(market => {
+                marketsToScan.forEach(market => {
                     const unsubscribe = subscribeTicks(market.value, point => {
                         if (!activeRef.current) return;
                         const marketSymbol = market.value;
@@ -735,7 +821,7 @@ const AutoDigits = observer(() => {
             mountedRef.current = false;
             unsubscribers.forEach(unsubscribe => unsubscribe());
         };
-    }, [addLog, processPoint, send, subscribeTicks]);
+    }, [addLog, analyze, connected, processPoint, send, subscribeTicks, marketSelection]);
 
     useEffect(() => {
         runningRef.current = run;
@@ -871,6 +957,17 @@ const AutoDigits = observer(() => {
 
                     <section className='ad-panel ad-controls'>
                         <div className='ad-panel__label'>BOT CONFIGURATION</div>
+                        <label>MARKET
+                            <select value={marketSelection} onChange={event => setMarketSelection(event.target.value)}>
+                                <option value='ALL'>Scan all available markets</option>
+                                {markets.map(market => (
+                                    <option key={market.value} value={market.value}>
+                                        {market.label}{market.isOpen === false ? ' (Closed)' : ''}
+                                    </option>
+                                ))}
+                            </select>
+                            <small className='ad-control-hint'>{markets.length} markets from the Deriv active-symbols feed</small>
+                        </label>
                         <label>CONTRACT TYPE<select value={strategy} onChange={event => { const value = event.target.value as StrategyValue; setStrategy(value); if (value === 'AUTO') setAutoDuration(true); }}>{['Auto', 'Parity', 'Digits', 'Barrier', 'Direction', 'Range'].map(group => <optgroup key={group} label={group}>{STRATEGIES.filter(item => item.group === group).map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</optgroup>)}</select></label>
                         <div className='ad-auto-selection'>
                             <span>MARKET + BARRIER AUTO</span>
@@ -909,7 +1006,7 @@ const AutoDigits = observer(() => {
                     <div className='ad-two-col'>
                         <section className='ad-panel ad-strategy'>
                             <div className='ad-panel__label'>CURRENT STRATEGY</div>
-                            <div className='ad-strategy__headline'><strong>{candidate?.label || `${strategy}${['OVER', 'UNDER'].includes(strategy) ? ` ${barrier}` : ''}`}</strong><div className='ad-score'><b>{candidate?.score || 0}</b><span>/100</span></div></div>
+                            <div className='ad-strategy__headline'><strong>{candidate?.label || `${strategy}${['OVER', 'UNDER'].includes(strategy) ? ` ${candidate?.barrier ?? 3}` : ''}`}</strong><div className='ad-score'><b>{candidate?.score || 0}</b><span>/100</span></div></div>
                             <div className='ad-progress'><i style={{ width: `${candidate?.score || 0}%` }} /></div>
                             <div className='ad-strategy__meta'><span className={`ad-confidence confidence-${(candidate?.confidence || 'wait').toLowerCase().replace(' ', '-')}`}>{candidate?.confidence || 'WAIT'}</span><span>Threshold {minScore}</span></div>
                             <p className='ad-reason'>{candidate?.reason || 'The engine will compare the 20T, 50T, 100T, and 1,000T windows.'}</p>
@@ -932,7 +1029,7 @@ const AutoDigits = observer(() => {
                 </main>
 
                 <aside className='auto-digits__rightbar'>
-                    <section className='ad-panel ad-engine-status'><div className='ad-panel__label'>BOT STATUS</div><div className={`ad-big-status ${run ? 'is-running' : ''}`}>{run ? 'RUNNING' : 'SCANNING'}</div><div className='ad-right-line'><span>Selected market</span><b>{MARKETS.find(market => market.value === symbol)?.label || 'Scanning all markets'}</b></div><div className='ad-right-line'><span>Selection</span><b>Condition + barrier</b></div><div className='ad-right-line'><span>Speed</span><b>Tick driven</b></div><div className='ad-right-line'><span>Data quality</span><b className={points.length >= 1000 ? 'positive' : ''}>{points.length >= 1000 ? '1,000T READY' : `${points.length}T`}</b></div><div className='ad-right-line'><span>Authorization</span><b className={authorized ? 'positive' : 'negative'}>{authorized ? 'DEMO / REAL' : 'LOGIN NEEDED'}</b></div></section>
+                     <section className='ad-panel ad-engine-status'><div className='ad-panel__label'>BOT STATUS</div><div className={`ad-big-status ${run ? 'is-running' : ''}`}>{run ? 'RUNNING' : 'SCANNING'}</div><div className='ad-right-line'><span>Selected market</span><b>{marketSelection === 'ALL' ? `Auto scan · ${marketLabel(symbol)}` : markets.find(market => market.value === marketSelection)?.label || marketLabel(symbol)}</b></div><div className='ad-right-line'><span>Selection</span><b>{strategy === 'AUTO' ? 'All strategies + best score' : 'Condition + barrier'}</b></div><div className='ad-right-line'><span>Speed</span><b>Authenticated tick feed</b></div><div className='ad-right-line'><span>Data quality</span><b className={points.length >= 1000 ? 'positive' : ''}>{points.length >= 1000 ? '1,000T READY' : `${points.length}T`}</b></div><div className='ad-right-line'><span>Authorization</span><b className={authorized ? 'positive' : 'negative'}>{authorized ? 'DEMO / REAL' : 'LOGIN NEEDED'}</b></div></section>
                     <section className='ad-panel ad-log'><div className='ad-panel__label'>ENGINE JOURNAL</div><div className='ad-log__items'>{log.map((item, index) => <p key={`${item}-${index}`}>{item}</p>)}</div></section>
                     <section className='ad-panel ad-results'><div className='ad-panel__label'>RECENT RESULTS</div>{trades.length === 0 ? <p className='ad-empty'>No executed contracts yet. Run stays gated behind two virtual wins.</p> : trades.slice(0, 6).map(trade => <div className='ad-result' key={trade.id}><span>{trade.time}</span><b>{trade.strategy}</b><strong className={trade.status === 'WIN' ? 'positive' : trade.status === 'LOSS' ? 'negative' : ''}>{trade.status === 'OPEN' ? 'OPEN' : `${trade.profit >= 0 ? '+' : ''}${fromUsd(trade.profit).toFixed(2)}`}</strong></div>)}</section>
                 </aside>
