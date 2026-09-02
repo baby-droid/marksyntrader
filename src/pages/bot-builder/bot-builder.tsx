@@ -25,6 +25,8 @@ const PALE_BLUE5 = '#6cb4e4';
 
 const FREE_BOTS_LIST = [
     // ── Signature bots (top of panel) ─────────────────────────────────────────
+    { id: 'under-cycle-auto', name: 'Under Cycle Auto', market: 'V50 1s', badge: 'UNDER CYCLE', badgeColor: '#38bdf8', xmlFile: '/bots/under-cycle-auto.xml', icon: '🔄' },
+    { id: 'ahmed-over-cycle', name: 'Ahmed Over Cycle', market: 'V50 1s', badge: 'AHMED OVER', badgeColor: '#fb7185', xmlFile: '/bots/ahmed-over-cycle.xml', icon: '⚡' },
     { id: 'differs-edge-scanner', name: 'Differs Edge Scanner — Recovery Matrix', market: 'V50 1s', badge: 'SCAN 🧠', badgeColor: '#34d399', xmlFile: '/bots/differs-edge-scanner.xml', icon: '🔎' },
     {
         id: 'ahmed-differs-cycle',

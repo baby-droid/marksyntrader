@@ -362,6 +362,29 @@
   box-shadow: 0 0 28px rgba(137, 196, 244, 0.2), 0 4px 14px rgba(0,0,0,0.25) !important;
 }
 
+/* ── Signature cycle themes ───────────────────────────────────────────────── */
+.free-bots__card--under-cycle {
+  --accent: #38bdf8 !important;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(14, 165, 233, 0.18), transparent 42%),
+    linear-gradient(145deg, rgba(8, 34, 63, 0.98), rgba(5, 15, 31, 0.98)) !important;
+  border-color: rgba(56, 189, 248, 0.42) !important;
+  box-shadow: inset 0 1px 0 rgba(125, 211, 252, 0.12), 0 4px 16px rgba(8, 145, 178, 0.12);
+  .free-bots__category-tag { color: #7dd3fc; background: rgba(14, 165, 233, 0.14); border-color: rgba(56, 189, 248, 0.28); }
+  .free-bots__card-icon-ring { border-color: rgba(56, 189, 248, 0.55); box-shadow: 0 0 18px rgba(14, 165, 233, 0.22); }
+}
+
+.free-bots__card--ahmed-over {
+  --accent: #fb7185 !important;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(244, 63, 94, 0.2), transparent 42%),
+    linear-gradient(145deg, rgba(63, 18, 43, 0.98), rgba(23, 10, 28, 0.98)) !important;
+  border-color: rgba(251, 113, 133, 0.46) !important;
+  box-shadow: inset 0 1px 0 rgba(253, 164, 175, 0.14), 0 4px 16px rgba(225, 29, 72, 0.14);
+  .free-bots__category-tag { color: #fda4af; background: rgba(244, 63, 94, 0.14); border-color: rgba(251, 113, 133, 0.3); }
+  .free-bots__card-icon-ring { border-color: rgba(251, 113, 133, 0.58); box-shadow: 0 0 18px rgba(225, 29, 72, 0.25); }
+}
+
 .free-bots__load-btn--prime {
   background: linear-gradient(135deg, #f59e0b, #d97706);
   &.active { background: linear-gradient(135deg, #6b7280, #4b5563); }

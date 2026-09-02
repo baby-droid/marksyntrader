@@ -13,6 +13,24 @@ import './free-bots.scss';
 
 const FREE_BOTS = [
   {
+    id: 'under-cycle-auto',
+    name: 'Under Cycle Auto',
+    description: '🔁 DIFFERS 9 → UNDER 9 → UNDER 8 → UNDER 7 → DIFFERS 0 → OVER 0 → OVER 1 → OVER 2. After a loss, waits for 2 consecutive evens or odds and buys the matching recovery contract.',
+    category: 'Cycle Recovery', market: 'V50 1s', type: 'Multi-Strategy', prediction: 'CYCLE',
+    xmlFile: '/bots/under-cycle-auto.xml',
+    badge: 'UNDER CYCLE', badgeColor: '#38bdf8', icon: '🔄', winRate: '—',
+    theme: 'under-cycle',
+  },
+  {
+    id: 'ahmed-over-cycle',
+    name: 'Ahmed Over Cycle',
+    description: '⚡ DIFFERS 0 → OVER 1 → OVER 2 → OVER 3 → directional reversal → DIFFERS 9 → UNDER 8 → UNDER 7 → UNDER 6. Two rises buy FALL; two falls buy RISE. Four-parity recovery follows losses.',
+    category: 'Cycle Recovery', market: 'V50 1s', type: 'Multi-Strategy', prediction: 'CYCLE',
+    xmlFile: '/bots/ahmed-over-cycle.xml',
+    badge: 'AHMED OVER', badgeColor: '#fb7185', icon: '⚡', winRate: '—',
+    theme: 'ahmed-over',
+  },
+  {
     id: 'differs-edge-scanner',
     name: 'Differs Edge Scanner — Recovery Matrix',
     description: '🧠 Scans the latest digit, rotates Differs → Over 2 → Over 3 → Differs → Under 7 → Under 6, then checks the loss digit for Even/Odd recovery. Includes 2× stake recovery.',
@@ -740,7 +758,7 @@ const FreeBots = observer(() => {
         {filtered.map(bot => (
           <div
             key={bot.id}
-            className={`free-bots__card ${loadedId === bot.id ? 'free-bots__card--loaded' : ''} ${bot.id === 'market-killer-prime-v1' && mkpOpen ? 'free-bots__card--prime-active' : ''}`}
+            className={`free-bots__card ${bot.theme ? `free-bots__card--${bot.theme}` : ''} ${loadedId === bot.id ? 'free-bots__card--loaded' : ''} ${bot.id === 'market-killer-prime-v1' && mkpOpen ? 'free-bots__card--prime-active' : ''}`}
             style={{ '--accent': bot.badgeColor } as React.CSSProperties}
           >
             <div className='free-bots__card-glow' />

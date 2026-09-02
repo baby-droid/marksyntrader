@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
+  <variables>
+    <variable id="uca_stake">stake</variable>
+    <variable id="uca_initial">initial_stake</variable>
+    <variable id="uca_martingale">martingale</variable>
+    <variable id="uca_phase">cycle_phase</variable>
+    <variable id="uca_recovery">recovery_mode</variable>
+    <variable id="uca_digit">last_digit</variable>
+    <variable id="uca_prev_parity">previous_parity</variable>
+    <variable id="uca_parity_streak">parity_streak</variable>
+  </variables>
+
+  <!--
+    UNDER CYCLE AUTO
+    DIFFERS 9 → UNDER 9 → UNDER 8 → UNDER 7 → DIFFERS 0 →
+    OVER 0 → OVER 1 → OVER 2 → repeat.
+    After every loss, wait for two consecutive evens or odds and buy
+    the matching parity contract. A recovery win returns to the cycle.
+  -->
+  <block type="trade_definition" id="uca_trade_definition" deletable="false" x="0" y="60">
+    <statement name="TRADE_OPTIONS">
+      <block type="trade_definition_market" id="uca_market" deletable="false" movable="false">
+        <field name="MARKET_LIST">synthetic_index</field>
+        <field name="SUBMARKET_LIST">random_index</field>
+        <field name="SYMBOL_LIST">1HZ50V</field>
+        <next>
+          <block type="trade_definition_tradetype" id="uca_trade_type" deletable="false" movable="false">
+            <field name="TRADETYPECAT_LIST">digits</field>
+            <field name="TRADETYPE_LIST">overunder</field>
+            <next>
+              <block type="trade_definition_contracttype" id="uca_contract_type" deletable="false" movable="false">
+                <field name="TYPE_LIST">both</field>
+                <next>
+                  <block type="trade_definition_candleinterval" id="uca_candle" deletable="false" movable="false">
+                    <field name="CANDLEINTERVAL_LIST">60</field>
+                    <next>
+                      <block type="trade_definition_restartbuysell" id="uca_restart" deletable="false" movable="false">
+                        <field name="TIME_MACHINE_ENABLED">FALSE</field>
+                        <next>
+                          <block type="trade_definition_restartonerror" id="uca_restart_error" deletable="false" movable="false">
+                            <field name="RESTARTONERROR">TRUE</field>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="INITIALIZATION">
+      <block type="variables_set" id="uca_init_stake">
+        <field name="VAR" id="uca_stake">stake</field>
+        <value name="VALUE"><block type="math_number" id="uca_stake_value"><field name="NUM">1</field></block></value>
+        <next>
+          <block type="variables_set" id="uca_init_initial">
+            <field name="VAR" id="uca_initial">initial_stake</field>
+            <value name="VALUE"><block type="math_number" id="uca_initial_value"><field name="NUM">1</field></block></value>
+            <next>
+              <block type="variables_set" id="uca_init_martingale">
+                <field name="VAR" id="uca_martingale">martingale</field>
+                <value name="VALUE"><block type="math_number" id="uca_martingale_value"><field name="NUM">2.1</field></block></value>
+                <next>
+                  <block type="variables_set" id="uca_init_phase">
+                    <field name="VAR" id="uca_phase">cycle_phase</field>
+                    <value name="VALUE"><block type="math_number" id="uca_phase_value"><field name="NUM">0</field></block></value>
+                    <next>
+                      <block type="variables_set" id="uca_init_recovery">
+                        <field name="VAR" id="uca_recovery">recovery_mode</field>
+                        <value name="VALUE"><block type="math_number" id="uca_recovery_value"><field name="NUM">0</field></block></value>
+                        <next>
+                          <block type="variables_set" id="uca_init_prev_parity">
+                            <field name="VAR" id="uca_prev_parity">previous_parity</field>
+                            <value name="VALUE"><block type="math_number" id="uca_prev_parity_value"><field name="NUM">-1</field></block></value>
+                            <next>
+                              <block type="variables_set" id="uca_init_parity_streak">
+                                <field name="VAR" id="uca_parity_streak">parity_streak</field>
+                                <value name="VALUE"><block type="math_number" id="uca_parity_streak_value"><field name="NUM">0</field></block></value>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="SUBMARKET">
+      <block type="trade_definition_tradeoptions" id="uca_trade_options" deletable="false" movable="false">
+        <mutation has_first_barrier="false" has_second_barrier="false" has_prediction="true"/>
+        <field name="DURATIONTYPE_LIST">t</field>
+        <value name="DURATION"><shadow type="math_number_positive"><field name="NUM">1</field></shadow></value>
+        <value name="AMOUNT"><shadow type="math_number_positive"><field name="NUM">1</field></shadow><block type="variables_get" id="uca_amount"><field name="VAR" id="uca_stake">stake</field></block></value>
+        <value name="PREDICTION"><shadow type="math_number_positive"><field name="NUM">9</field></shadow></value>
+      </block>
+    </statement>
+  </block>
+
+  <block type="before_purchase" id="uca_before_purchase" deletable="false" x="0" y="900">
+    <statement name="BEFOREPURCHASE_STACK">
+      <block type="variables_set" id="uca_capture_digit">
+        <field name="VAR" id="uca_digit">last_digit</field>
+        <value name="VALUE"><block type="last_digit" id="uca_last_digit"/></value>
+        <next>
+          <block type="controls_if" id="uca_update_parity">
+            <mutation else="1"/>
+            <value name="IF0"><block type="logic_compare" id="uca_same_parity"><field name="OP">EQ</field><value name="A"><block type="math_modulo" id="uca_current_mod"><value name="DIVIDEND"><block type="variables_get" id="uca_current_digit"><field name="VAR" id="uca_digit">last_digit</field></block></value><value name="DIVISOR"><shadow type="math_number"><field name="NUM">2</field></shadow></value></block></value><value name="B"><block type="variables_get" id="uca_previous_parity"><field name="VAR" id="uca_prev_parity">previous_parity</field></block></value></block></value>
+            <statement name="DO0"><block type="math_change" id="uca_inc_streak"><field name="VAR" id="uca_parity_streak">parity_streak</field><value name="DELTA"><shadow type="math_number"><field name="NUM">1</field></shadow></block></statement>
+            <statement name="ELSE"><block type="variables_set" id="uca_reset_streak"><field name="VAR" id="uca_parity_streak">parity_streak</field><value name="VALUE"><block type="math_number"><field name="NUM">1</field></block></value></block></statement>
+            <next>
+              <block type="variables_set" id="uca_store_parity">
+                <field name="VAR" id="uca_prev_parity">previous_parity</field>
+                <value name="VALUE"><block type="math_modulo" id="uca_store_mod"><value name="DIVIDEND"><block type="variables_get" id="uca_store_digit"><field name="VAR" id="uca_digit">last_digit</field></block></value><value name="DIVISOR"><shadow type="math_number"><field name="NUM">2</field></shadow></value></block></value>
+                <next>
+                  <block type="controls_if" id="uca_recovery_or_cycle">
+                    <mutation else="1"/>
+                    <value name="IF0"><block type="logic_compare" id="uca_recovery_active"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="uca_recovery_get"><field name="VAR" id="uca_recovery">recovery_mode</field></block></value><value name="B"><block type="math_number"><field name="NUM">1</field></block></value></block></value>
+                    <statement name="DO0">
+                      <block type="controls_if" id="uca_recovery_ready">
+                        <value name="IF0"><block type="logic_compare" id="uca_two_parity"><field name="OP">GTE</field><value name="A"><block type="variables_get" id="uca_streak_get"><field name="VAR" id="uca_parity_streak">parity_streak</field></block></value><value name="B"><block type="math_number"><field name="NUM">2</field></block></value></block></value>
+                        <statement name="DO0">
+                          <block type="controls_if" id="uca_even_or_odd">
+                            <mutation else="1"/>
+                            <value name="IF0"><block type="logic_compare" id="uca_even_digit"><field name="OP">EQ</field><value name="A"><block type="math_modulo" id="uca_recovery_mod"><value name="DIVIDEND"><block type="variables_get" id="uca_recovery_digit"><field name="VAR" id="uca_digit">last_digit</field></block></value><value name="DIVISOR"><shadow type="math_number"><field name="NUM">2</field></shadow></value></block></value><value name="B"><block type="math_number"><field name="NUM">0</field></block></value></block></value>
+                            <statement name="DO0"><block type="variables_set" id="uca_clear_even"><field name="VAR" id="uca_recovery">recovery_mode</field><value name="VALUE"><block type="math_number"><field name="NUM">0</field></block></value><next><block type="multiple_purchase" id="uca_buy_even"><field name="PURCHASE_1">DIGITEVEN</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/><field name="PREDICTION">NONE</field></block></next></block></statement>
+                            <statement name="ELSE"><block type="variables_set" id="uca_clear_odd"><field name="VAR" id="uca_recovery">recovery_mode</field><value name="VALUE"><block type="math_number"><field name="NUM">0</field></block></value><next><block type="multiple_purchase" id="uca_buy_odd"><field name="PURCHASE_1">DIGITODD</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/><field name="PREDICTION">NONE</field></block></next></block></statement>
+                          </block>
+                        </statement>
+                      </block>
+                    </statement>
+                    <statement name="ELSE">
+                      <block type="controls_if" id="uca_cycle_router">
+                        <mutation elseif="7"/>
+                        <value name="IF0"><block type="logic_compare" id="uca_phase0"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="uca_phase0_get"><field name="VAR" id="uca_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">0</field></block></value></block></value>
+                        <statement name="DO0"><block type="multiple_purchase" id="uca_buy_differs9"><field name="PURCHASE_1">DIGITDIFF</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/><field name="PREDICTION">9</field></block></statement>
+                        <value name="IF1"><block type="logic_compare" id="uca_phase1"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="uca_phase1_get"><field name="VAR" id="uca_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">1</field></block></value></block></value>
+                        <statement name="DO1"><block type="multiple_purchase" id="uca_buy_under9"><field name="PURCHASE_1">DIGITUNDER</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/><field name="PREDICTION">9</field></block></statement>
+                        <value name="IF2"><block type="logic_compare" id="uca_phase2"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="uca_phase2_get"><field name="VAR" id="uca_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">2</field></block></value></block></value>
+                        <statement name="DO2"><block type="multiple_purchase" id="uca_buy_under8"><field name="PURCHASE_1">DIGITUNDER</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/><field name="PREDICTION">8</field></block></statement>
+                        <value name="IF3"><block type="logic_compare" id="uca_phase3"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="uca_phase3_get"><field name="VAR" id="uca_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">3</field></block></value></block></value>
+                        <statement name="DO3"><block type="multiple_purchase" id="uca_buy_under7"><field name="PURCHASE_1">DIGITUNDER</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/><field name="PREDICTION">7</field></block></statement>
+                        <value name="IF4"><block type="logic_compare" id="uca_phase4"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="uca_phase4_get"><field name="VAR" id="uca_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">4</field></block></value></block></value>
+                        <statement name="DO4"><block type="multiple_purchase" id="uca_buy_differs0"><field name="PURCHASE_1">DIGITDIFF</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/><field name="PREDICTION">0</field></block></statement>
+                        <value name="IF5"><block type="logic_compare" id="uca_phase5"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="uca_phase5_get"><field name="VAR" id="uca_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">5</field></block></value></block></value>
+                        <statement name="DO5"><block type="multiple_purchase" id="uca_buy_over0"><field name="PURCHASE_1">DIGITOVER</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/><field name="PREDICTION">0</field></block></statement>
+                        <value name="IF6"><block type="logic_compare" id="uca_phase6"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="uca_phase6_get"><field name="VAR" id="uca_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">6</field></block></value></block></value>
+                        <statement name="DO6"><block type="multiple_purchase" id="uca_buy_over1"><field name="PURCHASE_1">DIGITOVER</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/><field name="PREDICTION">1</field></block></statement>
+                        <value name="IF7"><block type="logic_compare" id="uca_phase7"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="uca_phase7_get"><field name="VAR" id="uca_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">7</field></block></value></block></value>
+                        <statement name="DO7"><block type="multiple_purchase" id="uca_buy_over2"><field name="PURCHASE_1">DIGITOVER</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/><field name="PREDICTION">2</field></block></statement>
+                      </block>
+                    </statement>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+
+  <block type="after_purchase" id="uca_after_purchase" deletable="false" x="900" y="900">
+    <statement name="AFTERPURCHASE_STACK">
+      <block type="controls_if" id="uca_result_router">
+        <mutation else="1"/>
+        <value name="IF0"><block type="contract_check_result" id="uca_win_check"><field name="CHECK_RESULT">win</field></block></value>
+        <statement name="DO0">
+          <block type="variables_set" id="uca_win_reset_stake"><field name="VAR" id="uca_stake">stake</field><value name="VALUE"><block type="variables_get" id="uca_win_initial"><field name="VAR" id="uca_initial">initial_stake</field></block></value><next><block type="controls_if" id="uca_advance_or_restart"><mutation else="1"/><value name="IF0"><block type="logic_compare" id="uca_phase_lt_7"><field name="OP">LT</field><value name="A"><block type="variables_get" id="uca_phase_after_win"><field name="VAR" id="uca_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">7</field></block></value></block></value><statement name="DO0"><block type="math_change" id="uca_advance_phase"><field name="VAR" id="uca_phase">cycle_phase</field><value name="DELTA"><shadow type="math_number"><field name="NUM">1</field></shadow></block></statement><statement name="ELSE"><block type="variables_set" id="uca_restart_phase"><field name="VAR" id="uca_phase">cycle_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">0</field></block></value></statement></block></next></block>
+        </statement>
+        <statement name="ELSE">
+          <block type="variables_set" id="uca_loss_stake"><field name="VAR" id="uca_stake">stake</field><value name="VALUE"><block type="math_arithmetic" id="uca_multiply_stake"><field name="OP">MULTIPLY</field><value name="A"><block type="variables_get" id="uca_current_stake"><field name="VAR" id="uca_stake">stake</field></block></value><value name="B"><block type="variables_get" id="uca_martingale_get"><field name="VAR" id="uca_martingale">martingale</field></block></value></block></value><next><block type="variables_set" id="uca_loss_prev_parity"><field name="VAR" id="uca_prev_parity">previous_parity</field><value name="VALUE"><block type="math_number"><field name="NUM">-1</field></block></value><next><block type="variables_set" id="uca_loss_parity_streak"><field name="VAR" id="uca_parity_streak">parity_streak</field><value name="VALUE"><block type="math_number"><field name="NUM">0</field></block></value><next><block type="variables_set" id="uca_arm_recovery"><field name="VAR" id="uca_recovery">recovery_mode</field><value name="VALUE"><block type="math_number"><field name="NUM">1</field></block></value></block></next></block></next></block>
+        </statement>
+        <next><block type="trade_again" id="uca_trade_again"/></next>
+      </block>
+    </statement>
+  </block>
+</xml>
