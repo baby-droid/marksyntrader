@@ -353,6 +353,7 @@ const AutoDigits = observer(() => {
 
     const marketPointsRef = useRef<Record<string, TickPoint[]>>({});
     const rawHistoryByMarketRef = useRef<Record<string, number[]>>({});
+    const historyEpochsByMarketRef = useRef<Record<string, number[]>>({});
     const marketPipRefs = useRef<Record<string, number>>({});
     const marketCandidatesRef = useRef<Record<string, Candidate>>({});
     const activeSymbolRef = useRef('1HZ100V');
@@ -1028,15 +1029,81 @@ const AutoDigits = observer(() => {
     useEffect(() => {
         mountedRef.current = true;
         activeRef.current = true;
+        let cancelled = false;
+        let startInFlight = false;
+        let generation = 0;
+        let retryTimer: ReturnType<typeof setTimeout> | null = null;
+        let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
+        let retryAttempt = 0;
+        const lastTickAtByMarket = new Map<string, number>();
+        const unsubscribers: Array<() => void> = [];
+
+        const clearWatchdog = () => {
+            if (watchdogTimer) clearTimeout(watchdogTimer);
+            watchdogTimer = null;
+        };
+
+        const unsubscribeFeeds = () => {
+            while (unsubscribers.length) {
+                try {
+                    unsubscribers.pop()?.();
+                } catch {
+                    // A dropped socket may already have closed the stream.
+                }
+            }
+            lastTickAtByMarket.clear();
+        };
+
+        const scheduleRetry = (delay = 1000) => {
+            if (cancelled) return;
+            if (retryTimer) clearTimeout(retryTimer);
+            const backoff = Math.min(30000, Math.max(delay, 1000 * (2 ** retryAttempt)));
+            retryAttempt += 1;
+            retryTimer = setTimeout(() => {
+                retryTimer = null;
+                void start();
+            }, backoff);
+        };
+
+        const armWatchdog = (watchGeneration: number, markets: MarketOption[]) => {
+            clearWatchdog();
+            watchdogTimer = setTimeout(() => {
+                if (cancelled || watchGeneration !== generation) return;
+                const now = Date.now();
+                const stalled = markets.some(market => {
+                    const lastTickAt = lastTickAtByMarket.get(market.value);
+                    return !lastTickAt || now - lastTickAt >= 20000;
+                });
+                if (stalled) {
+                    if (startInFlight) {
+                        armWatchdog(watchGeneration, markets);
+                        return;
+                    }
+                    generation += 1;
+                    unsubscribeFeeds();
+                    setStatus('Market feed stalled — reconnecting authenticated ticks');
+                    scheduleRetry(1000);
+                } else {
+                    armWatchdog(watchGeneration, markets);
+                }
+            }, 20000);
+        };
+
         if (!connected) {
             setStatus('Waiting for Deriv market connection');
             return () => {
+                cancelled = true;
+                generation += 1;
+                if (retryTimer) clearTimeout(retryTimer);
+                clearWatchdog();
+                unsubscribeFeeds();
                 activeRef.current = false;
                 mountedRef.current = false;
             };
         }
         marketPointsRef.current = {};
         rawHistoryByMarketRef.current = {};
+        historyEpochsByMarketRef.current = {};
         marketPipRefs.current = {};
         marketCandidatesRef.current = {};
         activeSymbolRef.current = marketSelectionRef.current === 'ALL' ? '1HZ100V' : marketSelectionRef.current;
@@ -1049,21 +1116,38 @@ const AutoDigits = observer(() => {
         setStatus('Loading authenticated market baselines');
         validationRef.current = { key: '', wins: 0, attempt: 0, readyEpoch: 0 };
         setValidation({ wins: 0, attempt: 0, state: 'IDLE' });
-        const unsubscribers: Array<() => void> = [];
 
         const start = async () => {
+            if (cancelled || startInFlight) return;
+            startInFlight = true;
+            const runGeneration = ++generation;
+            unsubscribeFeeds();
             try {
                 // The current Deriv options WebSocket rejects `product_type` on
                 // active_symbols requests. The full response already contains
                 // the symbols needed by the scanner, including synthetic
                 // markets, so keep this request compatible with both public
                 // and authenticated sessions.
-                const activeSymbolsResponse = await send({ active_symbols: 'full' });
-                if (activeSymbolsResponse?.error) {
-                    throw new Error(activeSymbolsResponse.error.message || 'Deriv active-symbols request failed');
+                if (cancelled || runGeneration !== generation || !activeRef.current) return;
+                let discoveredMarkets: MarketOption[] = [];
+                try {
+                    const activeSymbolsResponse = await send({ active_symbols: 'full' });
+                    if (activeSymbolsResponse?.error) {
+                        addLog(`MARKET LIST — using cached markets: ${activeSymbolsResponse.error.message || 'request rejected'}`);
+                    } else {
+                        discoveredMarkets = normalizeMarkets(activeSymbolsResponse);
+                    }
+                } catch (error: any) {
+                    // Market discovery is supplementary. A rate-limited or
+                    // temporarily unavailable active_symbols request must not
+                    // prevent the already-known selected market from streaming.
+                    addLog(`MARKET LIST — using cached markets: ${error?.message || 'request failed'}`);
                 }
-                const discoveredMarkets = normalizeMarkets(activeSymbolsResponse);
-                const availableMarkets = discoveredMarkets.length ? discoveredMarkets : FALLBACK_MARKETS;
+                const availableMarkets = discoveredMarkets.length
+                    ? discoveredMarkets
+                    : marketsRef.current.length
+                        ? marketsRef.current
+                        : FALLBACK_MARKETS;
                 marketsRef.current = availableMarkets;
                 setMarkets(availableMarkets);
 
@@ -1081,33 +1165,85 @@ const AutoDigits = observer(() => {
                     : selectedMarket ? [selectedMarket] : [];
                 if (!marketsToScan.length) throw new Error('No open Deriv markets are available for this selection');
 
-                const responses = await Promise.all(marketsToScan.map(async market => {
+                // Attach live feeds before the baseline requests. The scanner
+                // should remain live while a large ALL-market history load is
+                // in progress instead of appearing frozen until every history
+                // request completes.
+                marketsToScan.forEach(market => {
+                    if (cancelled || runGeneration !== generation) return;
+                    lastTickAtByMarket.set(market.value, Date.now());
+                    const unsubscribe = subscribeTicks(market.value, point => {
+                        if (cancelled || runGeneration !== generation || !activeRef.current) return;
+                        const marketSymbol = market.value;
+                        lastTickAtByMarket.set(marketSymbol, Date.now());
+                        retryAttempt = 0;
+                        const authoritativePip = Number(point.pip_size);
+                        if (Number.isFinite(authoritativePip) && authoritativePip >= 0) {
+                            marketPipRefs.current[marketSymbol] = authoritativePip;
+                            const rawHistory = rawHistoryByMarketRef.current[marketSymbol];
+                            if (rawHistory?.length) {
+                                const historyEpochs = historyEpochsByMarketRef.current[marketSymbol] || [];
+                                const historyPoints = rawHistory.map((quote, index) => ({
+                                    quote,
+                                    digit: getDigit(quote, authoritativePip),
+                                    epoch: Number.isFinite(historyEpochs[index]) ? historyEpochs[index] : index,
+                                }));
+                                const livePoints = (marketPointsRef.current[marketSymbol] || [])
+                                    .filter(existing => existing.epoch > 1000000000);
+                                const merged = new Map<number, TickPoint>();
+                                [...historyPoints, ...livePoints].forEach(existing => merged.set(existing.epoch, existing));
+                                marketPointsRef.current[marketSymbol] = Array.from(merged.values()).slice(-1000);
+                                rawHistoryByMarketRef.current[marketSymbol] = [];
+                                historyEpochsByMarketRef.current[marketSymbol] = [];
+                            }
+                        }
+                        const pip = marketPipRefs.current[marketSymbol] ?? 2;
+                        const previous = marketPointsRef.current[marketSymbol]?.[marketPointsRef.current[marketSymbol].length - 1];
+                        if (previous?.epoch === point.epoch) return;
+                        processPoint(marketSymbol, {
+                            ...point,
+                            digit: getDigit(point.quote, pip),
+                        });
+                    });
+                    unsubscribers.push(unsubscribe);
+                });
+                const responses: Array<{ market: MarketOption; response: any }> = [];
+                for (const market of marketsToScan) {
+                    if (cancelled || runGeneration !== generation) return;
                     try {
                         const response = await send({ ticks_history: market.value, count: 1000, end: 'latest', style: 'ticks' });
                         if (response?.error) {
                             addLog(`HISTORY SKIP — ${market.label}: ${response.error.message || 'request rejected'}`);
-                            return { market, response: null };
+                            responses.push({ market, response: null });
+                        } else {
+                            responses.push({ market, response });
                         }
-                        return { market, response };
                     } catch (error: any) {
                         addLog(`HISTORY SKIP — ${market.label}: ${error?.message || 'request failed'}`);
-                        return { market, response: null };
+                        responses.push({ market, response: null });
                     }
-                }));
-                if (!activeRef.current) return;
+                }
+                if (cancelled || runGeneration !== generation || !activeRef.current) return;
                 responses.forEach(({ market, response }) => {
                     const prices = (response?.history?.prices || [])
                         .map(Number)
                         .filter(Number.isFinite);
+                    const epochs = (response?.history?.times || []).map(Number);
                     rawHistoryByMarketRef.current[market.value] = prices;
-                    const initialPip = market.pipSize ?? 2;
+                    historyEpochsByMarketRef.current[market.value] = epochs;
+                    const initialPip = marketPipRefs.current[market.value] ?? market.pipSize ?? 2;
                     marketPipRefs.current[market.value] = initialPip;
                     if (prices.length) {
-                        marketPointsRef.current[market.value] = prices.map((quote, index) => ({
+                        const historyPoints = prices.map((quote, index) => ({
                             quote,
                             digit: getDigit(quote, initialPip),
-                            epoch: index,
-                        })).slice(-1000);
+                            epoch: Number.isFinite(epochs[index]) ? epochs[index] : index,
+                        }));
+                        const livePoints = (marketPointsRef.current[market.value] || [])
+                            .filter(existing => existing.epoch > 1000000000);
+                        const merged = new Map<number, TickPoint>();
+                        [...historyPoints, ...livePoints].forEach(point => merged.set(point.epoch, point));
+                        marketPointsRef.current[market.value] = Array.from(merged.values()).slice(-1000);
                     }
                 });
                 const initialSymbol = requestedSelection === 'ALL'
@@ -1130,44 +1266,26 @@ const AutoDigits = observer(() => {
                 setStatus(requestedSelection === 'ALL'
                     ? `Baselines ready — scanning ${marketsToScan.length} open markets`
                     : `Baseline ready — scanning ${selectedMarket?.label || marketsToScan[0].label}`);
-
-                marketsToScan.forEach(market => {
-                    const unsubscribe = subscribeTicks(market.value, point => {
-                        if (!activeRef.current) return;
-                        const marketSymbol = market.value;
-                        const authoritativePip = Number(point.pip_size);
-                        if (Number.isFinite(authoritativePip) && authoritativePip >= 0) {
-                            marketPipRefs.current[marketSymbol] = authoritativePip;
-                            const rawHistory = rawHistoryByMarketRef.current[marketSymbol];
-                            if (rawHistory?.length) {
-                                marketPointsRef.current[marketSymbol] = rawHistory.map((quote, index) => ({
-                                    quote,
-                                    digit: getDigit(quote, authoritativePip),
-                                    epoch: index,
-                                })).slice(-1000);
-                                rawHistoryByMarketRef.current[marketSymbol] = [];
-                            }
-                        }
-                        const pip = marketPipRefs.current[marketSymbol] ?? 2;
-                        processPoint(marketSymbol, {
-                            ...point,
-                            digit: getDigit(point.quote, pip),
-                        });
-                    });
-                    unsubscribers.push(unsubscribe);
-                });
+                armWatchdog(runGeneration, marketsToScan);
             } catch (error) {
-                if (activeRef.current) {
+                if (!cancelled && runGeneration === generation && activeRef.current) {
                     setStatus(error?.message || 'Unable to load market data');
                     addLog(`DATA ERROR — ${error?.message || 'market baseline request failed'}`);
+                    scheduleRetry(1500);
                 }
+            } finally {
+                startInFlight = false;
             }
         };
-        start();
+        void start();
         return () => {
+            cancelled = true;
+            generation += 1;
+            if (retryTimer) clearTimeout(retryTimer);
+            clearWatchdog();
+            unsubscribeFeeds();
             activeRef.current = false;
             mountedRef.current = false;
-            unsubscribers.forEach(unsubscribe => unsubscribe());
         };
     }, [addLog, analyze, connected, processPoint, send, subscribeTicks, marketSelection]);
 

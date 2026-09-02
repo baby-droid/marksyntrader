@@ -61,3 +61,5 @@
 - [Ahmed Differs Cycle recovery](ahmed-differs-cycle-recovery.md) — every loss resets parity history and waits for three same-parity digits before the contrarian recovery buy.
 - [Blockly XML validation](blockly-xml-validation.md) — close child value/statement wrappers before parent blocks; parse XML and verify explicit block IDs after edits and builds.
 - [Auto-Digits active symbols API](auto-digits-active-symbols.md) — current Deriv options WebSocket rejects product_type on active_symbols; request full symbols without that field.
+- [Deriv tick observable teardown](auto-trades-feed-lifecycle.md) — unsubscribing a DerivAPIBasic stream owns the matching forget; manual forgets can duplicate requests and trigger rate limits.
+- [Auto-Digits feed lifecycle](auto-digits-feed-lifecycle.md) — attach authenticated live feeds before baseline history, cancel stale loaders, watchdog silent streams, and calculate digits with live pip_size plus epoch deduplication.
