@@ -213,30 +213,28 @@ const oppositeStrategy = (strategy: StrategyValue): StrategyValue | null => ({
     'LOW TICK': 'HIGH TICK',
 }[strategy] || null);
 
+// AUTO ranks a fresh setup instead of forcing a time-based rotation. This
+// means the live tick data decides the entry, while the order is used only as
+// a deterministic tie-breaker when two candidates have the same score.
 const AUTO_STRATEGIES: ConcreteStrategy[] = [
-    'OVER', 'UNDER', 'EVEN', 'ODD', 'MATCHES', 'DIFFERS',
+    'EVEN', 'ODD', 'OVER', 'UNDER', 'DIFFERS', 'MATCHES',
     'RISE', 'FALL', 'ONLY UPS', 'ONLY DOWNS', 'HIGH TICK', 'LOW TICK',
 ];
 
-type AutoRotationPlan = { strategy: ConcreteStrategy; barrier?: number };
-
-// AUTO rotates through an explicit, bounded plan. This prevents the scanner
-// from repeatedly choosing one contract while still testing every requested
-// Over/Under barrier and the supported digit/direction contracts.
-const AUTO_ROTATION_PLANS: AutoRotationPlan[] = [
-    ...[4, 5, 6, 7, 8].map(barrier => ({ strategy: 'OVER' as ConcreteStrategy, barrier })),
-    ...[4, 3, 2, 1].map(barrier => ({ strategy: 'UNDER' as ConcreteStrategy, barrier })),
-    ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(barrier => ({ strategy: 'MATCHES' as ConcreteStrategy, barrier })),
-    ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(barrier => ({ strategy: 'DIFFERS' as ConcreteStrategy, barrier })),
-    { strategy: 'EVEN' },
-    { strategy: 'ODD' },
-    { strategy: 'RISE' },
-    { strategy: 'FALL' },
-    { strategy: 'ONLY UPS' },
-    { strategy: 'ONLY DOWNS' },
-    { strategy: 'HIGH TICK' },
-    { strategy: 'LOW TICK' },
+// Loss recovery deliberately excludes Matches, Differs, and the more
+// aggressive tick contracts. Matches have a low hit rate and can compound
+// losses quickly, so they are only considered after the account returns to
+// normal mode and the candidate is exceptionally strong.
+const AUTO_RECOVERY_STRATEGIES: ConcreteStrategy[] = [
+    'OVER', 'UNDER', 'EVEN', 'ODD', 'RISE', 'FALL',
 ];
+const AUTO_MATCH_MIN_SCORE = 90;
+
+const autoStrategyRank = (strategy: ConcreteStrategy, recovery: boolean) => {
+    const order = recovery ? AUTO_RECOVERY_STRATEGIES : AUTO_STRATEGIES;
+    const rank = order.indexOf(strategy);
+    return rank === -1 ? order.length : rank;
+};
 
 const chooseAutomaticBarrier = (points: TickPoint[], selectedStrategy: ConcreteStrategy, fallback: number, forcedBarrier?: number) => {
     if (!['OVER', 'UNDER', 'MATCHES', 'DIFFERS'].includes(selectedStrategy)) return undefined;
@@ -343,7 +341,6 @@ const AutoDigits = observer(() => {
     const recentResultsRef = useRef<Array<'W' | 'L'>>([]);
     const marketSelectionRef = useRef('1HZ100V');
     const marketsRef = useRef<MarketOption[]>(FALLBACK_MARKETS);
-    const autoRotationIndexRef = useRef(0);
     const recoveryStakeRef = useRef(1);
     const completedRunsRef = useRef(0);
     const balanceRef = useRef<number | null>(null);
@@ -357,7 +354,6 @@ const AutoDigits = observer(() => {
         marketCandidatesRef.current = {};
         lastCandidateRef.current = null;
         validationRef.current = { key: '', wins: 0, attempt: 0, readyEpoch: 0 };
-        autoRotationIndexRef.current = 0;
         setCandidate(null);
         setValidation({ wins: 0, attempt: 0, state: 'IDLE' });
         setStatus(marketSelection === 'ALL' ? 'Re-scanning all available markets' : 'Re-scanning selected market');
@@ -372,7 +368,6 @@ const AutoDigits = observer(() => {
         marketCandidatesRef.current = {};
         lastCandidateRef.current = null;
         validationRef.current = { key: '', wins: 0, attempt: 0, readyEpoch: 0 };
-        autoRotationIndexRef.current = 0;
         setCandidate(null);
         setValidation({ wins: 0, attempt: 0, state: 'IDLE' });
         setStatus('Re-scanning selected contract conditions');
@@ -551,13 +546,25 @@ const AutoDigits = observer(() => {
     }, [logicMode, minScore]);
 
     const analyze = useCallback((nextPoints: TickPoint[]): Candidate => {
-        const strategies = strategy === 'AUTO' ? AUTO_STRATEGIES : [strategy];
+        const inRecovery = lossStreakRef.current > 0;
+        const strategies = strategy === 'AUTO'
+            ? (inRecovery ? AUTO_RECOVERY_STRATEGIES : AUTO_STRATEGIES)
+            : [strategy];
         const candidates = strategies.map(analysisStrategy =>
             analyzeStrategy(nextPoints, analysisStrategy as ConcreteStrategy, strategy === 'AUTO')
         );
-        const qualified = candidates.filter(item => item.score >= minScore);
-        return [...(qualified.length ? qualified : candidates)]
-            .sort((a, b) => b.score - a.score)[0] || analyzeStrategy(nextPoints, 'OVER', strategy === 'AUTO');
+        const eligibleCandidates = candidates.filter(item =>
+            // Matches is considered only when its score is materially above
+            // the normal threshold because one wrong digit loses the stake.
+            item.strategy !== 'MATCHES' || item.score >= AUTO_MATCH_MIN_SCORE
+        );
+        const qualified = eligibleCandidates.filter(item => item.score >= minScore);
+        const ranked = [...(qualified.length ? qualified : eligibleCandidates)].sort((a, b) =>
+            b.score - a.score ||
+            autoStrategyRank(a.strategy as ConcreteStrategy, inRecovery) -
+            autoStrategyRank(b.strategy as ConcreteStrategy, inRecovery)
+        );
+        return ranked[0] || analyzeStrategy(nextPoints, inRecovery ? 'OVER' : 'EVEN', strategy === 'AUTO');
     }, [analyzeStrategy, minScore, strategy]);
 
     const processPoint = useCallback((marketSymbol: string, point: TickPoint) => {
@@ -568,18 +575,17 @@ const AutoDigits = observer(() => {
 
         const nextCandidate = { ...analyze(nextPoints), symbol: marketSymbol };
         marketCandidatesRef.current[marketSymbol] = nextCandidate;
+        const recoveryMode = lossStreakRef.current > 0;
         const bestCandidate = Object.values(marketCandidatesRef.current)
-            .sort((a, b) => b.score - a.score)[0] || nextCandidate;
+            .sort((a, b) =>
+                b.score - a.score ||
+                autoStrategyRank(a.strategy as ConcreteStrategy, recoveryMode) -
+                autoStrategyRank(b.strategy as ConcreteStrategy, recoveryMode)
+            )[0] || nextCandidate;
         const isActiveMarket = bestCandidate.symbol === marketSymbol;
-        const rotationPlan = strategy === 'AUTO'
-            ? AUTO_ROTATION_PLANS[autoRotationIndexRef.current % AUTO_ROTATION_PLANS.length]
-            : undefined;
-        const executionCandidate = rotationPlan
-            ? {
-                ...analyzeStrategy(nextPoints, rotationPlan.strategy, true, rotationPlan.barrier),
-                symbol: marketSymbol,
-            }
-            : bestCandidate;
+        // The live analysis chooses the entry. Do not force a time-based
+        // rotation that can send a weak or unwanted contract.
+        const executionCandidate = bestCandidate;
         if (isActiveMarket || !lastCandidateRef.current) {
             const previousActiveSymbol = activeSymbolRef.current;
             activeSymbolRef.current = bestCandidate.symbol || marketSymbol;
@@ -602,22 +608,30 @@ const AutoDigits = observer(() => {
         const executionStrategy: ConcreteStrategy = executionCandidate.strategy || (strategy === 'AUTO' ? 'OVER' : strategy);
         const selectedContractType = String(executionCandidate.contractType || strategyContract(executionStrategy)).toUpperCase();
         const candidateKey = `${executionCandidate.symbol}:${selectedContractType}:${executionCandidate.barrier ?? 'none'}`;
-        const recoverySafeTypes = new Set(['DIGITEVEN', 'DIGITODD', 'DIGITMATCH', 'DIGITDIFF', 'DIGITOVER', 'DIGITUNDER', 'CALL', 'PUT']);
-        const inRecovery = recoveryDeficitRef.current > 0 || lossStreakRef.current > 0;
+        const recoverySafeTypes = new Set(['DIGITEVEN', 'DIGITODD', 'DIGITOVER', 'DIGITUNDER', 'CALL', 'PUT']);
+        const inRecovery = recoveryMode;
+        const isMatches = selectedContractType === 'DIGITMATCH';
+        const validationState = validationRef.current;
+        // Matches is never used as a recovery contract, including when it
+        // was manually selected before the loss happened.
+        if (inRecovery && isMatches) {
+            if (lastRecoverySkipRef.current !== executionCandidate.label) {
+                lastRecoverySkipRef.current = executionCandidate.label;
+                addLog(`RECOVERY BLOCK — ${executionCandidate.label}; Matches is disabled after a loss`);
+            }
+            validationRef.current = { key: '', wins: 0, attempt: validationState.attempt + 1, readyEpoch: point.epoch };
+            setStatus('RECOVERY FILTER — Matches disabled; waiting for Over, Under, Even, Odd, Rise, or Fall');
+            return;
+        }
         if (inRecovery && (!recoverySafeTypes.has(selectedContractType) || executionCandidate.score < Math.max(minScore, 78))) {
             const skippedPlan = executionCandidate.label;
             if (lastRecoverySkipRef.current !== skippedPlan) {
                 lastRecoverySkipRef.current = skippedPlan;
                 addLog(`RECOVERY SKIP — ${skippedPlan} did not meet the score/risk gate`);
             }
-            if (rotationPlan) {
-                autoRotationIndexRef.current = (autoRotationIndexRef.current + 1) % AUTO_ROTATION_PLANS.length;
-                validationRef.current = { key: '', wins: 0, attempt: 0, readyEpoch: point.epoch };
-            }
             setStatus('RECOVERY FILTER — waiting for a qualified, lower-risk contract');
             return;
         }
-        const validationState = validationRef.current;
         if (!validationState.key || validationState.key !== candidateKey) {
             validationRef.current = { key: candidateKey, wins: 0, attempt: 1, readyEpoch: point.epoch };
             setValidation({ wins: 0, attempt: 1, state: 'VIRTUAL 1' });
@@ -711,7 +725,6 @@ const AutoDigits = observer(() => {
         setTradeContext({ page: 'Auto-Digits', bot: executionCandidate.label });
         if (safeContractStake < requestedStake) addLog(`STAKE CONTROLLED — ${requestedStake.toFixed(2)} → ${safeContractStake.toFixed(2)} ${displayCur} by goal/risk limits`);
         addLog(`EXECUTE — ${executionCandidate.contractType} ${executionCandidate.barrier ?? ''} on ${marketLabel(executionCandidate.symbol || '')} | ${safeContractStake.toFixed(2)} ${displayCur} | ${tradeDuration}T`);
-        if (rotationPlan) autoRotationIndexRef.current = (autoRotationIndexRef.current + 1) % AUTO_ROTATION_PLANS.length;
         buyContract({
             symbol: executionCandidate.symbol || activeSymbolRef.current,
             contract_type: executionCandidate.contractType,
@@ -726,7 +739,7 @@ const AutoDigits = observer(() => {
                 execution_mode: 'market-condition-scanner',
                 strategy: executionCandidate.label,
                 validation: '2 virtual wins',
-                selected_by: rotationPlan ? 'safe-contract-rotation' : 'market-condition-scanner',
+                selected_by: inRecovery ? 'loss-recovery-ranked' : 'best-entry-ranked',
                 batch_id: `AUTO-DIGITS-${Date.now()}`,
             },
         }, settled => {
@@ -740,6 +753,11 @@ const AutoDigits = observer(() => {
             const settledRuns = completedRunsRef.current + 1;
             completedRunsRef.current = settledRuns;
             setCompletedRuns(settledRuns);
+            // A settlement changes the allowed contract pool. Re-rank every
+            // market from fresh data instead of reusing a normal-mode
+            // candidate during recovery (or a recovery candidate after a win).
+            marketCandidatesRef.current = {};
+            lastCandidateRef.current = null;
             const autoStakeActive = autoStakeEnabled && settledRuns >= 5;
             recentResultsRef.current = [...recentResultsRef.current, won ? 'W' : 'L'].slice(-8);
             if (won) {
@@ -1002,7 +1020,6 @@ const AutoDigits = observer(() => {
         recoveryStakeRef.current = stakeRef.current;
         completedRunsRef.current = 0;
         setCompletedRuns(0);
-        autoRotationIndexRef.current = 0;
         recentResultsRef.current = [];
         pnlRef.current = 0;
         setPnl(0);
@@ -1032,7 +1049,6 @@ const AutoDigits = observer(() => {
         completedRunsRef.current = 0;
         setCompletedRuns(0);
         recoveryStakeRef.current = stakeRef.current;
-        autoRotationIndexRef.current = 0;
         setRun(true);
         setStatus(authorized ? 'Scanning and validating' : 'Login required before real execution');
         addLog(authorized ? 'START BOT — virtual validation gate enabled' : 'START BOT — scanner active, execution waiting for authorization');
@@ -1122,7 +1138,7 @@ const AutoDigits = observer(() => {
                         <div className='ad-recovery__line'><span>Next stake</span><strong>{fromUsd(Math.max(0.35, autoStakeEnabled && completedRuns >= 5 ? recoveryStakeRef.current : stakeRef.current)).toFixed(2)} {displayCur}</strong></div>
                         <div className='ad-recovery__line'><span>Auto-stake</span><b>{autoStakeEnabled ? `${Math.max(0, 5 - completedRuns)} runs to warm-up` : 'OFF · manual only'}</b></div>
                         <div className='ad-recovery__line'><span>Martingale</span><b>{bestMartingale.toFixed(2)}x</b></div>
-                        <div className='ad-recovery__line'><span>Mode</span><b>{lossStreak >= 3 ? 'RE-SCAN' : recoveryDeficit ? 'CONTROLLED' : 'NORMAL'}</b></div>
+                        <div className='ad-recovery__line'><span>Mode</span><b>{lossStreak >= 3 ? 'RE-SCAN' : lossStreak > 0 ? 'RECOVERY' : 'NORMAL'}</b></div>
                         <button className='ad-outline-btn' onClick={resetEngine}>RESET RISK STATE</button>
                     </section>
 
@@ -1141,9 +1157,9 @@ const AutoDigits = observer(() => {
                         </label>
                         <label>CONTRACT TYPE<select value={strategy} onChange={event => { const value = event.target.value as StrategyValue; setStrategy(value); if (value === 'AUTO') setAutoDuration(true); }}>{['Auto', 'Parity', 'Digits', 'Barrier', 'Direction', 'Range'].map(group => <optgroup key={group} label={group}>{STRATEGIES.filter(item => item.group === group).map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</optgroup>)}</select></label>
                         <div className='ad-auto-selection'>
-                            <span>SAFE CONTRACT ROTATION</span>
+                            <span>BEST ENTRY POLICY</span>
                             <strong>{selectedAutoStrategy}{selectedAutoBarrier != null ? ` · BARRIER ${selectedAutoBarrier}` : ''}</strong>
-                            <small>AUTO rotates Over 4–8, Under 4–1, Matches/Differs 0–9, Even/Odd, Rise/Fall and tick contracts.</small>
+                            <small>AUTO ranks live setups: Even/Odd, Over/Under, Differs, high-confidence Matches, Rise/Fall, Only Ups/Downs, then tick contracts. After a loss it uses only Over/Under, Even/Odd, Rise/Fall.</small>
                         </div>
                         <div className='ad-control-row'><label>STAKE<NumberField value={Number(stake) || 0.35} min={0.35} max={1000} onCommit={value => setStake(value.toFixed(2))} /></label><label>MIN SCORE<NumberField value={minScore} min={50} max={95} onCommit={setMinScore} /></label></div>
                         <div className='ad-duration-row'><span>DURATION</span><button className={autoDuration ? 'is-active' : ''} onClick={() => setAutoDuration(true)}>AUTO {activeDuration}T</button>{[1, 2, 3, 4, 5].map(value => <button key={value} className={!autoDuration && duration === value ? 'is-active' : ''} onClick={() => { setAutoDuration(false); setDuration(value); }}>{value}T</button>)}</div>
@@ -1207,7 +1223,7 @@ const AutoDigits = observer(() => {
                     <div className='ad-three-col'>
                         <section className='ad-panel ad-recent'><div className='ad-panel__label'>RECENT TICKS <span>(LAST 30)</span></div><div className='ad-ticks'>{recentDigits.map((point, index) => <span key={`${point.epoch}-${index}`} className={point.digit % 2 === 0 ? 'even' : 'odd'}>{point.digit}</span>)}</div><div className='ad-parity-bar'><i style={{ width: `${oddPressure}%` }} /><span>ODD {oddPressure.toFixed(0)}%</span><b>EVEN {evenPressure.toFixed(0)}%</b></div></section>
                         <section className='ad-panel ad-validation'><div className='ad-panel__label'>VIRTUAL VALIDATION</div><div className='ad-validation__steps'><span className={validation.wins >= 1 ? 'done' : ''}><b>1</b> VIRTUAL {validation.wins >= 1 ? 'WIN' : 'READY'}</span><span className={validation.wins >= 2 ? 'done' : ''}><b>2</b> VIRTUAL {validation.wins >= 2 ? 'WIN' : 'WAITING'}</span><strong className={validation.state === 'PASSED' ? 'passed' : ''}>{validation.state === 'PASSED' ? 'PASSED' : 'GATE ACTIVE'}</strong></div></section>
-                        <section className='ad-panel ad-entry'><div className='ad-panel__label'>ENTRY DECISION</div><strong>{status}</strong><p>{strategy === 'AUTO' ? 'Auto mode compares Over, Under, Even, Odd, Matches, Differs, Rise/Fall, and tick contracts before choosing the strongest entry.' : logicMode === 'confluence' ? 'All windows are compared before an entry is accepted.' : LOGIC_MODES.find(mode => mode.value === logicMode)?.note}</p><div className='ad-entry__ticks'><span>Next contract</span><b>{candidate?.contractType || '—'} {candidate?.barrier != null ? `· Barrier ${candidate.barrier}` : ''}</b><small>{activeDuration} ticks {autoDuration ? '· AUTO' : ''}</small></div></section>
+                        <section className='ad-panel ad-entry'><div className='ad-panel__label'>ENTRY DECISION</div><strong>{status}</strong><p>{strategy === 'AUTO' ? (lossStreak > 0 ? 'Recovery mode: only Over, Under, Even, Odd, Rise, and Fall can pass. Matches, Differs, and tick contracts are blocked after a loss.' : 'Auto mode ranks live setups by score. Matches is only eligible with an exceptional score; direction and tick contracts remain available when they are the strongest setup.') : logicMode === 'confluence' ? 'All windows are compared before an entry is accepted.' : LOGIC_MODES.find(mode => mode.value === logicMode)?.note}</p><div className='ad-entry__ticks'><span>Next contract</span><b>{candidate?.contractType || '—'} {candidate?.barrier != null ? `· Barrier ${candidate.barrier}` : ''}</b><small>{activeDuration} ticks {autoDuration ? '· AUTO' : ''}</small></div></section>
                     </div>
                 </main>
 

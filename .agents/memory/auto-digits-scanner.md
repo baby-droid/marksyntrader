@@ -21,11 +21,11 @@ In AUTO mode, score every supported concrete strategy (parity, digit, barrier, d
 
 **How to apply:** Keep the active-symbol request and tick subscriptions on the existing authenticated hook; never open a second public WebSocket for Auto-Digits.
 
-AUTO execution uses a deterministic rotation plan across Over/Under barriers, Matches/Differs digits, parity, direction, and tick contracts; recovery entries are additionally filtered by score and supported contract type.
+AUTO execution ranks live candidates rather than forcing a fixed rotation. After a loss, recovery is limited to Over/Under, Even/Odd, Rise/Fall; Matches is normal-mode only and needs an exceptional score.
 
-**Why:** Repeatedly selecting one high-scoring candidate can over-concentrate risk and silently skip the contract families the user asked the scanner to cover.
+**Why:** Matches has a low hit rate and compounding it during recovery can rapidly consume the account; fixed rotation also sends stale or weak contracts.
 
-**How to apply:** Advance the rotation only after a qualified attempt or an explicit recovery skip, and reset it when the run or validation gate is reset.
+**How to apply:** Re-rank after every settlement, use the live score as the primary selector, use the configured order only for ties, and keep the recovery contract allowlist fail-closed.
 
 Auto-Digits risk controls should treat the manual stake as the base, cap each order by available balance and reserve percentage, enforce a session loss limit, and scale auto-stake down as take-profit progress increases.
 
