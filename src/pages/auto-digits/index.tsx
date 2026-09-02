@@ -228,8 +228,8 @@ const AUTO_STRATEGIES: ConcreteStrategy[] = [
 ];
 
 const AUTO_BASELINE_PLANS: AutoRotationPlan[] = [
-    ...[0, 1, 2, 3].map(barrier => ({ strategy: 'OVER' as ConcreteStrategy, barrier })),
-    ...[9, 8, 7, 6].map(barrier => ({ strategy: 'UNDER' as ConcreteStrategy, barrier })),
+    ...[1, 2, 3].map(barrier => ({ strategy: 'OVER' as ConcreteStrategy, barrier })),
+    ...[8, 7, 6].map(barrier => ({ strategy: 'UNDER' as ConcreteStrategy, barrier })),
     { strategy: 'EVEN' },
     { strategy: 'ODD' },
     { strategy: 'RISE' },
@@ -248,8 +248,8 @@ const AUTO_NEAR_TP_PLANS: AutoRotationPlan[] = [
 ];
 
 const AUTO_RECOVERY_PLANS: AutoRotationPlan[] = [
-    ...[0, 1, 2, 3].map(barrier => ({ strategy: 'OVER' as ConcreteStrategy, barrier })),
-    ...[9, 8, 7, 6].map(barrier => ({ strategy: 'UNDER' as ConcreteStrategy, barrier })),
+    ...[1, 2, 3].map(barrier => ({ strategy: 'OVER' as ConcreteStrategy, barrier })),
+    ...[8, 7, 6].map(barrier => ({ strategy: 'UNDER' as ConcreteStrategy, barrier })),
     { strategy: 'EVEN' },
     { strategy: 'ODD' },
     { strategy: 'RISE' },
@@ -258,6 +258,15 @@ const AUTO_RECOVERY_PLANS: AutoRotationPlan[] = [
 
 const AUTO_RECOVERY_STRATEGIES: ConcreteStrategy[] = ['OVER', 'UNDER', 'EVEN', 'ODD', 'RISE', 'FALL'];
 const AUTO_MATCH_MIN_SCORE = 90;
+const RECOVERY_PAYOUT_RATE = 0.8;
+
+const recoveryStakeFor = (deficit: number, baseStake: number) => {
+    const recoveryProfit = Math.max(0.35, baseStake * RECOVERY_PAYOUT_RATE);
+    return Math.max(
+        baseStake,
+        +((Math.max(0, deficit) + recoveryProfit) / RECOVERY_PAYOUT_RATE).toFixed(2),
+    );
+};
 
 const autoPlansFor = (recovery: boolean, nearTakeProfit: boolean) =>
     recovery ? AUTO_RECOVERY_PLANS : nearTakeProfit ? AUTO_NEAR_TP_PLANS : AUTO_BASELINE_PLANS;
@@ -701,7 +710,7 @@ const AutoDigits = observer(() => {
     }, [logicMode, minScore]);
 
     const analyze = useCallback((nextPoints: TickPoint[]): Candidate => {
-        const inRecovery = lossStreakRef.current > 0;
+        const inRecovery = lossStreakRef.current > 0 || recoveryDeficitRef.current > 0;
         const nearTakeProfit = !inRecovery &&
             pnlRef.current > 0 &&
             pnlRef.current >= Math.max(0.01, Number(takeProfit) || 5) * 0.7;
@@ -716,6 +725,18 @@ const AutoDigits = observer(() => {
                 autoPlanIndexRef.current = 0;
                 marketCandidatesRef.current = {};
                 lastCandidateRef.current = null;
+            }
+            if (inRecovery) {
+                // Recovery is deliberately linear. Every market evaluates the
+                // same current plan step, then the best qualifying market wins.
+                // The step advances only after a real Deriv buy response.
+                const recoveryPlanIndex = autoPlanIndexRef.current % plans.length;
+                const recoveryPlan = plans[recoveryPlanIndex];
+                return {
+                    ...analyzeStrategy(nextPoints, recoveryPlan.strategy, true, recoveryPlan.barrier),
+                    planIndex: recoveryPlanIndex,
+                    autoPhase: phase,
+                };
             }
             const candidates = plans.map((plan, index) => ({
                 ...analyzeStrategy(nextPoints, plan.strategy, true, plan.barrier),
@@ -749,7 +770,7 @@ const AutoDigits = observer(() => {
 
         const nextCandidate = { ...analyze(nextPoints), symbol: marketSymbol };
         marketCandidatesRef.current[marketSymbol] = nextCandidate;
-        const recoveryMode = lossStreakRef.current > 0;
+        const recoveryMode = lossStreakRef.current > 0 || recoveryDeficitRef.current > 0;
         const bestCandidate = Object.values(marketCandidatesRef.current)
             .sort((a, b) =>
                 b.score - a.score ||
@@ -876,7 +897,9 @@ const AutoDigits = observer(() => {
         const availableRisk = Math.min(currentBalance - balanceFloor, sessionLossLimit);
         const maxStake = Math.min(currentBalance * (stakeLimitPercent / 100), availableRisk);
         const autoStakeActive = autoStakeEnabled && completedRunsRef.current >= 5;
-        const requestedStake = autoStakeActive ? recoveryStakeRef.current : baseStake;
+        const requestedStake = inRecovery
+            ? Math.max(baseStake, recoveryStakeRef.current)
+            : autoStakeActive ? recoveryStakeRef.current : baseStake;
         if (maxStake < 0.35) {
             runningRef.current = false;
             setRun(false);
@@ -887,7 +910,7 @@ const AutoDigits = observer(() => {
         const contractStake = Math.max(0.35, Math.min(requestedStake, maxStake));
         const targetProgress = Math.max(0, Math.min(1, pnlRef.current / configuredTarget));
         const goalFactor = targetProgress >= 0.75 ? 0.65 : targetProgress >= 0.5 ? 0.8 : 1;
-        const goalAdjustedStake = autoStakeActive
+        const goalAdjustedStake = autoStakeActive && !inRecovery
             ? Math.max(baseStake, +(requestedStake * goalFactor).toFixed(2))
             : contractStake;
         const safeContractStake = Math.max(0.35, Math.min(goalAdjustedStake, maxStake));
@@ -936,7 +959,6 @@ const AutoDigits = observer(() => {
             // candidate during recovery (or a recovery candidate after a win).
             marketCandidatesRef.current = {};
             lastCandidateRef.current = null;
-            const autoStakeActive = autoStakeEnabled && settledRuns >= 5;
             recentResultsRef.current = [...recentResultsRef.current, won ? 'W' : 'L'].slice(-8);
             if (won) {
                 lossStreakRef.current = 0;
@@ -953,12 +975,10 @@ const AutoDigits = observer(() => {
                     const remaining = Math.max(0, baseline - nextPnl);
                     recoveryDeficitRef.current = remaining;
                     setRecoveryDeficit(remaining);
-                    // A recovery win reduces the next stake toward the manual
-                    // base instead of keeping the peak martingale amount.
-                    recoveryStakeRef.current = Math.max(
-                        stakeRef.current,
-                        +(safeContractStake * 0.7).toFixed(2),
-                    );
+                    // Keep recovery active after a partial win and size the
+                    // next attempt for the remaining deficit plus an 80%
+                    // return on the base stake.
+                    recoveryStakeRef.current = recoveryStakeFor(remaining, stakeRef.current);
                 }
                 if (balancedTradeRef.current) {
                     runningRef.current = false;
@@ -978,9 +998,7 @@ const AutoDigits = observer(() => {
                 const nextDeficit = Math.max(0, baseline - nextPnl);
                 recoveryDeficitRef.current = nextDeficit;
                 setRecoveryDeficit(nextDeficit);
-                recoveryStakeRef.current = autoStakeActive
-                    ? Math.max(stakeRef.current, +(safeContractStake * bestMartingale).toFixed(2))
-                    : stakeRef.current;
+                recoveryStakeRef.current = recoveryStakeFor(nextDeficit, stakeRef.current);
                 if (nextLosses >= 3) {
                     const opposite = oppositeStrategy(executionStrategy);
                     if (opposite && strategy !== 'AUTO') {
@@ -1471,10 +1489,11 @@ const AutoDigits = observer(() => {
                         <div className='ad-panel__label'>LOSS RECOVERY ENGINE</div>
                         <div className='ad-recovery__line'><span>Current loss streak</span><strong>{lossStreak}</strong></div>
                         <div className='ad-recovery__line'><span>Recovery deficit</span><strong>{fromUsd(recoveryDeficit).toFixed(2)} {displayCur}</strong></div>
-                        <div className='ad-recovery__line'><span>Next stake</span><strong>{fromUsd(Math.max(0.35, autoStakeEnabled && completedRuns >= 5 ? recoveryStakeRef.current : stakeRef.current)).toFixed(2)} {displayCur}</strong></div>
-                        <div className='ad-recovery__line'><span>Auto-stake</span><b>{autoStakeEnabled ? `${Math.max(0, 5 - completedRuns)} runs to warm-up` : 'OFF · manual only'}</b></div>
+                         <div className='ad-recovery__line'><span>Next stake</span><strong>{fromUsd(Math.max(0.35, lossStreak > 0 || recoveryDeficit > 0 ? recoveryStakeRef.current : autoStakeEnabled && completedRuns >= 5 ? recoveryStakeRef.current : stakeRef.current)).toFixed(2)} {displayCur}</strong></div>
+                         <div className='ad-recovery__line'><span>Recovery payout</span><b>{lossStreak > 0 || recoveryDeficit > 0 ? '80% target' : 'standby'}</b></div>
+                         <div className='ad-recovery__line'><span>Auto-stake</span><b>{lossStreak > 0 || recoveryDeficit > 0 ? 'RECOVERY TARGET ACTIVE' : autoStakeEnabled ? `${Math.max(0, 5 - completedRuns)} runs to warm-up` : 'OFF · manual only'}</b></div>
                         <div className='ad-recovery__line'><span>Martingale</span><b>{bestMartingale.toFixed(2)}x</b></div>
-                        <div className='ad-recovery__line'><span>Mode</span><b>{lossStreak >= 3 ? 'RE-SCAN' : lossStreak > 0 ? 'RECOVERY' : 'NORMAL'}</b></div>
+                         <div className='ad-recovery__line'><span>Mode</span><b>{lossStreak >= 3 ? 'RE-SCAN' : lossStreak > 0 || recoveryDeficit > 0 ? 'RECOVERY' : 'NORMAL'}</b></div>
                         <button className='ad-outline-btn' onClick={resetEngine}>RESET RISK STATE</button>
                     </section>
 
@@ -1492,10 +1511,10 @@ const AutoDigits = observer(() => {
                             <small className='ad-control-hint'>{markets.length} markets from the Deriv active-symbols feed</small>
                         </label>
                         <label>CONTRACT TYPE<select value={strategy} onChange={event => { const value = event.target.value as StrategyValue; setStrategy(value); if (value === 'AUTO') setAutoDuration(true); }}>{['Auto', 'Parity', 'Digits', 'Barrier', 'Direction', 'Range'].map(group => <optgroup key={group} label={group}>{STRATEGIES.filter(item => item.group === group).map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</optgroup>)}</select></label>
-                        <div className='ad-auto-selection'>
+                         <div className='ad-auto-selection'>
                             <span>BEST ENTRY POLICY</span>
                             <strong>{selectedAutoStrategy}{selectedAutoBarrier != null ? ` · BARRIER ${selectedAutoBarrier}` : ''}</strong>
-                            <small>AUTO sequence: Over 0–3, Under 9–6, Even/Odd, Rise/Fall, Only Ups/Downs, Differs, High/Low Tick. Near take-profit it enables Over 4–8, Under 5–2, then high-confidence Matches. Loss recovery returns to safe contracts only.</small>
+                             <small>AUTO sequence: Over 1–3, Under 8–6, then Even/Odd, Rise/Fall, Only Ups/Downs, Differs, and High/Low Tick. During recovery it stays linear: Over 1 → 2 → 3 → Under 8 → 7 → 6 → Even/Odd → Rise/Fall, selecting the best confirmed market for the current step.</small>
                         </div>
                         <div className='ad-control-row'><label>STAKE<NumberField value={Number(stake) || 0.35} min={0.35} max={1000} onCommit={value => setStake(value.toFixed(2))} /></label><label>MIN SCORE<NumberField value={minScore} min={50} max={95} onCommit={setMinScore} /></label></div>
                         <div className='ad-duration-row'><span>DURATION</span><button className={autoDuration ? 'is-active' : ''} onClick={() => setAutoDuration(true)}>AUTO {activeDuration}T</button>{[1, 2, 3, 4, 5].map(value => <button key={value} className={!autoDuration && duration === value ? 'is-active' : ''} onClick={() => { setAutoDuration(false); setDuration(value); }}>{value}T</button>)}</div>
