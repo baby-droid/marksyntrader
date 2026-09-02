@@ -55,7 +55,7 @@
 - [Differs cycle XML validation](differs-cycle-xml-validation.md) — Edge Scanner is phase-only with explicit parity recovery states; parse and synchronize public/dist copies after edits.
 - [AI cycle pattern detector](cycle-pattern-detector.md) — shared four-route one-tick cycle detector uses two setup touches, a barrier cross, and a return trigger.
 - [AI cycle guide runner](ai-cycle-guide-runner.md) — every guide mount intended to run bots needs a guided loader; lock market/digit recommendations for each three-run cycle.
-- [Auto-Digits scanner](auto-digits-scanner.md) — authenticated live tick distribution dashboard; two real-tick virtual validations precede buyContract trades, which emit native Bot Builder transaction events.
+- [Auto-Digits scanner](auto-digits-scanner.md) — authenticated scanner with two-tick validation, deterministic contract rotation, and balance-aware recovery guardrails.
 - [Native transaction event lifecycle](native-transaction-event-lifecycle.md) — shared transaction events from self-contained traders must outlive the Run Panel mount lifecycle.
 - [Blockly SVG fragment imports](blockly-svg-fragments.md) — rendered Blockly SVG exports are not loadable bot XML; convert them to executable Blockly roots and preserve source IDs as data metadata.
 - [Ahmed Differs Cycle recovery](ahmed-differs-cycle-recovery.md) — every loss resets parity history and waits for three same-parity digits before the contrarian recovery buy.

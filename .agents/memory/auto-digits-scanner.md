@@ -20,3 +20,15 @@ In AUTO mode, score every supported concrete strategy (parity, digit, barrier, d
 **Why:** The user expects AUTO to find whichever strategy is currently qualified instead of routing through a partial hardcoded heuristic or silently ignoring the chosen market.
 
 **How to apply:** Keep the active-symbol request and tick subscriptions on the existing authenticated hook; never open a second public WebSocket for Auto-Digits.
+
+AUTO execution uses a deterministic rotation plan across Over/Under barriers, Matches/Differs digits, parity, direction, and tick contracts; recovery entries are additionally filtered by score and supported contract type.
+
+**Why:** Repeatedly selecting one high-scoring candidate can over-concentrate risk and silently skip the contract families the user asked the scanner to cover.
+
+**How to apply:** Advance the rotation only after a qualified attempt or an explicit recovery skip, and reset it when the run or validation gate is reset.
+
+Auto-Digits risk controls should treat the manual stake as the base, cap each order by available balance and reserve percentage, enforce a session loss limit, and scale auto-stake down as take-profit progress increases.
+
+**Why:** Martingale recovery must not be allowed to consume the account, and nearing the target is a reason to reduce exposure rather than increase it.
+
+**How to apply:** Require an authoritative balance before real execution, stop at the reserve/take-profit/loss floors, activate auto-stake only after the warm-up run count, and reduce recovery stake after wins.

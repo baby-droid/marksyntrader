@@ -332,6 +332,66 @@
     }
 }
 
+.ad-risk-panel {
+    display: grid;
+    gap: 0.52rem;
+    padding: 0.62rem;
+    border: 1px solid rgba(255, 92, 115, 0.25);
+    border-radius: 7px;
+    background: rgba(255, 92, 115, 0.045);
+
+    &__heading {
+        display: grid;
+        gap: 0.18rem;
+
+        span {
+            color: var(--ad-red);
+            font-size: 0.56rem;
+            font-weight: 900;
+            letter-spacing: 0.07em;
+        }
+
+        small {
+            color: var(--ad-muted);
+            font-size: 0.53rem;
+            line-height: 1.25;
+        }
+    }
+}
+
+.ad-risk-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.4rem;
+}
+
+.ad-risk-toggle {
+    min-height: 2rem;
+    padding: 0.35rem 0.25rem;
+    border: 1px solid rgba(53, 216, 233, 0.38);
+    border-radius: 5px;
+    background: rgba(53, 216, 233, 0.07);
+    color: var(--ad-cyan);
+    cursor: pointer;
+    font-size: 0.54rem;
+    font-weight: 900;
+    letter-spacing: 0.02em;
+
+    &:hover { background: rgba(53, 216, 233, 0.15); }
+    &.is-active {
+        border-color: rgba(57, 229, 140, 0.45);
+        background: rgba(57, 229, 140, 0.1);
+        color: var(--ad-green);
+    }
+}
+
+.ad-risk-note {
+    margin: 0;
+    color: var(--ad-muted);
+    font-size: 0.52rem;
+    line-height: 1.35;
+}
+
 .ad-duration-row {
     display: flex;
     align-items: center;

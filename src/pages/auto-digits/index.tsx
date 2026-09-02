@@ -218,8 +218,29 @@ const AUTO_STRATEGIES: ConcreteStrategy[] = [
     'RISE', 'FALL', 'ONLY UPS', 'ONLY DOWNS', 'HIGH TICK', 'LOW TICK',
 ];
 
-const chooseAutomaticBarrier = (points: TickPoint[], selectedStrategy: ConcreteStrategy, fallback: number) => {
+type AutoRotationPlan = { strategy: ConcreteStrategy; barrier?: number };
+
+// AUTO rotates through an explicit, bounded plan. This prevents the scanner
+// from repeatedly choosing one contract while still testing every requested
+// Over/Under barrier and the supported digit/direction contracts.
+const AUTO_ROTATION_PLANS: AutoRotationPlan[] = [
+    ...[4, 5, 6, 7, 8].map(barrier => ({ strategy: 'OVER' as ConcreteStrategy, barrier })),
+    ...[4, 3, 2, 1].map(barrier => ({ strategy: 'UNDER' as ConcreteStrategy, barrier })),
+    ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(barrier => ({ strategy: 'MATCHES' as ConcreteStrategy, barrier })),
+    ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(barrier => ({ strategy: 'DIFFERS' as ConcreteStrategy, barrier })),
+    { strategy: 'EVEN' },
+    { strategy: 'ODD' },
+    { strategy: 'RISE' },
+    { strategy: 'FALL' },
+    { strategy: 'ONLY UPS' },
+    { strategy: 'ONLY DOWNS' },
+    { strategy: 'HIGH TICK' },
+    { strategy: 'LOW TICK' },
+];
+
+const chooseAutomaticBarrier = (points: TickPoint[], selectedStrategy: ConcreteStrategy, fallback: number, forcedBarrier?: number) => {
     if (!['OVER', 'UNDER', 'MATCHES', 'DIFFERS'].includes(selectedStrategy)) return undefined;
+    if (forcedBarrier != null) return forcedBarrier;
     if (!points.length) return fallback;
 
     const p20 = percentagesFor(points, 20);
@@ -292,6 +313,13 @@ const AutoDigits = observer(() => {
     const [recoveryDeficit, setRecoveryDeficit] = useState(0);
     const [validation, setValidation] = useState({ wins: 0, attempt: 0, state: 'IDLE' });
     const [displayCur, setDisplayCur] = useState(getDisplayCurrency());
+    const [takeProfit, setTakeProfit] = useState('5.00');
+    const [maxSessionLoss, setMaxSessionLoss] = useState('5.00');
+    const [reservePercent, setReservePercent] = useState(30);
+    const [maxStakePercent, setMaxStakePercent] = useState(5);
+    const [autoStakeEnabled, setAutoStakeEnabled] = useState(true);
+    const [bestMartingale, setBestMartingale] = useState(1.45);
+    const [completedRuns, setCompletedRuns] = useState(0);
 
     const marketPointsRef = useRef<Record<string, TickPoint[]>>({});
     const rawHistoryByMarketRef = useRef<Record<string, number[]>>({});
@@ -315,13 +343,21 @@ const AutoDigits = observer(() => {
     const recentResultsRef = useRef<Array<'W' | 'L'>>([]);
     const marketSelectionRef = useRef('1HZ100V');
     const marketsRef = useRef<MarketOption[]>(FALLBACK_MARKETS);
+    const autoRotationIndexRef = useRef(0);
+    const recoveryStakeRef = useRef(1);
+    const completedRunsRef = useRef(0);
+    const balanceRef = useRef<number | null>(null);
+    const sessionStartBalanceRef = useRef<number | null>(null);
+    const lastRecoverySkipRef = useRef('');
 
     useEffect(() => subscribeCurrency(() => setDisplayCur(getDisplayCurrency())), []);
+    useEffect(() => { balanceRef.current = balance == null ? null : Number(balance); }, [balance]);
     useEffect(() => {
         marketSelectionRef.current = marketSelection;
         marketCandidatesRef.current = {};
         lastCandidateRef.current = null;
         validationRef.current = { key: '', wins: 0, attempt: 0, readyEpoch: 0 };
+        autoRotationIndexRef.current = 0;
         setCandidate(null);
         setValidation({ wins: 0, attempt: 0, state: 'IDLE' });
         setStatus(marketSelection === 'ALL' ? 'Re-scanning all available markets' : 'Re-scanning selected market');
@@ -336,6 +372,7 @@ const AutoDigits = observer(() => {
         marketCandidatesRef.current = {};
         lastCandidateRef.current = null;
         validationRef.current = { key: '', wins: 0, attempt: 0, readyEpoch: 0 };
+        autoRotationIndexRef.current = 0;
         setCandidate(null);
         setValidation({ wins: 0, attempt: 0, state: 'IDLE' });
         setStatus('Re-scanning selected contract conditions');
@@ -348,7 +385,7 @@ const AutoDigits = observer(() => {
     const marketLabel = useCallback((marketSymbol: string) =>
         marketsRef.current.find(market => market.value === marketSymbol)?.label || marketSymbol, []);
 
-    const analyzeStrategy = useCallback((nextPoints: TickPoint[], analysisStrategy: ConcreteStrategy, autoMode = false): Candidate => {
+    const analyzeStrategy = useCallback((nextPoints: TickPoint[], analysisStrategy: ConcreteStrategy, autoMode = false, forcedBarrier?: number): Candidate => {
         const p1000 = percentagesFor(nextPoints, 1000);
         const p100 = percentagesFor(nextPoints, 100);
         const p50 = percentagesFor(nextPoints, 50);
@@ -360,8 +397,8 @@ const AutoDigits = observer(() => {
             Math.min(
                 9,
                 Number(strategy === 'AUTO'
-                    ? chooseAutomaticBarrier(nextPoints, analysisStrategy, 3)
-                    : chooseAutomaticBarrier(nextPoints, analysisStrategy, 3)) || 0
+                    ? chooseAutomaticBarrier(nextPoints, analysisStrategy, 3, forcedBarrier)
+                    : chooseAutomaticBarrier(nextPoints, analysisStrategy, 3, forcedBarrier)) || 0
             )
         );
         const recentCounts = countsFor(nextPoints, 20).counts;
@@ -405,15 +442,17 @@ const AutoDigits = observer(() => {
         } else if (analysisStrategy === 'MATCHES' || analysisStrategy === 'DIFFERS') {
             const sorted = p1000.map((value, digit) => ({ digit, value })).sort((a, b) => b.value - a.value);
             const dominant = sorted[0];
+            const selectedDigit = forcedBarrier != null ? forcedBarrier : dominant.digit;
+            const selectedFrequency = p1000[selectedDigit] ?? 0;
             const diversity = p20.filter(value => value > 0).length;
-            const concentrationRising = p20[dominant.digit] >= p50[dominant.digit] && p50[dominant.digit] >= p100[dominant.digit];
-            entryDigit = analysisStrategy === 'MATCHES' ? dominant.digit : sorted[0].digit;
+            const concentrationRising = p20[selectedDigit] >= p50[selectedDigit] && p50[selectedDigit] >= p100[selectedDigit];
+            entryDigit = selectedDigit;
             score = analysisStrategy === 'MATCHES'
-                ? Math.min(100, 34 + dominant.value * 2 + (concentrationRising ? 18 : 0) + (p20[dominant.digit] > 12 ? 10 : 0) + Math.min(10, recurrence * 1.5) + Math.min(8, digitCluster * 2))
-                : Math.min(100, 34 + diversity * 4 + (dominant.value < 14 ? 16 : 0) + (p20.filter(value => value > 0).length >= 8 ? 8 : 0) + Math.max(0, 10 - recurrence) + Math.max(0, 8 - digitCluster * 2));
+                ? Math.min(100, 34 + selectedFrequency * 2 + (concentrationRising ? 18 : 0) + (p20[selectedDigit] > 12 ? 10 : 0) + Math.min(10, recurrence * 1.5) + Math.min(8, digitCluster * 2))
+                : Math.min(100, 34 + diversity * 4 + (selectedFrequency < 14 ? 16 : 0) + (p20.filter(value => value > 0).length >= 8 ? 8 : 0) + Math.max(0, 10 - recurrence) + Math.max(0, 8 - digitCluster * 2));
             reason = analysisStrategy === 'MATCHES'
-                ? `Digit ${dominant.digit} concentration is ${dominant.value.toFixed(1)}% with ${concentrationRising ? 'rising' : 'mixed'} short windows; recurrence ${recurrence}/20, cluster ${digitCluster}`
-                : `${diversity}/10 digits active; recurrence ${recurrence}/20, cluster ${digitCluster}; dispersion ${dominant.value < 14 ? 'healthy' : 'too concentrated'}`;
+                ? `Digit ${selectedDigit} concentration is ${selectedFrequency.toFixed(1)}% with ${concentrationRising ? 'rising' : 'mixed'} short windows; recurrence ${recurrence}/20, cluster ${digitCluster}`
+                : `${diversity}/10 digits active; barrier ${selectedDigit}; recurrence ${recurrence}/20, cluster ${digitCluster}; dispersion ${selectedFrequency < 14 ? 'healthy' : 'too concentrated'}`;
         } else if (analysisStrategy === 'OVER' || analysisStrategy === 'UNDER') {
             const losing = analysisStrategy === 'OVER'
                 ? last10.filter(point => point.digit <= barrierNumber)
@@ -482,7 +521,14 @@ const AutoDigits = observer(() => {
             score += parityPattern ? 8 : 0;
             if ((analysisStrategy === 'ODD' || analysisStrategy === 'EVEN') && !parityPattern) score = Math.min(score, 69);
         }
-        const riskScore = recoveryDeficitRef.current < stakeRef.current * 16 && lossStreakRef.current < 4 ? 5 : 0;
+        // Keep recovery candidates available after a few losses, but make the
+        // engine fail closed after a sustained loss cluster. The execution
+        // gate below still limits recovery to higher-confidence contract types.
+        const riskScore = lossStreakRef.current >= 6
+            ? 0
+            : recoveryDeficitRef.current > 0
+                ? 8
+                : 5;
         score += riskScore;
         if (!riskScore) score = 0;
         score = Math.round(Math.min(100, score));
@@ -525,6 +571,15 @@ const AutoDigits = observer(() => {
         const bestCandidate = Object.values(marketCandidatesRef.current)
             .sort((a, b) => b.score - a.score)[0] || nextCandidate;
         const isActiveMarket = bestCandidate.symbol === marketSymbol;
+        const rotationPlan = strategy === 'AUTO'
+            ? AUTO_ROTATION_PLANS[autoRotationIndexRef.current % AUTO_ROTATION_PLANS.length]
+            : undefined;
+        const executionCandidate = rotationPlan
+            ? {
+                ...analyzeStrategy(nextPoints, rotationPlan.strategy, true, rotationPlan.barrier),
+                symbol: marketSymbol,
+            }
+            : bestCandidate;
         if (isActiveMarket || !lastCandidateRef.current) {
             const previousActiveSymbol = activeSymbolRef.current;
             activeSymbolRef.current = bestCandidate.symbol || marketSymbol;
@@ -535,24 +590,39 @@ const AutoDigits = observer(() => {
             setCurrentDigit(activePoints[activePoints.length - 1]?.digit ?? null);
             setCurrentPrice(activePoints[activePoints.length - 1]?.quote.toFixed(marketPipRefs.current[bestCandidate.symbol || marketSymbol] || 2) || '');
             lastCandidateRef.current = bestCandidate;
-            setCandidate(bestCandidate);
+            setCandidate(executionCandidate);
         }
 
-        if (!isActiveMarket || !runningRef.current || realInFlightRef.current || bestCandidate.score < minScore) return;
+        if (!isActiveMarket || !runningRef.current || realInFlightRef.current || executionCandidate.score < minScore) return;
         if (!authorized) {
             setStatus('Login required before real execution');
             return;
         }
 
-        const executionStrategy: ConcreteStrategy = bestCandidate.strategy || (strategy === 'AUTO' ? 'OVER' : strategy);
-        const selectedContractType = String(bestCandidate.contractType || strategyContract(executionStrategy)).toUpperCase();
-        const candidateKey = `${bestCandidate.symbol}:${selectedContractType}:${bestCandidate.barrier ?? 'none'}`;
+        const executionStrategy: ConcreteStrategy = executionCandidate.strategy || (strategy === 'AUTO' ? 'OVER' : strategy);
+        const selectedContractType = String(executionCandidate.contractType || strategyContract(executionStrategy)).toUpperCase();
+        const candidateKey = `${executionCandidate.symbol}:${selectedContractType}:${executionCandidate.barrier ?? 'none'}`;
+        const recoverySafeTypes = new Set(['DIGITEVEN', 'DIGITODD', 'DIGITMATCH', 'DIGITDIFF', 'DIGITOVER', 'DIGITUNDER', 'CALL', 'PUT']);
+        const inRecovery = recoveryDeficitRef.current > 0 || lossStreakRef.current > 0;
+        if (inRecovery && (!recoverySafeTypes.has(selectedContractType) || executionCandidate.score < Math.max(minScore, 78))) {
+            const skippedPlan = executionCandidate.label;
+            if (lastRecoverySkipRef.current !== skippedPlan) {
+                lastRecoverySkipRef.current = skippedPlan;
+                addLog(`RECOVERY SKIP — ${skippedPlan} did not meet the score/risk gate`);
+            }
+            if (rotationPlan) {
+                autoRotationIndexRef.current = (autoRotationIndexRef.current + 1) % AUTO_ROTATION_PLANS.length;
+                validationRef.current = { key: '', wins: 0, attempt: 0, readyEpoch: point.epoch };
+            }
+            setStatus('RECOVERY FILTER — waiting for a qualified, lower-risk contract');
+            return;
+        }
         const validationState = validationRef.current;
         if (!validationState.key || validationState.key !== candidateKey) {
             validationRef.current = { key: candidateKey, wins: 0, attempt: 1, readyEpoch: point.epoch };
             setValidation({ wins: 0, attempt: 1, state: 'VIRTUAL 1' });
             setStatus('Validating signal virtually');
-            addLog(`VIRTUAL 1 queued — ${bestCandidate.label} on ${marketLabel(bestCandidate.symbol || '')} scored ${bestCandidate.score}/100`);
+            addLog(`VIRTUAL 1 queued — ${executionCandidate.label} on ${marketLabel(executionCandidate.symbol || '')} scored ${executionCandidate.score}/100`);
             return;
         }
         if (point.epoch <= validationState.readyEpoch) return;
@@ -585,37 +655,79 @@ const AutoDigits = observer(() => {
         const tradeDuration = autoDuration
             ? (isAlternatingOutcomes
                 ? 2
-                : Math.max(1, Math.min(5, nextCandidate.score >= 90 ? 1 : nextCandidate.score >= 82 ? 2 : nextCandidate.score >= 74 ? 3 : 4)))
+                : Math.max(1, Math.min(5, executionCandidate.score >= 90 ? 1 : executionCandidate.score >= 82 ? 2 : executionCandidate.score >= 74 ? 3 : 4)))
             : duration;
         const baseStake = stakeRef.current;
-        const recoveryCeiling = baseStake * 16;
-        const contractStake = Math.min(recoveryCeiling, Math.max(0.35, baseStake + recoveryDeficitRef.current));
+        const currentBalance = balanceRef.current;
+        if (!Number.isFinite(currentBalance) || currentBalance == null || currentBalance <= 0) {
+            runningRef.current = false;
+            setRun(false);
+            setStatus('BALANCE CHECK — execution paused until the account balance is available');
+            addLog('RISK STOP — account balance unavailable; no contract sent');
+            return;
+        }
+        const reserve = Math.max(10, Math.min(90, Number(reservePercent) || 30));
+        const stakeLimitPercent = Math.max(1, Math.min(25, Number(maxStakePercent) || 5));
+        const sessionLossLimit = Math.max(0.35, Number(maxSessionLoss) || 5);
+        const configuredTarget = Math.max(0.01, Number(takeProfit) || 5);
+        const balanceFloor = currentBalance * (reserve / 100);
+        const sessionFloor = sessionStartBalanceRef.current == null
+            ? balanceFloor
+            : sessionStartBalanceRef.current * (reserve / 100);
+        if (currentBalance <= sessionFloor) {
+            runningRef.current = false;
+            setRun(false);
+            setStatus('RESERVE STOP — the protected account balance floor was reached');
+            addLog(`RISK STOP — reserve floor ${fromUsd(sessionFloor).toFixed(2)} ${displayCur} reached`);
+            return;
+        }
+        const availableRisk = Math.min(currentBalance - balanceFloor, sessionLossLimit);
+        const maxStake = Math.min(currentBalance * (stakeLimitPercent / 100), availableRisk);
+        const autoStakeActive = autoStakeEnabled && completedRunsRef.current >= 5;
+        const requestedStake = autoStakeActive ? recoveryStakeRef.current : baseStake;
+        if (maxStake < 0.35) {
+            runningRef.current = false;
+            setRun(false);
+            setStatus('RISK STOP — safe stake is below the Deriv minimum');
+            addLog('RISK STOP — account reserve and session-loss limits allow no new contract');
+            return;
+        }
+        const contractStake = Math.max(0.35, Math.min(requestedStake, maxStake));
+        const targetProgress = Math.max(0, Math.min(1, pnlRef.current / configuredTarget));
+        const goalFactor = targetProgress >= 0.75 ? 0.65 : targetProgress >= 0.5 ? 0.8 : 1;
+        const goalAdjustedStake = autoStakeActive
+            ? Math.max(baseStake, +(requestedStake * goalFactor).toFixed(2))
+            : contractStake;
+        const safeContractStake = Math.max(0.35, Math.min(goalAdjustedStake, maxStake));
         tradePnlBeforeRef.current = pnlRef.current;
-        const currentOddPressure = percentagesFor(marketPointsRef.current[bestCandidate.symbol || activeSymbolRef.current] || [], 100)
+        const currentOddPressure = percentagesFor(marketPointsRef.current[executionCandidate.symbol || activeSymbolRef.current] || [], 100)
             .filter((_, index) => index % 2 !== 0)
             .reduce((a, b) => a + b, 0);
         const currentEvenPressure = 100 - currentOddPressure;
         balancedTradeRef.current = (executionStrategy === 'EVEN' || executionStrategy === 'ODD') && Math.abs(currentOddPressure - currentEvenPressure) <= 4;
         realInFlightRef.current = true;
         const rowId = `ad-${Date.now()}-${++nextIdRef.current}`;
-        setTrades(previousTrades => [{ id: rowId, time: formatTime(), strategy: bestCandidate.label, contract: bestCandidate.contractType, stake: contractStake, profit: 0, status: 'OPEN' }, ...previousTrades].slice(0, 30));
-        setTradeContext({ page: 'Auto-Digits', bot: bestCandidate.label });
-         addLog(`EXECUTE — ${bestCandidate.contractType} ${bestCandidate.barrier ?? ''} on ${marketLabel(bestCandidate.symbol || '')} | ${contractStake.toFixed(2)} ${displayCur} | ${tradeDuration}T`);
+        setTrades(previousTrades => [{ id: rowId, time: formatTime(), strategy: executionCandidate.label, contract: executionCandidate.contractType, stake: safeContractStake, profit: 0, status: 'OPEN' }, ...previousTrades].slice(0, 30));
+        setTradeContext({ page: 'Auto-Digits', bot: executionCandidate.label });
+        if (safeContractStake < requestedStake) addLog(`STAKE CONTROLLED — ${requestedStake.toFixed(2)} → ${safeContractStake.toFixed(2)} ${displayCur} by goal/risk limits`);
+        addLog(`EXECUTE — ${executionCandidate.contractType} ${executionCandidate.barrier ?? ''} on ${marketLabel(executionCandidate.symbol || '')} | ${safeContractStake.toFixed(2)} ${displayCur} | ${tradeDuration}T`);
+        if (rotationPlan) autoRotationIndexRef.current = (autoRotationIndexRef.current + 1) % AUTO_ROTATION_PLANS.length;
         buyContract({
-            symbol: bestCandidate.symbol || activeSymbolRef.current,
-            contract_type: bestCandidate.contractType,
+            symbol: executionCandidate.symbol || activeSymbolRef.current,
+            contract_type: executionCandidate.contractType,
             duration: tradeDuration,
             duration_unit: 't',
-            stake: contractStake,
-            barrier: bestCandidate.barrier,
+            stake: safeContractStake,
+            barrier: executionCandidate.barrier,
             currency,
             metadata: {
                 auto_digits: true,
                 source: 'auto-digits',
                 execution_mode: 'market-condition-scanner',
-                strategy: bestCandidate.label,
+                strategy: executionCandidate.label,
                 validation: '2 virtual wins',
-                selected_by: 'market-condition-scanner',
+                selected_by: rotationPlan ? 'safe-contract-rotation' : 'market-condition-scanner',
+                batch_id: `AUTO-DIGITS-${Date.now()}`,
             },
         }, settled => {
             realInFlightRef.current = false;
@@ -625,6 +737,10 @@ const AutoDigits = observer(() => {
             const nextPnl = pnlRef.current + profit;
             pnlRef.current = nextPnl;
             setPnl(nextPnl);
+            const settledRuns = completedRunsRef.current + 1;
+            completedRunsRef.current = settledRuns;
+            setCompletedRuns(settledRuns);
+            const autoStakeActive = autoStakeEnabled && settledRuns >= 5;
             recentResultsRef.current = [...recentResultsRef.current, won ? 'W' : 'L'].slice(-8);
             if (won) {
                 lossStreakRef.current = 0;
@@ -636,10 +752,17 @@ const AutoDigits = observer(() => {
                     recoveryBaselineRef.current = null;
                     recoveryDeficitRef.current = 0;
                     setRecoveryDeficit(0);
+                    recoveryStakeRef.current = stakeRef.current;
                 } else {
                     const remaining = Math.max(0, baseline - nextPnl);
                     recoveryDeficitRef.current = remaining;
                     setRecoveryDeficit(remaining);
+                    // A recovery win reduces the next stake toward the manual
+                    // base instead of keeping the peak martingale amount.
+                    recoveryStakeRef.current = Math.max(
+                        stakeRef.current,
+                        +(safeContractStake * 0.7).toFixed(2),
+                    );
                 }
                 if (balancedTradeRef.current) {
                     runningRef.current = false;
@@ -659,13 +782,9 @@ const AutoDigits = observer(() => {
                 const nextDeficit = Math.max(0, baseline - nextPnl);
                 recoveryDeficitRef.current = nextDeficit;
                 setRecoveryDeficit(nextDeficit);
-                if (nextDeficit >= stakeRef.current * 16) {
-                    runningRef.current = false;
-                    setRun(false);
-                    setStatus('RECOVERY LIMIT — engine stopped; reset risk state before another run');
-                    addLog(`LOSS ${profit.toFixed(2)} ${displayCur} — recovery ceiling reached; execution stopped`);
-                    return;
-                }
+                recoveryStakeRef.current = autoStakeActive
+                    ? Math.max(stakeRef.current, +(safeContractStake * bestMartingale).toFixed(2))
+                    : stakeRef.current;
                 if (nextLosses >= 3) {
                     const opposite = oppositeStrategy(executionStrategy);
                     if (opposite && strategy !== 'AUTO') {
@@ -680,6 +799,22 @@ const AutoDigits = observer(() => {
                 }
                 setStatus(nextLosses >= 3 ? 'Loss cluster — windows, market, and duration re-scan' : `LOSS — controlled recovery: ${fromUsd(nextDeficit).toFixed(2)} ${displayCur} at risk`);
             }
+            // Refresh the authoritative account balance after every settlement
+            // so the next entry applies the reserve and stake-percentage caps.
+            void send({ balance: 1 }).catch(() => {});
+            const target = Math.max(0.01, Number(takeProfit) || 5);
+            const lossLimit = Math.max(0.35, Number(maxSessionLoss) || 5);
+            if (nextPnl >= target) {
+                runningRef.current = false;
+                setRun(false);
+                setStatus(`TAKE PROFIT HIT — ${fromUsd(nextPnl).toFixed(2)} ${displayCur}; trading stopped`);
+                addLog(`TAKE PROFIT HIT — target ${fromUsd(target).toFixed(2)} ${displayCur} reached`);
+            } else if (nextPnl <= -lossLimit) {
+                runningRef.current = false;
+                setRun(false);
+                setStatus(`SESSION LOSS LIMIT — ${fromUsd(lossLimit).toFixed(2)} ${displayCur}; trading stopped`);
+                addLog(`RISK STOP — session loss limit ${fromUsd(lossLimit).toFixed(2)} ${displayCur} reached`);
+            }
         }).catch(error => {
             realInFlightRef.current = false;
             validationRef.current = { key: '', wins: 0, attempt: 0, readyEpoch: point.epoch };
@@ -687,7 +822,7 @@ const AutoDigits = observer(() => {
             setStatus(error?.message || 'Trade request failed');
             addLog(`TRADE ERROR — ${error?.message || 'request rejected'}`);
         });
-    }, [addLog, analyze, authorized, autoDuration, buyContract, currency, displayCur, duration, marketLabel, minScore, strategy]);
+    }, [addLog, analyze, analyzeStrategy, authorized, autoDuration, autoStakeEnabled, bestMartingale, buyContract, currency, displayCur, duration, marketLabel, maxSessionLoss, minScore, reservePercent, send, strategy, takeProfit, maxStakePercent]);
 
     useEffect(() => {
         mountedRef.current = true;
@@ -864,6 +999,10 @@ const AutoDigits = observer(() => {
         recoveryBaselineRef.current = null;
         recoveryDeficitRef.current = 0;
         setRecoveryDeficit(0);
+        recoveryStakeRef.current = stakeRef.current;
+        completedRunsRef.current = 0;
+        setCompletedRuns(0);
+        autoRotationIndexRef.current = 0;
         recentResultsRef.current = [];
         pnlRef.current = 0;
         setPnl(0);
@@ -875,7 +1014,25 @@ const AutoDigits = observer(() => {
         addLog('RISK STATE RESET — baseline retained');
     };
 
+    const applyBestMartingale = () => {
+        const currentBalance = balanceRef.current;
+        const base = stakeRef.current;
+        // Smaller accounts get a gentler multiplier. This is a starting
+        // recommendation only; the hard balance/reserve cap remains active.
+        const recommended = !currentBalance || currentBalance < base * 20
+            ? 1.25
+            : currentBalance < base * 50 ? 1.35 : 1.45;
+        setBestMartingale(recommended);
+        recoveryStakeRef.current = base;
+        addLog(`BEST MARTINGALE — ${recommended.toFixed(2)}x selected; recovery will reduce after wins`);
+    };
+
     const startBot = () => {
+        sessionStartBalanceRef.current = balanceRef.current;
+        completedRunsRef.current = 0;
+        setCompletedRuns(0);
+        recoveryStakeRef.current = stakeRef.current;
+        autoRotationIndexRef.current = 0;
         setRun(true);
         setStatus(authorized ? 'Scanning and validating' : 'Login required before real execution');
         addLog(authorized ? 'START BOT — virtual validation gate enabled' : 'START BOT — scanner active, execution waiting for authorization');
@@ -939,7 +1096,7 @@ const AutoDigits = observer(() => {
                 <div className='auto-digits__top-actions'>
                     <span className={`ad-status-dot ${connected ? 'is-live' : ''}`}>{connected ? 'CONNECTED' : 'OFFLINE'}</span>
                     <span className={`ad-status-dot ${authorized ? 'is-authorized' : ''}`}>{authorized ? 'ACCOUNT READY' : 'ANALYSIS ONLY'}</span>
-                    <button className={`ad-run-toggle ${run ? 'is-on' : ''}`} onClick={() => setRun(value => !value)}>
+                    <button className={`ad-run-toggle ${run ? 'is-on' : ''}`} onClick={run ? pauseBot : startBot}>
                         <span className='ad-toggle-dot' /> {run ? 'RUNNING' : 'RUN ENGINE'}
                     </button>
                 </div>
@@ -962,7 +1119,9 @@ const AutoDigits = observer(() => {
                         <div className='ad-panel__label'>LOSS RECOVERY ENGINE</div>
                         <div className='ad-recovery__line'><span>Current loss streak</span><strong>{lossStreak}</strong></div>
                         <div className='ad-recovery__line'><span>Recovery deficit</span><strong>{fromUsd(recoveryDeficit).toFixed(2)} {displayCur}</strong></div>
-                        <div className='ad-recovery__line'><span>Next stake</span><strong>{fromUsd(Math.min(stakeRef.current * 16, Math.max(0.35, stakeRef.current + recoveryDeficit))).toFixed(2)} {displayCur}</strong></div>
+                        <div className='ad-recovery__line'><span>Next stake</span><strong>{fromUsd(Math.max(0.35, autoStakeEnabled && completedRuns >= 5 ? recoveryStakeRef.current : stakeRef.current)).toFixed(2)} {displayCur}</strong></div>
+                        <div className='ad-recovery__line'><span>Auto-stake</span><b>{autoStakeEnabled ? `${Math.max(0, 5 - completedRuns)} runs to warm-up` : 'OFF · manual only'}</b></div>
+                        <div className='ad-recovery__line'><span>Martingale</span><b>{bestMartingale.toFixed(2)}x</b></div>
                         <div className='ad-recovery__line'><span>Mode</span><b>{lossStreak >= 3 ? 'RE-SCAN' : recoveryDeficit ? 'CONTROLLED' : 'NORMAL'}</b></div>
                         <button className='ad-outline-btn' onClick={resetEngine}>RESET RISK STATE</button>
                     </section>
@@ -982,13 +1141,25 @@ const AutoDigits = observer(() => {
                         </label>
                         <label>CONTRACT TYPE<select value={strategy} onChange={event => { const value = event.target.value as StrategyValue; setStrategy(value); if (value === 'AUTO') setAutoDuration(true); }}>{['Auto', 'Parity', 'Digits', 'Barrier', 'Direction', 'Range'].map(group => <optgroup key={group} label={group}>{STRATEGIES.filter(item => item.group === group).map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</optgroup>)}</select></label>
                         <div className='ad-auto-selection'>
-                            <span>MARKET + BARRIER AUTO</span>
+                            <span>SAFE CONTRACT ROTATION</span>
                             <strong>{selectedAutoStrategy}{selectedAutoBarrier != null ? ` · BARRIER ${selectedAutoBarrier}` : ''}</strong>
-                            <small>Scanner selects the market and barrier with the strongest qualified condition.</small>
+                            <small>AUTO rotates Over 4–8, Under 4–1, Matches/Differs 0–9, Even/Odd, Rise/Fall and tick contracts.</small>
                         </div>
                         <div className='ad-control-row'><label>STAKE<NumberField value={Number(stake) || 0.35} min={0.35} max={1000} onCommit={value => setStake(value.toFixed(2))} /></label><label>MIN SCORE<NumberField value={minScore} min={50} max={95} onCommit={setMinScore} /></label></div>
                         <div className='ad-duration-row'><span>DURATION</span><button className={autoDuration ? 'is-active' : ''} onClick={() => setAutoDuration(true)}>AUTO {activeDuration}T</button>{[1, 2, 3, 4, 5].map(value => <button key={value} className={!autoDuration && duration === value ? 'is-active' : ''} onClick={() => { setAutoDuration(false); setDuration(value); }}>{value}T</button>)}</div>
                         <label>ENTRY LOGIC<select value={logicMode} onChange={event => setLogicMode(event.target.value)}>{LOGIC_MODES.map(mode => <option key={mode.value} value={mode.value}>{mode.label}</option>)}</select></label>
+                        <div className='ad-risk-panel'>
+                            <div className='ad-risk-panel__heading'><span>TAKE PROFIT & RISK LIMITS</span><small>Stops new trades before the account floor is crossed.</small></div>
+                            <div className='ad-control-row'><label>TAKE PROFIT (USD)<NumberField value={Number(takeProfit) || 0.01} min={0.01} max={100000} onCommit={value => setTakeProfit(value.toFixed(2))} /></label><label>SESSION LOSS (USD)<NumberField value={Number(maxSessionLoss) || 0.35} min={0.35} max={100000} onCommit={value => setMaxSessionLoss(value.toFixed(2))} /></label></div>
+                            <div className='ad-control-row'><label>RESERVE %<NumberField value={reservePercent} min={10} max={90} onCommit={setReservePercent} /></label><label>MAX STAKE %<NumberField value={maxStakePercent} min={1} max={25} onCommit={setMaxStakePercent} /></label></div>
+                            <div className='ad-risk-actions'>
+                                <button className={`ad-risk-toggle ${autoStakeEnabled ? 'is-active' : ''}`} onClick={() => setAutoStakeEnabled(value => !value)}>
+                                    {autoStakeEnabled ? 'AUTO STAKE ON' : 'AUTO STAKE OFF'}
+                                </button>
+                                <button className='ad-risk-toggle' onClick={applyBestMartingale}>SET BEST MARTINGALE</button>
+                            </div>
+                            <p className='ad-risk-note'>Manual stake remains the base. Auto stake starts after 5 settled runs, reduces after recovery wins, and is capped by balance, reserve, and session-loss limits.</p>
+                        </div>
                     </section>
                     <section className='ad-panel ad-quick-actions'>
                         <div className='ad-panel__label'>QUICK ACTIONS</div>

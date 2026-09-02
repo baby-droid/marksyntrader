@@ -4,6 +4,7 @@ import { api_base } from '@/external/bot-skeleton';
 import { useDerivTrade } from '@/hooks/useDerivTrade';
 import { isFastExecutionEnabled } from '@/utils/execution-speed';
 import NumberField from '@/components/number-field';
+import { setTradeContext } from '@/utils/trade-metadata';
 import './auto-trades.scss';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -398,6 +399,7 @@ function AiBotCard({ bot, globalStake, globalMartingale, session, onSessionUpdat
     const { buyAndWait } = useBuyAndWait();
 
     const start = useCallback(async (resumeStake?: number) => {
+        setTradeContext({ page: 'Auto Trades', bot: bot.name });
         stopRef.current = false;
         let localWins = 0;
         let localLosses = 0;
@@ -675,6 +677,7 @@ const AutoTrades: React.FC = () => {
         // Init run
         smartStopFlags.current[id] = false;
         const cfg = smartCardCfgRef.current[id];
+        setTradeContext({ page: 'Auto Trades', bot: `${id} Smart Trading` });
         smartCurrentStakes.current[id] = cfg.stake;
         updateSess(id, { running: true, wins: 0, losses: 0, profit: 0, lastLog: 'Starting…' });
 
