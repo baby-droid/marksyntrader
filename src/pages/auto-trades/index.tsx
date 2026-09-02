@@ -1,6 +1,10 @@
 // @ts-nocheck
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { api_base } from '@/external/bot-skeleton';
+import {
+    CONNECTION_STATUS,
+    connectionStatus$,
+} from '@/external/bot-skeleton/services/api/observables/connection-status-stream';
 import { useDerivTrade } from '@/hooks/useDerivTrade';
 import { isFastExecutionEnabled } from '@/utils/execution-speed';
 import NumberField from '@/components/number-field';
@@ -33,10 +37,15 @@ function useAuthenticatedLiveDigits(symbol: string) {
         let retryTimer: ReturnType<typeof setTimeout> | null = null;
         let watchdog: ReturnType<typeof setTimeout> | null = null;
         let subscriptionId: string | null = null;
+        let startInFlight = false;
+        let streamGeneration = 0;
+        let lastTickAt = 0;
         let historyLoaded = false;
+        let historyPrices: number[] = [];
+        let historyEpochs: number[] = [];
         let pipSize = 2;
         const seenEpochs = new Set<number>();
-        let liveBuffer: Array<{ epoch: number; digit: number }> = [];
+        let liveBuffer: Array<{ epoch: number; price: number }> = [];
 
         const publish = (next: number[]) => {
             const bounded = next.slice(-1000);
@@ -49,42 +58,70 @@ function useAuthenticatedLiveDigits(symbol: string) {
             watchdog = null;
         };
 
-        const forget = () => {
-            if (subscriptionId && api_base.api) {
-                try { (api_base.api as any).send({ forget: subscriptionId }).catch(() => {}); } catch {}
-            }
-            subscriptionId = null;
-        };
-
         const teardown = () => {
             clearWatchdog();
             try { rxSub?.unsubscribe?.(); } catch {}
             rxSub = null;
-            forget();
+            // DerivAPIBasic sends the matching forget request when an
+            // observable subscription is unsubscribed. Do not send a second
+            // forget here: duplicate forgets are noisy and can hit rate limits.
+            subscriptionId = null;
         };
 
         const scheduleStart = (delay = 350) => {
             if (!alive) return;
             if (retryTimer) clearTimeout(retryTimer);
-            retryTimer = setTimeout(start, delay);
+            retryTimer = setTimeout(() => {
+                retryTimer = null;
+                void start();
+            }, delay);
+        };
+
+        const rebuildDigits = () => {
+            if (!historyLoaded) {
+                publish(liveBuffer.map(item => extractDigit(item.price, pipSize)));
+                return;
+            }
+
+            const historyDigits = historyPrices
+                .filter((_, index) => !seenEpochs.has(Number(historyEpochs[index])))
+                .map(price => extractDigit(price, pipSize));
+            publish([
+                ...historyDigits,
+                ...liveBuffer.map(item => extractDigit(item.price, pipSize)),
+            ]);
+        };
+
+        const armWatchdog = (generation: number) => {
+            clearWatchdog();
+            watchdog = setTimeout(() => {
+                if (!alive || generation !== streamGeneration) return;
+                const silenceMs = lastTickAt ? Date.now() - lastTickAt : 20000;
+                if (silenceMs >= 20000) {
+                    streamGeneration += 1;
+                    teardown();
+                    scheduleStart(1000);
+                } else {
+                    armWatchdog(generation);
+                }
+            }, Math.max(1000, 20000 - (lastTickAt ? Date.now() - lastTickAt : 0)));
         };
 
         const start = async () => {
-            if (!alive) return;
+            if (!alive || startInFlight) return;
             const api = (api_base as any).api;
             if (!api) { scheduleStart(); return; }
 
+            startInFlight = true;
+            const generation = ++streamGeneration;
             teardown();
             historyLoaded = false;
+            historyPrices = [];
+            historyEpochs = [];
             pipSize = 2;
             seenEpochs.clear();
             liveBuffer = [];
-            publish([]);
-            if (alive) {
-                setLivePrice(null);
-                priceRef.current = null;
-                setTickVersion(0);
-            }
+            lastTickAt = Date.now();
 
             const loadHistory = async () => {
                 try {
@@ -94,77 +131,127 @@ function useAuthenticatedLiveDigits(symbol: string) {
                         end: 'latest',
                         style: 'ticks',
                     });
-                    if (!alive || response?.error) return;
-                    const prices = (response?.history?.prices ?? []).map(Number);
-                    const times = response?.history?.times ?? [];
-                    const historyDigits = prices
-                        .filter((_, i) => !seenEpochs.has(Number(times[i])))
-                        .map((price: number) => extractDigit(price, pipSize));
-                    publish([...historyDigits, ...liveBuffer.map(item => item.digit)]);
+                    if (!alive || generation !== streamGeneration || response?.error) return;
+                    historyPrices = (response?.history?.prices ?? []).map(Number);
+                    historyEpochs = (response?.history?.times ?? []).map(Number);
+                    rebuildDigits();
                 } catch {
                     // Live ticks remain usable if the history request is delayed.
                 } finally {
-                    historyLoaded = true;
+                    if (alive && generation === streamGeneration) {
+                        historyLoaded = true;
+                        rebuildDigits();
+                    }
                 }
             };
 
             const onTick = (tick: any) => {
-                if (!alive || !tick || tick.quote == null) return;
+                if (!alive || generation !== streamGeneration || !tick || tick.quote == null) return;
                 const quote = Number(tick.quote);
                 const epoch = Number(tick.epoch ?? 0);
                 if (!Number.isFinite(quote)) return;
-                if (tick.pip_size != null) pipSize = Number(tick.pip_size);
+                if (tick.pip_size != null && Number.isFinite(Number(tick.pip_size))) {
+                    // pip_size from a live tick is authoritative. History is
+                    // kept as raw prices until this value is available.
+                    pipSize = Number(tick.pip_size);
+                }
                 if (epoch && seenEpochs.has(epoch)) return;
                 if (epoch) seenEpochs.add(epoch);
 
-                const digit = extractDigit(quote, pipSize);
+                lastTickAt = Date.now();
                 priceRef.current = quote;
                 setLivePrice(quote);
                 if (alive) setTickVersion(version => version + 1);
-                if (!historyLoaded) {
-                    liveBuffer.push({ epoch, digit });
-                    publish([...digitsRef.current, digit]);
-                    if (liveBuffer.length === 1) void loadHistory();
-                } else {
-                    publish([...digitsRef.current, digit]);
-                }
-
-                clearWatchdog();
-                watchdog = setTimeout(() => {
-                    if (alive) { teardown(); scheduleStart(100); }
-                }, 20000);
+                liveBuffer.push({ epoch, price: quote });
+                rebuildDigits();
+                if (!historyLoaded && liveBuffer.length === 1) void loadHistory();
+                armWatchdog(generation);
             };
 
             try {
                 const stream = api.subscribe({ ticks: symbol, subscribe: 1 });
+                if (!stream?.subscribe) throw new Error('Deriv tick stream was not created');
                 rxSub = stream?.subscribe?.({
                     next: (message: any) => {
+                        if (generation !== streamGeneration) return;
                         if (message?.subscription?.id && !subscriptionId) {
                             subscriptionId = String(message.subscription.id);
                         }
                         onTick(message?.tick);
                     },
-                    error: () => { teardown(); scheduleStart(100); },
+                    error: () => {
+                        if (!alive || generation !== streamGeneration) return;
+                        streamGeneration += 1;
+                        teardown();
+                        scheduleStart(1000);
+                    },
                 });
-                // If the account session is ready but the first tick is delayed,
-                // retry rather than leaving the card looking connected forever.
-                watchdog = setTimeout(() => {
-                    if (alive && !historyLoaded) { teardown(); scheduleStart(100); }
-                }, 20000);
+                // This remains active after history loads; a stream that
+                // silently stalls must be restarted too.
+                armWatchdog(generation);
             } catch {
-                teardown();
-                scheduleStart(700);
+                if (generation === streamGeneration) {
+                    streamGeneration += 1;
+                    teardown();
+                }
+                scheduleStart(1500);
+            } finally {
+                startInFlight = false;
             }
         };
 
-        start();
-        const reconnect = () => { if (alive && !rxSub) start(); };
+        const handleConnectionStatus = (status: string) => {
+            if (!alive) return;
+            if (status === CONNECTION_STATUS.CLOSED) {
+                streamGeneration += 1;
+                teardown();
+                if (retryTimer) {
+                    clearTimeout(retryTimer);
+                    retryTimer = null;
+                }
+                return;
+            }
+
+            if (status === CONNECTION_STATUS.OPENED) {
+                // The API singleton may have been replaced while the old
+                // RxJS subscription object remained truthy. Always recreate
+                // the tick stream after the new socket opens.
+                scheduleStart(250);
+            }
+        };
+
+        let hasObservedConnectionStatus = false;
+        const connectionSub = connectionStatus$.subscribe(status => {
+            // BehaviorSubject immediately emits the current state. The
+            // initial stream start below already handles that state; only
+            // later close/open transitions should restart it.
+            if (!hasObservedConnectionStatus) {
+                hasObservedConnectionStatus = true;
+                return;
+            }
+            handleConnectionStatus(status);
+        });
+        void start();
+        const reconnect = () => {
+            if (!alive) return;
+            const readyState = (api_base as any).api?.connection?.readyState;
+            const streamIsHealthy = rxSub
+                && readyState === 1
+                && lastTickAt
+                && Date.now() - lastTickAt < 20000;
+            if (streamIsHealthy) return;
+            streamGeneration += 1;
+            teardown();
+            scheduleStart(250);
+        };
         window.addEventListener('online', reconnect);
         window.addEventListener('focus', reconnect);
 
         return () => {
             alive = false;
+            streamGeneration += 1;
             if (retryTimer) clearTimeout(retryTimer);
+            connectionSub.unsubscribe();
             window.removeEventListener('online', reconnect);
             window.removeEventListener('focus', reconnect);
             teardown();
