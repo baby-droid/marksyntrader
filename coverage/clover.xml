@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<coverage generated="1788181357294" clover="3.2.0">
-  <project timestamp="1788181357294" name="All files">
+<coverage generated="1788347783135" clover="3.2.0">
+  <project timestamp="1788347783135" name="All files">
     <metrics statements="18302" coveredstatements="10696" conditionals="1063" coveredconditionals="806" methods="915" coveredmethods="210" elements="20280" coveredelements="11712" complexity="0" loc="18302" ncloc="18302" packages="54" files="164" classes="164"/>
     <package name="adapters.smartcharts-champion">
       <metrics statements="753" coveredstatements="661" conditionals="125" coveredconditionals="106" methods="24" coveredmethods="20"/>

@@ -46,6 +46,7 @@ export default class TransactionsStore {
         this.root_store = root_store;
         this.core = core;
         this.is_transaction_details_modal_open = false;
+        this.registerAutoTradeListener();
         this.disposeReactionsFn = this.registerReactions();
 
         makeObservable(this, {
@@ -76,6 +77,7 @@ export default class TransactionsStore {
     recovered_transactions: number[] = [];
     is_called_proposal_open_contract = false;
     is_transaction_details_modal_open = false;
+    private auto_trade_listener: ((event: Event) => void) | null = null;
 
     get transactions(): TTransaction[] {
         const accountId = this.core?.client?.loginid || localStorage.getItem('active_loginid');
@@ -183,6 +185,21 @@ export default class TransactionsStore {
         this.pushTransaction(data);
     }
 
+    /**
+     * Keep non-Bot-Builder trade events connected for the lifetime of the root
+     * store. The Run Panel can mount and unmount independently, so this must
+     * not be part of its disposable reaction bundle.
+     */
+    private registerAutoTradeListener() {
+        if (typeof window === 'undefined' || this.auto_trade_listener) return;
+
+        this.auto_trade_listener = (event: Event) => {
+            const contract = (event as CustomEvent).detail;
+            if (contract?.contract_id) this.onBotContractEvent(contract);
+        };
+        window.addEventListener('auto-trade:contract', this.auto_trade_listener);
+    }
+
     pushTransaction(data: TContractInfo) {
         const is_completed = isEnded(data as ProposalOpenContract);
         // Auto Trades supplies a batch ID so its contracts are grouped in the
@@ -272,14 +289,6 @@ export default class TransactionsStore {
 
     registerReactions() {
         const { client } = this.core;
-        const autoTradeListener = (event: CustomEvent) => {
-            if (event.detail?.contract_id) {
-                this.onBotContractEvent(event.detail);
-            }
-        };
-        if (typeof window !== 'undefined') {
-            window.addEventListener('auto-trade:contract', autoTradeListener as EventListener);
-        }
 
         // Write transactions to session storage on each change in transaction elements.
         const disposeTransactionElementsListener = reaction(
@@ -302,9 +311,6 @@ export default class TransactionsStore {
         return () => {
             disposeTransactionElementsListener();
             disposeRecoverContracts();
-            if (typeof window !== 'undefined') {
-                window.removeEventListener('auto-trade:contract', autoTradeListener as EventListener);
-            }
         };
     }
 

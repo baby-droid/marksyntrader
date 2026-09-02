@@ -56,6 +56,7 @@
 - [AI cycle pattern detector](cycle-pattern-detector.md) — shared four-route one-tick cycle detector uses two setup touches, a barrier cross, and a return trigger.
 - [AI cycle guide runner](ai-cycle-guide-runner.md) — every guide mount intended to run bots needs a guided loader; lock market/digit recommendations for each three-run cycle.
 - [Auto-Digits scanner](auto-digits-scanner.md) — authenticated live tick distribution dashboard; two real-tick virtual validations precede buyContract trades, which emit native Bot Builder transaction events.
+- [Native transaction event lifecycle](native-transaction-event-lifecycle.md) — shared transaction events from self-contained traders must outlive the Run Panel mount lifecycle.
 - [Blockly SVG fragment imports](blockly-svg-fragments.md) — rendered Blockly SVG exports are not loadable bot XML; convert them to executable Blockly roots and preserve source IDs as data metadata.
 - [Ahmed Differs Cycle recovery](ahmed-differs-cycle-recovery.md) — every loss resets parity history and waits for three same-parity digits before the contrarian recovery buy.
 - [Blockly XML validation](blockly-xml-validation.md) — close child value/statement wrappers before parent blocks; parse XML and verify explicit block IDs after edits and builds.

@@ -609,7 +609,14 @@ const AutoDigits = observer(() => {
             stake: contractStake,
             barrier: bestCandidate.barrier,
             currency,
-            metadata: { auto_digits: true, strategy: bestCandidate.label, validation: '2 virtual wins', selected_by: 'market-condition-scanner' },
+            metadata: {
+                auto_digits: true,
+                source: 'auto-digits',
+                execution_mode: 'market-condition-scanner',
+                strategy: bestCandidate.label,
+                validation: '2 virtual wins',
+                selected_by: 'market-condition-scanner',
+            },
         }, settled => {
             realInFlightRef.current = false;
             const won = settled.status === 'won';
