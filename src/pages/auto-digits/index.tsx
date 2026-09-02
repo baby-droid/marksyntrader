@@ -222,8 +222,9 @@ type AutoRotationPlan = { strategy: ConcreteStrategy; barrier?: number };
 // current phase determines which contracts are eligible and the live score
 // determines the best confirmed entry within that phase.
 const AUTO_STRATEGIES: ConcreteStrategy[] = [
-    'EVEN', 'ODD', 'OVER', 'UNDER', 'DIFFERS', 'MATCHES',
-    'RISE', 'FALL', 'ONLY UPS', 'ONLY DOWNS', 'HIGH TICK', 'LOW TICK',
+    'OVER', 'UNDER', 'EVEN', 'ODD',
+    'RISE', 'FALL', 'ONLY UPS', 'ONLY DOWNS',
+    'HIGH TICK', 'LOW TICK', 'DIFFERS', 'MATCHES',
 ];
 
 const AUTO_BASELINE_PLANS: AutoRotationPlan[] = [
@@ -235,9 +236,9 @@ const AUTO_BASELINE_PLANS: AutoRotationPlan[] = [
     { strategy: 'FALL' },
     { strategy: 'ONLY UPS' },
     { strategy: 'ONLY DOWNS' },
-    { strategy: 'DIFFERS' },
     { strategy: 'HIGH TICK' },
     { strategy: 'LOW TICK' },
+    { strategy: 'DIFFERS' },
 ];
 
 const AUTO_NEAR_TP_PLANS: AutoRotationPlan[] = [
@@ -446,6 +447,18 @@ const AutoDigits = observer(() => {
         let touches = 0;
         let retention = 0;
         let entryDigit: number | undefined;
+        let selectedFrequency = 0;
+        let diversity = 0;
+        let winningSideStrength = 0;
+        let winningRun = 0;
+        let directionShort = 0;
+        let directionMedium = 0;
+        let directionLong = 0;
+        let directionBaseline = 0;
+        let consecutiveMoves = 0;
+        let rangePosition = 50;
+        let shortMomentum = 0;
+        let baselineMomentum = 0;
 
         if (nextPoints.length < 20) {
             return { score: 0, strategy: analysisStrategy, label: 'WARMING UP', contractType: strategyContract(analysisStrategy), reason: 'Collecting the 20-tick entry window', confidence: 'DATA', touches, retention };
@@ -475,8 +488,8 @@ const AutoDigits = observer(() => {
             const sorted = p1000.map((value, digit) => ({ digit, value })).sort((a, b) => b.value - a.value);
             const dominant = sorted[0];
             const selectedDigit = forcedBarrier != null ? forcedBarrier : dominant.digit;
-            const selectedFrequency = p1000[selectedDigit] ?? 0;
-            const diversity = p20.filter(value => value > 0).length;
+            selectedFrequency = p1000[selectedDigit] ?? 0;
+            diversity = p20.filter(value => value > 0).length;
             const concentrationRising = p20[selectedDigit] >= p50[selectedDigit] && p50[selectedDigit] >= p100[selectedDigit];
             entryDigit = selectedDigit;
             score = analysisStrategy === 'MATCHES'
@@ -493,47 +506,46 @@ const AutoDigits = observer(() => {
             const winning = analysisStrategy === 'OVER'
                 ? last20.filter(point => point.digit > barrierNumber)
                 : last20.filter(point => point.digit < barrierNumber);
-            const winningRun = longestRun(last20.slice().reverse(), point => analysisStrategy === 'OVER' ? point.digit > barrierNumber : point.digit < barrierNumber);
+            winningRun = longestRun(last20.slice().reverse(), point => analysisStrategy === 'OVER' ? point.digit > barrierNumber : point.digit < barrierNumber);
             retention = Math.min(100, winningRun * 25 + winning.length * 2);
             const losingRate = analysisStrategy === 'OVER'
                 ? p1000.slice(0, barrierNumber + 1).reduce((a, b) => a + b, 0)
                 : p1000.slice(barrierNumber, 10).reduce((a, b) => a + b, 0);
-            const winningStrength = analysisStrategy === 'OVER'
+            winningSideStrength = analysisStrategy === 'OVER'
                 ? p20.slice(barrierNumber + 1).reduce((a, b) => a + b, 0)
                 : p20.slice(0, barrierNumber).reduce((a, b) => a + b, 0);
-            score = Math.min(100, 28 + (touches >= 2 && touches <= 5 ? 22 : 0) + (retention >= 50 ? 20 : retention / 3) + (losingRate < 55 ? 18 : 0) + (winningStrength >= 55 ? 12 : 0) + (p20.filter((value, digit) => analysisStrategy === 'OVER' ? digit > barrierNumber && value >= 10 : digit < barrierNumber && value >= 10).length * 3));
+            score = Math.min(100, 28 + (touches >= 2 && touches <= 5 ? 22 : 0) + (retention >= 50 ? 20 : retention / 3) + (losingRate < 55 ? 18 : 0) + (winningSideStrength >= 55 ? 12 : 0) + (p20.filter((value, digit) => analysisStrategy === 'OVER' ? digit > barrierNumber && value >= 10 : digit < barrierNumber && value >= 10).length * 3));
             reason = `${touches}/10 losing-region touches; ${retention}% retention; ${winningStrength.toFixed(0)}% winning-side strength`;
             entryDigit = analysisStrategy === 'OVER'
                 ? p20.map((value, digit) => ({ value, digit })).filter(item => item.digit > barrierNumber).sort((a, b) => b.value - a.value)[0]?.digit
                 : p20.map((value, digit) => ({ value, digit })).filter(item => item.digit < barrierNumber).sort((a, b) => b.value - a.value)[0]?.digit;
         } else if (analysisStrategy === 'RISE' || analysisStrategy === 'FALL' || analysisStrategy === 'ONLY UPS' || analysisStrategy === 'ONLY DOWNS') {
             const direction = analysisStrategy === 'RISE' || analysisStrategy === 'ONLY UPS' ? 'up' : 'down';
-            const d20 = directionPct(nextPoints, 20, direction);
-            const d50 = directionPct(nextPoints, 50, direction);
-            const d100 = directionPct(nextPoints, 100, direction);
-            const d1000 = directionPct(nextPoints, 1000, direction);
+            directionShort = directionPct(nextPoints, 20, direction);
+            directionMedium = directionPct(nextPoints, 50, direction);
+            directionLong = directionPct(nextPoints, 100, direction);
+            directionBaseline = directionPct(nextPoints, 1000, direction);
             const strict = analysisStrategy === 'ONLY UPS' || analysisStrategy === 'ONLY DOWNS';
-            let consecutive = 0;
             for (let index = nextPoints.length - 1; index > 0; index -= 1) {
                 const move = nextPoints[index].quote - nextPoints[index - 1].quote;
-                if ((direction === 'up' && move > 0) || (direction === 'down' && move < 0)) consecutive += 1;
+                if ((direction === 'up' && move > 0) || (direction === 'down' && move < 0)) consecutiveMoves += 1;
                 else break;
             }
-            const chop = Math.min(d20, 100 - d20);
-            score = Math.min(100, 25 + (d20 >= (strict ? 65 : 55) ? 26 : 0) + (d50 >= 55 ? 18 : 0) + (d100 >= 53 ? 12 : 0) + (d1000 >= 50 ? 7 : 0) + Math.min(12, consecutive * 3) - (strict && chop > 42 ? 12 : 0));
-            reason = `${direction.toUpperCase()} pressure: ${d20.toFixed(0)}% / ${d50.toFixed(0)}% / ${d100.toFixed(0)}% / ${d1000.toFixed(0)}% across 20T–1,000T`;
-            retention = Math.min(100, consecutive * 20);
+            const chop = Math.min(directionShort, 100 - directionShort);
+            score = Math.min(100, 25 + (directionShort >= (strict ? 65 : 55) ? 26 : 0) + (directionMedium >= 55 ? 18 : 0) + (directionLong >= 53 ? 12 : 0) + (directionBaseline >= 50 ? 7 : 0) + Math.min(12, consecutiveMoves * 3) - (strict && chop > 42 ? 12 : 0));
+            reason = `${direction.toUpperCase()} pressure: ${directionShort.toFixed(0)}% / ${directionMedium.toFixed(0)}% / ${directionLong.toFixed(0)}% / ${directionBaseline.toFixed(0)}% across 20T–1,000T`;
+            retention = Math.min(100, consecutiveMoves * 20);
         } else {
             const window = nextPoints.slice(-50);
             const quotes = window.map(point => point.quote);
             const low = Math.min(...quotes);
             const high = Math.max(...quotes);
             const current = quotes[quotes.length - 1] || 0;
-            const rangePosition = high === low ? 50 : ((current - low) / (high - low)) * 100;
+            rangePosition = high === low ? 50 : ((current - low) / (high - low)) * 100;
             const isHigh = analysisStrategy === 'HIGH TICK';
             const rangeDirection = isHigh ? 'up' : 'down';
-            const shortMomentum = directionPct(nextPoints, 20, rangeDirection);
-            const baselineMomentum = directionPct(nextPoints, 1000, rangeDirection);
+            shortMomentum = directionPct(nextPoints, 20, rangeDirection);
+            baselineMomentum = directionPct(nextPoints, 1000, rangeDirection);
             score = Math.min(100, 35 + (isHigh ? rangePosition : 100 - rangePosition) * 0.55 + (shortMomentum >= 55 ? 15 : 0) + (baselineMomentum >= 50 ? 5 : 0));
             reason = `${isHigh ? 'High' : 'Low'} range position ${rangePosition.toFixed(0)}% with ${shortMomentum.toFixed(0)}% short / ${baselineMomentum.toFixed(0)}% baseline momentum`;
             retention = isHigh ? rangePosition : 100 - rangePosition;
@@ -545,21 +557,92 @@ const AutoDigits = observer(() => {
                 ? even100 >= odd100 && even1000 >= odd1000
                 : true;
         const pressureDelta = Math.abs(odd1000 - even1000);
-        const baseScore = score;
         const isParity = analysisStrategy === 'ODD' || analysisStrategy === 'EVEN';
         const isBarrier = analysisStrategy === 'OVER' || analysisStrategy === 'UNDER';
-        // "All strategy" treats each signal as a confirmation, but only
-        // applies specialized checks where they make sense for the contract.
-        // This avoids requiring an Over/Under touch metric from Rise/Fall.
-        const confluenceConfirmed = isParity ? parityWindowsAgree : baseScore >= 65;
-        const pressureConfirmed = isParity ? pressureDelta >= 6 : baseScore >= 65;
-        const touchConfirmed = isBarrier ? touches >= 2 && retention >= 30 : baseScore >= 65;
-        const patternConfirmed = isParity ? parityPattern : baseScore >= 65;
+        const isDigitFamily = analysisStrategy === 'MATCHES' || analysisStrategy === 'DIFFERS';
+        const isDirectionFamily = analysisStrategy === 'RISE' || analysisStrategy === 'FALL' || analysisStrategy === 'ONLY UPS' || analysisStrategy === 'ONLY DOWNS';
+        const isRangeFamily = analysisStrategy === 'HIGH TICK' || analysisStrategy === 'LOW TICK';
+
+        // Each confirmation is meaningful for the selected contract family.
+        // "All strategy" is deliberately a gate, not four generic score bonuses:
+        // every applicable window/distribution/touch/pattern check must pass.
+        const barrierConfluence = isBarrier && [p20, p50, p100].every(window => {
+            const winning = analysisStrategy === 'OVER'
+                ? window.slice(barrierNumber + 1).reduce((a, b) => a + b, 0)
+                : window.slice(0, barrierNumber).reduce((a, b) => a + b, 0);
+            const losing = 100 - winning;
+            return winning >= losing + 2;
+        });
+        const digitConfluence = isDigitFamily && (
+            analysisStrategy === 'MATCHES'
+                ? p20[entryDigit ?? 0] >= p50[entryDigit ?? 0] - 1 && p50[entryDigit ?? 0] >= p100[entryDigit ?? 0] - 1
+                : diversity >= 7 && p50.filter(value => value > 0).length >= 7
+        );
+        const directionConfluence = isDirectionFamily && directionShort >= 55 && directionMedium >= 53 && directionLong >= 51 && directionBaseline >= 50;
+        const rangeConfluence = isRangeFamily && (
+            (analysisStrategy === 'HIGH TICK' ? rangePosition >= 65 : rangePosition <= 35) &&
+            shortMomentum >= 55 && baselineMomentum >= 50
+        );
+        const confluenceConfirmed = isParity
+            ? parityWindowsAgree
+            : isBarrier ? barrierConfluence
+                : isDigitFamily ? digitConfluence
+                    : isDirectionFamily ? directionConfluence
+                        : isRangeFamily ? rangeConfluence
+                            : false;
+
+        const barrierPressure = isBarrier && winningSideStrength >= 55;
+        const digitPressure = isDigitFamily && (
+            analysisStrategy === 'MATCHES'
+                ? selectedFrequency >= 10
+                : selectedFrequency <= 14 && diversity >= 7
+        );
+        const directionPressure = isDirectionFamily && directionShort >= 55 && directionMedium >= 52;
+        const rangePressure = isRangeFamily && shortMomentum >= 55;
+        const pressureConfirmed = isParity
+            ? pressureDelta >= 6
+            : isBarrier ? barrierPressure
+                : isDigitFamily ? digitPressure
+                    : isDirectionFamily ? directionPressure
+                        : isRangeFamily ? rangePressure
+                            : false;
+
+        const barrierTouch = isBarrier && touches >= 2 && touches <= 5 && retention >= 30;
+        const digitTouch = isDigitFamily && (
+            analysisStrategy === 'MATCHES'
+                ? recurrence >= 2 && digitCluster >= 2
+                : diversity >= 7 && recurrence <= 5
+        );
+        const directionTouch = isDirectionFamily && consecutiveMoves >= 2;
+        const rangeTouch = isRangeFamily && retention >= 40;
+        const touchConfirmed = isParity
+            ? (parity >= 52)
+            : isBarrier ? barrierTouch
+                : isDigitFamily ? digitTouch
+                    : isDirectionFamily ? directionTouch
+                        : isRangeFamily ? rangeTouch
+                            : false;
+
+        const digitPattern = isDigitFamily && (
+            analysisStrategy === 'MATCHES'
+                ? digitCluster >= 2
+                : diversity >= 8 && digitCluster <= 3
+        );
+        const barrierPattern = isBarrier && winningRun >= 2 && retention >= 40;
+        const directionPattern = isDirectionFamily && (consecutiveMoves >= 3 || (directionShort >= 60 && directionMedium >= 55));
+        const rangePattern = isRangeFamily && ((analysisStrategy === 'HIGH TICK' ? rangePosition >= 70 : rangePosition <= 30) || shortMomentum >= 60);
+        const patternConfirmed = isParity
+            ? parityPattern
+            : isBarrier ? barrierPattern
+                : isDigitFamily ? digitPattern
+                    : isDirectionFamily ? directionPattern
+                        : isRangeFamily ? rangePattern
+                            : false;
         const allStrategyConfirmed = confluenceConfirmed && pressureConfirmed && touchConfirmed && patternConfirmed;
-        const confluenceBonus = parityWindowsAgree ? 6 : 0;
-        const pressureBonus = p1000.length ? Math.min(6, pressureDelta / 3) : 0;
-        const touchBonus = touches >= 2 ? Math.min(8, touches) : 0;
-        const patternBonus = parityPattern ? 8 : 0;
+        const confluenceBonus = confluenceConfirmed ? 6 : 0;
+        const pressureBonus = pressureConfirmed ? 6 : 0;
+        const touchBonus = touchConfirmed ? 8 : 0;
+        const patternBonus = patternConfirmed ? 8 : 0;
 
         if (logicMode === 'confluence' || logicMode === 'all') score += confluenceBonus;
         if (logicMode === 'pressure' || logicMode === 'all') score += pressureBonus;
@@ -569,8 +652,13 @@ const AutoDigits = observer(() => {
             if (isParity && !parityPattern) score = Math.min(score, 69);
         }
         if (logicMode === 'all' && !allStrategyConfirmed) {
-            score = Math.min(score, Math.max(0, minScore - 1));
-            reason += '; waiting for all confirmations';
+            const failedConfirmations = [
+                !confluenceConfirmed ? 'window' : '',
+                !pressureConfirmed ? 'pressure' : '',
+                !touchConfirmed ? 'touch' : '',
+                !patternConfirmed ? 'pattern' : '',
+            ].filter(Boolean).join(', ');
+            reason += `; ALL gate waiting (${failedConfirmations || 'confirmation'})`;
         } else if (logicMode === 'all') {
             reason += '; all confirmations passed';
         }
@@ -584,6 +672,12 @@ const AutoDigits = observer(() => {
                 : 5;
         score += riskScore;
         if (!riskScore) score = 0;
+        // Apply the combined-mode ceiling after every score adjustment,
+        // including risk/recovery bonuses, so a failed confirmation can never
+        // leak back above the execution threshold.
+        if (logicMode === 'all' && !allStrategyConfirmed) {
+            score = Math.min(score, Math.max(0, minScore - 1));
+        }
         score = Math.round(Math.min(100, score));
         const confidence = score >= 90 ? 'VERY STRONG' : score >= 80 ? 'STRONG' : score >= minScore ? 'WATCH' : 'WAIT';
         return {
@@ -802,15 +896,6 @@ const AutoDigits = observer(() => {
         setTradeContext({ page: 'Auto-Digits', bot: executionCandidate.label });
         if (safeContractStake < requestedStake) addLog(`STAKE CONTROLLED — ${requestedStake.toFixed(2)} → ${safeContractStake.toFixed(2)} ${displayCur} by goal/risk limits`);
         addLog(`EXECUTE — ${executionCandidate.contractType} ${executionCandidate.barrier ?? ''} on ${marketLabel(executionCandidate.symbol || '')} | ${safeContractStake.toFixed(2)} ${displayCur} | ${tradeDuration}T`);
-        if (strategy === 'AUTO' && Number.isInteger(executionCandidate.planIndex)) {
-            const planLength = executionCandidate.autoPhase === 'RECOVERY'
-                ? AUTO_RECOVERY_PLANS.length
-                : executionCandidate.autoPhase === 'NEAR TP'
-                    ? AUTO_NEAR_TP_PLANS.length
-                    : AUTO_BASELINE_PLANS.length;
-            autoPlanIndexRef.current = (Number(executionCandidate.planIndex) + 1) % planLength;
-            addLog(`AUTO PLAN — ${executionCandidate.autoPhase || 'BASELINE'} advanced to step ${autoPlanIndexRef.current + 1}/${planLength}`);
-        }
         buyContract({
             symbol: executionCandidate.symbol || activeSymbolRef.current,
             contract_type: executionCandidate.contractType,
@@ -925,6 +1010,18 @@ const AutoDigits = observer(() => {
             setTrades(previousTrades => previousTrades.filter(trade => trade.id !== rowId));
             setStatus(error?.message || 'Trade request failed');
             addLog(`TRADE ERROR — ${error?.message || 'request rejected'}`);
+        }).then(result => {
+            // Advance only after the authenticated Deriv buy response returns a
+            // real contract id. Validation alone must never consume a phase.
+            if (strategy === 'AUTO' && result?.contract_id && Number.isInteger(executionCandidate.planIndex)) {
+                const planLength = executionCandidate.autoPhase === 'RECOVERY'
+                    ? AUTO_RECOVERY_PLANS.length
+                    : executionCandidate.autoPhase === 'NEAR TP'
+                        ? AUTO_NEAR_TP_PLANS.length
+                        : AUTO_BASELINE_PLANS.length;
+                autoPlanIndexRef.current = (Number(executionCandidate.planIndex) + 1) % planLength;
+                addLog(`AUTO PLAN — ${executionCandidate.autoPhase || 'BASELINE'} advanced to step ${autoPlanIndexRef.current + 1}/${planLength} after confirmed buy`);
+            }
         });
     }, [addLog, analyze, analyzeStrategy, authorized, autoDuration, autoStakeEnabled, bestMartingale, buyContract, currency, displayCur, duration, marketLabel, maxSessionLoss, minScore, reservePercent, send, strategy, takeProfit, maxStakePercent]);
 
