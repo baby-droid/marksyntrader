@@ -7,4 +7,4 @@ Recovery must stay linear across markets: Over 1, Over 2, Over 3, Under 8, Under
 
 **Why:** Ranking every recovery plan simultaneously causes the engine to mix barriers and markets, making recovery unpredictable and skipping the intended sequence.
 
-**How to apply:** Advance the plan index only after a real Deriv contract ID, keep recovery active while any deficit remains (including after partial wins), and size the next stake against the remaining deficit plus the base profit target using the configured 80% payout assumption while respecting reserve and loss limits.
+**How to apply:** Advance the plan index only after a real Deriv contract ID, keep recovery active while any deficit remains (including after partial wins), and size the next stake as the higher of the user multiplier floor or the remaining-deficit target using the configured 80% payout assumption while respecting reserve and loss limits.

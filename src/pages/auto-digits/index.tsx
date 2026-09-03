@@ -260,10 +260,12 @@ const AUTO_RECOVERY_STRATEGIES: ConcreteStrategy[] = ['OVER', 'UNDER', 'EVEN', '
 const AUTO_MATCH_MIN_SCORE = 90;
 const RECOVERY_PAYOUT_RATE = 0.8;
 
-const recoveryStakeFor = (deficit: number, baseStake: number) => {
+const recoveryStakeFor = (deficit: number, baseStake: number, martingale: number) => {
     const recoveryProfit = Math.max(0.35, baseStake * RECOVERY_PAYOUT_RATE);
+    const martingaleStake = baseStake * Math.max(1, martingale);
     return Math.max(
         baseStake,
+        martingaleStake,
         +((Math.max(0, deficit) + recoveryProfit) / RECOVERY_PAYOUT_RATE).toFixed(2),
     );
 };
@@ -978,7 +980,7 @@ const AutoDigits = observer(() => {
                     // Keep recovery active after a partial win and size the
                     // next attempt for the remaining deficit plus an 80%
                     // return on the base stake.
-                    recoveryStakeRef.current = recoveryStakeFor(remaining, stakeRef.current);
+                    recoveryStakeRef.current = recoveryStakeFor(remaining, stakeRef.current, bestMartingale);
                 }
                 if (balancedTradeRef.current) {
                     runningRef.current = false;
@@ -998,7 +1000,7 @@ const AutoDigits = observer(() => {
                 const nextDeficit = Math.max(0, baseline - nextPnl);
                 recoveryDeficitRef.current = nextDeficit;
                 setRecoveryDeficit(nextDeficit);
-                recoveryStakeRef.current = recoveryStakeFor(nextDeficit, stakeRef.current);
+                recoveryStakeRef.current = recoveryStakeFor(nextDeficit, stakeRef.current, bestMartingale);
                 if (nextLosses >= 3) {
                     const opposite = oppositeStrategy(executionStrategy);
                     if (opposite && strategy !== 'AUTO') {
@@ -1383,6 +1385,19 @@ const AutoDigits = observer(() => {
         addLog('RISK STATE RESET — baseline retained');
     };
 
+    const updateMartingale = (value: number) => {
+        const multiplier = Math.max(1, Math.min(5, Number.isFinite(value) ? value : 1));
+        setBestMartingale(multiplier);
+        if (lossStreakRef.current > 0 || recoveryDeficitRef.current > 0) {
+            recoveryStakeRef.current = recoveryStakeFor(
+                recoveryDeficitRef.current,
+                stakeRef.current,
+                multiplier,
+            );
+        }
+        addLog(`MARTINGALE INPUT — ${multiplier.toFixed(2)}x; ordered recovery plan retained`);
+    };
+
     const applyBestMartingale = () => {
         const currentBalance = balanceRef.current;
         const base = stakeRef.current;
@@ -1392,8 +1407,8 @@ const AutoDigits = observer(() => {
             ? 1.25
             : currentBalance < base * 50 ? 1.35 : 1.45;
         setBestMartingale(recommended);
-        recoveryStakeRef.current = base;
-        addLog(`BEST MARTINGALE — ${recommended.toFixed(2)}x selected; recovery will reduce after wins`);
+        recoveryStakeRef.current = recoveryStakeFor(recoveryDeficitRef.current, base, recommended);
+        addLog(`BEST MARTINGALE — ${recommended.toFixed(2)}x selected; ordered recovery plan retained`);
     };
 
     const startBot = () => {
@@ -1523,6 +1538,11 @@ const AutoDigits = observer(() => {
                             <div className='ad-risk-panel__heading'><span>TAKE PROFIT & RISK LIMITS</span><small>Stops new trades before the account floor is crossed.</small></div>
                             <div className='ad-control-row'><label>TAKE PROFIT (USD)<NumberField value={Number(takeProfit) || 0.01} min={0.01} max={100000} onCommit={value => setTakeProfit(value.toFixed(2))} /></label><label>SESSION LOSS (USD)<NumberField value={Number(maxSessionLoss) || 0.35} min={0.35} max={100000} onCommit={value => setMaxSessionLoss(value.toFixed(2))} /></label></div>
                             <div className='ad-control-row'><label>RESERVE %<NumberField value={reservePercent} min={10} max={90} onCommit={setReservePercent} /></label><label>MAX STAKE %<NumberField value={maxStakePercent} min={1} max={25} onCommit={setMaxStakePercent} /></label></div>
+                             <div className='ad-martingale-panel'>
+                                 <div className='ad-martingale-panel__heading'><span>RECOVERY MARTINGALE</span><small>User multiplier with the 80% deficit target as the minimum.</small></div>
+                                 <label>MULTIPLIER (×)<NumberField value={bestMartingale} min={1} max={5} onCommit={updateMartingale} /></label>
+                                 <p>After a loss or partial win, the next stake uses this multiplier or the amount needed to clear the remaining deficit, whichever is higher. Risk limits still cap it.</p>
+                             </div>
                             <div className='ad-risk-actions'>
                                 <button className={`ad-risk-toggle ${autoStakeEnabled ? 'is-active' : ''}`} onClick={() => setAutoStakeEnabled(value => !value)}>
                                     {autoStakeEnabled ? 'AUTO STAKE ON' : 'AUTO STAKE OFF'}

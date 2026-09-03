@@ -365,6 +365,48 @@
     gap: 0.4rem;
 }
 
+.ad-martingale-panel {
+    display: grid;
+    gap: 0.42rem;
+    padding: 0.52rem;
+    border: 1px solid rgba(255, 190, 92, 0.3);
+    border-radius: 6px;
+    background: rgba(255, 190, 92, 0.045);
+
+    &__heading {
+        display: grid;
+        gap: 0.16rem;
+
+        span {
+            color: #ffcf70;
+            font-size: 0.56rem;
+            font-weight: 900;
+            letter-spacing: 0.07em;
+        }
+
+        small {
+            color: var(--ad-muted);
+            font-size: 0.52rem;
+            line-height: 1.25;
+        }
+    }
+
+    label {
+        display: grid;
+        gap: 0.22rem;
+        color: var(--ad-muted);
+        font-size: 0.54rem;
+        font-weight: 800;
+    }
+
+    p {
+        margin: 0;
+        color: var(--ad-muted);
+        font-size: 0.5rem;
+        line-height: 1.35;
+    }
+}
+
 .ad-risk-toggle {
     min-height: 2rem;
     padding: 0.35rem 0.25rem;
