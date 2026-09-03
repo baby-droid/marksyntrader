@@ -266,7 +266,16 @@ const AUTO_SAFE_RECOVERY_PLANS: AutoRotationPlan[] = [
     { strategy: 'ONLY DOWNS' },
 ];
 const SAFE_RECOVERY_RUN_LIMIT = 3;
-const LOW_RISK_CONTRACT_TYPES = new Set(['DIGITEVEN', 'DIGITODD', 'RUNHIGH', 'RUNLOW']);
+const LOW_RISK_CONTRACT_TYPES = new Set([
+    'DIGITEVEN',
+    'DIGITODD',
+    'DIGITOVER',
+    'DIGITUNDER',
+    'DIGITDIFF',
+    'DIGITMATCH',
+    'RUNHIGH',
+    'RUNLOW',
+]);
 const AUTO_RECOVERY_STRATEGIES: ConcreteStrategy[] = ['EVEN', 'ODD', 'ONLY UPS', 'ONLY DOWNS', 'OVER', 'UNDER', 'RISE', 'FALL'];
 const AUTO_MATCH_MIN_SCORE = 90;
 const RECOVERY_PAYOUT_RATE = 0.8;
