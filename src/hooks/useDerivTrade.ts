@@ -82,6 +82,7 @@ export function useDerivTrade() {
     const nextTickSubscriptionTokenRef = useRef(0);
     const pocCallbacksRef = useRef<Map<number, (c: SettledContract) => void>>(new Map());
     const contractMetaRef = useRef<Map<number, any>>(new Map());
+    const settlementRetryTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
     const [connected, setConnected] = useState(connectionStatus$.value === CONNECTION_STATUS.OPENED);
     const [balance, setBalance] = useState<number | null>(null);
     const [currency, setCurrency] = useState('USD');
@@ -168,6 +169,11 @@ export function useDerivTrade() {
                 if (poc.is_sold || poc.status === 'won' || poc.status === 'lost') {
                     const cb = pocCallbacksRef.current.get(cid);
                     const meta = contractMetaRef.current.get(cid);
+                    const retryTimer = settlementRetryTimersRef.current.get(cid);
+                    if (retryTimer) {
+                        clearTimeout(retryTimer);
+                        settlementRetryTimersRef.current.delete(cid);
+                    }
                     const profit = parseFloat(poc.profit ?? '0');
                     // Use the definitive status from the API; fall back to profit sign.
                     const status: 'won' | 'lost' =
@@ -438,17 +444,43 @@ export function useDerivTrade() {
             }));
 
             // Step 3 — subscribe to settlement notifications
-            // In Fast mode: subscribe is fire-and-forget (never blocks the caller)
             if (onSettled) {
                 pocCallbacksRef.current.set(contract_id, onSettled);
-                if (isFastExecutionEnabled()) {
-                    // Defer subscription message to rAF so the trade engine stays unblocked
-                    requestAnimationFrame(() => {
-                        send({ proposal_open_contract: 1, contract_id, subscribe: 1 }).catch(() => {});
-                    });
-                } else {
-                    send({ proposal_open_contract: 1, contract_id, subscribe: 1 }).catch(() => {});
-                }
+                const requestSettlementSubscription = (attempt = 0) => {
+                    const retryDelays = [250, 500, 1000, 2000];
+                    const request = () => {
+                        send({ proposal_open_contract: 1, contract_id, subscribe: 1 })
+                            .then(response => {
+                                if (!response?.error) {
+                                    settlementRetryTimersRef.current.delete(contract_id);
+                                    return;
+                                }
+                                if (attempt >= retryDelays.length) return;
+                                const timer = setTimeout(() => {
+                                    settlementRetryTimersRef.current.delete(contract_id);
+                                    requestSettlementSubscription(attempt + 1);
+                                }, retryDelays[attempt]);
+                                settlementRetryTimersRef.current.set(contract_id, timer);
+                            })
+                            .catch(() => {
+                                if (attempt >= retryDelays.length) return;
+                                const timer = setTimeout(() => {
+                                    settlementRetryTimersRef.current.delete(contract_id);
+                                    requestSettlementSubscription(attempt + 1);
+                                }, retryDelays[attempt]);
+                                settlementRetryTimersRef.current.set(contract_id, timer);
+                            });
+                    };
+
+                    if (attempt === 0 && isFastExecutionEnabled()) {
+                        // Keep Fast mode non-blocking, but still use the same
+                        // retrying subscription path as normal execution.
+                        requestAnimationFrame(request);
+                    } else {
+                        request();
+                    }
+                };
+                requestSettlementSubscription();
             }
 
             return {

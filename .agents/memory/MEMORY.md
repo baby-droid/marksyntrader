@@ -50,7 +50,7 @@
 - [Virtual Hook + Stealth Mode](scalper-virtual-hook.md) — VirtualHookConfig in BotConfig; gate in startBot after ENTRY_SIGNAL log; vPhase/vLossCount/vWinCount local vars; virtual TxRecord rows (virtual: true); stealthMode masks tick prices in terminal.
 - [Scalper cool-off stability](scalper-cooloff-crash.md) — bound cool-off virtual telemetry, clear resolved tick wait timers, normalize units, and avoid redundant countdown renders.
 - [Auto Trades Even/Odd condition](auto-trades-evenodd.md) — the card gates entries on the latest N digits sharing the selected parity; UI dropdowns drive both the condition and buy contract.
-- [Auto Trades batch manager](auto-trades-batch-manager.md) — same-account batches use concurrent authenticated WebSocket buys; track each contract under a batch ID because REST bulk purchase targets multiple accounts.
+- [Auto Trades batch manager](auto-trades-batch-manager.md) — same-account batches use concurrent authenticated buys; pending settlements are not losses and Bulk Trade owns execution exclusively.
 - [Differs Edge Scanner bot](differs-edge-scanner.md) — XML bot scans latest digit, rotates Differs/Over/Under phases, and uses Even/Odd parity recovery after losses.
 - [Differs cycle XML validation](differs-cycle-xml-validation.md) — Edge Scanner is phase-only with explicit parity recovery states; parse and synchronize public/dist copies after edits.
 - [AI cycle pattern detector](cycle-pattern-detector.md) — shared four-route one-tick cycle detector uses two setup touches, a barrier cross, and a return trigger.
@@ -63,4 +63,4 @@
 - [Auto-Digits active symbols API](auto-digits-active-symbols.md) — current Deriv options WebSocket rejects product_type on active_symbols; request full symbols without that field.
 - [Deriv tick observable teardown](auto-trades-feed-lifecycle.md) — unsubscribing a DerivAPIBasic stream owns the matching forget; manual forgets can duplicate requests and trigger rate limits.
 - [Auto-Digits feed lifecycle](auto-digits-feed-lifecycle.md) — attach authenticated live feeds before baseline history, cancel stale loaders, watchdog silent streams, and calculate digits with live pip_size plus epoch deduplication.
-- [Auto-Digits recovery order](auto-digits-recovery-order.md) — after a loss, evaluate one shared plan step across markets, trade only after entry confirmation, and advance Over 1–3 then Under 8–6 only after a real buy.
+- [Auto-Digits recovery order](auto-digits-recovery-order.md) — after a loss, evaluate one shared plan step; supported barriers are Over 4–8, Under 4,3,2,1, with Matches blocked in recovery.

@@ -315,10 +315,12 @@ function useBuyAndWait() {
             let settled = false;
             const timeout = setTimeout(() => {
                 if (!settled) {
-                    settled = true;
-                    resolve(0);
+                    // A missing settlement update is not a loss. The native
+                    // transaction bridge continues listening and will update
+                    // the Bot Builder row when Deriv settles the contract.
+                    resolve(Number.NaN);
                 }
-            }, 20_000);
+            }, 30_000);
             try {
                 const bought = await buyContract({
                     symbol,
@@ -676,6 +678,31 @@ const AutoTrades: React.FC = () => {
         setSmartCardCfg(prev => ({ ...prev, [id]: { ...prev[id], ...patch } }));
     }, []);
 
+    const toggleBulkMode = useCallback((id: SmartCardId) => {
+        const enabling = !smartCardCfgRef.current[id].bulkEnabled;
+        if (enabling) {
+            // Bulk owns the execution surface. Stop any other smart-card loop
+            // before enabling it and force the shared mode back to single
+            // execution; the batch branch below is the only active path.
+            SMART_CARD_IDS.forEach(otherId => {
+                if (otherId !== id && smartCardSess[otherId].running) {
+                    smartStopFlags.current[otherId] = true;
+                }
+            });
+            setSmartExecutionMode('normal');
+        }
+        setSmartCardCfg(prev => {
+            const next = { ...prev };
+            SMART_CARD_IDS.forEach(cardId => {
+                next[cardId] = {
+                    ...next[cardId],
+                    bulkEnabled: enabling ? cardId === id : cardId === id ? false : next[cardId].bulkEnabled,
+                };
+            });
+            return next;
+        });
+    }, [smartCardSess]);
+
     // Per-card session (runtime state)
     const [smartCardSess, setSmartCardSess] = useState<Record<SmartCardId, {
         running: boolean; wins: number; losses: number; profit: number; lastLog: string;
@@ -781,6 +808,16 @@ const AutoTrades: React.FC = () => {
                 let pendingTransactionIds: string[] = [];
                 try {
                     const mode = smartExecutionModeRef.current;
+                    const activeBulkOwner = SMART_CARD_IDS.find(cardId =>
+                        smartCardCfgRef.current[cardId].bulkEnabled
+                    );
+                    if (activeBulkOwner && activeBulkOwner !== id) {
+                        // A bulk batch has exclusive ownership of execution.
+                        // This second guard covers a card that was already
+                        // inside its loop when Bulk Trade was enabled.
+                        smartStopFlags.current[id] = true;
+                        break;
+                    }
                     // Every card evaluates once per new authenticated tick.
                     // Without this gate Normal mode can buy repeatedly from
                     // the same already-matching digit window after settlement.
@@ -919,7 +956,15 @@ const AutoTrades: React.FC = () => {
                             const orderId = batchTransactionIds[index];
                             const contractId = boughtContractIds.get(orderId);
                             if (result.status === 'fulfilled') {
-                                const profit = Number(result.value) || 0;
+                                const profit = Number(result.value);
+                                if (!Number.isFinite(profit)) {
+                                    setTransactions(prev => prev.map(transaction =>
+                                        transaction.id === orderId
+                                            ? { ...transaction, status: 'open', contractId }
+                                            : transaction
+                                    ));
+                                    return;
+                                }
                                 batchProfit = +(batchProfit + profit).toFixed(2);
                                 if (profit > 0) batchWins++; else batchLosses++;
                                 recordResult(profit, orderId, false, contractId);
@@ -944,9 +989,15 @@ const AutoTrades: React.FC = () => {
                             `[${new Date().toLocaleTimeString('en', { hour12: false })}] [${id}] ${batchId}: ${settledCount}/${batchCount} executions settled · ${batchOutcome} · ${batchWins} won · ${batchLosses} lost · P/L ${fmtProfit(batchProfit)}${failedOrders ? ` · ${failedOrders} failed` : ''}`,
                             ...prev,
                         ].slice(0, 50));
-                        smartCurrentStakes.current[id] = batchProfit <= 0
-                            ? Math.max(0.35, +(stk * currentCfg.martingale).toFixed(2))
-                            : currentCfg.stake;
+                        // Do not progress the stake from a partial batch. A
+                        // pending or failed order has no definitive outcome,
+                        // so martingale is only allowed after every requested
+                        // contract settled independently.
+                        if (settledCount === batchCount) {
+                            smartCurrentStakes.current[id] = batchProfit <= 0
+                                ? Math.max(0.35, +(stk * currentCfg.martingale).toFixed(2))
+                                : currentCfg.stake;
+                        }
                     } else if (mode === 'normal') {
                         const profit = await buyAndWait(sym, contract, barrier, stk, currentCfg.ticks, {
                             metadata: {
@@ -958,7 +1009,14 @@ const AutoTrades: React.FC = () => {
                             },
                         });
                         if (smartStopFlags.current[id]) break;
-                        recordResult(profit);
+                        if (Number.isFinite(profit)) {
+                            recordResult(profit);
+                        } else {
+                            setJournal(prev => [
+                                `[${new Date().toLocaleTimeString('en', { hour12: false })}] [${id}] ${batchId}: settlement pending; native transaction remains open`,
+                                ...prev,
+                            ].slice(0, 50));
+                        }
                     } else {
                         // Each Tick and Super Speed both place a separate
                         // one-tick contract for every newly received tick.
@@ -1389,7 +1447,7 @@ const AutoTrades: React.FC = () => {
                                                 className={`st__batch-toggle ${cfg.bulkEnabled ? 'on' : ''}`}
                                                 disabled={isRunning}
                                                 aria-pressed={cfg.bulkEnabled}
-                                                onClick={() => updateCardCfg(card.id, { bulkEnabled: !cfg.bulkEnabled })}
+                                                onClick={() => toggleBulkMode(card.id)}
                                             >
                                                 {cfg.bulkEnabled ? 'ON' : 'OFF'}
                                             </button>

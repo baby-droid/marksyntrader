@@ -201,7 +201,16 @@ export default class TransactionsStore {
     }
 
     pushTransaction(data: TContractInfo) {
-        const is_completed = isEnded(data as ProposalOpenContract);
+        // isEnded covers native DBot payloads. The shared authenticated trader
+        // also marks its definitive POC update explicitly, so accept those
+        // flags/statuses as completed as well instead of leaving a settled
+        // Auto Trades/Auto-Digits row open when the payload shape differs.
+        const is_completed = Boolean(
+            (data as any).is_completed ||
+            (data as any).is_sold ||
+            ['won', 'lost', 'sold'].includes(String((data as any).status || '').toLowerCase()) ||
+            isEnded(data as ProposalOpenContract)
+        );
         // Auto Trades supplies a batch ID so its contracts are grouped in the
         // native Bot Builder transaction page. Regular Bot Builder contracts
         // continue using the current run-panel run ID.
