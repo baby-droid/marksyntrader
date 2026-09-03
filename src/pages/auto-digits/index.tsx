@@ -330,7 +330,7 @@ const formatTime = () => new Date().toLocaleTimeString([], { hour: '2-digit', mi
 const AutoDigits = observer(() => {
     const { connected, authorized, balance, currency, send, subscribeTicks, buyContract } = useDerivTrade();
     const [markets, setMarkets] = useState<MarketOption[]>(FALLBACK_MARKETS);
-    const [marketSelection, setMarketSelection] = useState('1HZ100V');
+    const [marketSelection, setMarketSelection] = useState('ALL');
     const [symbol, setSymbol] = useState('1HZ100V');
     const [strategy, setStrategy] = useState<StrategyValue>('AUTO');
     const [logicMode, setLogicMode] = useState('confluence');
@@ -385,7 +385,7 @@ const AutoDigits = observer(() => {
     const tradePnlBeforeRef = useRef(0);
     const balancedTradeRef = useRef(false);
     const recentResultsRef = useRef<Array<'W' | 'L'>>([]);
-    const marketSelectionRef = useRef('1HZ100V');
+    const marketSelectionRef = useRef('ALL');
     const marketsRef = useRef<MarketOption[]>(FALLBACK_MARKETS);
     const autoPlanIndexRef = useRef(0);
     const autoPlanPhaseRef = useRef<'BASELINE' | 'NEAR TP' | 'RECOVERY'>('BASELINE');
