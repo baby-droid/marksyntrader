@@ -104,6 +104,7 @@ type Candidate = {
     entryDigit?: number;
     riskScore?: number;
     planIndex?: number;
+    autoPlanMode?: 'NORMAL' | 'BEST BARRIER';
     autoPhase?: 'BASELINE' | 'NEAR TP' | 'RECOVERY' | 'SAFE RECOVERY';
 };
 type TradeRow = {
@@ -241,6 +242,23 @@ const AUTO_BASELINE_PLANS: AutoRotationPlan[] = [
     { strategy: 'DIFFERS' },
 ];
 
+// Optional best-conditions rotation. The original AUTO sequence remains the
+// default; this longer plan is additive and can be enabled from the page.
+const AUTO_BARRIER_ROTATION_PLANS: AutoRotationPlan[] = [
+    ...[4, 5, 6, 7, 8].map(barrier => ({ strategy: 'OVER' as ConcreteStrategy, barrier })),
+    ...[4, 3, 2, 1].map(barrier => ({ strategy: 'UNDER' as ConcreteStrategy, barrier })),
+    ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(barrier => ({ strategy: 'MATCHES' as ConcreteStrategy, barrier })),
+    { strategy: 'EVEN' },
+    { strategy: 'ODD' },
+    { strategy: 'RISE' },
+    { strategy: 'FALL' },
+    { strategy: 'ONLY UPS' },
+    { strategy: 'ONLY DOWNS' },
+    { strategy: 'HIGH TICK' },
+    { strategy: 'LOW TICK' },
+    { strategy: 'DIFFERS' },
+];
+
 const AUTO_NEAR_TP_PLANS: AutoRotationPlan[] = [
     ...[4, 5, 6, 7, 8].map(barrier => ({ strategy: 'OVER' as ConcreteStrategy, barrier })),
     ...[5, 4, 3, 2].map(barrier => ({ strategy: 'UNDER' as ConcreteStrategy, barrier })),
@@ -292,8 +310,8 @@ const recoveryStakeFor = (deficit: number, baseStake: number, martingale: number
     );
 };
 
-const autoPlansFor = (recovery: boolean, nearTakeProfit: boolean) =>
-    recovery ? AUTO_RECOVERY_PLANS : nearTakeProfit ? AUTO_NEAR_TP_PLANS : AUTO_BASELINE_PLANS;
+const autoPlansFor = (recovery: boolean, nearTakeProfit: boolean, bestConditionRotation = false) =>
+    recovery ? AUTO_RECOVERY_PLANS : bestConditionRotation ? AUTO_BARRIER_ROTATION_PLANS : nearTakeProfit ? AUTO_NEAR_TP_PLANS : AUTO_BASELINE_PLANS;
 
 const autoStrategyRank = (strategy: ConcreteStrategy, recovery: boolean) => {
     const order = recovery ? AUTO_RECOVERY_STRATEGIES : AUTO_STRATEGIES;
@@ -360,6 +378,7 @@ const AutoDigits = observer(() => {
     const [stake, setStake] = useState('1.00');
     const [duration, setDuration] = useState(2);
     const [autoDuration, setAutoDuration] = useState(true);
+    const [bestConditionRotation, setBestConditionRotation] = useState(false);
     const [run, setRun] = useState(false);
     const [pipSize, setPipSize] = useState(2);
     const [points, setPoints] = useState<TickPoint[]>([]);
@@ -386,6 +405,7 @@ const AutoDigits = observer(() => {
     const [completedRuns, setCompletedRuns] = useState(0);
 
     const marketPointsRef = useRef<Record<string, TickPoint[]>>({});
+    const liveBufferByMarketRef = useRef<Record<string, Array<{ quote: number; epoch: number }>>>({});
     const rawHistoryByMarketRef = useRef<Record<string, number[]>>({});
     const historyEpochsByMarketRef = useRef<Record<string, number[]>>({});
     const historyLoadedByMarketRef = useRef<Record<string, boolean>>({});
@@ -447,7 +467,7 @@ const AutoDigits = observer(() => {
         autoPlanIndexRef.current = 0;
         autoPlanPhaseRef.current = 'BASELINE';
         setStatus('Re-scanning selected contract conditions');
-    }, [logicMode, minScore, strategy]);
+    }, [bestConditionRotation, logicMode, minScore, strategy]);
 
     const addLog = useCallback((message: string) => {
         setLog(previous => [`${formatTime()}  ${message}`, ...previous].slice(0, 18));
@@ -751,7 +771,7 @@ const AutoDigits = observer(() => {
         if (strategy === 'AUTO') {
             const plans = safeRecoveryActive
                 ? AUTO_SAFE_RECOVERY_PLANS
-                : autoPlansFor(inRecovery, nearTakeProfit);
+                : autoPlansFor(inRecovery, nearTakeProfit, bestConditionRotation);
             if (autoPlanPhaseRef.current !== phase) {
                 autoPlanPhaseRef.current = phase;
                 autoPlanIndexRef.current = 0;
@@ -767,12 +787,14 @@ const AutoDigits = observer(() => {
                 return {
                     ...analyzeStrategy(nextPoints, recoveryPlan.strategy, true, recoveryPlan.barrier),
                     planIndex: recoveryPlanIndex,
+                        autoPlanMode: 'NORMAL',
                     autoPhase: phase,
                 };
             }
             const candidates = plans.map((plan, index) => ({
                 ...analyzeStrategy(nextPoints, plan.strategy, true, plan.barrier),
                 planIndex: index,
+                autoPlanMode: bestConditionRotation ? 'BEST BARRIER' : 'NORMAL',
                 autoPhase: phase,
             }));
             const startIndex = autoPlanIndexRef.current % plans.length;
@@ -787,12 +809,23 @@ const AutoDigits = observer(() => {
             // contract in the requested order that has met the live score
             // and entry confirmation requirements.
             const qualified = eligibleCandidates.filter(item => item.score >= minimumScore);
+            if (bestConditionRotation) {
+                const bestQualified = qualified.slice().sort((a, b) =>
+                    b.score - a.score ||
+                    (a.planIndex ?? 0) - (b.planIndex ?? 0)
+                )[0];
+                const bestAvailable = eligibleCandidates.slice().sort((a, b) =>
+                    b.score - a.score ||
+                    (a.planIndex ?? 0) - (b.planIndex ?? 0)
+                )[0];
+                return bestQualified || bestAvailable || analyzeStrategy(nextPoints, 'OVER', true, 4);
+            }
             return qualified[0] || eligibleCandidates[0] ||
                 analyzeStrategy(nextPoints, inRecovery ? 'OVER' : 'EVEN', true);
         }
 
         return analyzeStrategy(nextPoints, strategy as ConcreteStrategy, false);
-    }, [analyzeStrategy, minScore, strategy, takeProfit]);
+    }, [analyzeStrategy, bestConditionRotation, minScore, strategy, takeProfit]);
 
     const processPoint = useCallback((marketSymbol: string, point: TickPoint) => {
         const previousPoints = marketPointsRef.current[marketSymbol] || [];
@@ -1095,7 +1128,9 @@ const AutoDigits = observer(() => {
                     ? AUTO_RECOVERY_PLANS.length
                     : executionCandidate.autoPhase === 'NEAR TP'
                         ? AUTO_NEAR_TP_PLANS.length
-                        : AUTO_BASELINE_PLANS.length;
+                        : executionCandidate.autoPlanMode === 'BEST BARRIER'
+                            ? AUTO_BARRIER_ROTATION_PLANS.length
+                            : AUTO_BASELINE_PLANS.length;
                 autoPlanIndexRef.current = (Number(executionCandidate.planIndex) + 1) % planLength;
                 if (executionCandidate.autoPhase === 'SAFE RECOVERY') {
                     safeRecoveryRunsRef.current += 1;
@@ -1186,6 +1221,7 @@ const AutoDigits = observer(() => {
             };
         }
         marketPointsRef.current = {};
+        liveBufferByMarketRef.current = {};
         rawHistoryByMarketRef.current = {};
         historyEpochsByMarketRef.current = {};
         historyLoadedByMarketRef.current = {};
@@ -1250,12 +1286,22 @@ const AutoDigits = observer(() => {
                     ? availableMarkets.filter(market => market.isOpen !== false)
                     : selectedMarket ? [selectedMarket] : [];
                 if (!marketsToScan.length) throw new Error('No open Deriv markets are available for this selection');
+                // Keep ALL-market scanning, but always request the default
+                // market's 1,000-tick baseline first so the initial screen
+                // becomes analysis-ready without waiting on every market.
+                const initialMarket = requestedSelection === 'ALL'
+                    ? marketsToScan.find(market => market.value === '1HZ100V') || marketsToScan[0]
+                    : marketsToScan[0];
+                const orderedMarketsToScan = [
+                    initialMarket,
+                    ...marketsToScan.filter(market => market.value !== initialMarket.value),
+                ];
 
                 // Attach live feeds before the baseline requests. The scanner
                 // should remain live while a large ALL-market history load is
                 // in progress instead of appearing frozen until every history
                 // request completes.
-                marketsToScan.forEach(market => {
+                orderedMarketsToScan.forEach(market => {
                     if (cancelled || runGeneration !== generation) return;
                     lastTickAtByMarket.set(market.value, Date.now());
                     const unsubscribe = subscribeTicks(market.value, point => {
@@ -1284,6 +1330,25 @@ const AutoDigits = observer(() => {
                             }
                         }
                         const pip = marketPipRefs.current[marketSymbol] ?? 2;
+                        if (!historyLoadedByMarketRef.current[marketSymbol]) {
+                            const buffered = liveBufferByMarketRef.current[marketSymbol] || [];
+                            const quote = Number(point.quote);
+                            const epoch = Number(point.epoch);
+                            if (Number.isFinite(quote) && Number.isFinite(epoch)) {
+                                liveBufferByMarketRef.current[marketSymbol] = [
+                                    ...buffered,
+                                    { quote, epoch },
+                                ].slice(-200);
+                            }
+                            if (marketSymbol === activeSymbolRef.current) {
+                                setCurrentDigit(getDigit(point.quote, pip));
+                                setCurrentPrice(Number(point.quote).toFixed(pip));
+                            }
+                            // Keep the authenticated stream alive, but do not
+                            // mix live ticks into the visible baseline counter
+                            // while the API's 1,000-tick history is loading.
+                            return;
+                        }
                         const previous = marketPointsRef.current[marketSymbol]?.[marketPointsRef.current[marketSymbol].length - 1];
                         if (previous?.epoch === point.epoch) return;
                         processPoint(marketSymbol, {
@@ -1294,7 +1359,7 @@ const AutoDigits = observer(() => {
                     unsubscribers.push(unsubscribe);
                 });
                 const responses: Array<{ market: MarketOption; response: any }> = [];
-                for (const market of marketsToScan) {
+                for (const market of orderedMarketsToScan) {
                     if (cancelled || runGeneration !== generation) return;
                     try {
                         const response = await send({ ticks_history: market.value, count: 1000, end: 'latest', style: 'ticks' });
@@ -1326,11 +1391,18 @@ const AutoDigits = observer(() => {
                             digit: getDigit(quote, initialPip),
                             epoch: Number.isFinite(epochs[index]) ? epochs[index] : index,
                         }));
-                        const livePoints = (marketPointsRef.current[market.value] || [])
-                            .filter(existing => existing.epoch > 1000000000);
+                        const bufferedLivePoints = (liveBufferByMarketRef.current[market.value] || []).map(point => ({
+                            ...point,
+                            digit: getDigit(point.quote, initialPip),
+                        }));
+                        const livePoints = [
+                            ...(marketPointsRef.current[market.value] || []).filter(existing => existing.epoch > 1000000000),
+                            ...bufferedLivePoints,
+                        ];
                         const merged = new Map<number, TickPoint>();
                         [...historyPoints, ...livePoints].forEach(point => merged.set(point.epoch, point));
                         marketPointsRef.current[market.value] = Array.from(merged.values()).slice(-1000);
+                        liveBufferByMarketRef.current[market.value] = [];
                     }
                 });
                 const initialSymbol = requestedSelection === 'ALL'
@@ -1358,12 +1430,12 @@ const AutoDigits = observer(() => {
                     historyLoadedByMarketRef.current[initialSymbol] &&
                     initialPoints.length >= 1000,
                 );
-                setStatus(initialBaselineReady
+                    setStatus(initialBaselineReady
                     ? requestedSelection === 'ALL'
-                        ? `Baselines ready — scanning ${marketsToScan.length} open markets`
-                        : `Baseline ready — scanning ${selectedMarket?.label || marketsToScan[0].label}`
+                            ? `Baselines ready — scanning ${orderedMarketsToScan.length} open markets`
+                            : `Baseline ready — scanning ${selectedMarket?.label || orderedMarketsToScan[0].label}`
                     : `Live feed active — loading the 1,000-tick baseline for ${marketLabel(initialSymbol)}`);
-                armWatchdog(runGeneration, marketsToScan);
+                armWatchdog(runGeneration, orderedMarketsToScan);
             } catch (error) {
                 if (!cancelled && runGeneration === generation && activeRef.current) {
                     setStatus(error?.message || 'Unable to load market data');
@@ -1598,8 +1670,19 @@ const AutoDigits = observer(() => {
                         <label>CONTRACT TYPE<select value={strategy} onChange={event => { const value = event.target.value as StrategyValue; setStrategy(value); if (value === 'AUTO') setAutoDuration(true); }}>{['Auto', 'Parity', 'Digits', 'Barrier', 'Direction', 'Range'].map(group => <optgroup key={group} label={group}>{STRATEGIES.filter(item => item.group === group).map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</optgroup>)}</select></label>
                          <div className='ad-auto-selection'>
                             <span>BEST ENTRY POLICY</span>
-                            <strong>{selectedAutoStrategy}{selectedAutoBarrier != null ? ` · BARRIER ${selectedAutoBarrier}` : ''}</strong>
-                             <small>AUTO sequence: Over 1–3, Under 8–6, then Even/Odd, Rise/Fall, Only Ups/Downs, Differs, and High/Low Tick. After two losses (including loss → win → loss), recovery switches to three one-tick runs using Even/Odd or Only Ups/Only Downs before returning to the ordered plan.</small>
+                             <strong>{selectedAutoStrategy}{selectedAutoBarrier != null ? ` · BARRIER ${selectedAutoBarrier}` : ''}</strong>
+                              <small>AUTO sequence remains Over 1–3, Under 8–6, then the existing contract phases. After two losses, recovery still uses the existing three one-tick runs.</small>
+                              <button
+                                  type='button'
+                                  className={`ad-risk-toggle ${bestConditionRotation ? 'is-active' : ''}`}
+                                  onClick={() => setBestConditionRotation(value => !value)}
+                                  disabled={strategy !== 'AUTO'}
+                              >
+                                  {bestConditionRotation ? 'BEST CONDITIONS ROTATION ON' : 'ADD BEST CONDITIONS ROTATION'}
+                              </button>
+                              <small>{bestConditionRotation
+                                  ? 'Long rotation: Over 4–8 · Under 4, 3, 2, 1 · Matches 0–9, then the remaining contract families. Only the best live score can qualify a step.'
+                                  : 'Optional additive rotation: Over 4–8 · Under 4, 3, 2, 1 · Matches 0–9. Normal AUTO behavior is unchanged while this is off.'}</small>
                         </div>
                         <div className='ad-control-row'><label>STAKE<NumberField value={Number(stake) || 0.35} min={0.35} max={1000} onCommit={value => setStake(value.toFixed(2))} /></label><label>MIN SCORE<NumberField value={minScore} min={50} max={95} onCommit={setMinScore} /></label></div>
                         <div className='ad-duration-row'><span>DURATION</span><button className={autoDuration ? 'is-active' : ''} onClick={() => setAutoDuration(true)}>AUTO {activeDuration}T</button>{[1, 2, 3, 4, 5].map(value => <button key={value} className={!autoDuration && duration === value ? 'is-active' : ''} onClick={() => { setAutoDuration(false); setDuration(value); }}>{value}T</button>)}</div>
@@ -1644,7 +1727,7 @@ const AutoDigits = observer(() => {
                                 return <div key={digit} className={`ad-digit ${isCurrent ? 'is-current' : ''} ${isStrong ? 'is-strong' : ''} ${isWeak ? 'is-weak' : ''}`}><div className='ad-digit__circle'><span>{digit}</span>{isCurrent && <i />}</div><strong>{displayDistribution[digit].toFixed(1)}%</strong><small>{distributionCounts[digit].toLocaleString()} ticks</small></div>;
                             })}
                         </div>
-                        <div className='ad-distribution-footer'><span className='ad-moving-pointer'><i /> moving pointer = current digit</span><span>{baselineReady ? '1,000 / 1,000 ticks · 100% distributed' : `${points.length.toLocaleString()} / 1,000 ticks · loading baseline`}</span></div>
+                         <div className='ad-distribution-footer'><span className='ad-moving-pointer'><i /> moving pointer = current digit</span><span>{baselineReady ? '1,000 / 1,000 ticks · 100% distributed' : 'Loading 1,000 ticks from the authenticated API… live feed active'}</span></div>
                     </section>
 
                     <div className='ad-two-col'>
@@ -1673,7 +1756,7 @@ const AutoDigits = observer(() => {
                 </main>
 
                 <aside className='auto-digits__rightbar'>
-                     <section className='ad-panel ad-engine-status'><div className='ad-panel__label'>BOT STATUS</div><div className={`ad-big-status ${run ? 'is-running' : ''}`}>{run ? 'RUNNING' : 'SCANNING'}</div><div className='ad-right-line'><span>Selected market</span><b>{marketSelection === 'ALL' ? `Auto scan · ${marketLabel(symbol)}` : markets.find(market => market.value === marketSelection)?.label || marketLabel(symbol)}</b></div><div className='ad-right-line'><span>Selection</span><b>{strategy === 'AUTO' ? 'All strategies + best score' : 'Condition + barrier'}</b></div><div className='ad-right-line'><span>Speed</span><b>Authenticated tick feed</b></div><div className='ad-right-line'><span>Data quality</span><b className={baselineReady ? 'positive' : ''}>{baselineReady ? '1,000T READY · 100%' : `${points.length}T · LOADING`}</b></div><div className='ad-right-line'><span>Authorization</span><b className={authorized ? 'positive' : 'negative'}>{authorized ? 'DEMO / REAL' : 'LOGIN NEEDED'}</b></div></section>
+                     <section className='ad-panel ad-engine-status'><div className='ad-panel__label'>BOT STATUS</div><div className={`ad-big-status ${run ? 'is-running' : ''}`}>{run ? 'RUNNING' : 'SCANNING'}</div><div className='ad-right-line'><span>Selected market</span><b>{marketSelection === 'ALL' ? `Auto scan · ${marketLabel(symbol)}` : markets.find(market => market.value === marketSelection)?.label || marketLabel(symbol)}</b></div><div className='ad-right-line'><span>Selection</span><b>{strategy === 'AUTO' ? (bestConditionRotation ? 'Best conditions + long barrier rotation' : 'All strategies + best score') : 'Condition + barrier'}</b></div><div className='ad-right-line'><span>Speed</span><b>Authenticated tick feed</b></div><div className='ad-right-line'><span>Data quality</span><b className={baselineReady ? 'positive' : ''}>{baselineReady ? '1,000T READY · 100%' : 'API baseline loading · live feed active'}</b></div><div className='ad-right-line'><span>Authorization</span><b className={authorized ? 'positive' : 'negative'}>{authorized ? 'DEMO / REAL' : 'LOGIN NEEDED'}</b></div></section>
                     <section className='ad-panel ad-log'><div className='ad-panel__label'>ENGINE JOURNAL</div><div className='ad-log__items'>{log.map((item, index) => <p key={`${item}-${index}`}>{item}</p>)}</div></section>
                     <section className='ad-panel ad-results'><div className='ad-panel__label'>RECENT RESULTS</div>{trades.length === 0 ? <p className='ad-empty'>No executed contracts yet. Run stays gated behind two virtual wins.</p> : trades.slice(0, 6).map(trade => <div className='ad-result' key={trade.id}><span>{trade.time}</span><b>{trade.strategy}</b><strong className={trade.status === 'WIN' ? 'positive' : trade.status === 'LOSS' ? 'negative' : ''}>{trade.status === 'OPEN' ? 'OPEN' : `${trade.profit >= 0 ? '+' : ''}${fromUsd(trade.profit).toFixed(2)}`}</strong></div>)}</section>
                 </aside>

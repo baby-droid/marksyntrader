@@ -678,6 +678,22 @@ const AutoTrades: React.FC = () => {
         setSmartCardCfg(prev => ({ ...prev, [id]: { ...prev[id], ...patch } }));
     }, []);
 
+    // Per-card session (runtime state)
+    const [smartCardSess, setSmartCardSess] = useState<Record<SmartCardId, {
+        running: boolean; wins: number; losses: number; profit: number; lastLog: string;
+    }>>({
+        risefall:    { running: false, wins: 0, losses: 0, profit: 0, lastLog: '' },
+        evenodd:     { running: false, wins: 0, losses: 0, profit: 0, lastLog: '' },
+        overunder:   { running: false, wins: 0, losses: 0, profit: 0, lastLog: '' },
+        matchdiffer: { running: false, wins: 0, losses: 0, profit: 0, lastLog: '' },
+    });
+    const smartStopFlags = useRef<Record<string, boolean>>({
+        risefall: false, evenodd: false, overunder: false, matchdiffer: false,
+    });
+    const smartCurrentStakes = useRef<Record<string, number>>({
+        risefall: 5, evenodd: 5, overunder: 5, matchdiffer: 5,
+    });
+
     const toggleBulkMode = useCallback((id: SmartCardId) => {
         const enabling = !smartCardCfgRef.current[id].bulkEnabled;
         if (enabling) {
@@ -702,22 +718,6 @@ const AutoTrades: React.FC = () => {
             return next;
         });
     }, [smartCardSess]);
-
-    // Per-card session (runtime state)
-    const [smartCardSess, setSmartCardSess] = useState<Record<SmartCardId, {
-        running: boolean; wins: number; losses: number; profit: number; lastLog: string;
-    }>>({
-        risefall:    { running: false, wins: 0, losses: 0, profit: 0, lastLog: '' },
-        evenodd:     { running: false, wins: 0, losses: 0, profit: 0, lastLog: '' },
-        overunder:   { running: false, wins: 0, losses: 0, profit: 0, lastLog: '' },
-        matchdiffer: { running: false, wins: 0, losses: 0, profit: 0, lastLog: '' },
-    });
-    const smartStopFlags = useRef<Record<string, boolean>>({
-        risefall: false, evenodd: false, overunder: false, matchdiffer: false,
-    });
-    const smartCurrentStakes = useRef<Record<string, number>>({
-        risefall: 5, evenodd: 5, overunder: 5, matchdiffer: 5,
-    });
 
     const updateSess = useCallback((id: SmartCardId, patch: Partial<typeof smartCardSess['risefall']>) => {
         setSmartCardSess(prev => ({ ...prev, [id]: { ...prev[id], ...patch } }));
