@@ -277,6 +277,8 @@ const LOW_RISK_CONTRACT_TYPES = new Set([
     'RUNLOW',
 ]);
 const AUTO_RECOVERY_STRATEGIES: ConcreteStrategy[] = ['EVEN', 'ODD', 'ONLY UPS', 'ONLY DOWNS', 'OVER', 'UNDER', 'RISE', 'FALL'];
+const riskShiftTicksFor = (losses: number, safeRecovery: boolean) =>
+    safeRecovery ? 1 : losses > 0 ? Math.min(5, 1 + losses) : 1;
 const AUTO_MATCH_MIN_SCORE = 90;
 const RECOVERY_PAYOUT_RATE = 0.8;
 
@@ -898,8 +900,12 @@ const AutoDigits = observer(() => {
         setStatus('Validation passed — sending contract');
         const recentOutcomes = recentResultsRef.current.slice(-4).join('');
         const isAlternatingOutcomes = recentOutcomes === 'WLWL' || recentOutcomes === 'LWLW';
+        const riskShiftTicks = riskShiftTicksFor(
+            lossesSinceRecoveryRef.current,
+            safeRecoveryActive,
+        );
         const tradeDuration = LOW_RISK_CONTRACT_TYPES.has(selectedContractType)
-            ? 1
+            ? riskShiftTicks
             : autoDuration
             ? (isAlternatingOutcomes
                 ? 2
@@ -1036,7 +1042,12 @@ const AutoDigits = observer(() => {
                 setRecoveryDeficit(nextDeficit);
                 recoveryStakeRef.current = recoveryStakeFor(nextDeficit, stakeRef.current, bestMartingale);
                 if (tradeDuration === 1) {
-                    addLog(`1-TICK LOSS ${profit.toFixed(2)} ${displayCur} — stake recalculated against the remaining deficit`);
+                    const nextRiskShiftTicks = riskShiftTicksFor(
+                        lossesSinceRecoveryRef.current,
+                        lossesSinceRecoveryRef.current >= 2 &&
+                            safeRecoveryRunsRef.current < SAFE_RECOVERY_RUN_LIMIT,
+                    );
+                    addLog(`1-TICK LOSS ${profit.toFixed(2)} ${displayCur} — stake recalculated; next risk-shift duration ${nextRiskShiftTicks}T`);
                 }
                 if (nextLosses >= 3) {
                     const opposite = oppositeStrategy(executionStrategy);
@@ -1404,11 +1415,18 @@ const AutoDigits = observer(() => {
     const recentDigits = useMemo(() => points.slice(-30), [points]);
     const oddPressure = shortDistribution.filter((_, index) => index % 2 !== 0).reduce((a, b) => a + b, 0);
     const evenPressure = 100 - oddPressure;
-    const activeDuration = autoDuration
-        ? LOW_RISK_CONTRACT_TYPES.has(String(candidate?.contractType || '').toUpperCase())
-            ? 1
-            : Math.max(1, Math.min(5, candidate?.score >= 90 ? 1 : candidate?.score >= 82 ? 2 : candidate?.score >= 74 ? 3 : 4))
-        : duration;
+    const displaySafeRecoveryActive =
+        lossesSinceRecoveryRef.current >= 2 &&
+        safeRecoveryRunsRef.current < SAFE_RECOVERY_RUN_LIMIT;
+    const displayRiskShiftTicks = riskShiftTicksFor(
+        lossesSinceRecoveryRef.current,
+        displaySafeRecoveryActive,
+    );
+    const activeDuration = LOW_RISK_CONTRACT_TYPES.has(String(candidate?.contractType || '').toUpperCase())
+        ? displayRiskShiftTicks
+        : autoDuration
+            ? Math.max(1, Math.min(5, candidate?.score >= 90 ? 1 : candidate?.score >= 82 ? 2 : candidate?.score >= 74 ? 3 : 4))
+            : duration;
     const selectedAutoStrategy = candidate?.strategy || 'AUTO';
     const selectedAutoBarrier = candidate?.barrier;
 
@@ -1559,7 +1577,8 @@ const AutoDigits = observer(() => {
                          <div className='ad-recovery__line'><span>Recovery payout</span><b>{lossStreak > 0 || recoveryDeficit > 0 ? '80% target' : 'standby'}</b></div>
                          <div className='ad-recovery__line'><span>Auto-stake</span><b>{lossStreak > 0 || recoveryDeficit > 0 ? 'RECOVERY TARGET ACTIVE' : autoStakeEnabled ? `${Math.max(0, 5 - completedRuns)} runs to warm-up` : 'OFF · manual only'}</b></div>
                         <div className='ad-recovery__line'><span>Martingale</span><b>{bestMartingale.toFixed(2)}x</b></div>
-                         <div className='ad-recovery__line'><span>Mode</span><b>{lossStreak >= 3 ? 'RE-SCAN' : lossStreak > 0 || recoveryDeficit > 0 ? 'RECOVERY' : 'NORMAL'}</b></div>
+                         <div className='ad-recovery__line'><span>Risk-shift ticks</span><b>{displayRiskShiftTicks}T{displaySafeRecoveryActive ? ' · SAFE' : lossesSinceRecoveryRef.current > 0 ? ' · ADJUSTED' : ' · BASE'}</b></div>
+                         <div className='ad-recovery__line'><span>Mode</span><b>{displaySafeRecoveryActive ? 'SAFE RECOVERY' : lossStreak >= 3 ? 'RE-SCAN' : lossStreak > 0 || recoveryDeficit > 0 ? 'RECOVERY' : 'NORMAL'}</b></div>
                         <button className='ad-outline-btn' onClick={resetEngine}>RESET RISK STATE</button>
                     </section>
 
