@@ -756,7 +756,7 @@ const AutoTrades: React.FC = () => {
     }, []);
 
     // Start/stop a smart card bot
-    const toggleSmartCard = useCallback((id: SmartCardId) => {
+    const toggleSmartCard = useCallback((id: SmartCardId, configOverride?: typeof smartCardCfg['risefall']) => {
         if (smartCardSess[id].running) {
             smartStopFlags.current[id] = true;
             return;
@@ -764,7 +764,10 @@ const AutoTrades: React.FC = () => {
 
         // Init run
         smartStopFlags.current[id] = false;
-        const cfg = smartCardCfgRef.current[id];
+        // Use the config from the rendered card when available. This avoids a
+        // one-render race where the Bulk toggle is visibly ON but the ref
+        // effect has not copied that edit before Start is clicked.
+        const cfg = configOverride || smartCardCfgRef.current[id];
         setTradeContext({ page: 'Auto Trades', bot: `${id} Smart Trading` });
         smartCurrentStakes.current[id] = cfg.stake;
         updateSess(id, { running: true, wins: 0, losses: 0, profit: 0, lastLog: 'Starting…' });
@@ -797,7 +800,7 @@ const AutoTrades: React.FC = () => {
                     const currentCfg = smartCardCfgRef.current[id];
                     const stk = smartCurrentStakes.current[id];
                     const sym = smartSharedSymbolRef.current;
-                    const batchEnabled = currentCfg.bulkEnabled;
+                    const batchEnabled = Boolean(currentCfg.bulkEnabled);
                     // Snapshot the edited count for this signal. Changes made
                     // while this batch is settling apply only to the next
                     // batch, never halfway through the current one.
@@ -876,19 +879,7 @@ const AutoTrades: React.FC = () => {
                         }
                     };
 
-                    if (!batchEnabled && mode === 'normal') {
-                        const profit = await buyAndWait(sym, contract, barrier, stk, currentCfg.ticks, {
-                            metadata: {
-                                source: 'auto-trades',
-                                execution_mode: 'single',
-                                batch_id: batchId,
-                                batch_index: 1,
-                                batch_size: 1,
-                            },
-                        });
-                        if (smartStopFlags.current[id]) break;
-                        recordResult(profit);
-                    } else if (batchEnabled) {
+                    if (batchEnabled) {
                         // Dispatch all identical orders from the same signal
                         // signal without awaiting one before starting the
                         // next. Each buy has its own proposal and settlement
@@ -956,6 +947,18 @@ const AutoTrades: React.FC = () => {
                         smartCurrentStakes.current[id] = batchProfit <= 0
                             ? Math.max(0.35, +(stk * currentCfg.martingale).toFixed(2))
                             : currentCfg.stake;
+                    } else if (mode === 'normal') {
+                        const profit = await buyAndWait(sym, contract, barrier, stk, currentCfg.ticks, {
+                            metadata: {
+                                source: 'auto-trades',
+                                execution_mode: 'single',
+                                batch_id: batchId,
+                                batch_index: 1,
+                                batch_size: 1,
+                            },
+                        });
+                        if (smartStopFlags.current[id]) break;
+                        recordResult(profit);
                     } else {
                         // Each Tick and Super Speed both place a separate
                         // one-tick contract for every newly received tick.
@@ -1436,7 +1439,7 @@ const AutoTrades: React.FC = () => {
                                         title={!connected || !authorized
                                             ? 'Log in to a demo or real account before starting'
                                             : undefined}
-                                        onClick={() => toggleSmartCard(card.id)}
+                                        onClick={() => toggleSmartCard(card.id, cfg)}
                                     >
                                         {isRunning ? '⏹ Stop Auto Trading' : '▶ Start Auto Trading'}
                                     </button>
