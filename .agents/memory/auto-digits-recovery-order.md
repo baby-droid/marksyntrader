@@ -3,7 +3,7 @@ name: Auto-Digits recovery order
 description: Ordered recovery behavior and payout-target sizing for Auto-Digits.
 ---
 
-Recovery must stay linear across markets: Over 1, Over 2, Over 3, Under 8, Under 7, Under 6, then the safe parity/direction steps. Every market evaluates the same current step; the highest-scoring market may win only after the normal entry-condition and virtual-validation gates pass.
+Recovery must stay linear across markets: Over 1, Over 2, Over 3, Under 8, Under 7, Under 6, then the safe parity/direction steps. After two cumulative losses (including loss → win → loss), use three one-tick runs limited to Even/Odd or Only Ups/Only Downs before returning to the barrier plan. Every market evaluates the same current step; the highest-scoring market may win only after the normal entry-condition and virtual-validation gates pass.
 
 **Why:** Ranking every recovery plan simultaneously causes the engine to mix barriers and markets, making recovery unpredictable and skipping the intended sequence.
 

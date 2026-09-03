@@ -104,7 +104,7 @@ type Candidate = {
     entryDigit?: number;
     riskScore?: number;
     planIndex?: number;
-    autoPhase?: 'BASELINE' | 'NEAR TP' | 'RECOVERY';
+    autoPhase?: 'BASELINE' | 'NEAR TP' | 'RECOVERY' | 'SAFE RECOVERY';
 };
 type TradeRow = {
     id: string;
@@ -256,7 +256,18 @@ const AUTO_RECOVERY_PLANS: AutoRotationPlan[] = [
     { strategy: 'FALL' },
 ];
 
-const AUTO_RECOVERY_STRATEGIES: ConcreteStrategy[] = ['OVER', 'UNDER', 'EVEN', 'ODD', 'RISE', 'FALL'];
+// After two losses in the current recovery sequence, prefer only one-tick
+// parity/direction contracts for three real runs before returning to the
+// ordered barrier recovery plan.
+const AUTO_SAFE_RECOVERY_PLANS: AutoRotationPlan[] = [
+    { strategy: 'EVEN' },
+    { strategy: 'ODD' },
+    { strategy: 'ONLY UPS' },
+    { strategy: 'ONLY DOWNS' },
+];
+const SAFE_RECOVERY_RUN_LIMIT = 3;
+const LOW_RISK_CONTRACT_TYPES = new Set(['DIGITEVEN', 'DIGITODD', 'RUNHIGH', 'RUNLOW']);
+const AUTO_RECOVERY_STRATEGIES: ConcreteStrategy[] = ['EVEN', 'ODD', 'ONLY UPS', 'ONLY DOWNS', 'OVER', 'UNDER', 'RISE', 'FALL'];
 const AUTO_MATCH_MIN_SCORE = 90;
 const RECOVERY_PAYOUT_RATE = 0.8;
 
@@ -388,8 +399,10 @@ const AutoDigits = observer(() => {
     const marketSelectionRef = useRef('ALL');
     const marketsRef = useRef<MarketOption[]>(FALLBACK_MARKETS);
     const autoPlanIndexRef = useRef(0);
-    const autoPlanPhaseRef = useRef<'BASELINE' | 'NEAR TP' | 'RECOVERY'>('BASELINE');
+    const autoPlanPhaseRef = useRef<'BASELINE' | 'NEAR TP' | 'RECOVERY' | 'SAFE RECOVERY'>('BASELINE');
     const recoveryStakeRef = useRef(1);
+    const lossesSinceRecoveryRef = useRef(0);
+    const safeRecoveryRunsRef = useRef(0);
     const completedRunsRef = useRef(0);
     const balanceRef = useRef<number | null>(null);
     const sessionStartBalanceRef = useRef<number | null>(null);
@@ -712,16 +725,22 @@ const AutoDigits = observer(() => {
     }, [logicMode, minScore]);
 
     const analyze = useCallback((nextPoints: TickPoint[]): Candidate => {
-        const inRecovery = lossStreakRef.current > 0 || recoveryDeficitRef.current > 0;
+        const safeRecoveryActive =
+            lossesSinceRecoveryRef.current >= 2 &&
+            safeRecoveryRunsRef.current < SAFE_RECOVERY_RUN_LIMIT;
+        const inRecovery = lossStreakRef.current > 0 || recoveryDeficitRef.current > 0 || safeRecoveryActive;
         const nearTakeProfit = !inRecovery &&
             pnlRef.current > 0 &&
             pnlRef.current >= Math.max(0.01, Number(takeProfit) || 5) * 0.7;
-        const phase: 'BASELINE' | 'NEAR TP' | 'RECOVERY' = inRecovery
-            ? 'RECOVERY'
+        const phase: 'BASELINE' | 'NEAR TP' | 'RECOVERY' | 'SAFE RECOVERY' = safeRecoveryActive
+            ? 'SAFE RECOVERY'
+            : inRecovery ? 'RECOVERY'
             : nearTakeProfit ? 'NEAR TP' : 'BASELINE';
 
         if (strategy === 'AUTO') {
-            const plans = autoPlansFor(inRecovery, nearTakeProfit);
+            const plans = safeRecoveryActive
+                ? AUTO_SAFE_RECOVERY_PLANS
+                : autoPlansFor(inRecovery, nearTakeProfit);
             if (autoPlanPhaseRef.current !== phase) {
                 autoPlanPhaseRef.current = phase;
                 autoPlanIndexRef.current = 0;
@@ -772,7 +791,10 @@ const AutoDigits = observer(() => {
 
         const nextCandidate = { ...analyze(nextPoints), symbol: marketSymbol };
         marketCandidatesRef.current[marketSymbol] = nextCandidate;
-        const recoveryMode = lossStreakRef.current > 0 || recoveryDeficitRef.current > 0;
+        const safeRecoveryActive =
+            lossesSinceRecoveryRef.current >= 2 &&
+            safeRecoveryRunsRef.current < SAFE_RECOVERY_RUN_LIMIT;
+        const recoveryMode = lossStreakRef.current > 0 || recoveryDeficitRef.current > 0 || safeRecoveryActive;
         const bestCandidate = Object.values(marketCandidatesRef.current)
             .sort((a, b) =>
                 b.score - a.score ||
@@ -809,7 +831,7 @@ const AutoDigits = observer(() => {
         const executionStrategy: ConcreteStrategy = executionCandidate.strategy || (strategy === 'AUTO' ? 'OVER' : strategy);
         const selectedContractType = String(executionCandidate.contractType || strategyContract(executionStrategy)).toUpperCase();
         const candidateKey = `${executionCandidate.symbol}:${selectedContractType}:${executionCandidate.barrier ?? 'none'}`;
-        const recoverySafeTypes = new Set(['DIGITEVEN', 'DIGITODD', 'DIGITOVER', 'DIGITUNDER', 'CALL', 'PUT']);
+        const recoverySafeTypes = new Set(['DIGITEVEN', 'DIGITODD', 'RUNHIGH', 'RUNLOW', 'DIGITOVER', 'DIGITUNDER', 'CALL', 'PUT']);
         const inRecovery = recoveryMode;
         const isMatches = selectedContractType === 'DIGITMATCH';
         const validationState = validationRef.current;
@@ -821,7 +843,7 @@ const AutoDigits = observer(() => {
                 addLog(`RECOVERY BLOCK — ${executionCandidate.label}; Matches is disabled after a loss`);
             }
             validationRef.current = { key: '', wins: 0, attempt: validationState.attempt + 1, readyEpoch: point.epoch };
-            setStatus('RECOVERY FILTER — Matches disabled; waiting for Over, Under, Even, Odd, Rise, or Fall');
+            setStatus('RECOVERY FILTER — Matches disabled; waiting for a lower-risk recovery contract');
             return;
         }
         if (inRecovery && (!recoverySafeTypes.has(selectedContractType) || executionCandidate.score < Math.max(minScore, 78))) {
@@ -867,7 +889,9 @@ const AutoDigits = observer(() => {
         setStatus('Validation passed — sending contract');
         const recentOutcomes = recentResultsRef.current.slice(-4).join('');
         const isAlternatingOutcomes = recentOutcomes === 'WLWL' || recentOutcomes === 'LWLW';
-        const tradeDuration = autoDuration
+        const tradeDuration = LOW_RISK_CONTRACT_TYPES.has(selectedContractType)
+            ? 1
+            : autoDuration
             ? (isAlternatingOutcomes
                 ? 2
                 : Math.max(1, Math.min(5, executionCandidate.score >= 90 ? 1 : executionCandidate.score >= 82 ? 2 : executionCandidate.score >= 74 ? 3 : 4)))
@@ -993,6 +1017,7 @@ const AutoDigits = observer(() => {
             } else {
                 const nextLosses = lossStreakRef.current + 1;
                 lossStreakRef.current = nextLosses;
+                lossesSinceRecoveryRef.current += 1;
                 setLossStreak(nextLosses);
                 setLosses(previousLosses => previousLosses + 1);
                 const baseline = recoveryBaselineRef.current ?? tradePnlBeforeRef.current;
@@ -1001,6 +1026,9 @@ const AutoDigits = observer(() => {
                 recoveryDeficitRef.current = nextDeficit;
                 setRecoveryDeficit(nextDeficit);
                 recoveryStakeRef.current = recoveryStakeFor(nextDeficit, stakeRef.current, bestMartingale);
+                if (tradeDuration === 1) {
+                    addLog(`1-TICK LOSS ${profit.toFixed(2)} ${displayCur} — stake recalculated against the remaining deficit`);
+                }
                 if (nextLosses >= 3) {
                     const opposite = oppositeStrategy(executionStrategy);
                     if (opposite && strategy !== 'AUTO') {
@@ -1041,12 +1069,22 @@ const AutoDigits = observer(() => {
             // Advance only after the authenticated Deriv buy response returns a
             // real contract id. Validation alone must never consume a phase.
             if (strategy === 'AUTO' && result?.contract_id && Number.isInteger(executionCandidate.planIndex)) {
-                const planLength = executionCandidate.autoPhase === 'RECOVERY'
+                const planLength = executionCandidate.autoPhase === 'SAFE RECOVERY'
+                    ? AUTO_SAFE_RECOVERY_PLANS.length
+                    : executionCandidate.autoPhase === 'RECOVERY'
                     ? AUTO_RECOVERY_PLANS.length
                     : executionCandidate.autoPhase === 'NEAR TP'
                         ? AUTO_NEAR_TP_PLANS.length
                         : AUTO_BASELINE_PLANS.length;
                 autoPlanIndexRef.current = (Number(executionCandidate.planIndex) + 1) % planLength;
+                if (executionCandidate.autoPhase === 'SAFE RECOVERY') {
+                    safeRecoveryRunsRef.current += 1;
+                    if (safeRecoveryRunsRef.current >= SAFE_RECOVERY_RUN_LIMIT) {
+                        safeRecoveryRunsRef.current = 0;
+                        lossesSinceRecoveryRef.current = 0;
+                        addLog('SAFE RECOVERY COMPLETE — three one-tick runs finished; returning to the normal recovery plan');
+                    }
+                }
                 addLog(`AUTO PLAN — ${executionCandidate.autoPhase || 'BASELINE'} advanced to step ${autoPlanIndexRef.current + 1}/${planLength} after confirmed buy`);
             }
         });
@@ -1358,13 +1396,17 @@ const AutoDigits = observer(() => {
     const oddPressure = shortDistribution.filter((_, index) => index % 2 !== 0).reduce((a, b) => a + b, 0);
     const evenPressure = 100 - oddPressure;
     const activeDuration = autoDuration
-        ? Math.max(1, Math.min(5, candidate?.score >= 90 ? 1 : candidate?.score >= 82 ? 2 : candidate?.score >= 74 ? 3 : 4))
+        ? LOW_RISK_CONTRACT_TYPES.has(String(candidate?.contractType || '').toUpperCase())
+            ? 1
+            : Math.max(1, Math.min(5, candidate?.score >= 90 ? 1 : candidate?.score >= 82 ? 2 : candidate?.score >= 74 ? 3 : 4))
         : duration;
     const selectedAutoStrategy = candidate?.strategy || 'AUTO';
     const selectedAutoBarrier = candidate?.barrier;
 
     const resetEngine = () => {
         lossStreakRef.current = 0;
+        lossesSinceRecoveryRef.current = 0;
+        safeRecoveryRunsRef.current = 0;
         setLossStreak(0);
         recoveryBaselineRef.current = null;
         recoveryDeficitRef.current = 0;
@@ -1529,7 +1571,7 @@ const AutoDigits = observer(() => {
                          <div className='ad-auto-selection'>
                             <span>BEST ENTRY POLICY</span>
                             <strong>{selectedAutoStrategy}{selectedAutoBarrier != null ? ` · BARRIER ${selectedAutoBarrier}` : ''}</strong>
-                             <small>AUTO sequence: Over 1–3, Under 8–6, then Even/Odd, Rise/Fall, Only Ups/Downs, Differs, and High/Low Tick. During recovery it stays linear: Over 1 → 2 → 3 → Under 8 → 7 → 6 → Even/Odd → Rise/Fall, selecting the best confirmed market for the current step.</small>
+                             <small>AUTO sequence: Over 1–3, Under 8–6, then Even/Odd, Rise/Fall, Only Ups/Downs, Differs, and High/Low Tick. After two losses (including loss → win → loss), recovery switches to three one-tick runs using Even/Odd or Only Ups/Only Downs before returning to the ordered plan.</small>
                         </div>
                         <div className='ad-control-row'><label>STAKE<NumberField value={Number(stake) || 0.35} min={0.35} max={1000} onCommit={value => setStake(value.toFixed(2))} /></label><label>MIN SCORE<NumberField value={minScore} min={50} max={95} onCommit={setMinScore} /></label></div>
                         <div className='ad-duration-row'><span>DURATION</span><button className={autoDuration ? 'is-active' : ''} onClick={() => setAutoDuration(true)}>AUTO {activeDuration}T</button>{[1, 2, 3, 4, 5].map(value => <button key={value} className={!autoDuration && duration === value ? 'is-active' : ''} onClick={() => { setAutoDuration(false); setDuration(value); }}>{value}T</button>)}</div>
@@ -1598,7 +1640,7 @@ const AutoDigits = observer(() => {
                     <div className='ad-three-col'>
                         <section className='ad-panel ad-recent'><div className='ad-panel__label'>RECENT TICKS <span>(LAST 30)</span></div><div className='ad-ticks'>{recentDigits.map((point, index) => <span key={`${point.epoch}-${index}`} className={point.digit % 2 === 0 ? 'even' : 'odd'}>{point.digit}</span>)}</div><div className='ad-parity-bar'><i style={{ width: `${oddPressure}%` }} /><span>ODD {oddPressure.toFixed(0)}%</span><b>EVEN {evenPressure.toFixed(0)}%</b></div></section>
                         <section className='ad-panel ad-validation'><div className='ad-panel__label'>VIRTUAL VALIDATION</div><div className='ad-validation__steps'><span className={validation.wins >= 1 ? 'done' : ''}><b>1</b> VIRTUAL {validation.wins >= 1 ? 'WIN' : 'READY'}</span><span className={validation.wins >= 2 ? 'done' : ''}><b>2</b> VIRTUAL {validation.wins >= 2 ? 'WIN' : 'WAITING'}</span><strong className={validation.state === 'PASSED' ? 'passed' : ''}>{validation.state === 'PASSED' ? 'PASSED' : 'GATE ACTIVE'}</strong></div></section>
-                        <section className='ad-panel ad-entry'><div className='ad-panel__label'>ENTRY DECISION</div><strong>{status}</strong><p>{strategy === 'AUTO' ? (lossStreak > 0 ? 'Recovery mode: only the safe barrier, parity, and Rise/Fall sequence can pass. Matches and risky tick contracts are blocked after a loss.' : 'Auto mode advances through the ordered barrier and contract phases, but only a live candidate that meets the score, entry condition, and virtual confirmation gate can trade.') : logicMode === 'all' ? 'Every applicable entry confirmation must agree before this contract can trade.' : logicMode === 'confluence' ? 'All windows are compared before an entry is accepted.' : LOGIC_MODES.find(mode => mode.value === logicMode)?.note}</p><div className='ad-entry__ticks'><span>Next contract</span><b>{candidate?.contractType || '—'} {candidate?.barrier != null ? `· Barrier ${candidate.barrier}` : ''}</b><small>{activeDuration} ticks {autoDuration ? '· AUTO' : ''}</small></div></section>
+                        <section className='ad-panel ad-entry'><div className='ad-panel__label'>ENTRY DECISION</div><strong>{status}</strong><p>{strategy === 'AUTO' ? (lossStreak > 0 ? 'Recovery mode keeps the ordered plan gated by live confirmation. After two losses, the next three real runs are limited to one-tick Even/Odd or Only Ups/Only Downs contracts; Matches and risky tick contracts remain blocked.' : 'Auto mode advances through the ordered barrier and contract phases, but only a live candidate that meets the score, entry condition, and virtual confirmation gate can trade.') : logicMode === 'all' ? 'Every applicable entry confirmation must agree before this contract can trade.' : logicMode === 'confluence' ? 'All windows are compared before an entry is accepted.' : LOGIC_MODES.find(mode => mode.value === logicMode)?.note}</p><div className='ad-entry__ticks'><span>Next contract</span><b>{candidate?.contractType || '—'} {candidate?.barrier != null ? `· Barrier ${candidate.barrier}` : ''}</b><small>{activeDuration} ticks {autoDuration ? '· AUTO' : ''}</small></div></section>
                     </div>
                 </main>
 
