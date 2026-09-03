@@ -615,6 +615,7 @@ const AutoTrades: React.FC = () => {
     const [transactions, setTransactions] = useState<Array<{
         id: string; time: string; contract: string; profit: number | null; symbol: string;
         stake?: number; status?: 'open' | 'won' | 'lost';
+        batchId?: string; batchIndex?: number; batchTotal?: number;
     }>>([]);
 
     // ── Smart Trader (multi-card) state ──────────────────────────────────────────
@@ -800,7 +801,7 @@ const AutoTrades: React.FC = () => {
                     // Snapshot the edited count for this signal. Changes made
                     // while this batch is settling apply only to the next
                     // batch, never halfway through the current one.
-                    const batchCount = Math.max(1, Math.min(100, Math.round(currentCfg.bulkCount || 10)));
+                    const batchCount = Math.max(1, Math.min(100, Math.floor(currentCfg.bulkCount || 10)));
 
                     const batchId = `BATCH-${id}-${Date.now()}-${wins + losses}`;
                     const transactionId = `${batchId}-ORDER-1`;
@@ -894,18 +895,18 @@ const AutoTrades: React.FC = () => {
                         // subscription, but shares the same symbol, contract,
                         // barrier, stake, duration, and entry tick.
                         setJournal(prev => [
-                            `[${transactionTime}] [${id}] ${batchId}: dispatching all ${batchCount} positions together`,
+                            `[${transactionTime}] [${id}] ${batchId}: dispatching all ${batchCount} executions from one entry signal`,
                             ...prev,
                         ].slice(0, 50));
                         const boughtContractIds = new Map<string, number>();
                         const batchResults = await Promise.allSettled(
-                            batchTransactionIds.map(orderId =>
+                            batchTransactionIds.map((orderId, batchIndex) =>
                                 buyAndWait(sym, contract, barrier, stk, currentCfg.ticks, {
                                     metadata: {
                                         source: 'auto-trades',
                                         execution_mode: 'parallel',
                                         batch_id: batchId,
-                                        batch_index: batchTransactionIds.indexOf(orderId) + 1,
+                                        batch_index: batchIndex + 1,
                                         batch_size: batchCount,
                                     },
                                     onBought: contractId => {
@@ -941,8 +942,15 @@ const AutoTrades: React.FC = () => {
                             }
                         });
                         const settledCount = batchWins + batchLosses;
+                        const batchOutcome = settledCount < batchCount
+                            ? 'PENDING/INCOMPLETE'
+                            : batchWins === batchCount
+                                ? 'ALL WON'
+                                : batchLosses === batchCount
+                                    ? 'ALL LOST'
+                                    : 'MIXED SETTLEMENTS';
                         setJournal(prev => [
-                            `[${new Date().toLocaleTimeString('en', { hour12: false })}] [${id}] ${batchId}: ${settledCount}/${batchCount} settled · ${batchWins} won · ${batchLosses} lost · P/L ${fmtProfit(batchProfit)}${failedOrders ? ` · ${failedOrders} failed` : ''}`,
+                            `[${new Date().toLocaleTimeString('en', { hour12: false })}] [${id}] ${batchId}: ${settledCount}/${batchCount} executions settled · ${batchOutcome} · ${batchWins} won · ${batchLosses} lost · P/L ${fmtProfit(batchProfit)}${failedOrders ? ` · ${failedOrders} failed` : ''}`,
                             ...prev,
                         ].slice(0, 50));
                         smartCurrentStakes.current[id] = batchProfit <= 0
@@ -1370,8 +1378,8 @@ const AutoTrades: React.FC = () => {
                                     <div className={`st__batch-panel ${cfg.bulkEnabled ? 'active' : ''}`}>
                                         <div className='st__batch-header'>
                                             <div>
-                                                <strong>Batch trade</strong>
-                                                <span>Open matching contracts from one entry signal</span>
+                                                        <strong>Bulk trade</strong>
+                                                        <span>Open matching executions from one entry signal</span>
                                             </div>
                                             <button
                                                 type='button'
@@ -1387,7 +1395,7 @@ const AutoTrades: React.FC = () => {
                                             <>
                                                 <div className='st__batch-fields'>
                                                     <label>
-                                                        Positions (editable)
+                                                            Runs (editable)
                                                         <NumberField
                                                             value={cfg.bulkCount}
                                                             min={1}
@@ -1398,12 +1406,12 @@ const AutoTrades: React.FC = () => {
                                                     </label>
                                                     <div className='st__batch-total'>
                                                         <span>Total stake</span>
-                                                        <strong>${(cfg.stake * cfg.bulkCount).toFixed(2)}</strong>
+                                                        <strong>${(cfg.stake * Math.max(1, Math.min(100, Math.floor(cfg.bulkCount || 10)))).toFixed(2)}</strong>
                                                     </div>
                                                 </div>
                                                 <p className='st__batch-note'>
-                                                    {cfg.bulkCount} positions · ${cfg.stake.toFixed(2)} each · {cfg.ticks} tick{cfg.ticks === 1 ? '' : 's'}.
-                                                    All use this card's same symbol, entry signal, barrier and exit duration.
+                                                    {Math.max(1, Math.min(100, Math.floor(cfg.bulkCount || 10)))} executions · ${cfg.stake.toFixed(2)} each · {cfg.ticks} tick{cfg.ticks === 1 ? '' : 's'}.
+                                                    One signal sends all executions together with the same symbol, contract, barrier and exit duration. Total exposure is stake × runs.
                                                 </p>
                                             </>
                                         )}
