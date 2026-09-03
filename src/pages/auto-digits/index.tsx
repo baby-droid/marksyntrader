@@ -227,19 +227,9 @@ const AUTO_STRATEGIES: ConcreteStrategy[] = [
     'HIGH TICK', 'LOW TICK', 'DIFFERS', 'MATCHES',
 ];
 
-const DIGIT_BARRIER_OPTIONS: Partial<Record<ConcreteStrategy, number[]>> = {
-    OVER: [4, 5, 6, 7, 8],
-    UNDER: [4, 3, 2, 1],
-    MATCHES: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-    DIFFERS: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-};
-
-const barrierOptionsFor = (selectedStrategy: ConcreteStrategy) => DIGIT_BARRIER_OPTIONS[selectedStrategy] || [];
-
 const AUTO_BASELINE_PLANS: AutoRotationPlan[] = [
-    ...[4, 5, 6, 7, 8].map(barrier => ({ strategy: 'OVER' as ConcreteStrategy, barrier })),
-    ...[4, 3, 2, 1].map(barrier => ({ strategy: 'UNDER' as ConcreteStrategy, barrier })),
-    ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(barrier => ({ strategy: 'MATCHES' as ConcreteStrategy, barrier })),
+    ...[1, 2, 3].map(barrier => ({ strategy: 'OVER' as ConcreteStrategy, barrier })),
+    ...[8, 7, 6].map(barrier => ({ strategy: 'UNDER' as ConcreteStrategy, barrier })),
     { strategy: 'EVEN' },
     { strategy: 'ODD' },
     { strategy: 'RISE' },
@@ -253,13 +243,13 @@ const AUTO_BASELINE_PLANS: AutoRotationPlan[] = [
 
 const AUTO_NEAR_TP_PLANS: AutoRotationPlan[] = [
     ...[4, 5, 6, 7, 8].map(barrier => ({ strategy: 'OVER' as ConcreteStrategy, barrier })),
-    ...[4, 3, 2, 1].map(barrier => ({ strategy: 'UNDER' as ConcreteStrategy, barrier })),
+    ...[5, 4, 3, 2].map(barrier => ({ strategy: 'UNDER' as ConcreteStrategy, barrier })),
     ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(barrier => ({ strategy: 'MATCHES' as ConcreteStrategy, barrier })),
 ];
 
 const AUTO_RECOVERY_PLANS: AutoRotationPlan[] = [
-    ...[4, 5, 6, 7, 8].map(barrier => ({ strategy: 'OVER' as ConcreteStrategy, barrier })),
-    ...[4, 3, 2, 1].map(barrier => ({ strategy: 'UNDER' as ConcreteStrategy, barrier })),
+    ...[1, 2, 3].map(barrier => ({ strategy: 'OVER' as ConcreteStrategy, barrier })),
+    ...[8, 7, 6].map(barrier => ({ strategy: 'UNDER' as ConcreteStrategy, barrier })),
     { strategy: 'EVEN' },
     { strategy: 'ODD' },
     { strategy: 'RISE' },
@@ -323,7 +313,7 @@ const chooseAutomaticBarrier = (points: TickPoint[], selectedStrategy: ConcreteS
 
     let bestBarrier = fallback;
     let bestScore = -Infinity;
-    for (const candidateBarrier of barrierOptionsFor(selectedStrategy)) {
+    for (let candidateBarrier = 1; candidateBarrier <= 8; candidateBarrier += 1) {
         const winningStrength = selectedStrategy === 'OVER'
             ? p20.slice(candidateBarrier + 1).reduce((sum, value) => sum + value, 0)
             : p20.slice(0, candidateBarrier).reduce((sum, value) => sum + value, 0);
