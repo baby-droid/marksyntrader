@@ -675,7 +675,32 @@ const AutoTrades: React.FC = () => {
     useEffect(() => { smartCardCfgRef.current = smartCardCfg; }, [smartCardCfg]);
 
     const updateCardCfg = useCallback((id: SmartCardId, patch: Partial<typeof smartCardCfg['risefall']>) => {
-        setSmartCardCfg(prev => ({ ...prev, [id]: { ...prev[id], ...patch } }));
+        const safePatch: any = { ...patch };
+        if ('stake' in safePatch) {
+            const value = Number(safePatch.stake);
+            safePatch.stake = Number.isFinite(value) ? Math.max(0.35, Math.min(1000, value)) : 0.35;
+        }
+        if ('ticks' in safePatch) {
+            const value = Number(safePatch.ticks);
+            safePatch.ticks = Number.isFinite(value) ? Math.max(1, Math.min(10, Math.floor(value))) : 1;
+        }
+        if ('martingale' in safePatch) {
+            const value = Number(safePatch.martingale);
+            safePatch.martingale = Number.isFinite(value) ? Math.max(1, Math.min(5, value)) : 1;
+        }
+        if ('barrier' in safePatch) {
+            const value = Number(safePatch.barrier);
+            safePatch.barrier = Number.isFinite(value) ? Math.max(0, Math.min(9, Math.floor(value))) : 5;
+        }
+        if ('lookback' in safePatch) {
+            const value = Number(safePatch.lookback);
+            safePatch.lookback = Number.isFinite(value) ? Math.max(1, Math.min(10, Math.floor(value))) : 3;
+        }
+        if ('bulkCount' in safePatch) {
+            const value = Number(safePatch.bulkCount);
+            safePatch.bulkCount = Number.isFinite(value) ? Math.max(1, Math.min(100, Math.floor(value))) : 10;
+        }
+        setSmartCardCfg(prev => ({ ...prev, [id]: { ...prev[id], ...safePatch } }));
     }, []);
 
     // Per-card session (runtime state)
@@ -727,14 +752,21 @@ const AutoTrades: React.FC = () => {
     const pickSmartTrade = useCallback((id: SmartCardId) => {
         const digits = smartDigitsRef.current;
         const cfg = smartCardCfgRef.current[id];
-        const depth = Math.min(smartSharedDepthRef.current, digits.length);
+        if (!cfg) {
+            return { contract: 'DIGITEVEN', barrier: null, meetsCondition: false };
+        }
+        const depth = Math.min(Math.max(1, smartSharedDepthRef.current), digits.length);
         const last = digits.slice(-Math.max(depth, 20));
-        const sample = last.slice(-Math.max(1, Math.min(10, cfg.lookback || 3)));
+        const requiredDigits = Math.max(1, Math.min(10, Math.floor(Number(cfg.lookback) || 3)));
+        const sample = digits.slice(-requiredDigits);
         const matchesAction = (name: string) => cfg.thenAction === name;
 
         if (id === 'risefall') {
-            const rising = sample.length < 2 || sample.slice(1).every((d, i) => d > sample[i]);
-            const falling = sample.length < 2 || sample.slice(1).every((d, i) => d < sample[i]);
+            // A direction needs two real digits. Never treat an empty feed as
+            // a valid Rise/Fall signal.
+            const movementSample = digits.slice(-Math.max(2, requiredDigits + 1));
+            const rising = movementSample.length >= 2 && movementSample.slice(1).every((d, i) => d > movementSample[i]);
+            const falling = movementSample.length >= 2 && movementSample.slice(1).every((d, i) => d < movementSample[i]);
             const meetsCondition = cfg.ifValue === 'Rise' ? rising : falling;
             return {
                 contract: matchesAction('Buy Rise') ? 'CALL' : 'PUT',
@@ -760,24 +792,29 @@ const AutoTrades: React.FC = () => {
             };
         }
         if (id === 'overunder') {
-            const isOver = sample.length > 0 && sample.every(d => d > cfg.barrier);
-            const isUnder = sample.length > 0 && sample.every(d => d < cfg.barrier);
+            const barrier = Math.max(0, Math.min(9, Math.floor(Number(cfg.barrier) || 0)));
+            const isOver = sample.length === requiredDigits && sample.every(d => d > barrier);
+            const isUnder = sample.length === requiredDigits && sample.every(d => d < barrier);
             return {
                 contract: matchesAction('Buy Over') ? 'DIGITOVER' : 'DIGITUNDER',
-                barrier: cfg.barrier,
+                barrier,
                 meetsCondition: cfg.ifValue === 'Over' ? isOver : isUnder,
-                overProb: sample.filter(d => d > cfg.barrier).length / Math.max(1, sample.length) * 100,
+                overProb: sample.filter(d => d > barrier).length / Math.max(1, sample.length) * 100,
             };
         }
-        // Matches means the recent digits are identical; Differs means at least
-        // two different digits appeared in the selected window.
+        // Matches uses the repeated digit as its barrier. Differs uses the
+        // most frequent recent digit as the barrier and only enters when the
+        // current digit is actually different from it.
         const freq = Array.from({ length: 10 }, (_, i) => last.filter(d => d === i).length);
-        const minDigit = freq.indexOf(Math.min(...freq));
-        const isMatch = sample.length > 0 && sample.every(d => d === sample[0]);
+        const maxDigit = freq.indexOf(Math.max(...freq));
+        const isMatch = sample.length === requiredDigits && sample.every(d => d === sample[0]);
+        const isDifferent = sample.length === requiredDigits &&
+            new Set(sample).size > 1 &&
+            sample[sample.length - 1] !== maxDigit;
         return {
             contract: matchesAction('Buy Matches') ? 'DIGITMATCH' : 'DIGITDIFF',
-            barrier: matchesAction('Buy Matches') ? sample[0] : minDigit,
-            meetsCondition: cfg.ifValue === 'Matches' ? isMatch : new Set(sample).size > 1,
+            barrier: matchesAction('Buy Matches') ? (sample[0] ?? 0) : maxDigit,
+            meetsCondition: cfg.ifValue === 'Matches' ? isMatch : isDifferent,
             freq,
         };
     }, []);
@@ -795,6 +832,10 @@ const AutoTrades: React.FC = () => {
         // one-render race where the Bulk toggle is visibly ON but the ref
         // effect has not copied that edit before Start is clicked.
         const cfg = configOverride || smartCardCfgRef.current[id];
+        if (!cfg) return;
+        // Make an immediate click use the same configuration snapshot as the
+        // rendered card, even before React flushes the ref-sync effect.
+        smartCardCfgRef.current[id] = cfg;
         setTradeContext({ page: 'Auto Trades', bot: `${id} Smart Trading` });
         smartCurrentStakes.current[id] = cfg.stake;
         updateSess(id, { running: true, wins: 0, losses: 0, profit: 0, lastLog: 'Starting…' });
@@ -834,7 +875,7 @@ const AutoTrades: React.FC = () => {
                         continue;
                     }
                     const { contract, barrier } = trade;
-                    const currentCfg = smartCardCfgRef.current[id];
+                    const currentCfg = smartCardCfgRef.current[id] || cfg;
                     const stk = smartCurrentStakes.current[id];
                     const sym = smartSharedSymbolRef.current;
                     const batchEnabled = Boolean(currentCfg.bulkEnabled);
