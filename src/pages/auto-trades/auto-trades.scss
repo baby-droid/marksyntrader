@@ -891,6 +891,68 @@
         font-size: 11px;
         color: rgba(255,255,255,0.4);
     }
+
+    &__cycle-config {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+        padding: 9px;
+        border-radius: 9px;
+        background: rgba(0, 40, 24, 0.45);
+        border: 1px solid rgba(0, 255, 136, 0.14);
+    }
+
+    &__cycle-config-title {
+        color: #9fffc6;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+    }
+
+    &__cycle-entry-grid,
+    &__cycle-risk-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6px;
+    }
+
+    &__cycle-risk-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    &__cycle-config label {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        color: rgba(255,255,255,0.52);
+        font-size: 9px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        input {
+            width: 100%;
+            min-width: 0;
+            padding: 5px 4px;
+            border-radius: 5px;
+            border: 1px solid rgba(0,255,136,0.18);
+            background: rgba(0,0,0,0.35);
+            color: #fff;
+            font-size: 12px;
+            font-weight: 700;
+            text-align: center;
+            outline: none;
+            &:focus { border-color: #00ff88; }
+            &:disabled { opacity: 0.55; }
+        }
+    }
+
+    &__cycle-entry-help {
+        color: rgba(255,255,255,0.35);
+        font-size: 9px;
+        line-height: 1.35;
+        text-transform: none;
+    }
 }
 
 /* ─── Mobile Responsive ─── */

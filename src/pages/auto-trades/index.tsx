@@ -369,6 +369,29 @@ function useBuyAndWait() {
 }
 
 // ── AI Bot Definitions ────────────────────────────────────────────────────────
+type CycleParity = 'odd' | 'even';
+
+interface CycleBotConfig {
+    weakEntry: number;
+    strongEntry: number;
+    martingale: number;
+    takeProfit: number;
+    stopLoss: number;
+}
+
+interface CycleBotDef {
+    targetParity: CycleParity;
+    defaultWeakEntry: number;
+    defaultStrongEntry: number;
+}
+
+interface AiTrade {
+    contract: string;
+    barrier: number | null;
+    shouldTrade?: boolean;
+    signal?: 'weak' | 'strong';
+}
+
 interface AiBotDef {
     id: string;
     name: string;
@@ -380,7 +403,38 @@ interface AiBotDef {
     defaultMartingale: number;
     defaultTakeProfit: number;
     defaultStopLoss: number;
-    pickTrade: (digits: number[], recoveryMode?: boolean) => { contract: string; barrier: number | null };
+    cycle?: CycleBotDef;
+    pickTrade: (digits: number[], recoveryMode?: boolean, cycleConfig?: CycleBotConfig) => AiTrade;
+}
+
+function normalizeCycleEntry(value: unknown, parity: CycleParity, fallback: number): number {
+    const parsed = Number(value);
+    const safe = Number.isFinite(parsed) ? Math.max(0, Math.min(9, Math.floor(parsed))) : fallback;
+    if (safe % 2 === (parity === 'even' ? 0 : 1)) return safe;
+    return Math.max(0, Math.min(9, safe + (safe < 9 ? 1 : -1)));
+}
+
+function pickParityCycleTrade(
+    digits: number[],
+    targetParity: CycleParity,
+    config: CycleBotConfig,
+): AiTrade {
+    const targetIsEven = targetParity === 'even';
+    const weakEntry = normalizeCycleEntry(config.weakEntry, targetIsEven ? 'odd' : 'even', targetIsEven ? 1 : 0);
+    const strongEntry = normalizeCycleEntry(config.strongEntry, targetIsEven ? 'odd' : 'even', targetIsEven ? 3 : 2);
+    const last = digits[digits.length - 1];
+    const strongPattern = digits.length >= 3
+        && digits[digits.length - 3] === strongEntry
+        && digits[digits.length - 2] === strongEntry
+        && ((last % 2 === 0) === targetIsEven);
+    const weakPattern = last === weakEntry;
+
+    return {
+        contract: targetIsEven ? 'DIGITEVEN' : 'DIGITODD',
+        barrier: null,
+        shouldTrade: strongPattern || weakPattern,
+        signal: strongPattern ? 'strong' : weakPattern ? 'weak' : undefined,
+    };
 }
 
 const AI_BOTS: AiBotDef[] = [
@@ -465,6 +519,40 @@ const AI_BOTS: AiBotDef[] = [
                 : { contract: 'DIGITUNDER', barrier: 7 };
         },
     },
+    {
+        id: 'odd-auto-cycle',
+        name: 'ODD AUTO CYCLE',
+        subtitle: 'Weak Even → Odd · Strong Even ×2 → Odd',
+        icon: '🔴',
+        desc: 'Buys Odd after the selected weak Even digit, or after two selected Strong Even digits followed by an Odd digit.',
+        symbol: '1HZ10V',
+        defaultStake: 1.0,
+        defaultMartingale: 2.0,
+        defaultTakeProfit: 5,
+        defaultStopLoss: 10,
+        cycle: { targetParity: 'odd', defaultWeakEntry: 0, defaultStrongEntry: 2 },
+        pickTrade: (digits, _recoveryMode, config) =>
+            pickParityCycleTrade(digits, 'odd', config || {
+                weakEntry: 0, strongEntry: 2, martingale: 2, takeProfit: 5, stopLoss: 10,
+            }),
+    },
+    {
+        id: 'even-auto-cycle',
+        name: 'EVEN AUTO CYCLE',
+        subtitle: 'Weak Odd → Even · Strong Odd ×2 → Even',
+        icon: '🔵',
+        desc: 'Buys Even after the selected weak Odd digit, or after two selected Strong Odd digits followed by an Even digit.',
+        symbol: '1HZ10V',
+        defaultStake: 1.0,
+        defaultMartingale: 2.0,
+        defaultTakeProfit: 5,
+        defaultStopLoss: 10,
+        cycle: { targetParity: 'even', defaultWeakEntry: 1, defaultStrongEntry: 3 },
+        pickTrade: (digits, _recoveryMode, config) =>
+            pickParityCycleTrade(digits, 'even', config || {
+                weakEntry: 1, strongEntry: 3, martingale: 2, takeProfit: 5, stopLoss: 10,
+            }),
+    },
 ];
 
 const AI_RUNS_PER_SCAN = 6;
@@ -506,6 +594,34 @@ function AiBotCard({ bot, globalStake, globalMartingale, session, onSessionUpdat
     const stopRef = useRef(false);
     const pausedStakeRef = useRef<number | null>(null); // for resume-with-martingale
     const { buyAndWait } = useBuyAndWait();
+    const [cycleConfig, setCycleConfig] = useState<CycleBotConfig>(() => ({
+        weakEntry: bot.cycle?.defaultWeakEntry ?? 0,
+        strongEntry: bot.cycle?.defaultStrongEntry ?? 2,
+        martingale: bot.defaultMartingale,
+        takeProfit: bot.defaultTakeProfit,
+        stopLoss: bot.defaultStopLoss,
+    }));
+    const isCycleBot = Boolean(bot.cycle);
+    const updateCycleConfig = useCallback((patch: Partial<CycleBotConfig>) => {
+        setCycleConfig(previous => {
+            const next = { ...previous, ...patch };
+            const entryParity = bot.cycle?.targetParity === 'odd' ? 'even' : 'odd';
+            return {
+                ...next,
+                weakEntry: normalizeCycleEntry(next.weakEntry, entryParity, previous.weakEntry),
+                strongEntry: normalizeCycleEntry(next.strongEntry, entryParity, previous.strongEntry),
+                martingale: Number.isFinite(Number(next.martingale))
+                    ? Math.max(1, Math.min(5, Number(next.martingale)))
+                    : previous.martingale,
+                takeProfit: Number.isFinite(Number(next.takeProfit))
+                    ? Math.max(0.01, Math.min(100000, Number(next.takeProfit)))
+                    : previous.takeProfit,
+                stopLoss: Number.isFinite(Number(next.stopLoss))
+                    ? Math.max(0.01, Math.min(100000, Number(next.stopLoss)))
+                    : previous.stopLoss,
+            };
+        });
+    }, [bot.cycle?.targetParity]);
 
     const start = useCallback(async (resumeStake?: number) => {
         setTradeContext({ page: 'Auto Trades', bot: bot.name });
@@ -515,19 +631,23 @@ function AiBotCard({ bot, globalStake, globalMartingale, session, onSessionUpdat
         let localProfit = 0;
         onSessionUpdate({ active: true, wins: 0, losses: 0, profit: 0 });
 
-        const tp = bot.defaultTakeProfit * Math.max(1, globalStake);
-        const sl = bot.defaultStopLoss * Math.max(1, globalStake);
+        const martingale = isCycleBot ? cycleConfig.martingale : globalMartingale;
+        const tp = isCycleBot
+            ? cycleConfig.takeProfit
+            : bot.defaultTakeProfit * Math.max(1, globalStake);
+        const sl = isCycleBot
+            ? cycleConfig.stopLoss
+            : bot.defaultStopLoss * Math.max(1, globalStake);
         let stk = resumeStake ?? globalStake; // resume with saved stake (martingale preserved)
         let recoveryMode = false;
         let lastScanKey = '';
-        onLog(`🚀 ${bot.name} started | Stake: $${stk.toFixed(2)} | TP:${tp.toFixed(2)} SL:${sl.toFixed(2)}`);
+        onLog(`🚀 ${bot.name} started | Stake: $${stk.toFixed(2)} | Martingale:${martingale.toFixed(2)}× TP:$${tp.toFixed(2)} SL:$${sl.toFixed(2)}`);
 
         while (!stopRef.current) {
             try {
-                // A scan is anchored to a new digit window. One valid entry
-                // starts exactly six sequential contracts; settlement gates
-                // every next buy so fast execution never races the account's
-                // contract state or reuses the same tick indefinitely.
+                // A scan is anchored to a new digit window. Cycle bots place
+                // one contract per valid weak/strong signal; the older AI
+                // bots keep their six-contract scan behavior.
                 let scanDigits = digitsRef.current.slice();
                 while (!stopRef.current && (
                     !scanDigits.length ||
@@ -539,25 +659,29 @@ function AiBotCard({ bot, globalStake, globalMartingale, session, onSessionUpdat
                 if (stopRef.current) break;
                 lastScanKey = scanDigits.slice(-10).join(',');
 
-                const entry = bot.pickTrade(scanDigits, recoveryMode);
-                if (!entry || scanDigits.length < 3) continue;
+                const entry = bot.pickTrade(scanDigits, recoveryMode, isCycleBot ? cycleConfig : undefined);
+                if (!entry || scanDigits.length < (isCycleBot ? 1 : 3) || entry.shouldTrade === false) continue;
 
-                for (let run = 0; run < AI_RUNS_PER_SCAN && !stopRef.current; run++) {
-                    const { contract, barrier } = bot.pickTrade(scanDigits, recoveryMode);
+                const runsForSignal = isCycleBot ? 1 : AI_RUNS_PER_SCAN;
+                for (let run = 0; run < runsForSignal && !stopRef.current; run++) {
+                    const trade = bot.pickTrade(scanDigits, recoveryMode, isCycleBot ? cycleConfig : undefined);
+                    if (trade.shouldTrade === false) break;
+                    const { contract, barrier } = trade;
                     const profit = await buyAndWait(bot.symbol, contract, barrier, stk);
                     const won = profit > 0;
                     localProfit = +(localProfit + profit).toFixed(2);
                     if (won) localWins++; else localLosses++;
 
                     onSessionUpdate({ wins: localWins, losses: localLosses, profit: localProfit });
-                    onLog(`${won ? '✅' : '❌'} AI scan ${run + 1}/${AI_RUNS_PER_SCAN}: ${contract}${barrier !== null ? '@' + barrier : ''} ${fmtProfit(profit)} | Total: ${fmtProfit(localProfit)}`);
+                    const signalLabel = trade.signal ? ` · ${trade.signal.toUpperCase()} entry` : '';
+                    onLog(`${won ? '✅' : '❌'} ${isCycleBot ? 'Cycle' : `AI scan ${run + 1}/${AI_RUNS_PER_SCAN}`}${signalLabel}: ${contract}${barrier !== null ? '@' + barrier : ''} ${fmtProfit(profit)} | Total: ${fmtProfit(localProfit)}`);
 
                     if (bot.id === 'auto-o2u7') recoveryMode = !won;
                     if (won) {
                         stk = globalStake;
                         pausedStakeRef.current = null;
                     } else {
-                        stk = Math.max(0.35, +(stk * globalMartingale).toFixed(2));
+                        stk = Math.max(0.35, +(stk * martingale).toFixed(2));
                         pausedStakeRef.current = stk; // save for resume
                     }
 
@@ -575,7 +699,7 @@ function AiBotCard({ bot, globalStake, globalMartingale, session, onSessionUpdat
         stopRef.current = false;
         onSessionUpdate({ active: false });
         onLog(`⏹ Stopped. Session P/L: ${fmtProfit(localProfit)}`);
-    }, [bot, globalStake, globalMartingale, digitsRef, buyAndWait, onLog, onSessionUpdate]);
+    }, [bot, globalStake, globalMartingale, cycleConfig, isCycleBot, digitsRef, buyAndWait, onLog, onSessionUpdate]);
 
     const toggle = useCallback(() => {
         if (session.active) {
@@ -604,6 +728,70 @@ function AiBotCard({ bot, globalStake, globalMartingale, session, onSessionUpdat
             <div className='autotrades__botcard-market'>
                 <span>📍 {bot.symbol}</span>
             </div>
+            {bot.cycle && (
+                <div className='autotrades__cycle-config'>
+                    <div className='autotrades__cycle-config-title'>
+                        {bot.cycle.targetParity === 'odd' ? 'Odd' : 'Even'} cycle entry points
+                    </div>
+                    <div className='autotrades__cycle-entry-grid'>
+                        <label>
+                            Weak {bot.cycle.targetParity === 'odd' ? 'Even' : 'Odd'}
+                            <NumberField
+                                value={cycleConfig.weakEntry}
+                                min={bot.cycle.targetParity === 'odd' ? 0 : 1}
+                                max={bot.cycle.targetParity === 'odd' ? 8 : 9}
+                                disabled={session.active}
+                                onCommit={value => updateCycleConfig({ weakEntry: value })}
+                            />
+                        </label>
+                        <label>
+                            Strong {bot.cycle.targetParity === 'odd' ? 'Even' : 'Odd'}
+                            <NumberField
+                                value={cycleConfig.strongEntry}
+                                min={bot.cycle.targetParity === 'odd' ? 0 : 1}
+                                max={bot.cycle.targetParity === 'odd' ? 8 : 9}
+                                disabled={session.active}
+                                onCommit={value => updateCycleConfig({ strongEntry: value })}
+                            />
+                        </label>
+                    </div>
+                    <div className='autotrades__cycle-entry-help'>
+                        Weak: selected digit → buy {bot.cycle.targetParity}. Strong: selected digit ×2 → {bot.cycle.targetParity} → buy {bot.cycle.targetParity}.
+                    </div>
+                    <div className='autotrades__cycle-risk-grid'>
+                        <label>
+                            Martingale ×
+                            <NumberField
+                                value={cycleConfig.martingale}
+                                min={1}
+                                max={5}
+                                disabled={session.active}
+                                onCommit={value => updateCycleConfig({ martingale: value })}
+                            />
+                        </label>
+                        <label>
+                            Take profit $
+                            <NumberField
+                                value={cycleConfig.takeProfit}
+                                min={0.01}
+                                max={100000}
+                                disabled={session.active}
+                                onCommit={value => updateCycleConfig({ takeProfit: value })}
+                            />
+                        </label>
+                        <label>
+                            Stop loss $
+                            <NumberField
+                                value={cycleConfig.stopLoss}
+                                min={0.01}
+                                max={100000}
+                                disabled={session.active}
+                                onCommit={value => updateCycleConfig({ stopLoss: value })}
+                            />
+                        </label>
+                    </div>
+                </div>
+            )}
             <div className='autotrades__botcard-stats'>
                 <span className='wins'>✓ {session.wins}</span>
                 <span className='losses'>✗ {session.losses}</span>

@@ -65,3 +65,4 @@
 - [Auto-Digits feed lifecycle](auto-digits-feed-lifecycle.md) — attach authenticated live feeds before baseline history, cancel stale loaders, watchdog silent streams, and calculate digits with live pip_size plus epoch deduplication.
 - [Auto-Digits recovery order](auto-digits-recovery-order.md) — after a loss, evaluate one shared plan step across markets, and advance Over 1–3 then Under 8–6 only after a real buy.
 - [Smart Trading card runner](smart-trading-card-runner.md) — tokenized card runs prevent stale async loops from restarting or buying after a stop/start; normalize exclusive digit barriers before proposal.
+- [Parity auto cycles](parity-auto-cycles.md) — ODD AUTO CYCLE uses weak even or strong-even×2→odd signals to buy DIGITODD; EVEN mirrors it with odd→DIGITEVEN.
