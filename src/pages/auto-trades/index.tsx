@@ -880,6 +880,7 @@ const AutoTrades: React.FC = () => {
                         resultTransactionId = transactionId,
                         advanceStake = true,
                         contractId?: number,
+                        countStake = true,
                     ) => {
                         const won = profit > 0;
                         sessionProfit = +(sessionProfit + profit).toFixed(2);
@@ -890,7 +891,7 @@ const AutoTrades: React.FC = () => {
                         updateSess(id, { wins, losses, profit: sessionProfit, lastLog: logMsg });
 
                         setSummaryStats(prev => ({
-                            stake: +(prev.stake + stk).toFixed(2),
+                            stake: +(prev.stake + (countStake ? stk : 0)).toFixed(2),
                             payout: +(prev.payout + (won ? stk + profit : 0)).toFixed(2),
                             runs: prev.runs + 1,
                             won: prev.won + (won ? 1 : 0),
@@ -939,6 +940,13 @@ const AutoTrades: React.FC = () => {
                                     },
                                     onBought: contractId => {
                                         boughtContractIds.set(orderId, contractId);
+                                        // Bulk exposure is counted when each
+                                        // authenticated buy succeeds, not when
+                                        // only one settlement callback arrives.
+                                        setSummaryStats(prev => ({
+                                            ...prev,
+                                            stake: +(prev.stake + stk).toFixed(2),
+                                        }));
                                         setTransactions(prev => prev.map(transaction =>
                                             transaction.id === orderId
                                                 ? { ...transaction, status: 'open', contractId }
@@ -967,7 +975,7 @@ const AutoTrades: React.FC = () => {
                                 }
                                 batchProfit = +(batchProfit + profit).toFixed(2);
                                 if (profit > 0) batchWins++; else batchLosses++;
-                                recordResult(profit, orderId, false, contractId);
+                                recordResult(profit, orderId, false, contractId, false);
                             } else {
                                 failedOrders++;
                                 setTransactions(prev => prev.map(transaction =>

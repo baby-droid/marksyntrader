@@ -81,6 +81,7 @@ export function useDerivTrade() {
     const tickSubscriptionsRef = useRef<Map<string, { token: number; id?: number }>>(new Map());
     const nextTickSubscriptionTokenRef = useRef(0);
     const pocCallbacksRef = useRef<Map<number, (c: SettledContract) => void>>(new Map());
+    const settledContractsRef = useRef<Map<number, SettledContract>>(new Map());
     const contractMetaRef = useRef<Map<number, any>>(new Map());
     const settlementRetryTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
     const [connected, setConnected] = useState(connectionStatus$.value === CONNECTION_STATUS.OPENED);
@@ -180,17 +181,25 @@ export function useDerivTrade() {
                         poc.status === 'won' ? 'won'
                         : poc.status === 'lost' ? 'lost'
                         : profit > 0 ? 'won' : 'lost';
-                    if (cb) {
-                        cb({
-                            contract_id: cid,
-                            profit,
-                            status,
-                            entry_spot: poc.entry_spot,
-                            exit_spot: poc.exit_spot,
-                            buy_price: poc.buy_price,
-                            pip_size: poc.pip_size != null ? Number(poc.pip_size) : undefined,
-                        });
+                    const settledContract: SettledContract = {
+                        contract_id: cid,
+                        profit,
+                        status,
+                        entry_spot: poc.entry_spot,
+                        exit_spot: poc.exit_spot,
+                        buy_price: poc.buy_price,
+                        pip_size: poc.pip_size != null ? Number(poc.pip_size) : undefined,
+                    };
+                    // Keep a short-lived replay cache. Very short contracts can
+                    // settle between the buy response and registration of the
+                    // local callback; without this, native rows settle while
+                    // Auto Trades waits until its timeout.
+                    settledContractsRef.current.set(cid, settledContract);
+                    if (settledContractsRef.current.size > 300) {
+                        const oldest = settledContractsRef.current.keys().next().value;
+                        if (oldest != null) settledContractsRef.current.delete(oldest);
                     }
+                    if (cb) cb(settledContract);
                     // Keep the native transaction page authoritative even if
                     // the local waiting promise timed out or was interrupted.
                     if (meta) {
@@ -446,6 +455,14 @@ export function useDerivTrade() {
             // Step 3 — subscribe to settlement notifications
             if (onSettled) {
                 pocCallbacksRef.current.set(contract_id, onSettled);
+                const alreadySettled = settledContractsRef.current.get(contract_id);
+                if (alreadySettled) {
+                    queueMicrotask(() => {
+                        if (pocCallbacksRef.current.get(contract_id) !== onSettled) return;
+                        pocCallbacksRef.current.delete(contract_id);
+                        onSettled(alreadySettled);
+                    });
+                }
                 const requestSettlementSubscription = (attempt = 0) => {
                     const retryDelays = [250, 500, 1000, 2000];
                     const request = () => {

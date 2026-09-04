@@ -866,7 +866,11 @@ const AutoDigits = observer(() => {
             setCandidate(executionCandidate);
         }
 
-        if (!isActiveMarket || !runningRef.current || realInFlightRef.current || executionCandidate.score < minScore) return;
+        // After a real loss, recovery is entry-driven: keep the live entry
+        // condition, but do not block the next contract on the previous
+        // score/quality threshold. Normal mode keeps the existing score gate.
+        if (!isActiveMarket || !runningRef.current || realInFlightRef.current ||
+            (!recoveryMode && executionCandidate.score < minScore)) return;
         if (!authorized) {
             setStatus('Login required before real execution');
             return;
@@ -875,62 +879,55 @@ const AutoDigits = observer(() => {
         const executionStrategy: ConcreteStrategy = executionCandidate.strategy || (strategy === 'AUTO' ? 'OVER' : strategy);
         const selectedContractType = String(executionCandidate.contractType || strategyContract(executionStrategy)).toUpperCase();
         const candidateKey = `${executionCandidate.symbol}:${selectedContractType}:${executionCandidate.barrier ?? 'none'}`;
-        const recoverySafeTypes = new Set(['DIGITEVEN', 'DIGITODD', 'RUNHIGH', 'RUNLOW', 'DIGITOVER', 'DIGITUNDER', 'CALL', 'PUT']);
         const inRecovery = recoveryMode;
-        const isMatches = selectedContractType === 'DIGITMATCH';
         const validationState = validationRef.current;
-        // Matches is never used as a recovery contract, including when it
-        // was manually selected before the loss happened.
-        if (inRecovery && isMatches) {
-            if (lastRecoverySkipRef.current !== executionCandidate.label) {
-                lastRecoverySkipRef.current = executionCandidate.label;
-                addLog(`RECOVERY BLOCK — ${executionCandidate.label}; Matches is disabled after a loss`);
+        const entryConfirmed = evaluateCandidate(
+            { ...bestCandidate, contractType: selectedContractType },
+            executionStrategy,
+            point,
+            previous,
+        );
+        if (inRecovery) {
+            // Recovery deliberately bypasses score and virtual-win gates. The
+            // current tick still has to satisfy the selected entry condition.
+            if (!entryConfirmed) {
+                setStatus('RECOVERY ENTRY WAITING — live condition not confirmed');
+                return;
             }
-            validationRef.current = { key: '', wins: 0, attempt: validationState.attempt + 1, readyEpoch: point.epoch };
-            setStatus('RECOVERY FILTER — Matches disabled; waiting for a lower-risk recovery contract');
-            return;
-        }
-        if (inRecovery && (!recoverySafeTypes.has(selectedContractType) || executionCandidate.score < Math.max(minScore, 78))) {
-            const skippedPlan = executionCandidate.label;
-            if (lastRecoverySkipRef.current !== skippedPlan) {
-                lastRecoverySkipRef.current = skippedPlan;
-                addLog(`RECOVERY SKIP — ${skippedPlan} did not meet the score/risk gate`);
+            validationRef.current = { key: '', wins: 0, attempt: validationState.attempt, readyEpoch: point.epoch };
+            setValidation({ wins: 0, attempt: validationState.attempt, state: 'RECOVERY ENTRY' });
+            setStatus('Recovery entry confirmed — sending contract');
+            addLog(`RECOVERY ENTRY — ${executionCandidate.label}; score gate bypassed after loss`);
+        } else {
+            if (!validationState.key || validationState.key !== candidateKey) {
+                validationRef.current = { key: candidateKey, wins: 0, attempt: 1, readyEpoch: point.epoch };
+                setValidation({ wins: 0, attempt: 1, state: 'VIRTUAL 1' });
+                setStatus('Validating signal virtually');
+                addLog(`VIRTUAL 1 queued — ${executionCandidate.label} on ${marketLabel(executionCandidate.symbol || '')} scored ${executionCandidate.score}/100`);
+                return;
             }
-            setStatus('RECOVERY FILTER — waiting for a qualified, lower-risk contract');
-            return;
-        }
-        if (!validationState.key || validationState.key !== candidateKey) {
-            validationRef.current = { key: candidateKey, wins: 0, attempt: 1, readyEpoch: point.epoch };
-            setValidation({ wins: 0, attempt: 1, state: 'VIRTUAL 1' });
-            setStatus('Validating signal virtually');
-            addLog(`VIRTUAL 1 queued — ${executionCandidate.label} on ${marketLabel(executionCandidate.symbol || '')} scored ${executionCandidate.score}/100`);
-            return;
-        }
-        if (point.epoch <= validationState.readyEpoch) return;
+            if (point.epoch <= validationState.readyEpoch) return;
 
-        // Do not buy merely because the score passed the threshold. The live
-        // tick must satisfy the selected contract's condition using the
-        // barrier chosen for this market.
-        const virtualWon = evaluateCandidate({ ...bestCandidate, contractType: selectedContractType }, executionStrategy, point, previous);
-        if (!virtualWon) {
-            validationRef.current = { key: '', wins: 0, attempt: validationState.attempt + 1, readyEpoch: point.epoch };
-            setValidation({ wins: 0, attempt: validationState.attempt + 1, state: 'RESET' });
-            setStatus('Virtual check rejected — re-scanning');
-            addLog('VIRTUAL LOSS — candidate rejected; waiting for a clean setup');
-            return;
-        }
+            if (!entryConfirmed) {
+                validationRef.current = { key: '', wins: 0, attempt: validationState.attempt + 1, readyEpoch: point.epoch };
+                setValidation({ wins: 0, attempt: validationState.attempt + 1, state: 'RESET' });
+                setStatus('Virtual check rejected — re-scanning');
+                addLog('VIRTUAL LOSS — candidate rejected; waiting for a clean setup');
+                return;
+            }
 
-        const nextVirtualWins = validationState.wins + 1;
-        if (nextVirtualWins < 2) {
-            validationRef.current = { ...validationState, wins: nextVirtualWins, readyEpoch: point.epoch };
-            setValidation({ wins: nextVirtualWins, attempt: validationState.attempt, state: 'VIRTUAL 2' });
-            addLog(`VIRTUAL ${nextVirtualWins} WIN — one more confirmation required`);
-            return;
-        }
+            const nextVirtualWins = validationState.wins + 1;
+            if (nextVirtualWins < 2) {
+                validationRef.current = { ...validationState, wins: nextVirtualWins, readyEpoch: point.epoch };
+                setValidation({ wins: nextVirtualWins, attempt: validationState.attempt, state: 'VIRTUAL 2' });
+                addLog(`VIRTUAL ${nextVirtualWins} WIN — one more confirmation required`);
+                return;
+            }
 
-        validationRef.current = { key: '', wins: 0, attempt: validationState.attempt, readyEpoch: point.epoch };
-        setValidation({ wins: 2, attempt: validationState.attempt, state: 'PASSED' });
-        setStatus('Validation passed — sending contract');
+            validationRef.current = { key: '', wins: 0, attempt: validationState.attempt, readyEpoch: point.epoch };
+            setValidation({ wins: 2, attempt: validationState.attempt, state: 'PASSED' });
+            setStatus('Validation passed — sending contract');
+        }
         const recentOutcomes = recentResultsRef.current.slice(-4).join('');
         const isAlternatingOutcomes = recentOutcomes === 'WLWL' || recentOutcomes === 'LWLW';
         const riskShiftTicks = riskShiftTicksFor(
