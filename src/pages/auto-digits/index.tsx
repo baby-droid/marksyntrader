@@ -760,7 +760,11 @@ const AutoDigits = observer(() => {
         const safeRecoveryActive =
             lossesSinceRecoveryRef.current >= 2 &&
             safeRecoveryRunsRef.current < SAFE_RECOVERY_RUN_LIMIT;
-        const inRecovery = lossStreakRef.current > 0 || recoveryDeficitRef.current > 0 || safeRecoveryActive;
+        const inRecovery =
+            recoveryEntryPendingRef.current ||
+            lossStreakRef.current > 0 ||
+            recoveryDeficitRef.current > 0 ||
+            safeRecoveryActive;
         const nearTakeProfit = !inRecovery &&
             pnlRef.current > 0 &&
             pnlRef.current >= Math.max(0.01, Number(takeProfit) || 5) * 0.7;
@@ -1015,7 +1019,7 @@ const AutoDigits = observer(() => {
                 source: 'auto-digits',
                 execution_mode: 'market-condition-scanner',
                 strategy: executionCandidate.label,
-                validation: '2 virtual wins',
+                validation: inRecovery ? 'live entry after loss' : '2 virtual wins',
                 selected_by: inRecovery ? 'loss-recovery-ranked' : 'best-entry-ranked',
                 batch_id: `AUTO-DIGITS-${Date.now()}`,
             },
@@ -1038,6 +1042,7 @@ const AutoDigits = observer(() => {
             recentResultsRef.current = [...recentResultsRef.current, won ? 'W' : 'L'].slice(-8);
             if (won) {
                 lossStreakRef.current = 0;
+                recoveryEntryPendingRef.current = false;
                 setLossStreak(0);
                 setWins(previousWins => previousWins + 1);
                 const baseline = recoveryBaselineRef.current;
@@ -1067,6 +1072,7 @@ const AutoDigits = observer(() => {
             } else {
                 const nextLosses = lossStreakRef.current + 1;
                 lossStreakRef.current = nextLosses;
+                recoveryEntryPendingRef.current = true;
                 lossesSinceRecoveryRef.current += 1;
                 setLossStreak(nextLosses);
                 setLosses(previousLosses => previousLosses + 1);
@@ -1084,6 +1090,10 @@ const AutoDigits = observer(() => {
                     );
                     addLog(`1-TICK LOSS ${profit.toFixed(2)} ${displayCur} — stake recalculated; next risk-shift duration ${nextRiskShiftTicks}T`);
                 }
+                // Every real loss clears normal-mode virtual validation. The
+                // next recovery entry only needs the live condition.
+                validationRef.current = { key: '', wins: 0, attempt: validationState.attempt + 1, readyEpoch: point.epoch };
+                setValidation({ wins: 0, attempt: validationState.attempt + 1, state: 'RECOVERY ENTRY' });
                 if (nextLosses >= 3) {
                     const opposite = oppositeStrategy(executionStrategy);
                     if (opposite && strategy !== 'AUTO') {
@@ -1093,8 +1103,6 @@ const AutoDigits = observer(() => {
                         addLog(`LOSS ${profit.toFixed(2)} ${displayCur} — auto re-scan: contract type, barrier, market, and duration`);
                     }
                     validationRef.current = { key: '', wins: 0, attempt: validationState.attempt + 1, readyEpoch: point.epoch };
-                } else {
-                    addLog(`LOSS ${profit.toFixed(2)} ${displayCur} — revalidate before controlled recovery`);
                 }
                 setStatus(nextLosses >= 3 ? 'Loss cluster — windows, market, and duration re-scan' : `LOSS — controlled recovery: ${fromUsd(nextDeficit).toFixed(2)} ${displayCur} at risk`);
             }
@@ -1465,7 +1473,7 @@ const AutoDigits = observer(() => {
         if (run) {
             if (!authorized) setStatus('Login required before real execution');
             else setStatus(candidate && candidate.score >= minScore ? 'Scanning and validating' : 'Scanning for a qualified setup');
-            addLog(authorized ? 'RUN ON — virtual validation gate enabled' : 'RUN requested — waiting for account authorization');
+            addLog(authorized ? 'RUN ON — normal entries use virtual validation; losses use live-entry recovery' : 'RUN requested — waiting for account authorization');
         } else {
             setStatus('SCAN ONLY — no contracts will be executed');
             addLog('RUN OFF — analysis continues without execution');
@@ -1506,6 +1514,7 @@ const AutoDigits = observer(() => {
 
     const resetEngine = () => {
         lossStreakRef.current = 0;
+        recoveryEntryPendingRef.current = false;
         lossesSinceRecoveryRef.current = 0;
         safeRecoveryRunsRef.current = 0;
         setLossStreak(0);
@@ -1563,7 +1572,7 @@ const AutoDigits = observer(() => {
         autoPlanPhaseRef.current = 'BASELINE';
         setRun(true);
         setStatus(authorized ? 'Scanning and validating' : 'Login required before real execution');
-        addLog(authorized ? 'START BOT — virtual validation gate enabled' : 'START BOT — scanner active, execution waiting for authorization');
+        addLog(authorized ? 'START BOT — normal entries use virtual validation; losses use live-entry recovery' : 'START BOT — scanner active, execution waiting for authorization');
     };
 
     const pauseBot = () => {
@@ -1574,6 +1583,7 @@ const AutoDigits = observer(() => {
 
     const stopBot = () => {
         setRun(false);
+        recoveryEntryPendingRef.current = false;
         validationRef.current = { key: '', wins: 0, attempt: 0, readyEpoch: 0 };
         setValidation({ wins: 0, attempt: 0, state: 'IDLE' });
         setStatus('STOPPED — press Start Bot to begin a fresh validation gate');
@@ -1739,7 +1749,7 @@ const AutoDigits = observer(() => {
                             <div className='ad-progress'><i style={{ width: `${candidate?.score || 0}%` }} /></div>
                             <div className='ad-strategy__meta'><span className={`ad-confidence confidence-${(candidate?.confidence || 'wait').toLowerCase().replace(' ', '-')}`}>{candidate?.confidence || 'WAIT'}</span><span>Threshold {minScore}</span></div>
                             <p className='ad-reason'>{candidate?.reason || 'The engine will compare the 20T, 50T, 100T, and 1,000T windows.'}</p>
-                            <div className='ad-checks'><span className={baselineReady ? 'pass' : ''}>Distribution baseline <b>{baselineReady ? 'READY' : 'BUILDING'}</b></span><span className={candidate?.score >= minScore ? 'pass' : ''}>Entry score <b>{candidate?.score >= minScore ? 'QUALIFIED' : 'WAITING'}</b></span><span className={validation.state === 'PASSED' ? 'pass' : ''}>Virtual gate <b>{validation.state}</b></span></div>
+                             <div className='ad-checks'><span className={baselineReady ? 'pass' : ''}>Distribution baseline <b>{baselineReady ? 'READY' : 'BUILDING'}</b></span><span className={candidate?.score >= minScore || lossStreak > 0 || recoveryDeficit > 0 ? 'pass' : ''}>Entry condition <b>{lossStreak > 0 || recoveryDeficit > 0 ? 'LIVE ENTRY ONLY' : candidate?.score >= minScore ? 'QUALIFIED' : 'WAITING'}</b></span><span className={lossStreak > 0 || recoveryDeficit > 0 ? 'pass' : validation.state === 'PASSED' ? 'pass' : ''}>{lossStreak > 0 || recoveryDeficit > 0 ? 'Recovery gate' : 'Virtual gate'} <b>{lossStreak > 0 || recoveryDeficit > 0 ? 'LIVE CONDITION' : validation.state}</b></span></div>
                         </section>
                         <section className='ad-panel ad-pressure'>
                             <div className='ad-panel__label'>WINDOW PRESSURE</div>
@@ -1752,8 +1762,8 @@ const AutoDigits = observer(() => {
 
                     <div className='ad-three-col'>
                         <section className='ad-panel ad-recent'><div className='ad-panel__label'>RECENT TICKS <span>(LAST 30)</span></div><div className='ad-ticks'>{recentDigits.map((point, index) => <span key={`${point.epoch}-${index}`} className={point.digit % 2 === 0 ? 'even' : 'odd'}>{point.digit}</span>)}</div><div className='ad-parity-bar'><i style={{ width: `${oddPressure}%` }} /><span>ODD {oddPressure.toFixed(0)}%</span><b>EVEN {evenPressure.toFixed(0)}%</b></div></section>
-                        <section className='ad-panel ad-validation'><div className='ad-panel__label'>VIRTUAL VALIDATION</div><div className='ad-validation__steps'><span className={validation.wins >= 1 ? 'done' : ''}><b>1</b> VIRTUAL {validation.wins >= 1 ? 'WIN' : 'READY'}</span><span className={validation.wins >= 2 ? 'done' : ''}><b>2</b> VIRTUAL {validation.wins >= 2 ? 'WIN' : 'WAITING'}</span><strong className={validation.state === 'PASSED' ? 'passed' : ''}>{validation.state === 'PASSED' ? 'PASSED' : 'GATE ACTIVE'}</strong></div></section>
-                        <section className='ad-panel ad-entry'><div className='ad-panel__label'>ENTRY DECISION</div><strong>{status}</strong><p>{strategy === 'AUTO' ? (lossStreak > 0 ? 'Recovery mode keeps the ordered plan gated by live confirmation. After two losses, the next three real runs are limited to one-tick Even/Odd or Only Ups/Only Downs contracts; Matches and risky tick contracts remain blocked.' : 'Auto mode advances through the ordered barrier and contract phases, but only a live candidate that meets the score, entry condition, and virtual confirmation gate can trade.') : logicMode === 'all' ? 'Every applicable entry confirmation must agree before this contract can trade.' : logicMode === 'confluence' ? 'All windows are compared before an entry is accepted.' : LOGIC_MODES.find(mode => mode.value === logicMode)?.note}</p><div className='ad-entry__ticks'><span>Next contract</span><b>{candidate?.contractType || '—'} {candidate?.barrier != null ? `· Barrier ${candidate.barrier}` : ''}</b><small>{activeDuration} ticks {autoDuration ? '· AUTO' : ''}</small></div></section>
+                         <section className='ad-panel ad-validation'><div className='ad-panel__label'>{lossStreak > 0 || recoveryDeficit > 0 ? 'RECOVERY ENTRY' : 'VIRTUAL VALIDATION'}</div><div className='ad-validation__steps'>{lossStreak > 0 || recoveryDeficit > 0 ? <><span className='done'><b>✓</b> LIVE CONDITION</span><span className='done'><b>✓</b> SCORE BYPASSED</span><strong className='passed'>READY TO EXECUTE</strong></> : <><span className={validation.wins >= 1 ? 'done' : ''}><b>1</b> VIRTUAL {validation.wins >= 1 ? 'WIN' : 'READY'}</span><span className={validation.wins >= 2 ? 'done' : ''}><b>2</b> VIRTUAL {validation.wins >= 2 ? 'WIN' : 'WAITING'}</span><strong className={validation.state === 'PASSED' ? 'passed' : ''}>{validation.state === 'PASSED' ? 'PASSED' : 'GATE ACTIVE'}</strong></>}</div></section>
+                         <section className='ad-panel ad-entry'><div className='ad-panel__label'>ENTRY DECISION</div><strong>{status}</strong><p>{strategy === 'AUTO' ? (lossStreak > 0 || recoveryDeficit > 0 ? 'Recovery mode trades as soon as the live entry condition is confirmed. Score and virtual-win validation are bypassed after a real loss.' : 'Auto mode advances through the ordered barrier and contract phases, but only a live candidate that meets the score, entry condition, and virtual confirmation gate can trade.') : logicMode === 'all' ? 'Every applicable entry confirmation must agree before this contract can trade.' : logicMode === 'confluence' ? 'All windows are compared before an entry is accepted.' : LOGIC_MODES.find(mode => mode.value === logicMode)?.note}</p><div className='ad-entry__ticks'><span>Next contract</span><b>{candidate?.contractType || '—'} {candidate?.barrier != null ? `· Barrier ${candidate.barrier}` : ''}</b><small>{activeDuration} ticks {autoDuration ? '· AUTO' : ''}</small></div></section>
                     </div>
                 </main>
 
