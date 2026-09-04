@@ -71,6 +71,38 @@ export interface BuyParams {
 
 const NEEDS_BARRIER = new Set(['DIGITOVER','DIGITUNDER','DIGITMATCH','DIGITDIFF']);
 
+export function buildProposalRequest(params: BuyParams, fallbackCurrency = 'USD'): Record<string, unknown> {
+    const {
+        symbol,
+        contract_type,
+        duration,
+        duration_unit = 't',
+        stake,
+        barrier,
+        currency,
+        growth_rate,
+        limit_order,
+    } = params;
+    const contractName = String(contract_type).toUpperCase();
+    const isAccumulator = contractName === 'ACCU';
+    const request: Record<string, unknown> = {
+        proposal: 1,
+        amount: stake,
+        basis: 'stake',
+        contract_type,
+        currency: currency || fallbackCurrency,
+        ...(duration != null && !isAccumulator ? { duration } : {}),
+        ...(duration_unit && !isAccumulator ? { duration_unit } : {}),
+        underlying_symbol: symbol,
+    };
+    if (NEEDS_BARRIER.has(contractName) && barrier !== undefined && barrier !== null) {
+        request.barrier = String(barrier);
+    }
+    if (growth_rate != null) request.growth_rate = growth_rate;
+    if (limit_order) request.limit_order = limit_order;
+    return request;
+}
+
 function getLastDigit(quote: number, pipSize = 2): number {
     const s = quote.toFixed(pipSize).replace('.', '');
     return parseInt(s[s.length - 1], 10);
@@ -299,40 +331,21 @@ export function useDerivTrade() {
      */
     const buyContract = useCallback(
         async (params: BuyParams, onSettled?: (c: SettledContract) => void): Promise<ContractResult> => {
+            const { symbol, contract_type, stake, currency: cur, metadata } = params;
+
+            const cur_ = cur || currency || 'USD';
+            const isAccumulator = String(contract_type).toUpperCase() === 'ACCU';
+            const proposalReq = buildProposalRequest(params, currency || 'USD');
             const {
-                symbol,
-                contract_type,
                 duration,
                 duration_unit = 't',
-                stake,
                 barrier,
-                currency: cur,
-                metadata,
                 growth_rate,
                 limit_order,
             } = params;
 
-            const cur_ = cur || currency || 'USD';
-            const needsBarrier = NEEDS_BARRIER.has(String(contract_type).toUpperCase());
-            const isAccumulator = String(contract_type).toUpperCase() === 'ACCU';
-
             // Step 1 — proposal (get an ask_price and a proposal ID)
             const t0 = performance.now();
-            const proposalReq: any = {
-                proposal: 1,
-                amount: stake,
-                basis: 'stake',
-                contract_type,
-                currency: cur_,
-                ...(duration != null && !isAccumulator ? { duration } : {}),
-                ...(duration_unit && !isAccumulator ? { duration_unit } : {}),
-                underlying_symbol: symbol,
-            };
-            if (needsBarrier && barrier !== undefined && barrier !== null) {
-                proposalReq.barrier = String(barrier);
-            }
-            if (growth_rate != null) proposalReq.growth_rate = growth_rate;
-            if (limit_order) proposalReq.limit_order = limit_order;
             const tradeKey = createTradeKey('ui');
 
             let proposalRes: any;

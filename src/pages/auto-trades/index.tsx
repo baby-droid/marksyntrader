@@ -9,6 +9,16 @@ import { useDerivTrade } from '@/hooks/useDerivTrade';
 import { isFastExecutionEnabled } from '@/utils/execution-speed';
 import NumberField from '@/components/number-field';
 import { setTradeContext } from '@/utils/trade-metadata';
+import {
+    beginSmartRun,
+    invalidateSmartRun,
+    isSmartRunActive,
+    isSmartRunCurrent,
+    normalizeSmartBarrier,
+    pickSmartTradeDecision,
+    type SmartCardConfig,
+    type SmartCardId,
+} from './smart-trading-guards';
 import './auto-trades.scss';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -19,18 +29,6 @@ function fmtProfit(v: number) {
 function extractDigit(quote: any, pipSize: number): number {
     return parseInt(Number(quote).toFixed(pipSize).slice(-1), 10);
 }
-
-function normalizeSmartBarrier(value: unknown, action: string): number {
-    const parsed = Number(value);
-    const fallback = Number.isFinite(parsed) ? Math.floor(parsed) : 5;
-    // Deriv digit barriers are exclusive: Over cannot use 9 and Under cannot
-    // use 0. Keeping the value valid before proposal creation prevents the
-    // non-Even/Odd cards from failing when their condition finally fires.
-    if (action === 'Buy Over') return Math.max(0, Math.min(8, fallback));
-    if (action === 'Buy Under') return Math.max(1, Math.min(9, fallback));
-    return Math.max(0, Math.min(9, fallback));
-}
-
 function describeTradeError(error: unknown): string {
     if (!error) return 'Trade request failed';
     if (typeof error === 'string') return error;
@@ -829,7 +827,6 @@ const AutoTrades: React.FC = () => {
     }>>([]);
 
     // ── Smart Trader (multi-card) state ──────────────────────────────────────────
-    type SmartCardId = 'risefall' | 'evenodd' | 'overunder' | 'matchdiffer';
     const SMART_CARD_IDS: SmartCardId[] = ['risefall', 'evenodd', 'overunder', 'matchdiffer'];
     const CONDITION_OPTIONS: Record<SmartCardId, string[]> = {
         risefall: ['Rise', 'Fall'],
@@ -868,11 +865,7 @@ const AutoTrades: React.FC = () => {
     useEffect(() => { smartExecutionModeRef.current = smartExecutionMode; }, [smartExecutionMode]);
 
     // Per-card config (editable params)
-    const [smartCardCfg, setSmartCardCfg] = useState<Record<SmartCardId, {
-        stake: number; ticks: number; martingale: number; barrier: number;
-        lookback: number; ifValue: string; thenAction: string;
-        bulkEnabled: boolean; bulkCount: number;
-    }>>({
+    const [smartCardCfg, setSmartCardCfg] = useState<Record<SmartCardId, SmartCardConfig>>({
         risefall:    { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Rise', thenAction: 'Buy Rise', bulkEnabled: false, bulkCount: 10 },
         evenodd:     { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Even', thenAction: 'Buy Even', bulkEnabled: false, bulkCount: 10 },
         overunder:   { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Over', thenAction: 'Buy Over', bulkEnabled: false, bulkCount: 10 },
@@ -962,92 +955,23 @@ const AutoTrades: React.FC = () => {
         setSmartCardSess(prev => ({ ...prev, [id]: { ...prev[id], ...patch } }));
     }, []);
 
-    // Pick the trade for each card type using live digits
-    const pickSmartTrade = useCallback((id: SmartCardId) => {
-        const digits = smartDigitsRef.current;
-        const cfg = smartCardCfgRef.current[id];
-        if (!cfg) {
-            return { contract: 'DIGITEVEN', barrier: null, meetsCondition: false };
-        }
-        const depth = Math.min(Math.max(1, smartSharedDepthRef.current), digits.length);
-        const last = digits.slice(-Math.max(depth, 20));
-        const requiredDigits = Math.max(1, Math.min(10, Math.floor(Number(cfg.lookback) || 3)));
-        const sample = digits.slice(-requiredDigits);
-        const matchesAction = (name: string) => cfg.thenAction === name;
-
-        if (id === 'risefall') {
-            // A direction needs two real digits. Never treat an empty feed as
-            // a valid Rise/Fall signal.
-            const movementSample = digits.slice(-Math.max(2, requiredDigits + 1));
-            const rising = movementSample.length >= 2 && movementSample.slice(1).every((d, i) => d > movementSample[i]);
-            const falling = movementSample.length >= 2 && movementSample.slice(1).every((d, i) => d < movementSample[i]);
-            const meetsCondition = cfg.ifValue === 'Rise' ? rising : falling;
-            return {
-                contract: matchesAction('Buy Rise') ? 'CALL' : 'PUT',
-                barrier: null,
-                meetsCondition,
-                riseProb: rising ? 100 : 0,
-            };
-        }
-        if (id === 'evenodd') {
-            // The Even/Odd card is deliberately streak-based: the latest N
-            // digits must all have the selected parity before an entry is
-            // allowed. This keeps the UI condition and execution gate
-            // identical.
-            const requiredDigits = Math.max(1, Math.min(10, cfg.lookback || 3));
-            const paritySample = digits.slice(-requiredDigits);
-            const meetsCondition = paritySample.length === requiredDigits
-                && paritySample.every(d => (d % 2 === 0) === (cfg.ifValue === 'Even'));
-            return {
-                contract: matchesAction('Buy Even') ? 'DIGITEVEN' : 'DIGITODD',
-                barrier: null,
-                meetsCondition,
-                evenProb: paritySample.filter(d => d % 2 === 0).length / Math.max(1, paritySample.length) * 100,
-            };
-        }
-        if (id === 'overunder') {
-            const action = matchesAction('Buy Over') ? 'Buy Over' : 'Buy Under';
-            const barrier = normalizeSmartBarrier(cfg.barrier, action);
-            const isOver = sample.length === requiredDigits && sample.every(d => d > barrier);
-            const isUnder = sample.length === requiredDigits && sample.every(d => d < barrier);
-            return {
-                contract: action === 'Buy Over' ? 'DIGITOVER' : 'DIGITUNDER',
-                barrier,
-                meetsCondition: cfg.ifValue === 'Over' ? isOver : isUnder,
-                overProb: sample.filter(d => d > barrier).length / Math.max(1, sample.length) * 100,
-            };
-        }
-        // Matches uses the repeated digit as its barrier. Differs uses the
-        // most frequent recent digit as the barrier and only enters when the
-        // current digit is actually different from it.
-        const freq = Array.from({ length: 10 }, (_, i) => last.filter(d => d === i).length);
-        const maxDigit = freq.indexOf(Math.max(...freq));
-        const isMatch = sample.length === requiredDigits && sample.every(d => d === sample[0]);
-        const isDifferent = sample.length === requiredDigits &&
-            new Set(sample).size > 1 &&
-            sample[sample.length - 1] !== maxDigit;
-        return {
-            contract: matchesAction('Buy Matches') ? 'DIGITMATCH' : 'DIGITDIFF',
-            barrier: matchesAction('Buy Matches') ? (sample[0] ?? 0) : maxDigit,
-            meetsCondition: cfg.ifValue === 'Matches' ? isMatch : isDifferent,
-            freq,
-        };
-    }, []);
-
     // Start/stop a smart card bot
-    const toggleSmartCard = useCallback((id: SmartCardId, configOverride?: typeof smartCardCfg['risefall']) => {
+    const toggleSmartCard = useCallback((id: SmartCardId, configOverride?: SmartCardConfig) => {
         if (smartCardSess[id].running) {
             smartStopFlags.current[id] = true;
-            smartRunTokens.current[id] += 1;
+            invalidateSmartRun(smartRunTokens.current, id);
             return;
         }
 
         // Init run
         smartStopFlags.current[id] = false;
-        const runToken = smartRunTokens.current[id] + 1;
-        smartRunTokens.current[id] = runToken;
-        const isRunActive = () =>
-            smartRunTokens.current[id] === runToken && !smartStopFlags.current[id];
+        const runToken = beginSmartRun(smartRunTokens.current, id);
+        const isRunActive = () => isSmartRunActive(
+            smartRunTokens.current,
+            id,
+            runToken,
+            smartStopFlags.current[id],
+        );
         // Use the config from the rendered card when available. This avoids a
         // one-render race where the Bulk toggle is visibly ON but the ref
         // effect has not copied that edit before Start is clicked.
@@ -1089,7 +1013,8 @@ const AutoTrades: React.FC = () => {
                     if (!isRunActive()) break;
                     evaluatedTick = smartTickVersionRef.current;
 
-                    const trade = pickSmartTrade(id);
+                    const currentCfg = smartCardCfgRef.current[id] || cfg;
+                    const trade = pickSmartTradeDecision(id, smartDigitsRef.current, currentCfg, smartSharedDepthRef.current);
                     if (!trade.meetsCondition) {
                         // Conditions are tick-gated. Do not repeatedly buy while
                         // the same non-matching window is on screen.
@@ -1097,7 +1022,6 @@ const AutoTrades: React.FC = () => {
                     }
                     if (!isRunActive()) break;
                     const { contract, barrier } = trade;
-                    const currentCfg = smartCardCfgRef.current[id] || cfg;
                     const stk = Number(smartCurrentStakes.current[id]);
                     const sym = smartSharedSymbolRef.current;
                     if (!sym || !Number.isFinite(stk) || stk < 0.35) {
@@ -1109,7 +1033,7 @@ const AutoTrades: React.FC = () => {
                     // batch, never halfway through the current one.
                     const batchCount = Math.max(1, Math.min(100, Math.floor(currentCfg.bulkCount || 10)));
 
-            const batchId = `BATCH-${id}-${Date.now()}-${wins + losses}`;
+                    const batchId = `BATCH-${id}-${Date.now()}-${wins + losses}`;
                     const transactionId = `${batchId}-ORDER-1`;
                     const transactionTime = new Date().toLocaleTimeString('en', { hour12: false });
                     const batchTransactionIds = Array.from({ length: batchCount }, (_, index) =>
@@ -1331,7 +1255,7 @@ const AutoTrades: React.FC = () => {
                     await new Promise(r => setTimeout(r, isFastExecutionEnabled() ? 0 : 1500));
                 }
             }
-            if (smartRunTokens.current[id] === runToken) {
+            if (isSmartRunCurrent(smartRunTokens.current, id, runToken)) {
                 smartStopFlags.current[id] = false;
                 setSmartCardSess(prev => ({
                     ...prev,
@@ -1353,7 +1277,7 @@ const AutoTrades: React.FC = () => {
                 ...prev,
             ].slice(0, 50));
         });
-    }, [smartCardSess, buyAndWait, pickSmartTrade, updateSess]);
+    }, [smartCardSess, buyAndWait, updateSess]);
 
     // ── AI Bots state
     const [globalStake, setGlobalStake] = useState(1.0);
@@ -1454,8 +1378,8 @@ const AutoTrades: React.FC = () => {
                 const oddProb = 100 - evenProb;
 
                 // Over/Under (using each card's barrier)
-                 const ouAction = smartCardCfg.overunder.thenAction === 'Buy Over' ? 'Buy Over' : 'Buy Under';
-                 const ouBarrier = normalizeSmartBarrier(smartCardCfg.overunder.barrier, ouAction);
+                const ouAction = smartCardCfg.overunder.thenAction === 'Buy Over' ? 'Buy Over' : 'Buy Under';
+                const ouBarrier = normalizeSmartBarrier(smartCardCfg.overunder.barrier, ouAction);
                 const overCount = last.filter(d => d > ouBarrier).length;
                 const overProb = n > 0 ? (overCount / n) * 100 : 50;
                 const underProb = 100 - overProb;
