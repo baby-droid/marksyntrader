@@ -419,6 +419,7 @@ const AutoDigits = observer(() => {
     const validationRef = useRef({ key: '', wins: 0, attempt: 0, readyEpoch: 0 });
     const stakeRef = useRef(1);
     const lossStreakRef = useRef(0);
+    const recoveryEntryPendingRef = useRef(false);
     const nextIdRef = useRef(0);
     const lastCandidateRef = useRef<Candidate | null>(null);
     const pnlRef = useRef(0);
@@ -838,7 +839,11 @@ const AutoDigits = observer(() => {
         const safeRecoveryActive =
             lossesSinceRecoveryRef.current >= 2 &&
             safeRecoveryRunsRef.current < SAFE_RECOVERY_RUN_LIMIT;
-        const recoveryMode = lossStreakRef.current > 0 || recoveryDeficitRef.current > 0 || safeRecoveryActive;
+        const recoveryMode =
+            recoveryEntryPendingRef.current ||
+            lossStreakRef.current > 0 ||
+            recoveryDeficitRef.current > 0 ||
+            safeRecoveryActive;
         const bestCandidate = Object.values(marketCandidatesRef.current)
             .sort((a, b) =>
                 b.score - a.score ||
