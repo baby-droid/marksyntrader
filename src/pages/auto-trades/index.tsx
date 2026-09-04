@@ -20,6 +20,26 @@ function extractDigit(quote: any, pipSize: number): number {
     return parseInt(Number(quote).toFixed(pipSize).slice(-1), 10);
 }
 
+function normalizeSmartBarrier(value: unknown, action: string): number {
+    const parsed = Number(value);
+    const fallback = Number.isFinite(parsed) ? Math.floor(parsed) : 5;
+    // Deriv digit barriers are exclusive: Over cannot use 9 and Under cannot
+    // use 0. Keeping the value valid before proposal creation prevents the
+    // non-Even/Odd cards from failing when their condition finally fires.
+    if (action === 'Buy Over') return Math.max(0, Math.min(8, fallback));
+    if (action === 'Buy Under') return Math.max(1, Math.min(9, fallback));
+    return Math.max(0, Math.min(9, fallback));
+}
+
+function describeTradeError(error: unknown): string {
+    if (!error) return 'Trade request failed';
+    if (typeof error === 'string') return error;
+    const candidate = error as { message?: unknown; code?: unknown };
+    const message = typeof candidate.message === 'string' ? candidate.message : '';
+    const code = typeof candidate.code === 'string' ? candidate.code : '';
+    return [code, message].filter(Boolean).join(': ') || 'Trade request failed';
+}
+
 // ── Authenticated per-symbol live digit hook ─────────────────────────────────
 // Auto Trades must consume the same authorized API session as the rest of the
 // app. A second public socket can show a different tick stream and cannot trade
@@ -715,6 +735,12 @@ const AutoTrades: React.FC = () => {
     const smartStopFlags = useRef<Record<string, boolean>>({
         risefall: false, evenodd: false, overunder: false, matchdiffer: false,
     });
+    // A stop/start can happen while proposal, buy, or settlement is awaiting
+    // the authenticated socket. The token makes the old async loop stale
+    // immediately, so it cannot clear the new run's stop flag or buy again.
+    const smartRunTokens = useRef<Record<string, number>>({
+        risefall: 0, evenodd: 0, overunder: 0, matchdiffer: 0,
+    });
     const smartCurrentStakes = useRef<Record<string, number>>({
         risefall: 5, evenodd: 5, overunder: 5, matchdiffer: 5,
     });
@@ -792,11 +818,12 @@ const AutoTrades: React.FC = () => {
             };
         }
         if (id === 'overunder') {
-            const barrier = Math.max(0, Math.min(9, Math.floor(Number(cfg.barrier) || 0)));
+            const action = matchesAction('Buy Over') ? 'Buy Over' : 'Buy Under';
+            const barrier = normalizeSmartBarrier(cfg.barrier, action);
             const isOver = sample.length === requiredDigits && sample.every(d => d > barrier);
             const isUnder = sample.length === requiredDigits && sample.every(d => d < barrier);
             return {
-                contract: matchesAction('Buy Over') ? 'DIGITOVER' : 'DIGITUNDER',
+                contract: action === 'Buy Over' ? 'DIGITOVER' : 'DIGITUNDER',
                 barrier,
                 meetsCondition: cfg.ifValue === 'Over' ? isOver : isUnder,
                 overProb: sample.filter(d => d > barrier).length / Math.max(1, sample.length) * 100,
@@ -823,11 +850,16 @@ const AutoTrades: React.FC = () => {
     const toggleSmartCard = useCallback((id: SmartCardId, configOverride?: typeof smartCardCfg['risefall']) => {
         if (smartCardSess[id].running) {
             smartStopFlags.current[id] = true;
+            smartRunTokens.current[id] += 1;
             return;
         }
 
         // Init run
         smartStopFlags.current[id] = false;
+        const runToken = smartRunTokens.current[id] + 1;
+        smartRunTokens.current[id] = runToken;
+        const isRunActive = () =>
+            smartRunTokens.current[id] === runToken && !smartStopFlags.current[id];
         // Use the config from the rendered card when available. This avoids a
         // one-render race where the Bulk toggle is visibly ON but the ref
         // effect has not copied that edit before Start is clicked.
@@ -845,9 +877,10 @@ const AutoTrades: React.FC = () => {
         let waitUntilTick = 0;
 
         const loop = async () => {
-            while (!smartStopFlags.current[id]) {
+            while (isRunActive()) {
                 let pendingTransactionIds: string[] = [];
                 try {
+                    if (!isRunActive()) break;
                     const mode = smartExecutionModeRef.current;
                     const activeBulkOwner = SMART_CARD_IDS.find(cardId =>
                         smartCardCfgRef.current[cardId].bulkEnabled
@@ -862,10 +895,10 @@ const AutoTrades: React.FC = () => {
                     // Every card evaluates once per new authenticated tick.
                     // Without this gate Normal mode can buy repeatedly from
                     // the same already-matching digit window after settlement.
-                    while (!smartStopFlags.current[id] && smartTickVersionRef.current <= Math.max(evaluatedTick, waitUntilTick)) {
+                    while (isRunActive() && smartTickVersionRef.current <= Math.max(evaluatedTick, waitUntilTick)) {
                         await new Promise(r => setTimeout(r, 40));
                     }
-                    if (smartStopFlags.current[id]) break;
+                    if (!isRunActive()) break;
                     evaluatedTick = smartTickVersionRef.current;
 
                     const trade = pickSmartTrade(id);
@@ -874,17 +907,21 @@ const AutoTrades: React.FC = () => {
                         // the same non-matching window is on screen.
                         continue;
                     }
+                    if (!isRunActive()) break;
                     const { contract, barrier } = trade;
                     const currentCfg = smartCardCfgRef.current[id] || cfg;
-                    const stk = smartCurrentStakes.current[id];
+                    const stk = Number(smartCurrentStakes.current[id]);
                     const sym = smartSharedSymbolRef.current;
+                    if (!sym || !Number.isFinite(stk) || stk < 0.35) {
+                        throw new Error('Invalid symbol or stake');
+                    }
                     const batchEnabled = Boolean(currentCfg.bulkEnabled);
                     // Snapshot the edited count for this signal. Changes made
                     // while this batch is settling apply only to the next
                     // batch, never halfway through the current one.
                     const batchCount = Math.max(1, Math.min(100, Math.floor(currentCfg.bulkCount || 10)));
 
-                    const batchId = `BATCH-${id}-${Date.now()}-${wins + losses}`;
+            const batchId = `BATCH-${id}-${Date.now()}-${wins + losses}`;
                     const transactionId = `${batchId}-ORDER-1`;
                     const transactionTime = new Date().toLocaleTimeString('en', { hour12: false });
                     const batchTransactionIds = Array.from({ length: batchCount }, (_, index) =>
@@ -1057,7 +1094,7 @@ const AutoTrades: React.FC = () => {
                                 batch_size: 1,
                             },
                         });
-                        if (smartStopFlags.current[id]) break;
+                        if (!isRunActive()) break;
                         if (Number.isFinite(profit)) {
                             recordResult(profit);
                         } else {
@@ -1088,24 +1125,46 @@ const AutoTrades: React.FC = () => {
                     // card can enter again. For example, after "3 Even →
                     // Buy Odd", the next entry waits for three new ticks.
                     waitUntilTick = evaluatedTick + Math.max(1, Math.min(10, currentCfg.lookback || 3));
-                } catch {
+                } catch (error) {
                     // A proposal/buy failure is not a taken trade. Remove its
                     // optimistic OPEN row instead of leaving a phantom
                     // transaction in the Bot Builder-style history.
                     if (pendingTransactionIds.length) {
                         setTransactions(prev => prev.filter(transaction => !pendingTransactionIds.includes(transaction.id)));
                     }
+                    if (isRunActive()) {
+                        const message = describeTradeError(error);
+                        setJournal(prev => [
+                            `[${new Date().toLocaleTimeString('en', { hour12: false })}] [${id}] ${message}`,
+                            ...prev,
+                        ].slice(0, 50));
+                        updateSess(id, { lastLog: `⚠ ${message}` });
+                    }
                     await new Promise(r => setTimeout(r, isFastExecutionEnabled() ? 0 : 1500));
                 }
             }
-            smartStopFlags.current[id] = false;
-            setSmartCardSess(prev => ({
-                ...prev,
-                [id]: { ...prev[id], running: false, lastLog: `Stopped. P/L: ${fmtProfit(sessionProfit)}` },
-            }));
+            if (smartRunTokens.current[id] === runToken) {
+                smartStopFlags.current[id] = false;
+                setSmartCardSess(prev => ({
+                    ...prev,
+                    [id]: { ...prev[id], running: false, lastLog: `Stopped. P/L: ${fmtProfit(sessionProfit)}` },
+                }));
+            }
         };
 
-        loop(); // fire-and-forget async loop
+        // Keep the runner fire-and-forget, but never leave an unexpected
+        // exception as an unhandled promise rejection that can take down the
+        // Smart Trading page.
+        void loop().catch(error => {
+            if (smartRunTokens.current[id] !== runToken) return;
+            smartStopFlags.current[id] = true;
+            const message = describeTradeError(error);
+            updateSess(id, { running: false, lastLog: `⚠ ${message}` });
+            setJournal(prev => [
+                `[${new Date().toLocaleTimeString('en', { hour12: false })}] [${id}] ${message}`,
+                ...prev,
+            ].slice(0, 50));
+        });
     }, [smartCardSess, buyAndWait, pickSmartTrade, updateSess]);
 
     // ── AI Bots state
@@ -1207,7 +1266,8 @@ const AutoTrades: React.FC = () => {
                 const oddProb = 100 - evenProb;
 
                 // Over/Under (using each card's barrier)
-                const ouBarrier = smartCardCfg.overunder.barrier;
+                 const ouAction = smartCardCfg.overunder.thenAction === 'Buy Over' ? 'Buy Over' : 'Buy Under';
+                 const ouBarrier = normalizeSmartBarrier(smartCardCfg.overunder.barrier, ouAction);
                 const overCount = last.filter(d => d > ouBarrier).length;
                 const overProb = n > 0 ? (overCount / n) * 100 : 50;
                 const underProb = 100 - overProb;
