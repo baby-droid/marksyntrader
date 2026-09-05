@@ -3,7 +3,7 @@ name: Blockly XML validation
 description: Structural rules for hand-authored executable Blockly bot XML
 ---
 
-Hand-authored compact Blockly XML must close each child `value` or `statement` wrapper before closing its containing `block`; balanced tag counts alone are not enough.
+Hand-authored compact Blockly XML must close each child `value` or `statement` wrapper before closing its containing `block`; balanced tag counts are not enough. In nested inline comparisons, close the arithmetic block, its value wrapper, then the parent comparison value wrapper.
 
 **Why:** Inline nesting errors can leave the XML well-shaped enough to look plausible while Blockly rejects or silently drops parts of the bot during loading.
 
