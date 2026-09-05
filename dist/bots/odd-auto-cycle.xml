@@ -1,0 +1,255 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
+  <variables>
+    <variable id="oac_stake">stake</variable>
+    <variable id="oac_initial">initial_stake</variable>
+    <variable id="oac_mart">martingale</variable>
+    <variable id="oac_tp">take_profit</variable>
+    <variable id="oac_sl">stop_loss</variable>
+    <variable id="oac_weak">weak_even_entry</variable>
+    <variable id="oac_strong">strong_even_entry</variable>
+    <variable id="oac_last">last_digit</variable>
+    <variable id="oac_prev">previous_digit</variable>
+    <variable id="oac_prev2">previous_previous_digit</variable>
+    <variable id="oac_samples">sample_count</variable>
+    <variable id="oac_signal">signal</variable>
+  </variables>
+
+  <!-- ODD AUTO CYCLE
+       Weak signal: selected even digit -> DIGITODD.
+       Strong signal: selected even digit, selected even digit, then any odd
+       digit -> DIGITODD. The three-tick sequence is tracked by the previous
+       digit variables below. -->
+  <block type="trade_definition" id="oac_definition" deletable="false" x="0" y="40">
+    <statement name="TRADE_OPTIONS">
+      <block type="trade_definition_market" id="oac_market" deletable="false" movable="false">
+        <field name="MARKET_LIST">synthetic_index</field>
+        <field name="SUBMARKET_LIST">random_index</field>
+        <field name="SYMBOL_LIST">1HZ10V</field>
+        <next>
+          <block type="trade_definition_tradetype" id="oac_trade_type" deletable="false" movable="false">
+            <field name="TRADETYPECAT_LIST">digits</field>
+            <field name="TRADETYPE_LIST">evenodd</field>
+            <next>
+              <block type="trade_definition_contracttype" id="oac_contract_type" deletable="false" movable="false">
+                <field name="TYPE_LIST">DIGITODD</field>
+                <next>
+                  <block type="trade_definition_candleinterval" id="oac_candle" deletable="false" movable="false">
+                    <field name="CANDLEINTERVAL_LIST">60</field>
+                    <next>
+                      <block type="trade_definition_restartbuysell" id="oac_restart_buy" deletable="false" movable="false">
+                        <field name="TIME_MACHINE_ENABLED">FALSE</field>
+                        <next>
+                          <block type="trade_definition_restartonerror" id="oac_restart_error" deletable="false" movable="false">
+                            <field name="RESTARTONERROR">TRUE</field>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="INITIALIZATION">
+      <block type="variables_set" id="oac_init_stake">
+        <field name="VAR" id="oac_initial">initial_stake</field>
+        <value name="VALUE"><block type="math_number" id="oac_init_stake_value"><field name="NUM">0.35</field></block></value>
+        <next>
+          <block type="variables_set" id="oac_init_mart">
+            <field name="VAR" id="oac_mart">martingale</field>
+            <value name="VALUE"><block type="math_number" id="oac_init_mart_value"><field name="NUM">2</field></block></value>
+            <next>
+              <block type="variables_set" id="oac_init_tp">
+                <field name="VAR" id="oac_tp">take_profit</field>
+                <value name="VALUE"><block type="math_number" id="oac_init_tp_value"><field name="NUM">5</field></block></value>
+                <next>
+                  <block type="variables_set" id="oac_init_sl">
+                    <field name="VAR" id="oac_sl">stop_loss</field>
+                    <value name="VALUE"><block type="math_number" id="oac_init_sl_value"><field name="NUM">10</field></block></value>
+                    <next>
+                      <block type="variables_set" id="oac_init_weak">
+                        <field name="VAR" id="oac_weak">weak_even_entry</field>
+                        <value name="VALUE"><block type="math_number" id="oac_init_weak_value"><field name="NUM">0</field></block></value>
+                        <next>
+                          <block type="variables_set" id="oac_init_strong">
+                            <field name="VAR" id="oac_strong">strong_even_entry</field>
+                            <value name="VALUE"><block type="math_number" id="oac_init_strong_value"><field name="NUM">2</field></block></value>
+                            <next>
+                              <block type="variables_set" id="oac_init_current_stake">
+                                <field name="VAR" id="oac_stake">stake</field>
+                                <value name="VALUE"><block type="variables_get" id="oac_initial_stake_get"><field name="VAR" id="oac_initial">initial_stake</field></block></value>
+                                <next>
+                                  <block type="variables_set" id="oac_init_prev">
+                                    <field name="VAR" id="oac_prev">previous_digit</field>
+                                    <value name="VALUE"><block type="math_number" id="oac_init_prev_value"><field name="NUM">-1</field></block></value>
+                                    <next>
+                                      <block type="variables_set" id="oac_init_prev2">
+                                        <field name="VAR" id="oac_prev2">previous_previous_digit</field>
+                                        <value name="VALUE"><block type="math_number" id="oac_init_prev2_value"><field name="NUM">-1</field></block></value>
+                                        <next>
+                                          <block type="variables_set" id="oac_init_samples">
+                                            <field name="VAR" id="oac_samples">sample_count</field>
+                                            <value name="VALUE"><block type="math_number" id="oac_init_samples_value"><field name="NUM">0</field></block></value>
+                                            <next>
+                                              <block type="text_print" id="oac_init_message">
+                                                <value name="TEXT"><block type="text" id="oac_init_message_text"><field name="TEXT">ODD AUTO CYCLE started — waiting for weak/strong Even signals</field></block></value>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="SUBMARKET">
+      <block type="trade_definition_tradeoptions" id="oac_options" deletable="false" movable="false">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="false"></mutation>
+        <field name="DURATIONTYPE_LIST">t</field>
+        <value name="DURATION"><shadow type="math_number_positive" id="oac_duration"><field name="NUM">1</field></shadow></value>
+        <value name="AMOUNT">
+          <shadow type="math_number_positive" id="oac_amount_shadow"><field name="NUM">0.35</field></shadow>
+          <block type="variables_get" id="oac_amount"><field name="VAR" id="oac_stake">stake</field></block>
+        </value>
+      </block>
+    </statement>
+  </block>
+
+  <block type="before_purchase" id="oac_before_purchase" deletable="false" x="0" y="700">
+    <statement name="BEFOREPURCHASE_STACK">
+      <block type="variables_set" id="oac_capture_digit">
+        <field name="VAR" id="oac_last">last_digit</field>
+        <value name="VALUE"><block type="last_digit" id="oac_last_digit"></block></value>
+        <next>
+          <block type="variables_set" id="oac_clear_signal">
+            <field name="VAR" id="oac_signal">signal</field>
+            <value name="VALUE"><block type="math_number" id="oac_clear_signal_value"><field name="NUM">0</field></block></value>
+            <next>
+              <block type="controls_if" id="oac_signal_router">
+                <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                <value name="IF0">
+                  <block type="logic_compare" id="oac_weak_check"><field name="OP">EQ</field>
+                    <value name="A"><block type="variables_get" id="oac_weak_last"><field name="VAR" id="oac_last">last_digit</field></block></value>
+                    <value name="B"><block type="variables_get" id="oac_weak_value"><field name="VAR" id="oac_weak">weak_even_entry</field></block></value>
+                  </block>
+                </value>
+                <statement name="DO0">
+                  <block type="variables_set" id="oac_weak_signal">
+                    <field name="VAR" id="oac_signal">signal</field>
+                    <value name="VALUE"><block type="math_number" id="oac_weak_signal_value"><field name="NUM">1</field></block></value>
+                    <next><block type="notify" id="oac_weak_notice"><field name="NOTIFICATION_TYPE">info</field><field name="NOTIFICATION_SOUND">ding</field><value name="MESSAGE"><block type="text" id="oac_weak_notice_text"><field name="TEXT">ODD CYCLE weak Even signal → BUY DIGITODD</field></block></value></block></next>
+                  </block>
+                </statement>
+                <statement name="ELSE">
+                  <block type="controls_if" id="oac_strong_router">
+                    <value name="IF0">
+                      <block type="logic_operation" id="oac_strong_and_1"><field name="OP">AND</field>
+                        <value name="A">
+                          <block type="logic_operation" id="oac_strong_and_2"><field name="OP">AND</field>
+                            <value name="A"><block type="logic_compare" id="oac_sample_check"><field name="OP">GTE</field><value name="A"><block type="variables_get" id="oac_sample_count"><field name="VAR" id="oac_samples">sample_count</field></block></value><value name="B"><block type="math_number" id="oac_sample_min"><field name="NUM">2</field></block></value></block></value>
+                            <value name="B"><block type="logic_compare" id="oac_old_strong_check"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="oac_old_strong"><field name="VAR" id="oac_prev2">previous_previous_digit</field></block></value><value name="B"><block type="variables_get" id="oac_old_strong_value"><field name="VAR" id="oac_strong">strong_even_entry</field></block></value></block></value>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <block type="logic_operation" id="oac_strong_and_3"><field name="OP">AND</field>
+                            <value name="A"><block type="logic_compare" id="oac_recent_strong_check"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="oac_recent_strong"><field name="VAR" id="oac_prev">previous_digit</field></block></value><value name="B"><block type="variables_get" id="oac_recent_strong_value"><field name="VAR" id="oac_strong">strong_even_entry</field></block></value></block></value>
+                            <value name="B"><block type="logic_compare" id="oac_current_odd_check"><field name="OP">EQ</field><value name="A"><block type="math_arithmetic" id="oac_current_mod"><field name="OP">MODULO</field><value name="A"><block type="variables_get" id="oac_current_mod_value"><field name="VAR" id="oac_last">last_digit</field></block></value><value name="B"><block type="math_number" id="oac_mod_base"><field name="NUM">2</field></block></value></block></value><value name="B"><block type="math_number" id="oac_odd_value"><field name="NUM">1</field></block></value></block></value>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                    <statement name="DO0">
+                      <block type="variables_set" id="oac_strong_signal">
+                        <field name="VAR" id="oac_signal">signal</field>
+                        <value name="VALUE"><block type="math_number" id="oac_strong_signal_value"><field name="NUM">1</field></block></value>
+                        <next><block type="notify" id="oac_strong_notice"><field name="NOTIFICATION_TYPE">info</field><field name="NOTIFICATION_SOUND">ding</field><value name="MESSAGE"><block type="text" id="oac_strong_notice_text"><field name="TEXT">ODD CYCLE strong Even ×2 → Odd signal → BUY DIGITODD</field></block></value></block></next>
+                      </block>
+                    </statement>
+                  </block>
+                </statement>
+                <next>
+                  <block type="variables_set" id="oac_shift_prev2">
+                    <field name="VAR" id="oac_prev2">previous_previous_digit</field>
+                    <value name="VALUE"><block type="variables_get" id="oac_shift_prev2_value"><field name="VAR" id="oac_prev">previous_digit</field></block></value>
+                    <next>
+                      <block type="variables_set" id="oac_shift_prev">
+                        <field name="VAR" id="oac_prev">previous_digit</field>
+                        <value name="VALUE"><block type="variables_get" id="oac_shift_prev_value"><field name="VAR" id="oac_last">last_digit</field></block></value>
+                        <next>
+                          <block type="math_change" id="oac_increment_samples">
+                            <field name="VAR" id="oac_samples">sample_count</field>
+                            <value name="DELTA"><shadow type="math_number" id="oac_increment_value"><field name="NUM">1</field></shadow></value>
+                            <next>
+                              <block type="controls_if" id="oac_purchase_gate">
+                                <value name="IF0"><block type="logic_compare" id="oac_purchase_check"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="oac_purchase_signal"><field name="VAR" id="oac_signal">signal</field></block></value><value name="B"><block type="math_number" id="oac_purchase_one"><field name="NUM">1</field></block></value></block></value>
+                                <statement name="DO0"><block type="purchase" id="oac_purchase"><field name="PURCHASE_LIST">DIGITODD</field></block></statement>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+
+  <block type="after_purchase" id="oac_after_purchase" deletable="false" x="0" y="1180">
+    <statement name="AFTERPURCHASE_STACK">
+      <block type="controls_if" id="oac_result">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+        <value name="IF0"><block type="contract_check_result" id="oac_win_check"><field name="CHECK_RESULT">win</field></block></value>
+        <statement name="DO0">
+          <block type="variables_set" id="oac_win_reset">
+            <field name="VAR" id="oac_stake">stake</field>
+            <value name="VALUE"><block type="variables_get" id="oac_win_initial"><field name="VAR" id="oac_initial">initial_stake</field></block></value>
+            <next><block type="notify" id="oac_win_notice"><field name="NOTIFICATION_TYPE">success</field><field name="NOTIFICATION_SOUND">earned-money</field><value name="MESSAGE"><block type="text" id="oac_win_text"><field name="TEXT">ODD AUTO CYCLE WIN — stake reset</field></block></value></block></next>
+          </block>
+        </statement>
+        <statement name="ELSE">
+          <block type="variables_set" id="oac_loss_progress">
+            <field name="VAR" id="oac_stake">stake</field>
+            <value name="VALUE"><block type="math_arithmetic" id="oac_loss_multiply"><field name="OP">MULTIPLY</field><value name="A"><block type="variables_get" id="oac_loss_stake"><field name="VAR" id="oac_stake">stake</field></block></value><value name="B"><block type="variables_get" id="oac_loss_mart"><field name="VAR" id="oac_mart">martingale</field></block></value></block></value>
+            <next><block type="notify" id="oac_loss_notice"><field name="NOTIFICATION_TYPE">warning</field><field name="NOTIFICATION_SOUND">error</field><value name="MESSAGE"><block type="text" id="oac_loss_text"><field name="TEXT">ODD AUTO CYCLE LOSS — martingale advanced</field></block></value></block></next>
+          </block>
+        </statement>
+        <next>
+          <block type="controls_if" id="oac_risk">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+            <value name="IF0"><block type="logic_compare" id="oac_tp_check"><field name="OP">GTE</field><value name="A"><block type="total_profit" id="oac_tp_profit"></block></value><value name="B"><block type="variables_get" id="oac_tp_value"><field name="VAR" id="oac_tp">take_profit</field></block></value></block></value>
+            <statement name="DO0"><block type="notify" id="oac_tp_notice"><field name="NOTIFICATION_TYPE">success</field><field name="NOTIFICATION_SOUND">earned-money</field><value name="MESSAGE"><block type="text" id="oac_tp_text"><field name="TEXT">ODD AUTO CYCLE TAKE PROFIT reached — bot stopped</field></block></value></block></statement>
+            <statement name="ELSE">
+              <block type="controls_if" id="oac_sl_router">
+                <value name="IF0"><block type="logic_compare" id="oac_sl_check"><field name="OP">LTE</field><value name="A"><block type="total_profit" id="oac_sl_profit"></block></value><value name="B"><block type="math_arithmetic" id="oac_sl_negative"><field name="OP">MULTIPLY</field><value name="A"><block type="math_number" id="oac_sl_minus_one"><field name="NUM">-1</field></block></value><value name="B"><block type="variables_get" id="oac_sl_value"><field name="VAR" id="oac_sl">stop_loss</field></block></value></block></value></block>
+                <statement name="DO0"><block type="notify" id="oac_sl_notice"><field name="NOTIFICATION_TYPE">danger</field><field name="NOTIFICATION_SOUND">error</field><value name="MESSAGE"><block type="text" id="oac_sl_text"><field name="TEXT">ODD AUTO CYCLE STOP LOSS reached — bot stopped</field></block></value></block></statement>
+                <statement name="ELSE"><block type="trade_again" id="oac_trade_again"></block></statement>
+              </block>
+            </statement>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+</xml>

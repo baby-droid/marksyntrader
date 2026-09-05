@@ -28,6 +28,8 @@ const FREE_BOTS_LIST = [
     { id: 'under-cycle-auto', name: 'Under Cycle Auto', market: 'V50 1s', badge: 'UNDER CYCLE', badgeColor: '#38bdf8', xmlFile: '/bots/under-cycle-auto.xml', icon: '🔄' },
     { id: 'ahmed-over-cycle', name: 'Ahmed Over Cycle', market: 'V50 1s', badge: 'AHMED OVER', badgeColor: '#fb7185', xmlFile: '/bots/ahmed-over-cycle.xml', icon: '⚡' },
     { id: 'differs-edge-scanner', name: 'Differs Edge Scanner — Recovery Matrix', market: 'V50 1s', badge: 'SCAN 🧠', badgeColor: '#34d399', xmlFile: '/bots/differs-edge-scanner.xml', icon: '🔎' },
+    { id: 'odd-auto-cycle', name: 'ODD AUTO CYCLE', market: 'V10 1s', badge: 'ODD CYCLE', badgeColor: '#f43f5e', xmlFile: '/bots/odd-auto-cycle.xml', icon: '🔴' },
+    { id: 'even-auto-cycle', name: 'EVEN AUTO CYCLE', market: 'V10 1s', badge: 'EVEN CYCLE', badgeColor: '#3b82f6', xmlFile: '/bots/even-auto-cycle.xml', icon: '🔵' },
     {
         id: 'ahmed-differs-cycle',
         name: 'AHMED DIFFERS CYCLE',

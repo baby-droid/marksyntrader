@@ -1,0 +1,254 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
+  <variables>
+    <variable id="eac_stake">stake</variable>
+    <variable id="eac_initial">initial_stake</variable>
+    <variable id="eac_mart">martingale</variable>
+    <variable id="eac_tp">take_profit</variable>
+    <variable id="eac_sl">stop_loss</variable>
+    <variable id="eac_weak">weak_odd_entry</variable>
+    <variable id="eac_strong">strong_odd_entry</variable>
+    <variable id="eac_last">last_digit</variable>
+    <variable id="eac_prev">previous_digit</variable>
+    <variable id="eac_prev2">previous_previous_digit</variable>
+    <variable id="eac_samples">sample_count</variable>
+    <variable id="eac_signal">signal</variable>
+  </variables>
+
+  <!-- EVEN AUTO CYCLE
+       Weak signal: selected odd digit -> DIGITEVEN.
+       Strong signal: selected odd digit, selected odd digit, then any even
+       digit -> DIGITEVEN. -->
+  <block type="trade_definition" id="eac_definition" deletable="false" x="0" y="40">
+    <statement name="TRADE_OPTIONS">
+      <block type="trade_definition_market" id="eac_market" deletable="false" movable="false">
+        <field name="MARKET_LIST">synthetic_index</field>
+        <field name="SUBMARKET_LIST">random_index</field>
+        <field name="SYMBOL_LIST">1HZ10V</field>
+        <next>
+          <block type="trade_definition_tradetype" id="eac_trade_type" deletable="false" movable="false">
+            <field name="TRADETYPECAT_LIST">digits</field>
+            <field name="TRADETYPE_LIST">evenodd</field>
+            <next>
+              <block type="trade_definition_contracttype" id="eac_contract_type" deletable="false" movable="false">
+                <field name="TYPE_LIST">DIGITEVEN</field>
+                <next>
+                  <block type="trade_definition_candleinterval" id="eac_candle" deletable="false" movable="false">
+                    <field name="CANDLEINTERVAL_LIST">60</field>
+                    <next>
+                      <block type="trade_definition_restartbuysell" id="eac_restart_buy" deletable="false" movable="false">
+                        <field name="TIME_MACHINE_ENABLED">FALSE</field>
+                        <next>
+                          <block type="trade_definition_restartonerror" id="eac_restart_error" deletable="false" movable="false">
+                            <field name="RESTARTONERROR">TRUE</field>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="INITIALIZATION">
+      <block type="variables_set" id="eac_init_stake">
+        <field name="VAR" id="eac_initial">initial_stake</field>
+        <value name="VALUE"><block type="math_number" id="eac_init_stake_value"><field name="NUM">0.35</field></block></value>
+        <next>
+          <block type="variables_set" id="eac_init_mart">
+            <field name="VAR" id="eac_mart">martingale</field>
+            <value name="VALUE"><block type="math_number" id="eac_init_mart_value"><field name="NUM">2</field></block></value>
+            <next>
+              <block type="variables_set" id="eac_init_tp">
+                <field name="VAR" id="eac_tp">take_profit</field>
+                <value name="VALUE"><block type="math_number" id="eac_init_tp_value"><field name="NUM">5</field></block></value>
+                <next>
+                  <block type="variables_set" id="eac_init_sl">
+                    <field name="VAR" id="eac_sl">stop_loss</field>
+                    <value name="VALUE"><block type="math_number" id="eac_init_sl_value"><field name="NUM">10</field></block></value>
+                    <next>
+                      <block type="variables_set" id="eac_init_weak">
+                        <field name="VAR" id="eac_weak">weak_odd_entry</field>
+                        <value name="VALUE"><block type="math_number" id="eac_init_weak_value"><field name="NUM">1</field></block></value>
+                        <next>
+                          <block type="variables_set" id="eac_init_strong">
+                            <field name="VAR" id="eac_strong">strong_odd_entry</field>
+                            <value name="VALUE"><block type="math_number" id="eac_init_strong_value"><field name="NUM">3</field></block></value>
+                            <next>
+                              <block type="variables_set" id="eac_init_current_stake">
+                                <field name="VAR" id="eac_stake">stake</field>
+                                <value name="VALUE"><block type="variables_get" id="eac_initial_stake_get"><field name="VAR" id="eac_initial">initial_stake</field></block></value>
+                                <next>
+                                  <block type="variables_set" id="eac_init_prev">
+                                    <field name="VAR" id="eac_prev">previous_digit</field>
+                                    <value name="VALUE"><block type="math_number" id="eac_init_prev_value"><field name="NUM">-1</field></block></value>
+                                    <next>
+                                      <block type="variables_set" id="eac_init_prev2">
+                                        <field name="VAR" id="eac_prev2">previous_previous_digit</field>
+                                        <value name="VALUE"><block type="math_number" id="eac_init_prev2_value"><field name="NUM">-1</field></block></value>
+                                        <next>
+                                          <block type="variables_set" id="eac_init_samples">
+                                            <field name="VAR" id="eac_samples">sample_count</field>
+                                            <value name="VALUE"><block type="math_number" id="eac_init_samples_value"><field name="NUM">0</field></block></value>
+                                            <next>
+                                              <block type="text_print" id="eac_init_message">
+                                                <value name="TEXT"><block type="text" id="eac_init_message_text"><field name="TEXT">EVEN AUTO CYCLE started — waiting for weak/strong Odd signals</field></block></value>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="SUBMARKET">
+      <block type="trade_definition_tradeoptions" id="eac_options" deletable="false" movable="false">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="false"></mutation>
+        <field name="DURATIONTYPE_LIST">t</field>
+        <value name="DURATION"><shadow type="math_number_positive" id="eac_duration"><field name="NUM">1</field></shadow></value>
+        <value name="AMOUNT">
+          <shadow type="math_number_positive" id="eac_amount_shadow"><field name="NUM">0.35</field></shadow>
+          <block type="variables_get" id="eac_amount"><field name="VAR" id="eac_stake">stake</field></block>
+        </value>
+      </block>
+    </statement>
+  </block>
+
+  <block type="before_purchase" id="eac_before_purchase" deletable="false" x="0" y="700">
+    <statement name="BEFOREPURCHASE_STACK">
+      <block type="variables_set" id="eac_capture_digit">
+        <field name="VAR" id="eac_last">last_digit</field>
+        <value name="VALUE"><block type="last_digit" id="eac_last_digit"></block></value>
+        <next>
+          <block type="variables_set" id="eac_clear_signal">
+            <field name="VAR" id="eac_signal">signal</field>
+            <value name="VALUE"><block type="math_number" id="eac_clear_signal_value"><field name="NUM">0</field></block></value>
+            <next>
+              <block type="controls_if" id="eac_signal_router">
+                <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                <value name="IF0">
+                  <block type="logic_compare" id="eac_weak_check"><field name="OP">EQ</field>
+                    <value name="A"><block type="variables_get" id="eac_weak_last"><field name="VAR" id="eac_last">last_digit</field></block></value>
+                    <value name="B"><block type="variables_get" id="eac_weak_value"><field name="VAR" id="eac_weak">weak_odd_entry</field></block></value>
+                  </block>
+                </value>
+                <statement name="DO0">
+                  <block type="variables_set" id="eac_weak_signal">
+                    <field name="VAR" id="eac_signal">signal</field>
+                    <value name="VALUE"><block type="math_number" id="eac_weak_signal_value"><field name="NUM">1</field></block></value>
+                    <next><block type="notify" id="eac_weak_notice"><field name="NOTIFICATION_TYPE">info</field><field name="NOTIFICATION_SOUND">ding</field><value name="MESSAGE"><block type="text" id="eac_weak_notice_text"><field name="TEXT">EVEN CYCLE weak Odd signal → BUY DIGITEVEN</field></block></value></block></next>
+                  </block>
+                </statement>
+                <statement name="ELSE">
+                  <block type="controls_if" id="eac_strong_router">
+                    <value name="IF0">
+                      <block type="logic_operation" id="eac_strong_and_1"><field name="OP">AND</field>
+                        <value name="A">
+                          <block type="logic_operation" id="eac_strong_and_2"><field name="OP">AND</field>
+                            <value name="A"><block type="logic_compare" id="eac_sample_check"><field name="OP">GTE</field><value name="A"><block type="variables_get" id="eac_sample_count"><field name="VAR" id="eac_samples">sample_count</field></block></value><value name="B"><block type="math_number" id="eac_sample_min"><field name="NUM">2</field></block></value></block></value>
+                            <value name="B"><block type="logic_compare" id="eac_old_strong_check"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="eac_old_strong"><field name="VAR" id="eac_prev2">previous_previous_digit</field></block></value><value name="B"><block type="variables_get" id="eac_old_strong_value"><field name="VAR" id="eac_strong">strong_odd_entry</field></block></value></block></value>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <block type="logic_operation" id="eac_strong_and_3"><field name="OP">AND</field>
+                            <value name="A"><block type="logic_compare" id="eac_recent_strong_check"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="eac_recent_strong"><field name="VAR" id="eac_prev">previous_digit</field></block></value><value name="B"><block type="variables_get" id="eac_recent_strong_value"><field name="VAR" id="eac_strong">strong_odd_entry</field></block></value></block></value>
+                            <value name="B"><block type="logic_compare" id="eac_current_even_check"><field name="OP">EQ</field><value name="A"><block type="math_arithmetic" id="eac_current_mod"><field name="OP">MODULO</field><value name="A"><block type="variables_get" id="eac_current_mod_value"><field name="VAR" id="eac_last">last_digit</field></block></value><value name="B"><block type="math_number" id="eac_mod_base"><field name="NUM">2</field></block></value></block><value name="B"><block type="math_number" id="eac_even_value"><field name="NUM">0</field></block></value></block></value>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                    <statement name="DO0">
+                      <block type="variables_set" id="eac_strong_signal">
+                        <field name="VAR" id="eac_signal">signal</field>
+                        <value name="VALUE"><block type="math_number" id="eac_strong_signal_value"><field name="NUM">1</field></block></value>
+                        <next><block type="notify" id="eac_strong_notice"><field name="NOTIFICATION_TYPE">info</field><field name="NOTIFICATION_SOUND">ding</field><value name="MESSAGE"><block type="text" id="eac_strong_notice_text"><field name="TEXT">EVEN CYCLE strong Odd ×2 → Even signal → BUY DIGITEVEN</field></block></value></block></next>
+                      </block>
+                    </statement>
+                  </block>
+                </statement>
+                <next>
+                  <block type="variables_set" id="eac_shift_prev2">
+                    <field name="VAR" id="eac_prev2">previous_previous_digit</field>
+                    <value name="VALUE"><block type="variables_get" id="eac_shift_prev2_value"><field name="VAR" id="eac_prev">previous_digit</field></block></value>
+                    <next>
+                      <block type="variables_set" id="eac_shift_prev">
+                        <field name="VAR" id="eac_prev">previous_digit</field>
+                        <value name="VALUE"><block type="variables_get" id="eac_shift_prev_value"><field name="VAR" id="eac_last">last_digit</field></block></value>
+                        <next>
+                          <block type="math_change" id="eac_increment_samples">
+                            <field name="VAR" id="eac_samples">sample_count</field>
+                            <value name="DELTA"><shadow type="math_number" id="eac_increment_value"><field name="NUM">1</field></shadow></value>
+                            <next>
+                              <block type="controls_if" id="eac_purchase_gate">
+                                <value name="IF0"><block type="logic_compare" id="eac_purchase_check"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="eac_purchase_signal"><field name="VAR" id="eac_signal">signal</field></block></value><value name="B"><block type="math_number" id="eac_purchase_one"><field name="NUM">1</field></block></value></block></value>
+                                <statement name="DO0"><block type="purchase" id="eac_purchase"><field name="PURCHASE_LIST">DIGITEVEN</field></block></statement>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+
+  <block type="after_purchase" id="eac_after_purchase" deletable="false" x="0" y="1180">
+    <statement name="AFTERPURCHASE_STACK">
+      <block type="controls_if" id="eac_result">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+        <value name="IF0"><block type="contract_check_result" id="eac_win_check"><field name="CHECK_RESULT">win</field></block></value>
+        <statement name="DO0">
+          <block type="variables_set" id="eac_win_reset">
+            <field name="VAR" id="eac_stake">stake</field>
+            <value name="VALUE"><block type="variables_get" id="eac_win_initial"><field name="VAR" id="eac_initial">initial_stake</field></block></value>
+            <next><block type="notify" id="eac_win_notice"><field name="NOTIFICATION_TYPE">success</field><field name="NOTIFICATION_SOUND">earned-money</field><value name="MESSAGE"><block type="text" id="eac_win_text"><field name="TEXT">EVEN AUTO CYCLE WIN — stake reset</field></block></value></block></next>
+          </block>
+        </statement>
+        <statement name="ELSE">
+          <block type="variables_set" id="eac_loss_progress">
+            <field name="VAR" id="eac_stake">stake</field>
+            <value name="VALUE"><block type="math_arithmetic" id="eac_loss_multiply"><field name="OP">MULTIPLY</field><value name="A"><block type="variables_get" id="eac_loss_stake"><field name="VAR" id="eac_stake">stake</field></block></value><value name="B"><block type="variables_get" id="eac_loss_mart"><field name="VAR" id="eac_mart">martingale</field></block></value></block></value>
+            <next><block type="notify" id="eac_loss_notice"><field name="NOTIFICATION_TYPE">warning</field><field name="NOTIFICATION_SOUND">error</field><value name="MESSAGE"><block type="text" id="eac_loss_text"><field name="TEXT">EVEN AUTO CYCLE LOSS — martingale advanced</field></block></value></block></next>
+          </block>
+        </statement>
+        <next>
+          <block type="controls_if" id="eac_risk">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+            <value name="IF0"><block type="logic_compare" id="eac_tp_check"><field name="OP">GTE</field><value name="A"><block type="total_profit" id="eac_tp_profit"></block></value><value name="B"><block type="variables_get" id="eac_tp_value"><field name="VAR" id="eac_tp">take_profit</field></block></value></block></value>
+            <statement name="DO0"><block type="notify" id="eac_tp_notice"><field name="NOTIFICATION_TYPE">success</field><field name="NOTIFICATION_SOUND">earned-money</field><value name="MESSAGE"><block type="text" id="eac_tp_text"><field name="TEXT">EVEN AUTO CYCLE TAKE PROFIT reached — bot stopped</field></block></value></block></statement>
+            <statement name="ELSE">
+              <block type="controls_if" id="eac_sl_router">
+                <value name="IF0"><block type="logic_compare" id="eac_sl_check"><field name="OP">LTE</field><value name="A"><block type="total_profit" id="eac_sl_profit"></block></value><value name="B"><block type="math_arithmetic" id="eac_sl_negative"><field name="OP">MULTIPLY</field><value name="A"><block type="math_number" id="eac_sl_minus_one"><field name="NUM">-1</field></block></value><value name="B"><block type="variables_get" id="eac_sl_value"><field name="VAR" id="eac_sl">stop_loss</field></block></value></block></value></block>
+                <statement name="DO0"><block type="notify" id="eac_sl_notice"><field name="NOTIFICATION_TYPE">danger</field><field name="NOTIFICATION_SOUND">error</field><value name="MESSAGE"><block type="text" id="eac_sl_text"><field name="TEXT">EVEN AUTO CYCLE STOP LOSS reached — bot stopped</field></block></value></block></statement>
+                <statement name="ELSE"><block type="trade_again" id="eac_trade_again"></block></statement>
+              </block>
+            </statement>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+</xml>

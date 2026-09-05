@@ -62,6 +62,24 @@ const FREE_BOTS = [
     xmlFile: '/bots/ahmed-auto-odd.xml',
     badge: 'AUTO ODD', badgeColor: '#60a5fa', icon: '🔢', winRate: '—',
   },
+  {
+    id: 'odd-auto-cycle',
+    name: 'ODD AUTO CYCLE',
+    description: '🔴 Weak Even → DIGITODD, or selected Strong Even ×2 followed by an Odd digit → DIGITODD. Editable entry digits with martingale and TP/SL.',
+    category: 'Even/Odd', market: 'V10 1s', type: 'DIGITODD', prediction: 'ODD',
+    xmlFile: '/bots/odd-auto-cycle.xml',
+    badge: 'ODD CYCLE', badgeColor: '#f43f5e', icon: '🔴', winRate: '—',
+    theme: 'odd-auto-cycle',
+  },
+  {
+    id: 'even-auto-cycle',
+    name: 'EVEN AUTO CYCLE',
+    description: '🔵 Weak Odd → DIGITEVEN, or selected Strong Odd ×2 followed by an Even digit → DIGITEVEN. Editable entry digits with martingale and TP/SL.',
+    category: 'Even/Odd', market: 'V10 1s', type: 'DIGITEVEN', prediction: 'EVEN',
+    xmlFile: '/bots/even-auto-cycle.xml',
+    badge: 'EVEN CYCLE', badgeColor: '#3b82f6', icon: '🔵', winRate: '—',
+    theme: 'even-auto-cycle',
+  },
   // ── Recovery barrier bots ────────────────────────────────────────────────
   {
     id: 'recovery-over1-over3',
