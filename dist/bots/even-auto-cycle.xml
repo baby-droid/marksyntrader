@@ -31,7 +31,7 @@
             <field name="TRADETYPE_LIST">evenodd</field>
             <next>
               <block type="trade_definition_contracttype" id="eac_contract_type" deletable="false" movable="false">
-                <field name="TYPE_LIST">DIGITEVEN</field>
+                <field name="TYPE_LIST">both</field>
                 <next>
                   <block type="trade_definition_candleinterval" id="eac_candle" deletable="false" movable="false">
                     <field name="CANDLEINTERVAL_LIST">60</field>
