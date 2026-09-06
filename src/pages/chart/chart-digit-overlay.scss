@@ -77,6 +77,18 @@
         overflow: visible !important; /* must be visible so title dropdown floats above canvas */
     }
 
+    /* SmartChart's canvas layer needs an explicit height when it is nested in
+       the flex chart column. Without this, the canvas can mount at zero height
+       and the quote line is technically present but invisible. */
+    .dashboard__chart-wrapper,
+    .dashboard__chart-wrapper > .smartcharts,
+    .dashboard__chart-wrapper > .smartcharts-desktop,
+    .dashboard__chart-wrapper .ciq-chart,
+    .dashboard__chart-wrapper .ciq-chart-area,
+    .dashboard__chart-wrapper canvas {
+        min-height: 0 !important;
+    }
+
     /* SmartChart root canvas containers */
     > div, .sc-chart-layout, .chartWrapper, [class*="chart-"] {
         width: 100% !important;

@@ -190,7 +190,7 @@
  * chart owns its zoom navigation, but its toolbar can otherwise be placed
  * behind the chart canvas by the surrounding workspace layout.
  *
- * This is the compact right-side rail shown in the Smart Chart reference:
+ * This is the compact left-side rail shown in the Smart Chart reference:
  * chart type, views, drawing tools, indicators, and download/share. The
  * controls remain SmartChart's native components so their menus and drawing
  * state continue to be managed by the chart itself. */
@@ -217,13 +217,14 @@
         display: flex;
         flex-direction: column;
         gap: 8px;
-        left: auto !important;
+        left: 12px !important;
         overflow: visible;
         padding: 0 !important;
         pointer-events: auto;
         position: absolute !important;
-        right: 12px !important;
-        top: 72px !important;
+        right: auto !important;
+        top: 50% !important;
+        transform: translateY(-50%);
         bottom: auto !important;
         width: 40px !important;
         visibility: visible !important;
@@ -249,7 +250,7 @@
         outline-offset: 2px;
     }
 
-    /* Keep the right-rail popovers above the chart canvas and trade overlay. */
+    /* Keep the left-rail popovers above the chart canvas and trade overlay. */
     .sc-toolbar-widget .cq-menu-dropdown,
     .sc-toolbar-widget .cq-modal-dropdown {
         z-index: 9999 !important;
@@ -258,8 +259,9 @@
 
 @media screen and (max-width: 767px) {
     .dashboard__chart-wrapper .sc-toolbar-widget {
-        left: auto !important;
-        right: 10px !important;
+        left: 10px !important;
+        right: auto !important;
         top: 72px !important;
+        transform: none;
     }
 }

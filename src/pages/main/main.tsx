@@ -534,7 +534,10 @@ const AppWrapper = observer(() => {
                 DBOT_TABS.MANUAL_TRADER,
                 DBOT_TABS.TUTORIAL,
             ].includes(active_tab) && <FloatingRunButton />}
-            <WhatsAppFloat />
+            {/* Keep the mobile experience focused: WhatsApp is a Dashboard
+                affordance on phones, while desktop retains the existing
+                floating contact button on every page. */}
+            {(isDesktop || active_tab === DASHBOARD) && <WhatsAppFloat />}
 
             <DesktopWrapper>
                 <div className='main__run-strategy-wrapper'>

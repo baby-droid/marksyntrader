@@ -593,6 +593,89 @@
 }
 @keyframes ctp-accu-pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
 
+.ctp__accu-stats {
+    margin: 0 7px 3px;
+    padding: 7px;
+    border: 1px solid #cfe0f6;
+    border-radius: 9px;
+    background: linear-gradient(135deg, #f7fbff, #eef6ff);
+}
+
+.ctp__accu-stats-head,
+.ctp__accu-value-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    color: #52647b;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.ctp__accu-status {
+    color: #0b8f51;
+    font-size: 9px;
+    font-weight: 900;
+    text-transform: uppercase;
+    &--sold,
+    &--lost { color: #dc3545; }
+    &--won { color: #0b8f51; }
+}
+
+.ctp__accu-progress {
+    height: 7px;
+    margin: 7px 0;
+    overflow: hidden;
+    border-radius: 99px;
+    background: #dbe8f5;
+    box-shadow: inset 0 1px 2px rgba(20, 53, 90, .12);
+    span {
+        display: block;
+        height: 100%;
+        min-width: 3px;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #1e88ff, #00b86b);
+        transition: width .25s ease;
+    }
+}
+
+.ctp__accu-stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px;
+    margin-bottom: 6px;
+    > div {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+        padding: 4px 5px;
+        border-radius: 6px;
+        background: rgba(255, 255, 255, .75);
+    }
+    span {
+        color: #8492a6;
+        font-size: 9px;
+        font-weight: 700;
+    }
+    strong {
+        overflow: hidden;
+        color: #172033;
+        font-size: 11px;
+        font-weight: 900;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        &.is-positive { color: #079455; }
+        &.is-negative { color: #d9363e; }
+    }
+}
+
+.ctp__accu-value-row {
+    padding-top: 5px;
+    border-top: 1px solid rgba(142, 177, 212, .35);
+    strong { color: #172033; font-size: 11px; font-weight: 900; }
+}
+
 /* ── Accumulator Take Profit section ───────────────────────────────────────── */
 .ctp__accu-tp-section {
     padding: 0 10px;
