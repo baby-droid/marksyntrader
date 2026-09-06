@@ -12,9 +12,62 @@ export type DerivContractTick = {
     [key: string]: unknown;
 };
 
+export type TickSettlementMode = 'skip-first-after-entry' | 'include-first-after-entry';
+
 export function finiteEpoch(value: unknown): number | null {
     const epoch = Number(value);
     return Number.isFinite(epoch) && epoch > 0 ? epoch : null;
+}
+
+/**
+ * Deriv's tick stream has a small market-family timing difference:
+ * The entry spot is never a duration tick. Plain, Bear/Bull, and other
+ * synthetic families count their first post-entry tick; 1-second volatility
+ * and Jump indices publish one additional leading post-entry quote, so that
+ * first quote is skipped before counting duration ticks.
+ *
+ * Keep this rule in one place so desktop and mobile never drift apart.
+ */
+export function getTickSettlementMode(symbol?: string | null): TickSettlementMode {
+    const value = String(symbol ?? '').toUpperCase();
+    return /^1HZ/.test(value) || /^JD/.test(value)
+        ? 'skip-first-after-entry'
+        : 'include-first-after-entry';
+}
+
+export function countSettlementEpochs(
+    epochs: unknown,
+    entryEpoch?: number | null,
+    symbol?: string | null,
+): number {
+    if (!Array.isArray(epochs)) return 0;
+
+    const uniqueEpochs = new Set<number>();
+    const anchor = finiteEpoch(entryEpoch);
+    const mode = getTickSettlementMode(symbol);
+
+    for (const value of epochs) {
+        const epoch = finiteEpoch(
+            typeof value === 'object' && value !== null
+                ? (
+                    (value as DerivContractTick).epoch
+                    ?? (value as DerivContractTick).tick_time
+                    ?? (value as DerivContractTick).time
+                )
+                : value,
+        );
+        if (epoch === null) continue;
+
+        // The entry spot is not a settled duration tick. Every market starts
+        // from the first unique tick strictly after the entry timestamp.
+        const isSettlementTick = anchor === null || epoch > anchor;
+        if (isSettlementTick) uniqueEpochs.add(epoch);
+    }
+
+    const ordered = [...uniqueEpochs].sort((a, b) => a - b);
+    return mode === 'skip-first-after-entry' && anchor !== null
+        ? Math.max(0, ordered.length - 1)
+        : ordered.length;
 }
 
 export function getPocEntryEpoch(poc: Record<string, unknown>): number | null {
@@ -31,26 +84,29 @@ export function getPocTickCount(poc: Record<string, unknown>): number | null {
 export function getPocStreamCount(
     stream: unknown,
     entryEpoch?: number | null,
+    symbol?: string | null,
 ): number | null {
     if (!Array.isArray(stream)) return null;
 
-    const epochs = new Set<number>();
+    const epochValues: unknown[] = [];
+    let hasEpoch = false;
     for (const item of stream as Array<DerivContractTick | number | string>) {
         const epoch = typeof item === 'object' && item !== null
             ? (
-                finiteEpoch((item as DerivContractTick).epoch)
-                ?? finiteEpoch((item as DerivContractTick).tick_time)
-                ?? finiteEpoch((item as DerivContractTick).time)
+                (item as DerivContractTick).epoch
+                ?? (item as DerivContractTick).tick_time
+                ?? (item as DerivContractTick).time
             )
-            : finiteEpoch(item);
-        if (epoch !== null && (entryEpoch == null || epoch >= entryEpoch)) {
-            epochs.add(epoch);
-        }
+            : item;
+        if (finiteEpoch(epoch) !== null) hasEpoch = true;
+        epochValues.push(epoch);
     }
 
     // Some historical responses contain stream entries without epoch. In
     // that case the array itself is still the best contract-side count.
-    return epochs.size > 0 ? epochs.size : stream.length;
+    return hasEpoch
+        ? countSettlementEpochs(epochValues, entryEpoch, symbol)
+        : stream.length;
 }
 
 export function clampContractTickCount(count: number, totalTicks: number): number {

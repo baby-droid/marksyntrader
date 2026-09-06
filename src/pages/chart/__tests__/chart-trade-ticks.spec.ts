@@ -4,6 +4,8 @@ import {
     getPocEntryEpoch,
     getPocStreamCount,
     getPocTickCount,
+    countSettlementEpochs,
+    getTickSettlementMode,
 } from '../chart-trade-ticks';
 
 describe('chart contract tick reconciliation helpers', () => {
@@ -25,12 +27,30 @@ describe('chart contract tick reconciliation helpers', () => {
             { tick_time: 100 },
             { tick_time: 101 },
             { epoch: 102 },
-        ], 100)).toBe(3);
+        ], 100)).toBe(2);
         expect(getPocStreamCount([
             { tick_time: 99 },
             { tick_time: 100 },
             { tick_time: 101 },
-        ], 100)).toBe(2);
+        ], 100)).toBe(1);
+    });
+
+    it('counts 1s and Jump settlement ticks strictly after entry', () => {
+        expect(getTickSettlementMode('1HZ100V')).toBe('skip-first-after-entry');
+        expect(getTickSettlementMode('JD100')).toBe('skip-first-after-entry');
+        // Entry=9, produced ticks=0,1,2,3: skip 0, then count 1,2,3.
+        expect(countSettlementEpochs([9, 10, 11, 12, 13], 9, '1HZ100V')).toBe(3);
+        expect(countSettlementEpochs([9, 10, 11, 12, 13], 9, 'JD100')).toBe(3);
+    });
+
+    it('counts plain, Bear, and Bull settlement ticks from entry', () => {
+        expect(getTickSettlementMode('R_100')).toBe('include-first-after-entry');
+        expect(getTickSettlementMode('RDBEAR')).toBe('include-first-after-entry');
+        expect(getTickSettlementMode('RDBULL')).toBe('include-first-after-entry');
+        // Entry=9, produced ticks=0,1,2: count all three post-entry ticks.
+        expect(countSettlementEpochs([9, 10, 11, 12], 9, 'R_100')).toBe(3);
+        expect(countSettlementEpochs([9, 10, 11, 12], 9, 'RDBEAR')).toBe(3);
+        expect(countSettlementEpochs([9, 10, 11, 12], 9, 'RDBULL')).toBe(3);
     });
 
     it('falls back to stream length when a response omits per-tick epochs', () => {

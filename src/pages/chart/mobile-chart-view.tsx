@@ -566,6 +566,7 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                 detail: {
                     contractId: Number(contractId),
                     ticks: effectiveTicks,
+                    symbol,
                     purchaseTime: Number(buyRes?.buy?.purchase_time) || 0,
                     startTime: Number(buyRes?.buy?.start_time) || 0,
                 },

@@ -7,7 +7,12 @@ import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import Chart from './chart';
 import { ChartTradePanel } from './chart-trade-panel';
 import MobileChartView from './mobile-chart-view';
-import { clampContractTickCount, finiteEpoch, getPocStreamCount } from './chart-trade-ticks';
+import {
+    clampContractTickCount,
+    countSettlementEpochs,
+    finiteEpoch,
+    getPocStreamCount,
+} from './chart-trade-ticks';
 import './chart.scss';
 import './chart-trade-panel.scss';
 import './chart-digit-overlay.scss';
@@ -162,6 +167,7 @@ interface PendingTrade {
     id: string;
     totalTicks: number;
     countedTicks: number;
+    symbol: string;
 }
 
 /* ════════════════════════════════════════════════════════════════════════════ */
@@ -225,7 +231,7 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
     useEffect(() => {
         // ── New trade purchased ────────────────────────────────────────────
         const handleStarted = (e: CustomEvent) => {
-            const { contractId, ticks, purchaseTime, startTime } = e.detail;
+            const { contractId, ticks, symbol: tradeSymbol, purchaseTime, startTime } = e.detail;
             const id = String(contractId);
             entryEpochRef.current.set(
                 id,
@@ -233,7 +239,15 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
             );
             liveTickEpochsRef.current.set(id, new Set());
             authoritativeTickCountRef.current.delete(id);
-            pendingTradesRef.current = [...pendingTradesRef.current, { id, totalTicks: ticks, countedTicks: 0 }];
+            pendingTradesRef.current = [
+                ...pendingTradesRef.current,
+                {
+                    id,
+                    totalTicks: ticks,
+                    countedTicks: 0,
+                    symbol: String(tradeSymbol ?? symbol),
+                },
+            ];
             setPendingTrades([...pendingTradesRef.current]);
         };
 
@@ -256,10 +270,14 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
             const epoch = finiteEpoch(entryEpoch);
             if (epoch === null) return;
             entryEpochRef.current.set(id, epoch);
-            const liveCount = [...(liveTickEpochsRef.current.get(id) ?? [])]
-                .filter(tickEpoch => tickEpoch >= epoch).length;
+            const trade = pendingTradesRef.current.find(t => t.id === id);
+            const liveCount = countSettlementEpochs(
+                [...(liveTickEpochsRef.current.get(id) ?? [])],
+                epoch,
+                trade?.symbol,
+            );
             const authoritative = authoritativeTickCountRef.current.get(id);
-            updateCount(id, Math.max(liveCount, authoritative ?? 0));
+            updateCount(id, authoritative ?? liveCount);
         };
 
         // The public stream is immediate but can be ahead/behind the account
@@ -275,16 +293,26 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
             const streamCount = getPocStreamCount(
                 tickStream,
                 entryEpochRef.current.get(id) || null,
+                pendingTradesRef.current.find(t => t.id === id)?.symbol,
             );
             const reportedCount = tickCount != null && Number.isFinite(Number(tickCount))
                 ? Math.floor(Number(tickCount))
                 : streamCount;
             if (reportedCount == null || reportedCount < 0) return;
-            authoritativeTickCountRef.current.set(id, reportedCount);
-            const anchor = entryEpochRef.current.get(id) ?? 0;
-            const liveCount = [...(liveTickEpochsRef.current.get(id) ?? [])]
-                .filter(tickEpoch => anchor === 0 || tickEpoch >= anchor).length;
-            updateCount(id, Math.max(liveCount, reportedCount));
+            // Contract progress is monotonic. A first POC message can still
+            // contain tick_count=0 while the public stream has already shown
+            // the first settlement tick, so never move the live counter back.
+            const previousAuthoritative = authoritativeTickCountRef.current.get(id) ?? 0;
+            const nextAuthoritative = Math.max(previousAuthoritative, reportedCount);
+            authoritativeTickCountRef.current.set(id, nextAuthoritative);
+
+            const trade = pendingTradesRef.current.find(t => t.id === id);
+            const liveCount = countSettlementEpochs(
+                [...(liveTickEpochsRef.current.get(id) ?? [])],
+                entryEpochRef.current.get(id) ?? null,
+                trade?.symbol,
+            );
+            updateCount(id, Math.max(nextAuthoritative, liveCount));
         };
 
         // ── Contract settled ───────────────────────────────────────────────
@@ -501,14 +529,16 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                             const entryEpoch = entryEpochRef.current.get(t.id) ?? 0;
                             if (epoch <= 0) return t;
                             const seen = liveTickEpochsRef.current.get(t.id);
-                            if (!seen || (entryEpoch > 0 && epoch < entryEpoch)) return t;
+                            if (!seen) return t;
                             seen.add(epoch);
-                            const liveCount = [...seen].filter(tickEpoch =>
-                                entryEpoch === 0 || tickEpoch >= entryEpoch
-                            ).length;
+                            const liveCount = countSettlementEpochs(
+                                [...seen],
+                                entryEpoch || null,
+                                t.symbol,
+                            );
                             const authoritative = authoritativeTickCountRef.current.get(t.id);
                             const countedTicks = clampContractTickCount(
-                                Math.max(liveCount, authoritative ?? 0),
+                                authoritative ?? liveCount,
                                 t.totalTicks,
                             );
                             return countedTicks === t.countedTicks ? t : { ...t, countedTicks };
