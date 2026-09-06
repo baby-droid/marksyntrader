@@ -8,6 +8,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import { publishMasterTrade, getMasterSource, createTradeKey } from '@/utils/trade-bus';
+import { getPocEntryEpoch, getPocStreamCount, getPocTickCount } from './chart-trade-ticks';
 import ChartAiControl from './chart-ai';
 import './mobile-chart-view.scss';
 
@@ -368,13 +369,6 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
         underAsk: number;
         expiry: number;
     } | null>(null);
-    // Tracks the last tick-count dispatched per contract so we never fire a
-    // chart:trade-tick event with the same or fewer ticks than before.
-    // Deriv POC fires on every state change, not just new ticks — this ref
-    // prevents redundant/stale dispatches that trigger race overwrites in the
-    // wrapper. Keyed by numeric contractId.
-    const pocLastTickCountRef = useRef<Map<number, number>>(new Map());
-
     /* ── Win/Loss toast notification ──────────────────────────────────────── */
     // Queue-based: every settled trade gets its own popup; rapid trades don't
     // cancel each other.  toastKey forces React to unmount+remount the element
@@ -569,7 +563,12 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
             purchasedContractId = contractId != null ? Number(contractId) : null;
             setResult({ ok: true, msg: `✅ #${contractId}` });
             window.dispatchEvent(new CustomEvent('chart:trade-started', {
-                detail: { contractId: Number(contractId), ticks: effectiveTicks },
+                detail: {
+                    contractId: Number(contractId),
+                    ticks: effectiveTicks,
+                    purchaseTime: Number(buyRes?.buy?.purchase_time) || 0,
+                    startTime: Number(buyRes?.buy?.start_time) || 0,
+                },
             }));
 
             // Re-warm the proposal cache immediately so the next buy is also instant
@@ -589,14 +588,8 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                         pocSubId = null;
                     }
                 };
-                // Per-contract dispatch guard (issue #2):
-                // Deriv sends a POC message on EVERY live price tick, not only when a
-                // new settlement tick lands. Without this, the same tick_stream fires
-                // dozens of chart:trade-tick events per real tick, causing redundant
-                // processing and potential race overwrites in chart-wrapper.
-                // savedEntryTime: lock the authoritative spot time when available,
-                        // falling back to entry_spot_time. Until Deriv provides either
-                // value, keep buffering live ticks rather than guessing.
+                // POC is the contract-side source of truth. The public chart
+                // stream remains responsible for low-latency display updates.
                 let savedEntryTime = 0;
                 let entryTimeDispatched = false; // fire chart:trade-entry exactly once
 
@@ -610,9 +603,8 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                         // chart-wrapper counts this entry tick and following ticks,
                         // while ignoring only ticks that occurred before entry.
                         if (savedEntryTime === 0) {
-                            const pocEntryTime =
-                                Number(poc.entry_tick_time) || Number(poc.entry_spot_time) || 0;
-                            if (pocEntryTime > 0) {
+                            const pocEntryTime = getPocEntryEpoch(poc);
+                            if (pocEntryTime !== null) {
                                 savedEntryTime = pocEntryTime;
                             }
                             if (savedEntryTime > 0 && !entryTimeDispatched) {
@@ -623,8 +615,22 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                             }
                         }
 
-                        // Settlement handled below; tick labelling driven by chart-wrapper
-                        // live-tick path (real-time, no API roundtrip).
+                        const pocTickCount = getPocTickCount(poc);
+                        const pocStreamCount = getPocStreamCount(
+                            poc.tick_stream,
+                            savedEntryTime || getPocEntryEpoch(poc),
+                        );
+                        if (pocTickCount != null || pocStreamCount != null) {
+                            window.dispatchEvent(new CustomEvent('chart:trade-progress', {
+                                detail: {
+                                    contractId: cid,
+                                    tickCount: pocTickCount,
+                                    tickStream: poc.tick_stream,
+                                    entryEpoch: savedEntryTime || getPocEntryEpoch(poc),
+                                },
+                            }));
+                        }
+
                         if (poc.status === 'won' || poc.status === 'lost') {
                             const won    = poc.status === 'won';
                             const profit = Number(poc.profit ?? 0);
@@ -632,7 +638,13 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                                 ? String(poc.exit_tick_display_value).replace('.', '') : null;
                             const exitDigit = exitStr ? parseInt(exitStr[exitStr.length - 1], 10) : null;
                             window.dispatchEvent(new CustomEvent('chart:trade-settled', {
-                                detail: { won, profit, exitDigit, barrier: effectiveBarrier, contractType, contractId: cid },
+                                detail: {
+                                    won, profit, exitDigit, barrier: effectiveBarrier,
+                                    contractType, contractId: cid,
+                                    tickCount: pocTickCount,
+                                    tickStream: poc.tick_stream,
+                                    entryEpoch: savedEntryTime || getPocEntryEpoch(poc),
+                                },
                             }));
                             forgetPoc();
                         }

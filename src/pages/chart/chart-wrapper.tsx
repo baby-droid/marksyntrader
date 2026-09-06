@@ -7,6 +7,7 @@ import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import Chart from './chart';
 import { ChartTradePanel } from './chart-trade-panel';
 import MobileChartView from './mobile-chart-view';
+import { clampContractTickCount, finiteEpoch, getPocStreamCount } from './chart-trade-ticks';
 import './chart.scss';
 import './chart-trade-panel.scss';
 import './chart-digit-overlay.scss';
@@ -213,73 +214,100 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
     const [pendingTrades, setPendingTrades] = useState<PendingTrade[]>([]);
     const pendingTradesRef      = useRef<PendingTrade[]>([]);
 
-    // entryEpochRef: stores the authoritative entry_tick_time per contract once POC
-    // provides it.  0 = not yet known (POC hasn't arrived yet).
-    // tickBufferRef: accumulates live ticks (epoch+digit) received before the entry
-    // epoch is known, so we can retroactively assign T1, T2, … when it arrives.
+    // The public ticks stream drives the low-latency display. POC contract
+    // progress reconciles it when available. The buy receipt is only an
+    // initial anchor; entry_spot_time re-anchors it to the actual contract tick.
     const entryEpochRef = useRef<Map<string, number>>(new Map());
-    const tickBufferRef = useRef<Map<string, { epoch: number; digit: number }[]>>(new Map());
-    const countedTickEpochsRef = useRef<Map<string, Set<number>>>(new Map());
+    const liveTickEpochsRef = useRef<Map<string, Set<number>>>(new Map());
+    const authoritativeTickCountRef = useRef<Map<string, number>>(new Map());
 
     /* Trade events */
     useEffect(() => {
         // ── New trade purchased ────────────────────────────────────────────
         const handleStarted = (e: CustomEvent) => {
-            const { contractId, ticks } = e.detail;
+            const { contractId, ticks, purchaseTime, startTime } = e.detail;
             const id = String(contractId);
-            entryEpochRef.current.set(id, 0);      // 0 = entry epoch not yet known
-            tickBufferRef.current.set(id, []);      // pre-entry live-tick buffer
-            countedTickEpochsRef.current.set(id, new Set());
+            entryEpochRef.current.set(
+                id,
+                finiteEpoch(startTime) ?? finiteEpoch(purchaseTime) ?? 0,
+            );
+            liveTickEpochsRef.current.set(id, new Set());
+            authoritativeTickCountRef.current.delete(id);
             pendingTradesRef.current = [...pendingTradesRef.current, { id, totalTicks: ticks, countedTicks: 0 }];
             setPendingTrades([...pendingTradesRef.current]);
         };
 
-        // ── Entry epoch received from POC (chart:trade-entry, fired once) ──
-        // This is the authoritative entry/spot time from Deriv. Ticks at or
-        // after it are settlement ticks; only earlier ticks are excluded.
+        const updateCount = (id: string, count: number) => {
+            const trade = pendingTradesRef.current.find(t => t.id === id);
+            if (!trade) return;
+            const countedTicks = clampContractTickCount(count, trade.totalTicks);
+            if (countedTicks === trade.countedTicks) return;
+            pendingTradesRef.current = pendingTradesRef.current.map(t =>
+                t.id === id ? { ...t, countedTicks } : t
+            );
+            setPendingTrades([...pendingTradesRef.current]);
+        };
+
+        // Deriv documents entry_spot_time as the epoch of the first valid
+        // underlying spot. Re-anchor all already-seen public ticks to it.
         const handleTradeEntry = (e: CustomEvent) => {
             const { contractId, entryEpoch } = e.detail;
             const id = String(contractId);
-            entryEpochRef.current.set(id, entryEpoch);
+            const epoch = finiteEpoch(entryEpoch);
+            if (epoch === null) return;
+            entryEpochRef.current.set(id, epoch);
+            const liveCount = [...(liveTickEpochsRef.current.get(id) ?? [])]
+                .filter(tickEpoch => tickEpoch >= epoch).length;
+            const authoritative = authoritativeTickCountRef.current.get(id);
+            updateCount(id, Math.max(liveCount, authoritative ?? 0));
+        };
 
-            // Drain the buffer so ticks that arrived before the entry epoch was
-            // known still contribute to the settlement countdown.
-            const buffer = tickBufferRef.current.get(id) ?? [];
-            tickBufferRef.current.delete(id);
-            const countedEpochs = countedTickEpochsRef.current.get(id) ?? new Set<number>();
-            const postEntry = buffer.filter(t =>
-                t.epoch >= entryEpoch && !countedEpochs.has(t.epoch)
-            );
-            if (postEntry.length > 0) {
-                const trade = pendingTradesRef.current.find(t => t.id === id);
-                if (trade) {
-                    postEntry.forEach(t => countedEpochs.add(t.epoch));
-                    countedTickEpochsRef.current.set(id, countedEpochs);
-                    const countedTicks = Math.min(
-                        trade.countedTicks + postEntry.length,
-                        trade.totalTicks
-                    );
-                    pendingTradesRef.current = pendingTradesRef.current.map(t =>
-                        t.id === id ? { ...t, countedTicks } : t
-                    );
-                    setPendingTrades([...pendingTradesRef.current]);
-                }
+        // The public stream is immediate but can be ahead/behind the account
+        // stream. Reconcile it with POC tick_count or tick_stream.
+        const handleTradeProgress = (e: CustomEvent) => {
+            const { contractId, tickCount, tickStream, entryEpoch } = e.detail;
+            const id = String(contractId);
+            if (finiteEpoch(entryEpoch) !== null) {
+                handleTradeEntry(new CustomEvent('chart:trade-entry', {
+                    detail: { contractId: id, entryEpoch },
+                }));
             }
+            const streamCount = getPocStreamCount(
+                tickStream,
+                entryEpochRef.current.get(id) || null,
+            );
+            const reportedCount = tickCount != null && Number.isFinite(Number(tickCount))
+                ? Math.floor(Number(tickCount))
+                : streamCount;
+            if (reportedCount == null || reportedCount < 0) return;
+            authoritativeTickCountRef.current.set(id, reportedCount);
+            const anchor = entryEpochRef.current.get(id) ?? 0;
+            const liveCount = [...(liveTickEpochsRef.current.get(id) ?? [])]
+                .filter(tickEpoch => anchor === 0 || tickEpoch >= anchor).length;
+            updateCount(id, Math.max(liveCount, reportedCount));
         };
 
         // ── Contract settled ───────────────────────────────────────────────
         const handleSettlement = (e: CustomEvent) => {
-            const { won, profit, exitDigit, barrier: tradedBarrier, contractId } = e.detail;
+            const {
+                won, profit, exitDigit, barrier: tradedBarrier, contractId,
+                tickCount, tickStream, entryEpoch,
+            } = e.detail;
             const digit = exitDigit ?? tradedBarrier;
 
             const cleanupId = (id: string) => {
                 entryEpochRef.current.delete(id);
-                tickBufferRef.current.delete(id);
-                countedTickEpochsRef.current.delete(id);
+                liveTickEpochsRef.current.delete(id);
+                authoritativeTickCountRef.current.delete(id);
             };
 
             if (contractId != null) {
                 const id = String(contractId);
+                if (tickCount != null || tickStream != null) {
+                    handleTradeProgress(new CustomEvent('chart:trade-progress', {
+                        detail: { contractId, tickCount, tickStream, entryEpoch },
+                    }));
+                }
                 pendingTradesRef.current = pendingTradesRef.current.filter(t => t.id !== id);
                 setPendingTrades([...pendingTradesRef.current]);
                 cleanupId(id);
@@ -305,10 +333,12 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
 
         window.addEventListener('chart:trade-started', handleStarted as any);
         window.addEventListener('chart:trade-entry',   handleTradeEntry as any);
+        window.addEventListener('chart:trade-progress', handleTradeProgress as any);
         window.addEventListener('chart:trade-settled', handleSettlement as any);
         return () => {
             window.removeEventListener('chart:trade-started', handleStarted as any);
             window.removeEventListener('chart:trade-entry',   handleTradeEntry as any);
+            window.removeEventListener('chart:trade-progress', handleTradeProgress as any);
             window.removeEventListener('chart:trade-settled', handleSettlement as any);
             if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
             flagTimersRef.current.forEach(t => clearTimeout(t));
@@ -463,38 +493,25 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                         applyDigit(d);
                     }
 
-                    // ── Live-tick settlement count (epoch-anchored, real-time) ──
-                    // Count the entry tick and each following settlement tick.
-                    // The entry/spot time comes from the POC chart:trade-entry event.
-                    // Before it arrives we buffer live ticks; when it arrives the
-                    // buffer is drained (handleTradeEntry) and subsequent live ticks
-                    // update the countdown on the same frame as currentDigit.
+                    // ── Live-tick display count (epoch-anchored, real-time) ──
+                    // Count unique public ticks immediately, then reconcile with
+                    // POC tick_count/tick_stream when the contract stream updates.
                     if (pendingTradesRef.current.length > 0) {
                         pendingTradesRef.current = pendingTradesRef.current.map(t => {
                             const entryEpoch = entryEpochRef.current.get(t.id) ?? 0;
-
-                            if (entryEpoch === 0) {
-                                // Entry epoch not yet known — buffer this tick so we can
-                                // retroactively count ticks once POC delivers entry_tick_time.
-                                const buf = tickBufferRef.current.get(t.id);
-                                if (buf) buf.push({ epoch, digit: d });
-                                return t;
-                            }
-
-                            if (epoch < entryEpoch) {
-                                // Only ticks before the entry tick are pre-contract.
-                                return t;
-                            }
-
-                            // epoch >= entryEpoch → one settlement tick, update instantly.
-                            // Dedup by epoch because reconnects/POC updates can replay a tick.
-                            const countedEpochs = countedTickEpochsRef.current.get(t.id);
-                            if (!countedEpochs || countedEpochs.has(epoch)) return t;
-                            countedEpochs.add(epoch);
-                            if (t.countedTicks < t.totalTicks) {
-                                return { ...t, countedTicks: t.countedTicks + 1 };
-                            }
-                            return t;
+                            if (epoch <= 0) return t;
+                            const seen = liveTickEpochsRef.current.get(t.id);
+                            if (!seen || (entryEpoch > 0 && epoch < entryEpoch)) return t;
+                            seen.add(epoch);
+                            const liveCount = [...seen].filter(tickEpoch =>
+                                entryEpoch === 0 || tickEpoch >= entryEpoch
+                            ).length;
+                            const authoritative = authoritativeTickCountRef.current.get(t.id);
+                            const countedTicks = clampContractTickCount(
+                                Math.max(liveCount, authoritative ?? 0),
+                                t.totalTicks,
+                            );
+                            return countedTicks === t.countedTicks ? t : { ...t, countedTicks };
                         });
                         setPendingTrades([...pendingTradesRef.current]);
                     }

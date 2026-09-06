@@ -4,6 +4,7 @@ import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import { publishMasterTrade, getMasterSource, createTradeKey } from '@/utils/trade-bus';
 import ChartAiControl from './chart-ai';
+import { getPocEntryEpoch, getPocStreamCount, getPocTickCount } from './chart-trade-ticks';
 
 /* ── Symbol display names ─────────────────────────────────────────────────── */
 const SYMBOL_NAMES: Record<string, string> = {
@@ -507,7 +508,12 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             purchasedContractId = contractId != null ? Number(contractId) : null;
             setResult({ ok: true, msg: `✅ #${contractId}` });
             window.dispatchEvent(new CustomEvent('chart:trade-started', {
-                detail: { contractId: Number(contractId), ticks: effectiveTicks },
+                detail: {
+                    contractId: Number(contractId),
+                    ticks: effectiveTicks,
+                    purchaseTime: Number(buyRes?.buy?.purchase_time) || 0,
+                    startTime: Number(buyRes?.buy?.start_time) || 0,
+                },
             }));
 
             // Re-warm the proposal cache immediately so the next buy is also instant
@@ -528,17 +534,8 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                     }
                 };
 
-                // Per-contract dispatch guard (issue #2):
-                // Deriv sends a POC message on EVERY price change, not only when a
-                // new settlement tick arrives. Without this guard the same tick_stream
-                // length would be re-dispatched dozens of times per second, causing
-                // redundant chart:trade-tick events and potential race overwrites.
-                // We only fire the event when the post-entry stream is strictly longer
-                // than the last one we sent for this contract.
-                // savedEntryTime: lock the authoritative spot time when available,
-                // falling back to entry_spot_time. Until Deriv provides either
-                // value, keep buffering live ticks rather than guessing from the
-                // first tick_stream item.
+                // POC is the contract-side source of truth. The public chart
+                // stream remains responsible for low-latency display updates.
                 let savedEntryTime = 0;
                 let entryTimeDispatched = false; // fire chart:trade-entry exactly once
 
@@ -553,9 +550,8 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                         // chart-wrapper counts the entry tick and every following tick,
                         // while ignoring only ticks that occurred before entry.
                         if (savedEntryTime === 0) {
-                            const pocEntryTime =
-                                Number(poc.entry_tick_time) || Number(poc.entry_spot_time) || 0;
-                            if (pocEntryTime > 0) {
+                            const pocEntryTime = getPocEntryEpoch(poc);
+                            if (pocEntryTime !== null) {
                                 savedEntryTime = pocEntryTime;
                             }
                             // Dispatch chart:trade-entry exactly once so chart-wrapper can
@@ -568,8 +564,21 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                             }
                         }
 
-                        // Settlement is handled below; tick labelling is now driven by
-                        // chart-wrapper's live-tick path (real-time, no API roundtrip).
+                        const pocTickCount = getPocTickCount(poc);
+                        const pocStreamCount = getPocStreamCount(
+                            poc.tick_stream,
+                            savedEntryTime || getPocEntryEpoch(poc),
+                        );
+                        if (pocTickCount != null || pocStreamCount != null) {
+                            window.dispatchEvent(new CustomEvent('chart:trade-progress', {
+                                detail: {
+                                    contractId: cid,
+                                    tickCount: pocTickCount,
+                                    tickStream: poc.tick_stream,
+                                    entryEpoch: savedEntryTime || getPocEntryEpoch(poc),
+                                },
+                            }));
+                        }
 
                         if (poc.status === 'won' || poc.status === 'lost') {
                             const won       = poc.status === 'won';
@@ -579,7 +588,13 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                             const exitDigit = exitStr
                                 ? parseInt(exitStr[exitStr.length - 1], 10) : null;
                             window.dispatchEvent(new CustomEvent('chart:trade-settled', {
-                                detail: { won, profit, exitDigit, barrier: effectiveBarrier, contractType, contractId: cid },
+                                detail: {
+                                    won, profit, exitDigit, barrier: effectiveBarrier,
+                                    contractType, contractId: cid,
+                                    tickCount: pocTickCount,
+                                    tickStream: poc.tick_stream,
+                                    entryEpoch: savedEntryTime || getPocEntryEpoch(poc),
+                                },
                             }));
                             forgetPoc();
                         }
