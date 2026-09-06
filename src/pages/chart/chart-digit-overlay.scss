@@ -88,6 +88,13 @@
     .dashboard__chart-wrapper canvas {
         min-height: 0 !important;
     }
+    .dashboard__chart-wrapper > .smartcharts,
+    .dashboard__chart-wrapper > .smartcharts > .smartcharts-desktop,
+    .dashboard__chart-wrapper .ciq-chart,
+    .dashboard__chart-wrapper .ciq-chart-area,
+    .dashboard__chart-wrapper .chartContainer {
+        height: 100% !important;
+    }
 
     /* SmartChart root canvas containers */
     > div, .sc-chart-layout, .chartWrapper, [class*="chart-"] {
