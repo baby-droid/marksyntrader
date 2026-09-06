@@ -162,6 +162,21 @@
     }
 }
 
+/* The custom rail owns the visible chart controls. Keep SmartChart's official
+ * controls mounted so indicator and drawing actions still use its real
+ * implementations, but do not render a second toolbar over the chart. */
+.chart-native-toolbar {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 1px !important;
+    height: 1px !important;
+    overflow: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    z-index: -1 !important;
+}
+
 // Safari-specific fixes
 .dashboard__chart-wrapper--safari {
     .smartcharts-mobile {

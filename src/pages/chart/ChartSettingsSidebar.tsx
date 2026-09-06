@@ -1,180 +1,305 @@
 // @ts-nocheck
-/**
- * ChartSettingsSidebar — vertical icon strip overlaid at the left edge of
- * the SmartChart canvas. Matches the design shown in the reference screenshot:
- *   1T label → line-chart type → indicators → OHLC bars → drawing → download
- */
 import React, { useState } from 'react';
 import { useStore } from '@/hooks/useStore';
 import './ChartSettingsSidebar.scss';
 
-/* ── Icon SVGs ─────────────────────────────────────────────────────────────── */
-const IconLine = () => (
-    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
-        <polyline points='22 12 18 12 15 21 9 3 6 12 2 12' />
-    </svg>
-);
-const IconCandle = () => (
-    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
-        <line x1='18' y1='2' x2='18' y2='6' /><rect x='15' y='6' width='6' height='8' rx='1' />
-        <line x1='18' y1='14' x2='18' y2='22' /><line x1='6' y1='4' x2='6' y2='8' />
-        <rect x='3' y='8' width='6' height='7' rx='1' /><line x1='6' y1='15' x2='6' y2='20' />
-    </svg>
-);
-const IconIndicators = () => (
-    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
-        <polyline points='3 18 9 12 13 16 21 8' /><line x1='21' y1='3' x2='21' y2='9' /><line x1='15' y1='3' x2='21' y2='3' />
-    </svg>
-);
-const IconBar = () => (
-    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
-        <line x1='4'  y1='20' x2='4'  y2='4' /><line x1='4'  y1='4'  x2='10' y2='4' /><line x1='4'  y1='12' x2='10' y2='12' />
-        <line x1='12' y1='20' x2='12' y2='9' /><line x1='12' y1='9'  x2='18' y2='9' /><line x1='12' y1='15' x2='18' y2='15' />
-        <line x1='20' y1='20' x2='20' y2='2' /><line x1='20' y1='2'  x2='24' y2='2' /><line x1='20' y1='11' x2='24' y2='11' />
-    </svg>
-);
-const IconDraw = () => (
-    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
-        <path d='M12 20h9'/><path d='M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z'/>
-    </svg>
-);
-const IconDownload = () => (
-    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
-        <path d='M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4'/><polyline points='7 10 12 15 17 10'/><line x1='12' y1='15' x2='12' y2='3'/>
-    </svg>
-);
+type PanelId = 'chart' | 'indicators' | 'drawing' | 'download' | null;
 
-/* ── Granularity helpers ────────────────────────────────────────────────────── */
-const GRAN_STEPS = [0, 60, 120, 300, 600, 900, 1800, 3600, 7200, 14400, 28800, 86400];
-const granLabel = (g: number): string => {
-    if (g === 0)     return '1T';
-    if (g < 60)      return `${g}S`;
-    if (g < 3600)    return `${g / 60}M`;
-    if (g < 86400)   return `${g / 3600}H`;
-    return '1D';
+const GRANULARITIES = [
+    { value: 0, label: '1t' },
+    { value: 60, label: '1 minute' },
+    { value: 120, label: '2 minutes' },
+    { value: 180, label: '3 minutes' },
+    { value: 300, label: '5 minutes' },
+    { value: 600, label: '10 minutes' },
+    { value: 900, label: '15 minutes' },
+    { value: 1800, label: '30 minutes' },
+    { value: 3600, label: '1 hour' },
+    { value: 7200, label: '2 hours' },
+    { value: 14400, label: '4 hours' },
+    { value: 28800, label: '8 hours' },
+    { value: 86400, label: '1 day' },
+];
+
+const CHART_TYPES = [
+    { value: 'line', label: 'Area', glyph: 'area' },
+    { value: 'candles', label: 'Candle', glyph: 'candle' },
+    { value: 'hollow', label: 'Hollow', glyph: 'hollow' },
+    { value: 'ohlc', label: 'OHLC', glyph: 'ohlc' },
+];
+
+const INDICATORS = {
+    Momentum: [
+        'Awesome Oscillator',
+        'Detrended Price Oscillator',
+        'MACD',
+        'Price Rate of Change',
+        'Relative Strength Index (RSI)',
+        'Stochastic Oscillator',
+        'Stochastic Momentum Index',
+        "William's Percent Range",
+    ],
+    Trend: ['ADX', 'Aroon', 'Parabolic SAR', 'Pivot Points', 'Supertrend'],
+    Volatility: ['Average True Range', 'Bollinger Bands', 'Keltner Channels', 'Standard Deviation'],
+    'Moving averages': ['Exponential Moving Average', 'Simple Moving Average', 'Weighted Moving Average'],
+    Others: ['Volume', 'Ichimoku Cloud', 'Price Channel', 'Zig Zag'],
 };
 
-/* ── Component ──────────────────────────────────────────────────────────────── */
+const IconChart = () => (
+    <svg viewBox='0 0 24 24' aria-hidden='true'>
+        <path d='M4 18V6m0 12h16M7 15l3-4 3 2 4-6' />
+    </svg>
+);
+
+const IconIndicators = () => (
+    <svg viewBox='0 0 24 24' aria-hidden='true'>
+        <path d='M3 18l5-6 4 3 8-9M16 6h4v4' />
+    </svg>
+);
+
+const IconDrawing = () => (
+    <svg viewBox='0 0 24 24' aria-hidden='true'>
+        <path d='M4 20h5L19 10a2.1 2.1 0 0 0-3-3L6 17v3h3' />
+        <path d='M14 8l3 3' />
+    </svg>
+);
+
+const IconDownload = () => (
+    <svg viewBox='0 0 24 24' aria-hidden='true'>
+        <path d='M12 3v12m0 0 4-4m-4 4-4-4M4 17v3h16v-3' />
+    </svg>
+);
+
+const TypeGlyph = ({ type }: { type: string }) => {
+    if (type === 'candle' || type === 'hollow') {
+        return (
+            <svg viewBox='0 0 32 32' aria-hidden='true'>
+                <path d='M9 5v22M23 5v22' />
+                <rect x='5' y='10' width='8' height='10' rx='1' />
+                <rect x='19' y='8' width='8' height='13' rx='1' />
+            </svg>
+        );
+    }
+    if (type === 'ohlc') {
+        return (
+            <svg viewBox='0 0 32 32' aria-hidden='true'>
+                <path d='M8 5v22m16-22v22M8 11h7m-7 9h7m9-7h-7m7 8h-7' />
+            </svg>
+        );
+    }
+    return (
+        <svg viewBox='0 0 32 32' aria-hidden='true'>
+            <path d='M4 25 12 17l5 4 11-13v17H4Z' />
+            <path d='m4 25 8-8 5 4 11-13' />
+        </svg>
+    );
+};
+
 const ChartSettingsSidebar: React.FC = () => {
     const { chart_store } = useStore();
-    const [showGranPicker, setShowGranPicker] = useState(false);
-    const [showTypePicker, setShowTypePicker] = useState(false);
+    const [panel, setPanel] = useState<PanelId>(null);
+    const [indicatorCategory, setIndicatorCategory] = useState('Momentum');
 
-    const chartType  = chart_store?.chart_type   ?? 'line';
-    const granularity = chart_store?.granularity ?? 0;
+    const chartType = chart_store?.chart_type ?? 'line';
+    const granularity = Number(chart_store?.granularity ?? 0);
+    const selectedType = CHART_TYPES.find(type => type.value === chartType)?.value ?? 'line';
+    const selectedGranularity = GRANULARITIES.find(item => item.value === granularity)?.label ?? '1t';
 
-    const handleGran = (g: number) => {
-        chart_store?.updateGranularity(g);
-        setShowGranPicker(false);
+    const togglePanel = (nextPanel: Exclude<PanelId, null>) => {
+        setPanel(current => current === nextPanel ? null : nextPanel);
     };
 
-    const handleChartType = (t: string) => {
-        chart_store?.updateChartType(t);
-        setShowTypePicker(false);
+    const selectChartType = (type: string) => {
+        chart_store?.updateChartType(type);
     };
 
-    const handleDownload = () => {
-        try {
-            const canvas = document.querySelector('.ciq-canvas') as HTMLCanvasElement;
-            if (canvas) {
-                const link = document.createElement('a');
-                link.download = `chart-${Date.now()}.png`;
-                link.href = canvas.toDataURL('image/png');
-                link.click();
-            }
-        } catch { /* ignore cross-origin canvas issues */ }
+    const selectGranularity = (value: number) => {
+        chart_store?.updateGranularity(value);
+        // SmartChart renders tick data as an area chart. Candle families are
+        // only valid once the feed is returning OHLC candles.
+        if (value === 0) chart_store?.updateChartType('line');
     };
+
+    const openNativeTool = (tool: 'indicator' | 'drawing' | 'share') => {
+        const selector = tool === 'indicator'
+            ? '.chart-native-control--study'
+            : tool === 'drawing'
+                ? '.chart-native-control--drawing'
+                : '.chart-native-control--share';
+        const button = document.querySelector(
+            `${selector} .cq-menu-btn, ${selector} button, ${selector} [role="button"]`,
+        ) as HTMLElement | null;
+        button?.click();
+    };
+
+    const downloadChart = () => {
+        const canvas = document.querySelector(
+            '.ciq-chart-area canvas, .ciq-canvas, canvas',
+        ) as HTMLCanvasElement | null;
+        if (!canvas) return;
+        const link = document.createElement('a');
+        link.download = `marksyntrader-${Date.now()}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+    };
+
+    const panelTitle = panel === 'chart'
+        ? 'Chart settings'
+        : panel === 'indicators'
+            ? 'Indicators'
+            : panel === 'drawing'
+                ? 'Drawing tools'
+                : 'Download & share';
 
     return (
-        <div className='css-sidebar'>
-            {/* ── Granularity chip ── */}
-            <div className='css-sidebar__item css-sidebar__item--label'
-                title='Timeframe'
-                onClick={() => { setShowGranPicker(v => !v); setShowTypePicker(false); }}>
-                <span className='css-sidebar__gran'>{granLabel(granularity)}</span>
-            </div>
+        <div className='chart-settings-sidebar'>
+            <nav className='chart-settings-sidebar__rail' aria-label='Chart tools'>
+                <button
+                    type='button'
+                    className={`chart-settings-sidebar__tool ${panel === 'chart' ? 'is-active' : ''}`}
+                    aria-label='Chart type and time interval'
+                    aria-expanded={panel === 'chart'}
+                    onClick={() => togglePanel('chart')}
+                >
+                    <span className='chart-settings-sidebar__badge'>{selectedGranularity}</span>
+                    <IconChart />
+                </button>
+                <button
+                    type='button'
+                    className={`chart-settings-sidebar__tool ${panel === 'indicators' ? 'is-active' : ''}`}
+                    aria-label='Indicators'
+                    aria-expanded={panel === 'indicators'}
+                    onClick={() => togglePanel('indicators')}
+                >
+                    <IconIndicators />
+                </button>
+                <button
+                    type='button'
+                    className={`chart-settings-sidebar__tool ${panel === 'drawing' ? 'is-active' : ''}`}
+                    aria-label='Drawing tools'
+                    aria-expanded={panel === 'drawing'}
+                    onClick={() => togglePanel('drawing')}
+                >
+                    <IconDrawing />
+                </button>
+                <button
+                    type='button'
+                    className={`chart-settings-sidebar__tool ${panel === 'download' ? 'is-active' : ''}`}
+                    aria-label='Download chart'
+                    aria-expanded={panel === 'download'}
+                    onClick={() => togglePanel('download')}
+                >
+                    <IconDownload />
+                </button>
+            </nav>
 
-            {/* ── Chart type ── */}
-            <div className={`css-sidebar__item ${chartType === 'line' || chartType === 'mountain' ? 'active' : ''}`}
-                title='Line chart'
-                onClick={() => { setShowTypePicker(v => !v); setShowGranPicker(false); }}>
-                <IconLine />
-            </div>
+            {panel && (
+                <section className='chart-settings-sidebar__panel' aria-label={panelTitle}>
+                    <header className='chart-settings-sidebar__header'>
+                        <h2>{panelTitle}</h2>
+                        <button type='button' className='chart-settings-sidebar__close' aria-label='Close chart tools' onClick={() => setPanel(null)}>
+                            ×
+                        </button>
+                    </header>
 
-            {/* ── Indicators (opens SmartChart's built-in indicator panel) ── */}
-            <div className='css-sidebar__item'
-                title='Studies / Indicators'
-                onClick={() => {
-                    try {
-                        (document.querySelector('.ciq-menu .cq-menu-btn') as HTMLElement)?.click();
-                    } catch { /* noop */ }
-                }}>
-                <IconIndicators />
-            </div>
+                    {panel === 'chart' && (
+                        <div className='chart-settings-sidebar__body'>
+                            <h3>Chart types</h3>
+                            <div className='chart-settings-sidebar__types'>
+                                {CHART_TYPES.map(type => (
+                                    <button
+                                        type='button'
+                                        key={type.value}
+                                        className={`chart-settings-sidebar__type ${selectedType === type.value ? 'is-selected' : ''}`}
+                                        onClick={() => selectChartType(type.value)}
+                                    >
+                                        <TypeGlyph type={type.glyph} />
+                                        <span>{type.label}</span>
+                                    </button>
+                                ))}
+                            </div>
+                            <h3>Time interval</h3>
+                            <div className='chart-settings-sidebar__intervals'>
+                                {GRANULARITIES.map(item => (
+                                    <button
+                                        type='button'
+                                        key={item.value}
+                                        className={granularity === item.value ? 'is-selected' : ''}
+                                        onClick={() => selectGranularity(item.value)}
+                                    >
+                                        {item.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
-            {/* ── Bar / OHLC ── */}
-            <div className={`css-sidebar__item ${chartType === 'bar' || chartType === 'candle' ? 'active' : ''}`}
-                title='Candle/Bar chart'
-                onClick={() => handleChartType(chartType === 'candle' ? 'bar' : 'candle')}>
-                <IconCandle />
-            </div>
+                    {panel === 'indicators' && (
+                        <div className='chart-settings-sidebar__split'>
+                            <div className='chart-settings-sidebar__categories'>
+                                {Object.keys(INDICATORS).map(category => (
+                                    <button
+                                        type='button'
+                                        key={category}
+                                        className={indicatorCategory === category ? 'is-selected' : ''}
+                                        onClick={() => setIndicatorCategory(category)}
+                                    >
+                                        {category}
+                                    </button>
+                                ))}
+                            </div>
+                            <div className='chart-settings-sidebar__items'>
+                                <p className='chart-settings-sidebar__hint'>
+                                    Choose an indicator to open the official SmartChart study settings.
+                                </p>
+                                {INDICATORS[indicatorCategory].map(indicator => (
+                                    <button
+                                        type='button'
+                                        className='chart-settings-sidebar__item'
+                                        key={indicator}
+                                        onClick={() => openNativeTool('indicator')}
+                                    >
+                                        <span className='chart-settings-sidebar__item-glyph'>∿</span>
+                                        {indicator}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
-            {/* ── Drawing tools ── */}
-            <div className='css-sidebar__item'
-                title='Drawing tools'
-                onClick={() => {
-                    try {
-                        (document.querySelector('[class*="ciq-draw"]') as HTMLElement)?.click();
-                    } catch { /* noop */ }
-                }}>
-                <IconDraw />
-            </div>
+                    {panel === 'drawing' && (
+                        <div className='chart-settings-sidebar__body'>
+                            <p className='chart-settings-sidebar__hint'>
+                                Select a tool, then draw directly on the live chart.
+                            </p>
+                            {['Trend line', 'Horizontal line', 'Vertical line', 'Fibonacci retracement', 'Rectangle'].map(tool => (
+                                <button type='button' className='chart-settings-sidebar__action' key={tool} onClick={() => openNativeTool('drawing')}>
+                                    <span className='chart-settings-sidebar__action-icon'>↗</span>
+                                    <span>{tool}</span>
+                                    <span className='chart-settings-sidebar__action-arrow'>›</span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
 
-            {/* ── Download ── */}
-            <div className='css-sidebar__item' title='Download chart' onClick={handleDownload}>
-                <IconDownload />
-            </div>
-
-            {/* ── Granularity picker ── */}
-            {showGranPicker && (
-                <div className='css-sidebar__picker' onClick={() => setShowGranPicker(false)}>
-                    <div className='css-sidebar__picker-panel' onClick={e => e.stopPropagation()}>
-                        <div className='css-sidebar__picker-title'>Timeframe</div>
-                        {GRAN_STEPS.map(g => (
-                            <button
-                                key={g}
-                                className={`css-sidebar__picker-btn ${granularity === g ? 'active' : ''}`}
-                                onClick={() => handleGran(g)}
-                            >
-                                {granLabel(g)}
+                    {panel === 'download' && (
+                        <div className='chart-settings-sidebar__body'>
+                            <p className='chart-settings-sidebar__hint'>
+                                Save the current chart view or open the official sharing controls.
+                            </p>
+                            <button type='button' className='chart-settings-sidebar__action' onClick={downloadChart}>
+                                <span className='chart-settings-sidebar__action-icon'>↓</span>
+                                <span>Download chart as PNG</span>
+                                <span className='chart-settings-sidebar__action-arrow'>›</span>
                             </button>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* ── Chart type picker ── */}
-            {showTypePicker && (
-                <div className='css-sidebar__picker' onClick={() => setShowTypePicker(false)}>
-                    <div className='css-sidebar__picker-panel' onClick={e => e.stopPropagation()}>
-                        <div className='css-sidebar__picker-title'>Chart Type</div>
-                        {[
-                            { id: 'line',     label: '↗ Line'      },
-                            { id: 'mountain', label: '🏔 Mountain'  },
-                            { id: 'candle',   label: '🕯 Candlestick' },
-                            { id: 'bar',      label: '📊 OHLC Bar'  },
-                            { id: 'dot',      label: '● Dot'        },
-                        ].map(t => (
-                            <button
-                                key={t.id}
-                                className={`css-sidebar__picker-btn ${chartType === t.id ? 'active' : ''}`}
-                                onClick={() => handleChartType(t.id)}
-                            >
-                                {t.label}
+                            <button type='button' className='chart-settings-sidebar__action' onClick={() => openNativeTool('share')}>
+                                <span className='chart-settings-sidebar__action-icon'>↗</span>
+                                <span>Open chart sharing</span>
+                                <span className='chart-settings-sidebar__action-arrow'>›</span>
                             </button>
-                        ))}
-                    </div>
-                </div>
+                        </div>
+                    )}
+                </section>
             )}
         </div>
     );

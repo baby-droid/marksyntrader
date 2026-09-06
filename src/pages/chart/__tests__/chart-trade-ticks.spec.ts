@@ -53,6 +53,11 @@ describe('chart contract tick reconciliation helpers', () => {
         expect(countSettlementEpochs([9, 10, 11, 12], 9, 'RDBULL')).toBe(3);
     });
 
+    it('does not count public ticks until the contract has an entry anchor', () => {
+        expect(countSettlementEpochs([], null, 'R_100')).toBe(0);
+        expect(countSettlementEpochs([101, 102], 100, 'R_100')).toBe(2);
+    });
+
     it('falls back to stream length when a response omits per-tick epochs', () => {
         expect(getPocStreamCount([{ tick_display_value: '1' }, { tick_display_value: '2' }])).toBe(2);
     });

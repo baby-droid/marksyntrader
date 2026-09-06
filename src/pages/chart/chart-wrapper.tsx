@@ -526,14 +526,19 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                     // POC tick_count/tick_stream when the contract stream updates.
                     if (pendingTradesRef.current.length > 0) {
                         pendingTradesRef.current = pendingTradesRef.current.map(t => {
-                            const entryEpoch = entryEpochRef.current.get(t.id) ?? 0;
                             if (epoch <= 0) return t;
+                            // Do not label chart ticks as contract ticks until
+                            // Deriv has supplied the contract entry epoch.
+                            // Otherwise every public tick already on screen
+                            // before the buy is incorrectly counted.
+                            const entryEpoch = entryEpochRef.current.get(t.id);
+                            if (entryEpoch == null) return t;
                             const seen = liveTickEpochsRef.current.get(t.id);
                             if (!seen) return t;
                             seen.add(epoch);
                             const liveCount = countSettlementEpochs(
                                 [...seen],
-                                entryEpoch || null,
+                                entryEpoch,
                                 t.symbol,
                             );
                             const authoritative = authoritativeTickCountRef.current.get(t.id);

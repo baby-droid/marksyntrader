@@ -470,8 +470,8 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
     }, [warmProposalCache]);
 
     /* ── Market type (informational) ─────────────────────────────────────── */
-    // Tick counting is driven by chart-wrapper.tsx: the entry tick and following
-    // ticks are counted, with only pre-entry ticks excluded.
+    // Tick counting is driven by chart-wrapper.tsx: the entry quote is never
+    // counted; market-specific post-entry rules live in the shared helper.
     const is1sMarket   = /^1HZ/i.test(symbol);
     const isJumpMarket = /^JD/i.test(symbol);
 

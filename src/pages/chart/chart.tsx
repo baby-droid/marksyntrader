@@ -9,6 +9,7 @@ import { useSmartChartAdaptor } from '@/hooks/useSmartChartAdaptor';
 import { useStore } from '@/hooks/useStore';
 import { ChartTitle, SmartChart, TGranularity, TStateChangeListener } from '@deriv-com/smartcharts-champion';
 import { useDevice } from '@deriv-com/ui';
+import ChartSettingsSidebar from './ChartSettingsSidebar';
 import ToolbarWidgets from './toolbar-widgets';
 
 const Chart = observer(({
@@ -138,14 +139,16 @@ const Chart = observer(({
                 enabledChartFooter={false}
                 stateChangeListener={handleStateChange}
                 toolbarWidget={() => (
-                    <ToolbarWidgets
-                        updateChartType={updateChartType}
-                        updateGranularity={updateGranularity}
-                        position={!isDesktop ? 'bottom' : 'top'}
-                        isDesktop={isDesktop}
-                    />
+                    <div className='chart-native-toolbar' aria-hidden='true'>
+                        <ToolbarWidgets
+                            updateChartType={updateChartType}
+                            updateGranularity={updateGranularity}
+                            position={!isDesktop ? 'bottom' : 'top'}
+                            isDesktop={isDesktop}
+                        />
+                    </div>
                 )}
-                 chartType={chart_type || 'line'}
+                chartType={chart_type || 'line'}
                 isMobile={isMobile}
                 enabledNavigationWidget={isDesktop}
                  granularity={(granularity ?? 0) as TGranularity}
@@ -166,6 +169,7 @@ const Chart = observer(({
                 leftMargin={80}
                 drawingToolFloatingMenuPosition={drawingToolFloatingMenuPosition}
             />
+            <ChartSettingsSidebar />
         </div>
     );
 });
