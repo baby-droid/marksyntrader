@@ -327,6 +327,17 @@
     }
 }
 
+/* Keep the official SmartChart controls mounted for proxy clicks, but never
+   let the library's own toolbar create a second wide row of buttons. */
+.dashboard__chart-wrapper .smartchart-native-toolbar-proxy {
+    display: none !important;
+    position: absolute !important;
+    width: 0 !important;
+    height: 0 !important;
+    overflow: hidden !important;
+    pointer-events: none !important;
+}
+
 /* SmartChart's current ChartMode/Indicators/DrawTools/Share components render
    their real content in a per-chart Quill portal. Keep each native surface as
    a small popover beside the lower-left control rail, never a full-height

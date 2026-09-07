@@ -15,33 +15,35 @@ const ToolbarWidgets = ({ updateChartType, updateGranularity, position, isDeskto
     const validPosition = position === 'top' || position === 'bottom' ? position : 'top';
 
     return (
-        <ToolbarWidget position={validPosition || (isMobile ? 'bottom' : null)}>
-            {/* Chart type selector — always visible */}
-            <div className='chart-native-control--chart'>
-                <ChartMode portalNodeId='modal_root' onChartType={updateChartType} onGranularity={updateGranularity} />
-            </div>
-            {/* Indicators / studies — always visible */}
-            <div className='chart-native-control--study'>
-                <StudyLegend portalNodeId='modal_root' searchInputClassName='data-hj-whitelist' />
-            </div>
-            {/* Saved views */}
-            <div className='chart-native-control--views'>
-                <Views
-                    portalNodeId='modal_root'
-                    onChartType={updateChartType}
-                    onGranularity={updateGranularity}
-                    searchInputClassName='data-hj-whitelist'
-                />
-            </div>
-            {/* Drawing tools — always visible */}
-            <div className='chart-native-control--drawing'>
-                <DrawTools portalNodeId='modal_root' />
-            </div>
-            {/* Download / Share — always visible */}
-            <div className='chart-native-control--share'>
-                <Share portalNodeId='modal_root' />
-            </div>
-        </ToolbarWidget>
+        <div className='smartchart-native-toolbar-proxy'>
+            <ToolbarWidget position={validPosition || (isMobile ? 'bottom' : null)}>
+                {/* Chart type selector — always available to the visible proxy rail */}
+                <div className='chart-native-control--chart'>
+                    <ChartMode portalNodeId='modal_root' onChartType={updateChartType} onGranularity={updateGranularity} />
+                </div>
+                {/* Indicators / studies — always available to the visible proxy rail */}
+                <div className='chart-native-control--study'>
+                    <StudyLegend portalNodeId='modal_root' searchInputClassName='data-hj-whitelist' />
+                </div>
+                {/* Saved views */}
+                <div className='chart-native-control--views'>
+                    <Views
+                        portalNodeId='modal_root'
+                        onChartType={updateChartType}
+                        onGranularity={updateGranularity}
+                        searchInputClassName='data-hj-whitelist'
+                    />
+                </div>
+                {/* Drawing tools — always available to the visible proxy rail */}
+                <div className='chart-native-control--drawing'>
+                    <DrawTools portalNodeId='modal_root' />
+                </div>
+                {/* Download / Share — always available to the visible proxy rail */}
+                <div className='chart-native-control--share'>
+                    <Share portalNodeId='modal_root' />
+                </div>
+            </ToolbarWidget>
+        </div>
     );
 };
 
