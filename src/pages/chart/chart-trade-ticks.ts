@@ -3,8 +3,9 @@
  *
  * The public `ticks` stream is useful for low-latency UI updates, but it is
  * not the contract's settlement ledger. `proposal_open_contract.tick_count`
- * and `tick_stream` are the authoritative contract-side values and are used
- * to reconcile the live counter.
+ * and `tick_stream` are used to anchor and verify contract settlement. The
+ * visible counter itself follows the live tick stream so it cannot jump ahead
+ * of the digit currently shown on the chart.
  */
 
 export type DerivContractTick = {
@@ -12,7 +13,7 @@ export type DerivContractTick = {
     [key: string]: unknown;
 };
 
-export type TickSettlementMode = 'include-first-after-entry';
+export type TickSettlementMode = 'include-first-after-entry' | 'skip-first-after-entry';
 
 export function finiteEpoch(value: unknown): number | null {
     const epoch = Number(value);
@@ -20,18 +21,19 @@ export function finiteEpoch(value: unknown): number | null {
 }
 
 /**
- * The entry spot is never a duration tick. The first unique quote strictly
- * after the entry spot is settlement tick 1 for every market family. This is
- * important for 1-second Volatility and Jump indices: their faster stream must
- * not make a 3-tick contract display only T2.
+ * The entry spot is never a duration tick. Plain Volatility, Bear, and Bull
+ * count the first unique quote strictly after entry as T1. 1-second
+ * Volatility and Jump contracts expose one leading post-entry quote (the
+ * visible 0 in an entry-9 sequence), so that quote is skipped and the next
+ * quote is T1.
  *
  * Keep this rule in one place so desktop and mobile never drift apart.
  */
 export function getTickSettlementMode(symbol?: string | null): TickSettlementMode {
-    // Keep the market argument in the API because settlement rules may grow,
-    // but all currently supported tick-duration markets count post-entry tick
-    // 1 consistently.
-    void symbol;
+    const normalized = String(symbol ?? '').toUpperCase();
+    if (/^1HZ/.test(normalized) || /^JD/.test(normalized)) {
+        return 'skip-first-after-entry';
+    }
     return 'include-first-after-entry';
 }
 
@@ -44,7 +46,7 @@ export function countSettlementEpochs(
 
     const uniqueEpochs = new Set<number>();
     const anchor = finiteEpoch(entryEpoch);
-    getTickSettlementMode(symbol);
+    const settlementMode = getTickSettlementMode(symbol);
 
     for (const value of epochs) {
         const epoch = finiteEpoch(
@@ -64,7 +66,10 @@ export function countSettlementEpochs(
         if (isSettlementTick) uniqueEpochs.add(epoch);
     }
 
-    return [...uniqueEpochs].sort((a, b) => a - b).length;
+    const sortedEpochs = [...uniqueEpochs].sort((a, b) => a - b);
+    return settlementMode === 'skip-first-after-entry'
+        ? Math.max(0, sortedEpochs.length - 1)
+        : sortedEpochs.length;
 }
 
 export function getPocEntryEpoch(poc: Record<string, unknown>): number | null {

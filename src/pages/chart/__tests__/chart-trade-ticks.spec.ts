@@ -35,19 +35,31 @@ describe('chart contract tick reconciliation helpers', () => {
         ], 100)).toBe(1);
     });
 
-    it('counts every post-entry tick for 1s and Jump markets', () => {
-        expect(getTickSettlementMode('1HZ100V')).toBe('include-first-after-entry');
-        expect(getTickSettlementMode('JD100')).toBe('include-first-after-entry');
-        // Entry=9, produced ticks=1,2,3: the first post-entry quote is T1.
-        expect(countSettlementEpochs([9, 10, 11, 12], 9, '1HZ100V')).toBe(3);
-        expect(countSettlementEpochs([9, 10, 11, 12], 9, 'JD100')).toBe(3);
+    it('skips the leading post-entry quote for 1s and Jump markets', () => {
+        expect(getTickSettlementMode('1HZ100V')).toBe('skip-first-after-entry');
+        expect(getTickSettlementMode('JD100')).toBe('skip-first-after-entry');
+        // Entry digit=9, produced digits=0,1,2,3: skip 0, then T1/T2/T3.
+        expect(countSettlementEpochs([9, 10], 9, '1HZ100V')).toBe(0);
+        expect(countSettlementEpochs([9, 10, 11], 9, '1HZ100V')).toBe(1);
+        expect(countSettlementEpochs([9, 10, 11, 12], 9, '1HZ100V')).toBe(2);
+        expect(countSettlementEpochs([9, 10, 11, 12, 13], 9, '1HZ100V')).toBe(3);
+        expect(countSettlementEpochs([9, 10, 11, 12, 13], 9, 'JD100')).toBe(3);
+        expect(getPocStreamCount([
+            { epoch: 9 },
+            { epoch: 10 },
+            { epoch: 11 },
+            { epoch: 12 },
+            { epoch: 13 },
+        ], 9, '1HZ100V')).toBe(3);
     });
 
     it('counts plain, Bear, and Bull settlement ticks from entry', () => {
         expect(getTickSettlementMode('R_100')).toBe('include-first-after-entry');
         expect(getTickSettlementMode('RDBEAR')).toBe('include-first-after-entry');
         expect(getTickSettlementMode('RDBULL')).toBe('include-first-after-entry');
-        // Entry=9, produced ticks=0,1,2: count all three post-entry ticks.
+        // Entry digit=9, produced digits=0,1,2: count 0 as T1.
+        expect(countSettlementEpochs([9, 10], 9, 'R_100')).toBe(1);
+        expect(countSettlementEpochs([9, 10, 11], 9, 'RDBEAR')).toBe(2);
         expect(countSettlementEpochs([9, 10, 11, 12], 9, 'R_100')).toBe(3);
         expect(countSettlementEpochs([9, 10, 11, 12], 9, 'RDBEAR')).toBe(3);
         expect(countSettlementEpochs([9, 10, 11, 12], 9, 'RDBULL')).toBe(3);

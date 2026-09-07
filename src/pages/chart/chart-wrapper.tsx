@@ -266,17 +266,7 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
             const id = String(contractId);
             const epoch = finiteEpoch(entryEpoch);
             if (epoch === null) return;
-            const previousEntryEpoch = entryEpochRef.current.get(id);
             entryEpochRef.current.set(id, epoch);
-
-            // The POC entry update can arrive after one or more public ticks.
-            // Those buffered ticks belong to the pre-anchor window from the
-            // badge's point of view. Start the visible sequence at the next
-            // live quote so the first displayed contract tick is always T1.
-            if (previousEntryEpoch !== epoch) {
-                liveTickEpochsRef.current.set(id, new Set());
-                updateCount(id, 0);
-            }
 
             const trade = pendingTradesRef.current.find(t => t.id === id);
             const liveCount = countSettlementEpochs(
@@ -284,6 +274,10 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                 epoch,
                 trade?.symbol,
             );
+            // Keep the live epochs received between buy and the POC anchor.
+            // They are real ticks, not stale data; countSettlementEpochs will
+            // remove anything before the authoritative entry epoch and apply
+            // the market-specific leading-tick rule.
             updateCount(id, liveCount);
         };
 
@@ -430,6 +424,7 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
 
         const teardownSub = () => {
             if (watchdog) { clearTimeout(watchdog); watchdog = null; }
+            if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
             rxSub?.unsubscribe?.();
             rxSub = null;
             if (subscriptionId) {
@@ -438,10 +433,18 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
             }
         };
 
+        const scheduleRetry = (delay: number) => {
+            if (!alive || retryTimer) return;
+            retryTimer = setTimeout(() => {
+                retryTimer = null;
+                startSub();
+            }, delay);
+        };
+
         const startSub = () => {
             if (!alive) return;
             if (!(api_base as any)?.api) {
-                retryTimer = setTimeout(startSub, 300);
+                scheduleRetry(300);
                 return;
             }
 
@@ -514,8 +517,8 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                     }
 
                     // ── Live-tick display count (epoch-anchored, real-time) ──
-                    // Count unique public ticks immediately, then reconcile with
-                    // POC tick_count/tick_stream when the contract stream updates.
+            // Count unique public ticks immediately. POC updates re-anchor the
+            // sequence, but the live stream remains the source for the badge.
                     if (pendingTradesRef.current.length > 0) {
                         pendingTradesRef.current = pendingTradesRef.current.map(t => {
                             if (epoch <= 0) return t;
@@ -542,7 +545,7 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                 error: () => {
                     if (!alive) return;
                     // Fast retry — don't leave a 2 s gap in the stream
-                    retryTimer = setTimeout(startSub, 100);
+                    scheduleRetry(100);
                 },
             });
 
@@ -560,14 +563,19 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
             teardownSub();
             startSub();
         };
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') handleReconnect();
+        };
         window.addEventListener('online',           handleReconnect);
-        window.addEventListener('visibilitychange', handleReconnect);
+        window.addEventListener('focus',             handleReconnect);
+        document.addEventListener('visibilitychange', handleVisibility);
 
         return () => {
             alive = false;
             if (retryTimer) clearTimeout(retryTimer);
             window.removeEventListener('online',           handleReconnect);
-            window.removeEventListener('visibilitychange', handleReconnect);
+            window.removeEventListener('focus',             handleReconnect);
+            document.removeEventListener('visibilitychange', handleVisibility);
             teardownSub();
         };
     }, [symbol]);
