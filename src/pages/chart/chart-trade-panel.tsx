@@ -512,7 +512,8 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
 
     /* ── Market type (informational) ─────────────────────────────────────── */
     // Entry-tick handling is uniform across market types; the chart counter
-    // applies the market-specific leading-tick rule to live quotes after entry.
+    // applies the inclusive entry-tick rule to live quotes after the
+    // authoritative entry spot is known.
     const is1sMarket   = /^1HZ/i.test(symbol);
     const isJumpMarket = /^JD/i.test(symbol);
 
@@ -644,8 +645,8 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                         if (!pocSubId && res.subscription?.id) pocSubId = res.subscription.id;
 
                         // ── Lock in the authoritative entry/spot time ───────────────
-                // chart-wrapper applies the market-specific leading-tick rule
-                // to live quotes after entry.
+                // chart-wrapper applies the inclusive entry-tick rule to live
+                // quotes after the authoritative entry spot is known.
                         if (savedEntryTime === 0) {
                             const pocEntryTime = getPocEntryEpoch(poc);
                             if (pocEntryTime !== null) {
@@ -673,6 +674,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                                     contractId: cid,
                                     tickCount: pocTickCount,
                                     tickStream: poc.tick_stream,
+                                    tickStreamCount: pocStreamCount,
                                     entryEpoch: savedEntryTime || getPocEntryEpoch(poc),
                                 },
                             }));
@@ -691,6 +693,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                                     contractType, contractId: cid,
                                     tickCount: pocTickCount,
                                     tickStream: poc.tick_stream,
+                                    tickStreamCount: pocStreamCount,
                                     entryEpoch: savedEntryTime || getPocEntryEpoch(poc),
                                 },
                             }));

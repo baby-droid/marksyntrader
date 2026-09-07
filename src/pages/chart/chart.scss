@@ -162,20 +162,6 @@
     }
 }
 
-/* The custom rail owns the visible chart controls. Keep SmartChart's official
- * controls mounted and place them in a compact vertical rail over the chart. */
-.chart-native-toolbar {
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
-    overflow: visible !important;
-    opacity: 1 !important;
-    pointer-events: none !important;
-    z-index: 100000 !important;
-}
-
 // Safari-specific fixes
 .dashboard__chart-wrapper--safari {
     .smartcharts-mobile {
@@ -246,17 +232,12 @@
         z-index: 100000 !important;
     }
 
-    /* The native component wraps each menu in an extra control div. Reset
-       every wrapper as well as the button itself so global chart/menu styles
-       cannot stretch a control across the chart. */
-    .chart-native-toolbar .chart-native-control,
-    .chart-native-toolbar .ciq-menu,
-    .chart-native-toolbar .ciq-menu .cq-menu-btn,
-    .chart-native-toolbar .ciq-menu .cq-menu-btn .sc-chart-mode__menu,
-    .chart-native-toolbar .ciq-menu .cq-menu-btn .sc-views__menu,
-    .chart-native-toolbar .ciq-menu .cq-menu-btn .sc-download__menu,
-    .chart-native-toolbar .ciq-menu .cq-menu-btn .sc-studies__menu,
-    .chart-native-toolbar .ciq-menu .cq-menu-btn .sc-dtools__menu {
+    /* Reset SmartChart's native controls so they stay compact instead of
+       inheriting a full-width black toolbar row from the chart layout. */
+    .sc-toolbar-widget > *,
+    .sc-toolbar-widget .ciq-menu,
+    .sc-toolbar-widget .ciq-menu .cq-menu-btn,
+    .sc-toolbar-widget .ciq-menu .cq-menu-btn > * {
         box-sizing: border-box !important;
         flex: 0 0 40px !important;
         height: 40px !important;
@@ -267,7 +248,7 @@
         min-width: 40px !important;
     }
 
-    .chart-native-toolbar .chart-native-control {
+    .sc-toolbar-widget > * {
         display: flex !important;
         align-items: center;
         justify-content: center;
@@ -275,23 +256,25 @@
         padding: 0 !important;
     }
 
-    .chart-native-toolbar .ciq-menu {
+    .sc-toolbar-widget .ciq-menu {
         margin: 0 !important;
         padding: 0 !important;
     }
 
-    .chart-native-toolbar .ciq-menu .cq-menu-btn {
+    .sc-toolbar-widget .ciq-menu .cq-menu-btn {
         align-items: center;
-        background: rgba(242, 243, 244, 0.94);
+        background: rgba(242, 243, 244, 0.96) !important;
+        border: 0 !important;
         border-radius: 50%;
         display: flex;
         justify-content: center;
         padding: 0;
+        box-shadow: 0 1px 4px rgba(29, 39, 49, 0.08);
     }
 
-    .chart-native-toolbar .ciq-menu .cq-menu-btn:hover,
-    .chart-native-toolbar .ciq-menu .cq-menu-btn:focus-visible {
-        background: #e2e5e7;
+    .sc-toolbar-widget .ciq-menu .cq-menu-btn:hover,
+    .sc-toolbar-widget .ciq-menu .cq-menu-btn:focus-visible {
+        background: #e2e5e7 !important;
         outline: 2px solid rgba(30, 136, 255, 0.45);
         outline-offset: 2px;
     }
@@ -346,46 +329,5 @@
 
     .dashboard__chart-wrapper .sc-navigation-widget {
         bottom: 12px !important;
-    }
-}
-
-/* ── SmartChart controls ─────────────────────────────────────────────────────
- * The chart page has its own compact control rail
- * (ChartSettingsSidebar). SmartChart still needs its native toolbar mounted
- * because those controls own the real chart menus, but the native toolbar
- * buttons must not paint a second, stretched row over the chart. The previous
- * layout rules allowed the native buttons to inherit a full chart width,
- * producing the large black bars shown in the chart reference.
- */
-.dashboard__chart-wrapper .chart-native-toolbar .sc-toolbar-widget {
-    display: none !important;
-}
-
-/* SmartChart portals these menus into #modal_root. Keep the real menu
- * contents, but present them as a focused settings sheet at the centre-right
- * of the chart instead of anchoring them to the hidden native toolbar. */
-.chart-settings-modal-root > .sc-dialog,
-.chart-settings-modal-root .sc-dialog {
-    position: fixed !important;
-    top: 50% !important;
-    left: 64% !important;
-    max-height: calc(100vh - 96px);
-    overflow: auto;
-    transform: translate(-50%, -50%) !important;
-    z-index: 10000 !important;
-}
-
-.chart-settings-modal-root .sc-dialog.sc-dialog-enter-active,
-.chart-settings-modal-root .sc-dialog.sc-dialog-enter-done {
-    transform: translate(-50%, -50%) !important;
-}
-
-@media screen and (max-width: 767px) {
-    .chart-settings-modal-root > .sc-dialog,
-    .chart-settings-modal-root .sc-dialog {
-        top: 50% !important;
-        left: 50% !important;
-        width: min(calc(100vw - 32px), 360px) !important;
-        max-height: calc(100vh - 48px);
     }
 }

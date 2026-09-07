@@ -11,6 +11,7 @@ import {
     clampContractTickCount,
     countSettlementEpochs,
     finiteEpoch,
+    getPocStreamCount,
 } from './chart-trade-ticks';
 import './chart.scss';
 import './chart-trade-panel.scss';
@@ -248,11 +249,14 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
             setPendingTrades([...pendingTradesRef.current]);
         };
 
-        const updateCount = (id: string, count: number) => {
+        const updateCount = (id: string, count: number, allowReanchor = false) => {
             const trade = pendingTradesRef.current.find(t => t.id === id);
             if (!trade) return;
             const countedTicks = clampContractTickCount(count, trade.totalTicks);
-            if (countedTicks === trade.countedTicks) return;
+            // A late public tick or a reordered POC update must never move the
+            // visible T label backwards. Counts are monotonic until settlement.
+            if (!allowReanchor && countedTicks <= trade.countedTicks) return;
+            if (allowReanchor && countedTicks === trade.countedTicks) return;
             pendingTradesRef.current = pendingTradesRef.current.map(t =>
                 t.id === id ? { ...t, countedTicks } : t
             );
@@ -276,17 +280,19 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
             );
             // Keep the live epochs received between buy and the POC anchor.
             // They are real ticks, not stale data; countSettlementEpochs will
-            // remove anything before the authoritative entry epoch and apply
-            // the market-specific leading-tick rule.
-            updateCount(id, liveCount);
+            // remove anything before the authoritative entry epoch and count
+            // that entry epoch as T1 for every market.
+            // The first entry event is authoritative and may correct the
+            // temporary purchase-time anchor used before POC arrives.
+            updateCount(id, liveCount, true);
         };
 
         // The public stream owns the visible badge because it is the same
-        // stream that updates the digit currently under the triangle. POC
-        // updates still re-anchor the sequence and drive settlement, but must
-        // not make the badge jump ahead of the displayed live digit.
+        // stream that updates the digit currently under the triangle. The POC
+        // tick_stream is merged as the authoritative reconciliation source so
+        // missed/fast public ticks cannot leave T1…Tn behind settlement.
         const handleTradeProgress = (e: CustomEvent) => {
-            const { contractId, entryEpoch } = e.detail;
+            const { contractId, entryEpoch, tickStream, tickStreamCount } = e.detail;
             const id = String(contractId);
             if (finiteEpoch(entryEpoch) !== null) {
                 handleTradeEntry(new CustomEvent('chart:trade-entry', {
@@ -299,7 +305,11 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                 entryEpochRef.current.get(id) ?? null,
                 trade?.symbol,
             );
-            updateCount(id, liveCount);
+            const anchor = entryEpochRef.current.get(id) ?? finiteEpoch(entryEpoch);
+            const pocCount = Number.isFinite(Number(tickStreamCount))
+                ? Number(tickStreamCount)
+                : getPocStreamCount(tickStream, anchor, trade?.symbol);
+            updateCount(id, Math.max(liveCount, pocCount ?? 0));
         };
 
         // ── Contract settled ───────────────────────────────────────────────
@@ -517,8 +527,8 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                     }
 
                     // ── Live-tick display count (epoch-anchored, real-time) ──
-            // Count unique public ticks immediately. POC updates re-anchor the
-            // sequence, but the live stream remains the source for the badge.
+                    // Count unique public ticks immediately. POC progress is
+                    // merged separately so missed public ticks are recovered.
                     if (pendingTradesRef.current.length > 0) {
                         pendingTradesRef.current = pendingTradesRef.current.map(t => {
                             if (epoch <= 0) return t;
@@ -537,7 +547,10 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                                 t.symbol,
                             );
                             const countedTicks = clampContractTickCount(liveCount, t.totalTicks);
-                            return countedTicks === t.countedTicks ? t : { ...t, countedTicks };
+                            const nextCountedTicks = Math.max(t.countedTicks, countedTicks);
+                            return nextCountedTicks === t.countedTicks
+                                ? t
+                                : { ...t, countedTicks: nextCountedTicks };
                         });
                         setPendingTrades([...pendingTradesRef.current]);
                     }

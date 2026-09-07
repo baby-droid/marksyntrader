@@ -17,30 +17,20 @@ const ToolbarWidgets = ({ updateChartType, updateGranularity, position, isDeskto
     return (
         <ToolbarWidget position={validPosition || (isMobile ? 'bottom' : null)}>
             {/* Chart type selector — always visible */}
-            <div className='chart-native-control chart-native-control--chart'>
-                <ChartMode portalNodeId='modal_root' onChartType={updateChartType} onGranularity={updateGranularity} />
-            </div>
+            <ChartMode portalNodeId='modal_root' onChartType={updateChartType} onGranularity={updateGranularity} />
             {/* Indicators / studies — always visible */}
-            <div className='chart-native-control chart-native-control--study'>
-                <StudyLegend portalNodeId='modal_root' searchInputClassName='data-hj-whitelist' />
-            </div>
+            <StudyLegend portalNodeId='modal_root' searchInputClassName='data-hj-whitelist' />
             {/* Saved views */}
-            <div className='chart-native-control chart-native-control--views'>
-                <Views
-                    portalNodeId='modal_root'
-                    onChartType={updateChartType}
-                    onGranularity={updateGranularity}
-                    searchInputClassName='data-hj-whitelist'
-                />
-            </div>
+            <Views
+                portalNodeId='modal_root'
+                onChartType={updateChartType}
+                onGranularity={updateGranularity}
+                searchInputClassName='data-hj-whitelist'
+            />
             {/* Drawing tools — always visible */}
-            <div className='chart-native-control chart-native-control--drawing'>
-                <DrawTools portalNodeId='modal_root' />
-            </div>
+            <DrawTools portalNodeId='modal_root' />
             {/* Download / Share — always visible */}
-            <div className='chart-native-control chart-native-control--share'>
-                <Share portalNodeId='modal_root' />
-            </div>
+            <Share portalNodeId='modal_root' />
         </ToolbarWidget>
     );
 };

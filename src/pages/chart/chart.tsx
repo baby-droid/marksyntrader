@@ -9,7 +9,6 @@ import { useSmartChartAdaptor } from '@/hooks/useSmartChartAdaptor';
 import { useStore } from '@/hooks/useStore';
 import { ChartTitle, SmartChart, TGranularity, TStateChangeListener } from '@deriv-com/smartcharts-champion';
 import { useDevice } from '@deriv-com/ui';
-import ChartSettingsSidebar from './ChartSettingsSidebar';
 import ToolbarWidgets from './toolbar-widgets';
 
 const Chart = observer(({
@@ -95,12 +94,8 @@ const Chart = observer(({
 
         setIsSafari(isSafariBrowser());
 
-        const modalRoot = document.getElementById('modal_root');
-        modalRoot?.classList.add('chart-settings-modal-root');
-
         return () => {
             (api_base.api as any)?.forgetAll?.('ticks');
-            modalRoot?.classList.remove('chart-settings-modal-root');
         };
     }, []);
 
@@ -143,14 +138,12 @@ const Chart = observer(({
                 enabledChartFooter={false}
                 stateChangeListener={handleStateChange}
                 toolbarWidget={() => (
-                    <div className='chart-native-toolbar' aria-hidden='true'>
-                        <ToolbarWidgets
-                            updateChartType={updateChartType}
-                            updateGranularity={updateGranularity}
-                            position={!isDesktop ? 'bottom' : 'top'}
-                            isDesktop={isDesktop}
-                        />
-                    </div>
+                    <ToolbarWidgets
+                        updateChartType={updateChartType}
+                        updateGranularity={updateGranularity}
+                        position={!isDesktop ? 'bottom' : 'top'}
+                        isDesktop={isDesktop}
+                    />
                 )}
                 chartType={chart_type || 'line'}
                 isMobile={isMobile}
@@ -173,7 +166,6 @@ const Chart = observer(({
                 leftMargin={80}
                 drawingToolFloatingMenuPosition={drawingToolFloatingMenuPosition}
             />
-            <ChartSettingsSidebar />
         </div>
     );
 });

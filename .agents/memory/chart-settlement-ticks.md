@@ -4,8 +4,8 @@ description: Entry-tick inclusion and duplicate-epoch handling for chart contrac
 ---
 
 ## Rule
-For chart duration countdowns, count unique live epochs strictly after `entryEpoch`; `1HZ*` and `JD*` skip the first post-entry quote, while plain Volatility, Bear, and Bull count it as T1. The live stream owns the visible badge; POC data anchors entry and settlement but must not jump it ahead.
+For chart duration countdowns, count unique contract epochs at or after `entryEpoch`; the entry spot is T1 for every market and contract type. Merge the live stream with POC `tick_stream` reconciliation, keeping the visible count monotonic and clamped to the requested duration.
 
-**Why:** 1-second and Jump contracts expose a leading post-entry quote before their numbered settlement sequence, while plain/Bear/Bull contracts do not. POC updates can arrive after buffered live quotes or report a larger count before the visible stream catches up.
+**Why:** Deriv documents `entry_spot_time` as the first valid underlying spot and `tick_stream` as the contract stream from entry to end. Excluding the entry or relying only on public ticks makes fast-market labels fall behind and can miss ticks during stream timing gaps.
 
-**How to apply:** Start with the buy receipt's `start_time`/`purchase_time` as a temporary anchor, re-anchor to non-zero `entry_spot_time` (legacy `entry_tick_time` fallback) without discarding buffered live epochs, apply the purchased symbol's settlement mode, and keep the visible count clamped to the contract duration.
+**How to apply:** Start with the buy receipt's `start_time`/`purchase_time` as a temporary anchor, re-anchor to non-zero `entry_spot_time` (legacy `entry_tick_time` fallback), deduplicate epochs, reconcile from POC `tick_stream`, and keep the visible count clamped to the contract duration.

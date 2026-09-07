@@ -4,8 +4,8 @@
  * The public `ticks` stream is useful for low-latency UI updates, but it is
  * not the contract's settlement ledger. `proposal_open_contract.tick_count`
  * and `tick_stream` are used to anchor and verify contract settlement. The
- * visible counter itself follows the live tick stream so it cannot jump ahead
- * of the digit currently shown on the chart.
+ * visible counter follows the live tick stream and is reconciled with the
+ * contract stream so it remains real-time without drifting.
  */
 
 export type DerivContractTick = {
@@ -13,7 +13,7 @@ export type DerivContractTick = {
     [key: string]: unknown;
 };
 
-export type TickSettlementMode = 'include-first-after-entry' | 'skip-first-after-entry';
+export type TickSettlementMode = 'include-first-after-entry';
 
 export function finiteEpoch(value: unknown): number | null {
     const epoch = Number(value);
@@ -21,19 +21,13 @@ export function finiteEpoch(value: unknown): number | null {
 }
 
 /**
- * The entry spot is never a duration tick. Plain Volatility, Bear, and Bull
- * count the first unique quote strictly after entry as T1. 1-second
- * Volatility and Jump contracts expose one leading post-entry quote (the
- * visible 0 in an entry-9 sequence), so that quote is skipped and the next
- * quote is T1.
+ * Deriv's entry spot is the first valid spot in the contract's tick stream.
+ * It is therefore T1 for tick-duration contracts. Every market and contract
+ * type uses the same inclusive rule; only duplicate epochs are discarded.
  *
  * Keep this rule in one place so desktop and mobile never drift apart.
  */
 export function getTickSettlementMode(symbol?: string | null): TickSettlementMode {
-    const normalized = String(symbol ?? '').toUpperCase();
-    if (/^1HZ/.test(normalized) || /^JD/.test(normalized)) {
-        return 'skip-first-after-entry';
-    }
     return 'include-first-after-entry';
 }
 
@@ -46,8 +40,6 @@ export function countSettlementEpochs(
 
     const uniqueEpochs = new Set<number>();
     const anchor = finiteEpoch(entryEpoch);
-    const settlementMode = getTickSettlementMode(symbol);
-
     for (const value of epochs) {
         const epoch = finiteEpoch(
             typeof value === 'object' && value !== null
@@ -60,16 +52,14 @@ export function countSettlementEpochs(
         );
         if (epoch === null) continue;
 
-        // The entry spot is not a settled duration tick. Every market starts
-        // from the first unique tick strictly after the entry timestamp.
-        const isSettlementTick = anchor === null || epoch > anchor;
+        // entry_spot_time is the first valid contract spot and is T1. Include
+        // it so fast markets do not make the visible T label fall behind.
+        const isSettlementTick = anchor === null || epoch >= anchor;
         if (isSettlementTick) uniqueEpochs.add(epoch);
     }
 
     const sortedEpochs = [...uniqueEpochs].sort((a, b) => a - b);
-    return settlementMode === 'skip-first-after-entry'
-        ? Math.max(0, sortedEpochs.length - 1)
-        : sortedEpochs.length;
+    return sortedEpochs.length;
 }
 
 export function getPocEntryEpoch(poc: Record<string, unknown>): number | null {

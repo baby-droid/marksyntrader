@@ -470,8 +470,9 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
     }, [warmProposalCache]);
 
     /* ── Market type (informational) ─────────────────────────────────────── */
-    // Tick counting is driven by chart-wrapper.tsx: the entry quote is never
-    // counted; market-specific post-entry rules live in the shared helper.
+    // Tick counting is driven by chart-wrapper.tsx: the authoritative entry
+    // spot is T1, duplicate epochs are removed, and all market types share the
+    // same settlement semantics.
     const is1sMarket   = /^1HZ/i.test(symbol);
     const isJumpMarket = /^JD/i.test(symbol);
 
@@ -601,8 +602,8 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                         if (!pocSubId && res.subscription?.id) pocSubId = res.subscription.id;
 
                         // ── Lock in the authoritative entry/spot time ───────────────
-                        // chart-wrapper applies the market-specific leading-tick
-                        // rule to live quotes after entry.
+                        // chart-wrapper applies the inclusive entry-tick rule
+                        // to live quotes after the authoritative entry spot.
                         if (savedEntryTime === 0) {
                             const pocEntryTime = getPocEntryEpoch(poc);
                             if (pocEntryTime !== null) {
@@ -628,6 +629,7 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                                     contractId: cid,
                                     tickCount: pocTickCount,
                                     tickStream: poc.tick_stream,
+                                    tickStreamCount: pocStreamCount,
                                     entryEpoch: savedEntryTime || getPocEntryEpoch(poc),
                                 },
                             }));
@@ -645,6 +647,7 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                                     contractType, contractId: cid,
                                     tickCount: pocTickCount,
                                     tickStream: poc.tick_stream,
+                                    tickStreamCount: pocStreamCount,
                                     entryEpoch: savedEntryTime || getPocEntryEpoch(poc),
                                 },
                             }));
