@@ -1,20 +1,22 @@
 .chart-settings-sidebar {
-    position: absolute;
-    inset: 0;
+    position: absolute !important;
+    inset: 0 !important;
     z-index: 100000;
     width: 100%;
     height: 100%;
     overflow: visible;
-    pointer-events: none;
+    pointer-events: none !important;
     color: #252a31;
 
     &__rail {
-        position: absolute;
-        bottom: 24px;
-        left: 18px;
-        display: flex;
-        flex-direction: column;
-        align-items: flex-start;
+        position: absolute !important;
+        top: auto !important;
+        right: auto !important;
+        bottom: 24px !important;
+        left: 18px !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: flex-start !important;
         gap: 8px;
         width: 44px !important;
         min-width: 44px !important;
@@ -22,12 +24,12 @@
         height: auto !important;
         margin: 0 !important;
         padding: 0 !important;
-        pointer-events: auto;
+        pointer-events: auto !important;
     }
 
     &__tool {
-        position: relative;
-        display: flex;
+        position: relative !important;
+        display: flex !important;
         align-items: center;
         justify-content: center;
         flex: 0 0 44px !important;
@@ -38,13 +40,13 @@
         min-height: 44px !important;
         max-height: 44px !important;
         padding: 0;
-        border: 0;
-        border-radius: 50%;
-        background: #f0f1f2;
+        border: 0 !important;
+        border-radius: 50% !important;
+        background: #f0f1f2 !important;
         color: #252a31;
-        cursor: pointer;
+        cursor: pointer !important;
         box-shadow: none;
-        appearance: none;
+        appearance: none !important;
         transition:
             background 140ms ease,
             color 140ms ease,
