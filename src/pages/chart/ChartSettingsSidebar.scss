@@ -3,15 +3,15 @@
     inset: 0;
     z-index: 100000;
     pointer-events: none;
-    color: #28313a;
+    color: #252a31;
 
     &__rail {
         position: absolute;
         top: 48px;
-        left: 38px;
+        left: 40px;
         display: flex;
         flex-direction: column;
-        gap: 9px;
+        gap: 8px;
         pointer-events: auto;
     }
 
@@ -20,15 +20,15 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 50px;
-        height: 50px;
+        width: 48px;
+        height: 48px;
         padding: 0;
         border: 0;
         border-radius: 50%;
-        background: #eef0f2;
-        color: #303840;
+        background: #f0f1f2;
+        color: #252a31;
         cursor: pointer;
-        box-shadow: 0 1px 4px rgba(29, 39, 49, 0.08);
+        box-shadow: none;
         transition:
             background 140ms ease,
             color 140ms ease,
@@ -47,41 +47,41 @@
 
         &:hover,
         &:focus-visible {
-            background: #e5e8eb;
+            background: #e7e9eb;
             color: #111820;
             outline: none;
-            transform: translateX(1px);
+            transform: none;
         }
 
         &.is-active {
-            background: #eef0f2;
+            background: #f0f1f2;
             color: #111820;
             box-shadow:
-                0 0 0 2px #9dbcf1,
-                0 0 0 4px rgba(157, 188, 241, 0.25),
-                0 1px 4px rgba(29, 39, 49, 0.08);
+                0 0 0 2px #9bbef5,
+                0 0 0 4px rgba(155, 190, 245, 0.22);
         }
 
         &:focus-visible {
             box-shadow:
-                0 0 0 3px rgba(30, 136, 255, 0.38),
-                0 1px 4px rgba(29, 39, 49, 0.08);
+                0 0 0 2px #9bbef5,
+                0 0 0 4px rgba(155, 190, 245, 0.22);
         }
     }
 
     &__badge {
         position: absolute;
-        top: -5px;
-        right: -8px;
+        top: -3px;
+        right: -7px;
         z-index: 1;
-        min-width: 25px;
-        padding: 3px 5px;
-        border-radius: 2px;
-        background: #2f3742;
+        min-width: 27px;
+        height: 18px;
+        padding: 1px 4px;
+        border-radius: 2px 2px 0 0;
+        background: #2f3339;
         color: #fff;
-        font-size: 11px;
+        font-size: 12px;
         font-weight: 700;
-        line-height: 1.05;
+        line-height: 16px;
         text-align: center;
         letter-spacing: 0.01em;
     }
@@ -89,31 +89,26 @@
 
 @media (max-width: 767px) {
     .chart-settings-sidebar__rail {
-        top: 72px;
-        left: 14px;
+        top: 48px;
+        left: 16px;
         gap: 8px;
     }
 
     .chart-settings-sidebar__tool {
-        width: 46px;
-        height: 46px;
+        width: 44px;
+        height: 44px;
     }
 }
 
-@media (prefers-color-scheme: dark) {
-    .chart-settings-sidebar__tool {
-        background: #252c33;
-        color: #dce3e8;
-
-        &:hover,
-        &:focus-visible,
-        &.is-active {
-            background: #303a43;
-            color: #fff;
-        }
-    }
-
-    .chart-settings-sidebar__badge {
-        background: #20262d;
-    }
+/* The reference rail is intentionally light even when the app shell is dark. */
+.chart-settings-sidebar::before {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 112px;
+    border-right: 1px solid #e1e3e5;
+    background: #fff;
+    content: '';
+    pointer-events: none;
 }

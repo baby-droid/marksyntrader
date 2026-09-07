@@ -326,6 +326,48 @@
     }
 }
 
+/* SmartChart's current ChartMode/Indicators/DrawTools/Share components render
+   their real content in a per-chart Quill portal. The reference design uses a
+   docked panel rather than a centered modal, so move only those native surfaces
+   to the right edge while leaving their internal functionality untouched. */
+.smartcharts-quill-portal.smartcharts-desktop {
+    position: fixed !important;
+    z-index: 100010 !important;
+    pointer-events: none;
+
+    .quill-modal__background {
+        position: fixed !important;
+        inset: 0 0 0 112px !important;
+        display: flex !important;
+        align-items: stretch !important;
+        justify-content: flex-end !important;
+        background: transparent !important;
+        pointer-events: auto;
+    }
+
+    .quill-modal__container.sc-quill-dialog {
+        box-sizing: border-box !important;
+        width: min(430px, calc(100vw - 112px)) !important;
+        min-width: 360px !important;
+        height: 100% !important;
+        max-height: none !important;
+        margin: 0 !important;
+        border-radius: 0 !important;
+        box-shadow: -10px 0 28px rgba(22, 28, 36, 0.16) !important;
+        overflow: hidden auto !important;
+        pointer-events: auto;
+        transform: none !important;
+    }
+
+    .quill-modal__container.sc-quill-dialog .quill-modal__content-wrapper {
+        min-height: 100%;
+    }
+
+    .quill-modal__container.sc-quill-dialog .quill-modal__close-icon {
+        z-index: 2;
+    }
+}
+
 @media screen and (max-width: 767px) {
     .dashboard__chart-wrapper .sc-toolbar-widget {
         left: -10000px !important;
@@ -337,5 +379,9 @@
     .dashboard__chart-wrapper .sc-navigation-widget {
         left: 12px !important;
         bottom: 12px !important;
+    }
+
+    .smartcharts-quill-portal.smartcharts-mobile {
+        z-index: 100010 !important;
     }
 }
