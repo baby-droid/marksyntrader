@@ -8,7 +8,7 @@
     &__rail {
         position: absolute;
         top: 48px;
-        left: 18px;
+        left: 38px;
         display: flex;
         flex-direction: column;
         gap: 9px;
@@ -90,7 +90,7 @@
 @media (max-width: 767px) {
     .chart-settings-sidebar__rail {
         top: 72px;
-        left: 10px;
+        left: 14px;
         gap: 8px;
     }
 

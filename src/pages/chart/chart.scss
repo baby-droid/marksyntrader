@@ -202,8 +202,8 @@
 }
 
 /* Keep the SmartChart action buttons visible beside the graph. The embedded
- * chart owns its zoom navigation, but its toolbar can otherwise be placed
- * behind the chart canvas by the surrounding workspace layout.
+ * chart owns its zoom navigation and the custom rail only proxies the native
+ * menus, so all chart actions remain inside SmartChart.
  *
  * This is the compact left-side rail shown in the Smart Chart reference:
  * chart type, views, drawing tools, indicators, and download/share. The
@@ -270,6 +270,39 @@
     .sc-toolbar-widget .cq-modal-dropdown {
         z-index: 9999 !important;
     }
+
+    /* Native minus / crosshair / plus navigation shown in the second
+       reference image. These buttons retain SmartChart's real zoom behavior. */
+    .sc-navigation-widget {
+        bottom: 18px !important;
+        left: 50% !important;
+        z-index: 100001 !important;
+    }
+
+    .sc-navigation-widget__buttons {
+        gap: 8px !important;
+    }
+
+    .sc-navigation-widget__item {
+        width: 40px !important;
+        height: 40px !important;
+        background: rgba(242, 243, 244, 0.96) !important;
+        box-shadow: 0 1px 4px rgba(29, 39, 49, 0.08) !important;
+    }
+
+    .sc-navigation-widget__item:hover,
+    .sc-navigation-widget__item:focus-visible {
+        background: #e2e5e7 !important;
+        box-shadow:
+            0 0 0 2px rgba(157, 188, 241, 0.6),
+            0 1px 4px rgba(29, 39, 49, 0.08) !important;
+    }
+
+    .sc-navigation-widget__item .ic-icon,
+    .sc-navigation-widget__item .ic-icon svg {
+        width: 24px !important;
+        height: 24px !important;
+    }
 }
 
 @media screen and (max-width: 767px) {
@@ -278,5 +311,9 @@
         right: auto !important;
         top: 72px !important;
         transform: none;
+    }
+
+    .dashboard__chart-wrapper .sc-navigation-widget {
+        bottom: 12px !important;
     }
 }

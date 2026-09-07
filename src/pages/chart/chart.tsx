@@ -150,7 +150,7 @@ const Chart = observer(({
                 )}
                 chartType={chart_type || 'line'}
                 isMobile={isMobile}
-                enabledNavigationWidget={isDesktop}
+                enabledNavigationWidget
                  granularity={(granularity ?? 0) as TGranularity}
                 getQuotes={getQuotes}
                 subscribeQuotes={subscribeQuotes}
