@@ -512,7 +512,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
 
     /* ── Market type (informational) ─────────────────────────────────────── */
     // Entry-tick handling is uniform across market types; the chart counter
-    // includes the entry tick and ignores only ticks before the entry epoch.
+    // starts at the first live quote after entry and ignores earlier quotes.
     const is1sMarket   = /^1HZ/i.test(symbol);
     const isJumpMarket = /^JD/i.test(symbol);
 
@@ -644,8 +644,8 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                         if (!pocSubId && res.subscription?.id) pocSubId = res.subscription.id;
 
                         // ── Lock in the authoritative entry/spot time ───────────────
-                        // chart-wrapper counts the entry tick and every following tick,
-                        // while ignoring only ticks that occurred before entry.
+                // chart-wrapper starts the visible sequence at the first live
+                // quote after entry and ignores earlier quotes.
                         if (savedEntryTime === 0) {
                             const pocEntryTime = getPocEntryEpoch(poc);
                             if (pocEntryTime !== null) {
