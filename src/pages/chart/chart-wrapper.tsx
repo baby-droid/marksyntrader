@@ -277,7 +277,10 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                 trade?.symbol,
             );
             const authoritative = authoritativeTickCountRef.current.get(id);
-            updateCount(id, authoritative ?? liveCount);
+            // The first POC update often reports 0 while the public stream
+            // already contains settlement tick 1. Keep whichever source is
+            // further ahead; never make the badge wait for a later refresh.
+            updateCount(id, Math.max(authoritative ?? 0, liveCount));
         };
 
         // The public stream is immediate but can be ahead/behind the account
@@ -543,7 +546,7 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                             );
                             const authoritative = authoritativeTickCountRef.current.get(t.id);
                             const countedTicks = clampContractTickCount(
-                                authoritative ?? liveCount,
+                                Math.max(authoritative ?? 0, liveCount),
                                 t.totalTicks,
                             );
                             return countedTicks === t.countedTicks ? t : { ...t, countedTicks };
@@ -564,7 +567,14 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
         startSub();
 
         // Re-subscribe when the browser comes back online or the tab regains focus
-        const handleReconnect = () => { if (alive && !rxSub) startSub(); };
+        const handleReconnect = () => {
+            if (!alive) return;
+            // An RxJS stream can be closed after an error while its object is
+            // still non-null. Always tear down and recreate on online/focus so
+            // the chart recovers without a page refresh.
+            teardownSub();
+            startSub();
+        };
         window.addEventListener('online',           handleReconnect);
         window.addEventListener('visibilitychange', handleReconnect);
 

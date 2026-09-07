@@ -12,7 +12,7 @@ export type DerivContractTick = {
     [key: string]: unknown;
 };
 
-export type TickSettlementMode = 'skip-first-after-entry' | 'include-first-after-entry';
+export type TickSettlementMode = 'include-first-after-entry';
 
 export function finiteEpoch(value: unknown): number | null {
     const epoch = Number(value);
@@ -20,19 +20,19 @@ export function finiteEpoch(value: unknown): number | null {
 }
 
 /**
- * Deriv's tick stream has a small market-family timing difference:
- * The entry spot is never a duration tick. Plain, Bear/Bull, and other
- * synthetic families count their first post-entry tick; 1-second volatility
- * and Jump indices publish one additional leading post-entry quote, so that
- * first quote is skipped before counting duration ticks.
+ * The entry spot is never a duration tick. The first unique quote strictly
+ * after the entry spot is settlement tick 1 for every market family. This is
+ * important for 1-second Volatility and Jump indices: their faster stream must
+ * not make a 3-tick contract display only T2.
  *
  * Keep this rule in one place so desktop and mobile never drift apart.
  */
 export function getTickSettlementMode(symbol?: string | null): TickSettlementMode {
-    const value = String(symbol ?? '').toUpperCase();
-    return /^1HZ/.test(value) || /^JD/.test(value)
-        ? 'skip-first-after-entry'
-        : 'include-first-after-entry';
+    // Keep the market argument in the API because settlement rules may grow,
+    // but all currently supported tick-duration markets count post-entry tick
+    // 1 consistently.
+    void symbol;
+    return 'include-first-after-entry';
 }
 
 export function countSettlementEpochs(
@@ -44,7 +44,7 @@ export function countSettlementEpochs(
 
     const uniqueEpochs = new Set<number>();
     const anchor = finiteEpoch(entryEpoch);
-    const mode = getTickSettlementMode(symbol);
+    getTickSettlementMode(symbol);
 
     for (const value of epochs) {
         const epoch = finiteEpoch(
@@ -64,10 +64,7 @@ export function countSettlementEpochs(
         if (isSettlementTick) uniqueEpochs.add(epoch);
     }
 
-    const ordered = [...uniqueEpochs].sort((a, b) => a - b);
-    return mode === 'skip-first-after-entry' && anchor !== null
-        ? Math.max(0, ordered.length - 1)
-        : ordered.length;
+    return [...uniqueEpochs].sort((a, b) => a - b).length;
 }
 
 export function getPocEntryEpoch(poc: Record<string, unknown>): number | null {

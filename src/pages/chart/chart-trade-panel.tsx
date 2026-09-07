@@ -665,6 +665,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                         const pocStreamCount = getPocStreamCount(
                             poc.tick_stream,
                             savedEntryTime || getPocEntryEpoch(poc),
+                            symbol,
                         );
                         if (pocTickCount != null || pocStreamCount != null) {
                             window.dispatchEvent(new CustomEvent('chart:trade-progress', {

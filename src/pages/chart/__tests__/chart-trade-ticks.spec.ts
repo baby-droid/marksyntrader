@@ -35,12 +35,12 @@ describe('chart contract tick reconciliation helpers', () => {
         ], 100)).toBe(1);
     });
 
-    it('counts 1s and Jump settlement ticks strictly after entry', () => {
-        expect(getTickSettlementMode('1HZ100V')).toBe('skip-first-after-entry');
-        expect(getTickSettlementMode('JD100')).toBe('skip-first-after-entry');
-        // Entry=9, produced ticks=0,1,2,3: skip 0, then count 1,2,3.
-        expect(countSettlementEpochs([9, 10, 11, 12, 13], 9, '1HZ100V')).toBe(3);
-        expect(countSettlementEpochs([9, 10, 11, 12, 13], 9, 'JD100')).toBe(3);
+    it('counts every post-entry tick for 1s and Jump markets', () => {
+        expect(getTickSettlementMode('1HZ100V')).toBe('include-first-after-entry');
+        expect(getTickSettlementMode('JD100')).toBe('include-first-after-entry');
+        // Entry=9, produced ticks=1,2,3: the first post-entry quote is T1.
+        expect(countSettlementEpochs([9, 10, 11, 12], 9, '1HZ100V')).toBe(3);
+        expect(countSettlementEpochs([9, 10, 11, 12], 9, 'JD100')).toBe(3);
     });
 
     it('counts plain, Bear, and Bull settlement ticks from entry', () => {
