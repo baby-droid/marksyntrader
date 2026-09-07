@@ -163,18 +163,17 @@
 }
 
 /* The custom rail owns the visible chart controls. Keep SmartChart's official
- * controls mounted so indicator and drawing actions still use its real
- * implementations, but do not render a second toolbar over the chart. */
+ * controls mounted and place them in a compact vertical rail over the chart. */
 .chart-native-toolbar {
     position: absolute !important;
     top: 0 !important;
     left: 0 !important;
-    width: 1px !important;
-    height: 1px !important;
-    overflow: hidden !important;
-    opacity: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    overflow: visible !important;
+    opacity: 1 !important;
     pointer-events: none !important;
-    z-index: -1 !important;
+    z-index: 100000 !important;
 }
 
 // Safari-specific fixes
@@ -247,19 +246,51 @@
         z-index: 100000 !important;
     }
 
-    .sc-toolbar-widget .ciq-menu .cq-menu-btn {
+    /* The native component wraps each menu in an extra control div. Reset
+       every wrapper as well as the button itself so global chart/menu styles
+       cannot stretch a control across the chart. */
+    .chart-native-toolbar .chart-native-control,
+    .chart-native-toolbar .ciq-menu,
+    .chart-native-toolbar .ciq-menu .cq-menu-btn,
+    .chart-native-toolbar .ciq-menu .cq-menu-btn .sc-chart-mode__menu,
+    .chart-native-toolbar .ciq-menu .cq-menu-btn .sc-views__menu,
+    .chart-native-toolbar .ciq-menu .cq-menu-btn .sc-download__menu,
+    .chart-native-toolbar .ciq-menu .cq-menu-btn .sc-studies__menu,
+    .chart-native-toolbar .ciq-menu .cq-menu-btn .sc-dtools__menu {
+        box-sizing: border-box !important;
+        flex: 0 0 40px !important;
+        height: 40px !important;
+        max-height: 40px !important;
+        min-height: 40px !important;
+        width: 40px !important;
+        max-width: 40px !important;
+        min-width: 40px !important;
+    }
+
+    .chart-native-toolbar .chart-native-control {
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    .chart-native-toolbar .ciq-menu {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    .chart-native-toolbar .ciq-menu .cq-menu-btn {
         align-items: center;
         background: rgba(242, 243, 244, 0.94);
         border-radius: 50%;
         display: flex;
-        height: 40px;
         justify-content: center;
         padding: 0;
-        width: 40px;
     }
 
-    .sc-toolbar-widget .ciq-menu .cq-menu-btn:hover,
-    .sc-toolbar-widget .ciq-menu .cq-menu-btn:focus-visible {
+    .chart-native-toolbar .ciq-menu .cq-menu-btn:hover,
+    .chart-native-toolbar .ciq-menu .cq-menu-btn:focus-visible {
         background: #e2e5e7;
         outline: 2px solid rgba(30, 136, 255, 0.45);
         outline-offset: 2px;
