@@ -18,9 +18,9 @@
         flex-direction: column !important;
         align-items: flex-start !important;
         gap: 7px;
-        width: 40px !important;
-        min-width: 40px !important;
-        max-width: 40px !important;
+        width: 30px !important;
+        min-width: 30px !important;
+        max-width: 30px !important;
         height: auto !important;
         margin: 0 !important;
         padding: 0 !important;
@@ -32,13 +32,13 @@
         display: flex !important;
         align-items: center;
         justify-content: center;
-        flex: 0 0 40px !important;
-        width: 40px !important;
-        min-width: 40px !important;
-        max-width: 40px !important;
-        height: 40px !important;
-        min-height: 40px !important;
-        max-height: 40px !important;
+        flex: 0 0 30px !important;
+        width: 30px !important;
+        min-width: 30px !important;
+        max-width: 30px !important;
+        height: 30px !important;
+        min-height: 30px !important;
+        max-height: 30px !important;
         padding: 0;
         border: 0 !important;
         border-radius: 50% !important;
@@ -54,8 +54,8 @@
             transform 140ms ease;
 
         svg {
-            width: 20px;
-            height: 20px;
+            width: 16px;
+            height: 16px;
             fill: none;
             stroke: currentColor;
             stroke-linecap: round;
@@ -91,16 +91,16 @@
         top: -4px;
         right: -5px;
         z-index: 1;
-        min-width: 22px;
+        min-width: 20px;
         width: max-content !important;
         max-width: max-content !important;
         flex: none !important;
-        height: 17px;
-        padding: 1px 3px;
+        height: 15px;
+        padding: 0 2px;
         border-radius: 2px 2px 0 0;
         background: #2f3339;
         color: #fff;
-        font-size: 11px;
+        font-size: 10px;
         font-weight: 700;
         line-height: 16px;
         text-align: center;
@@ -116,7 +116,7 @@
     }
 
     .chart-settings-sidebar__tool {
-        width: 40px !important;
-        height: 40px !important;
+        width: 30px !important;
+        height: 30px !important;
     }
 }
