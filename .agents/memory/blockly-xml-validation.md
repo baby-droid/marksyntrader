@@ -20,3 +20,9 @@ For mixed digit and Rise/Fall bots, keep the base trade options free of a digit 
 **Why:** A shared digit barrier can leak into a directional API buy and make the mixed strategy unreliable even when the XML itself parses.
 
 **How to apply:** Use `multiple_purchase` prediction overrides for digit phases and plain `purchase` blocks for CALL/PUT phases.
+
+The trade-definition dropdowns need safe canonical fallback options during XML import; live API options can replace them after the authenticated metadata loads.
+
+**Why:** These fields initially contain only an empty option, so Blockly discards saved XML values when active-symbols or contracts-for data is still loading. The bot then appears to contain only an empty Trade Parameters block.
+
+**How to apply:** Keep the fallback values limited to valid persisted XML values (`synthetic_index`, `random_index`, the supported symbol IDs, `digits`, `evenodd`, and `both`); do not use fallbacks to introduce invalid contract selections.

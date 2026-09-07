@@ -15,17 +15,35 @@ window.Blockly.Blocks.trade_definition_market = {
                 {
                     type: 'field_dropdown',
                     name: 'MARKET_LIST',
-                    options: [['', '']],
+                    // Keep the canonical XML values available while active_symbols
+                    // is still loading. Without an initial option Blockly drops the
+                    // saved value during domToWorkspace and the whole trade block
+                    // appears empty until the user edits it manually.
+                    options: [
+                        [localize('Synthetic Indices'), 'synthetic_index'],
+                        [localize('Forex'), 'forex'],
+                        [localize('Cryptocurrencies'), 'cryptocurrency'],
+                    ],
                 },
                 {
                     type: 'field_dropdown',
                     name: 'SUBMARKET_LIST',
-                    options: [['', '']],
+                    options: [
+                        [localize('Random Indices'), 'random_index'],
+                        [localize('Major Pairs'), 'major_pairs'],
+                        [localize('Minor Pairs'), 'minor_pairs'],
+                    ],
                 },
                 {
                     type: 'field_dropdown',
                     name: 'SYMBOL_LIST',
-                    options: [['', '']],
+                    options: [
+                        ['Volatility 10 (1s) Index', '1HZ10V'],
+                        ['Volatility 25 (1s) Index', '1HZ25V'],
+                        ['Volatility 50 (1s) Index', '1HZ50V'],
+                        ['Volatility 75 (1s) Index', '1HZ75V'],
+                        ['Volatility 100 (1s) Index', '1HZ100V'],
+                    ],
                 },
             ],
             colour: window.Blockly.Colours.Special1.colour,
