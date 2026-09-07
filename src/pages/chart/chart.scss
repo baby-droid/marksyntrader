@@ -282,21 +282,21 @@
         outline-offset: 2px;
     }
 
-    /* Keep the left-rail popovers above the chart canvas and trade overlay. */
+    /* Keep the native toolbar menus above the chart canvas and trade overlay. */
     .sc-toolbar-widget .cq-menu-dropdown,
     .sc-toolbar-widget .cq-modal-dropdown {
         z-index: 9999 !important;
     }
 
-    /* Native minus / crosshair / plus navigation from the first reference.
-       Keep them horizontal and docked on the left edge of the graph. The
+    /* Native minus / crosshair / plus navigation from the reference.
+       Keep them horizontal and docked along the lower-left graph edge. The
        library still owns the click behavior: minus reduces visible history,
        crosshair toggles the cursor, and plus increases visible history. */
     .sc-navigation-widget {
         bottom: 18px !important;
-        left: 18px !important;
+        left: 50% !important;
         right: auto !important;
-        transform: none !important;
+        transform: translateX(-50%) !important;
         z-index: 100001 !important;
     }
 
@@ -327,9 +327,9 @@
 }
 
 /* SmartChart's current ChartMode/Indicators/DrawTools/Share components render
-   their real content in a per-chart Quill portal. Keep the reference rail on
-   the left, but present each native surface as a compact panel in the chart's
-   middle/right area instead of a full-height edge drawer. */
+   their real content in a per-chart Quill portal. Keep each native surface as
+   a small popover beside the lower-left control rail, never a full-height
+   drawer over the chart. */
 .smartcharts-quill-portal.smartcharts-desktop {
     position: fixed !important;
     z-index: 100010 !important;
@@ -346,15 +346,15 @@
     .quill-modal__container.sc-quill-dialog {
         position: absolute !important;
         top: 50% !important;
-        left: clamp(132px, calc(50vw - 150px), calc(100vw - 430px)) !important;
+        left: 76px !important;
         box-sizing: border-box !important;
-        width: min(430px, calc(100vw - 112px)) !important;
-        min-width: 360px !important;
+        width: min(360px, calc(100vw - 92px)) !important;
+        min-width: 0 !important;
         height: auto !important;
-        max-height: min(760px, calc(100vh - 64px)) !important;
+        max-height: min(560px, calc(100vh - 112px)) !important;
         margin: 0 !important;
-        border-radius: 12px !important;
-        box-shadow: 0 12px 32px rgba(22, 28, 36, 0.2) !important;
+        border-radius: 10px !important;
+        box-shadow: 0 8px 24px rgba(22, 28, 36, 0.18) !important;
         overflow: hidden auto !important;
         pointer-events: auto;
         transform: translateY(-50%) !important;
@@ -378,8 +378,16 @@
     }
 
     .dashboard__chart-wrapper .sc-navigation-widget {
-        left: 12px !important;
+        left: 50% !important;
         bottom: 12px !important;
+        transform: translateX(-50%) !important;
+    }
+
+    .smartcharts-quill-portal.smartcharts-desktop .quill-modal__container.sc-quill-dialog {
+        top: 50% !important;
+        left: 70px !important;
+        width: calc(100vw - 82px) !important;
+        max-height: calc(100vh - 96px) !important;
     }
 
     .smartcharts-quill-portal.smartcharts-mobile {

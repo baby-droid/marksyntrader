@@ -7,8 +7,8 @@
 
     &__rail {
         position: absolute;
-        top: 48px;
-        left: 40px;
+        bottom: 24px;
+        left: 18px;
         display: flex;
         flex-direction: column;
         gap: 8px;
@@ -20,8 +20,8 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 48px;
-        height: 48px;
+        width: 44px;
+        height: 44px;
         padding: 0;
         border: 0;
         border-radius: 50%;
@@ -36,8 +36,8 @@
             transform 140ms ease;
 
         svg {
-            width: 23px;
-            height: 23px;
+            width: 22px;
+            height: 22px;
             fill: none;
             stroke: currentColor;
             stroke-linecap: round;
@@ -89,8 +89,8 @@
 
 @media (max-width: 767px) {
     .chart-settings-sidebar__rail {
-        top: 48px;
-        left: 16px;
+        bottom: 18px;
+        left: 14px;
         gap: 8px;
     }
 
@@ -98,17 +98,4 @@
         width: 44px;
         height: 44px;
     }
-}
-
-/* The reference rail is intentionally light even when the app shell is dark. */
-.chart-settings-sidebar::before {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    width: 112px;
-    border-right: 1px solid #e1e3e5;
-    background: #fff;
-    content: '';
-    pointer-events: none;
 }

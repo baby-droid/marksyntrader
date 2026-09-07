@@ -164,7 +164,7 @@ const Chart = observer(({
                 isConnectionOpened={is_connection_opened}
                 getMarketsOrder={getMarketsOrder}
                 isLive
-                leftMargin={112}
+                leftMargin={0}
                 drawingToolFloatingMenuPosition={drawingToolFloatingMenuPosition}
             />
             {/* Visual rail shown in the reference images. Each button clicks
