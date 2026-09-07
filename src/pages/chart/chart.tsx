@@ -64,13 +64,6 @@ const Chart = observer(({
     const { isDesktop, isMobile } = useDevice();
     const { is_drawer_open } = run_panel;
     const { is_chart_modal_visible } = dashboard;
-    // Keep SmartChart's native floating control stack on the left, above its
-    // zoom navigation buttons. This is the chart-native version of the
-    // Chart types / Drawing tools / Studies / Download controls.
-    const drawingToolFloatingMenuPosition = isMobile
-        ? { x: 16, y: 72 }
-        : { x: 20, y: 72 };
-
     const settings = {
         assetInformation: false, // ui.is_chart_asset_info_visible,
         countdown: true,
@@ -165,7 +158,6 @@ const Chart = observer(({
                 getMarketsOrder={getMarketsOrder}
                 isLive
                 leftMargin={0}
-                drawingToolFloatingMenuPosition={drawingToolFloatingMenuPosition}
             />
             {/* Visual rail shown in the reference images. Each button clicks
                 the corresponding native SmartChart control above, so chart

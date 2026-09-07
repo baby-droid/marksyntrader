@@ -1,9 +1,10 @@
 .chart-settings-sidebar {
     position: absolute !important;
     inset: 0 !important;
-    z-index: 100000;
+    z-index: 100020;
     width: 100%;
     height: 100%;
+        isolation: isolate;
     overflow: visible;
     pointer-events: none !important;
     color: #252a31;
