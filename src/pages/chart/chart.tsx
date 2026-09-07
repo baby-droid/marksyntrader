@@ -95,8 +95,12 @@ const Chart = observer(({
 
         setIsSafari(isSafariBrowser());
 
+        const modalRoot = document.getElementById('modal_root');
+        modalRoot?.classList.add('chart-settings-modal-root');
+
         return () => {
             (api_base.api as any)?.forgetAll?.('ticks');
+            modalRoot?.classList.remove('chart-settings-modal-root');
         };
     }, []);
 

@@ -348,3 +348,44 @@
         bottom: 12px !important;
     }
 }
+
+/* ── SmartChart controls ─────────────────────────────────────────────────────
+ * The chart page has its own compact control rail
+ * (ChartSettingsSidebar). SmartChart still needs its native toolbar mounted
+ * because those controls own the real chart menus, but the native toolbar
+ * buttons must not paint a second, stretched row over the chart. The previous
+ * layout rules allowed the native buttons to inherit a full chart width,
+ * producing the large black bars shown in the chart reference.
+ */
+.dashboard__chart-wrapper .chart-native-toolbar .sc-toolbar-widget {
+    display: none !important;
+}
+
+/* SmartChart portals these menus into #modal_root. Keep the real menu
+ * contents, but present them as a focused settings sheet at the centre-right
+ * of the chart instead of anchoring them to the hidden native toolbar. */
+.chart-settings-modal-root > .sc-dialog,
+.chart-settings-modal-root .sc-dialog {
+    position: fixed !important;
+    top: 50% !important;
+    left: 64% !important;
+    max-height: calc(100vh - 96px);
+    overflow: auto;
+    transform: translate(-50%, -50%) !important;
+    z-index: 10000 !important;
+}
+
+.chart-settings-modal-root .sc-dialog.sc-dialog-enter-active,
+.chart-settings-modal-root .sc-dialog.sc-dialog-enter-done {
+    transform: translate(-50%, -50%) !important;
+}
+
+@media screen and (max-width: 767px) {
+    .chart-settings-modal-root > .sc-dialog,
+    .chart-settings-modal-root .sc-dialog {
+        top: 50% !important;
+        left: 50% !important;
+        width: min(calc(100vw - 32px), 360px) !important;
+        max-height: calc(100vh - 48px);
+    }
+}
