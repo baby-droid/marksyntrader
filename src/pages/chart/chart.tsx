@@ -4,7 +4,7 @@ import { observer } from 'mobx-react-lite';
 /* [AI] - Analytics removed - rudderstack event tracking removed */
 /* [/AI] */
 import ChunkLoader from '@/components/loader/chunk-loader';
-import chart_api from '@/external/bot-skeleton/services/api/chart-api';
+import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { useSmartChartAdaptor } from '@/hooks/useSmartChartAdaptor';
 import { useStore } from '@/hooks/useStore';
 import { ChartTitle, SmartChart, TGranularity, TStateChangeListener } from '@deriv-com/smartcharts-champion';
@@ -96,7 +96,7 @@ const Chart = observer(({
         setIsSafari(isSafariBrowser());
 
         return () => {
-            chart_api.api?.forgetAll?.('ticks');
+            (api_base.api as any)?.forgetAll?.('ticks');
         };
     }, []);
 
@@ -104,7 +104,7 @@ const Chart = observer(({
         if (!symbol) updateSymbol();
     }, [symbol, updateSymbol]);
 
-    const is_connection_opened = !!chart_api?.api;
+    const is_connection_opened = !!api_base.api;
 
     const handleStateChange: TStateChangeListener = (state, options) => {
         /* [AI] - Analytics removed - rudderstack event call removed */

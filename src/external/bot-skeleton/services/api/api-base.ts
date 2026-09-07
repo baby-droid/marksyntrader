@@ -22,7 +22,6 @@ import {
 } from './observables/connection-status-stream';
 import ApiHelpers from './api-helpers';
 import { generateDerivApiInstance, V2GetActiveAccountId } from './appId';
-import chart_api from './chart-api';
 
 type CurrentSubscription = {
     id: string;
@@ -211,7 +210,8 @@ class APIBase {
         if (this.time_interval) clearInterval(this.time_interval);
         this.time_interval = null;
 
-        chart_api.init(force_create_connection);
+        // Chart data is served through this authenticated connection. Do not
+        // create the legacy public chart WebSocket here.
     }
 
     getConnectionStatus() {
