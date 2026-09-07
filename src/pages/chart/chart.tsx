@@ -10,6 +10,7 @@ import { useStore } from '@/hooks/useStore';
 import { ChartTitle, SmartChart, TGranularity, TStateChangeListener } from '@deriv-com/smartcharts-champion';
 import { useDevice } from '@deriv-com/ui';
 import ToolbarWidgets from './toolbar-widgets';
+import ChartSettingsSidebar from './ChartSettingsSidebar';
 
 const Chart = observer(({
     show_digits_stats,
@@ -166,6 +167,11 @@ const Chart = observer(({
                 leftMargin={80}
                 drawingToolFloatingMenuPosition={drawingToolFloatingMenuPosition}
             />
+            {/* Visual rail shown in the reference images. Each button clicks
+                the corresponding native SmartChart control above, so chart
+                type, indicators, drawings and download remain real
+                SmartChart features rather than page-level mock controls. */}
+            <ChartSettingsSidebar />
         </div>
     );
 });

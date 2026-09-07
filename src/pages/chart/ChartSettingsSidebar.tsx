@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useStore } from '@/hooks/useStore';
 import './ChartSettingsSidebar.scss';
 
@@ -56,12 +56,14 @@ const NATIVE_SELECTORS: Record<NativeTool, string> = {
 
 const ChartSettingsSidebar: React.FC = () => {
     const { chart_store } = useStore();
+    const sidebarRef = useRef<HTMLElement | null>(null);
     const [activeTool, setActiveTool] = useState<NativeTool>('chart');
     const granularity = Number(chart_store?.granularity ?? 0);
     const intervalLabel = GRANULARITY_LABELS[granularity] ?? '1t';
 
     const openNativeTool = (tool: NativeTool) => {
-        const control = document.querySelector(NATIVE_SELECTORS[tool]);
+        const chartRoot = sidebarRef.current?.closest('.dashboard__chart-wrapper') ?? document;
+        const control = chartRoot.querySelector(NATIVE_SELECTORS[tool]);
         const button = control?.querySelector(
             '.cq-menu-btn, button, [role="button"]',
         ) as HTMLElement | null;
@@ -84,7 +86,7 @@ const ChartSettingsSidebar: React.FC = () => {
     ];
 
     return (
-        <aside className='chart-settings-sidebar' aria-label='SmartChart tools'>
+        <aside ref={sidebarRef} className='chart-settings-sidebar' aria-label='SmartChart tools'>
             <nav className='chart-settings-sidebar__rail'>
                 {tools.map(tool => (
                     <button

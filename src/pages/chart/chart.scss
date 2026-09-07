@@ -209,6 +209,9 @@
         overflow: visible !important;
     }
 
+    /* The visible controls are rendered by ChartSettingsSidebar. Keep the
+       SmartChart-native controls mounted (the sidebar proxies clicks to them)
+       but visually out of the way so two tool rails are never shown. */
     .sc-toolbar-widget {
         align-items: center;
         background: transparent !important;
@@ -217,10 +220,10 @@
         display: flex;
         flex-direction: column;
         gap: 8px;
-        left: 12px !important;
+        left: -10000px !important;
         overflow: visible;
         padding: 0 !important;
-        pointer-events: auto;
+        pointer-events: none;
         position: absolute !important;
         right: auto !important;
         top: 50% !important;
@@ -228,7 +231,7 @@
         bottom: auto !important;
         width: 40px !important;
         visibility: visible !important;
-        opacity: 1 !important;
+        opacity: 0 !important;
         z-index: 100000 !important;
     }
 
@@ -285,11 +288,15 @@
         z-index: 9999 !important;
     }
 
-    /* Native minus / crosshair / plus navigation shown in the second
-       reference image. These buttons retain SmartChart's real zoom behavior. */
+    /* Native minus / crosshair / plus navigation from the first reference.
+       Keep them horizontal and docked on the left edge of the graph. The
+       library still owns the click behavior: minus reduces visible history,
+       crosshair toggles the cursor, and plus increases visible history. */
     .sc-navigation-widget {
         bottom: 18px !important;
-        left: 50% !important;
+        left: 18px !important;
+        right: auto !important;
+        transform: none !important;
         z-index: 100001 !important;
     }
 
@@ -321,13 +328,14 @@
 
 @media screen and (max-width: 767px) {
     .dashboard__chart-wrapper .sc-toolbar-widget {
-        left: 10px !important;
+        left: -10000px !important;
         right: auto !important;
         top: 72px !important;
         transform: none;
     }
 
     .dashboard__chart-wrapper .sc-navigation-widget {
+        left: 12px !important;
         bottom: 12px !important;
     }
 }
