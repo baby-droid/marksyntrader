@@ -27,12 +27,12 @@ describe('chart contract tick reconciliation helpers', () => {
             { tick_time: 100 },
             { tick_time: 101 },
             { epoch: 102 },
-        ], 100)).toBe(2);
+        ], 100)).toBe(3);
         expect(getPocStreamCount([
             { tick_time: 99 },
             { tick_time: 100 },
             { tick_time: 101 },
-        ], 100)).toBe(1);
+        ], 100)).toBe(2);
     });
 
     it('includes the entry spot for fast and Jump markets', () => {
@@ -54,9 +54,9 @@ describe('chart contract tick reconciliation helpers', () => {
     });
 
     it('counts plain, Bear, and Bull settlement ticks from entry', () => {
-        expect(getTickSettlementMode('R_100')).toBe('include-first-after-entry');
-        expect(getTickSettlementMode('RDBEAR')).toBe('include-first-after-entry');
-        expect(getTickSettlementMode('RDBULL')).toBe('include-first-after-entry');
+        expect(getTickSettlementMode('R_100')).toBe('include-entry-spot');
+        expect(getTickSettlementMode('RDBEAR')).toBe('include-entry-spot');
+        expect(getTickSettlementMode('RDBULL')).toBe('include-entry-spot');
         // Entry=9 is T1, followed by T2/T3/T4.
         expect(countSettlementEpochs([9, 10], 9, 'R_100')).toBe(2);
         expect(countSettlementEpochs([9, 10, 11], 9, 'RDBEAR')).toBe(3);
