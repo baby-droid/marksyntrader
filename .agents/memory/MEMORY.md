@@ -67,3 +67,4 @@
 - [Smart Trading card runner](smart-trading-card-runner.md) — tokenized card runs prevent stale async loops from restarting or buying after a stop/start; normalize exclusive digit barriers before proposal.
 - [Parity auto cycles](parity-auto-cycles.md) — ODD AUTO CYCLE uses weak even or strong-even×2→odd signals to buy DIGITODD; EVEN mirrors it with odd→DIGITEVEN.
 - [SmartChart proxy rail scoping](smartchart-proxy-rail.md) — scope native control lookups to the nearest chart wrapper when normal and modal charts can coexist.
+- [Development preview routing](preview-routing.md) — local `/bot/preview` can omit the build flag, so preview mode must also detect the pathname.
