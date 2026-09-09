@@ -35,39 +35,39 @@ describe('chart contract tick reconciliation helpers', () => {
         ], 100)).toBe(1);
     });
 
-    it('skips the leading post-entry quote for 1s and Jump markets', () => {
-        expect(getTickSettlementMode('1HZ100V')).toBe('skip-first-after-entry');
-        expect(getTickSettlementMode('JD100')).toBe('skip-first-after-entry');
-        // Entry=9, produced values 0,1,2,3: skip 0, then T1/T2/T3.
-        expect(countSettlementEpochs([9, 10], 9, '1HZ100V')).toBe(0);
-        expect(countSettlementEpochs([9, 10, 11], 9, '1HZ100V')).toBe(1);
-        expect(countSettlementEpochs([9, 10, 11, 12], 9, '1HZ100V')).toBe(2);
-        expect(countSettlementEpochs([9, 10, 11, 12, 13], 9, '1HZ100V')).toBe(3);
-        expect(countSettlementEpochs([9, 10, 11, 12, 13], 9, 'JD100')).toBe(3);
+    it('includes the entry spot for fast and Jump markets', () => {
+        expect(getTickSettlementMode('1HZ100V')).toBe('include-entry-spot');
+        expect(getTickSettlementMode('JD100')).toBe('include-entry-spot');
+        // Entry=9 is T1, followed by T2/T3/T4.
+        expect(countSettlementEpochs([9, 10], 9, '1HZ100V')).toBe(2);
+        expect(countSettlementEpochs([9, 10, 11], 9, '1HZ100V')).toBe(3);
+        expect(countSettlementEpochs([9, 10, 11, 12], 9, '1HZ100V')).toBe(4);
+        expect(countSettlementEpochs([9, 10, 11, 12, 13], 9, '1HZ100V')).toBe(5);
+        expect(countSettlementEpochs([9, 10, 11, 12, 13], 9, 'JD100')).toBe(5);
         expect(getPocStreamCount([
             { epoch: 9 },
             { epoch: 10 },
             { epoch: 11 },
             { epoch: 12 },
             { epoch: 13 },
-        ], 9, '1HZ100V')).toBe(3);
+        ], 9, '1HZ100V')).toBe(5);
     });
 
     it('counts plain, Bear, and Bull settlement ticks from entry', () => {
         expect(getTickSettlementMode('R_100')).toBe('include-first-after-entry');
         expect(getTickSettlementMode('RDBEAR')).toBe('include-first-after-entry');
         expect(getTickSettlementMode('RDBULL')).toBe('include-first-after-entry');
-        // Entry=9, produced values 0,1,2: T1/T2/T3.
-        expect(countSettlementEpochs([9, 10], 9, 'R_100')).toBe(1);
-        expect(countSettlementEpochs([9, 10, 11], 9, 'RDBEAR')).toBe(2);
-        expect(countSettlementEpochs([9, 10, 11, 12], 9, 'R_100')).toBe(3);
-        expect(countSettlementEpochs([9, 10, 11, 12], 9, 'RDBEAR')).toBe(3);
-        expect(countSettlementEpochs([9, 10, 11, 12], 9, 'RDBULL')).toBe(3);
+        // Entry=9 is T1, followed by T2/T3/T4.
+        expect(countSettlementEpochs([9, 10], 9, 'R_100')).toBe(2);
+        expect(countSettlementEpochs([9, 10, 11], 9, 'RDBEAR')).toBe(3);
+        expect(countSettlementEpochs([9, 10, 11, 12], 9, 'R_100')).toBe(4);
+        expect(countSettlementEpochs([9, 10, 11, 12], 9, 'RDBEAR')).toBe(4);
+        expect(countSettlementEpochs([9, 10, 11, 12], 9, 'RDBULL')).toBe(4);
     });
 
     it('does not count public ticks until the contract has an entry anchor', () => {
         expect(countSettlementEpochs([], null, 'R_100')).toBe(0);
-        expect(countSettlementEpochs([101, 102], 100, 'R_100')).toBe(2);
+        expect(countSettlementEpochs([100, 101, 102], 100, 'R_100')).toBe(3);
     });
 
     it('falls back to stream length when a response omits per-tick epochs', () => {

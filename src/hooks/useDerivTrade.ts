@@ -462,6 +462,8 @@ export function useDerivTrade() {
                     ticks: duration,
                     symbol,
                     contractType: contract_type,
+                    purchaseTime: Number(buyRes?.buy?.purchase_time) || 0,
+                    startTime: Number(buyRes?.buy?.start_time) || 0,
                 },
             }));
 

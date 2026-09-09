@@ -232,9 +232,15 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
         const handleStarted = (e: CustomEvent) => {
             const { contractId, ticks, symbol: tradeSymbol, purchaseTime, startTime } = e.detail;
             const id = String(contractId);
+            // Render from the buy response immediately. POC entry_spot_time
+            // arrives later and re-anchors these same live ticks authoritatively.
+            const initialAnchor =
+                finiteEpoch(startTime) ??
+                finiteEpoch(purchaseTime) ??
+                Math.floor(Date.now() / 1000);
             entryEpochRef.current.set(
                 id,
-                finiteEpoch(startTime) ?? finiteEpoch(purchaseTime) ?? 0,
+                initialAnchor,
             );
             liveTickEpochsRef.current.set(id, new Set());
             pendingTradesRef.current = [
@@ -535,12 +541,9 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                     // Count unique public ticks immediately. POC progress is
                     // merged separately so missed public ticks are recovered.
                     if (pendingTradesRef.current.length > 0) {
+                        let changed = false;
                         pendingTradesRef.current = pendingTradesRef.current.map(t => {
                             if (epoch <= 0) return t;
-                            // Do not label chart ticks as contract ticks until
-                            // Deriv has supplied the contract entry epoch.
-                            // Otherwise every public tick already on screen
-                            // before the buy is incorrectly counted.
                             const entryEpoch = entryEpochRef.current.get(t.id);
                             if (entryEpoch == null) return t;
                             const seen = liveTickEpochsRef.current.get(t.id);
@@ -553,11 +556,11 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                             );
                             const countedTicks = clampContractTickCount(liveCount, t.totalTicks);
                             const nextCountedTicks = Math.max(t.countedTicks, countedTicks);
-                            return nextCountedTicks === t.countedTicks
-                                ? t
-                                : { ...t, countedTicks: nextCountedTicks };
+                            if (nextCountedTicks === t.countedTicks) return t;
+                            changed = true;
+                            return { ...t, countedTicks: nextCountedTicks };
                         });
-                        setPendingTrades([...pendingTradesRef.current]);
+                        if (changed) setPendingTrades([...pendingTradesRef.current]);
                     }
                 },
                 error: () => {

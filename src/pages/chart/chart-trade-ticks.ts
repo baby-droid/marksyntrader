@@ -13,7 +13,7 @@ export type DerivContractTick = {
     [key: string]: unknown;
 };
 
-export type TickSettlementMode = 'include-first-after-entry' | 'skip-first-after-entry';
+export type TickSettlementMode = 'include-entry-spot' | 'include-first-after-entry';
 
 export function finiteEpoch(value: unknown): number | null {
     const epoch = Number(value);
@@ -21,18 +21,15 @@ export function finiteEpoch(value: unknown): number | null {
 }
 
 /**
- * The entry spot is the anchor, not a numbered settlement tick. Plain
- * Volatility, Bear, and Bull contracts count the first quote after entry as
- * T1. 1-second Volatility and Jump markets expose one leading post-entry
- * quote, so that quote is discarded and the following quote is T1.
+ * Deriv's entry spot is the first contract tick. The contract counter starts
+ * at that spot (T1), so the live feed and proposal_open_contract.tick_stream
+ * use the same inclusive epoch anchor for every market family.
  *
  * Keep this rule in one place so desktop and mobile never drift apart.
  */
 export function getTickSettlementMode(symbol?: string | null): TickSettlementMode {
-    const normalized = String(symbol ?? '').toUpperCase();
-    return /^1HZ/.test(normalized) || /^JD/.test(normalized)
-        ? 'skip-first-after-entry'
-        : 'include-first-after-entry';
+    void symbol;
+    return 'include-entry-spot';
 }
 
 export function countSettlementEpochs(
@@ -57,17 +54,17 @@ export function countSettlementEpochs(
         );
         if (epoch === null) continue;
 
-        // The entry spot is only the anchor. Numbered settlement ticks start
-        // strictly after it, so entry=9 followed by 0,1,2 is T1/T2/T3 on
-        // plain markets.
-        const isSettlementTick = anchor === null || epoch > anchor;
+        // The entry spot is T1. Inclusive matching is important for fast
+        // markets because the authenticated feed can deliver that tick before
+        // the POC entry_spot_time event reaches the UI.
+        const isSettlementTick = anchor === null || epoch >= anchor;
         if (isSettlementTick) uniqueEpochs.add(epoch);
     }
 
     const sortedEpochs = [...uniqueEpochs].sort((a, b) => a - b);
-    return settlementMode === 'skip-first-after-entry'
-        ? Math.max(0, sortedEpochs.length - 1)
-        : sortedEpochs.length;
+    return settlementMode === 'include-entry-spot' || settlementMode === 'include-first-after-entry'
+        ? sortedEpochs.length
+        : 0;
 }
 
 export function getPocEntryEpoch(poc: Record<string, unknown>): number | null {
