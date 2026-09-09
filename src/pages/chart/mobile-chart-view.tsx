@@ -602,8 +602,8 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                         if (!pocSubId && res.subscription?.id) pocSubId = res.subscription.id;
 
                         // ── Lock in the authoritative entry/spot time ───────────────
-                        // chart-wrapper applies the inclusive entry-tick rule
-                        // to live quotes after the authoritative entry spot.
+                        // chart-wrapper applies the market-specific post-entry
+                        // rule after the authoritative entry spot is known.
                         if (savedEntryTime === 0) {
                             const pocEntryTime = getPocEntryEpoch(poc);
                             if (pocEntryTime !== null) {

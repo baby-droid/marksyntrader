@@ -511,9 +511,9 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
     }, [accumContractId, loading, stake, stopAccumulatorPoc]);
 
     /* ── Market type (informational) ─────────────────────────────────────── */
-    // Entry-tick handling is uniform across market types; the chart counter
-    // applies the inclusive entry-tick rule to live quotes after the
-    // authoritative entry spot is known.
+    // The chart counter uses the contract's entry spot as its anchor. Plain,
+    // Bear, and Bull count the first post-entry quote as T1; 1HZ and Jump
+    // skip their leading post-entry quote.
     const is1sMarket   = /^1HZ/i.test(symbol);
     const isJumpMarket = /^JD/i.test(symbol);
 
@@ -645,8 +645,8 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                         if (!pocSubId && res.subscription?.id) pocSubId = res.subscription.id;
 
                         // ── Lock in the authoritative entry/spot time ───────────────
-                // chart-wrapper applies the inclusive entry-tick rule to live
-                // quotes after the authoritative entry spot is known.
+                // chart-wrapper applies the market-specific post-entry rule
+                // after the authoritative entry spot is known.
                         if (savedEntryTime === 0) {
                             const pocEntryTime = getPocEntryEpoch(poc);
                             if (pocEntryTime !== null) {

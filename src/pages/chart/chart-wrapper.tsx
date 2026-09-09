@@ -280,8 +280,9 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
             );
             // Keep the live epochs received between buy and the POC anchor.
             // They are real ticks, not stale data; countSettlementEpochs will
-            // remove anything before the authoritative entry epoch and count
-            // that entry epoch as T1 for every market.
+            // remove anything before the authoritative entry epoch. The shared
+            // helper then applies the market settlement rule: plain/Bear/Bull
+            // use the first post-entry quote as T1, while 1HZ/Jump skip it.
             // The first entry event is authoritative and may correct the
             // temporary purchase-time anchor used before POC arrives.
             updateCount(id, liveCount, true);
@@ -294,6 +295,7 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
         const handleTradeProgress = (e: CustomEvent) => {
             const { contractId, entryEpoch, tickStream, tickStreamCount } = e.detail;
             const id = String(contractId);
+            const eventEntryEpoch = finiteEpoch(entryEpoch);
             if (finiteEpoch(entryEpoch) !== null) {
                 handleTradeEntry(new CustomEvent('chart:trade-entry', {
                     detail: { contractId: id, entryEpoch },
@@ -306,7 +308,10 @@ const ChartWrapper = observer(({ prefix = 'chart', show_digits_stats }: ChartWra
                 trade?.symbol,
             );
             const anchor = entryEpochRef.current.get(id) ?? finiteEpoch(entryEpoch);
-            const pocCount = Number.isFinite(Number(tickStreamCount))
+            // A stream count calculated before POC supplies entry_spot_time is
+            // not authoritative: it may include the entry quote or buffered
+            // pre-entry data. Reconcile it locally against the best anchor.
+            const pocCount = eventEntryEpoch !== null && Number.isFinite(Number(tickStreamCount))
                 ? Number(tickStreamCount)
                 : getPocStreamCount(tickStream, anchor, trade?.symbol);
             updateCount(id, Math.max(liveCount, pocCount ?? 0));
