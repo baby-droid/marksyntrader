@@ -121,9 +121,6 @@ const Cards = observer(({ is_mobile, has_dashboard_strategies }: TCardProps) => 
                                     className={classNames('tab__dashboard__table__images', {
                                         'tab__dashboard__table__images--minimized': has_dashboard_strategies,
                                     })}
-                                    width='8rem'
-                                    height='8rem'
-                                    icon={icon}
                                     id={id}
                                 >
                                     {icon}
@@ -140,6 +137,8 @@ const Cards = observer(({ is_mobile, has_dashboard_strategies }: TCardProps) => 
                             title={dialog_options.title}
                             is_visible={is_dialog_open}
                             onCancel={onCloseDialog}
+                            onConfirm={onCloseDialog}
+                            login={onCloseDialog}
                             is_mobile_full_width
                             className='dc-dialog__wrapper--google-drive'
                             has_close_icon
