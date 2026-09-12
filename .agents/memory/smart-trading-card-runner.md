@@ -1,6 +1,6 @@
 ---
 name: Smart Trading card runner
-description: Reliability rules for the Smart Trading Rise/Fall, Even/Odd, Over/Under, and Matches/Differs card loops.
+description: Reliability rules for the Smart Trading trend and parity card loops.
 ---
 
 Each Smart Trading card run must have a generation token in addition to its stop flag. A stop/start can happen while a proposal, buy, or settlement request is awaiting the authenticated socket; a stale loop must not clear the new run's flag, update its state, or place another order. Normalize exclusive digit barriers before sending them to Deriv: Over accepts 0–8 and Under accepts 1–9.

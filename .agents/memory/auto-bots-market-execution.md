@@ -7,4 +7,4 @@ Auto Bots use the authenticated Deriv market feed as a background scanner. Each 
 
 **Why:** A shared global candidate list caused the UI to hide watch markets and made execution depend on unrelated market ticks. One-tick contracts also keep displayed probability, entry timing, and settlement semantics aligned.
 
-**How to apply:** Keep the visible market set compact and ranked, show non-qualified live markets as watch cards, execute the highest-probability fresh market by default, and execute multiple markets only when all selected signals are strong. TP/SL state belongs to each market, so one stopped market must not stop the other markets in the same bot run.
+**How to apply:** Keep the visible market set compact and ranked, show non-qualified live markets as watch cards, prioritize 1-second Volatility, Jump, plain Volatility, Bear, then Bull markets, and execute up to five fresh eligible markets concurrently. TP/SL state belongs to each market in Auto Bots, so one stopped market must not stop the other markets in the same bot run.

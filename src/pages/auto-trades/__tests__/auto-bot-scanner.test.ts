@@ -42,20 +42,20 @@ describe('Auto Bot market execution rules', () => {
         expect(AUTO_BOT_TICK_DURATION).toBe(1);
     });
 
-    it('selects the best market unless every selected market is strong', () => {
+    it('executes every fresh eligible market in the ranked set', () => {
         const mixed = selectAutoBotMarketsForExecution([
             candidate('V10', 95, 1, true, 'strong'),
             candidate('V25', 90, 1, true, 'weak'),
             candidate('V50', 85, 1, true, 'strong'),
         ]);
-        expect(mixed.map(item => item.symbol)).toEqual(['V10']);
+        expect(mixed.map(item => item.symbol)).toEqual(['V10', 'V25', 'V50']);
 
-        const allStrong = selectAutoBotMarketsForExecution([
-            candidate('V10', 95, 1, true, 'strong'),
-            candidate('V25', 90, 1, true, 'strong'),
-            candidate('V50', 85, 1, true, 'strong'),
-        ]);
-        expect(allStrong.map(item => item.symbol)).toEqual(['V10', 'V25', 'V50']);
+        const five = selectAutoBotMarketsForExecution(
+            ['V10', 'V25', 'V50', 'V75', 'V100', 'JD10'].map((symbol, index) =>
+                candidate(symbol, 95 - index, 1, true, 'weak')
+            ),
+        );
+        expect(five).toHaveLength(5);
     });
 
     it('stops only the market whose own TP or SL was reached', () => {

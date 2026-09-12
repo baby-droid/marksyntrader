@@ -1829,6 +1829,12 @@ const AutoTrades: React.FC = () => {
                             {smartDigits.length > 0 ? `${smartDigits.length} ticks loaded` : 'Loading market data…'}
                         </div>
                         <div className='st__data-status'>
+                            <span className={`st__dot ${autoBotScannerConnected ? 'live' : ''}`} />
+                            {autoBotScannerConnected
+                                ? `${Object.keys(autoBotSnapshots).length} priority markets scanning · up to 5 fresh entries`
+                                : 'Priority market scanner connecting…'}
+                        </div>
+                        <div className='st__data-status'>
                             <span className={`st__dot ${connected && authorized ? 'live' : ''}`} />
                             {connected && authorized
                                 ? 'Authenticated trading ready'
@@ -1948,7 +1954,6 @@ const AutoTrades: React.FC = () => {
                                                 </div>
                                             )}
                                         </div>
-                                    </div>
 
                                     {/* Trading Condition */}
                                     <div className='st__condition'>
