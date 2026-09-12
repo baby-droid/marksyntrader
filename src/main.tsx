@@ -10,6 +10,7 @@ import {
     applyPrimaryColorFromConfig,
 } from './utils/document-branding';
 import { performVersionCheck } from './utils/version-check';
+import { installChunkRecovery } from './utils/chunk-recovery';
 import './styles/index.scss';
 // Load SmartChart's stylesheet with the app entry rather than the lazy chart
 // route. This prevents a stale async CSS chunk from blanking the chart page
@@ -18,6 +19,10 @@ import '@deriv-com/smartcharts-champion/dist/smartcharts.css';
 
 // Configure MobX to handle multiple instances in production builds
 configure({ isolateGlobalState: true });
+
+// Recover from stale/missing async chunks before they can leave the preview
+// white after a dev-server restart.
+installChunkRecovery();
 
 // Perform version check FIRST - before any other operations
 performVersionCheck();
