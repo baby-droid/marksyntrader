@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { api_base } from '@/external/bot-skeleton';
 import {
     CONNECTION_STATUS,
@@ -19,6 +19,12 @@ import {
     type SmartCardConfig,
     type SmartCardId,
 } from './smart-trading-guards';
+import {
+    AUTO_BOT_MARKETS,
+    scanAutoBotMarkets,
+    useAuthenticatedAutoBotScanner,
+    type AutoBotMarketCandidate,
+} from './auto-bot-scanner';
 import './auto-trades.scss';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -375,6 +381,7 @@ interface CycleBotConfig {
     martingale: number;
     takeProfit: number;
     stopLoss: number;
+    ticks: 1 | 2 | 3 | 4;
 }
 
 interface CycleBotDef {
@@ -583,12 +590,27 @@ interface AiBotRunnerProps {
     globalStake: number;
     globalMartingale: number;
     session: BotSession;
+    marketCandidates: AutoBotMarketCandidate[];
+    scannerTickVersion: number;
     onSessionUpdate: (patch: Partial<BotSession>) => void;
     onLog: (msg: string) => void;
 }
 
-function AiBotCard({ bot, globalStake, globalMartingale, session, onSessionUpdate, onLog }: AiBotRunnerProps) {
-    const digitsRef = useLiveDigitsRef(bot.symbol);
+function AiBotCard({
+    bot,
+    globalStake,
+    globalMartingale,
+    session,
+    marketCandidates,
+    scannerTickVersion,
+    onSessionUpdate,
+    onLog,
+}: AiBotRunnerProps) {
+    const marketCandidatesRef = useRef<AutoBotMarketCandidate[]>(marketCandidates);
+    const scannerTickVersionRef = useRef(scannerTickVersion);
+    const runVersionRef = useRef(0);
+    useEffect(() => { marketCandidatesRef.current = marketCandidates; }, [marketCandidates]);
+    useEffect(() => { scannerTickVersionRef.current = scannerTickVersion; }, [scannerTickVersion]);
     const stopRef = useRef(false);
     const pausedStakeRef = useRef<number | null>(null); // for resume-with-martingale
     const { buyAndWait } = useBuyAndWait();
@@ -598,7 +620,13 @@ function AiBotCard({ bot, globalStake, globalMartingale, session, onSessionUpdat
         martingale: bot.defaultMartingale,
         takeProfit: bot.defaultTakeProfit,
         stopLoss: bot.defaultStopLoss,
+        ticks: 1,
     }));
+    const [riskConfig, setRiskConfig] = useState({
+        takeProfit: bot.defaultTakeProfit,
+        stopLoss: bot.defaultStopLoss,
+        ticks: 1 as 1 | 2 | 3 | 4,
+    });
     const isCycleBot = Boolean(bot.cycle);
     const updateCycleConfig = useCallback((patch: Partial<CycleBotConfig>) => {
         setCycleConfig(previous => {
@@ -617,13 +645,17 @@ function AiBotCard({ bot, globalStake, globalMartingale, session, onSessionUpdat
                 stopLoss: Number.isFinite(Number(next.stopLoss))
                     ? Math.max(0.01, Math.min(100000, Number(next.stopLoss)))
                     : previous.stopLoss,
+                ticks: ([1, 2, 3, 4].includes(Number(next.ticks)) ? Number(next.ticks) : previous.ticks) as 1 | 2 | 3 | 4,
             };
         });
     }, [bot.cycle?.targetParity]);
 
     const start = useCallback(async (resumeStake?: number) => {
         setTradeContext({ page: 'Auto Trades', bot: bot.name });
+        const runVersion = runVersionRef.current + 1;
+        runVersionRef.current = runVersion;
         stopRef.current = false;
+        const isCurrentRun = () => runVersionRef.current === runVersion && !stopRef.current;
         let localWins = 0;
         let localLosses = 0;
         let localProfit = 0;
@@ -632,47 +664,64 @@ function AiBotCard({ bot, globalStake, globalMartingale, session, onSessionUpdat
         const martingale = isCycleBot ? cycleConfig.martingale : globalMartingale;
         const tp = isCycleBot
             ? cycleConfig.takeProfit
-            : bot.defaultTakeProfit * Math.max(1, globalStake);
+            : riskConfig.takeProfit;
         const sl = isCycleBot
             ? cycleConfig.stopLoss
-            : bot.defaultStopLoss * Math.max(1, globalStake);
+            : riskConfig.stopLoss;
         let stk = resumeStake ?? globalStake; // resume with saved stake (martingale preserved)
         let recoveryMode = false;
         let lastScanKey = '';
         onLog(`🚀 ${bot.name} started | Stake: $${stk.toFixed(2)} | Martingale:${martingale.toFixed(2)}× TP:$${tp.toFixed(2)} SL:$${sl.toFixed(2)}`);
 
-        while (!stopRef.current) {
+        while (isCurrentRun()) {
             try {
-                // A scan is anchored to a new digit window. Cycle bots place
-                // one contract per valid weak/strong signal; the older AI
-                // bots keep their six-contract scan behavior.
-                let scanDigits = digitsRef.current.slice();
-                while (!stopRef.current && (
-                    !scanDigits.length ||
-                    scanDigits.slice(-10).join(',') === lastScanKey
-                )) {
+                // Each scan is anchored to a new authenticated tick across all
+                // supported Deriv markets. The best four qualifying markets are
+                // dispatched together and settled independently.
+                while (isCurrentRun() && scannerTickVersionRef.current <= 0) {
                     await new Promise(r => setTimeout(r, isFastExecutionEnabled() ? 0 : 80));
-                    scanDigits = digitsRef.current.slice();
                 }
-                if (stopRef.current) break;
-                lastScanKey = scanDigits.slice(-10).join(',');
+                while (isCurrentRun() && scannerTickVersionRef.current === Number(lastScanKey)) {
+                    await new Promise(r => setTimeout(r, isFastExecutionEnabled() ? 0 : 80));
+                }
+                if (!isCurrentRun()) break;
+                lastScanKey = String(scannerTickVersionRef.current);
+                const candidates = marketCandidatesRef.current.slice(0, 4);
+                if (!candidates.length) continue;
 
-                const entry = bot.pickTrade(scanDigits, recoveryMode, isCycleBot ? cycleConfig : undefined);
-                if (!entry || scanDigits.length < (isCycleBot ? 1 : 3) || entry.shouldTrade === false) continue;
+                const results = await Promise.allSettled(candidates.map(candidate =>
+                    buyAndWait(
+                        candidate.symbol,
+                        candidate.trade.contract,
+                        candidate.trade.barrier,
+                        stk,
+                        isCycleBot ? cycleConfig.ticks : riskConfig.ticks,
+                        {
+                            metadata: {
+                                source: 'auto-bots',
+                                scan_score: candidate.score,
+                                scan_ticks: candidate.ticks,
+                                scan_markets: candidates.length,
+                            },
+                        },
+                    )
+                ));
 
-                const runsForSignal = isCycleBot ? 1 : AI_RUNS_PER_SCAN;
-                for (let run = 0; run < runsForSignal && !stopRef.current; run++) {
-                    const trade = bot.pickTrade(scanDigits, recoveryMode, isCycleBot ? cycleConfig : undefined);
-                    if (trade.shouldTrade === false) break;
-                    const { contract, barrier } = trade;
-                    const profit = await buyAndWait(bot.symbol, contract, barrier, stk);
+                for (let index = 0; index < results.length && isCurrentRun(); index++) {
+                    const result = results[index];
+                    const candidate = candidates[index];
+                    if (result.status === 'rejected' || !Number.isFinite(result.value)) {
+                        onLog(`⚠ ${candidate.label}: ${describeTradeError(result.status === 'rejected' ? result.reason : 'Settlement pending')}`);
+                        continue;
+                    }
+                    const profit = result.value;
                     const won = profit > 0;
                     localProfit = +(localProfit + profit).toFixed(2);
                     if (won) localWins++; else localLosses++;
 
                     onSessionUpdate({ wins: localWins, losses: localLosses, profit: localProfit });
-                    const signalLabel = trade.signal ? ` · ${trade.signal.toUpperCase()} entry` : '';
-                    onLog(`${won ? '✅' : '❌'} ${isCycleBot ? 'Cycle' : `AI scan ${run + 1}/${AI_RUNS_PER_SCAN}`}${signalLabel}: ${contract}${barrier !== null ? '@' + barrier : ''} ${fmtProfit(profit)} | Total: ${fmtProfit(localProfit)}`);
+                    const signalLabel = candidate.trade.signal ? ` · ${candidate.trade.signal.toUpperCase()} entry` : '';
+                    onLog(`${won ? '✅' : '❌'} ${candidate.label} · ${candidate.ticks}t${signalLabel}: ${candidate.trade.contract}${candidate.trade.barrier !== null ? '@' + candidate.trade.barrier : ''} ${fmtProfit(profit)} | Total: ${fmtProfit(localProfit)}`);
 
                     if (bot.id === 'auto-o2u7') recoveryMode = !won;
                     if (won) {
