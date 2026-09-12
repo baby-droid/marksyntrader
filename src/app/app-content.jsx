@@ -45,11 +45,6 @@ const AppContent = observer(() => {
     const [is_api_initialized, setIsApiInitialized] = React.useState(false);
     const [is_loading, setIsLoading] = React.useState(true);
     const [min_time_elapsed, setMinTimeElapsed] = React.useState(false);
-    // Content is only swapped in once the loading screen's own finish
-    // animation has actually reached 100% (via onDone) — not the instant
-    // `is_loading`/`min_time_elapsed` flip true — so the viewer always sees
-    // the bar complete instead of the screen being replaced mid-ramp.
-    const [reveal_content, setRevealContent] = React.useState(false);
     // Once the app has shown its initial loading screen and revealed content, we
     // never show the full-screen loader again for the rest of the session — brief
     // reconnects/token refreshes should not re-trigger the "Loading..." screen.
@@ -295,14 +290,8 @@ const AppContent = observer(() => {
                     <PreviewBranding />
                 </Suspense>
             )}
-            {!reveal_content ? (
-                <LoadingScreen
-                    ready={!is_loading && min_time_elapsed}
-                    onDone={() => {
-                        has_loaded_once_ref.current = true;
-                        setRevealContent(true);
-                    }}
-                />
+            {(is_loading || !min_time_elapsed) ? (
+                <LoadingScreen />
             ) : (
                 <AuthLoadingWrapper>
                     <ThemeProvider theme={is_dark_mode_on ? 'dark' : 'light'}>

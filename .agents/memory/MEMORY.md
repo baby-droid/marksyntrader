@@ -69,4 +69,5 @@
 - [Parity auto cycles](parity-auto-cycles.md) — ODD AUTO CYCLE uses weak even or strong-even×2→odd signals to buy DIGITODD; EVEN mirrors it with odd→DIGITEVEN.
 - [SmartChart proxy rail scoping](smartchart-proxy-rail.md) — scope native control lookups to the nearest chart wrapper when normal and modal charts can coexist.
 - [Development preview routing](preview-routing.md) — local `/bot/preview` can omit the build flag, so preview mode must also detect the pathname.
+- [Deriv OAuth endpoint](deriv-oauth.md) — production authorization uses `/oauth2/auth`; the Deriv app must be live before an interactive callback test can succeed.
 - [Dependency repair](dependency-repair.md) — restore an empty node_modules tree without unintentionally upgrading the checked-in manifest.
