@@ -5,7 +5,7 @@
   box-sizing: border-box;
   overflow-x: hidden;
   overflow-y: auto;
-  padding: 1.25rem 1.4rem 2rem;
+  padding: 1.25rem 2cm 2rem;
   background: #f5f7fb;
   color: #182237;
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -127,12 +127,15 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 27rem), 1fr));
   align-items: start;
+  justify-items: center;
+  justify-content: center;
   gap: 1rem;
 }
 
 .dc-market-slot {
   min-width: 0;
-  width: 100%;
+  width: min(100%, 42rem);
+  margin-inline: auto;
   border-radius: .72rem;
   transition: box-shadow .2s ease;
 }
@@ -482,6 +485,7 @@
   .dc-add-market select { width: 100%; }
   .dc-page__layout { display: flex; flex-direction: column; gap: .8rem; }
   .dc-market-grid, .dc-rail { width: 100%; }
+  .dc-market-slot { width: min(100%, 42rem); }
   .dc-rail { position: static; }
   .dc-card__header { padding: .75rem .7rem .6rem; }
   .dc-metrics-grid { gap: .4rem; padding-inline: .45rem; }
