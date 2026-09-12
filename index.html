@@ -36,6 +36,29 @@
     <title>Marksyntrader — Ahmed Syn Trader</title>
 </head>
 <body>
-    <div id="root"></div>
+    <div id="root">
+        <div data-boot-fallback style="min-height:100vh;background:#050b1d;color:#e8eefc;display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;text-align:center;padding:24px;box-sizing:border-box">
+            <div>
+                <div style="font-size:18px;font-weight:700;letter-spacing:.04em">Marksyntrader</div>
+                <div data-boot-message style="margin-top:10px;color:#8ea1c7;font-size:13px">Loading trading workspace…</div>
+                <button data-boot-retry type="button" onclick="window.location.reload()" style="display:none;margin-top:16px;padding:9px 16px;border:1px solid #2ddf8c;border-radius:8px;background:#0c2b2a;color:#d9fff0;cursor:pointer">Reload preview</button>
+            </div>
+        </div>
+    </div>
+    <script>
+        (function () {
+            function showBootError() {
+                var root = document.getElementById('root');
+                var fallback = root && root.querySelector('[data-boot-fallback]');
+                if (!fallback) return;
+                var message = fallback.querySelector('[data-boot-message]');
+                var retry = fallback.querySelector('[data-boot-retry]');
+                if (message) message.textContent = 'The preview could not start. Reload to try again.';
+                if (retry) retry.style.display = 'inline-block';
+            }
+            window.addEventListener('error', showBootError, true);
+            window.addEventListener('unhandledrejection', showBootError);
+        }());
+    </script>
 </body>
 </html>

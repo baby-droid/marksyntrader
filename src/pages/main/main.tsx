@@ -146,13 +146,6 @@ const AppWrapper = observer(() => {
     };
     const active_hash_tab = GetHashedValue(active_tab);
 
-    // Register service worker for PWA
-    useEffect(() => {
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/sw.js').catch(() => {});
-        }
-    }, []);
-
     // ── Copy-trading: global restore on every page load ────────────────────
     // restoreState() reads localStorage, reconnects follower WebSockets, and
     // auto-restarts the engine if it was running when the page was last closed.

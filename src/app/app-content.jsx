@@ -240,7 +240,53 @@ const AppContent = observer(() => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [client.is_logged_in, is_api_initialized]);
 
-    if (common?.error) return null;
+    if (common?.error) {
+        return (
+            <div
+                role='alert'
+                style={{
+                    minHeight: '100vh',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '2rem',
+                    boxSizing: 'border-box',
+                    background: '#050b1d',
+                    color: '#e8eefc',
+                    fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+                    textAlign: 'center',
+                }}
+            >
+                <div style={{ maxWidth: 520 }}>
+                    <div style={{ fontSize: '1.25rem', fontWeight: 800, letterSpacing: '0.04em' }}>
+                        Marksyntrader
+                    </div>
+                    <h1 style={{ margin: '1.25rem 0 0.5rem', fontSize: '1.1rem' }}>
+                        The trading workspace could not connect
+                    </h1>
+                    <p style={{ margin: 0, color: '#9fb0d0', lineHeight: 1.6 }}>
+                        {common.error.message || 'The live connection is temporarily unavailable. Reload the preview to try again.'}
+                    </p>
+                    <button
+                        type='button'
+                        onClick={() => window.location.reload()}
+                        style={{
+                            marginTop: '1.25rem',
+                            padding: '0.65rem 1rem',
+                            border: '1px solid #2ddf8c',
+                            borderRadius: 8,
+                            background: '#0c2b2a',
+                            color: '#d9fff0',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                        }}
+                    >
+                        Reload preview
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <React.Fragment>
