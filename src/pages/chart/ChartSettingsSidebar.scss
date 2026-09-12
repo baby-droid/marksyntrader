@@ -14,14 +14,14 @@
         top: auto !important;
         right: auto !important;
         bottom: 20px !important;
-        left: 10px !important;
+        left: 16px !important;
         display: flex !important;
         flex-direction: column !important;
         align-items: flex-start !important;
-        gap: 7px;
-        width: 30px !important;
-        min-width: 30px !important;
-        max-width: 30px !important;
+        gap: 8px;
+        width: 40px !important;
+        min-width: 40px !important;
+        max-width: 40px !important;
         height: auto !important;
         margin: 0 !important;
         padding: 0 !important;
@@ -33,20 +33,20 @@
         display: flex !important;
         align-items: center;
         justify-content: center;
-        flex: 0 0 30px !important;
-        width: 30px !important;
-        min-width: 30px !important;
-        max-width: 30px !important;
-        height: 30px !important;
-        min-height: 30px !important;
-        max-height: 30px !important;
+        flex: 0 0 40px !important;
+        width: 40px !important;
+        min-width: 40px !important;
+        max-width: 40px !important;
+        height: 40px !important;
+        min-height: 40px !important;
+        max-height: 40px !important;
         padding: 0;
         border: 0 !important;
         border-radius: 50% !important;
-        background: #f0f1f2 !important;
+        background: #f1f2f3 !important;
         color: #252a31;
         cursor: pointer !important;
-        box-shadow: none;
+        box-shadow: 0 1px 4px rgba(29, 39, 49, 0.08);
         appearance: none !important;
         transition:
             background 140ms ease,
@@ -55,8 +55,8 @@
             transform 140ms ease;
 
         svg {
-            width: 16px;
-            height: 16px;
+            width: 20px;
+            height: 20px;
             fill: none;
             stroke: currentColor;
             stroke-linecap: round;
@@ -73,7 +73,7 @@
         }
 
         &.is-active {
-            background: #f0f1f2;
+            background: #f1f2f3;
             color: #111820;
             box-shadow:
                 0 0 0 2px #9bbef5,
@@ -89,21 +89,21 @@
 
     &__badge {
         position: absolute;
-        top: -4px;
-        right: -5px;
+        top: -5px;
+        right: -4px;
         z-index: 1;
         min-width: 20px;
         width: max-content !important;
         max-width: max-content !important;
         flex: none !important;
-        height: 15px;
+        height: 16px;
         padding: 0 2px;
         border-radius: 2px 2px 0 0;
         background: #2f3339;
         color: #fff;
         font-size: 10px;
         font-weight: 700;
-        line-height: 16px;
+        line-height: 17px;
         text-align: center;
         letter-spacing: 0.01em;
     }
@@ -112,12 +112,12 @@
 @media (max-width: 767px) {
     .chart-settings-sidebar__rail {
         bottom: 16px;
-        left: 8px;
-        gap: 7px;
+        left: 16px;
+        gap: 8px;
     }
 
     .chart-settings-sidebar__tool {
-        width: 30px !important;
-        height: 30px !important;
+        width: 40px !important;
+        height: 40px !important;
     }
 }
