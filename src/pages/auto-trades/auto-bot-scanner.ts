@@ -32,6 +32,8 @@ export const AUTO_BOT_MARKETS = [
     { label: 'Bull Market', value: 'RDBULL' },
 ] as const;
 
+type AutoBotMarket = { label: string; value: string };
+
 export interface AutoBotMarketSnapshot {
     symbol: string;
     label: string;
@@ -65,6 +67,24 @@ export interface AutoBotMarketCandidate {
 
 const digitFromQuote = (quote: number, pipSize: number) =>
     Number(Number(quote).toFixed(pipSize).slice(-1));
+
+const isDigitMarket = (item: any): boolean => {
+    const symbol = String(item?.symbol ?? '').trim();
+    if (!symbol) return false;
+    const market = String(item?.market ?? '').toLowerCase();
+    const symbolType = String(item?.symbol_type ?? '').toLowerCase();
+    return market === 'synthetic_index'
+        || symbolType === 'synthetic_index'
+        || /^(1HZ|R_|JD|BOOM|CRASH|STP|RDBULL|RDBEAR)/i.test(symbol);
+};
+
+const mergeMarkets = (discovered: AutoBotMarket[]): AutoBotMarket[] => {
+    const bySymbol = new Map<string, AutoBotMarket>();
+    [...AUTO_BOT_MARKETS, ...discovered].forEach(market => {
+        if (market.value) bySymbol.set(market.value, market);
+    });
+    return [...bySymbol.values()];
+};
 
 const scoreTrade = (trade: AutoBotTrade, digits: number[]): number => {
     if (!digits.length) return 0;
@@ -148,26 +168,34 @@ export function useAuthenticatedAutoBotScanner(): {
             prices: number[];
             epochs: Set<number>;
             live: Array<{ epoch: number; price: number }>;
-            pipSize: number;
+            pipSize: number | null;
         }>();
+        const marketLabels = new Map<string, string>(
+            AUTO_BOT_MARKETS.map(market => [market.value, market.label]),
+        );
 
         const publish = (symbol: string, ready = true) => {
             const market = marketState.get(symbol);
             if (!market || !alive) return;
-            const history = market.prices.map(price => digitFromQuote(price, market.pipSize));
-            const live = market.live.map(item => digitFromQuote(item.price, market.pipSize));
+            const hasPipSize = Number.isFinite(market.pipSize);
+            const history = hasPipSize
+                ? market.prices.map(price => digitFromQuote(price, market.pipSize as number))
+                : [];
+            const live = hasPipSize
+                ? market.live.map(item => digitFromQuote(item.price, market.pipSize as number))
+                : [];
             setSnapshots(previous => ({
                 ...previous,
                 [symbol]: {
                     symbol,
-                    label: AUTO_BOT_MARKETS.find(item => item.value === symbol)?.label ?? symbol,
+                    label: marketLabels.get(symbol) ?? symbol,
                     digits: [...history, ...live].slice(-1000),
                     livePrice: market.live.at(-1)?.price ?? null,
                     tickVersion: (previous[symbol]?.tickVersion ?? 0) + (ready ? 1 : 0),
-                    ready,
+                    ready: ready && hasPipSize,
                 },
             }));
-            setTickVersion(version => version + (ready ? 1 : 0));
+            setTickVersion(version => version + (ready && hasPipSize ? 1 : 0));
         };
 
         const start = async () => {
@@ -178,14 +206,32 @@ export function useAuthenticatedAutoBotScanner(): {
             }
 
             setConnected(true);
-            await Promise.all(AUTO_BOT_MARKETS.map(async ({ value: symbol }) => {
+            let markets = [...AUTO_BOT_MARKETS] as AutoBotMarket[];
+            try {
+                // Do not include product_type here. Deriv rejects that field
+                // for active_symbols on some authenticated sessions.
+                const response = await api.send({ active_symbols: 'full' });
+                const discovered = (response?.active_symbols ?? [])
+                    .filter(isDigitMarket)
+                    .map((item: any) => ({
+                        value: String(item.symbol),
+                        label: String(item.display_name || item.name || item.symbol),
+                    }));
+                markets = mergeMarkets(discovered);
+                markets.forEach(market => marketLabels.set(market.value, market.label));
+            } catch {
+                // Keep the known synthetic catalog when discovery is delayed
+                // or unavailable. The authenticated streams still work.
+            }
+
+            await Promise.all(markets.map(async ({ value: symbol }) => {
                 const generation = (generations.get(symbol) ?? 0) + 1;
                 generations.set(symbol, generation);
                 const market = {
                     prices: [],
                     epochs: new Set<number>(),
                     live: [],
-                    pipSize: 2,
+                    pipSize: null as number | null,
                 };
                 marketState.set(symbol, market);
 
@@ -246,6 +292,8 @@ export function useAuthenticatedAutoBotScanner(): {
             subscriptions.forEach(subscription => {
                 try { subscription.unsubscribe?.(); } catch {}
             });
+            marketState.clear();
+            generations.clear();
         };
     }, []);
 

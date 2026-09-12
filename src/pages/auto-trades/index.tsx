@@ -24,6 +24,7 @@ import {
     scanAutoBotMarkets,
     useAuthenticatedAutoBotScanner,
     type AutoBotMarketCandidate,
+    type AutoBotMarketSnapshot,
 } from './auto-bot-scanner';
 import './auto-trades.scss';
 
@@ -590,7 +591,7 @@ interface AiBotRunnerProps {
     globalStake: number;
     globalMartingale: number;
     session: BotSession;
-    marketCandidates: AutoBotMarketCandidate[];
+    scannerSnapshots: Record<string, AutoBotMarketSnapshot>;
     scannerTickVersion: number;
     onSessionUpdate: (patch: Partial<BotSession>) => void;
     onLog: (msg: string) => void;
@@ -601,15 +602,15 @@ function AiBotCard({
     globalStake,
     globalMartingale,
     session,
-    marketCandidates,
+    scannerSnapshots,
     scannerTickVersion,
     onSessionUpdate,
     onLog,
 }: AiBotRunnerProps) {
-    const marketCandidatesRef = useRef<AutoBotMarketCandidate[]>(marketCandidates);
+    const isCycleBot = Boolean(bot.cycle);
+    const marketCandidatesRef = useRef<AutoBotMarketCandidate[]>([]);
     const scannerTickVersionRef = useRef(scannerTickVersion);
     const runVersionRef = useRef(0);
-    useEffect(() => { marketCandidatesRef.current = marketCandidates; }, [marketCandidates]);
     useEffect(() => { scannerTickVersionRef.current = scannerTickVersion; }, [scannerTickVersion]);
     const stopRef = useRef(false);
     const pausedStakeRef = useRef<number | null>(null); // for resume-with-martingale
@@ -620,14 +621,23 @@ function AiBotCard({
         martingale: bot.defaultMartingale,
         takeProfit: bot.defaultTakeProfit,
         stopLoss: bot.defaultStopLoss,
-        ticks: 1,
+        ticks: 4,
     }));
     const [riskConfig, setRiskConfig] = useState({
         takeProfit: bot.defaultTakeProfit,
         stopLoss: bot.defaultStopLoss,
-        ticks: 1 as 1 | 2 | 3 | 4,
+        ticks: 4 as 1 | 2 | 3 | 4,
     });
-    const isCycleBot = Boolean(bot.cycle);
+    const marketCandidates = useMemo(
+        () => scanAutoBotMarkets(
+            bot,
+            scannerSnapshots,
+            false,
+            isCycleBot ? cycleConfig : undefined,
+        ),
+        [bot, scannerSnapshots, isCycleBot, cycleConfig],
+    );
+    useEffect(() => { marketCandidatesRef.current = marketCandidates; }, [marketCandidates]);
     const updateCycleConfig = useCallback((patch: Partial<CycleBotConfig>) => {
         setCycleConfig(previous => {
             const next = { ...previous, ...patch };
@@ -695,7 +705,13 @@ function AiBotCard({
                         candidate.trade.contract,
                         candidate.trade.barrier,
                         stk,
-                        isCycleBot ? cycleConfig.ticks : riskConfig.ticks,
+                            Math.max(
+                                1,
+                                Math.min(
+                                    candidate.ticks,
+                                    isCycleBot ? cycleConfig.ticks : riskConfig.ticks,
+                                ),
+                            ),
                         {
                             metadata: {
                                 source: 'auto-bots',
@@ -743,14 +759,19 @@ function AiBotCard({
             }
         }
 
-        stopRef.current = false;
-        onSessionUpdate({ active: false });
-        onLog(`⏹ Stopped. Session P/L: ${fmtProfit(localProfit)}`);
-    }, [bot, globalStake, globalMartingale, cycleConfig, isCycleBot, digitsRef, buyAndWait, onLog, onSessionUpdate]);
+        if (runVersionRef.current === runVersion) {
+            stopRef.current = false;
+            onSessionUpdate({ active: false });
+            onLog(`⏹ Stopped. Session P/L: ${fmtProfit(localProfit)}`);
+        }
+    }, [bot, globalStake, globalMartingale, cycleConfig, riskConfig, isCycleBot, buyAndWait, onLog, onSessionUpdate]);
 
     const toggle = useCallback(() => {
         if (session.active) {
             stopRef.current = true;
+            runVersionRef.current += 1;
+            onSessionUpdate({ active: false });
+            onLog('⏹ Stop requested. Waiting for any open contract to settle safely.');
         } else {
             const resumeStake = pausedStakeRef.current;
             start(resumeStake ?? undefined);
@@ -773,7 +794,29 @@ function AiBotCard({
             </div>
             <p className='autotrades__botcard-desc'>{bot.desc}</p>
             <div className='autotrades__botcard-market'>
-                <span>📍 {bot.symbol}</span>
+                <span>📡 {marketCandidates.length} qualifying markets</span>
+                <span className='autotrades__botcard-market-status'>{scannerTickVersion > 0 ? 'Live scanner' : 'Loading scanner…'}</span>
+            </div>
+            <div className='autotrades__botcard-markets'>
+                <div className='autotrades__botcard-markets-title'>
+                    <span>Best markets · top 4 trade together</span>
+                    <span>{marketCandidates.length ? `${Math.min(4, marketCandidates.length)} active slots` : 'Waiting'}</span>
+                </div>
+                {marketCandidates.length ? marketCandidates.map(candidate => (
+                    <div className='autotrades__botcard-market-row' key={candidate.symbol}>
+                        <span className='autotrades__botcard-market-name'>{candidate.label}</span>
+                        <span className='autotrades__botcard-market-detail'>
+                            {candidate.score.toFixed(1)}% · {candidate.ticks}t · {candidate.trade.contract}
+                            {candidate.trade.barrier !== null ? ` @${candidate.trade.barrier}` : ''}
+                            {candidate.weakPct != null ? ` · W ${candidate.weakPct.toFixed(1)}%` : ''}
+                            {candidate.strongPct != null ? ` · S ${candidate.strongPct.toFixed(1)}%` : ''}
+                        </span>
+                    </div>
+                )) : (
+                    <div className='autotrades__botcard-markets-empty'>
+                        Collecting 1,000 authenticated ticks or waiting for a qualifying signal.
+                    </div>
+                )}
             </div>
             {bot.cycle && (
                 <div className='autotrades__cycle-config'>
@@ -836,7 +879,60 @@ function AiBotCard({
                                 onCommit={value => updateCycleConfig({ stopLoss: value })}
                             />
                         </label>
+                        <label>
+                            Max ticks (best ≤)
+                            <NumberField
+                                value={cycleConfig.ticks}
+                                min={1}
+                                max={4}
+                                disabled={session.active}
+                                onCommit={value => updateCycleConfig({ ticks: value as 1 | 2 | 3 | 4 })}
+                            />
+                        </label>
                     </div>
+                </div>
+            )}
+            {!bot.cycle && (
+                <div className='autotrades__bot-risk-grid'>
+                    <label>
+                        Take profit $
+                        <NumberField
+                            value={riskConfig.takeProfit}
+                            min={0.01}
+                            max={100000}
+                            disabled={session.active}
+                            onCommit={value => setRiskConfig(previous => ({
+                                ...previous,
+                                takeProfit: Math.max(0.01, Math.min(100000, value)),
+                            }))}
+                        />
+                    </label>
+                    <label>
+                        Stop loss $
+                        <NumberField
+                            value={riskConfig.stopLoss}
+                            min={0.01}
+                            max={100000}
+                            disabled={session.active}
+                            onCommit={value => setRiskConfig(previous => ({
+                                ...previous,
+                                stopLoss: Math.max(0.01, Math.min(100000, value)),
+                            }))}
+                        />
+                    </label>
+                    <label>
+                        Max ticks (best ≤)
+                        <NumberField
+                            value={riskConfig.ticks}
+                            min={1}
+                            max={4}
+                            disabled={session.active}
+                            onCommit={value => setRiskConfig(previous => ({
+                                ...previous,
+                                ticks: Math.max(1, Math.min(4, Math.floor(value))) as 1 | 2 | 3 | 4,
+                            }))}
+                        />
+                    </label>
                 </div>
             )}
             <div className='autotrades__botcard-stats'>
@@ -908,6 +1004,11 @@ const AutoTrades: React.FC = () => {
     const smartLivePrice = smartFeed.livePrice;
 
     const { buyAndWait, authorized, connected } = useBuyAndWait();
+    const {
+        snapshots: autoBotSnapshots,
+        tickVersion: autoBotTickVersion,
+        connected: autoBotScannerConnected,
+    } = useAuthenticatedAutoBotScanner();
     type SmartExecutionMode = 'normal' | 'eachTick' | 'superSpeed';
     const [smartExecutionMode, setSmartExecutionMode] = useState<SmartExecutionMode>('normal');
     const smartExecutionModeRef = useRef<SmartExecutionMode>('normal');
@@ -1009,6 +1110,7 @@ const AutoTrades: React.FC = () => {
         if (smartCardSess[id].running) {
             smartStopFlags.current[id] = true;
             invalidateSmartRun(smartRunTokens.current, id);
+            updateSess(id, { running: false, lastLog: 'Stop requested. Waiting for open contract cleanup…' });
             return;
         }
 
@@ -1824,6 +1926,8 @@ const AutoTrades: React.FC = () => {
                                 globalStake={globalStake}
                                 globalMartingale={globalMartingale}
                                 session={sessions[bot.id]}
+                                scannerSnapshots={autoBotSnapshots}
+                                scannerTickVersion={autoBotTickVersion}
                                 onSessionUpdate={patch => updateSession(bot.id, patch)}
                                 onLog={msg => addLog(bot.id, msg)}
                             />
