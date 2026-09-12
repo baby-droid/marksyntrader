@@ -190,7 +190,7 @@ export function useAuthenticatedAutoBotScanner(): {
                     symbol,
                     label: marketLabels.get(symbol) ?? symbol,
                     digits: [...history, ...live].slice(-1000),
-                    livePrice: market.live.at(-1)?.price ?? null,
+                    livePrice: market.live[market.live.length - 1]?.price ?? null,
                     tickVersion: (previous[symbol]?.tickVersion ?? 0) + (ready ? 1 : 0),
                     ready: ready && hasPipSize,
                 },
