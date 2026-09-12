@@ -1652,7 +1652,7 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                             Cycle pattern {cyclePatternEnabled ? 'ON' : 'OFF'}
                         </button>
                     </div>
-                    <div className='chart-ai__settings'>
+                    <div className='chart-ai__settings chart-ai__settings--controls'>
                         <label>{executionMode === 'touches' ? 'Best ticks' : 'Best ticks'}
                             <output className='chart-ai__auto-value' aria-label='Automatically selected best ticks'>
                                 {bestTicks ?? '—'}
@@ -1750,7 +1750,7 @@ export const ChartAiControl: React.FC<ChartAiControlProps> = ({
                             </div>
                         )}
                     </div>
-                    <div className='chart-ai__settings'>
+                    <div className='chart-ai__settings chart-ai__settings--risk'>
                         {[
                             ['runs', runs, setRuns, 1, 100],
                             ['losses', stopLoss, setStopLoss, 1, 100],
