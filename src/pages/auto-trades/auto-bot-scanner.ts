@@ -60,9 +60,57 @@ export interface AutoBotMarketCandidate {
     digits: number[];
     trade: AutoBotTrade;
     score: number;
+    qualifies: boolean;
+    tickVersion: number;
+    livePrice: number | null;
     ticks: 1 | 2 | 3 | 4;
     weakPct?: number;
     strongPct?: number;
+}
+
+export const AUTO_BOT_TICK_DURATION = 1 as const;
+
+export function getFreshAutoBotMarkets(
+    candidates: AutoBotMarketCandidate[],
+    lastEvaluatedTickByMarket: Map<string, number>,
+): AutoBotMarketCandidate[] {
+    const fresh = candidates
+        .filter(candidate =>
+            candidate.qualifies
+            && candidate.tickVersion > (lastEvaluatedTickByMarket.get(candidate.symbol) ?? 0)
+        )
+        .sort((left, right) => right.score - left.score);
+
+    // Mark every changed market as evaluated, not only the market selected
+    // for execution. This prevents a qualifying market from being replayed
+    // on every unrelated market tick.
+    candidates.forEach(candidate => {
+        if (candidate.tickVersion > (lastEvaluatedTickByMarket.get(candidate.symbol) ?? 0)) {
+            lastEvaluatedTickByMarket.set(candidate.symbol, candidate.tickVersion);
+        }
+    });
+
+    return fresh;
+}
+
+export function selectAutoBotMarketsForExecution(
+    freshMarkets: AutoBotMarketCandidate[],
+): AutoBotMarketCandidate[] {
+    const rankedMarkets = freshMarkets.slice(0, 4);
+    if (!rankedMarkets.length) return [];
+
+    // A normal scan uses the highest-probability market. Multiple contracts
+    // are allowed only when every selected market is a strong signal.
+    const allStrong = rankedMarkets.length > 1
+        && rankedMarkets.every(candidate => candidate.trade.signal === 'strong');
+    return allStrong ? rankedMarkets : rankedMarkets.slice(0, 1);
+}
+
+export function isAutoBotMarketStopped(
+    profit: number,
+    risk: { takeProfit: number; stopLoss: number },
+): boolean {
+    return profit >= risk.takeProfit || profit <= -risk.stopLoss;
 }
 
 const digitFromQuote = (quote: number, pipSize: number) =>
@@ -105,17 +153,16 @@ const chooseBestTicks = (
     recoveryMode = false,
     cycleConfig?: unknown,
 ) => {
-    const options = [1, 2, 3, 4] as const;
-    return options.reduce((best, ticks) => {
-        const sample = digits.slice(-Math.max(20, Math.min(1000, 40 + ticks * 10)));
-        const trade = bot.pickTrade(sample, recoveryMode, cycleConfig);
-        const score = scoreTrade(trade, sample) + (trade.shouldTrade === false ? -100 : 0);
-        return score > best.score ? { ticks, score, trade } : best;
-    }, {
-        ticks: 1 as 1 | 2 | 3 | 4,
-        score: -Infinity,
-        trade: bot.pickTrade(digits, recoveryMode, cycleConfig),
-    });
+    // Auto Bots are tick-wise. The previous implementation selected a
+    // duration from 1–4 ticks while scanning, which made the displayed
+    // probability and the actual contract duration disagree.
+    const sample = digits.slice(-Math.max(20, Math.min(1000, 50)));
+    const trade = bot.pickTrade(sample, recoveryMode, cycleConfig);
+    return {
+        ticks: 1 as const,
+        score: scoreTrade(trade, sample) + (trade.shouldTrade === false ? -100 : 0),
+        trade,
+    };
 };
 
 export function scanAutoBotMarkets(
@@ -131,12 +178,16 @@ export function scanAutoBotMarkets(
             const last1000 = snapshot.digits.slice(-1000);
             const weakDigit = Number((cycleConfig as any)?.weakEntry);
             const strongDigit = Number((cycleConfig as any)?.strongEntry);
+            const rawScore = Math.max(0, Math.min(100, selected.score));
             return {
                 symbol: snapshot.symbol,
                 label: snapshot.label,
                 digits: snapshot.digits,
                 trade: selected.trade,
-                score: Math.max(0, Math.min(100, selected.score)),
+                score: rawScore,
+                qualifies: selected.trade.shouldTrade !== false && rawScore >= 50,
+                tickVersion: snapshot.tickVersion,
+                livePrice: snapshot.livePrice,
                 ticks: selected.ticks,
                 ...(Number.isInteger(weakDigit) ? {
                     weakPct: last1000.filter(digit => digit === weakDigit).length / Math.max(1, last1000.length) * 100,
@@ -146,8 +197,10 @@ export function scanAutoBotMarkets(
                 } : {}),
             };
         })
-        .filter(candidate => candidate.trade.shouldTrade !== false && candidate.score >= 50)
-        .sort((left, right) => right.score - left.score);
+        .sort((left, right) => {
+            if (left.qualifies !== right.qualifies) return left.qualifies ? -1 : 1;
+            return right.score - left.score;
+        });
 }
 
 export function useAuthenticatedAutoBotScanner(): {

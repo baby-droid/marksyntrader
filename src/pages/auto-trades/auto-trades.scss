@@ -890,6 +890,10 @@
     &__botcard-market {
         font-size: 11px;
         color: rgba(255,255,255,0.4);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
     }
 
     &__cycle-config {
@@ -953,6 +957,148 @@
         line-height: 1.35;
         text-transform: none;
     }
+
+    &__botcard-markets {
+        min-width: 0;
+        overflow: hidden;
+        padding: 8px 0 2px;
+        border-top: 1px solid rgba(0,255,100,0.08);
+        border-bottom: 1px solid rgba(0,255,100,0.08);
+    }
+
+    &__botcard-markets-title {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 7px;
+        color: rgba(255,255,255,0.45);
+        font-size: 9px;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+
+    &__botcard-market-tape {
+        min-width: 0;
+        overflow: hidden;
+        mask-image: linear-gradient(to right, transparent, #000 5%, #000 95%, transparent);
+    }
+
+    &__botcard-market-track {
+        display: flex;
+        width: max-content;
+        gap: 7px;
+        animation: auto-bot-market-ticker 24s linear infinite;
+        &:hover { animation-play-state: paused; }
+    }
+
+    &__botcard-market-tile {
+        width: 154px;
+        min-height: 72px;
+        flex: 0 0 154px;
+        padding: 8px;
+        border: 1px solid rgba(0,255,136,0.14);
+        border-radius: 8px;
+        background: rgba(0, 30, 16, 0.75);
+    }
+
+    &__botcard-market-tile-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 5px;
+        strong {
+            min-width: 0;
+            overflow: hidden;
+            color: rgba(255,255,255,0.82);
+            font-size: 10px;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        span {
+            flex-shrink: 0;
+            color: rgba(255,255,255,0.42);
+            font-size: 8px;
+            font-weight: 800;
+            &.ready { color: #00ff88; }
+            &.watch { color: #fbbf24; }
+        }
+    }
+
+    &__botcard-market-tile-price {
+        margin-top: 4px;
+        color: #fff;
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 15px;
+        font-weight: 800;
+    }
+
+    &__botcard-market-detail {
+        display: block;
+        margin-top: 3px;
+        overflow: hidden;
+        color: rgba(255,255,255,0.42);
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 8px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    &__botcard-market-risk {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 5px;
+        margin-top: 6px;
+        label {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            color: rgba(255,255,255,0.45);
+            font-size: 8px;
+            font-weight: 800;
+            text-transform: uppercase;
+            input {
+                width: 100%;
+                min-width: 0;
+                padding: 3px 4px;
+                border: 1px solid rgba(0,255,136,0.14);
+                border-radius: 4px;
+                background: rgba(0,0,0,0.3);
+                color: #fff;
+                font-size: 10px;
+                font-weight: 700;
+                outline: none;
+                &:focus { border-color: #00ff88; }
+                &:disabled { opacity: 0.55; }
+            }
+        }
+    }
+
+    &__bot-fixed-ticks {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 4px;
+        color: rgba(255,255,255,0.52);
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        strong {
+            display: block;
+            padding: 5px 4px;
+            border: 1px solid rgba(0,255,136,0.18);
+            border-radius: 5px;
+            color: #9fffc6;
+            font-size: 12px;
+            text-align: center;
+        }
+    }
+}
+
+@keyframes auto-bot-market-ticker {
+    from { transform: translateX(0); }
+    to { transform: translateX(calc(-50% - 3.5px)); }
 }
 
 /* ─── Mobile Responsive ─── */

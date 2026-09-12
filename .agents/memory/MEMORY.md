@@ -64,6 +64,7 @@
 - [Deriv tick observable teardown](auto-trades-feed-lifecycle.md) — unsubscribing a DerivAPIBasic stream owns the matching forget; manual forgets can duplicate requests and trigger rate limits.
 - [Auto-Digits feed lifecycle](auto-digits-feed-lifecycle.md) — attach authenticated live feeds before baseline history, cancel stale loaders, watchdog silent streams, and calculate digits with live pip_size plus epoch deduplication.
 - [Auto-Digits recovery order](auto-digits-recovery-order.md) — after a loss, evaluate one shared plan step across markets, and advance Over 1–3 then Under 8–6 only after a real buy.
+- [Auto Bots market execution](auto-bots-market-execution.md) — scan authenticated markets continuously, evaluate each on its own tick, select the best unless all selected signals are strong, and stop risk per market.
 - [Smart Trading card runner](smart-trading-card-runner.md) — tokenized card runs prevent stale async loops from restarting or buying after a stop/start; normalize exclusive digit barriers before proposal.
 - [Parity auto cycles](parity-auto-cycles.md) — ODD AUTO CYCLE uses weak even or strong-even×2→odd signals to buy DIGITODD; EVEN mirrors it with odd→DIGITEVEN.
 - [SmartChart proxy rail scoping](smartchart-proxy-rail.md) — scope native control lookups to the nearest chart wrapper when normal and modal charts can coexist.
