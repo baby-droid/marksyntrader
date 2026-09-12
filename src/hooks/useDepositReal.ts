@@ -19,10 +19,20 @@ export const useDepositReal = () => {
     const openDeposit = useCallback(() => {
         setState('loading');
         try {
-            // Keep Marksyntrader open so the user returns to the live app
-            // after completing the external deposit flow.
+            // Keep Marksyntrader open while the external deposit sheet is active.
+            // Deriv Home does not expose a documented browser callback parameter
+            // for this URL, so the original tab is the reliable return surface.
             const opened = window.open(DERIV_DEPOSIT_URL, '_blank', 'noopener,noreferrer');
             if (!opened) throw new Error('Deposit window was blocked');
+            const onReturn = () => {
+                if (!opened.closed) return;
+                window.removeEventListener('focus', onReturn);
+                const callbackUrl = new URL(window.location.href);
+                callbackUrl.searchParams.set('deposit', 'success');
+                window.history.replaceState({}, '', callbackUrl.toString());
+                window.dispatchEvent(new PopStateEvent('popstate'));
+            };
+            window.addEventListener('focus', onReturn);
             setState('idle');
         } catch {
             setState('error');
