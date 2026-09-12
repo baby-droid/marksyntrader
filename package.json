@@ -6,12 +6,13 @@
     "node": "20.x"
   },
   "scripts": {
+    "predev": "node scripts/ensure-node-modules.js",
     "dev": "./node_modules/.bin/rsbuild dev --port 5000",
     "build": "rsbuild build",
     "test": "jest",
     "type-check": "tsc --noEmit",
     "generate:brand-css": "node scripts/generate-brand-css.js",
-    "prebuild": "node scripts/generate-brand-css.js"
+    "prebuild": "node scripts/ensure-node-modules.js && node scripts/generate-brand-css.js"
   },
   "dependencies": {
     "@deriv-com/quill-ui": "^1.24.12",
