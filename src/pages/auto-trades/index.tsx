@@ -33,6 +33,45 @@ import {
 import './auto-trades.scss';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+const SCANNER_SMART_CARD_IDS = new Set<SmartCardId>([
+    'rise',
+    'fall',
+    'risefallbias',
+    'oddbias',
+    'evenbias',
+]);
+
+function scanSmartCardMarkets(
+    id: SmartCardId,
+    snapshots: Record<string, AutoBotMarketSnapshot>,
+    cfg: SmartCardConfig,
+    depth: number,
+): AutoBotMarketCandidate[] {
+    return Object.values(snapshots)
+        .filter(snapshot => snapshot.ready && snapshot.digits.length >= 20)
+        .map(snapshot => {
+            const decision = pickSmartTradeDecision(id, snapshot.digits, cfg, depth);
+            const score = Math.max(0, Math.min(100, Number(decision.score ?? 0)));
+            return {
+                symbol: snapshot.symbol,
+                label: snapshot.label,
+                digits: snapshot.digits,
+                trade: {
+                    contract: decision.contract,
+                    barrier: decision.barrier,
+                    shouldTrade: decision.meetsCondition,
+                    signal: decision.meetsCondition ? 'strong' as const : undefined,
+                },
+                score,
+                qualifies: decision.meetsCondition,
+                tickVersion: snapshot.tickVersion,
+                livePrice: snapshot.livePrice,
+                ticks: AUTO_BOT_TICK_DURATION,
+            };
+        })
+        .sort((left, right) => right.score - left.score);
+}
+
 function fmtProfit(v: number) {
     return (v >= 0 ? '+' : '') + v.toFixed(2);
 }
@@ -869,7 +908,6 @@ function AiBotCard({
                         <div className='autotrades__botcard-market-track'>
                             {[...visibleMarketCandidates, ...visibleMarketCandidates].map((candidate, index) => {
                                 const isClone = index >= visibleMarketCandidates.length;
-                                const risk = getMarketRisk(candidate.symbol);
                                 const status = marketRiskStatus[candidate.symbol];
                                 return (
                                     <div className='autotrades__botcard-market-tile' key={`${candidate.symbol}-${index}`}>
@@ -887,34 +925,6 @@ function AiBotCard({
                                             {candidate.trade.barrier !== null ? ` @${candidate.trade.barrier}` : ''}
                                             {status ? ` · ${fmtProfit(status.profit)}` : ''}
                                         </span>
-                                        {!isClone && (
-                                            <div className='autotrades__botcard-market-risk'>
-                                                <label>
-                                                    TP
-                                                    <NumberField
-                                                        value={risk.takeProfit}
-                                                        min={0.01}
-                                                        max={100000}
-                                                        disabled={session.active}
-                                                        onCommit={value => updateMarketRisk(candidate.symbol, {
-                                                            takeProfit: Math.max(0.01, Math.min(100000, value)),
-                                                        })}
-                                                    />
-                                                </label>
-                                                <label>
-                                                    SL
-                                                    <NumberField
-                                                        value={risk.stopLoss}
-                                                        min={0.01}
-                                                        max={100000}
-                                                        disabled={session.active}
-                                                        onCommit={value => updateMarketRisk(candidate.symbol, {
-                                                            stopLoss: Math.max(0.01, Math.min(100000, value)),
-                                                        })}
-                                                    />
-                                                </label>
-                                            </div>
-                                        )}
                                     </div>
                                 );
                             })}
@@ -1071,14 +1081,24 @@ const AutoTrades: React.FC = () => {
     }>>([]);
 
     // ── Smart Trader (multi-card) state ──────────────────────────────────────────
-    const SMART_CARD_IDS: SmartCardId[] = ['risefall', 'evenodd', 'overunder', 'matchdiffer'];
+    const SMART_CARD_IDS: SmartCardId[] = ['rise', 'fall', 'risefallbias', 'oddbias', 'evenbias'];
     const CONDITION_OPTIONS: Record<SmartCardId, string[]> = {
+        rise: ['Rise'],
+        fall: ['Fall'],
+        risefallbias: ['Flow Bias'],
+        oddbias: ['Odd Bias'],
+        evenbias: ['Even Bias'],
         risefall: ['Rise', 'Fall'],
         evenodd: ['Even', 'Odd'],
         overunder: ['Over', 'Under'],
         matchdiffer: ['Matches', 'Differs'],
     };
     const ACTION_OPTIONS: Record<SmartCardId, string[]> = {
+        rise: ['Buy Rise'],
+        fall: ['Buy Fall'],
+        risefallbias: ['Auto Bias'],
+        oddbias: ['Buy Odd'],
+        evenbias: ['Buy Even'],
         risefall: ['Buy Rise', 'Buy Fall'],
         evenodd: ['Buy Even', 'Buy Odd'],
         overunder: ['Buy Over', 'Buy Under'],
@@ -1108,6 +1128,10 @@ const AutoTrades: React.FC = () => {
         tickVersion: autoBotTickVersion,
         connected: autoBotScannerConnected,
     } = useAuthenticatedAutoBotScanner();
+    const autoBotSnapshotsRef = useRef<Record<string, AutoBotMarketSnapshot>>(autoBotSnapshots);
+    const autoBotTickVersionRef = useRef(autoBotTickVersion);
+    useEffect(() => { autoBotSnapshotsRef.current = autoBotSnapshots; }, [autoBotSnapshots]);
+    useEffect(() => { autoBotTickVersionRef.current = autoBotTickVersion; }, [autoBotTickVersion]);
     type SmartExecutionMode = 'normal' | 'eachTick' | 'superSpeed';
     const [smartExecutionMode, setSmartExecutionMode] = useState<SmartExecutionMode>('normal');
     const smartExecutionModeRef = useRef<SmartExecutionMode>('normal');
@@ -1115,10 +1139,11 @@ const AutoTrades: React.FC = () => {
 
     // Per-card config (editable params)
     const [smartCardCfg, setSmartCardCfg] = useState<Record<SmartCardId, SmartCardConfig>>({
-        risefall:    { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Rise', thenAction: 'Buy Rise', bulkEnabled: false, bulkCount: 10 },
-        evenodd:     { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Even', thenAction: 'Buy Even', bulkEnabled: false, bulkCount: 10 },
-        overunder:   { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Over', thenAction: 'Buy Over', bulkEnabled: false, bulkCount: 10 },
-        matchdiffer: { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Matches', thenAction: 'Buy Matches', bulkEnabled: false, bulkCount: 10 },
+        rise:         { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Rise',      thenAction: 'Buy Rise',  bulkEnabled: false, bulkCount: 10, takeProfit: 5, stopLoss: 10 },
+        fall:         { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Fall',      thenAction: 'Buy Fall',  bulkEnabled: false, bulkCount: 10, takeProfit: 5, stopLoss: 10 },
+        risefallbias: { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Flow Bias', thenAction: 'Auto Bias', bulkEnabled: false, bulkCount: 10, takeProfit: 5, stopLoss: 10 },
+        oddbias:      { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Odd Bias',  thenAction: 'Buy Odd',   bulkEnabled: false, bulkCount: 10, takeProfit: 5, stopLoss: 10 },
+        evenbias:     { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Even Bias', thenAction: 'Buy Even',  bulkEnabled: false, bulkCount: 10, takeProfit: 5, stopLoss: 10 },
     });
     const batchTradingEnabled = Object.values(smartCardCfg).some(cfg => cfg.bulkEnabled);
     const smartCardCfgRef = useRef(smartCardCfg);
@@ -1150,6 +1175,13 @@ const AutoTrades: React.FC = () => {
             const value = Number(safePatch.bulkCount);
             safePatch.bulkCount = Number.isFinite(value) ? Math.max(1, Math.min(100, Math.floor(value))) : 10;
         }
+        if ('takeProfit' in safePatch || 'stopLoss' in safePatch) {
+            for (const key of ['takeProfit', 'stopLoss']) {
+                if (!(key in safePatch)) continue;
+                const value = Number(safePatch[key]);
+                safePatch[key] = Number.isFinite(value) ? Math.max(0.01, Math.min(100000, value)) : 0.01;
+            }
+        }
         setSmartCardCfg(prev => ({ ...prev, [id]: { ...prev[id], ...safePatch } }));
     }, []);
 
@@ -1157,22 +1189,23 @@ const AutoTrades: React.FC = () => {
     const [smartCardSess, setSmartCardSess] = useState<Record<SmartCardId, {
         running: boolean; wins: number; losses: number; profit: number; lastLog: string;
     }>>({
-        risefall:    { running: false, wins: 0, losses: 0, profit: 0, lastLog: '' },
-        evenodd:     { running: false, wins: 0, losses: 0, profit: 0, lastLog: '' },
-        overunder:   { running: false, wins: 0, losses: 0, profit: 0, lastLog: '' },
-        matchdiffer: { running: false, wins: 0, losses: 0, profit: 0, lastLog: '' },
+        rise:         { running: false, wins: 0, losses: 0, profit: 0, lastLog: '' },
+        fall:         { running: false, wins: 0, losses: 0, profit: 0, lastLog: '' },
+        risefallbias: { running: false, wins: 0, losses: 0, profit: 0, lastLog: '' },
+        oddbias:      { running: false, wins: 0, losses: 0, profit: 0, lastLog: '' },
+        evenbias:     { running: false, wins: 0, losses: 0, profit: 0, lastLog: '' },
     });
     const smartStopFlags = useRef<Record<string, boolean>>({
-        risefall: false, evenodd: false, overunder: false, matchdiffer: false,
+        rise: false, fall: false, risefallbias: false, oddbias: false, evenbias: false,
     });
     // A stop/start can happen while proposal, buy, or settlement is awaiting
     // the authenticated socket. The token makes the old async loop stale
     // immediately, so it cannot clear the new run's stop flag or buy again.
     const smartRunTokens = useRef<Record<string, number>>({
-        risefall: 0, evenodd: 0, overunder: 0, matchdiffer: 0,
+        rise: 0, fall: 0, risefallbias: 0, oddbias: 0, evenbias: 0,
     });
     const smartCurrentStakes = useRef<Record<string, number>>({
-        risefall: 5, evenodd: 5, overunder: 5, matchdiffer: 5,
+        rise: 5, fall: 5, risefallbias: 5, oddbias: 5, evenbias: 5,
     });
 
     const toggleBulkMode = useCallback((id: SmartCardId) => {
@@ -1235,8 +1268,12 @@ const AutoTrades: React.FC = () => {
         updateSess(id, { running: true, wins: 0, losses: 0, profit: 0, lastLog: 'Starting…' });
 
         let wins = 0, losses = 0, sessionProfit = 0;
-        let evaluatedTick = smartTickVersionRef.current - 1;
+        const usesMarketScanner = SCANNER_SMART_CARD_IDS.has(id);
+        let evaluatedTick = usesMarketScanner
+            ? autoBotTickVersionRef.current - 1
+            : smartTickVersionRef.current - 1;
         let waitUntilTick = 0;
+        const lastEvaluatedTickByMarket = new Map<string, number>();
 
         const loop = async () => {
             while (isRunActive()) {
@@ -1254,27 +1291,55 @@ const AutoTrades: React.FC = () => {
                         smartStopFlags.current[id] = true;
                         break;
                     }
+                    const tickRef = usesMarketScanner ? autoBotTickVersionRef : smartTickVersionRef;
                     // Every card evaluates once per new authenticated tick.
-                    // Without this gate Normal mode can buy repeatedly from
-                    // the same already-matching digit window after settlement.
-                    while (isRunActive() && smartTickVersionRef.current <= Math.max(evaluatedTick, waitUntilTick)) {
+                    // Scanner cards additionally use each market's own tick
+                    // version, so a quiet market is not replayed because an
+                    // unrelated market moved.
+                    while (isRunActive() && tickRef.current <= Math.max(evaluatedTick, waitUntilTick)) {
                         await new Promise(r => setTimeout(r, 40));
                     }
                     if (!isRunActive()) break;
-                    evaluatedTick = smartTickVersionRef.current;
+                    evaluatedTick = tickRef.current;
 
                     const currentCfg = smartCardCfgRef.current[id] || cfg;
-                    const trade = pickSmartTradeDecision(id, smartDigitsRef.current, currentCfg, smartSharedDepthRef.current);
-                    if (!trade.meetsCondition) {
+                    if (sessionProfit >= Number(currentCfg.takeProfit ?? 5)
+                        || sessionProfit <= -Number(currentCfg.stopLoss ?? 10)) {
+                        updateSess(id, {
+                            running: false,
+                            lastLog: sessionProfit >= Number(currentCfg.takeProfit ?? 5)
+                                ? `Take profit reached: ${fmtProfit(sessionProfit)}`
+                                : `Stop loss reached: ${fmtProfit(sessionProfit)}`,
+                        });
+                        break;
+                    }
+                    const scannerCandidates = usesMarketScanner
+                        ? selectAutoBotMarketsForExecution(
+                            getFreshAutoBotMarkets(
+                                scanSmartCardMarkets(
+                                    id,
+                                    autoBotSnapshotsRef.current,
+                                    currentCfg,
+                                    smartSharedDepthRef.current,
+                                ),
+                                lastEvaluatedTickByMarket,
+                            ),
+                        )
+                        : [];
+                    const trade = usesMarketScanner
+                        ? scannerCandidates[0]?.trade
+                        : pickSmartTradeDecision(id, smartDigitsRef.current, currentCfg, smartSharedDepthRef.current);
+                    if (!trade || !trade.meetsCondition && !usesMarketScanner) {
                         // Conditions are tick-gated. Do not repeatedly buy while
                         // the same non-matching window is on screen.
                         continue;
                     }
+                    if (usesMarketScanner && !scannerCandidates.length) continue;
                     if (!isRunActive()) break;
                     const { contract, barrier } = trade;
                     const stk = Number(smartCurrentStakes.current[id]);
                     const sym = smartSharedSymbolRef.current;
-                    if (!sym || !Number.isFinite(stk) || stk < 0.35) {
+                    if ((!usesMarketScanner && !sym) || !Number.isFinite(stk) || stk < 0.35) {
                         throw new Error('Invalid symbol or stake');
                     }
                     const batchEnabled = Boolean(currentCfg.bulkEnabled);
@@ -1286,13 +1351,31 @@ const AutoTrades: React.FC = () => {
                     const batchId = `BATCH-${id}-${Date.now()}-${wins + losses}`;
                     const transactionId = `${batchId}-ORDER-1`;
                     const transactionTime = new Date().toLocaleTimeString('en', { hour12: false });
+                    const scannerOrderIds = usesMarketScanner
+                        ? scannerCandidates.map((_, index) => `${batchId}-MARKET-${index + 1}`)
+                        : [];
                     const batchTransactionIds = Array.from({ length: batchCount }, (_, index) =>
                         `${batchId}-ORDER-${index + 1}`
                     );
-                    pendingTransactionIds = batchEnabled ? batchTransactionIds : [transactionId];
+                    pendingTransactionIds = usesMarketScanner
+                        ? scannerOrderIds
+                        : batchEnabled ? batchTransactionIds : [transactionId];
                     setTransactions(prev => [
-                        ...prev.slice(-(batchEnabled ? Math.max(99, batchCount * 2) : 99)),
-                        ...(batchEnabled
+                        ...prev.slice(-(usesMarketScanner
+                            ? Math.max(99, scannerCandidates.length * 2)
+                            : batchEnabled ? Math.max(99, batchCount * 2) : 99)),
+                        ...(usesMarketScanner
+                            ? scannerCandidates.map((candidate, index) => ({
+                                id: scannerOrderIds[index],
+                                time: transactionTime,
+                                contract: `${candidate.trade.contract}${candidate.trade.barrier !== null ? '@' + candidate.trade.barrier : ''}`,
+                                profit: null,
+                                symbol: candidate.symbol,
+                                stake: stk,
+                                status: 'open',
+                                batchId,
+                            }))
+                            : batchEnabled
                             ? batchTransactionIds.map((id, index) => ({
                                 id,
                                 time: transactionTime,
@@ -1321,13 +1404,17 @@ const AutoTrades: React.FC = () => {
                         advanceStake = true,
                         contractId?: number,
                         countStake = true,
+                        resultContext: { symbol?: string; contract?: string; barrier?: number | null } = {},
                     ) => {
                         const won = profit > 0;
                         sessionProfit = +(sessionProfit + profit).toFixed(2);
                         if (won) wins++; else losses++;
 
                         const ts = new Date().toLocaleTimeString('en', { hour12: false });
-                        const logMsg = `${won ? '✅' : '❌'} ${contract}${barrier !== null ? '@' + barrier : ''} ${fmtProfit(profit)}`;
+                        const resultContract = resultContext.contract ?? contract;
+                        const resultBarrier = resultContext.barrier ?? barrier;
+                        const resultSymbol = resultContext.symbol ?? sym;
+                        const logMsg = `${won ? '✅' : '❌'} ${resultSymbol} · ${resultContract}${resultBarrier !== null ? '@' + resultBarrier : ''} ${fmtProfit(profit)}`;
                         updateSess(id, { wins, losses, profit: sessionProfit, lastLog: logMsg });
 
                         setSummaryStats(prev => ({
@@ -1357,7 +1444,65 @@ const AutoTrades: React.FC = () => {
                         }
                     };
 
-                    if (batchEnabled) {
+                    if (usesMarketScanner) {
+                        // Scanner cards trade every fresh eligible market in
+                        // parallel. Each market gets its own one-tick
+                        // proposal, buy, and settlement; one slow market must
+                        // not block the others from being dispatched.
+                        const scannerResults = await Promise.allSettled(
+                            scannerCandidates.map((candidate, index) =>
+                                buyAndWait(
+                                    candidate.symbol,
+                                    candidate.trade.contract,
+                                    candidate.trade.barrier,
+                                    stk,
+                                    AUTO_BOT_TICK_DURATION,
+                                    {
+                                        metadata: {
+                                            source: 'auto-trades',
+                                            execution_mode: 'market-scan',
+                                            batch_id: batchId,
+                                            batch_index: index + 1,
+                                            batch_size: scannerCandidates.length,
+                                            scan_score: candidate.score,
+                                        },
+                                    },
+                                )
+                            )
+                        );
+                        let settled = 0;
+                        let roundLoss = false;
+                        scannerResults.forEach((result, index) => {
+                            if (result.status !== 'fulfilled' || !Number.isFinite(result.value)) return;
+                            settled++;
+                            const candidate = scannerCandidates[index];
+                            const profit = Number(result.value);
+                            if (profit <= 0) roundLoss = true;
+                            recordResult(
+                                profit,
+                                scannerOrderIds[index],
+                                false,
+                                undefined,
+                                true,
+                                {
+                                    symbol: candidate.symbol,
+                                    contract: candidate.trade.contract,
+                                    barrier: candidate.trade.barrier,
+                                },
+                            );
+                        });
+                        if (settled > 0) {
+                            smartCurrentStakes.current[id] = roundLoss
+                                ? Math.max(0.35, +(stk * currentCfg.martingale).toFixed(2))
+                                : currentCfg.stake;
+                        }
+                        if (settled < scannerCandidates.length) {
+                            setJournal(prev => [
+                                `[${new Date().toLocaleTimeString('en', { hour12: false })}] [${id}] ${settled}/${scannerCandidates.length} market settlements received; pending markets remain open`,
+                                ...prev,
+                            ].slice(0, 50));
+                        }
+                    } else if (batchEnabled) {
                         // Dispatch all identical orders from the same signal
                         // signal without awaiting one before starting the
                         // next. Each buy has its own proposal and settlement
@@ -1486,7 +1631,12 @@ const AutoTrades: React.FC = () => {
                     // Require a completely new lookback window before this
                     // card can enter again. For example, after "3 Even →
                     // Buy Odd", the next entry waits for three new ticks.
-                    waitUntilTick = evaluatedTick + Math.max(1, Math.min(10, currentCfg.lookback || 3));
+                    // Scanner cards re-evaluate as soon as any market produces
+                    // a new tick. The per-market freshness map above prevents
+                    // unchanged markets from being replayed.
+                    waitUntilTick = usesMarketScanner
+                        ? evaluatedTick
+                        : evaluatedTick + Math.max(1, Math.min(10, currentCfg.lookback || 3));
                 } catch (error) {
                     // A proposal/buy failure is not a taken trade. Remove its
                     // optimistic OPEN row instead of leaving a phantom
@@ -1627,14 +1777,6 @@ const AutoTrades: React.FC = () => {
                 const evenProb = n > 0 ? (evenCount / n) * 100 : 50;
                 const oddProb = 100 - evenProb;
 
-                // Over/Under (using each card's barrier)
-                const ouAction = smartCardCfg.overunder.thenAction === 'Buy Over' ? 'Buy Over' : 'Buy Under';
-                const ouBarrier = normalizeSmartBarrier(smartCardCfg.overunder.barrier, ouAction);
-                const overCount = last.filter(d => d > ouBarrier).length;
-                const overProb = n > 0 ? (overCount / n) * 100 : 50;
-                const underProb = 100 - overProb;
-
-                // Matches/Differs
                 const freq = Array.from({ length: 10 }, (_, i) => last.filter(d => d === i).length);
                 const maxFreq = Math.max(...freq);
                 const mostFreqDigit = freq.indexOf(maxFreq);
@@ -1653,10 +1795,11 @@ const AutoTrades: React.FC = () => {
                  })();
 
                 const CARD_DEFS = [
-                    { id: 'risefall' as SmartCardId,    title: 'Rise/Fall',         icon: '📈' },
-                    { id: 'evenodd' as SmartCardId,     title: 'Even/Odd',          icon: '⚖️'  },
-                    { id: 'overunder' as SmartCardId,   title: 'Over/Under',        icon: '🎯' },
-                    { id: 'matchdiffer' as SmartCardId, title: 'Matches/Differs',   icon: '🔢' },
+                    { id: 'rise' as SmartCardId,         title: 'Rise',             icon: '📈' },
+                    { id: 'fall' as SmartCardId,         title: 'Fall',             icon: '📉' },
+                    { id: 'risefallbias' as SmartCardId, title: 'Rise/Fall Bias',   icon: '🌊' },
+                    { id: 'oddbias' as SmartCardId,      title: 'Odd Bias',         icon: '🟣' },
+                    { id: 'evenbias' as SmartCardId,     title: 'Even Bias',        icon: '🔵' },
                 ];
 
                 return (
@@ -1740,22 +1883,18 @@ const AutoTrades: React.FC = () => {
 
                             let statA: string, statB: string, labelA: string, labelB: string;
                             let probA: number, probB: number;
-                            if (card.id === 'risefall') {
+                            if (card.id === 'rise' || card.id === 'fall' || card.id === 'risefallbias') {
                                 labelA = 'Rise'; labelB = 'Fall';
                                 probA = riseProb; probB = fallProb;
                                 statA = riseProb.toFixed(2) + '%'; statB = fallProb.toFixed(2) + '%';
-                            } else if (card.id === 'evenodd') {
+                            } else if (card.id === 'oddbias') {
+                                labelA = 'Odd'; labelB = 'Even';
+                                probA = oddProb; probB = evenProb;
+                                statA = oddProb.toFixed(2) + '%'; statB = evenProb.toFixed(2) + '%';
+                            } else {
                                 labelA = 'Even'; labelB = 'Odd';
                                 probA = evenProb; probB = oddProb;
                                 statA = evenProb.toFixed(2) + '%'; statB = oddProb.toFixed(2) + '%';
-                            } else if (card.id === 'overunder') {
-                                labelA = `Over`; labelB = `Under`;
-                                probA = overProb; probB = underProb;
-                                statA = overProb.toFixed(2) + '%'; statB = underProb.toFixed(2) + '%';
-                            } else {
-                                labelA = 'Matches'; labelB = 'Differs';
-                                probA = matchProb; probB = differProb;
-                                statA = matchProb.toFixed(2) + '%'; statB = differProb.toFixed(2) + '%';
                             }
 
                             return (
@@ -1785,49 +1924,31 @@ const AutoTrades: React.FC = () => {
                                     </div>
 
                                     {/* Last Digits Pattern */}
-                                    {(card.id === 'evenodd' || card.id === 'overunder' || card.id === 'matchdiffer') && (
-                                        <div className='st__digit-pattern'>
+                                    <div className='st__digit-pattern'>
                                             <div className='st__pattern-label'>Last Digits Pattern</div>
                                             <div className='st__pattern-dots'>
                                                 {last10.map((d, i) => (
-                                                    <span key={i} className={`st__pdot ${(card.id === 'evenodd' || card.id === 'overunder') ? (d % 2 === 0 ? 'even' : 'odd') : `d${d % 5}`}`}>
-                                                        {card.id === 'evenodd' ? evenOddPattern[i] : d}
+                                                    <span key={i} className={`st__pdot ${
+                                                        (card.id === 'oddbias' || card.id === 'evenbias')
+                                                            ? (d % 2 === 0 ? 'even' : 'odd')
+                                                            : `d${d % 5}`
+                                                    }`}>
+                                                        {(card.id === 'oddbias' || card.id === 'evenbias') ? evenOddPattern[i] : d}
                                                     </span>
                                                 ))}
                                             </div>
                                             <div className='st__pattern-note'>
-                                                {card.id === 'evenodd'
+                                                {(card.id === 'oddbias' || card.id === 'evenbias')
                                                     ? `${last10.length ? evenOddPattern.join(' · ') : 'Waiting for ticks'}`
-                                                    : card.id === 'overunder'
-                                                    ? `O=Over (>${ouBarrier}), E=Equal (=${ouBarrier}), U=Under (<${ouBarrier})`
-                                                    : `Most frequent: ${mostFreqDigit} (${matchProb.toFixed(2)}%)`}
+                                                    : `Flow: ${riseProb.toFixed(1)}% rise · ${fallProb.toFixed(1)}% fall`}
                                             </div>
-                                            {card.id === 'evenodd' && (
+                                            {(card.id === 'oddbias' || card.id === 'evenbias') && (
                                                 <div className='st__streak-note'>
                                                     Current streak: <strong>{last10.length ? `${evenOddStreak} ${last10[last10.length - 1] % 2 === 0 ? 'Even' : 'Odd'}` : '—'}</strong>
                                                 </div>
                                             )}
-                                            {card.id === 'matchdiffer' && (
-                                                <div className='st__freq-dist'>
-                                                    <div className='st__freq-label'>Digit Frequency Distribution</div>
-                                                    <div className='st__freq-bars'>
-                                                        {freq.map((cnt, d) => {
-                                                            const pct = n > 0 ? (cnt / n) * 100 : 10;
-                                                            return (
-                                                                <div key={d} className='st__freq-col'>
-                                                                    <div className='st__freq-bar-wrap'>
-                                                                        <div className={`st__freq-bar ${d === leastFreqDigit ? 'pred' : ''}`}
-                                                                            style={{ height: `${Math.max(4, pct * 2)}px` }} />
-                                                                    </div>
-                                                                    <span className='st__freq-d'>{d}</span>
-                                                                </div>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                </div>
-                                            )}
                                         </div>
-                                    )}
+                                    </div>
 
                                     {/* Trading Condition */}
                                     <div className='st__condition'>
@@ -1845,7 +1966,9 @@ const AutoTrades: React.FC = () => {
                                                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(v => <option key={v} value={v}>{v}</option>)}
                                              </select>
                                              <span className='st__cond-text'>
-                                                 {card.id === 'risefall' ? 'digits move' : 'digits are'}
+                                                  {card.id === 'rise' || card.id === 'fall' || card.id === 'risefallbias'
+                                                      ? 'market flow is'
+                                                      : 'digits show'}
                                              </span>
                                              <select
                                                  className='st__cond-select'
@@ -1856,7 +1979,6 @@ const AutoTrades: React.FC = () => {
                                              >
                                                  {CONDITION_OPTIONS[card.id].map(value => <option key={value} value={value}>{value}</option>)}
                                              </select>
-                                             {card.id === 'overunder' && <span className='st__cond-text'>digit {ouBarrier}</span>}
                                         </div>
                                           <div className='st__condition-row st__condition-row--interactive'>
                                             <span className='st__cond-lbl'>Then</span>
@@ -1869,18 +1991,7 @@ const AutoTrades: React.FC = () => {
                                               >
                                                   {ACTION_OPTIONS[card.id].map(value => <option key={value} value={value}>{value}</option>)}
                                               </select>
-                                              {card.id === 'overunder' && <span className='st__cond-text'>digit {ouBarrier}</span>}
                                         </div>
-                                        {card.id === 'overunder' && (
-                                            <div className='st__condition-row'>
-                                                <span className='st__cond-lbl'>Barrier</span>
-                                                <input type='number' min='0' max='9' step='1'
-                                                    className='st__cond-input'
-                                                    value={cfg.barrier}
-                                                    disabled={isRunning}
-                                                    onChange={e => updateCardCfg(card.id, { barrier: +e.target.value })} />
-                                            </div>
-                                        )}
                                     </div>
 
                                     {/* Per-card params */}
@@ -1903,6 +2014,18 @@ const AutoTrades: React.FC = () => {
                                             <input type='number' min='1' max='5' step='0.1' value={cfg.martingale}
                                                 disabled={isRunning}
                                                 onChange={e => updateCardCfg(card.id, { martingale: +e.target.value })} />
+                                        </div>
+                                        <div className='st__param st__param--risk'>
+                                            <label>TP ($)</label>
+                                            <input type='number' min='0.01' max='100000' step='0.01' value={cfg.takeProfit ?? 5}
+                                                disabled={isRunning}
+                                                onChange={e => updateCardCfg(card.id, { takeProfit: +e.target.value })} />
+                                        </div>
+                                        <div className='st__param st__param--risk'>
+                                            <label>SL ($)</label>
+                                            <input type='number' min='0.01' max='100000' step='0.01' value={cfg.stopLoss ?? 10}
+                                                disabled={isRunning}
+                                                onChange={e => updateCardCfg(card.id, { stopLoss: +e.target.value })} />
                                         </div>
                                     </div>
 

@@ -70,6 +70,24 @@ export interface AutoBotMarketCandidate {
 
 export const AUTO_BOT_TICK_DURATION = 1 as const;
 
+const marketPriority = (symbol: string): number => {
+    const value = String(symbol).toUpperCase();
+    if (value.startsWith('1HZ')) return 5;
+    if (value.startsWith('JD')) return 4;
+    if (value.startsWith('R_')) return 3;
+    if (value === 'RDBEAR') return 2;
+    if (value === 'RDBULL') return 1;
+    return 0;
+};
+
+const compareAutoBotMarkets = (
+    left: AutoBotMarketCandidate,
+    right: AutoBotMarketCandidate,
+): number => {
+    const priorityDelta = marketPriority(right.symbol) - marketPriority(left.symbol);
+    return priorityDelta || right.score - left.score;
+};
+
 export function getFreshAutoBotMarkets(
     candidates: AutoBotMarketCandidate[],
     lastEvaluatedTickByMarket: Map<string, number>,
@@ -79,7 +97,7 @@ export function getFreshAutoBotMarkets(
             candidate.qualifies
             && candidate.tickVersion > (lastEvaluatedTickByMarket.get(candidate.symbol) ?? 0)
         )
-        .sort((left, right) => right.score - left.score);
+        .sort(compareAutoBotMarkets);
 
     // Mark every changed market as evaluated, not only the market selected
     // for execution. This prevents a qualifying market from being replayed
@@ -96,14 +114,15 @@ export function getFreshAutoBotMarkets(
 export function selectAutoBotMarketsForExecution(
     freshMarkets: AutoBotMarketCandidate[],
 ): AutoBotMarketCandidate[] {
-    const rankedMarkets = freshMarkets.slice(0, 4);
+    // A fresh signal is independent per market. Keep up to five of them so a
+    // strong burst across the prioritized synthetic groups can be traded on
+    // the same tick rather than silently dropping the fourth or fifth market.
+    const rankedMarkets = freshMarkets
+        .slice()
+        .sort(compareAutoBotMarkets)
+        .slice(0, 5);
     if (!rankedMarkets.length) return [];
-
-    // A normal scan uses the highest-probability market. Multiple contracts
-    // are allowed only when every selected market is a strong signal.
-    const allStrong = rankedMarkets.length > 1
-        && rankedMarkets.every(candidate => candidate.trade.signal === 'strong');
-    return allStrong ? rankedMarkets : rankedMarkets.slice(0, 1);
+    return rankedMarkets;
 }
 
 export function isAutoBotMarketStopped(

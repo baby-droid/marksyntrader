@@ -1,4 +1,14 @@
-export type SmartCardId = 'risefall' | 'evenodd' | 'overunder' | 'matchdiffer';
+export type SmartCardId =
+    | 'rise'
+    | 'fall'
+    | 'risefallbias'
+    | 'oddbias'
+    | 'evenbias'
+    // Kept for persisted sessions and backwards-compatible unit coverage.
+    | 'risefall'
+    | 'evenodd'
+    | 'overunder'
+    | 'matchdiffer';
 
 export interface SmartCardConfig {
     stake: number;
@@ -10,6 +20,8 @@ export interface SmartCardConfig {
     thenAction: string;
     bulkEnabled: boolean;
     bulkCount: number;
+    takeProfit?: number;
+    stopLoss?: number;
 }
 
 export interface SmartTradeDecision {
@@ -20,6 +32,8 @@ export interface SmartTradeDecision {
     evenProb?: number;
     overProb?: number;
     freq?: number[];
+    score?: number;
+    bias?: 'rise' | 'fall' | 'odd' | 'even';
 }
 
 export function normalizeSmartBarrier(value: unknown, action: string): number {
@@ -46,9 +60,57 @@ export function pickSmartTradeDecision(
     const requiredDigits = Math.max(1, Math.min(10, Math.floor(Number(cfg.lookback) || 3)));
     const sample = digits.slice(-requiredDigits);
     const matchesAction = (name: string) => cfg.thenAction === name;
+    const movementSample = digits.slice(-Math.max(2, requiredDigits + 1));
+    const riseCount = movementSample.slice(1).filter((digit, index) => digit > movementSample[index]).length;
+    const fallCount = movementSample.slice(1).filter((digit, index) => digit < movementSample[index]).length;
+    const movementCount = Math.max(1, movementSample.length - 1);
+    const riseProb = riseCount / movementCount * 100;
+    const fallProb = fallCount / movementCount * 100;
+    const evenProb = sample.length
+        ? sample.filter(digit => digit % 2 === 0).length / sample.length * 100
+        : 50;
+    const oddProb = 100 - evenProb;
+
+    if (id === 'rise' || id === 'fall') {
+        const rising = movementSample.length >= 2 && riseCount === movementCount;
+        const falling = movementSample.length >= 2 && fallCount === movementCount;
+        const wantsRise = id === 'rise';
+        return {
+            contract: wantsRise ? 'CALL' : 'PUT',
+            barrier: null,
+            meetsCondition: wantsRise ? rising : falling,
+            riseProb,
+            score: wantsRise ? riseProb : fallProb,
+            bias: wantsRise ? 'rise' : 'fall',
+        };
+    }
+
+    if (id === 'risefallbias') {
+        const bias = riseProb >= fallProb ? 'rise' : 'fall';
+        return {
+            contract: bias === 'rise' ? 'CALL' : 'PUT',
+            barrier: null,
+            meetsCondition: Math.max(riseProb, fallProb) >= 55,
+            riseProb,
+            score: Math.max(riseProb, fallProb),
+            bias,
+        };
+    }
+
+    if (id === 'oddbias' || id === 'evenbias') {
+        const wantsEven = id === 'evenbias';
+        const score = wantsEven ? evenProb : oddProb;
+        return {
+            contract: wantsEven ? 'DIGITEVEN' : 'DIGITODD',
+            barrier: null,
+            meetsCondition: sample.length === requiredDigits && score >= 55,
+            evenProb,
+            score,
+            bias: wantsEven ? 'even' : 'odd',
+        };
+    }
 
     if (id === 'risefall') {
-        const movementSample = digits.slice(-Math.max(2, requiredDigits + 1));
         const rising = movementSample.length >= 2
             && movementSample.slice(1).every((digit, index) => digit > movementSample[index]);
         const falling = movementSample.length >= 2
@@ -58,6 +120,7 @@ export function pickSmartTradeDecision(
             barrier: null,
             meetsCondition: cfg.ifValue === 'Rise' ? rising : falling,
             riseProb: rising ? 100 : 0,
+            score: cfg.ifValue === 'Rise' ? riseProb : fallProb,
         };
     }
 
