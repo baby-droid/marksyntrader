@@ -2020,17 +2020,19 @@ const AutoTrades: React.FC = () => {
                                                 disabled={isRunning}
                                                 onChange={e => updateCardCfg(card.id, { martingale: +e.target.value })} />
                                         </div>
-                                        <div className='st__param st__param--risk'>
-                                            <label>TP ($)</label>
-                                            <input type='number' min='0.01' max='100000' step='0.01' value={cfg.takeProfit ?? 5}
-                                                disabled={isRunning}
-                                                onChange={e => updateCardCfg(card.id, { takeProfit: +e.target.value })} />
-                                        </div>
-                                        <div className='st__param st__param--risk'>
-                                            <label>SL ($)</label>
-                                            <input type='number' min='0.01' max='100000' step='0.01' value={cfg.stopLoss ?? 10}
-                                                disabled={isRunning}
-                                                onChange={e => updateCardCfg(card.id, { stopLoss: +e.target.value })} />
+                                        <div className='st__risk-controls' aria-label='Take profit and stop loss'>
+                                            <div className='st__param st__param--risk'>
+                                                <label htmlFor={`${card.id}-take-profit`}>TP</label>
+                                                <input id={`${card.id}-take-profit`} type='number' min='0.01' max='100000' step='0.01' value={cfg.takeProfit ?? 5}
+                                                    disabled={isRunning}
+                                                    onChange={e => updateCardCfg(card.id, { takeProfit: +e.target.value })} />
+                                            </div>
+                                            <div className='st__param st__param--risk'>
+                                                <label htmlFor={`${card.id}-stop-loss`}>SL</label>
+                                                <input id={`${card.id}-stop-loss`} type='number' min='0.01' max='100000' step='0.01' value={cfg.stopLoss ?? 10}
+                                                    disabled={isRunning}
+                                                    onChange={e => updateCardCfg(card.id, { stopLoss: +e.target.value })} />
+                                            </div>
                                         </div>
                                     </div>
 
