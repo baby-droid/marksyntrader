@@ -101,6 +101,10 @@ export default defineConfig({
     host: '0.0.0.0',
     headers: {
       'Access-Control-Allow-Origin': '*',
+      // A dev preview must always fetch the current HTML and async chunks.
+      // Cached chunk URLs from an earlier Rsbuild process cause ChunkLoadError
+      // after a restart even when the current asset exists and is healthy.
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
     },
   },
   dev: {

@@ -17,8 +17,20 @@ const requiredFiles = [
     path.join(root, 'node_modules', '.bin', 'rsbuild'),
     path.join(root, 'node_modules', '@rsbuild', 'core', 'compiled', 'html-rspack-plugin', 'loader.js'),
 ];
+const requiredModules = [
+    '@rsbuild/core/package.json',
+];
 
-const isReady = () => requiredFiles.every(file => fs.existsSync(file));
+const canResolve = moduleName => {
+    try {
+        require.resolve(moduleName, { paths: [root] });
+        return true;
+    } catch {
+        return false;
+    }
+};
+
+const isReady = () => requiredFiles.every(file => fs.existsSync(file)) && requiredModules.every(canResolve);
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
