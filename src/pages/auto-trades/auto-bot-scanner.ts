@@ -4,6 +4,7 @@ import {
     CONNECTION_STATUS,
     connectionStatus$,
 } from '@/external/bot-skeleton/services/api/observables/connection-status-stream';
+import { classifyAutoBotMarket } from './auto-bot-strategies';
 
 export const AUTO_BOT_MARKETS = [
     { label: 'V10 (1s)', value: '1HZ10V' },
@@ -21,13 +22,6 @@ export const AUTO_BOT_MARKETS = [
     { label: 'Jump 50', value: 'JD50' },
     { label: 'Jump 75', value: 'JD75' },
     { label: 'Jump 100', value: 'JD100' },
-    { label: 'Boom 300', value: 'BOOM300N' },
-    { label: 'Boom 500', value: 'BOOM500' },
-    { label: 'Boom 1000', value: 'BOOM1000' },
-    { label: 'Crash 300', value: 'CRASH300N' },
-    { label: 'Crash 500', value: 'CRASH500' },
-    { label: 'Crash 1000', value: 'CRASH1000' },
-    { label: 'Step Index', value: 'STPX' },
     { label: 'Bear Market', value: 'RDBEAR' },
     { label: 'Bull Market', value: 'RDBULL' },
 ] as const;
@@ -38,6 +32,7 @@ export interface AutoBotMarketSnapshot {
     symbol: string;
     label: string;
     digits: number[];
+    prices: number[];
     livePrice: number | null;
     tickVersion: number;
     ready: boolean;
@@ -48,16 +43,26 @@ export interface AutoBotTrade {
     barrier: number | null;
     shouldTrade?: boolean;
     signal?: 'weak' | 'strong';
+    score?: number;
+    reason?: string;
+    direction?: 'rise' | 'fall' | 'odd' | 'even';
+    state?: string;
 }
 
 export interface AutoBotDefinition {
-    pickTrade: (digits: number[], recoveryMode?: boolean, cycleConfig?: unknown) => AutoBotTrade;
+    pickTrade: (
+        digits: number[],
+        prices?: number[],
+        recoveryMode?: boolean,
+        cycleConfig?: unknown,
+    ) => AutoBotTrade;
 }
 
 export interface AutoBotMarketCandidate {
     symbol: string;
     label: string;
     digits: number[];
+    prices: number[];
     trade: AutoBotTrade;
     score: number;
     qualifies: boolean;
@@ -66,6 +71,7 @@ export interface AutoBotMarketCandidate {
     ticks: 1 | 2 | 3 | 4;
     weakPct?: number;
     strongPct?: number;
+    marketFamily: string;
 }
 
 export const AUTO_BOT_TICK_DURATION = 1 as const;
@@ -80,12 +86,21 @@ const marketPriority = (symbol: string): number => {
     return 0;
 };
 
+export const isSupportedAutoBotMarket = (symbol: string): boolean => {
+    const value = String(symbol).toUpperCase();
+    return /^1HZ\d+V$/.test(value)
+        || /^JD\d+$/.test(value)
+        || /^R_\d+$/.test(value)
+        || value === 'RDBEAR'
+        || value === 'RDBULL';
+};
+
 const compareAutoBotMarkets = (
     left: AutoBotMarketCandidate,
     right: AutoBotMarketCandidate,
 ): number => {
-    const priorityDelta = marketPriority(right.symbol) - marketPriority(left.symbol);
-    return priorityDelta || right.score - left.score;
+    const scoreDelta = right.score - left.score;
+    return scoreDelta || marketPriority(right.symbol) - marketPriority(left.symbol);
 };
 
 export function getFreshAutoBotMarkets(
@@ -122,7 +137,9 @@ export function selectAutoBotMarketsForExecution(
         .sort(compareAutoBotMarkets)
         .slice(0, 5);
     if (!rankedMarkets.length) return [];
-    return rankedMarkets;
+    return rankedMarkets.every(candidate => candidate.trade.signal === 'strong')
+        ? rankedMarkets
+        : rankedMarkets.slice(0, 1);
 }
 
 export function isAutoBotMarketStopped(
@@ -140,9 +157,10 @@ const isDigitMarket = (item: any): boolean => {
     if (!symbol) return false;
     const market = String(item?.market ?? '').toLowerCase();
     const symbolType = String(item?.symbol_type ?? '').toLowerCase();
-    return market === 'synthetic_index'
+    const supportedFamily = isSupportedAutoBotMarket(symbol);
+    return supportedFamily && (market === 'synthetic_index'
         || symbolType === 'synthetic_index'
-        || /^(1HZ|R_|JD|BOOM|CRASH|STP|RDBULL|RDBEAR)/i.test(symbol);
+        || supportedFamily);
 };
 
 const mergeMarkets = (discovered: AutoBotMarket[]): AutoBotMarket[] => {
@@ -171,15 +189,19 @@ const chooseBestTicks = (
     digits: number[],
     recoveryMode = false,
     cycleConfig?: unknown,
+    prices: number[] = [],
 ) => {
     // Auto Bots are tick-wise. The previous implementation selected a
     // duration from 1–4 ticks while scanning, which made the displayed
     // probability and the actual contract duration disagree.
-    const sample = digits.slice(-Math.max(20, Math.min(1000, 50)));
-    const trade = bot.pickTrade(sample, recoveryMode, cycleConfig);
+    const sample = digits.slice(-Math.max(20, Math.min(1000, 1000)));
+    const priceSample = prices.slice(-Math.max(20, Math.min(1000, 1000)));
+    const trade = bot.pickTrade(sample, priceSample, recoveryMode, cycleConfig);
     return {
         ticks: 1 as const,
-        score: scoreTrade(trade, sample) + (trade.shouldTrade === false ? -100 : 0),
+        score: Number.isFinite(Number(trade.score))
+            ? Number(trade.score)
+            : scoreTrade(trade, sample) + (trade.shouldTrade === false ? -100 : 0),
         trade,
     };
 };
@@ -191,9 +213,13 @@ export function scanAutoBotMarkets(
     cycleConfig?: unknown,
 ): AutoBotMarketCandidate[] {
     return Object.values(snapshots)
-        .filter(snapshot => snapshot.ready && snapshot.digits.length >= 20)
+        .filter(snapshot =>
+            isSupportedAutoBotMarket(snapshot.symbol)
+            && snapshot.ready
+            && snapshot.digits.length >= 20
+        )
         .map(snapshot => {
-            const selected = chooseBestTicks(bot, snapshot.digits, recoveryMode, cycleConfig);
+            const selected = chooseBestTicks(bot, snapshot.digits, recoveryMode, cycleConfig, snapshot.prices);
             const last1000 = snapshot.digits.slice(-1000);
             const weakDigit = Number((cycleConfig as any)?.weakEntry);
             const strongDigit = Number((cycleConfig as any)?.strongEntry);
@@ -202,12 +228,14 @@ export function scanAutoBotMarkets(
                 symbol: snapshot.symbol,
                 label: snapshot.label,
                 digits: snapshot.digits,
+                prices: snapshot.prices,
                 trade: selected.trade,
                 score: rawScore,
                 qualifies: selected.trade.shouldTrade !== false && rawScore >= 50,
                 tickVersion: snapshot.tickVersion,
                 livePrice: snapshot.livePrice,
                 ticks: selected.ticks,
+                marketFamily: classifyAutoBotMarket(snapshot.symbol),
                 ...(Number.isInteger(weakDigit) ? {
                     weakPct: last1000.filter(digit => digit === weakDigit).length / Math.max(1, last1000.length) * 100,
                 } : {}),
@@ -262,6 +290,7 @@ export function useAuthenticatedAutoBotScanner(): {
                     symbol,
                     label: marketLabels.get(symbol) ?? symbol,
                     digits: [...history, ...live].slice(-1000),
+                    prices: [...market.prices, ...market.live.map(item => item.price)].slice(-1000),
                     livePrice: market.live[market.live.length - 1]?.price ?? null,
                     tickVersion: (previous[symbol]?.tickVersion ?? 0) + (ready ? 1 : 0),
                     ready: ready && hasPipSize,

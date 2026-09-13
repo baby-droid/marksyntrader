@@ -1,9 +1,13 @@
 import {
     AUTO_BOT_TICK_DURATION,
     getFreshAutoBotMarkets,
+    isSupportedAutoBotMarket,
     isAutoBotMarketStopped,
+    scanAutoBotMarkets,
     selectAutoBotMarketsForExecution,
+    type AutoBotDefinition,
     type AutoBotMarketCandidate,
+    type AutoBotMarketSnapshot,
 } from '../auto-bot-scanner';
 
 const candidate = (
@@ -16,12 +20,14 @@ const candidate = (
     symbol,
     label: symbol,
     digits: Array.from({ length: 20 }, () => 5),
+    prices: Array.from({ length: 20 }, (_, index) => 100 + index),
     trade: { contract: 'DIGITDIFF', barrier: 5, signal },
     score,
     qualifies,
     tickVersion,
     livePrice: 100,
     ticks: AUTO_BOT_TICK_DURATION,
+    marketFamily: '1s Volatility',
 });
 
 describe('Auto Bot market execution rules', () => {
@@ -38,24 +44,68 @@ describe('Auto Bot market execution rules', () => {
         expect(lastEvaluated.get('V50')).toBe(7);
     });
 
+    it('expires a signal after it has been evaluated for that market tick', () => {
+        const lastEvaluated = new Map<string, number>();
+        const first = candidate('V10', 95, 7);
+
+        expect(getFreshAutoBotMarkets([first], lastEvaluated)).toHaveLength(1);
+        expect(getFreshAutoBotMarkets([first], lastEvaluated)).toHaveLength(0);
+        expect(getFreshAutoBotMarkets([candidate('V10', 95, 8)], lastEvaluated)).toHaveLength(1);
+    });
+
     it('uses exactly one tick for Auto Bot contracts', () => {
         expect(AUTO_BOT_TICK_DURATION).toBe(1);
     });
 
-    it('executes every fresh eligible market in the ranked set', () => {
+    it('ranks by signal score and keeps weak exposure to the strongest market', () => {
         const mixed = selectAutoBotMarketsForExecution([
-            candidate('V10', 95, 1, true, 'strong'),
-            candidate('V25', 90, 1, true, 'weak'),
+            candidate('V10', 95, 1, true, 'weak'),
+            candidate('V25', 98, 1, true, 'weak'),
             candidate('V50', 85, 1, true, 'strong'),
         ]);
-        expect(mixed.map(item => item.symbol)).toEqual(['V10', 'V25', 'V50']);
+        expect(mixed.map(item => item.symbol)).toEqual(['V25']);
 
-        const five = selectAutoBotMarketsForExecution(
+        const strongBurst = selectAutoBotMarketsForExecution(
             ['V10', 'V25', 'V50', 'V75', 'V100', 'JD10'].map((symbol, index) =>
-                candidate(symbol, 95 - index, 1, true, 'weak')
+                candidate(symbol, 95 - index, 1, true, 'strong')
             ),
         );
-        expect(five).toHaveLength(5);
+        expect(strongBurst.map(item => item.symbol)).toEqual(['V10', 'V25', 'V50', 'V75', 'V100']);
+    });
+
+    it('allows only the requested Auto Bot market families', () => {
+        expect(isSupportedAutoBotMarket('1HZ100V')).toBe(true);
+        expect(isSupportedAutoBotMarket('JD50')).toBe(true);
+        expect(isSupportedAutoBotMarket('R_25')).toBe(true);
+        expect(isSupportedAutoBotMarket('RDBEAR')).toBe(true);
+        expect(isSupportedAutoBotMarket('RDBULL')).toBe(true);
+        expect(isSupportedAutoBotMarket('BOOM1000')).toBe(false);
+        expect(isSupportedAutoBotMarket('CRASH500')).toBe(false);
+    });
+
+    it('filters unsupported symbols before strategy evaluation', () => {
+        const bot: AutoBotDefinition = {
+            pickTrade: () => ({
+                contract: 'CALL',
+                barrier: null,
+                shouldTrade: true,
+                score: 75,
+            }),
+        };
+        const snapshot = (symbol: string): AutoBotMarketSnapshot => ({
+            symbol,
+            label: symbol,
+            digits: Array.from({ length: 20 }, () => 5),
+            prices: Array.from({ length: 20 }, (_, index) => 100 + index),
+            livePrice: 100,
+            tickVersion: 1,
+            ready: true,
+        });
+
+        expect(scanAutoBotMarkets(bot, {
+            '1HZ10V': snapshot('1HZ10V'),
+            BOOM1000: snapshot('BOOM1000'),
+        }).map(item => item.symbol)).toEqual(['1HZ10V']);
     });
 
     it('stops only the market whose own TP or SL was reached', () => {

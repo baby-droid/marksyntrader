@@ -30,6 +30,10 @@ import {
     type AutoBotMarketCandidate,
     type AutoBotMarketSnapshot,
 } from './auto-bot-scanner';
+import {
+    evaluateAutoBotStrategy,
+    type AutoBotStrategyId,
+} from './auto-bot-strategies';
 import './auto-trades.scss';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -439,6 +443,10 @@ interface AiTrade {
     barrier: number | null;
     shouldTrade?: boolean;
     signal?: 'weak' | 'strong';
+    score?: number;
+    reason?: string;
+    direction?: 'rise' | 'fall' | 'odd' | 'even';
+    state?: string;
 }
 
 interface AiBotDef {
@@ -452,8 +460,14 @@ interface AiBotDef {
     defaultMartingale: number;
     defaultTakeProfit: number;
     defaultStopLoss: number;
+    strategyId: AutoBotStrategyId;
     cycle?: CycleBotDef;
-    pickTrade: (digits: number[], recoveryMode?: boolean, cycleConfig?: CycleBotConfig) => AiTrade;
+    pickTrade: (
+        digits: number[],
+        prices?: number[],
+        recoveryMode?: boolean,
+        cycleConfig?: CycleBotConfig,
+    ) => AiTrade;
 }
 
 function normalizeCycleEntry(value: unknown, parity: CycleParity, fallback: number): number {
@@ -488,119 +502,74 @@ function pickParityCycleTrade(
 
 const AI_BOTS: AiBotDef[] = [
     {
-        id: 'autodiffer',
-        name: 'AutoDiffer',
-        subtitle: 'Least-Frequent Digit Analysis',
-        icon: '🎲',
-        desc: 'Analyzes last 50 digits, picks DIGITDIFF on the least frequent digit for maximum win probability.',
-        symbol: '1HZ100V',
-        defaultStake: 1.0,
-        defaultMartingale: 2.2,
+        id: 'rise',
+        name: 'RISE',
+        subtitle: 'Directional Bullish Flow',
+        icon: '📈',
+        desc: 'CALL only. Requires bullish 20/50/100/1000-tick alignment, positive structure, persistence, and low chop.',
+        symbol: 'AUTO',
+        defaultStake: 1,
+        defaultMartingale: 1.8,
         defaultTakeProfit: 5,
         defaultStopLoss: 10,
-        pickTrade: (digits) => {
-            const n = Math.min(50, digits.length);
-            const last = digits.slice(-n);
-            const freq = Array.from({ length: 10 }, (_, i) => last.filter(d => d === i).length);
-            const minDigit = freq.indexOf(Math.min(...freq));
-            return { contract: 'DIGITDIFF', barrier: minDigit };
-        },
+        strategyId: 'rise',
+        pickTrade: (digits, prices = []) => evaluateAutoBotStrategy('rise', digits, prices),
     },
     {
-        id: 'auto-overunder',
-        name: 'Auto Over/Under',
-        subtitle: 'AI Pattern Recognition',
-        icon: '🧠',
-        desc: 'Analyzes last 20 digits to identify over/under bias. Trades DIGITOVER 2 when over-bias, DIGITUNDER 7 otherwise.',
-        symbol: '1HZ25V',
-        defaultStake: 1.0,
-        defaultMartingale: 2.0,
+        id: 'fall',
+        name: 'FALL',
+        subtitle: 'Directional Bearish Flow',
+        icon: '📉',
+        desc: 'PUT only. Requires bearish 20/50/100/1000-tick alignment, negative structure, persistence, and low chop.',
+        symbol: 'AUTO',
+        defaultStake: 1,
+        defaultMartingale: 1.8,
         defaultTakeProfit: 5,
         defaultStopLoss: 10,
-        pickTrade: (digits) => {
-            const last20 = digits.slice(-20);
-            if (!last20.length) return { contract: 'DIGITOVER', barrier: 2 };
-            const overCount = last20.filter(d => d > 4).length;
-            return overCount > 10
-                ? { contract: 'DIGITOVER', barrier: 2 }
-                : { contract: 'DIGITUNDER', barrier: 7 };
-        },
+        strategyId: 'fall',
+        pickTrade: (digits, prices = []) => evaluateAutoBotStrategy('fall', digits, prices),
     },
     {
-        id: 'auto-o5-u4',
-        name: 'Auto O5 U4',
-        subtitle: 'Dual Digit Strategy',
-        icon: '⚡',
-        desc: 'Compares Over 5 vs Under 4 frequency in last 20 digits and trades whichever has higher probability.',
-        symbol: '1HZ50V',
-        defaultStake: 1.0,
-        defaultMartingale: 2.0,
+        id: 'rise-fall-bias',
+        name: 'RISE / FALL BIAS',
+        subtitle: 'Adaptive Direction by Market Pattern',
+        icon: '🧭',
+        desc: 'Chooses CALL or PUT only when the calculated directional scores separate by at least 10 points.',
+        symbol: 'AUTO',
+        defaultStake: 1,
+        defaultMartingale: 1.8,
         defaultTakeProfit: 5,
         defaultStopLoss: 10,
-        pickTrade: (digits) => {
-            const last20 = digits.slice(-20);
-            if (!last20.length) return { contract: 'DIGITOVER', barrier: 5 };
-            const over5 = last20.filter(d => d > 5).length;
-            const under4 = last20.filter(d => d < 4).length;
-            return over5 >= under4
-                ? { contract: 'DIGITOVER', barrier: 5 }
-                : { contract: 'DIGITUNDER', barrier: 4 };
-        },
+        strategyId: 'bias',
+        pickTrade: (digits, prices = []) => evaluateAutoBotStrategy('bias', digits, prices),
     },
     {
-        id: 'auto-o2u7',
-        name: 'Auto O2U7',
-        subtitle: 'Over 2 · Under 7 · Recovery Mode',
-        icon: '🔄',
-        desc: 'Trades Over 2 / Under 7 based on last 5 digit average. On loss, switches to recovery mode with Under 5.',
-        symbol: '1HZ75V',
-        defaultStake: 1.0,
-        defaultMartingale: 2.2,
-        defaultTakeProfit: 5,
-        defaultStopLoss: 10,
-        pickTrade: (digits, recoveryMode?: boolean) => {
-            if (recoveryMode) return { contract: 'DIGITUNDER', barrier: 5 };
-            const last5 = digits.slice(-5);
-            if (!last5.length) return { contract: 'DIGITUNDER', barrier: 7 };
-            const avg = last5.reduce((a, b) => a + b, 0) / last5.length;
-            return avg > 4.5
-                ? { contract: 'DIGITOVER', barrier: 2 }
-                : { contract: 'DIGITUNDER', barrier: 7 };
-        },
-    },
-    {
-        id: 'odd-auto-cycle',
-        name: 'ODD AUTO CYCLE',
-        subtitle: 'Weak Even → Odd · Strong Even ×2 → Odd',
+        id: 'odd-bias',
+        name: 'ODD BIAS',
+        subtitle: '1000 → 50 → 20 → 10 Parity Confirmation',
         icon: '🔴',
-        desc: 'Buys Odd after the selected weak Even digit, or after two selected Strong Even digits followed by an Odd digit.',
-        symbol: '1HZ10V',
-        defaultStake: 1.0,
-        defaultMartingale: 2.0,
+        desc: 'DIGITODD only. Uses broad odd distribution, recent odd flow, low alternation, and a 10-tick entry pattern.',
+        symbol: 'AUTO',
+        defaultStake: 1,
+        defaultMartingale: 1.8,
         defaultTakeProfit: 5,
         defaultStopLoss: 10,
-        cycle: { targetParity: 'odd', defaultWeakEntry: 0, defaultStrongEntry: 2 },
-        pickTrade: (digits, _recoveryMode, config) =>
-            pickParityCycleTrade(digits, 'odd', config || {
-                weakEntry: 0, strongEntry: 2, martingale: 2, takeProfit: 5, stopLoss: 10,
-            }),
+        strategyId: 'odd',
+        pickTrade: (digits, prices = []) => evaluateAutoBotStrategy('odd', digits, prices),
     },
     {
-        id: 'even-auto-cycle',
-        name: 'EVEN AUTO CYCLE',
-        subtitle: 'Weak Odd → Even · Strong Odd ×2 → Even',
+        id: 'even-bias',
+        name: 'EVEN BIAS',
+        subtitle: '1000 → 50 → 20 → 10 Parity Confirmation',
         icon: '🔵',
-        desc: 'Buys Even after the selected weak Odd digit, or after two selected Strong Odd digits followed by an Even digit.',
-        symbol: '1HZ10V',
-        defaultStake: 1.0,
-        defaultMartingale: 2.0,
+        desc: 'DIGITEVEN only. Uses broad even distribution, recent even flow, low alternation, and a 10-tick entry pattern.',
+        symbol: 'AUTO',
+        defaultStake: 1,
+        defaultMartingale: 1.8,
         defaultTakeProfit: 5,
         defaultStopLoss: 10,
-        cycle: { targetParity: 'even', defaultWeakEntry: 1, defaultStrongEntry: 3 },
-        pickTrade: (digits, _recoveryMode, config) =>
-            pickParityCycleTrade(digits, 'even', config || {
-                weakEntry: 1, strongEntry: 3, martingale: 2, takeProfit: 5, stopLoss: 10,
-            }),
+        strategyId: 'even',
+        pickTrade: (digits, prices = []) => evaluateAutoBotStrategy('even', digits, prices),
     },
 ];
 
@@ -900,23 +869,23 @@ function AiBotCard({
             </div>
             <div className='autotrades__botcard-markets'>
                 <div className='autotrades__botcard-markets-title'>
-                    <span>Best markets · 1-tick execution</span>
+                        <span>Best markets · strongest signal first · 1 tick</span>
                     <span>{visibleMarketCandidates.length ? `${visibleMarketCandidates.length} visible slots` : 'Waiting'}</span>
                 </div>
                 {visibleMarketCandidates.length ? (
                     <div className='autotrades__botcard-market-tape'>
                         <div className='autotrades__botcard-market-track'>
                             {[...visibleMarketCandidates, ...visibleMarketCandidates].map((candidate, index) => {
-                                const isClone = index >= visibleMarketCandidates.length;
                                 const status = marketRiskStatus[candidate.symbol];
                                 return (
                                     <div className='autotrades__botcard-market-tile' key={`${candidate.symbol}-${index}`}>
                                         <div className='autotrades__botcard-market-tile-top'>
                                             <strong>{candidate.label}</strong>
                                             <span className={status?.stopped ? 'watch' : candidate.qualifies ? 'ready' : 'watch'}>
-                                                {status?.stopped ? 'STOPPED' : candidate.qualifies ? (candidate.trade.signal === 'strong' ? 'STRONG' : 'READY') : 'WATCH'}
+                                                {status?.stopped ? 'STOPPED' : candidate.trade.state ?? (candidate.qualifies ? 'READY' : 'WATCH')}
                                             </span>
                                         </div>
+                                        <span className='autotrades__botcard-market-family'>{candidate.marketFamily}</span>
                                         <div className='autotrades__botcard-market-tile-price'>
                                             {candidate.livePrice == null ? '—' : candidate.livePrice}
                                         </div>
@@ -924,6 +893,9 @@ function AiBotCard({
                                             {candidate.score.toFixed(1)}% · 1t · {candidate.trade.contract}
                                             {candidate.trade.barrier !== null ? ` @${candidate.trade.barrier}` : ''}
                                             {status ? ` · ${fmtProfit(status.profit)}` : ''}
+                                        </span>
+                                        <span className='autotrades__botcard-market-reason'>
+                                            {candidate.trade.reason ?? 'Waiting for a strategy evaluation'}
                                         </span>
                                     </div>
                                 );
