@@ -1362,9 +1362,8 @@
     // ── Card grid
     &__cards {
         display: grid;
-        // The Smart Trading surface is intentionally a fixed three-column
-        // desktop layout so five strategies read as three cards, then two.
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        // Keep Smart Trading cards to exactly two cards per row on desktop.
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 0;
         padding: 0;
         flex: 1;
