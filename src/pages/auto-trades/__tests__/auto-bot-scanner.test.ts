@@ -57,6 +57,35 @@ describe('Auto Bot market execution rules', () => {
         expect(AUTO_BOT_TICK_DURATION).toBe(1);
     });
 
+    it('requires the current and previous frame to select the same entry', () => {
+        const bot: AutoBotDefinition = {
+            pickTrade: digits => digits[digits.length - 1] === 7
+                ? { contract: 'DIGITOVER', barrier: 2 }
+                : { contract: 'DIGITUNDER', barrier: 7 },
+        };
+        const snapshot = (digits: number[]): AutoBotMarketSnapshot => ({
+            symbol: '1HZ10V',
+            label: 'V10 (1s)',
+            digits,
+            prices: digits.map((_, index) => 100 + index),
+            livePrice: 100,
+            tickVersion: 1,
+            ready: true,
+        });
+
+        const matching = scanAutoBotMarkets(bot, {
+            match: snapshot(Array.from({ length: 19 }, () => 5).concat([7, 7])),
+        })[0];
+        const changing = scanAutoBotMarkets(bot, {
+            change: snapshot(Array.from({ length: 19 }, () => 5).concat([7, 4])),
+        })[0];
+
+        expect(matching.trade.entryFrame).toBe('matched');
+        expect(matching.qualifies).toBe(true);
+        expect(changing.trade.entryFrame).toBe('waiting');
+        expect(changing.qualifies).toBe(false);
+    });
+
     it('ranks by signal score and keeps weak exposure to the strongest market', () => {
         const mixed = selectAutoBotMarketsForExecution([
             candidate('V10', 95, 1, true, 'weak'),

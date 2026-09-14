@@ -341,7 +341,7 @@
 
     &__botcards {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 14px;
     }
 
@@ -1150,6 +1150,17 @@
         &__smart-settings {
             grid-template-columns: 1fr 1fr;
         }
+
+        &__botcards {
+            grid-template-columns: 1fr;
+            gap: 12px;
+        }
+    }
+}
+
+@media (min-width: 601px) and (max-width: 980px) {
+    .autotrades__botcards {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 

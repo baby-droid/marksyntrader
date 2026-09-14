@@ -47,6 +47,7 @@ export interface AutoBotTrade {
     reason?: string;
     direction?: 'rise' | 'fall' | 'odd' | 'even';
     state?: string;
+    entryFrame?: 'matched' | 'waiting';
 }
 
 export interface AutoBotDefinition {
@@ -197,12 +198,30 @@ const chooseBestTicks = (
     const sample = digits.slice(-Math.max(20, Math.min(1000, 1000)));
     const priceSample = prices.slice(-Math.max(20, Math.min(1000, 1000)));
     const trade = bot.pickTrade(sample, priceSample, recoveryMode, cycleConfig);
+    const previousSample = sample.slice(0, -1);
+    const previousPriceSample = priceSample.slice(0, -1);
+    const previousTrade = previousSample.length >= 20
+        ? bot.pickTrade(previousSample, previousPriceSample, recoveryMode, cycleConfig)
+        : null;
+    const sameEntryFrame = Boolean(
+        previousTrade
+        && previousTrade.contract === trade.contract
+        && Number(previousTrade.barrier ?? null) === Number(trade.barrier ?? null)
+        && previousTrade.shouldTrade !== false
+        && trade.shouldTrade !== false,
+    );
+    const confirmedTrade = {
+        ...trade,
+        shouldTrade: sameEntryFrame,
+        entryFrame: sameEntryFrame ? 'matched' as const : 'waiting' as const,
+        reason: `${trade.reason ? `${trade.reason} · ` : ''}${sameEntryFrame ? '2-tick match' : 'waiting for 2-tick match'}`,
+    };
     return {
         ticks: 1 as const,
-        score: Number.isFinite(Number(trade.score))
-            ? Number(trade.score)
-            : scoreTrade(trade, sample) + (trade.shouldTrade === false ? -100 : 0),
-        trade,
+        score: Number.isFinite(Number(confirmedTrade.score))
+            ? Number(confirmedTrade.score)
+            : scoreTrade(confirmedTrade, sample) + (confirmedTrade.shouldTrade === false ? -100 : 0),
+        trade: confirmedTrade,
     };
 };
 
