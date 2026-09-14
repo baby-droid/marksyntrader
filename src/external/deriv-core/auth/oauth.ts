@@ -12,10 +12,11 @@ import {
 } from './storage';
 import { getAuthBaseUrl } from '../config/urls';
 
-// Deriv's OAuth scopes are space-separated and must be one of the scopes
-// documented by the current API: trade, payment, account_manage, or
-// application_read. "read" is not a valid OAuth scope.
-export const DEFAULT_OAUTH_SCOPES = 'trade account_manage payment';
+// The OAuth client registered for Marksyntrader is currently allowed to
+// request `trade` only. Deriv rejects the whole authorization request when a
+// scope is not enabled for the client, which sends the user to a failed flow
+// page before the login screen can load.
+export const DEFAULT_OAUTH_SCOPES = 'trade';
 
 /**
  * Build the base PKCE URLSearchParams shared by login and sign-up.
