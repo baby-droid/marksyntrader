@@ -36,6 +36,7 @@ export default defineConfig({
         // Redirect URI registered in the Deriv developer portal. Must match exactly.
         // Production: https://marksyntrader.replit.app/callback
         NEXT_PUBLIC_DERIV_REDIRECT_URI: JSON.stringify(process.env.NEXT_PUBLIC_DERIV_REDIRECT_URI ?? ''),
+        NEXT_PUBLIC_DERIV_PREVIEW_REDIRECT_URI: JSON.stringify(process.env.NEXT_PUBLIC_DERIV_PREVIEW_REDIRECT_URI ?? ''),
         // Authoritative environment signal. The bot's URL resolver (config.ts) and
         // the vendored deriv-core OAuth resolver both read this so endpoints stay consistent
         // on a deployed partner domain (where hostname detection can't match Deriv).

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { cleanupUrl, handleOAuthCallback } from '@/external/deriv-core';
+import { cleanupUrl, DEFAULT_OAUTH_SCOPES, handleOAuthCallback } from '@/external/deriv-core';
+import { getOAuthRedirectUri } from '@/utils/oauth-redirect';
 import './callback.scss';
 
 type Status = 'loading' | 'error';
@@ -17,14 +18,12 @@ const CallbackPage = () => {
 
         const run = async () => {
             try {
-                const redirectUri =
-                    process.env.NEXT_PUBLIC_DERIV_REDIRECT_URI ||
-                    `${window.location.origin}/callback`;
+                const redirectUri = getOAuthRedirectUri();
 
                 const authInfo = await handleOAuthCallback(window.location.href, {
                     clientId: process.env.NEXT_PUBLIC_DERIV_APP_ID || '',
                     redirectUri,
-                    scopes: 'trade read',
+                    scopes: DEFAULT_OAUTH_SCOPES,
                 });
 
                 const { DerivWSAccountsService } = await import('@/services/derivws-accounts.service');

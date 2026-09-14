@@ -37,13 +37,9 @@ import {
 import './auto-trades.scss';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-const SCANNER_SMART_CARD_IDS = new Set<SmartCardId>([
-    'rise',
-    'fall',
-    'risefallbias',
-    'oddbias',
-    'evenbias',
-]);
+// The original Smart Trading cards use the shared selected-symbol feed.
+// Market-scanner strategies remain available in the separate Auto Bots tab.
+const SCANNER_SMART_CARD_IDS = new Set<SmartCardId>();
 
 function scanSmartCardMarkets(
     id: SmartCardId,
@@ -1053,7 +1049,7 @@ const AutoTrades: React.FC = () => {
     }>>([]);
 
     // ── Smart Trader (multi-card) state ──────────────────────────────────────────
-    const SMART_CARD_IDS: SmartCardId[] = ['rise', 'fall', 'risefallbias', 'oddbias', 'evenbias'];
+    const SMART_CARD_IDS: SmartCardId[] = ['risefall', 'evenodd', 'overunder', 'matchdiffer'];
     const CONDITION_OPTIONS: Record<SmartCardId, string[]> = {
         rise: ['Rise'],
         fall: ['Fall'],
@@ -1111,11 +1107,10 @@ const AutoTrades: React.FC = () => {
 
     // Per-card config (editable params)
     const [smartCardCfg, setSmartCardCfg] = useState<Record<SmartCardId, SmartCardConfig>>({
-        rise:         { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Rise',      thenAction: 'Buy Rise',  bulkEnabled: false, bulkCount: 10, takeProfit: 5, stopLoss: 10 },
-        fall:         { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Fall',      thenAction: 'Buy Fall',  bulkEnabled: false, bulkCount: 10, takeProfit: 5, stopLoss: 10 },
-        risefallbias: { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Flow Bias', thenAction: 'Auto Bias', bulkEnabled: false, bulkCount: 10, takeProfit: 5, stopLoss: 10 },
-        oddbias:      { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Odd Bias',  thenAction: 'Buy Odd',   bulkEnabled: false, bulkCount: 10, takeProfit: 5, stopLoss: 10 },
-        evenbias:     { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Even Bias', thenAction: 'Buy Even',  bulkEnabled: false, bulkCount: 10, takeProfit: 5, stopLoss: 10 },
+        risefall:     { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Rise',    thenAction: 'Buy Rise',    bulkEnabled: false, bulkCount: 10, takeProfit: 5, stopLoss: 10 },
+        evenodd:      { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Even',    thenAction: 'Buy Even',    bulkEnabled: false, bulkCount: 10, takeProfit: 5, stopLoss: 10 },
+        overunder:    { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Over',    thenAction: 'Buy Over',    bulkEnabled: false, bulkCount: 10, takeProfit: 5, stopLoss: 10 },
+        matchdiffer:  { stake: 5, ticks: 1, martingale: 1, barrier: 5, lookback: 3, ifValue: 'Matches', thenAction: 'Buy Matches', bulkEnabled: false, bulkCount: 10, takeProfit: 5, stopLoss: 10 },
     });
     const batchTradingEnabled = Object.values(smartCardCfg).some(cfg => cfg.bulkEnabled);
     const smartCardCfgRef = useRef(smartCardCfg);
@@ -1161,23 +1156,22 @@ const AutoTrades: React.FC = () => {
     const [smartCardSess, setSmartCardSess] = useState<Record<SmartCardId, {
         running: boolean; wins: number; losses: number; profit: number; lastLog: string;
     }>>({
-        rise:         { running: false, wins: 0, losses: 0, profit: 0, lastLog: '' },
-        fall:         { running: false, wins: 0, losses: 0, profit: 0, lastLog: '' },
-        risefallbias: { running: false, wins: 0, losses: 0, profit: 0, lastLog: '' },
-        oddbias:      { running: false, wins: 0, losses: 0, profit: 0, lastLog: '' },
-        evenbias:     { running: false, wins: 0, losses: 0, profit: 0, lastLog: '' },
+        risefall:    { running: false, wins: 0, losses: 0, profit: 0, lastLog: '' },
+        evenodd:     { running: false, wins: 0, losses: 0, profit: 0, lastLog: '' },
+        overunder:   { running: false, wins: 0, losses: 0, profit: 0, lastLog: '' },
+        matchdiffer: { running: false, wins: 0, losses: 0, profit: 0, lastLog: '' },
     });
     const smartStopFlags = useRef<Record<string, boolean>>({
-        rise: false, fall: false, risefallbias: false, oddbias: false, evenbias: false,
+        risefall: false, evenodd: false, overunder: false, matchdiffer: false,
     });
     // A stop/start can happen while proposal, buy, or settlement is awaiting
     // the authenticated socket. The token makes the old async loop stale
     // immediately, so it cannot clear the new run's stop flag or buy again.
     const smartRunTokens = useRef<Record<string, number>>({
-        rise: 0, fall: 0, risefallbias: 0, oddbias: 0, evenbias: 0,
+        risefall: 0, evenodd: 0, overunder: 0, matchdiffer: 0,
     });
     const smartCurrentStakes = useRef<Record<string, number>>({
-        rise: 5, fall: 5, risefallbias: 5, oddbias: 5, evenbias: 5,
+        risefall: 5, evenodd: 5, overunder: 5, matchdiffer: 5,
     });
 
     const toggleBulkMode = useCallback((id: SmartCardId) => {
@@ -1756,6 +1750,9 @@ const AutoTrades: React.FC = () => {
                 const leastFreqDigit = freq.indexOf(minFreq);
                 const matchProb = n > 0 ? (freq[mostFreqDigit] / n) * 100 : 10;
                 const differProb = 100 - (n > 0 ? (freq[leastFreqDigit] / n) * 100 : 10);
+                 const ouBarrier = 5;
+                 const overProb = n > 0 ? (last.filter(d => d > ouBarrier).length / n) * 100 : 50;
+                 const underProb = 100 - overProb;
                 const last10 = smartDigits.slice(-10);
                  const evenOddPattern = last10.map(d => d % 2 === 0 ? 'E' : 'O');
                  const evenOddStreak = (() => {
@@ -1767,11 +1764,10 @@ const AutoTrades: React.FC = () => {
                  })();
 
                 const CARD_DEFS = [
-                    { id: 'rise' as SmartCardId,         title: 'Rise',             icon: '📈' },
-                    { id: 'fall' as SmartCardId,         title: 'Fall',             icon: '📉' },
-                    { id: 'risefallbias' as SmartCardId, title: 'Rise/Fall Bias',   icon: '🌊' },
-                    { id: 'oddbias' as SmartCardId,      title: 'Odd Bias',         icon: '🟣' },
-                    { id: 'evenbias' as SmartCardId,     title: 'Even Bias',        icon: '🔵' },
+                     { id: 'risefall' as SmartCardId,    title: 'Rise/Fall',         icon: '📈' },
+                     { id: 'evenodd' as SmartCardId,     title: 'Even/Odd',          icon: '⚖️'  },
+                     { id: 'overunder' as SmartCardId,   title: 'Over/Under',        icon: '🎯' },
+                     { id: 'matchdiffer' as SmartCardId, title: 'Matches/Differs',   icon: '🔢' },
                 ];
 
                 return (
@@ -1861,18 +1857,22 @@ const AutoTrades: React.FC = () => {
 
                             let statA: string, statB: string, labelA: string, labelB: string;
                             let probA: number, probB: number;
-                            if (card.id === 'rise' || card.id === 'fall' || card.id === 'risefallbias') {
+                            if (card.id === 'risefall') {
                                 labelA = 'Rise'; labelB = 'Fall';
                                 probA = riseProb; probB = fallProb;
                                 statA = riseProb.toFixed(2) + '%'; statB = fallProb.toFixed(2) + '%';
-                            } else if (card.id === 'oddbias') {
-                                labelA = 'Odd'; labelB = 'Even';
-                                probA = oddProb; probB = evenProb;
-                                statA = oddProb.toFixed(2) + '%'; statB = evenProb.toFixed(2) + '%';
-                            } else {
+                            } else if (card.id === 'evenodd') {
                                 labelA = 'Even'; labelB = 'Odd';
                                 probA = evenProb; probB = oddProb;
                                 statA = evenProb.toFixed(2) + '%'; statB = oddProb.toFixed(2) + '%';
+                            } else if (card.id === 'overunder') {
+                                labelA = 'Over'; labelB = 'Under';
+                                probA = overProb; probB = underProb;
+                                statA = overProb.toFixed(2) + '%'; statB = underProb.toFixed(2) + '%';
+                            } else {
+                                labelA = 'Matches'; labelB = 'Differs';
+                                probA = matchProb; probB = differProb;
+                                statA = matchProb.toFixed(2) + '%'; statB = differProb.toFixed(2) + '%';
                             }
 
                             return (
@@ -1907,20 +1907,20 @@ const AutoTrades: React.FC = () => {
                                             <div className='st__pattern-dots'>
                                                 {last10.map((d, i) => (
                                                     <span key={i} className={`st__pdot ${
-                                                        (card.id === 'oddbias' || card.id === 'evenbias')
+                                                        card.id === 'evenodd'
                                                             ? (d % 2 === 0 ? 'even' : 'odd')
                                                             : `d${d % 5}`
                                                     }`}>
-                                                        {(card.id === 'oddbias' || card.id === 'evenbias') ? evenOddPattern[i] : d}
+                                                         {card.id === 'evenodd' ? evenOddPattern[i] : d}
                                                     </span>
                                                 ))}
                                             </div>
                                             <div className='st__pattern-note'>
-                                                {(card.id === 'oddbias' || card.id === 'evenbias')
+                                                 {card.id === 'evenodd'
                                                     ? `${last10.length ? evenOddPattern.join(' · ') : 'Waiting for ticks'}`
                                                     : `Flow: ${riseProb.toFixed(1)}% rise · ${fallProb.toFixed(1)}% fall`}
                                             </div>
-                                            {(card.id === 'oddbias' || card.id === 'evenbias') && (
+                                             {card.id === 'evenodd' && (
                                                 <div className='st__streak-note'>
                                                     Current streak: <strong>{last10.length ? `${evenOddStreak} ${last10[last10.length - 1] % 2 === 0 ? 'Even' : 'Odd'}` : '—'}</strong>
                                                 </div>
@@ -1943,7 +1943,7 @@ const AutoTrades: React.FC = () => {
                                                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(v => <option key={v} value={v}>{v}</option>)}
                                              </select>
                                              <span className='st__cond-text'>
-                                                  {card.id === 'rise' || card.id === 'fall' || card.id === 'risefallbias'
+                                                   {card.id === 'risefall'
                                                       ? 'market flow is'
                                                       : 'digits show'}
                                              </span>
@@ -1956,6 +1956,9 @@ const AutoTrades: React.FC = () => {
                                              >
                                                  {CONDITION_OPTIONS[card.id].map(value => <option key={value} value={value}>{value}</option>)}
                                              </select>
+                                              {card.id === 'overunder' && (
+                                                  <span className='st__cond-text'>digit {ouBarrier}</span>
+                                              )}
                                         </div>
                                           <div className='st__condition-row st__condition-row--interactive'>
                                             <span className='st__cond-lbl'>Then</span>
@@ -1969,6 +1972,21 @@ const AutoTrades: React.FC = () => {
                                                   {ACTION_OPTIONS[card.id].map(value => <option key={value} value={value}>{value}</option>)}
                                               </select>
                                         </div>
+                                         {card.id === 'overunder' && (
+                                             <div className='st__condition-row'>
+                                                 <span className='st__cond-lbl'>Barrier</span>
+                                                 <input
+                                                     type='number'
+                                                     min='0'
+                                                     max='9'
+                                                     step='1'
+                                                     className='st__cond-input'
+                                                     value={cfg.barrier}
+                                                     disabled={isRunning}
+                                                     onChange={e => updateCardCfg(card.id, { barrier: +e.target.value })}
+                                                 />
+                                             </div>
+                                         )}
                                     </div>
 
                                     {/* Per-card params */}
