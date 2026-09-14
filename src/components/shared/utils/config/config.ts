@@ -9,7 +9,7 @@ import {
 } from '@/external/deriv-core';
 import type { AuthConfig } from '@/external/deriv-core';
 import { DerivWSAccountsService } from '@/services/derivws-accounts.service';
-import { getOAuthRedirectUri } from '@/utils/oauth-redirect';
+import { getOAuthRedirectUri, rememberOAuthRedirectUri } from '@/utils/oauth-redirect';
 import brandConfig from '../../../../../brand.config.json';
 
 // =============================================================================
@@ -111,7 +111,8 @@ export const generateOAuthURL = async (prompt?: string): Promise<string> => {
         const clientId = process.env.NEXT_PUBLIC_DERIV_APP_ID;
         if (!clientId) return '';
 
-         const redirectUri = getOAuthRedirectUri();
+        const redirectUri = getOAuthRedirectUri();
+        rememberOAuthRedirectUri(redirectUri);
         const config: AuthConfig = {
             clientId,
             redirectUri,

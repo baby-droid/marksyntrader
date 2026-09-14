@@ -1,4 +1,5 @@
 const PREVIEW_BASE_PATH = '/bot/preview';
+const OAUTH_REDIRECT_URI_KEY = 'marksyntrader.oauth_redirect_uri';
 
 const isPreviewPath = (pathname: string): boolean =>
     pathname === PREVIEW_BASE_PATH || pathname.startsWith(`${PREVIEW_BASE_PATH}/`);
@@ -39,4 +40,36 @@ export const getOAuthRedirectUri = (): string => {
     }
 
     return configuredUri || `${window.location.origin}/callback`;
+};
+
+/**
+ * Keep the exact redirect URI used to start OAuth available for the callback.
+ * OAuth requires the token exchange redirect_uri to match the authorization
+ * request byte-for-byte, so recomputing it after a host/path change is unsafe.
+ */
+export const rememberOAuthRedirectUri = (redirectUri: string): void => {
+    if (typeof window === 'undefined') return;
+    try {
+        window.sessionStorage.setItem(OAUTH_REDIRECT_URI_KEY, redirectUri);
+    } catch {
+        // Session storage can be unavailable in privacy-restricted browsers.
+    }
+};
+
+export const getRememberedOAuthRedirectUri = (): string | null => {
+    if (typeof window === 'undefined') return null;
+    try {
+        return window.sessionStorage.getItem(OAUTH_REDIRECT_URI_KEY);
+    } catch {
+        return null;
+    }
+};
+
+export const clearRememberedOAuthRedirectUri = (): void => {
+    if (typeof window === 'undefined') return;
+    try {
+        window.sessionStorage.removeItem(OAUTH_REDIRECT_URI_KEY);
+    } catch {
+        // Session storage can be unavailable in privacy-restricted browsers.
+    }
 };
