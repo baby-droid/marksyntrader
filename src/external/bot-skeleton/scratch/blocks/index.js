@@ -11,6 +11,7 @@ import './Binary/Tools/Candle';
 import './Binary/Tools/Misc';
 import './Binary/Tools/Time';
 import './Binary/Tools/AhmedAI';
+import './Binary/Tools/KingFisher';
 import './Binary/Trade Definition';
 import './Logic';
 import './Math';
