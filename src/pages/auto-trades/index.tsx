@@ -23,6 +23,7 @@ import {
     AUTO_BOT_MARKETS,
     AUTO_BOT_TICK_DURATION,
     getFreshAutoBotMarkets,
+    isValidatedAutoBotEntry,
     isAutoBotMarketStopped,
     scanAutoBotMarkets,
     selectAutoBotMarketsForExecution,
@@ -676,6 +677,12 @@ const AI_BOTS: AiBotDef[] = [
     },
 ];
 
+// The first four Auto Bots are intentionally managed as small two-market
+// cohorts. The directional/parity AUTO bots below continue using the broader
+// fresh-market scanner.
+const ROTATING_AUTO_BOT_IDS = new Set(AI_BOTS.slice(0, 4).map(bot => bot.id));
+const AUTO_BOT_ROTATION_MARKETS = 2;
+const AUTO_BOT_RUNS_PER_MARKET = 5;
 const AI_RUNS_PER_SCAN = 6;
 
 // ── Per-bot session state ─────────────────────────────────────────────────────
@@ -742,6 +749,12 @@ function AiBotCard({
     const stopRef = useRef(false);
     const pausedStakeRef = useRef<number | null>(null); // for resume-with-martingale
     const { buyAndWait } = useBuyAndWait();
+    const usesPairRotation = ROTATING_AUTO_BOT_IDS.has(bot.id);
+    const [rotationStatus, setRotationStatus] = useState<{
+        symbols: string[];
+        counts: Record<string, number>;
+        cycle: number;
+    }>({ symbols: [], counts: {}, cycle: 0 });
     const [marketRiskConfig, setMarketRiskConfig] = useState<Record<string, MarketRiskConfig>>({});
     const [marketRiskStatus, setMarketRiskStatus] = useState<Record<string, MarketRiskStatus>>({});
     const marketRiskConfigRef = useRef<Record<string, MarketRiskConfig>>({});
@@ -770,7 +783,9 @@ function AiBotCard({
         ),
         [bot, scannerSnapshots, isCycleBot, cycleConfig],
     );
-    const visibleMarketCandidates = marketCandidates.slice(0, 4);
+    const visibleMarketCandidates = usesPairRotation && rotationStatus.symbols.length
+        ? marketCandidates.filter(candidate => rotationStatus.symbols.includes(candidate.symbol)).slice(0, AUTO_BOT_ROTATION_MARKETS)
+        : marketCandidates.slice(0, usesPairRotation ? AUTO_BOT_ROTATION_MARKETS : 4);
     const qualifyingMarketCount = marketCandidates.filter(candidate => candidate.qualifies).length;
     useEffect(() => { marketCandidatesRef.current = marketCandidates; }, [marketCandidates]);
     const defaultMarketRisk: MarketRiskConfig = {
@@ -837,9 +852,24 @@ function AiBotCard({
         const marketProfitBySymbol = new Map<string, number>();
         const marketWinsBySymbol = new Map<string, number>();
         const marketLossesBySymbol = new Map<string, number>();
+        const marketRunsBySymbol = new Map<string, number>();
+        const marketLossStreakBySymbol = new Map<string, number>();
+        const lossCooldownUntilTick = new Map<string, number>();
         const stoppedMarkets = new Set<string>();
+        let rotationSymbols: string[] = [];
+        let rotationCycle = 0;
         setMarketRiskStatus({});
+        setRotationStatus({ symbols: [], counts: {}, cycle: 0 });
         onLog(`🚀 ${bot.name} started | Stake: $${stk.toFixed(2)} | Martingale:${martingale.toFixed(2)}× TP:$${tp.toFixed(2)} SL:$${sl.toFixed(2)}`);
+
+        const publishRotationStatus = () => {
+            if (!usesPairRotation) return;
+            const counts = Object.fromEntries(rotationSymbols.map(symbol => [
+                symbol,
+                marketRunsBySymbol.get(symbol) ?? 0,
+            ]));
+            setRotationStatus({ symbols: [...rotationSymbols], counts, cycle: rotationCycle });
+        };
 
         const recordSettlement = (candidate: AutoBotMarketCandidate, profit: number) => {
             inFlightMarkets.delete(candidate.symbol);
@@ -854,6 +884,17 @@ function AiBotCard({
             marketProfitBySymbol.set(candidate.symbol, marketProfit);
             marketWinsBySymbol.set(candidate.symbol, marketWins);
             marketLossesBySymbol.set(candidate.symbol, marketLosses);
+            marketRunsBySymbol.set(candidate.symbol, (marketRunsBySymbol.get(candidate.symbol) ?? 0) + 1);
+            if (won) {
+                marketLossStreakBySymbol.set(candidate.symbol, 0);
+                lossCooldownUntilTick.delete(candidate.symbol);
+            } else {
+                const lossStreak = (marketLossStreakBySymbol.get(candidate.symbol) ?? 0) + 1;
+                marketLossStreakBySymbol.set(candidate.symbol, lossStreak);
+                // Skip the immediate next tick and require a stronger setup
+                // before allowing the same market to re-enter.
+                lossCooldownUntilTick.set(candidate.symbol, candidate.tickVersion + 1);
+            }
 
             const marketRisk = marketRiskConfigRef.current[candidate.symbol] ?? { takeProfit: tp, stopLoss: sl };
             const marketStopped = isAutoBotMarketStopped(marketProfit, marketRisk);
@@ -883,6 +924,7 @@ function AiBotCard({
             stk = nextStake;
             if (won) pausedStakeRef.current = null;
             else pausedStakeRef.current = nextStake;
+            publishRotationStatus();
         };
 
         while (isCurrentRun()) {
@@ -905,7 +947,37 @@ function AiBotCard({
                     ),
                     lastEvaluatedTickByMarket,
                 );
-                const candidates = selectAutoBotMarketsForExecution(freshMarkets);
+                const validatedFreshMarkets = freshMarkets.filter(candidate => {
+                    const lossStreak = marketLossStreakBySymbol.get(candidate.symbol) ?? 0;
+                    const cooldownTick = lossCooldownUntilTick.get(candidate.symbol) ?? 0;
+                    return candidate.tickVersion > cooldownTick
+                        && isValidatedAutoBotEntry(candidate, lossStreak);
+                });
+
+                if (usesPairRotation && !rotationSymbols.length) {
+                    // Pick the next pair from the current scanner snapshot, but
+                    // only execute a candidate when its own tick is fresh.
+                    const nextPair = selectAutoBotMarketsForExecution(
+                        marketCandidatesRef.current.filter(candidate =>
+                            !stoppedMarkets.has(candidate.symbol)
+                            && isValidatedAutoBotEntry(candidate, marketLossStreakBySymbol.get(candidate.symbol) ?? 0),
+                        ),
+                    ).slice(0, AUTO_BOT_ROTATION_MARKETS);
+                    if (nextPair.length < AUTO_BOT_ROTATION_MARKETS) continue;
+                    rotationSymbols = nextPair.map(candidate => candidate.symbol);
+                    rotationCycle += 1;
+                    rotationSymbols.forEach(symbol => marketRunsBySymbol.set(symbol, 0));
+                    publishRotationStatus();
+                    onLog(`🔁 Rotation ${rotationCycle}: ${nextPair.map(candidate => candidate.label).join(' + ')} · ${AUTO_BOT_RUNS_PER_MARKET} validated runs each`);
+                }
+
+                const cohortMarkets = usesPairRotation
+                    ? validatedFreshMarkets.filter(candidate =>
+                        rotationSymbols.includes(candidate.symbol)
+                        && (marketRunsBySymbol.get(candidate.symbol) ?? 0) < AUTO_BOT_RUNS_PER_MARKET,
+                    )
+                    : validatedFreshMarkets;
+                const candidates = selectAutoBotMarketsForExecution(cohortMarkets);
                 if (!candidates.length) continue;
 
                 // Open every ready market concurrently. Settlement is handled
@@ -948,6 +1020,17 @@ function AiBotCard({
                         onLog(`⚠ ${detail?.label ?? 'Market'}: ${describeTradeError(result.reason?.error ?? result.reason)}`);
                     }
                 });
+
+                if (usesPairRotation && rotationSymbols.length
+                    && inFlightMarkets.size === 0
+                    && rotationSymbols.every(symbol =>
+                        (marketRunsBySymbol.get(symbol) ?? 0) >= AUTO_BOT_RUNS_PER_MARKET
+                        || stoppedMarkets.has(symbol),
+                    )) {
+                    onLog(`✅ Rotation ${rotationCycle} complete · moving to the next validated pair`);
+                    rotationSymbols = [];
+                    publishRotationStatus();
+                }
             } catch (err: any) {
                 onLog(`⚠️ ${err?.message || 'Error'}`);
                 await new Promise(r => setTimeout(r, isFastExecutionEnabled() ? 0 : 1500));
@@ -992,6 +1075,20 @@ function AiBotCard({
                 <span>📡 {Object.keys(scannerSnapshots).length} markets scanned · {qualifyingMarketCount} ready</span>
                 <span className='autotrades__botcard-market-status'>{scannerTickVersion > 0 ? 'Live scanner' : 'Loading scanner…'}</span>
             </div>
+            {usesPairRotation && (
+                <div className='autotrades__botcard-rotation'>
+                    <span>
+                        {rotationStatus.symbols.length
+                            ? `Pair ${rotationStatus.symbols.map(symbol => scannerSnapshots[symbol]?.label ?? symbol).join(' + ')}`
+                            : 'Waiting for two validated markets'}
+                    </span>
+                    <strong>
+                        {rotationStatus.symbols.length
+                            ? rotationStatus.symbols.map(symbol => `${rotationStatus.counts[symbol] ?? 0}/${AUTO_BOT_RUNS_PER_MARKET}`).join(' · ')
+                            : '5 runs each'}
+                    </strong>
+                </div>
+            )}
             <div className='autotrades__botcard-markets'>
                 <div className='autotrades__botcard-markets-title'>
                     <span>Best markets · 2-tick entry confirmation · 1-tick execution</span>
