@@ -63,6 +63,22 @@ const AppContent = observer(() => {
     const msg_listener = React.useRef(null);
     const { connectionStatus } = useApiBase();
 
+    // Do not let a stalled socket/API handshake trap the whole application
+    // behind the marketing loader. The trading pages already handle a closed
+    // connection and can reconnect when the API becomes available; the shell
+    // must remain usable so users can log in or retry from the app itself.
+    React.useEffect(() => {
+        if (is_api_initialized) return undefined;
+
+        const startupFallback = setTimeout(() => {
+            setIsApiInitialized(true);
+            setIsLoading(false);
+            has_loaded_once_ref.current = true;
+        }, 7000);
+
+        return () => clearTimeout(startupFallback);
+    }, [is_api_initialized]);
+
     // Initialize dev mode keyboard shortcuts
     useDevMode();
 
