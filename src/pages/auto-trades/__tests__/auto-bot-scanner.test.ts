@@ -86,20 +86,20 @@ describe('Auto Bot market execution rules', () => {
         expect(changing.qualifies).toBe(false);
     });
 
-    it('ranks by signal score and keeps weak exposure to the strongest market', () => {
+    it('ranks every ready market for continuous execution', () => {
         const mixed = selectAutoBotMarketsForExecution([
             candidate('V10', 95, 1, true, 'weak'),
             candidate('V25', 98, 1, true, 'weak'),
             candidate('V50', 85, 1, true, 'strong'),
         ]);
-        expect(mixed.map(item => item.symbol)).toEqual(['V25']);
+        expect(mixed.map(item => item.symbol)).toEqual(['V25', 'V10', 'V50']);
 
         const strongBurst = selectAutoBotMarketsForExecution(
             ['V10', 'V25', 'V50', 'V75', 'V100', 'JD10'].map((symbol, index) =>
                 candidate(symbol, 95 - index, 1, true, 'strong')
             ),
         );
-        expect(strongBurst.map(item => item.symbol)).toEqual(['V10', 'V25', 'V50', 'V75', 'V100']);
+        expect(strongBurst.map(item => item.symbol)).toEqual(['V10', 'V25', 'V50', 'V75', 'V100', 'JD10']);
     });
 
     it('allows only the requested Auto Bot market families', () => {

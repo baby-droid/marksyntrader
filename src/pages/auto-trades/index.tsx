@@ -832,12 +832,58 @@ function AiBotCard({
         let recoveryMode = false;
         let lastScanKey = '';
         const lastEvaluatedTickByMarket = new Map<string, number>();
+        const inFlightMarkets = new Set<string>();
+        const marketStakeBySymbol = new Map<string, number>();
         const marketProfitBySymbol = new Map<string, number>();
         const marketWinsBySymbol = new Map<string, number>();
         const marketLossesBySymbol = new Map<string, number>();
         const stoppedMarkets = new Set<string>();
         setMarketRiskStatus({});
         onLog(`🚀 ${bot.name} started | Stake: $${stk.toFixed(2)} | Martingale:${martingale.toFixed(2)}× TP:$${tp.toFixed(2)} SL:$${sl.toFixed(2)}`);
+
+        const recordSettlement = (candidate: AutoBotMarketCandidate, profit: number) => {
+            inFlightMarkets.delete(candidate.symbol);
+            if (runVersionRef.current !== runVersion) return;
+
+            const won = profit > 0;
+            localProfit = +(localProfit + profit).toFixed(2);
+            if (won) localWins++; else localLosses++;
+            const marketProfit = +((marketProfitBySymbol.get(candidate.symbol) ?? 0) + profit).toFixed(2);
+            const marketWins = (marketWinsBySymbol.get(candidate.symbol) ?? 0) + (won ? 1 : 0);
+            const marketLosses = (marketLossesBySymbol.get(candidate.symbol) ?? 0) + (won ? 0 : 1);
+            marketProfitBySymbol.set(candidate.symbol, marketProfit);
+            marketWinsBySymbol.set(candidate.symbol, marketWins);
+            marketLossesBySymbol.set(candidate.symbol, marketLosses);
+
+            const marketRisk = marketRiskConfigRef.current[candidate.symbol] ?? { takeProfit: tp, stopLoss: sl };
+            const marketStopped = isAutoBotMarketStopped(marketProfit, marketRisk);
+            if (marketStopped) {
+                stoppedMarkets.add(candidate.symbol);
+                onLog(`⏹ ${candidate.label} risk limit reached · ${fmtProfit(marketProfit)}`);
+            }
+            setMarketRiskStatus(previous => ({
+                ...previous,
+                [candidate.symbol]: {
+                    wins: marketWins,
+                    losses: marketLosses,
+                    profit: marketProfit,
+                    stopped: marketStopped,
+                },
+            }));
+
+            onSessionUpdate({ wins: localWins, losses: localLosses, profit: localProfit });
+            const signalLabel = candidate.trade.signal ? ` · ${candidate.trade.signal.toUpperCase()} entry` : '';
+            onLog(`${won ? '✅' : '❌'} ${candidate.label} · ${AUTO_BOT_TICK_DURATION}t${signalLabel}: ${candidate.trade.contract}${candidate.trade.barrier !== null ? '@' + candidate.trade.barrier : ''} ${fmtProfit(profit)} | Total: ${fmtProfit(localProfit)}`);
+
+            if (bot.id === 'auto-o2u7') recoveryMode = !won;
+            const nextStake = won
+                ? globalStake
+                : Math.max(0.35, +( (marketStakeBySymbol.get(candidate.symbol) ?? globalStake) * martingale).toFixed(2));
+            marketStakeBySymbol.set(candidate.symbol, nextStake);
+            stk = nextStake;
+            if (won) pausedStakeRef.current = null;
+            else pausedStakeRef.current = nextStake;
+        };
 
         while (isCurrentRun()) {
             try {
@@ -854,78 +900,54 @@ function AiBotCard({
                 if (!isCurrentRun()) break;
                 lastScanKey = String(scannerTickVersionRef.current);
                 const freshMarkets = getFreshAutoBotMarkets(
-                    marketCandidatesRef.current.filter(candidate => !stoppedMarkets.has(candidate.symbol)),
+                    marketCandidatesRef.current.filter(candidate =>
+                        !stoppedMarkets.has(candidate.symbol) && !inFlightMarkets.has(candidate.symbol)
+                    ),
                     lastEvaluatedTickByMarket,
                 );
                 const candidates = selectAutoBotMarketsForExecution(freshMarkets);
                 if (!candidates.length) continue;
 
-                const results = await Promise.allSettled(candidates.map(candidate =>
-                    buyAndWait(
-                        candidate.symbol,
-                        candidate.trade.contract,
-                        candidate.trade.barrier,
-                        stk,
+                // Open every ready market concurrently. Settlement is handled
+                // by the callback so the scanner can keep evaluating new ticks
+                // instead of waiting one full contract at a time.
+                const results = await Promise.allSettled(candidates.map(async candidate => {
+                    inFlightMarkets.add(candidate.symbol);
+                    const marketStake = marketStakeBySymbol.get(candidate.symbol) ?? stk;
+                    try {
+                        await buyAndWait(
+                            candidate.symbol,
+                            candidate.trade.contract,
+                            candidate.trade.barrier,
+                            marketStake,
                             AUTO_BOT_TICK_DURATION,
-                        {
-                            metadata: {
-                                source: 'auto-bots',
-                                scan_score: candidate.score,
-                                scan_ticks: AUTO_BOT_TICK_DURATION,
-                                scan_markets: candidates.length,
-                                scan_qualified_markets: freshMarkets.length,
+                            {
+                                settle: false,
+                                onSettled: profit => recordSettlement(candidate, Number(profit ?? 0)),
+                                metadata: {
+                                    source: 'auto-bots',
+                                    scan_score: candidate.score,
+                                    scan_ticks: AUTO_BOT_TICK_DURATION,
+                                    scan_markets: candidates.length,
+                                    scan_qualified_markets: freshMarkets.length,
+                                },
                             },
-                        },
-                    )
-                ));
-
-                for (let index = 0; index < results.length && isCurrentRun(); index++) {
-                    const result = results[index];
-                    const candidate = candidates[index];
-                    if (result.status === 'rejected' || !Number.isFinite(result.value)) {
-                        onLog(`⚠ ${candidate.label}: ${describeTradeError(result.status === 'rejected' ? result.reason : 'Settlement pending')}`);
-                        continue;
+                        );
+                        return candidate;
+                    } catch (error) {
+                        inFlightMarkets.delete(candidate.symbol);
+                        throw { candidate, error };
                     }
-                    const profit = result.value;
-                    const won = profit > 0;
-                    localProfit = +(localProfit + profit).toFixed(2);
-                    if (won) localWins++; else localLosses++;
-                    const marketProfit = +((marketProfitBySymbol.get(candidate.symbol) ?? 0) + profit).toFixed(2);
-                    const marketWins = (marketWinsBySymbol.get(candidate.symbol) ?? 0) + (won ? 1 : 0);
-                    const marketLosses = (marketLossesBySymbol.get(candidate.symbol) ?? 0) + (won ? 0 : 1);
-                    marketProfitBySymbol.set(candidate.symbol, marketProfit);
-                    marketWinsBySymbol.set(candidate.symbol, marketWins);
-                    marketLossesBySymbol.set(candidate.symbol, marketLosses);
-                    const marketRisk = marketRiskConfigRef.current[candidate.symbol] ?? { takeProfit: tp, stopLoss: sl };
-                    const marketStopped = isAutoBotMarketStopped(marketProfit, marketRisk);
-                    if (marketStopped) {
-                        stoppedMarkets.add(candidate.symbol);
-                        onLog(`⏹ ${candidate.label} risk limit reached · ${fmtProfit(marketProfit)}`);
-                    }
-                    setMarketRiskStatus(previous => ({
-                        ...previous,
-                        [candidate.symbol]: {
-                            wins: marketWins,
-                            losses: marketLosses,
-                            profit: marketProfit,
-                            stopped: marketStopped,
-                        },
-                    }));
+                }));
 
-                    onSessionUpdate({ wins: localWins, losses: localLosses, profit: localProfit });
-                    const signalLabel = candidate.trade.signal ? ` · ${candidate.trade.signal.toUpperCase()} entry` : '';
-                    onLog(`${won ? '✅' : '❌'} ${candidate.label} · ${AUTO_BOT_TICK_DURATION}t${signalLabel}: ${candidate.trade.contract}${candidate.trade.barrier !== null ? '@' + candidate.trade.barrier : ''} ${fmtProfit(profit)} | Total: ${fmtProfit(localProfit)}`);
-
-                    if (bot.id === 'auto-o2u7') recoveryMode = !won;
-                    if (won) {
-                        stk = globalStake;
-                        pausedStakeRef.current = null;
+                results.forEach(result => {
+                    if (result.status === 'fulfilled') {
+                        onLog(`🟢 ${result.value.label} ready · ${result.value.trade.contract}${result.value.trade.barrier !== null ? '@' + result.value.trade.barrier : ''} opened; scanning continues`);
                     } else {
-                        stk = Math.max(0.35, +(stk * martingale).toFixed(2));
-                        pausedStakeRef.current = stk; // save for resume
+                        const detail = result.reason?.candidate;
+                        onLog(`⚠ ${detail?.label ?? 'Market'}: ${describeTradeError(result.reason?.error ?? result.reason)}`);
                     }
-
-                }
+                });
             } catch (err: any) {
                 onLog(`⚠️ ${err?.message || 'Error'}`);
                 await new Promise(r => setTimeout(r, isFastExecutionEnabled() ? 0 : 1500));

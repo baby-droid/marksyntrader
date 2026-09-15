@@ -130,17 +130,12 @@ export function getFreshAutoBotMarkets(
 export function selectAutoBotMarketsForExecution(
     freshMarkets: AutoBotMarketCandidate[],
 ): AutoBotMarketCandidate[] {
-    // A fresh signal is independent per market. Keep up to five of them so a
-    // strong burst across the prioritized synthetic groups can be traded on
-    // the same tick rather than silently dropping the fourth or fifth market.
-    const rankedMarkets = freshMarkets
+    // Every market with a fresh qualifying entry is independently tradable.
+    // Do not downgrade a ready market to "watch" just because another market
+    // has a weaker score; the user's enabled market set owns execution.
+    return freshMarkets
         .slice()
-        .sort(compareAutoBotMarkets)
-        .slice(0, 5);
-    if (!rankedMarkets.length) return [];
-    return rankedMarkets.every(candidate => candidate.trade.signal === 'strong')
-        ? rankedMarkets
-        : rankedMarkets.slice(0, 1);
+        .sort(compareAutoBotMarkets);
 }
 
 export function isAutoBotMarketStopped(
