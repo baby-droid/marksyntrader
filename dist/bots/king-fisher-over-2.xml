@@ -40,10 +40,10 @@
         <next><block type="variables_set" id="kf2_set_stake"><field name="VAR" id="kf2_stake">stake</field><value name="VALUE"><block type="variables_get" id="kf2_get_base"><field name="VAR" id="kf2_base">base stake</field></block></value>
           <next><block type="variables_set" id="kf2_set_mg"><field name="VAR" id="kf2_mg">martingale</field><value name="VALUE"><block type="math_number" id="kf2_mg_num"><field name="NUM">2</field></block></value>
             <next><block type="variables_set" id="kf2_set_tp"><field name="VAR" id="kf2_tp">take profit</field><value name="VALUE"><block type="math_number" id="kf2_tp_num"><field name="NUM">5</field></block></value>
-              <next><block type="variables_set" id="kf2_set_sl"><field name="VAR" id="kf2_sl">stop loss</field><value name="VALUE"><block type="math_number" id="kf2_sl_num"><field name="NUM">20</field></block></value></next>
-            </block>
-          </block>
-        </block>
+              <next><block type="variables_set" id="kf2_set_sl"><field name="VAR" id="kf2_sl">stop loss</field><value name="VALUE"><block type="math_number" id="kf2_sl_num"><field name="NUM">20</field></block></value></block></next>
+            </block></next>
+          </block></next>
+        </block></next>
       </block>
     </statement>
     <statement name="SUBMARKET">
@@ -62,7 +62,7 @@
         <value name="IF0"><block type="logic_compare" id="kf2_tp_cmp"><field name="OP">GTE</field><value name="A"><block type="total_profit" id="kf2_profit"></block></value><value name="B"><block type="variables_get" id="kf2_tp_get"><field name="VAR" id="kf2_tp">take profit</field></block></value></block></value>
         <statement name="ELSE">
           <block type="controls_if" id="kf2_sl_if">
-            <value name="IF0"><block type="logic_compare" id="kf2_sl_cmp"><field name="OP">LTE</field><value name="A"><block type="total_profit" id="kf2_loss"></block></value><value name="B"><block type="math_single" id="kf2_neg"><field name="OP">NEG</field><value name="NUM"><block type="variables_get" id="kf2_sl_get"><field name="VAR" id="kf2_sl">stop loss</field></block></value></block></value></block>
+            <value name="IF0"><block type="logic_compare" id="kf2_sl_cmp"><field name="OP">LTE</field><value name="A"><block type="total_profit" id="kf2_loss"></block></value><value name="B"><block type="math_single" id="kf2_neg"><field name="OP">NEG</field><value name="NUM"><block type="variables_get" id="kf2_sl_get"><field name="VAR" id="kf2_sl">stop loss</field></block></value></block></value></block></value>
             <statement name="ELSE">
               <block type="controls_if" id="kf2_result">
                 <value name="IF0"><block type="contract_check_result" id="kf2_win"><field name="CHECK_RESULT">win</field></block></value>
