@@ -71,3 +71,4 @@
 - [Development preview routing](preview-routing.md) — local `/bot/preview` can omit the build flag, so preview mode must also detect the pathname.
 - [Deriv OAuth endpoint](deriv-oauth.md) — production authorization uses `/oauth2/auth`; the Deriv app must be live before an interactive callback test can succeed.
 - [Dependency repair](dependency-repair.md) — restore an empty node_modules tree without unintentionally upgrading the checked-in manifest.
+- [Blockly fallback execution](unsupported-block-execution.md) — unknown imported blocks need both a visible definition and a JavaScript generator fallback to remain runnable.
