@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import './loading-screen.scss';
 
-const RAMP_MS      = 2200;
+const RAMP_MS      = 1200;
 const FAKE_CEILING = 92;
 const FINISH_MS    = 300;
 

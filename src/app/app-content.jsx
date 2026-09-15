@@ -50,7 +50,7 @@ const AppContent = observer(() => {
     // reconnects/token refreshes should not re-trigger the "Loading..." screen.
     const has_loaded_once_ref = React.useRef(false);
     React.useEffect(() => {
-        const t = setTimeout(() => setMinTimeElapsed(true), 1200);
+        const t = setTimeout(() => setMinTimeElapsed(true), 900);
         return () => clearTimeout(t);
     }, []);
 
@@ -63,21 +63,18 @@ const AppContent = observer(() => {
     const msg_listener = React.useRef(null);
     const { connectionStatus } = useApiBase();
 
-    // Do not let a stalled socket/API handshake trap the whole application
-    // behind the marketing loader. The trading pages already handle a closed
-    // connection and can reconnect when the API becomes available; the shell
-    // must remain usable so users can log in or retry from the app itself.
+    // Never let the first meaningful landing render depend on a socket,
+    // active-symbol request, or other network handshake. Those services
+    // continue in the background and the trading views reconnect as needed.
     React.useEffect(() => {
-        if (is_api_initialized) return undefined;
-
-        const startupFallback = setTimeout(() => {
+        const startupReveal = setTimeout(() => {
             setIsApiInitialized(true);
             setIsLoading(false);
             has_loaded_once_ref.current = true;
-        }, 7000);
+        }, 1400);
 
-        return () => clearTimeout(startupFallback);
-    }, [is_api_initialized]);
+        return () => clearTimeout(startupReveal);
+    }, []);
 
     // Initialize dev mode keyboard shortcuts
     useDevMode();
