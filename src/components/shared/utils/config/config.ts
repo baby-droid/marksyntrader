@@ -5,7 +5,7 @@ import {
     parseReferralLink,
     parseLandingParams,
     resolveReferralViaProxy,
-    DEFAULT_OAUTH_SCOPES,
+    getOAuthScopes,
 } from '@/external/deriv-core';
 import type { AuthConfig } from '@/external/deriv-core';
 import { DerivWSAccountsService } from '@/services/derivws-accounts.service';
@@ -116,7 +116,7 @@ export const generateOAuthURL = async (prompt?: string): Promise<string> => {
         const config: AuthConfig = {
             clientId,
             redirectUri,
-             scopes: DEFAULT_OAUTH_SCOPES,
+            scopes: getOAuthScopes(process.env.NEXT_PUBLIC_DERIV_OAUTH_SCOPES),
         };
 
         // Static referral link (fallback for direct visits without affiliate click)

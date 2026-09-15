@@ -48,6 +48,7 @@ export {
   parseLandingParams,
   resolveReferralViaProxy,
   DEFAULT_OAUTH_SCOPES,
+  getOAuthScopes,
 } from './auth';
 
 // Types

@@ -11,6 +11,7 @@ export {
   cleanupUrl,
   OAuthError,
   DEFAULT_OAUTH_SCOPES,
+  getOAuthScopes,
 } from './oauth';
 
 export {

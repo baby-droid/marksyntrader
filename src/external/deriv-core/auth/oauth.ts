@@ -12,11 +12,14 @@ import {
 } from './storage';
 import { getAuthBaseUrl } from '../config/urls';
 
-// The OAuth client registered for Marksyntrader is currently allowed to
-// request `trade` only. Deriv rejects the whole authorization request when a
-// scope is not enabled for the client, which sends the user to a failed flow
-// page before the login screen can load.
+// Keep the default limited to the scope currently enabled for the Deriv app.
+// Additional scopes can be enabled without a code change through the build
+// configuration once they are enabled in the Deriv developer portal.
 export const DEFAULT_OAUTH_SCOPES = 'trade';
+
+export function getOAuthScopes(configuredScopes?: string): string {
+  return configuredScopes?.trim() || DEFAULT_OAUTH_SCOPES;
+}
 
 /**
  * Build the base PKCE URLSearchParams shared by login and sign-up.
@@ -31,7 +34,7 @@ async function buildPkceParams(config: AuthConfig): Promise<URLSearchParams> {
   storeCodeVerifier(codeVerifier);
 
   return new URLSearchParams({
-    scope: config.scopes ?? DEFAULT_OAUTH_SCOPES,
+    scope: getOAuthScopes(config.scopes),
     response_type: 'code',
     client_id: config.clientId,
     redirect_uri: config.redirectUri,

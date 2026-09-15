@@ -37,6 +37,10 @@ export default defineConfig({
         // Production: https://marksyntrader.replit.app/callback
         NEXT_PUBLIC_DERIV_REDIRECT_URI: JSON.stringify(process.env.NEXT_PUBLIC_DERIV_REDIRECT_URI ?? ''),
         NEXT_PUBLIC_DERIV_PREVIEW_REDIRECT_URI: JSON.stringify(process.env.NEXT_PUBLIC_DERIV_PREVIEW_REDIRECT_URI ?? ''),
+        // Space-separated OAuth scopes enabled for the Deriv application.
+        // Defaults to `trade`; add `payment` or `account_manage` only after
+        // enabling those scopes in the Deriv developer portal.
+        NEXT_PUBLIC_DERIV_OAUTH_SCOPES: JSON.stringify(process.env.NEXT_PUBLIC_DERIV_OAUTH_SCOPES ?? ''),
         // Authoritative environment signal. The bot's URL resolver (config.ts) and
         // the vendored deriv-core OAuth resolver both read this so endpoints stay consistent
         // on a deployed partner domain (where hostname detection can't match Deriv).

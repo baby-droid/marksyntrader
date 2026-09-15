@@ -46,6 +46,17 @@ describe('Deriv OAuth', () => {
     expect(url.searchParams.get('code_challenge_method')).toBe('S256');
   });
 
+  it('preserves explicitly configured space-separated scopes', async () => {
+    const url = new URL(
+      await buildAuthorizationUrl({
+        ...publishedConfig,
+        scopes: 'trade payment',
+      })
+    );
+
+    expect(url.searchParams.get('scope')).toBe('trade payment');
+  });
+
   it('keeps the preview callback URI exact and adds the registration prompt', async () => {
     const url = new URL(await buildSignUpUrl(previewConfig));
 

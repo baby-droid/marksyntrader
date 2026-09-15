@@ -32,6 +32,7 @@ Set in `.replit` under `[userenv.shared]`:
 - `NEXT_PUBLIC_DERIV_REDIRECT_URI` — Optional registered production OAuth callback URL; local and Replit preview builds use their current origin
 - `NEXT_PUBLIC_DERIV_ENV` — `production` or `staging`
 - `NEXT_PUBLIC_DERIV_APP_NAME` — Displayed app name
+- `NEXT_PUBLIC_DERIV_OAUTH_SCOPES` — Space-separated Deriv OAuth scopes; currently `trade`
 
 ## User Preferences
 - Keep existing project structure and file conventions

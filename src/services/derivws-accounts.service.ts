@@ -1,5 +1,4 @@
-import { isProduction } from '@/components/shared';
-import brandConfig from '../../brand.config.json';
+import { getApiBaseUrl } from '@/external/deriv-core';
 
 /**
  * Account information from derivatives/accounts endpoint
@@ -56,8 +55,10 @@ export class DerivWSAccountsService {
      * @returns DerivWS base URL (e.g., "https://api.derivws.com/trading/v1/")
      */
     private static getDerivWSBaseURL(): string {
-        const environment = isProduction() ? 'production' : 'staging';
-        return brandConfig.platform.derivws.url[environment];
+        // Keep account and OTP requests on the same Deriv environment as the
+        // OAuth/token endpoints. Using hostname detection here made local and
+        // Replit preview callbacks send a production token to staging.
+        return getApiBaseUrl();
     }
 
     /**
@@ -128,14 +129,12 @@ export class DerivWSAccountsService {
         this.accountsFetchPromise = (async () => {
             try {
                 const baseURL = this.getDerivWSBaseURL();
-                const OptionsDir = brandConfig.platform.derivws.directories.options;
-                const endpoint = `${baseURL}${OptionsDir}accounts`;
+                const endpoint = `${baseURL}/accounts`;
 
                 const response = await fetch(endpoint, {
                     method: 'GET',
                     headers: {
                         Authorization: `Bearer ${accessToken}`,
-                        'Deriv-App-ID': process.env.NEXT_PUBLIC_DERIV_APP_ID || '',
                     },
                 });
 
@@ -193,14 +192,12 @@ export class DerivWSAccountsService {
         const otpPromise = (async () => {
             try {
                 const baseURL = this.getDerivWSBaseURL();
-                const optionsDir = brandConfig.platform.derivws.directories.options;
-                const endpoint = `${baseURL}${optionsDir}accounts/${accountId}/otp`;
+                const endpoint = `${baseURL}/accounts/${accountId}/otp`;
 
                 const response = await fetch(endpoint, {
                     method: 'POST',
                     headers: {
                         Authorization: `Bearer ${accessToken}`,
-                        'Deriv-App-ID': process.env.NEXT_PUBLIC_DERIV_APP_ID || '',
                     },
                 });
 

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { cleanupUrl, DEFAULT_OAUTH_SCOPES, handleOAuthCallback } from '@/external/deriv-core';
+import { cleanupUrl, getOAuthScopes, handleOAuthCallback } from '@/external/deriv-core';
 import {
     clearRememberedOAuthRedirectUri,
     getOAuthRedirectUri,
@@ -27,7 +27,7 @@ const CallbackPage = () => {
                 const authInfo = await handleOAuthCallback(window.location.href, {
                     clientId: process.env.NEXT_PUBLIC_DERIV_APP_ID || '',
                     redirectUri,
-                    scopes: DEFAULT_OAUTH_SCOPES,
+                    scopes: getOAuthScopes(process.env.NEXT_PUBLIC_DERIV_OAUTH_SCOPES),
                 });
 
                 const { DerivWSAccountsService } = await import('@/services/derivws-accounts.service');
