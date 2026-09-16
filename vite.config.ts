@@ -21,6 +21,9 @@ function missingAssetFallback(): Plugin {
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, process.cwd(), '');
+    const replitDomains = [env.REPLIT_DEV_DOMAIN, ...(env.REPLIT_DOMAINS ?? '').split(',')]
+        .map(domain => domain.trim())
+        .filter(Boolean);
 
     return {
         plugins: [
@@ -71,7 +74,12 @@ export default defineConfig(({ mode }) => {
         server: {
             port: 5000,
             host: '0.0.0.0',
-            allowedHosts: true,
+            allowedHosts: [
+                'localhost',
+                '127.0.0.1',
+                '2fad663f-f2dd-49ee-a2cf-c31476c0feae-00-30vl7t7zuve52.picard.replit.dev',
+                ...replitDomains,
+            ],
         },
         build: {
             outDir: 'dist',
