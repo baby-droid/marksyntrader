@@ -6,12 +6,14 @@ import Journal from '@/components/journal';
 import Button from '@/components/shared_ui/button';
 import Drawer from '@/components/shared_ui/drawer';
 import Modal from '@/components/shared_ui/modal';
-import Money from '@/components/shared_ui/money';
+import KshMoney from '@/components/shared_ui/ksh-money/ksh-money';
 import Tabs from '@/components/shared_ui/tabs';
 import Text from '@/components/shared_ui/text';
 import Summary from '@/components/summary';
 import TradeAnimation from '@/components/trade-animation';
 import Transactions from '@/components/transactions';
+import DigitPercentWidget from '@/components/digit-percent-widget/digit-percent-widget';
+import CyclePatternDetector from '@/components/cycle-pattern-detector/cycle-pattern-detector';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { popover_zindex } from '@/constants/z-indexes';
 import { useStore } from '@/hooks/useStore';
@@ -35,6 +37,8 @@ type TStatisticsSummary = {
     toggleStatisticsInfoModal: () => void;
     total_profit: number;
     won_contracts: number;
+    is_clear_stat_disabled?: boolean;
+    onClearStatClick?: () => void;
 };
 type TDrawerHeader = {
     is_clear_stat_disabled: boolean;
@@ -48,6 +52,8 @@ type TDrawerContent = {
     is_drawer_open: boolean;
     active_tour: string;
     setActiveTabIndex: () => void;
+    is_clear_stat_disabled?: boolean;
+    onClearStatClick?: () => void;
 };
 
 type TDrawerFooter = {
@@ -78,40 +84,81 @@ export const StatisticsSummary = ({
     toggleStatisticsInfoModal,
     total_profit,
     won_contracts,
+    is_clear_stat_disabled,
+    onClearStatClick,
 }: TStatisticsSummary) => (
     <div
         className={classNames('run-panel__stat', {
             'run-panel__stat--mobile': is_mobile,
         })}
     >
-        <div className='run-panel__stat--info' onClick={toggleStatisticsInfoModal}>
-            <div className='run-panel__stat--info-item'>
+        <div className='run-panel__stat--info' style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div className='run-panel__stat--info-item' onClick={toggleStatisticsInfoModal} style={{ cursor: 'pointer' }}>
                 <Localize i18n_default_text="What's this?" />
             </div>
+            {onClearStatClick && (
+                <button
+                    className='run-panel__reset-top-btn'
+                    disabled={!!is_clear_stat_disabled}
+                    onClick={onClearStatClick}
+                    title='Reset stats'
+                    style={{
+                        background: 'none',
+                        border: '1px solid var(--border-normal, #3d3d3d)',
+                        borderRadius: '4px',
+                        color: 'var(--text-less-prominent, #999)',
+                        cursor: is_clear_stat_disabled ? 'not-allowed' : 'pointer',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        padding: '2px 8px',
+                        opacity: is_clear_stat_disabled ? 0.4 : 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                    }}
+                >
+                    🔄 Reset
+                </button>
+            )}
         </div>
+        {/* Row 1: 3 tiles */}
         <div className='run-panel__stat--tiles'>
             <StatisticsTile
                 title={localize('Total stake')}
                 alignment='top'
-                content={<Money amount={total_stake} currency={currency} show_currency />}
+                content={<KshMoney amount={total_stake} contractCurrency={currency} showCurrency />}
             />
             <StatisticsTile
                 title={localize('Total payout')}
                 alignment='top'
-                content={<Money amount={total_payout} currency={currency} show_currency />}
+                content={<KshMoney amount={total_payout} contractCurrency={currency} showCurrency />}
             />
             <StatisticsTile title={localize('No. of runs')} alignment='top' content={number_of_runs} />
-            <StatisticsTile title={localize('Contracts lost')} alignment='bottom' content={lost_contracts} />
-            <StatisticsTile title={localize('Contracts won')} alignment='bottom' content={won_contracts} />
+        </div>
+        {/* Row 2: 2 narrow + 1 wide P/L */}
+        <div className='run-panel__stat--tiles run-panel__stat--tiles-bottom'>
+            <StatisticsTile title={localize('Lost')} alignment='bottom' content={lost_contracts} />
+            <StatisticsTile title={localize('Won')} alignment='bottom' content={won_contracts} />
             <StatisticsTile
-                title={localize('Total profit/loss')}
-                content={<Money amount={total_profit} currency={currency} has_sign show_currency />}
+                title={localize('Total P/L')}
+                content={<KshMoney amount={total_profit} contractCurrency={currency} hasSign showCurrency />}
                 alignment='bottom'
                 contentClassName={classNames('run-panel__stat-amount', {
                     'run-panel__stat-amount--positive': total_profit > 0,
                     'run-panel__stat-amount--negative': total_profit < 0,
                 })}
             />
+        </div>
+        {/* Prominent full-width Total P/L bar */}
+        <div className={classNames('run-panel__stat--pl-bar', {
+            'run-panel__stat--pl-bar--positive': total_profit > 0,
+            'run-panel__stat--pl-bar--negative': total_profit < 0,
+            'run-panel__stat--pl-bar--zero': total_profit === 0,
+        })}>
+            <span className='run-panel__stat--pl-bar-label'>{localize('Total Profit / Loss')}</span>
+            <span className='run-panel__stat--pl-bar-value'>
+                <KshMoney amount={total_profit} contractCurrency={currency} hasSign showCurrency />
+            </span>
         </div>
     </div>
 );
@@ -146,39 +193,110 @@ const DrawerContent = ({ active_index, is_drawer_open, active_tour, setActiveTab
     }, [is_drawer_open, isDesktop]);
 
     return (
-        <>
-            <Tabs active_index={active_index} onTabItemClick={setActiveTabIndex} top>
-                <div id='db-run-panel-tab__summary' label={<Localize i18n_default_text='Summary' />}>
-                    <Summary is_drawer_open={is_drawer_open} />
+        <div
+            className='run-panel__drawer-content'
+            style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}
+        >
+            <div style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
+                <Tabs active_index={active_index} onTabItemClick={setActiveTabIndex} top>
+                    <div id='db-run-panel-tab__summary' label={<Localize i18n_default_text='Summary' />}>
+                        <Summary is_drawer_open={is_drawer_open} />
+                    </div>
+                    <div
+                        id='db-run-panel-tab__transactions'
+                        label={<Localize i18n_default_text='Transactions' />}
+                    >
+                        <div className='run-panel__transactions-tab'>
+                            <DigitPercentWidget showTrigger={false} />
+                            <Transactions is_drawer_open={is_drawer_open} />
+                        </div>
+                    </div>
+                    <div id='db-run-panel-tab__journal' label={<Localize i18n_default_text='Journal' />}>
+                        <Journal />
+                    </div>
+                </Tabs>
+            </div>
+            <button
+                type='button'
+                className='run-panel__analyzer-trigger'
+                title='Open Digit Analyzer'
+                aria-label='Open Digit Analyzer'
+                onClick={() => window.dispatchEvent(new CustomEvent('digit-analyzer:open'))}
+            >
+                <span /><span /><span /><span />
+            </button>
+            <CyclePatternDetector />
+            {(is_drawer_open || active_tour) && (
+                <div style={{ flexShrink: 0 }}>
+                    <StatisticsSummary {...props} />
                 </div>
-                <div id='db-run-panel-tab__transactions' label={<Localize i18n_default_text='Transactions' />}>
-                    <Transactions is_drawer_open={is_drawer_open} />
-                </div>
-                <div id='db-run-panel-tab__journal' label={<Localize i18n_default_text='Journal' />}>
-                    <Journal />
-                </div>
-            </Tabs>
-            {((is_drawer_open && active_index !== 2) || active_tour) && <StatisticsSummary {...props} />}
-        </>
+            )}
+        </div>
     );
 };
 
-const DrawerFooter = ({ is_clear_stat_disabled, onClearStatClick }: TDrawerFooter) => (
-    <div className='run-panel__footer'>
-        <Button
-            id='db-run-panel__clear-button'
-            className='run-panel__footer-button'
-            disabled={is_clear_stat_disabled}
-            onClick={onClearStatClick}
-            has_effect
-            secondary
-        >
-            <span>
-                <Localize i18n_default_text='Reset' />
-            </span>
-        </Button>
-    </div>
-);
+const DrawerFooter = ({ is_clear_stat_disabled, onClearStatClick }: TDrawerFooter) => {
+    const [menuOpen, setMenuOpen] = React.useState(false);
+    const menuRef = React.useRef<HTMLDivElement>(null);
+    const { transactions: transactionsStore } = useStore();
+    const { toggleTransactionDetailsModal } = transactionsStore;
+
+    React.useEffect(() => {
+        const handleClick = (e: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+        };
+        document.addEventListener('mousedown', handleClick);
+        return () => document.removeEventListener('mousedown', handleClick);
+    }, []);
+
+    const handleDownload = () => {
+        const rows = [['Type', 'Spot', 'Buy Price', 'P/L']];
+        const csv = rows.map(r => r.join(',')).join('\n');
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'trades.csv'; a.click();
+        URL.revokeObjectURL(url);
+        setMenuOpen(false);
+    };
+
+    return (
+        <div className='run-panel__footer'>
+            <div ref={menuRef} style={{ position: 'relative' }}>
+                <button
+                    className='run-panel__footer-menu-btn'
+                    onClick={() => setMenuOpen(o => !o)}
+                    title='More options'
+                >
+                    ⋮
+                </button>
+                {menuOpen && (
+                    <div className='run-panel__footer-dropdown'>
+                        <button
+                            className='run-panel__footer-dropdown-item run-panel__footer-dropdown-item--danger'
+                            disabled={is_clear_stat_disabled}
+                            onClick={() => { onClearStatClick(); setMenuOpen(false); }}
+                        >
+                            🔄 Reset stats
+                        </button>
+                        <button
+                            className='run-panel__footer-dropdown-item'
+                            onClick={handleDownload}
+                        >
+                            ⬇ Download CSV
+                        </button>
+                        <button
+                            className='run-panel__footer-dropdown-item'
+                            onClick={() => { toggleTransactionDetailsModal(true); setMenuOpen(false); }}
+                        >
+                            📊 View Detail
+                        </button>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
 
 const MobileDrawerFooter = () => {
     return (
@@ -268,7 +386,13 @@ const RunPanel = observer(() => {
     const { statistics } = transactions;
     const { active_tour, active_tab } = dashboard;
     const { total_payout, total_profit, total_stake, won_contracts, lost_contracts, number_of_runs } = statistics;
-    const { BOT_BUILDER, CHART, AHMED_LEARNING } = DBOT_TABS;
+    const { BOT_BUILDER, AHMED_SCALPER_BOTS, BULK_TRADE, AUTO_TRADES } = DBOT_TABS;
+
+    // Summary/Transactions/Journal are intentionally available on mobile only
+    // for the four bot execution surfaces requested by the mobile layout:
+    // Bot Builder, Scalper Bots, Bulk Trade, and Auto Trades.
+    const MOBILE_RUN_PANEL_TABS = [BOT_BUILDER, AHMED_SCALPER_BOTS, BULK_TRADE, AUTO_TRADES];
+    const hide_on_mobile = !isDesktop && !MOBILE_RUN_PANEL_TABS.includes(active_tab);
 
     React.useEffect(() => {
         onMount();
@@ -282,12 +406,16 @@ const RunPanel = observer(() => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    if (hide_on_mobile) return null;
+
     const content = (
         <DrawerContent
             active_index={active_index}
             currency={currency}
             is_drawer_open={is_drawer_open}
             is_mobile={!isDesktop}
+            is_clear_stat_disabled={is_clear_stat_disabled}
+            onClearStatClick={onClearStatClick}
             lost_contracts={lost_contracts}
             number_of_runs={number_of_runs}
             setActiveTabIndex={setActiveTabIndex}
@@ -311,7 +439,6 @@ const RunPanel = observer(() => {
         />
     );
 
-    const show_run_panel = [BOT_BUILDER, CHART, AHMED_LEARNING].includes(active_tab) || active_tour;
     if (active_tour === 'bot_builder') return null;
 
     return (

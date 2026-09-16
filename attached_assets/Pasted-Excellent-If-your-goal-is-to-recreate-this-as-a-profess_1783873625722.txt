@@ -1,0 +1,634 @@
+Excellent. If your goal is to recreate this as a **professional web application**, here's a comprehensive prompt you can give to Claude, GPT-5, Cursor AI, Lovable, Bolt.new, or v0.dev.
+
+---
+
+# MASTER UI/UX PROMPT
+
+```
+Create a world-class Trading Bot Dashboard with an enterprise fintech design similar to TradingView, Bloomberg Terminal, Stripe Dashboard, and Linear.app.
+
+STYLE
+
+• Modern SaaS UI
+• Premium fintech aesthetics
+• Minimalistic
+• Soft shadows
+• Rounded cards
+• Glassmorphism where appropriate
+• Responsive
+• Fast loading
+• Dark/Light mode
+• Material Design 3
+• Apple Human Interface inspired spacing
+• Smooth Framer Motion animations
+
+----------------------------------------------------
+
+TECH STACK
+
+Next.js 15
+React 19
+TypeScript
+TailwindCSS v4
+shadcn/ui
+Framer Motion
+Lucide Icons
+TanStack Table
+React Hook Form
+Zustand
+Recharts
+Sonner Toast
+Radix UI
+
+----------------------------------------------------
+
+LAYOUT
+
+Sticky Top Navigation
+
+Left
+
+• Logo
+• Dashboard
+• Bot Builder
+• My Bots
+• Free Bots
+• Marketplace
+• Analytics
+• AI Assistant
+
+Center
+
+Global Search Bar
+
+Right
+
+Notification Bell
+
+Account Balance
+
+Theme Toggle
+
+Settings
+
+User Avatar
+
+----------------------------------------------------
+
+BODY
+
+Background
+
+#F5F7FA
+
+Container width
+
+1600px
+
+Padding
+
+32px
+
+----------------------------------------------------
+
+HOME PAGE
+
+Hero Section
+
+Welcome Back
+
+Today's Profit
+
+Current Running Bots
+
+Total Trades
+
+ROI
+
+Win Rate
+
+Quick Action Buttons
+
+Run Bot
+
+Create Bot
+
+Marketplace
+
+Analytics
+
+----------------------------------------------------
+
+BOT CATEGORY GRID
+
+Responsive Folder Cards
+
+Each folder contains
+
+Icon
+
+Gradient Background
+
+Bot Count
+
+Description
+
+Hover Lift Animation
+
+Folder Types
+
+Scalpers
+
+Switchers
+
+Even/Odd
+
+Over/Under
+
+Volatility
+
+Crash/Boom
+
+Synthetic Indices
+
+Forex
+
+Crypto
+
+AI Bots
+
+Favorites
+
+Recently Used
+
+----------------------------------------------------
+
+BOT DETAILS PAGE
+
+Breadcrumb Navigation
+
+Large Header
+
+Bot Information
+
+Live Status
+
+Run Button
+
+Stop Button
+
+Clone
+
+Export
+
+Delete
+
+----------------------------------------------------
+
+LEFT PANEL
+
+Bot Configuration
+
+Trade Parameters
+
+Stake
+
+Duration
+
+Market
+
+Account Type
+
+Contract Type
+
+Symbol
+
+Risk Percentage
+
+Martingale Toggle
+
+Take Profit
+
+Stop Loss
+
+Maximum Consecutive Losses
+
+Cooldown Timer
+
+AI Confidence Slider
+
+----------------------------------------------------
+
+CENTER PANEL
+
+Bot Strategy
+
+Visual Workflow
+
+Drag and Drop Nodes
+
+Conditions
+
+Indicators
+
+Moving Average
+
+RSI
+
+MACD
+
+ATR
+
+Bollinger Bands
+
+Candlestick Patterns
+
+AI Prediction Block
+
+Probability
+
+Expected Win %
+
+Expected ROI
+
+----------------------------------------------------
+
+RIGHT SIDEBAR
+
+Summary Card
+
+Transactions
+
+Journal
+
+Performance
+
+Charts
+
+Recent Trades
+
+Running Status
+
+CPU Usage
+
+Latency
+
+API Connection
+
+Connection Status
+
+----------------------------------------------------
+
+BOTTOM SECTION
+
+Trading History
+
+Beautiful Data Table
+
+Columns
+
+Time
+
+Bot
+
+Market
+
+Direction
+
+Stake
+
+Payout
+
+Profit
+
+Status
+
+Expandable Rows
+
+Filters
+
+Sorting
+
+Pagination
+
+Export CSV
+
+----------------------------------------------------
+
+MODALS
+
+Glassmorphism
+
+Blur Background
+
+Rounded 24px
+
+Animated
+
+Confirmation Dialog
+
+Bot Settings
+
+Import Strategy
+
+Marketplace Purchase
+
+Risk Warning
+
+----------------------------------------------------
+
+COLORS
+
+Primary
+
+#2F6D3A
+
+Secondary
+
+#43A047
+
+Accent
+
+#00C853
+
+Danger
+
+#F44336
+
+Warning
+
+#FF9800
+
+Info
+
+#2196F3
+
+Success
+
+#4CAF50
+
+Background
+
+#F5F7FA
+
+Cards
+
+#FFFFFF
+
+Text
+
+#1E293B
+
+Muted
+
+#64748B
+
+Border
+
+#E2E8F0
+
+----------------------------------------------------
+
+TYPOGRAPHY
+
+Inter
+
+Headings
+
+700
+
+22px
+
+Body
+
+16px
+
+Buttons
+
+15px
+
+Captions
+
+13px
+
+----------------------------------------------------
+
+COMPONENTS
+
+Cards
+
+Tables
+
+Dropdowns
+
+Switches
+
+Badges
+
+Tooltips
+
+Progress Bars
+
+Charts
+
+Tabs
+
+Accordion
+
+Timeline
+
+Skeleton Loading
+
+Toast Notifications
+
+Command Palette
+
+Date Picker
+
+Calendar
+
+Popover
+
+Dialog
+
+Context Menu
+
+----------------------------------------------------
+
+ANIMATIONS
+
+Framer Motion
+
+Hover Lift
+
+Scale Buttons
+
+Smooth Page Transition
+
+Fade In
+
+Slide Up
+
+Animated Counters
+
+Progress Ring
+
+Loading Spinner
+
+Lottie Empty States
+
+----------------------------------------------------
+
+RESPONSIVENESS
+
+Desktop
+
+Laptop
+
+Tablet
+
+Mobile
+
+Collapsible Sidebar
+
+Adaptive Tables
+
+Mobile Bottom Navigation
+
+----------------------------------------------------
+
+PERFORMANCE
+
+Lazy Loading
+
+Code Splitting
+
+Image Optimization
+
+Infinite Scroll
+
+Virtualized Tables
+
+Caching
+
+Suspense
+
+Server Components
+
+----------------------------------------------------
+
+ACCESSIBILITY
+
+WCAG AA
+
+Keyboard Navigation
+
+ARIA Labels
+
+Focus States
+
+High Contrast Mode
+
+Reduced Motion Support
+
+----------------------------------------------------
+
+AI FEATURES
+
+Natural Language Bot Builder
+
+Chat Assistant
+
+Auto Strategy Generator
+
+Trade Explanation
+
+Risk Score
+
+AI Suggestions
+
+Performance Optimization
+
+Market Prediction
+
+Strategy Comparison
+
+----------------------------------------------------
+
+ADMIN FEATURES
+
+User Management
+
+Subscription Plans
+
+Payments
+
+Affiliate Dashboard
+
+Analytics
+
+API Keys
+
+Logs
+
+Notifications
+
+----------------------------------------------------
+
+Overall appearance should look like a premium fintech platform worth over $100M, combining the elegance of Stripe Dashboard, the data density of Bloomberg Terminal, the simplicity of Linear, the smooth animations of Framer, and the clean usability of TradingView.
+```
+
+---
+
+## Recommended Folder Structure
+
+```text
+src/
+│
+├── app/
+│   ├── dashboard/
+│   ├── bots/
+│   ├── analytics/
+│   ├── marketplace/
+│   ├── settings/
+│   ├── ai/
+│   └── profile/
+│
+├── components/
+│   ├── layout/
+│   ├── sidebar/
+│   ├── navbar/
+│   ├── cards/
+│   ├── charts/
+│   ├── tables/
+│   ├── forms/
+│   ├── modals/
+│   ├── buttons/
+│   ├── bot/
+│   └── ai/
+│
+├── hooks/
+├── lib/
+├── services/
+├── store/
+├── types/
+├── utils/
+└── styles/
+```
+
+## Design References
+
+Use these products as visual inspiration:
+
+* Stripe Dashboard
+* TradingView
+* Linear
+* Vercel Dashboard
+* Raycast
+* Arc Browser
+* Notion
+* Bloomberg Terminal (for data density)
+* Coinbase Advanced Trade
+* Binance Web
+
+This combination will produce a polished, enterprise-grade trading dashboard with a professional UI/UX that closely matches—and improves upon—the interface shown in your recordings.

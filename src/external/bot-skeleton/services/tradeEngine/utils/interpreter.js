@@ -1,5 +1,6 @@
 import { isMultiplierContract } from '@/components/shared';
 import cloneThorough from '@/utils/clone';
+import { setBotPaused as _pauseFlagSet } from '@/utils/bot-pause-flag';
 import JSInterpreter from '@deriv/js-interpreter';
 import { unrecoverable_errors } from '../../../constants/messages';
 import { observer as globalObserver } from '../../../utils/observer';
@@ -78,7 +79,11 @@ const Interpreter = () => {
             func(...function_args.map(arg => js_interpreter.pseudoToNative(arg)))
                 .then(rv => {
                     callback(js_interpreter.nativeToPseudo(rv));
-                    loop();
+                    // Do NOT continue the interpreter loop while paused — the
+                    // resume() function will call loop() once the user resumes.
+                    if (!interpreter.paused_) {
+                        loop();
+                    }
                 })
                 .catch(e => {
                     // e.error for errors get from API, e for code errors
@@ -130,6 +135,11 @@ const Interpreter = () => {
             pseudo_bot_interface,
             'purchase',
             createAsync(js_interpreter, bot_interface.purchase)
+        );
+        js_interpreter.setProperty(
+            pseudo_bot_interface,
+            'purchaseMultiple',
+            createAsync(js_interpreter, bot_interface.purchaseMultiple)
         );
         js_interpreter.setProperty(
             pseudo_bot_interface,
@@ -277,7 +287,33 @@ const Interpreter = () => {
         });
     }
 
-    return { stop, run, terminateSession, bot, unsubscribeFromTicksService };
+    // True pause/resume — leverages JS-Interpreter's native paused_ flag so the
+    // interpreter's call stack (and all Blockly workspace variables, e.g. the
+    // running `stake`/`martingale` values) stay exactly as they were. This is
+    // NOT a stop/restart: no state is discarded, so resuming continues the
+    // strategy mid-flight instead of re-running "Run once at start".
+    function pause() {
+        if (interpreter) {
+            interpreter.paused_ = true;
+            // Mirror into the module-level flag so Purchase.js can gate side
+            // purchases without importing the MobX store (which would circular).
+            _pauseFlagSet(true);
+        }
+    }
+
+    function resume() {
+        if (interpreter) {
+            interpreter.paused_ = false;
+            _pauseFlagSet(false);
+            loop();
+        }
+    }
+
+    function isPaused() {
+        return !!(interpreter && interpreter.paused_);
+    }
+
+    return { stop, run, pause, resume, isPaused, terminateSession, bot, unsubscribeFromTicksService };
 };
 export default Interpreter;
 

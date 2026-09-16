@@ -170,6 +170,24 @@ export const ToolboxItems = () =>
                 <Block type='after_purchase' />
                 <Block type='trade_again' />
             </Category>
+            <Category id='king_fisher' name={localize('King Fisher')}>
+                <Block type='king_fisher_entry'>
+                    <Field name='DIRECTION'>BELOW</Field>
+                    <Field name='THRESHOLD'>3</Field>
+                    <Field name='STREAK'>2_3</Field>
+                </Block>
+                <Block type='king_fisher_virtual_hook'>
+                    <Field name='ENABLED'>TRUE</Field>
+                    <Field name='CONFIRMATIONS'>1</Field>
+                    <Value name='SIGNAL'>
+                        <Block type='king_fisher_entry'>
+                            <Field name='DIRECTION'>BELOW</Field>
+                            <Field name='THRESHOLD'>3</Field>
+                            <Field name='STREAK'>2_3</Field>
+                        </Block>
+                    </Value>
+                </Block>
+            </Category>
 
             <Category id='analysis' name={localize('Analysis')}>
                 <Category id='indicators' name={localize('Indicators')}>

@@ -1,0 +1,74 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Bulk Purchase Request",
+  "description": "Request to buy the same options contract across multiple end-user accounts in a single call",
+  "type": "object",
+  "properties": {
+    "headers": {
+      "type": "object",
+      "properties": {
+        "Deriv-App-ID": {
+          "type": "string",
+          "description": "Application identifier used for Personal Access Token (PAT) authentication. No OAuth access token is required for this endpoint — each account is authorized by its own PAT in the request body."
+        },
+        "Content-Type": {
+          "type": "string",
+          "enum": [
+            "application/json"
+          ],
+          "description": "Content type"
+        }
+      },
+      "required": [
+        "Deriv-App-ID",
+        "Content-Type"
+      ]
+    },
+    "body": {
+      "type": "object",
+      "properties": {
+        "contract_parameters": {
+          "type": "object",
+          "description": "Opaque options contract parameters applied to every account in the request (e.g. contract_type, symbol, amount, duration). Passed through unmodified to the trading backend, which validates the contents.",
+          "additionalProperties": true
+        },
+        "accounts": {
+          "type": "array",
+          "description": "List of end-user token / account pairs to buy the contract for. Duplicate pairs are honoured and result in repeated purchases, matching the legacy behaviour.",
+          "minItems": 1,
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "properties": {
+              "token": {
+                "type": "string",
+                "description": "End-user Personal Access Token (PAT) authorizing the purchase on the paired account. Never logged or forwarded downstream.",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "account_id": {
+                "type": "string",
+                "description": "Options trading account the contract should be bought for. Must belong to the token's owner.",
+                "minLength": 1,
+                "maxLength": 64
+              }
+            },
+            "required": [
+              "token",
+              "account_id"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "contract_parameters",
+        "accounts"
+      ]
+    }
+  },
+  "required": [
+    "headers",
+    "body"
+  ]
+}

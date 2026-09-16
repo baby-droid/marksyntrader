@@ -75,6 +75,7 @@ export default defineConfig(({ mode }) => {
         },
         build: {
             outDir: 'dist',
+            cssMinify: false,
         },
         assetsInclude: ['**/*.xml'],
         optimizeDeps: {

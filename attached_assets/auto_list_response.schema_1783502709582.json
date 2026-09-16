@@ -1,0 +1,113 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "title": "Auto List (response)",
+  "description": "List of automated trading runs for the current account",
+  "type": "object",
+  "required": [
+    "echo_req",
+    "msg_type"
+  ],
+  "properties": {
+    "auto_list": {
+      "title": "auto_list",
+      "description": "List of automated trading runs",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runs"
+      ],
+      "properties": {
+        "runs": {
+          "description": "Array of automated trading runs",
+          "type": "array",
+          "items": {
+            "description": "Details of an automated trading run",
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "contract_template",
+              "run_id",
+              "start_time",
+              "status",
+              "strategy_id",
+              "strategy_parameters",
+              "total_payout",
+              "total_stake"
+            ],
+            "properties": {
+              "contract_template": {
+                "description": "Contract template used for each purchase in this run",
+                "type": "object"
+              },
+              "run_id": {
+                "description": "Unique identifier for the automated trading run",
+                "type": "string"
+              },
+              "start_time": {
+                "description": "Epoch of when the run was started",
+                "type": "integer"
+              },
+              "status": {
+                "description": "Current status of the run",
+                "type": "string",
+                "enum": [
+                  "running",
+                  "paused",
+                  "stopped"
+                ]
+              },
+              "stop_reason": {
+                "description": "Reason the run was stopped (absent if still running or paused)",
+                "type": "string",
+                "enum": [
+                  "error",
+                  "user_stopped",
+                  "condition_triggered"
+                ]
+              },
+              "stop_reason_code": {
+                "description": "Code associated with the stop reason (absent if still running or paused)",
+                "type": "string"
+              },
+              "stop_time": {
+                "description": "Epoch of when the run was stopped (absent if still running or paused)",
+                "type": "integer"
+              },
+              "strategy_id": {
+                "description": "Identifier of the strategy used for this run",
+                "type": "string"
+              },
+              "strategy_parameters": {
+                "description": "Parameters the strategy was started with",
+                "type": "object"
+              },
+              "total_payout": {
+                "description": "Total amount received from settled contracts in this run",
+                "type": "number"
+              },
+              "total_stake": {
+                "description": "Total amount spent on contract purchases in this run",
+                "type": "number"
+              }
+            }
+          }
+        }
+      }
+    },
+    "echo_req": {
+      "description": "Echo of the request made.",
+      "type": "object"
+    },
+    "msg_type": {
+      "description": "Action name of the request made.",
+      "type": "string",
+      "enum": [
+        "auto_list"
+      ]
+    },
+    "req_id": {
+      "description": "Optional field sent in request to map to response, present only when request contains `req_id`.",
+      "type": "integer"
+    }
+  }
+}

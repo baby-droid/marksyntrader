@@ -1,0 +1,123 @@
+.chart-settings-sidebar {
+    position: absolute !important;
+    inset: 0 !important;
+    z-index: 100020;
+    width: 100%;
+    height: 100%;
+        isolation: isolate;
+    overflow: visible;
+    pointer-events: none !important;
+    color: #252a31;
+
+    &__rail {
+        position: absolute !important;
+        top: auto !important;
+        right: auto !important;
+        bottom: 20px !important;
+        left: 16px !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 8px;
+        width: 40px !important;
+        min-width: 40px !important;
+        max-width: 40px !important;
+        height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        pointer-events: auto !important;
+    }
+
+    &__tool {
+        position: relative !important;
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 40px !important;
+        width: 40px !important;
+        min-width: 40px !important;
+        max-width: 40px !important;
+        height: 40px !important;
+        min-height: 40px !important;
+        max-height: 40px !important;
+        padding: 0;
+        border: 0 !important;
+        border-radius: 50% !important;
+        background: #f1f2f3 !important;
+        color: #252a31;
+        cursor: pointer !important;
+        box-shadow: 0 1px 4px rgba(29, 39, 49, 0.08);
+        appearance: none !important;
+        transition:
+            background 140ms ease,
+            color 140ms ease,
+            box-shadow 140ms ease,
+            transform 140ms ease;
+
+        svg {
+            width: 20px;
+            height: 20px;
+            fill: none;
+            stroke: currentColor;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            stroke-width: 1.65;
+        }
+
+        &:hover,
+        &:focus-visible {
+            background: #e7e9eb;
+            color: #111820;
+            outline: none;
+            transform: none;
+        }
+
+        &.is-active {
+            background: #f1f2f3;
+            color: #111820;
+            box-shadow:
+                0 0 0 2px #9bbef5,
+                0 0 0 4px rgba(155, 190, 245, 0.22);
+        }
+
+        &:focus-visible {
+            box-shadow:
+                0 0 0 2px #9bbef5,
+                0 0 0 4px rgba(155, 190, 245, 0.22);
+        }
+    }
+
+    &__badge {
+        position: absolute;
+        top: -5px;
+        right: -4px;
+        z-index: 1;
+        min-width: 20px;
+        width: max-content !important;
+        max-width: max-content !important;
+        flex: none !important;
+        height: 16px;
+        padding: 0 2px;
+        border-radius: 2px 2px 0 0;
+        background: #2f3339;
+        color: #fff;
+        font-size: 10px;
+        font-weight: 700;
+        line-height: 17px;
+        text-align: center;
+        letter-spacing: 0.01em;
+    }
+}
+
+@media (max-width: 767px) {
+    .chart-settings-sidebar__rail {
+        bottom: 16px;
+        left: 16px;
+        gap: 8px;
+    }
+
+    .chart-settings-sidebar__tool {
+        width: 40px !important;
+        height: 40px !important;
+    }
+}

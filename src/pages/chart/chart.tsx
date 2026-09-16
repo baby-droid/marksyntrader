@@ -1,19 +1,47 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import classNames from 'classnames';
 import { observer } from 'mobx-react-lite';
 /* [AI] - Analytics removed - rudderstack event tracking removed */
 /* [/AI] */
 import ChunkLoader from '@/components/loader/chunk-loader';
-import chart_api from '@/external/bot-skeleton/services/api/chart-api';
+import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { useSmartChartAdaptor } from '@/hooks/useSmartChartAdaptor';
 import { useStore } from '@/hooks/useStore';
 import { ChartTitle, SmartChart, TGranularity, TStateChangeListener } from '@deriv-com/smartcharts-champion';
 import { useDevice } from '@deriv-com/ui';
 import ToolbarWidgets from './toolbar-widgets';
-import '@deriv-com/smartcharts-champion/dist/smartcharts.css';
+import ChartSettingsSidebar from './ChartSettingsSidebar';
 
-const Chart = observer(({ show_digits_stats }: { show_digits_stats: boolean }) => {
-    const barriers: [] = [];
+const Chart = observer(({
+    show_digits_stats,
+    showAccumulatorRange = false,
+    accumulatorGrowthRate = 0.03,
+}: {
+    show_digits_stats: boolean;
+    showAccumulatorRange?: boolean;
+    accumulatorGrowthRate?: number;
+}) => {
+    // SmartChart's barrier layer is also the correct chart-native surface for
+    // the accumulator band: it stays attached to the live price scale while
+    // drawings remain managed by the official DrawTools control.
+    const accumulatorOffset = Math.max(
+        0.001,
+        Number((0.253 * (Number(accumulatorGrowthRate) || 0.03) / 0.03).toFixed(3))
+    );
+    const barriers = useMemo(() => showAccumulatorRange ? [{
+        key: 'accumulator-range',
+        color: '#1E88FF',
+        shadeColor: 'rgba(30, 136, 255, 0.10)',
+        shade: 'between',
+        high: accumulatorOffset,
+        low: -accumulatorOffset,
+        relative: true,
+        draggable: false,
+        hidePriceLines: false,
+        hideBarrierLine: false,
+        lineStyle: 'solid',
+        useInlineLabel: true,
+    }] : [], [accumulatorOffset, showAccumulatorRange]);
     const { common, ui } = useStore();
     const { chart_store, run_panel, dashboard } = useStore();
     const [isSafari, setIsSafari] = useState(false);
@@ -36,7 +64,6 @@ const Chart = observer(({ show_digits_stats }: { show_digits_stats: boolean }) =
     const { isDesktop, isMobile } = useDevice();
     const { is_drawer_open } = run_panel;
     const { is_chart_modal_visible } = dashboard;
-
     const settings = {
         assetInformation: false, // ui.is_chart_asset_info_visible,
         countdown: true,
@@ -62,7 +89,7 @@ const Chart = observer(({ show_digits_stats }: { show_digits_stats: boolean }) =
         setIsSafari(isSafariBrowser());
 
         return () => {
-            chart_api.api.forgetAll('ticks');
+            (api_base.api as any)?.forgetAll?.('ticks');
         };
     }, []);
 
@@ -70,7 +97,7 @@ const Chart = observer(({ show_digits_stats }: { show_digits_stats: boolean }) =
         if (!symbol) updateSymbol();
     }, [symbol, updateSymbol]);
 
-    const is_connection_opened = !!chart_api?.api;
+    const is_connection_opened = !!api_base.api;
 
     const handleStateChange: TStateChangeListener = (state, options) => {
         /* [AI] - Analytics removed - rudderstack event call removed */
@@ -81,8 +108,10 @@ const Chart = observer(({ show_digits_stats }: { show_digits_stats: boolean }) =
         }
     };
 
-    if (!symbol || chartData.activeSymbols.length === 0) {
-        return <ChunkLoader message='' />;
+    // Render the chart immediately even if activeSymbols is still loading.
+    // SmartChart shows its own loading state; the wrapper handles tick data independently.
+    if (!symbol) {
+        return <></>;
     }
 
     return (
@@ -98,7 +127,7 @@ const Chart = observer(({ show_digits_stats }: { show_digits_stats: boolean }) =
                 id={`dbot-${symbol}`}
                 key={`chart-${symbol}`}
                 barriers={barriers}
-                showLastDigitStats={show_digits_stats}
+                showLastDigitStats={false}
                 chartControlsWidgets={null}
                 enabledChartFooter={false}
                 stateChangeListener={handleStateChange}
@@ -110,23 +139,31 @@ const Chart = observer(({ show_digits_stats }: { show_digits_stats: boolean }) =
                         isDesktop={isDesktop}
                     />
                 )}
-                chartType={chart_type}
+                chartType={chart_type || 'line'}
                 isMobile={isMobile}
-                enabledNavigationWidget={isDesktop}
-                granularity={granularity as TGranularity}
+                enabledNavigationWidget
+                 granularity={(granularity ?? 0) as TGranularity}
                 getQuotes={getQuotes}
                 subscribeQuotes={subscribeQuotes}
                 unsubscribeQuotes={unsubscribeQuotes}
-                chartData={{ activeSymbols: chartData.activeSymbols, tradingTimes: chartData.tradingTimes }}
+                chartData={
+                    chartData.activeSymbols.length > 0
+                        ? { activeSymbols: chartData.activeSymbols, tradingTimes: chartData.tradingTimes }
+                        : undefined
+                }
                 settings={settings}
                 symbol={symbol}
                 topWidgets={() => <ChartTitle onChange={onSymbolChange} />}
                 isConnectionOpened={is_connection_opened}
                 getMarketsOrder={getMarketsOrder}
                 isLive
-                leftMargin={80}
-                drawingToolFloatingMenuPosition={isMobile ? { x: 100, y: 100 } : { x: 200, y: 200 }}
+                leftMargin={0}
             />
+            {/* Visual rail shown in the reference images. Each button clicks
+                the corresponding native SmartChart control above, so chart
+                type, indicators, drawings and download remain real
+                SmartChart features rather than page-level mock controls. */}
+            <ChartSettingsSidebar />
         </div>
     );
 });

@@ -1,38 +1,67 @@
 // @ts-nocheck
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { observer } from 'mobx-react-lite';
-import { useDerivTrading } from '@/hooks/useDerivTrading';
+import { api_base } from '@/external/bot-skeleton/services/api/api-base';
+import { MessageTypes } from '@/external/bot-skeleton';
+import { useStore } from '@/hooks/useStore';
+import { BatchEvent, useDerivTrading } from '@/hooks/useDerivTrading';
 import { useDigitStats } from '@/hooks/useDigitStats';
 import DigitCircles from '@/components/digit-circles';
+import NumberField from '@/components/number-field';
+import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import './bulk-trade.scss';
 
+const AccountBadge: React.FC = () => {
+    const [isDemo, setIsDemo] = React.useState(false);
+    React.useEffect(() => {
+        const check = () => {
+            const id = localStorage.getItem('active_loginid') || '';
+            setIsDemo(id.startsWith('VRTC') || id.startsWith('VR'));
+        };
+        check();
+        window.addEventListener('storage', check);
+        return () => window.removeEventListener('storage', check);
+    }, []);
+    return (
+        <span className={`bulk-trade__acct-badge ${isDemo ? 'demo' : 'real'}`}>
+            {isDemo ? '🔵 DEMO' : '🟢 REAL'}
+        </span>
+    );
+};
+
 const MARKETS = [
-  { label: 'V10',     value: 'R_10'      },
-  { label: 'V25',     value: 'R_25'      },
-  { label: 'V50',     value: 'R_50'      },
-  { label: 'V75',     value: 'R_75'      },
-  { label: 'V100',    value: 'R_100'     },
-  { label: 'V10 1s',  value: '1HZ10V'   },
-  { label: 'V25 1s',  value: '1HZ25V'   },
-  { label: 'V50 1s',  value: '1HZ50V'   },
-  { label: 'V75 1s',  value: '1HZ75V'   },
-  { label: 'V100 1s', value: '1HZ100V'  },
-  { label: 'Jump 10', value: 'JD10'     },
-  { label: 'Jump 25', value: 'JD25'     },
-  { label: 'Jump 50', value: 'JD50'     },
-  { label: 'Jump 75', value: 'JD75'     },
-  { label: 'Jump 100',value: 'JD100'    },
+  { label: 'V10',         value: 'R_10'      },
+  { label: 'V25',         value: 'R_25'      },
+  { label: 'V50',         value: 'R_50'      },
+  { label: 'V75',         value: 'R_75'      },
+  { label: 'V100',        value: 'R_100'     },
+  { label: 'V10 1s',      value: '1HZ10V'    },
+  { label: 'V25 1s',      value: '1HZ25V'    },
+  { label: 'V50 1s',      value: '1HZ50V'    },
+  { label: 'V75 1s',      value: '1HZ75V'    },
+  { label: 'V100 1s',     value: '1HZ100V'   },
+  { label: 'Jump 10',     value: 'JD10'      },
+  { label: 'Jump 25',     value: 'JD25'      },
+  { label: 'Jump 50',     value: 'JD50'      },
+  { label: 'Jump 75',     value: 'JD75'      },
+  { label: 'Jump 100',    value: 'JD100'     },
+  { label: 'Crash 300N',  value: 'CRASH300N' },
+  { label: 'Crash 500',   value: 'CRASH500'  },
+  { label: 'Crash 1000',  value: 'CRASH1000' },
+  { label: 'Boom 300N',   value: 'BOOM300N'  },
+  { label: 'Boom 500',    value: 'BOOM500'   },
+  { label: 'Boom 1000',   value: 'BOOM1000'  },
 ];
 
 const TRADE_TYPES = [
-  { label: '⬆ Rise',  value: 'CALL'       },
-  { label: '⬇ Fall',  value: 'PUT'        },
-  { label: 'Even',    value: 'DIGITEVEN'  },
-  { label: 'Odd',     value: 'DIGITODD'   },
-  { label: 'Over',    value: 'DIGITOVER'  },
-  { label: 'Under',   value: 'DIGITUNDER' },
-  { label: 'Match',   value: 'DIGITMATCH' },
-  { label: 'Differ',  value: 'DIGITDIFF'  },
+  { label: '⬆ Rise',   value: 'CALL'       },
+  { label: '⬇ Fall',   value: 'PUT'        },
+  { label: 'Even',     value: 'DIGITEVEN'  },
+  { label: 'Odd',      value: 'DIGITODD'   },
+  { label: 'Over',     value: 'DIGITOVER'  },
+  { label: 'Under',    value: 'DIGITUNDER' },
+  { label: 'Match',    value: 'DIGITMATCH' },
+  { label: 'Differ',   value: 'DIGITDIFF'  },
 ];
 
 const TICK_OPTIONS = [1, 2, 3, 5, 10];
@@ -40,6 +69,7 @@ const STAKE_PRESETS = [0.35, 0.5, 1, 2, 5];
 const COUNT_OPTIONS = [2, 3, 5, 10, 20, 50];
 
 const BulkTrade = observer(() => {
+  const store = useStore();
   const [market, setMarket] = useState('1HZ100V');
   const [tradeType, setTradeType] = useState('DIGITOVER');
   const [prediction, setPrediction] = useState(7);
@@ -48,52 +78,180 @@ const BulkTrade = observer(() => {
   const [count, setCount] = useState(5);
   const [martingale, setMartingale] = useState(false);
   const [martMult, setMartMult] = useState(2);
-  const [results, setResults] = useState<any[]>([]);
   const [isRunning, setIsRunning] = useState(false);
-  const [totalProfit, setTotalProfit] = useState(0);
   const [disclaimer, setDisclaimer] = useState(true);
+  const [displayCur, setDisplayCur] = useState(getDisplayCurrency());
+  const [batchSummary, setBatchSummary] = useState<any>(null);
+  const appliedMartingaleBatchRef = useRef<string | null>(null);
 
-  const { balance, currency, buyContract } = useDerivTrading();
-  const { digits, lastDigit, currentPrice, isConnected } = useDigitStats(market);
+  useEffect(() => subscribeCurrency(() => setDisplayCur(getDisplayCurrency())), []);
+
+  const fmt = (usd: number) => `${fromUsd(usd).toFixed(2)} ${displayCur}`;
+  const fmtProfit = (usd: number) => `${usd >= 0 ? '+' : ''}${fromUsd(usd).toFixed(2)} ${displayCur}`;
+
+  const { balance, currency, buyBatch, tradeResults, winCount, lossCount, totalProfit, clearResults } = useDerivTrading();
+  const { digits, lastDigit, currentPrice, isConnected, setSymbol } = useDigitStats(market);
+
+  // Sync market changes into useDigitStats (it only reads initialSymbol on mount)
+  useEffect(() => { setSymbol(market); }, [market, setSymbol]);
+
+  const prevDigitRef = React.useRef<number | null>(null);
+  const [digitFlash, setDigitFlash] = React.useState(false);
+  React.useEffect(() => {
+    if (lastDigit !== null && lastDigit !== prevDigitRef.current) {
+      prevDigitRef.current = lastDigit;
+      setDigitFlash(true);
+      const t = setTimeout(() => setDigitFlash(false), 300);
+      return () => clearTimeout(t);
+    }
+  }, [lastDigit]);
 
   const needsPrediction = ['DIGITOVER', 'DIGITUNDER', 'DIGITMATCH', 'DIGITDIFF'].includes(tradeType);
 
+  const [activeStake, setActiveStake] = useState(stake);
+
+  useEffect(() => { setActiveStake(stake); }, [stake]);
+
+  const buildContractInfo = useCallback((event: BatchEvent) => {
+    const raw = event.contract || {};
+    const result = event.result || {};
+    const contractId = String(raw.contract_id || result.contract_id || result.id || '');
+    const profit = Number(result.profit ?? raw.profit ?? 0);
+    const buyPrice = Number(result.stake ?? raw.buy_price ?? activeStake);
+    const settled = event.phase === 'settled';
+    return {
+      id: contractId,
+      contract_id: contractId,
+      transaction_ids: {
+        buy: String(
+          raw.transaction_ids?.buy ||
+          raw.transaction_id ||
+          result.transaction_id ||
+          `${event.batchId}-${event.index ?? 0}`
+        ),
+      },
+      contract_type: result.type || tradeType,
+      underlying_symbol: market,
+      buy_price: buyPrice,
+      bid_price: settled ? buyPrice + profit : buyPrice,
+      payout: settled ? buyPrice + profit : 0,
+      profit: settled ? profit : 0,
+      currency: currency || 'USD',
+      status: settled ? (result.won ? 'won' : 'lost') : 'open',
+      is_sold: settled,
+      is_expired: settled,
+      date_start: new Date(result.time || Date.now()).toISOString(),
+      entry_spot: result.entry_spot ?? raw.entry_spot,
+      exit_spot: result.exit_spot ?? raw.exit_spot,
+      batch_id: event.batchId,
+      batch_index: event.index,
+      batch_total: event.total,
+    };
+  }, [activeStake, currency, market, tradeType]);
+
+  const handleBatchEvent = useCallback((event: BatchEvent) => {
+    setBatchSummary((previous: any) => {
+      const current = previous?.batchId === event.batchId
+        ? previous
+        : {
+            batchId: event.batchId,
+            total: event.total,
+            bought: 0,
+            settled: 0,
+            pending: event.total,
+            wins: 0,
+            losses: 0,
+             failed: 0,
+            totalStake: 0,
+            totalProfit: 0,
+            currency: currency || 'USD',
+            contractType: tradeType,
+            symbol: market,
+            updatedAt: Date.now(),
+          };
+      const next = { ...current, updatedAt: Date.now() };
+      if (event.phase === 'bought') {
+        next.bought += 1;
+        next.totalStake += Number(event.result?.stake || activeStake);
+      }
+      if (event.phase === 'settled' && event.result) {
+        next.settled += 1;
+         next.pending = Math.max(0, next.total - next.settled - next.failed);
+        next.wins += event.result.won ? 1 : 0;
+        next.losses += event.result.won ? 0 : 1;
+        next.totalProfit += Number(event.result.profit || 0);
+      }
+      if (event.phase === 'failed') {
+         next.failed += 1;
+        next.pending = Math.max(0, next.pending - 1);
+      }
+      store.summary_card.setBatchSummary(next);
+      return next;
+    });
+
+    if (event.phase === 'bought' || event.phase === 'settled') {
+      const contract = buildContractInfo(event);
+      if (contract.contract_id) store.transactions.onBotContractEvent(contract);
+      if (event.phase === 'bought') {
+        store.journal.pushMessage(
+          `Batch ${event.batchId}: contract ${event.index + 1}/${event.total} bought`,
+          MessageTypes.SUCCESS,
+          'bulk-trade__journal-message'
+        );
+      } else {
+        store.journal.pushMessage(
+          `Batch ${event.batchId}: contract ${event.index + 1}/${event.total} ${event.result?.won ? 'won' : 'lost'} (${fmtProfit(Number(event.result?.profit || 0))})`,
+          MessageTypes.SUCCESS,
+          'bulk-trade__journal-message'
+        );
+      }
+    }
+    if (event.phase === 'failed') {
+      store.journal.pushMessage(
+        `Batch ${event.batchId}: contract ${event.index !== undefined ? event.index + 1 : 'request'} failed — ${event.error || 'unknown error'}`,
+        MessageTypes.ERROR,
+        'bulk-trade__journal-message'
+      );
+    }
+  }, [activeStake, buildContractInfo, currency, fmtProfit, market, store, tradeType]);
+
   const runBulk = useCallback(async () => {
     if (isRunning) return;
+    if (!api_base?.api) { console.error('API not connected'); return; }
     setIsRunning(true);
     try {
-      const promises = Array.from({ length: count }, async (_, i) => {
-        const s = stake;
-        const res = await buyContract({
-          symbol: market,
-          contract_type: tradeType,
-          stake: s,
-          duration: ticks,
-          barrier: needsPrediction ? String(prediction) : undefined,
-        });
-        const r = {
-          id: Date.now() + i,
-          type: tradeType,
-          stake: s,
-          market,
-          status: res ? 'sent' : 'failed',
-          time: new Date().toLocaleTimeString(),
-          contractId: res?.contract_id || null,
-        };
-        setResults(prev => [r, ...prev].slice(0, 300));
-        return r;
-      });
-      await Promise.all(promises);
+      await buyBatch({
+        symbol: market,
+        contract_type: tradeType,
+        stake: activeStake,
+        duration: ticks,
+        duration_unit: 't',
+        barrier: needsPrediction ? String(prediction) : undefined,
+        currency: currency || 'USD',
+        count,
+      }, handleBatchEvent);
     } catch (e) {
       console.error('Bulk trade error', e);
     } finally {
       setIsRunning(false);
     }
-  }, [isRunning, count, stake, market, tradeType, ticks, prediction, martingale, martMult, buyContract, needsPrediction]);
+  }, [isRunning, count, activeStake, market, tradeType, ticks, prediction, buyBatch, handleBatchEvent, needsPrediction, currency]);
 
-  const wins   = results.filter(r => r.status === 'won').length;
-  const losses = results.filter(r => r.status === 'lost').length;
-  const sent   = results.filter(r => r.status === 'sent').length;
+  useEffect(() => {
+    if (!martingale || !batchSummary || batchSummary.pending > 0 || !batchSummary.settled) return;
+    if (appliedMartingaleBatchRef.current === batchSummary.batchId) return;
+    appliedMartingaleBatchRef.current = batchSummary.batchId;
+    if (batchSummary.losses > batchSummary.wins) {
+      setActiveStake(prev => Math.max(0.35, +(prev * martMult).toFixed(2)));
+    } else {
+      setActiveStake(stake);
+    }
+  }, [batchSummary, martingale, martMult, stake]);
+
+  const wins = winCount;
+  const losses = lossCount;
+  const settled = winCount + lossCount;
+  const tradeTypeLabel = TRADE_TYPES.find(t => t.value === tradeType)?.label ?? tradeType;
 
   return (
     <div className='bulk-trade'>
@@ -101,7 +259,7 @@ const BulkTrade = observer(() => {
       {disclaimer && (
         <div className='bulk-trade__disclaimer'>
           <span>⚠</span>
-          <span>RISK DISCLAIMER — Bulk trading involves high risk. Only trade what you can afford to lose. AHMED SYN TRADER provides tools, not financial advice.</span>
+          <span>RISK DISCLAIMER — Bulk trading involves high risk. Only trade what you can afford to lose.</span>
           <button onClick={() => setDisclaimer(false)}>✕</button>
         </div>
       )}
@@ -110,12 +268,13 @@ const BulkTrade = observer(() => {
       <div className='bulk-trade__header'>
         <div>
           <h2 className='bulk-trade__title'>⚡ Bulk Trade</h2>
-          <p className='bulk-trade__sub'>AHMED SYN TRADER — Execute {count} contracts simultaneously at the same entry spot</p>
+          <p className='bulk-trade__sub'>Execute {count} contracts simultaneously at the same entry spot</p>
         </div>
         <div className='bulk-trade__header-right'>
+          <AccountBadge />
           <div className='bulk-trade__balance'>
             <span>Balance</span>
-            <strong>{currency} {Number(balance).toFixed(2)}</strong>
+            <strong>{fmt(Number(balance))}</strong>
           </div>
           <div className={`bulk-trade__conn ${isConnected ? 'on' : 'off'}`}>
             {isConnected ? '● Live' : '○ Offline'}
@@ -123,180 +282,193 @@ const BulkTrade = observer(() => {
         </div>
       </div>
 
-      {/* Digit Circles */}
-      <div className='bulk-trade__circles-section'>
-        <DigitCircles digits={digits} lastDigit={lastDigit} />
-        <div className='bulk-trade__price-box'>
-          <span>Live Price</span>
-          <strong>{currentPrice ?? '—'}</strong>
-        </div>
-      </div>
+      {/* Main body: left=controls, right=circles+execute */}
+      <div className='bulk-trade__body'>
 
-      {/* Controls Card */}
-      <div className='bulk-trade__controls'>
-        {/* Market */}
-        <div className='bulk-trade__group'>
-          <label>Market</label>
-          <div className='bulk-trade__pills'>
-            {MARKETS.map(m => (
-              <button key={m.value} className={`bulk-trade__pill ${market === m.value ? 'active' : ''}`} onClick={() => setMarket(m.value)}>
-                {m.label}
-              </button>
-            ))}
-          </div>
-        </div>
+        {/* LEFT: compact controls */}
+        <div className='bulk-trade__controls'>
 
-        {/* Trade Type */}
-        <div className='bulk-trade__group'>
-          <label>Trade Type</label>
-          <div className='bulk-trade__pills'>
-            {TRADE_TYPES.map(t => (
-              <button key={t.value} className={`bulk-trade__pill ${tradeType === t.value ? 'active' : ''}`} onClick={() => setTradeType(t.value)}>
-                {t.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Prediction (digits) */}
-        {needsPrediction && (
-          <div className='bulk-trade__group'>
-            <label>Prediction (digit 0–9)</label>
-            <div className='bulk-trade__pills'>
-              {[0,1,2,3,4,5,6,7,8,9].map(d => (
-                <button
-                  key={d}
-                  className={`bulk-trade__pill bulk-trade__pill--digit ${prediction === d ? 'active' : ''}`}
-                  onClick={() => setPrediction(d)}
-                >
-                  {d}
-                </button>
-              ))}
+          {/* Market + Trade Type dropdowns */}
+          <div className='bulk-trade__droprow'>
+            <div className='bulk-trade__field'>
+              <label>Market</label>
+              <select value={market} onChange={e => setMarket(e.target.value)} className='bulk-trade__select'>
+                {MARKETS.map(m => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
+              </select>
             </div>
-          </div>
-        )}
-
-        {/* Row: Ticks + Count + Stake */}
-        <div className='bulk-trade__row3'>
-          <div className='bulk-trade__group'>
-            <label>Ticks Duration</label>
-            <div className='bulk-trade__pills'>
-              {TICK_OPTIONS.map(t => (
-                <button key={t} className={`bulk-trade__pill ${ticks === t ? 'active' : ''}`} onClick={() => setTicks(t)}>
-                  {t}T
-                </button>
-              ))}
+            <div className='bulk-trade__field'>
+              <label>Trade Type</label>
+              <select value={tradeType} onChange={e => setTradeType(e.target.value)} className='bulk-trade__select'>
+                {TRADE_TYPES.map(t => (
+                  <option key={t.value} value={t.value}>{t.label}</option>
+                ))}
+              </select>
             </div>
           </div>
 
-          <div className='bulk-trade__group'>
-            <label>Contracts Count</label>
-            <div className='bulk-trade__pills'>
-              {COUNT_OPTIONS.map(c => (
-                <button key={c} className={`bulk-trade__pill ${count === c ? 'active' : ''}`} onClick={() => setCount(c)}>
-                  {c}
-                </button>
-              ))}
-              <input
-                type='number' min={1} max={100}
-                value={count}
-                onChange={e => setCount(Math.max(1, Number(e.target.value)))}
-                className='bulk-trade__num-input'
-                title='Custom count'
-              />
+          {/* Prediction digits */}
+          {needsPrediction && (
+            <div className='bulk-trade__field'>
+              <label>Prediction (digit 0–9)</label>
+              <div className='bulk-trade__pills bulk-trade__pills--digits'>
+                {[0,1,2,3,4,5,6,7,8,9].map(d => (
+                  <button
+                    key={d}
+                    className={`bulk-trade__pill ${prediction === d ? 'active' : ''}`}
+                    onClick={() => setPrediction(d)}
+                  >
+                    {d}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-
-          <div className='bulk-trade__group'>
-            <label>Stake per Contract ({currency})</label>
-            <div className='bulk-trade__pills'>
-              {STAKE_PRESETS.map(s => (
-                <button key={s} className={`bulk-trade__pill ${stake === s ? 'active' : ''}`} onClick={() => setStake(s)}>
-                  ${s}
-                </button>
-              ))}
-              <input
-                type='number' min={0.35} step={0.01}
-                value={stake}
-                onChange={e => setStake(Number(e.target.value))}
-                className='bulk-trade__num-input'
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Martingale */}
-        <div className='bulk-trade__group bulk-trade__group--row'>
-          <label>Martingale on Loss</label>
-          <button className={`bulk-trade__toggle ${martingale ? 'on' : ''}`} onClick={() => setMartingale(p => !p)}>
-            {martingale ? 'ON' : 'OFF'}
-          </button>
-          {martingale && (
-            <>
-              <label style={{ marginLeft: '1.6rem' }}>Multiplier</label>
-              <input type='number' min={1.1} max={5} step={0.1} value={martMult}
-                onChange={e => setMartMult(Number(e.target.value))}
-                className='bulk-trade__num-input'
-              />
-            </>
           )}
+
+          {/* Ticks, Count, Stake in one row */}
+          <div className='bulk-trade__row3'>
+            <div className='bulk-trade__field'>
+              <label>Ticks</label>
+              <div className='bulk-trade__pills'>
+                {TICK_OPTIONS.map(t => (
+                  <button key={t} className={`bulk-trade__pill ${ticks === t ? 'active' : ''}`} onClick={() => setTicks(t)}>
+                    {t}T
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className='bulk-trade__field'>
+              <label>Contracts</label>
+              <div className='bulk-trade__pills'>
+                {COUNT_OPTIONS.map(c => (
+                  <button key={c} className={`bulk-trade__pill ${count === c ? 'active' : ''}`} onClick={() => setCount(c)}>
+                    {c}
+                  </button>
+                ))}
+                <NumberField
+                  min={1} max={100}
+                  value={count}
+                  onCommit={n => setCount(n)}
+                  className='bulk-trade__num-input'
+                />
+              </div>
+            </div>
+
+            <div className='bulk-trade__field'>
+              <label>Stake ({currency})</label>
+              <div className='bulk-trade__pills'>
+                {STAKE_PRESETS.map(s => (
+                  <button key={s} className={`bulk-trade__pill ${stake === s ? 'active' : ''}`} onClick={() => setStake(s)}>
+                    ${s}
+                  </button>
+                ))}
+                <input
+                  type='number' min={0.35} step={0.01}
+                  value={stake}
+                  onChange={e => setStake(Number(e.target.value))}
+                  className='bulk-trade__num-input'
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Martingale */}
+          <div className='bulk-trade__field bulk-trade__field--row'>
+            <label>Martingale on Loss</label>
+            <button className={`bulk-trade__toggle ${martingale ? 'on' : ''}`} onClick={() => setMartingale(p => !p)}>
+              {martingale ? 'ON' : 'OFF'}
+            </button>
+            {martingale && (
+              <>
+                <label style={{ marginLeft: '1rem' }}>×</label>
+                <input type='number' min={1.1} max={5} step={0.1} value={martMult}
+                  onChange={e => setMartMult(Number(e.target.value))}
+                  className='bulk-trade__num-input'
+                  style={{ width: '5rem' }}
+                />
+              </>
+            )}
+          </div>
+
+          {/* Summary mini-bar */}
+          <div className='bulk-trade__summary'>
+            <div className='bulk-trade__summary-item'>
+              <span>Contracts</span><strong>{count}</strong>
+            </div>
+            <div className='bulk-trade__summary-item'>
+              <span>Total Stake</span>
+              <strong>{fmt(activeStake * count)}</strong>
+            </div>
+            <div className='bulk-trade__summary-item'>
+              <span>Type</span><strong>{tradeTypeLabel}{needsPrediction ? ` [${prediction}]` : ''}</strong>
+            </div>
+            <div className='bulk-trade__summary-item bulk-trade__summary-item--green'>
+              <span>Wins</span><strong>{wins}</strong>
+            </div>
+            <div className='bulk-trade__summary-item bulk-trade__summary-item--red'>
+              <span>Losses</span><strong>{losses}</strong>
+            </div>
+            <div className={`bulk-trade__summary-item ${totalProfit >= 0 ? 'bulk-trade__summary-item--green' : 'bulk-trade__summary-item--red'}`}>
+              <span>Net P/L</span><strong>{fmtProfit(totalProfit)}</strong>
+            </div>
+          </div>
+        </div>
+
+        {/* RIGHT: digit display + circles + execute */}
+        <div className='bulk-trade__right'>
+          {/* Current Digit Display */}
+          <div className={`bulk-trade__digit-display ${digitFlash ? 'flash' : ''}`}>
+            <div className='bulk-trade__digit-triangle'>▲</div>
+            <div className='bulk-trade__digit-value'>{lastDigit !== null ? lastDigit : '—'}</div>
+            <div className='bulk-trade__digit-meta'>
+              <div className='bulk-trade__digit-tag'>CURRENT DIGIT</div>
+              <div className='bulk-trade__digit-price'>{currentPrice ?? '—'}</div>
+            </div>
+          </div>
+
+          {/* Digit Circles */}
+          <div className='bulk-trade__circles-section'>
+            <DigitCircles digits={digits} lastDigit={lastDigit} />
+          </div>
+
+          {/* Execute button — sits right below the circles */}
+          <button
+            className={`bulk-trade__execute ${isRunning ? 'running' : ''}`}
+            onClick={runBulk}
+            disabled={isRunning || !isConnected}
+          >
+            {isRunning
+              ? `⏳ Sending ${count} contracts...`
+              : `⚡ Execute ${count} × ${tradeTypeLabel}${needsPrediction ? ` [${prediction}]` : ''} — ${fmt(activeStake * count)}`
+            }
+          </button>
         </div>
       </div>
-
-      {/* Summary bar */}
-      <div className='bulk-trade__summary'>
-        <div className='bulk-trade__summary-item'>
-          <span>Contracts</span><strong>{count}</strong>
-        </div>
-        <div className='bulk-trade__summary-item'>
-          <span>Total Stake</span><strong>{currency} {(stake * count).toFixed(2)}</strong>
-        </div>
-        <div className='bulk-trade__summary-item'>
-          <span>Market</span><strong>{market}</strong>
-        </div>
-        <div className='bulk-trade__summary-item'>
-          <span>Type</span><strong>{tradeType}{needsPrediction ? ` [${prediction}]` : ''}</strong>
-        </div>
-        <div className='bulk-trade__summary-item bulk-trade__summary-item--green'>
-          <span>Sent</span><strong>{sent}</strong>
-        </div>
-        <div className='bulk-trade__summary-item bulk-trade__summary-item--red'>
-          <span>Failed</span><strong>{results.filter(r => r.status === 'failed').length}</strong>
-        </div>
-      </div>
-
-      {/* Execute */}
-      <button
-        className={`bulk-trade__execute ${isRunning ? 'running' : ''}`}
-        onClick={runBulk}
-        disabled={isRunning || !isConnected}
-      >
-        {isRunning
-          ? `⏳ Sending ${count} contracts...`
-          : `⚡ Execute ${count} ${tradeType} Contracts — ${currency} ${(stake * count).toFixed(2)} total`
-        }
-      </button>
 
       {/* Results log */}
-      {results.length > 0 && (
+      {(tradeResults.length > 0 || isRunning) && (
         <div className='bulk-trade__results'>
           <div className='bulk-trade__results-hdr'>
-            <h3>Trade Log ({results.length})</h3>
-            <button onClick={() => setResults([])}>Clear</button>
+            <h3>Trade Log ({tradeResults.length}{isRunning ? ` · ${count - settled} pending` : ''})</h3>
+            <button onClick={clearResults}>Clear</button>
           </div>
           <div className='bulk-trade__results-list'>
-            {results.map((r, i) => (
-              <div key={r.id} className={`bulk-trade__result-row bulk-trade__result-row--${r.status}`}>
-                <span className='bulk-trade__result-time'>{r.time}</span>
-                <span>{r.type}</span>
-                <span>{r.market}</span>
-                <span>${r.stake}</span>
-                <span className={`bulk-trade__result-status bulk-trade__result-status--${r.status}`}>
-                  {r.status === 'sent' ? '✓ Sent' : r.status === 'failed' ? '✗ Failed' : r.status}
-                </span>
-                {r.contractId && <span style={{ fontSize: '1rem', opacity: 0.5 }}>#{r.contractId}</span>}
-              </div>
-            ))}
+            {tradeResults.map(r => {
+              const st = r.won ? 'won' : 'lost';
+              return (
+                <div key={r.id} className={`bulk-trade__result-row bulk-trade__result-row--${st}`}>
+                  <span className='bulk-trade__result-time'>{new Date(r.time).toLocaleTimeString()}</span>
+                  <span>{r.type}</span>
+                  <span>{market}</span>
+                  <span>{fmt(r.stake)}</span>
+                  <span className={`bulk-trade__result-status bulk-trade__result-status--${st}`}>
+                    {r.won ? '✓ Won' : '✗ Lost'} {fmtProfit(r.profit)}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

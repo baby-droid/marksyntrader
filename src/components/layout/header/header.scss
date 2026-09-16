@@ -293,3 +293,183 @@
     from { transform: rotate(0deg); }
     to   { transform: rotate(360deg); }
 }
+
+// ─── Demo account: left-side Reset Demo button ───────────────────────────────
+.header__demo-reset-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 14px;
+    margin-inline-start: 1.2rem;
+    border: 1.5px solid rgba(255, 185, 0, 0.45);
+    border-radius: 16px;
+    background: transparent;
+    color: #ffb900;
+    font-size: 1.25rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+
+    svg path {
+        stroke: currentColor;
+    }
+
+    &:hover:not(:disabled) {
+        background: rgba(255, 185, 0, 0.1);
+        border-color: #ffb900;
+    }
+
+    &:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+    }
+
+    &--success {
+        color: #00c389;
+        border-color: rgba(0, 195, 137, 0.55);
+
+        &:hover:not(:disabled) {
+            background: rgba(0, 195, 137, 0.1);
+            border-color: #00c389;
+        }
+    }
+
+    &--error {
+        color: #e74c3c;
+        border-color: rgba(231, 76, 60, 0.45);
+
+        &:hover:not(:disabled) {
+            background: rgba(231, 76, 60, 0.1);
+            border-color: #e74c3c;
+        }
+    }
+
+    &__spinner {
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        border: 2px solid rgba(255, 185, 0, 0.3);
+        border-top-color: #ffb900;
+        border-radius: 50%;
+        animation: auth-spinner-rotate 0.7s linear infinite;
+    }
+}
+
+// ─── App-wide A-SPEED BOOST ─────────────────────────────────────────────────
+.header__a-speed-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 32px;
+    padding: 5px 10px;
+    margin-inline-start: 0.6rem;
+    border: 1px solid rgba(14, 165, 233, 0.45);
+    border-radius: 17px;
+    background: rgba(14, 165, 233, 0.08);
+    color: #38bdf8;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+
+    &__icon {
+        font-size: 14px;
+        line-height: 1;
+    }
+
+    &__state {
+        padding: 1px 4px;
+        border-radius: 5px;
+        background: rgba(148, 163, 184, 0.16);
+        color: #94a3b8;
+        font-size: 9px;
+        letter-spacing: 0.05em;
+    }
+
+    &:hover:not(:disabled) {
+        background: rgba(14, 165, 233, 0.16);
+        border-color: #38bdf8;
+    }
+
+    &--active {
+        border-color: rgba(34, 211, 238, 0.9);
+        background: linear-gradient(135deg, #0369a1, #0891b2);
+        color: #fff;
+        box-shadow: 0 0 10px rgba(34, 211, 238, 0.45), 0 0 22px rgba(14, 165, 233, 0.2);
+
+        .header__a-speed-btn__state {
+            background: rgba(255, 255, 255, 0.24);
+            color: #fff;
+        }
+    }
+
+    @include mobile-or-tablet-screen {
+        margin-inline-start: 0.35rem;
+        padding-inline: 7px;
+        font-size: 9px;
+        gap: 3px;
+
+        &__icon {
+            font-size: 12px;
+        }
+    }
+}
+
+// ─── Real account: Transfer + Deposit wrapper ────────────────────────────────
+.header__real-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+// ─── Real account: Deposit button (right side) ───────────────────────────────
+.header__deposit-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 7px 18px;
+    border: none;
+    border-radius: 16px;
+    background: linear-gradient(135deg, #00c389 0%, #007a56 100%);
+    color: #fff;
+    font-size: 1.3rem;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: opacity 0.15s, transform 0.1s;
+    box-shadow: 0 2px 8px rgba(0, 195, 137, 0.3);
+    margin-inline-end: 0.4rem;
+
+    svg path {
+        stroke: currentColor;
+    }
+
+    &:hover:not(:disabled) {
+        opacity: 0.9;
+        transform: translateY(-1px);
+    }
+
+    &:active:not(:disabled) {
+        transform: translateY(0);
+        opacity: 1;
+    }
+
+    &:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+        transform: none;
+    }
+
+    &__spinner {
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        border: 2px solid rgba(255, 255, 255, 0.35);
+        border-top-color: #fff;
+        border-radius: 50%;
+        animation: auth-spinner-rotate 0.7s linear infinite;
+    }
+}

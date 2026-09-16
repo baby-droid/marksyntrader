@@ -18,6 +18,25 @@ type TElement = {
     [key: string]: TTransaction[];
 };
 
+const dedupeStoredElements = (elements: TElement): TElement =>
+    Object.fromEntries(Object.entries(elements || {}).map(([accountId, rows]) => {
+        const seen = new Set<string>();
+        const deduped = rows.filter(row => {
+            if (row.type !== transaction_elements.CONTRACT || typeof row.data === 'string') return true;
+            const contract = row.data as any;
+            const identity = contract?.contract_id != null
+                ? `contract:${contract.contract_id}`
+                : contract?.transaction_ids?.buy != null
+                    ? `buy:${contract.transaction_ids.buy}`
+                    : null;
+            if (!identity) return true;
+            if (seen.has(identity)) return false;
+            seen.add(identity);
+            return true;
+        });
+        return [accountId, deduped];
+    }));
+
 export default class TransactionsStore {
     root_store: RootStore;
     core: TStores;
@@ -27,6 +46,7 @@ export default class TransactionsStore {
         this.root_store = root_store;
         this.core = core;
         this.is_transaction_details_modal_open = false;
+        this.registerAutoTradeListener();
         this.disposeReactionsFn = this.registerReactions();
 
         makeObservable(this, {
@@ -49,15 +69,19 @@ export default class TransactionsStore {
     }
     TRANSACTION_CACHE = 'transaction_cache';
 
-    elements: TElement = getStoredItemsByUser(this.TRANSACTION_CACHE, this.core?.client?.loginid, []);
+    elements: TElement = dedupeStoredElements(
+        getStoredItemsByUser(this.TRANSACTION_CACHE, this.core?.client?.loginid, [])
+    );
     active_transaction_id: null | number = null;
     recovered_completed_transactions: number[] = [];
     recovered_transactions: number[] = [];
     is_called_proposal_open_contract = false;
     is_transaction_details_modal_open = false;
+    private auto_trade_listener: ((event: Event) => void) | null = null;
 
     get transactions(): TTransaction[] {
-        if (this.core?.client?.loginid) return this.elements[this.core?.client?.loginid] ?? [];
+        const accountId = this.core?.client?.loginid || localStorage.getItem('active_loginid');
+        if (accountId) return this.elements[accountId] ?? [];
         return [];
     }
 
@@ -65,7 +89,10 @@ export default class TransactionsStore {
         let total_runs = 0;
         // Filter out only contract transactions and remove dividers
         const trxs = this.transactions.filter(
-            trx => trx.type === transaction_elements.CONTRACT && typeof trx.data === 'object'
+            trx =>
+                trx.type === transaction_elements.CONTRACT &&
+                typeof trx.data === 'object' &&
+                !(trx.data as any).is_virtual_hook
         );
         const statistics = trxs.reduce(
             (stats, { data }) => {
@@ -102,6 +129,54 @@ export default class TransactionsStore {
         return statistics;
     }
 
+    /**
+     * Add a simulated scalper hook to the native Bot Builder transaction feed.
+     * It is deliberately marked separately from real contracts so the native
+     * summary never includes its stake, wins/losses, payout, or P/L.
+     */
+    pushVirtualHook(data: {
+        id: number;
+        time: string;
+        market: string;
+        result: 'won' | 'lost';
+        exitDigit?: number | null;
+        hookType?: string;
+    }) {
+        const current_account = this.core?.client?.loginid as string;
+        if (!current_account) return;
+
+        const hookResult = data.result === 'won' ? 'profit' : 'loss';
+        const contract: any = {
+            is_virtual_hook: true,
+            hook_result: hookResult,
+            hook_type: data.hookType || 'Virtual Hook',
+            contract_id: -Math.abs(data.id),
+            transaction_ids: { buy: -Math.abs(data.id), sell: -Math.abs(data.id) },
+            date_start: data.time,
+            display_name: data.market,
+            underlying_symbol: data.market,
+            contract_type: 'VIRTUAL_HOOK',
+            currency: 'USD',
+            entry_spot: '',
+            exit_spot: data.exitDigit == null ? '' : String(data.exitDigit),
+            buy_price: 0,
+            payout: 0,
+            bid_price: 0,
+            profit: 0,
+            is_completed: true,
+            run_id: `virtual-hook-${data.id}`,
+        };
+
+        if (!this.elements[current_account]) {
+            this.elements = { ...this.elements, [current_account]: [] };
+        }
+        this.elements[current_account] = [
+            { type: transaction_elements.CONTRACT, data: contract },
+            ...this.elements[current_account],
+        ].slice(0, 5000);
+        this.elements = { ...this.elements };
+    }
+
     toggleTransactionDetailsModal = (is_open: boolean) => {
         this.is_transaction_details_modal_open = is_open;
     };
@@ -110,10 +185,38 @@ export default class TransactionsStore {
         this.pushTransaction(data);
     }
 
+    /**
+     * Keep non-Bot-Builder trade events connected for the lifetime of the root
+     * store. The Run Panel can mount and unmount independently, so this must
+     * not be part of its disposable reaction bundle.
+     */
+    private registerAutoTradeListener() {
+        if (typeof window === 'undefined' || this.auto_trade_listener) return;
+
+        this.auto_trade_listener = (event: Event) => {
+            const contract = (event as CustomEvent).detail;
+            if (contract?.contract_id) this.onBotContractEvent(contract);
+        };
+        window.addEventListener('auto-trade:contract', this.auto_trade_listener);
+    }
+
     pushTransaction(data: TContractInfo) {
-        const is_completed = isEnded(data as ProposalOpenContract);
-        const { run_id } = this.root_store.run_panel;
-        const current_account = this.core?.client?.loginid as string;
+        // isEnded covers native DBot payloads. The shared authenticated trader
+        // also marks its definitive POC update explicitly, so accept those
+        // flags/statuses as completed as well instead of leaving a settled
+        // Auto Trades/Auto-Digits row open when the payload shape differs.
+        const is_completed = Boolean(
+            (data as any).is_completed ||
+            (data as any).is_sold ||
+            ['won', 'lost', 'sold'].includes(String((data as any).status || '').toLowerCase()) ||
+            isEnded(data as ProposalOpenContract)
+        );
+        // Auto Trades supplies a batch ID so its contracts are grouped in the
+        // native Bot Builder transaction page. Regular Bot Builder contracts
+        // continue using the current run-panel run ID.
+        const run_id = (data as any).batch_id || this.root_store.run_panel.run_id;
+        const current_account = (this.core?.client?.loginid || localStorage.getItem('active_loginid')) as string;
+        if (!current_account || !data?.contract_id) return;
 
         const contract: TContractInfo = {
             ...data,
@@ -136,11 +239,19 @@ export default class TransactionsStore {
 
         const same_contract_index = this.elements[current_account]?.findIndex(c => {
             if (typeof c.data === 'string') return false;
-            return (
-                c.type === transaction_elements.CONTRACT &&
-                c.data?.transaction_ids &&
-                c.data.transaction_ids.buy === data.transaction_ids?.buy
-            );
+            if (c.type !== transaction_elements.CONTRACT) return false;
+            const existing = c.data as any;
+            const incoming = data as any;
+            // The same purchase reaches this store through both the native
+            // bot.contract observer and Auto Trades' browser event. Contract
+            // IDs are the canonical identity; the buy transaction id is only a
+            // fallback for older recovered payloads.
+            if (existing?.contract_id && incoming?.contract_id) {
+                return Number(existing.contract_id) === Number(incoming.contract_id);
+            }
+            const existingBuy = existing?.transaction_ids?.buy;
+            const incomingBuy = incoming?.transaction_ids?.buy;
+            return existingBuy != null && incomingBuy != null && existingBuy === incomingBuy;
         });
 
         if (same_contract_index === -1) {

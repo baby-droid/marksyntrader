@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { buildSmartchartsChampionAdapter } from '@/adapters/smartcharts-champion';
 import { createServices } from '@/adapters/smartcharts-champion/services';
 import { createTransport } from '@/adapters/smartcharts-champion/transport';
-import chart_api from '@/external/bot-skeleton/services/api/chart-api';
+import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import type { SmartchartsChampionAdapter } from '@/types/smartchart.types';
 import type {
     ActiveSymbols,
@@ -45,14 +45,37 @@ interface UseSmartChartAdaptorReturn {
  * Handles adapter initialization, data fetching, and subscription management
  * with proper memoization and memory leak prevention
  */
+// ── LocalStorage cache helpers for instant chart load ─────────────────────────
+const CHART_CACHE_KEY = 'sc_chart_data_v2';
+const CHART_CACHE_TTL = 3_600_000; // 1 hour
+
+function readChartCache(): { activeSymbols: ActiveSymbols; tradingTimes: TradingTimesMap } | null {
+    try {
+        const raw = localStorage.getItem(CHART_CACHE_KEY);
+        if (!raw) return null;
+        const { data, ts } = JSON.parse(raw);
+        if (Date.now() - ts > CHART_CACHE_TTL) return null;
+        if (!Array.isArray(data?.activeSymbols) || data.activeSymbols.length === 0) return null;
+        return data;
+    } catch { return null; }
+}
+
+function writeChartCache(data: { activeSymbols: ActiveSymbols; tradingTimes: TradingTimesMap }) {
+    try {
+        localStorage.setItem(CHART_CACHE_KEY, JSON.stringify({ data, ts: Date.now() }));
+    } catch { /* quota exceeded — ignore */ }
+}
+
 export const useSmartChartAdaptor = (): UseSmartChartAdaptorReturn => {
     // State management
     const [adapter, setAdapter] = useState<SmartchartsChampionAdapter | null>(null);
     const [adapterInitialized, setAdapterInitialized] = useState(false);
+
+    // Pre-populate from localStorage cache so chart renders immediately
     const [chartData, setChartData] = useState<{
         activeSymbols: ActiveSymbols;
         tradingTimes: TradingTimesMap;
-    }>({
+    }>(() => readChartCache() ?? {
         activeSymbols: [] as ActiveSymbols,
         tradingTimes: {} as TradingTimesMap,
     });
@@ -78,29 +101,54 @@ export const useSmartChartAdaptor = (): UseSmartChartAdaptorReturn => {
         };
     }, []);
 
-    // Initialize adapter - runs once when chart_api.api is available
+    // Initialize adapter — polls until the authenticated main API is ready, then
+    // builds once. The original guard only ran when the effect first fired. If
+    // the API was null at mount time the effect never
+    // retried, leaving SmartChart in a permanent "Retrieving Chart Data" state.
     useEffect(() => {
-        if (!adapterInitialized && chart_api.api) {
+        if (adapterInitialized) return;
+        let cancelled = false;
+
+        const tryInit = () => {
+            if (cancelled) return;
+            if (!api_base.api) {
+                // API not ready yet — retry in 500 ms
+                retryTimeoutRef.current = setTimeout(tryInit, 500);
+                return;
+            }
             try {
-                const transport = createTransport();
-                const services = createServices();
+                const transport       = createTransport();
+                const services        = createServices();
                 const championAdapter = buildSmartchartsChampionAdapter(transport, services, {
-                    debug: true,
+                    debug: false,
                     subscriptionTimeout: 30000,
                 });
-
-                if (isMountedRef.current) {
+                if (isMountedRef.current && !cancelled) {
                     setAdapter(championAdapter);
                     setAdapterInitialized(true);
                     setError(null);
                 }
             } catch (err) {
-                if (isMountedRef.current) {
-                    setError(err instanceof Error ? err : new Error('Failed to initialize adapter'));
+                if (!cancelled && isMountedRef.current) {
+                    setError(err instanceof Error ? err : new Error('Failed to initialize chart adapter'));
                     setIsLoading(false);
                 }
+                if (isMountedRef.current && !cancelled) {
+                    // Build failed — retry in 1 s
+                    retryTimeoutRef.current = setTimeout(tryInit, 1000);
+                }
             }
-        }
+        };
+
+        tryInit();
+
+        return () => {
+            cancelled = true;
+            if (retryTimeoutRef.current) {
+                clearTimeout(retryTimeoutRef.current);
+                retryTimeoutRef.current = null;
+            }
+        };
     }, [adapterInitialized]);
 
     // Load chart data when adapter is initialized
@@ -132,10 +180,12 @@ export const useSmartChartAdaptor = (): UseSmartChartAdaptorReturn => {
                         return;
                     }
 
-                    setChartData({
+                    const freshData = {
                         activeSymbols: data.activeSymbols,
                         tradingTimes: data.tradingTimes,
-                    });
+                    };
+                    setChartData(freshData);
+                    writeChartCache(freshData);
                     setError(null);
                 }
             } catch (err) {
@@ -188,7 +238,11 @@ export const useSmartChartAdaptor = (): UseSmartChartAdaptorReturn => {
     const getQuotes: TGetQuotes = useCallback(
         async params => {
             if (!adapter) {
-                throw new Error('Adapter not initialized');
+                // Return empty history instead of throwing — lets SmartChart render without blocking
+                if (params.granularity === 0) {
+                    return { history: { prices: [], times: [] } };
+                }
+                return { candles: [] };
             }
 
             const result = await adapter.getQuotes({
@@ -294,7 +348,7 @@ export const useSmartChartAdaptor = (): UseSmartChartAdaptorReturn => {
 
             // Unsubscribe from all ticks
             try {
-                chart_api.api?.forgetAll('ticks');
+                (api_base.api as any)?.forgetAll?.('ticks');
             } catch (err) {
                 logger.error('Error forgetting ticks:', err);
             }

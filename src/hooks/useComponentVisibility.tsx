@@ -4,7 +4,7 @@ export const useComponentVisibility = (ref: React.RefObject<HTMLInputElement>) =
     const [is_dropdown_visible, setDropdownVisibility] = React.useState(false);
 
     const handleHideDropdown = (event: KeyboardEvent) => {
-        if (event.key.toUpperCase() === 'ESCAPE') {
+        if (String(event?.key || '').toUpperCase() === 'ESCAPE') {
             setDropdownVisibility(false);
         }
     };

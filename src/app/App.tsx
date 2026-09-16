@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import React from 'react';
 import { createBrowserRouter, createRoutesFromElements, Route, RouterProvider } from 'react-router-dom';
+import ChunkErrorPage from '@/components/error-component/chunk-error-boundary';
 import ChunkLoader from '@/components/loader/chunk-loader';
 import LocalStorageSyncWrapper from '@/components/localStorage-sync-wrapper';
 import RoutePromptDialog from '@/components/route-prompt-dialog';
@@ -16,6 +17,7 @@ import './app-root.scss';
 const Layout = lazy(() => import('../components/layout'));
 const AppRoot = lazy(() => import('./app-root'));
 const CallbackPage = lazy(() => import('../pages/callback/callback'));
+const DTraderPage = lazy(() => import('../pages/dtrader'));
 
 const LanguageHandler = ({ children }: { children: React.ReactNode }) => {
     useLanguageFromURL();
@@ -28,6 +30,7 @@ const router = createBrowserRouter(
     createRoutesFromElements(
         <Route
             path='/'
+            errorElement={<ChunkErrorPage />}
             element={
                 <Suspense
                     fallback={<ChunkLoader message={localize('Please wait while we connect to the server...')} />}
@@ -47,10 +50,20 @@ const router = createBrowserRouter(
                 </Suspense>
             }
         >
-            <Route index element={<AppRoot />} />
-            <Route path='preview' element={<AppRoot />} />
+            <Route index element={<AppRoot />} errorElement={<ChunkErrorPage />} />
+            <Route path='preview' element={<AppRoot />} errorElement={<ChunkErrorPage />} />
+            <Route
+                path='dtrader'
+                element={
+                    <Suspense fallback={<ChunkLoader message={localize('Loading D-Trader...')} />}>
+                        <DTraderPage />
+                    </Suspense>
+                }
+                errorElement={<ChunkErrorPage />}
+            />
             <Route
                 path='callback'
+                errorElement={<ChunkErrorPage />}
                 element={
                     <Suspense fallback={<ChunkLoader message={localize('Completing login…')} />}>
                         <CallbackPage />

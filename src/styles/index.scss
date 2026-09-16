@@ -1,11 +1,18 @@
 @use 'components/shared/styles/themes' as *;
+// Global responsive system — must be loaded alongside themes, before any CSS rules
+@use 'responsive';
+
 // Removed IBM Plex Sans Google Font import - now using brand font from brand.config.json
 // Third-party developers can add their own font imports if needed
+
+// html font-size (62.5% base + responsive breakpoints) is now managed entirely
+// in src/styles/responsive.scss so media-query overrides are never clobbered.
 
 body {
     // Updated to use brand font variable from brand.config.json
     font-family: var(--brand-font-primary);
     background: var(--general-main-1);
+    font-size: 1.4rem;
 }
 
 .icon-general-fill-path {

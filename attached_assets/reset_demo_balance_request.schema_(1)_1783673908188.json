@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Reset Demo Balance Request",
+  "description": "Request to reset balance for Options trading demo account",
+  "type": "object",
+  "properties": {
+    "headers": {
+      "type": "object",
+      "properties": {
+        "Deriv-App-ID": {
+          "type": "string",
+          "description": "Application identifier"
+        },
+        "Authorization": {
+          "type": "string",
+          "description": "Bearer token for authentication",
+          "example": "Bearer YOUR_AUTH_TOKEN"
+        }
+      },
+      "required": [
+        "Deriv-App-ID",
+        "Authorization"
+      ]
+    },
+    "path": {
+      "type": "object",
+      "properties": {
+        "account_id": {
+          "type": "string",
+          "description": "Options trading account ID",
+          "example": "DOT90004580"
+        }
+      },
+      "required": [
+        "account_id"
+      ]
+    }
+  },
+  "required": [
+    "headers",
+    "path"
+  ]
+}

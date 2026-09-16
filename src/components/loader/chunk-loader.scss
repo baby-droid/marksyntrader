@@ -1,0 +1,28 @@
+.chunk-loader {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 50px;
+    height: 20px;
+    margin: auto;
+
+    &__bars {
+        display: flex;
+        align-items: flex-end;
+        gap: 4px;
+        height: 20px;
+    }
+
+    &__bar {
+        width: 5px;
+        height: 20px;
+        border-radius: 3px;
+        animation: chunk-bar-wave 1s ease-in-out infinite;
+        transform-origin: bottom center;
+    }
+}
+
+@keyframes chunk-bar-wave {
+    0%, 100% { transform: scaleY(0.35); opacity: 0.5; }
+    50%       { transform: scaleY(1);    opacity: 1; }
+}

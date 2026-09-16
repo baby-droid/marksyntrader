@@ -122,8 +122,10 @@ const DigitCircles: React.FC<DigitCirclesProps> = ({
                 data-digit={digit}
                 className={`digit-circles__wrapper${isLast ? ' digit-circles__wrapper--current' : ''}`}
               >
-                {/* triangle rendered FIRST so it appears ABOVE the circle */}
-                {isLast  && <span className='digit-circles__rank digit-circles__rank--current'>▼</span>}
+                {/* Black triangle pointer — floats ABOVE the active circle */}
+                <span className={`digit-circles__pointer${isLast ? ' digit-circles__pointer--on' : ''}`}>
+                  ▼
+                </span>
 
                 <div
                   className='digit-circles__circle'
@@ -136,6 +138,7 @@ const DigitCircles: React.FC<DigitCirclesProps> = ({
                     boxShadow: isLast
                       ? `0 0 14px ${bg}aa, 0 0 4px ${bg}`
                       : `0 2px 6px rgba(0,0,0,0.12)`,
+                    zIndex: isLast ? 5 : undefined,
                   }}
                 >
                   <span className='digit-circles__number'>{digit}</span>

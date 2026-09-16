@@ -18,21 +18,10 @@ const RoutePromptDialog = observer(() => {
         ({ currentLocation, nextLocation }) => show_prompt && currentLocation.pathname !== nextLocation.pathname
     );
 
-    React.useEffect(() => {
-        const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-            if (show_prompt) {
-                event.preventDefault();
-            } else {
-                delete event.returnValue;
-            }
-        };
-
-        window.addEventListener('beforeunload', handleBeforeUnload);
-
-        return () => {
-            window.removeEventListener('beforeunload', handleBeforeUnload);
-        };
-    }, [show_prompt]);
+    // NOTE: we intentionally do NOT attach a `beforeunload` handler. It made the
+    // browser show a native "Reload site?" dialog while the bot was running /
+    // buying contracts. In-app navigation is still guarded by the router blocker
+    // below, so a running bot won't be silently abandoned when switching tabs.
 
     return (
         <Dialog

@@ -5,9 +5,11 @@ import {
     parseReferralLink,
     parseLandingParams,
     resolveReferralViaProxy,
+    DEFAULT_OAUTH_SCOPES,
 } from '@/external/deriv-core';
 import type { AuthConfig } from '@/external/deriv-core';
 import { DerivWSAccountsService } from '@/services/derivws-accounts.service';
+import { getOAuthRedirectUri, rememberOAuthRedirectUri } from '@/utils/oauth-redirect';
 import brandConfig from '../../../../../brand.config.json';
 
 // =============================================================================
@@ -24,10 +26,16 @@ export const STAGING_DOMAINS = {
     COM: brandConfig.platform.hostname.staging.com,
 } as const;
 
-// WebSocket server URLs
+// WebSocket server URLs.
+// `WebSocket` requires a `ws:`/`wss:` scheme — passing an `https:`/`http:` URL
+// (as brand.config.json stores them, since they're shared with plain HTTP/REST
+// usages elsewhere) throws a SyntaxError in the browser. Normalize here so the
+// actual live-connection code always gets a valid WebSocket URL.
+const toWebSocketScheme = (url: string) => url.replace(/^https:/i, 'wss:').replace(/^http:/i, 'ws:');
+
 export const WS_SERVERS = {
-    STAGING: `${brandConfig.platform.derivws.url.staging}options/ws/public`,
-    PRODUCTION: `${brandConfig.platform.derivws.url.production}options/ws/public`,
+    STAGING: toWebSocketScheme(`${brandConfig.platform.derivws.url.staging}options/ws/public`),
+    PRODUCTION: toWebSocketScheme(`${brandConfig.platform.derivws.url.production}options/ws/public`),
 } as const;
 
 // =============================================================================
@@ -103,11 +111,12 @@ export const generateOAuthURL = async (prompt?: string): Promise<string> => {
         const clientId = process.env.NEXT_PUBLIC_DERIV_APP_ID;
         if (!clientId) return '';
 
-        const redirectUri = process.env.NEXT_PUBLIC_DERIV_REDIRECT_URI || window.location.origin;
+        const redirectUri = getOAuthRedirectUri();
+        rememberOAuthRedirectUri(redirectUri);
         const config: AuthConfig = {
             clientId,
             redirectUri,
-            scopes: 'trade read',
+             scopes: DEFAULT_OAUTH_SCOPES,
         };
 
         // Static referral link (fallback for direct visits without affiliate click)

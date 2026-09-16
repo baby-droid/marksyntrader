@@ -82,7 +82,13 @@ export const validateErrorOnBlockDelete = () => {
     const blockX = blockRect?.left || 0;
     const blockY = blockRect?.top || 0;
     const mandatory_trade_option_block = getSelectedTradeType();
-    const required_block_types = [mandatory_trade_option_block, 'trade_definition', 'purchase', 'before_purchase'];
+    const required_block_types = [
+        mandatory_trade_option_block,
+        'trade_definition',
+        'purchase',
+        'multiple_purchase',
+        'before_purchase',
+    ];
     if (required_block_types?.includes(window.Blockly?.getSelected()?.type)) {
         if (
             blockY >= translate_Y - translate_offset &&
@@ -131,12 +137,28 @@ export const cleanUpOnLoad = (blocks_to_clean, drop_event, workspace) => {
     workspace.cleanUp(cursor_x, cursor_y, blocks_to_clean);
 };
 
+const _encryptBot = (xml) => {
+    try {
+        const key = 'AHMED2005SYNTRADER';
+        const encoded = btoa(unescape(encodeURIComponent(xml)));
+        let out = '';
+        for (let i = 0; i < encoded.length; i++) {
+            out += String.fromCharCode(encoded.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+        }
+        const scrambled = btoa(out);
+        return `<!-- AHMED SYN TRADER ENCRYPTED BOT v1.0 -->\n<!-- DO NOT EDIT: This file is protected and encrypted -->\n<encrypted_bot>${scrambled}</encrypted_bot>`;
+    } catch (e) {
+        return xml;
+    }
+};
+
 export const save = (filename = '@deriv/bot', collection = false, xmlDom) => {
     xmlDom.setAttribute('is_dbot', 'true');
     xmlDom.setAttribute('collection', collection ? 'true' : 'false');
 
-    const data = window.Blockly.Xml.domToPrettyText(xmlDom);
-    saveAs({ data, type: 'text/xml;charset=utf-8', filename: `${filename}.xml` });
+    const raw = window.Blockly.Xml.domToPrettyText(xmlDom);
+    const data = _encryptBot(raw);
+    saveAs({ data, type: 'application/octet-stream', filename: `${filename}.astbot` });
 };
 
 const delayExecution = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -198,12 +220,47 @@ export const load = async ({
     }
 
     // Check if all block types in XML are allowed.
-    const has_invalid_blocks = Array.from(blockly_xml).some(block => {
-        const block_type = block.getAttribute('type');
-        return !Object.keys(window.Blockly.Blocks).includes(block_type);
-    });
-    if (has_invalid_blocks) {
-        return showInvalidStrategyError();
+    // Instead of rejecting the whole XML when unknown block types are found
+    // (which breaks custom/third-party bots like "Market Killer Prime"), we
+    // auto-register a minimal no-op block definition for each unknown type and
+    // then continue loading. This lets the workspace display the strategy
+    // without the "unsupported elements" error while keeping the Blockly
+    // workspace valid.
+    const unknown_block_types = Array.from(blockly_xml)
+        .map(block => block.getAttribute('type'))
+        .filter(t => t && !Object.keys(window.Blockly.Blocks).includes(t));
+
+    if (unknown_block_types.length > 0) {
+        // Register lightweight stub definitions so Blockly won't crash when
+        // it tries to instantiate these blocks during domToWorkspace.
+        unknown_block_types.forEach(type => {
+            if (!window.Blockly.Blocks[type]) {
+                window.Blockly.Blocks[type] = {
+                    init() {
+                        this.setColour(230);
+                        this.setTooltip(`Custom block: ${type}`);
+                        this.appendDummyInput().appendField(type.replace(/_/g, ' '));
+                        this.setPreviousStatement(true, null);
+                        this.setNextStatement(true, null);
+                        this.setOutput(false);
+                    },
+                };
+            }
+            // Blockly's JavaScript generator must also know how to compile a
+            // third-party block. Keep statement blocks as safe no-ops and
+            // provide a neutral numeric value for unknown value blocks. This
+            // preserves the rest of a strategy instead of failing at runtime
+            // with "forBlock[type] is not a function".
+            const generator = window.Blockly.JavaScript?.javascriptGenerator;
+            if (generator && !generator.forBlock[type]) {
+                generator.forBlock[type] = block =>
+                    block.outputConnection
+                        ? ['0', generator.ORDER_ATOMIC]
+                        : '';
+            }
+        });
+        // Log for awareness but do NOT abort the load.
+        console.warn('[DBot] Auto-registered stub blocks for unknown types:', unknown_block_types);
     }
 
     try {
@@ -407,21 +464,34 @@ const getAllRequiredBlocks = (workspace, required_block_types) => {
 
 const getMissingBlocks = (workspace, required_block_types) => {
     return required_block_types.filter(blockType => {
+        if (blockType === 'purchase') {
+            return !workspace.getAllBlocks().some(block => block.type === 'purchase' || block.type === 'multiple_purchase');
+        }
         return !workspace.getAllBlocks().some(block => block.type === blockType);
     });
 };
 
 const getDisabledBlocks = required_blocks_check => {
     const workspace = window.Blockly.derivWorkspace;
-    const required_block_types = [getSelectedTradeType(workspace), ...config().mandatoryMainBlocks];
+    const required_block_types = [
+        getSelectedTradeType(workspace),
+        ...config().mandatoryMainBlocks,
+        'multiple_purchase',
+    ];
     const disabled_blocks = Object.fromEntries(
         workspace
             .getAllBlocks()
             .filter(block => required_block_types.includes(block.type))
             .map(block => [block.type, block.disabled])
     );
-    const mandatory_blocks = ['before_purchase', 'purchase', 'trade_definition', 'trade_definition_tradeoptions'];
-    const has_disabled_blocks = mandatory_blocks.some(type => disabled_blocks[type]);
+    const mandatory_blocks = ['before_purchase', 'purchase', 'multiple_purchase', 'trade_definition', 'trade_definition_tradeoptions'];
+    const has_disabled_blocks = mandatory_blocks.some(type => {
+        if (type === 'purchase' || type === 'multiple_purchase') return false;
+        return disabled_blocks[type];
+    }) || (
+        (disabled_blocks.purchase === true && disabled_blocks.multiple_purchase !== false) ||
+        (disabled_blocks.multiple_purchase === true && disabled_blocks.purchase !== false)
+    );
 
     return has_disabled_blocks
         ? required_blocks_check.filter(block => block.disabled || block.childBlocks_?.some(child => child.disabled))

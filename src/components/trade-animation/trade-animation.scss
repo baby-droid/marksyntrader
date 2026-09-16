@@ -68,6 +68,42 @@
         display: flex;
         align-items: center;
         height: 40px;
+        gap: 8px;
+        padding: 4px 8px;
+        background: rgba(2, 10, 8, 0.55);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 10px;
+        flex-wrap: nowrap;
+    }
+
+    &__pause-button,
+    &__resume-button {
+        width: fit-content;
+        height: 100% !important;
+        font-weight: 700 !important;
+        white-space: nowrap;
+    }
+
+    // Pause needs to stand out clearly against the dark toolbar background —
+    // "secondary" theme buttons are too low-contrast here to notice at a glance.
+    &__pause-button {
+        background: linear-gradient(135deg, #eab308, #ca8a04) !important;
+        color: #1a1200 !important;
+        border: none !important;
+
+        &:hover {
+            background: linear-gradient(135deg, #facc15, #eab308) !important;
+        }
+    }
+
+    &__resume-button {
+        background: linear-gradient(135deg, #22c55e, #16a34a) !important;
+        color: #fff !important;
+        border: none !important;
+
+        &:hover {
+            background: linear-gradient(135deg, #34d399, #22c55e) !important;
+        }
     }
 
     &__overlay {

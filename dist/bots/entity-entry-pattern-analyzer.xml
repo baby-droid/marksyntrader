@@ -1,0 +1,513 @@
+<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
+  <variables>
+    <variable id="epa_stake">stake</variable>
+    <variable id="epa_init">initial_stake</variable>
+    <variable id="epa_scan">scan_stake</variable>
+    <variable id="epa_mart">martingale</variable>
+    <variable id="epa_codd">cons_odd</variable>
+    <variable id="epa_cevn">cons_even</variable>
+    <variable id="epa_sig">signal_type</variable>
+    <variable id="epa_last">last_digit_val</variable>
+    <variable id="epa_tp">take_profit</variable>
+    <variable id="epa_sl">stop_loss</variable>
+    <variable id="epa_profit">session_profit</variable>
+  </variables>
+
+  <!-- ═══════════════════════════════════════════════════════════════════
+       ENTITY ENTRY PATTERN ANALYZER
+       STRATEGY:
+         Tracks consecutive digit parity on every tick.
+         Signal "buy EVEN":  3+ consecutive ODD digits seen → buy DIGITEVEN
+         Signal "buy ODD":   3+ consecutive EVEN digits seen → buy DIGITODD
+         Lowest digit (0,1): buy DIGITODD  (0 is even-lowest → favours odd next)
+         Highest digit (8,9): buy DIGITEVEN (9 is odd-highest → favours even next)
+         No signal → scan trade with min stake (0.35) to keep engine alive
+         Martingale 2x on real trade loss | Reset on win
+         TP $5 / SL $50 | Market: V25 1s
+  ═══════════════════════════════════════════════════════════════════ -->
+  <block type="trade_definition" id="epa_def" deletable="false" x="0" y="60">
+    <statement name="TRADE_OPTIONS">
+      <block type="trade_definition_market" id="epa_mkt" deletable="false" movable="false">
+        <field name="MARKET_LIST">synthetic_index</field>
+        <field name="SUBMARKET_LIST">random_index</field>
+        <field name="SYMBOL_LIST">1HZ25V</field>
+        <next>
+          <block type="trade_definition_tradetype" id="epa_tt" deletable="false" movable="false">
+            <field name="TRADETYPECAT_LIST">digits</field>
+            <field name="TRADETYPE_LIST">evenodd</field>
+            <next>
+              <block type="trade_definition_contracttype" id="epa_ct" deletable="false" movable="false">
+                <field name="TYPE_LIST">DIGITEVEN</field>
+                <next>
+                  <block type="trade_definition_duration" id="epa_dur" deletable="false" movable="false">
+                    <field name="DURATIONTYPE_LIST">t</field>
+                    <value name="DURATION">
+                      <shadow type="math_number_positive" id="epa_dur_v">
+                        <field name="NUM">1</field>
+                      </shadow>
+                    </value>
+                    <next>
+                      <block type="trade_definition_candleinterval" id="epa_ci" deletable="false" movable="false">
+                        <field name="CANDLEINTERVAL_LIST">60</field>
+                        <next>
+                          <block type="trade_definition_restartbuysell" id="epa_rbs" deletable="false" movable="false">
+                            <field name="TIME_MACHINE_ENABLED">FALSE</field>
+                            <next>
+                              <block type="trade_definition_restartonerror" id="epa_roe" deletable="false" movable="false">
+                                <field name="RESTARTONERROR">TRUE</field>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="INITIALIZATION">
+      <block type="variables_set" id="epa_i1">
+        <field name="VAR" id="epa_stake">stake</field>
+        <value name="VALUE"><block type="math_number" id="epa_i1v"><field name="NUM">0.5</field></block></value>
+        <next>
+          <block type="variables_set" id="epa_i2">
+            <field name="VAR" id="epa_init">initial_stake</field>
+            <value name="VALUE"><block type="math_number" id="epa_i2v"><field name="NUM">0.5</field></block></value>
+            <next>
+              <!-- scan_stake = 0.35 (minimum, for pattern-scanning rounds) -->
+              <block type="variables_set" id="epa_i3">
+                <field name="VAR" id="epa_scan">scan_stake</field>
+                <value name="VALUE"><block type="math_number" id="epa_i3v"><field name="NUM">0.35</field></block></value>
+                <next>
+                  <block type="variables_set" id="epa_i4">
+                    <field name="VAR" id="epa_mart">martingale</field>
+                    <value name="VALUE"><block type="math_number" id="epa_i4v"><field name="NUM">2</field></block></value>
+                    <next>
+                      <!-- cons_odd = 0, cons_even = 0 -->
+                      <block type="variables_set" id="epa_i5">
+                        <field name="VAR" id="epa_codd">cons_odd</field>
+                        <value name="VALUE"><block type="math_number" id="epa_i5v"><field name="NUM">0</field></block></value>
+                        <next>
+                          <block type="variables_set" id="epa_i6">
+                            <field name="VAR" id="epa_cevn">cons_even</field>
+                            <value name="VALUE"><block type="math_number" id="epa_i6v"><field name="NUM">0</field></block></value>
+                            <next>
+                              <!-- signal_type: 0=scan, 1=buy_even, 2=buy_odd -->
+                              <block type="variables_set" id="epa_i7">
+                                <field name="VAR" id="epa_sig">signal_type</field>
+                                <value name="VALUE"><block type="math_number" id="epa_i7v"><field name="NUM">0</field></block></value>
+                                <next>
+                                  <block type="variables_set" id="epa_i8">
+                                    <field name="VAR" id="epa_last">last_digit_val</field>
+                                    <value name="VALUE"><block type="math_number" id="epa_i8v"><field name="NUM">0</field></block></value>
+                                    <next>
+                                      <block type="variables_set" id="epa_i9">
+                                        <field name="VAR" id="epa_tp">take_profit</field>
+                                        <value name="VALUE"><block type="math_number" id="epa_i9v"><field name="NUM">5</field></block></value>
+                                        <next>
+                                          <block type="variables_set" id="epa_i10">
+                                            <field name="VAR" id="epa_sl">stop_loss</field>
+                                            <value name="VALUE"><block type="math_number" id="epa_i10v"><field name="NUM">50</field></block></value>
+                                            <next>
+                                              <block type="variables_set" id="epa_i11">
+                                                <field name="VAR" id="epa_profit">session_profit</field>
+                                                <value name="VALUE"><block type="math_number" id="epa_i11v"><field name="NUM">0</field></block></value>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+
+  <!-- ═══ BEFORE PURCHASE — Pattern detection + signal routing ═══ -->
+  <block type="before_purchase" id="epa_bp" collapsed="false" deletable="false" x="0" y="700">
+    <statement name="BEFOREPURCHASE_STACK">
+
+      <!-- Step 1: Read last digit -->
+      <block type="variables_set" id="epa_bp_ld">
+        <field name="VAR" id="epa_last">last_digit_val</field>
+        <value name="VALUE">
+          <block type="last_digit" id="epa_bp_ld_block"></block>
+        </value>
+        <next>
+
+          <!-- Step 2: Update consecutive counters based on parity of last digit
+               ODD digit (last_digit % 2 != 0): cons_odd++, cons_even=0
+               EVEN digit: cons_even++, cons_odd=0
+               We check: if last_digit is 1,3,5,7,9 → odd
+               Use: last_digit >= 1 AND last_digit != 2 AND last_digit != 4 etc.
+               Simpler: use math_modulo if available, else check specific values.
+               We use controls_if with logic_compare chains for odd detection:
+               odd digits: 1, 3, 5, 7, 9 → check using last_digit NOT in {0,2,4,6,8} -->
+          <block type="controls_if" id="epa_bp_parity">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+            <!-- IF last_digit_val is ODD: check using (last_digit mod 2 == 1) pattern
+                 Using: last_digit is one of 1,3,5,7,9
+                 Approximation: last_digit >= 1 AND last_digit - 2*floor(last_digit/2) == 1
+                 Simplest available: use multiple OR comparisons -->
+            <value name="IF0">
+              <block type="logic_operation" id="epa_bp_odd_check">
+                <field name="OP">OR</field>
+                <value name="A">
+                  <block type="logic_operation" id="epa_bp_odd_check_a">
+                    <field name="OP">OR</field>
+                    <value name="A">
+                      <block type="logic_compare" id="epa_bp_odd_c1">
+                        <field name="OP">EQ</field>
+                        <value name="A"><block type="variables_get" id="epa_bp_odd_g1"><field name="VAR" id="epa_last">last_digit_val</field></block></value>
+                        <value name="B"><block type="math_number" id="epa_bp_odd_n1"><field name="NUM">1</field></block></value>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <block type="logic_operation" id="epa_bp_odd_check_b">
+                        <field name="OP">OR</field>
+                        <value name="A">
+                          <block type="logic_compare" id="epa_bp_odd_c3">
+                            <field name="OP">EQ</field>
+                            <value name="A"><block type="variables_get" id="epa_bp_odd_g3"><field name="VAR" id="epa_last">last_digit_val</field></block></value>
+                            <value name="B"><block type="math_number" id="epa_bp_odd_n3"><field name="NUM">3</field></block></value>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <block type="logic_compare" id="epa_bp_odd_c5">
+                            <field name="OP">EQ</field>
+                            <value name="A"><block type="variables_get" id="epa_bp_odd_g5"><field name="VAR" id="epa_last">last_digit_val</field></block></value>
+                            <value name="B"><block type="math_number" id="epa_bp_odd_n5"><field name="NUM">5</field></block></value>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+                <value name="B">
+                  <block type="logic_operation" id="epa_bp_odd_check_c">
+                    <field name="OP">OR</field>
+                    <value name="A">
+                      <block type="logic_compare" id="epa_bp_odd_c7">
+                        <field name="OP">EQ</field>
+                        <value name="A"><block type="variables_get" id="epa_bp_odd_g7"><field name="VAR" id="epa_last">last_digit_val</field></block></value>
+                        <value name="B"><block type="math_number" id="epa_bp_odd_n7"><field name="NUM">7</field></block></value>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <block type="logic_compare" id="epa_bp_odd_c9">
+                        <field name="OP">EQ</field>
+                        <value name="A"><block type="variables_get" id="epa_bp_odd_g9"><field name="VAR" id="epa_last">last_digit_val</field></block></value>
+                        <value name="B"><block type="math_number" id="epa_bp_odd_n9"><field name="NUM">9</field></block></value>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <!-- IS ODD: cons_odd++, cons_even=0 -->
+            <statement name="DO0">
+              <block type="math_change" id="epa_bp_codd_inc">
+                <field name="VAR" id="epa_codd">cons_odd</field>
+                <value name="DELTA"><shadow type="math_number" id="epa_bp_codd_inc_v"><field name="NUM">1</field></shadow></value>
+                <next>
+                  <block type="variables_set" id="epa_bp_cevn_reset">
+                    <field name="VAR" id="epa_cevn">cons_even</field>
+                    <value name="VALUE"><block type="math_number" id="epa_bp_cevn_reset_v"><field name="NUM">0</field></block></value>
+                  </block>
+                </next>
+              </block>
+            </statement>
+            <!-- IS EVEN: cons_even++, cons_odd=0 -->
+            <statement name="ELSE">
+              <block type="math_change" id="epa_bp_cevn_inc">
+                <field name="VAR" id="epa_cevn">cons_even</field>
+                <value name="DELTA"><shadow type="math_number" id="epa_bp_cevn_inc_v"><field name="NUM">1</field></shadow></value>
+                <next>
+                  <block type="variables_set" id="epa_bp_codd_reset">
+                    <field name="VAR" id="epa_codd">cons_odd</field>
+                    <value name="VALUE"><block type="math_number" id="epa_bp_codd_reset_v"><field name="NUM">0</field></block></value>
+                  </block>
+                </next>
+              </block>
+            </statement>
+          </block>
+          <next>
+
+          <!-- Step 3: Determine signal based on patterns + extremes -->
+          <block type="controls_if" id="epa_bp_signal">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="3" else="1"></mutation>
+
+            <!-- IF cons_odd >= 3: signal=1 (buy EVEN after 3 consecutive odds) -->
+            <value name="IF0">
+              <block type="logic_compare" id="epa_bp_sig_c0">
+                <field name="OP">GTE</field>
+                <value name="A"><block type="variables_get" id="epa_bp_sig_g0"><field name="VAR" id="epa_codd">cons_odd</field></block></value>
+                <value name="B"><block type="math_number" id="epa_bp_sig_n0"><field name="NUM">3</field></block></value>
+              </block>
+            </value>
+            <statement name="DO0">
+              <block type="variables_set" id="epa_bp_sig_s0">
+                <field name="VAR" id="epa_sig">signal_type</field>
+                <value name="VALUE"><block type="math_number" id="epa_bp_sig_s0v"><field name="NUM">1</field></block></value>
+                <next>
+                  <!-- reset cons_odd after signal fires -->
+                  <block type="variables_set" id="epa_bp_sig_s0r">
+                    <field name="VAR" id="epa_codd">cons_odd</field>
+                    <value name="VALUE"><block type="math_number" id="epa_bp_sig_s0rv"><field name="NUM">0</field></block></value>
+                  </block>
+                </next>
+              </block>
+            </statement>
+
+            <!-- ELSEIF cons_even >= 3: signal=2 (buy ODD after 3 consecutive evens) -->
+            <value name="IF1">
+              <block type="logic_compare" id="epa_bp_sig_c1">
+                <field name="OP">GTE</field>
+                <value name="A"><block type="variables_get" id="epa_bp_sig_g1"><field name="VAR" id="epa_cevn">cons_even</field></block></value>
+                <value name="B"><block type="math_number" id="epa_bp_sig_n1"><field name="NUM">3</field></block></value>
+              </block>
+            </value>
+            <statement name="DO1">
+              <block type="variables_set" id="epa_bp_sig_s1">
+                <field name="VAR" id="epa_sig">signal_type</field>
+                <value name="VALUE"><block type="math_number" id="epa_bp_sig_s1v"><field name="NUM">2</field></block></value>
+                <next>
+                  <block type="variables_set" id="epa_bp_sig_s1r">
+                    <field name="VAR" id="epa_cevn">cons_even</field>
+                    <value name="VALUE"><block type="math_number" id="epa_bp_sig_s1rv"><field name="NUM">0</field></block></value>
+                  </block>
+                </next>
+              </block>
+            </statement>
+
+            <!-- ELSEIF last_digit is 0 or 1 (extreme low): signal=2 (buy ODD directly) -->
+            <value name="IF2">
+              <block type="logic_operation" id="epa_bp_sig_low">
+                <field name="OP">OR</field>
+                <value name="A">
+                  <block type="logic_compare" id="epa_bp_sig_low0">
+                    <field name="OP">EQ</field>
+                    <value name="A"><block type="variables_get" id="epa_bp_sig_low0_g"><field name="VAR" id="epa_last">last_digit_val</field></block></value>
+                    <value name="B"><block type="math_number" id="epa_bp_sig_low0_n"><field name="NUM">0</field></block></value>
+                  </block>
+                </value>
+                <value name="B">
+                  <block type="logic_compare" id="epa_bp_sig_low1">
+                    <field name="OP">EQ</field>
+                    <value name="A"><block type="variables_get" id="epa_bp_sig_low1_g"><field name="VAR" id="epa_last">last_digit_val</field></block></value>
+                    <value name="B"><block type="math_number" id="epa_bp_sig_low1_n"><field name="NUM">1</field></block></value>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <statement name="DO2">
+              <!-- Low digit: buy ODD directly (1 is odd-lowest, 0 is even-lowest → both extremes favour ODD next) -->
+              <block type="variables_set" id="epa_bp_sig_s2">
+                <field name="VAR" id="epa_sig">signal_type</field>
+                <value name="VALUE"><block type="math_number" id="epa_bp_sig_s2v"><field name="NUM">2</field></block></value>
+              </block>
+            </statement>
+
+            <!-- ELSEIF last_digit is 8 or 9 (extreme high): signal=1 (buy EVEN directly) -->
+            <value name="IF3">
+              <block type="logic_operation" id="epa_bp_sig_high">
+                <field name="OP">OR</field>
+                <value name="A">
+                  <block type="logic_compare" id="epa_bp_sig_high8">
+                    <field name="OP">EQ</field>
+                    <value name="A"><block type="variables_get" id="epa_bp_sig_high8_g"><field name="VAR" id="epa_last">last_digit_val</field></block></value>
+                    <value name="B"><block type="math_number" id="epa_bp_sig_high8_n"><field name="NUM">8</field></block></value>
+                  </block>
+                </value>
+                <value name="B">
+                  <block type="logic_compare" id="epa_bp_sig_high9">
+                    <field name="OP">EQ</field>
+                    <value name="A"><block type="variables_get" id="epa_bp_sig_high9_g"><field name="VAR" id="epa_last">last_digit_val</field></block></value>
+                    <value name="B"><block type="math_number" id="epa_bp_sig_high9_n"><field name="NUM">9</field></block></value>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <statement name="DO3">
+              <!-- High digit: buy EVEN directly (9 is odd-highest → favour EVEN; 8 is even-highest → also favour EVEN) -->
+              <block type="variables_set" id="epa_bp_sig_s3">
+                <field name="VAR" id="epa_sig">signal_type</field>
+                <value name="VALUE"><block type="math_number" id="epa_bp_sig_s3v"><field name="NUM">1</field></block></value>
+              </block>
+            </statement>
+
+            <!-- ELSE: no signal → scan mode -->
+            <statement name="ELSE">
+              <block type="variables_set" id="epa_bp_sig_se">
+                <field name="VAR" id="epa_sig">signal_type</field>
+                <value name="VALUE"><block type="math_number" id="epa_bp_sig_sev"><field name="NUM">0</field></block></value>
+              </block>
+            </statement>
+          </block>
+          <next>
+
+          <!-- Step 4: Purchase based on signal_type -->
+          <block type="controls_if" id="epa_bp_purchase">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="1" else="1"></mutation>
+
+            <!-- signal=1: REAL trade → buy DIGITEVEN with full stake -->
+            <value name="IF0">
+              <block type="logic_compare" id="epa_bp_pur_c0">
+                <field name="OP">EQ</field>
+                <value name="A"><block type="variables_get" id="epa_bp_pur_g0"><field name="VAR" id="epa_sig">signal_type</field></block></value>
+                <value name="B"><block type="math_number" id="epa_bp_pur_n0"><field name="NUM">1</field></block></value>
+              </block>
+            </value>
+            <statement name="DO0">
+              <block type="timeout" id="epa_bp_pur_t0">
+                <statement name="TIMEOUTSTACK">
+                  <block type="purchase" id="epa_bp_pur_p0">
+                    <field name="PURCHASE_LIST">DIGITEVEN</field>
+                  </block>
+                </statement>
+                <value name="SECONDS"><block type="math_number" id="epa_bp_pur_t0v"><field name="NUM">-0.00001</field></block></value>
+              </block>
+            </statement>
+
+            <!-- signal=2: REAL trade → buy DIGITODD with full stake -->
+            <value name="IF1">
+              <block type="logic_compare" id="epa_bp_pur_c1">
+                <field name="OP">EQ</field>
+                <value name="A"><block type="variables_get" id="epa_bp_pur_g1"><field name="VAR" id="epa_sig">signal_type</field></block></value>
+                <value name="B"><block type="math_number" id="epa_bp_pur_n1"><field name="NUM">2</field></block></value>
+              </block>
+            </value>
+            <statement name="DO1">
+              <block type="timeout" id="epa_bp_pur_t1">
+                <statement name="TIMEOUTSTACK">
+                  <block type="purchase" id="epa_bp_pur_p1">
+                    <field name="PURCHASE_LIST">DIGITODD</field>
+                  </block>
+                </statement>
+                <value name="SECONDS"><block type="math_number" id="epa_bp_pur_t1v"><field name="NUM">-0.00001</field></block></value>
+              </block>
+            </statement>
+
+            <!-- signal=0: SCAN trade → stake=scan_stake, buy DIGITEVEN (scanner probe) -->
+            <statement name="ELSE">
+              <block type="variables_set" id="epa_bp_pur_scan_stake">
+                <field name="VAR" id="epa_stake">stake</field>
+                <value name="VALUE">
+                  <block type="variables_get" id="epa_bp_pur_scan_stake_g"><field name="VAR" id="epa_scan">scan_stake</field></block>
+                </value>
+                <next>
+                  <block type="timeout" id="epa_bp_pur_te">
+                    <statement name="TIMEOUTSTACK">
+                      <block type="purchase" id="epa_bp_pur_pe">
+                        <field name="PURCHASE_LIST">DIGITEVEN</field>
+                      </block>
+                    </statement>
+                    <value name="SECONDS"><block type="math_number" id="epa_bp_pur_tev"><field name="NUM">-0.00001</field></block></value>
+                  </block>
+                </next>
+              </block>
+            </statement>
+          </block>
+
+          </next>
+          </next>
+        </next>
+      </block>
+    </statement>
+  </block>
+
+  <!-- ═══ AFTER PURCHASE ═══ -->
+  <block type="after_purchase" id="epa_ap" collapsed="false" deletable="false" x="0" y="1100">
+    <statement name="AFTERPURCHASE_STACK">
+      <block type="controls_if" id="epa_ap_if">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+        <value name="IF0">
+          <block type="contract_check_result" id="epa_ap_win">
+            <field name="CHECK_RESULT">win</field>
+          </block>
+        </value>
+        <statement name="DO0">
+          <!-- WIN: reset stake to initial (if this was a real trade) -->
+          <block type="controls_if" id="epa_ap_win_rt">
+            <value name="IF0">
+              <block type="logic_compare" id="epa_ap_win_rt_cmp">
+                <field name="OP">GT</field>
+                <value name="A"><block type="variables_get" id="epa_ap_win_rt_g"><field name="VAR" id="epa_stake">stake</field></block></value>
+                <value name="B"><block type="math_number" id="epa_ap_win_rt_n"><field name="NUM">0.35</field></block></value>
+              </block>
+            </value>
+            <statement name="DO0">
+              <block type="variables_set" id="epa_ap_win_reset">
+                <field name="VAR" id="epa_stake">stake</field>
+                <value name="VALUE">
+                  <block type="variables_get" id="epa_ap_win_reset_g"><field name="VAR" id="epa_init">initial_stake</field></block>
+                </value>
+              </block>
+            </statement>
+          </block>
+        </statement>
+        <statement name="ELSE">
+          <!-- LOSS: if real trade → martingale; scan trade → just restore initial -->
+          <block type="controls_if" id="epa_ap_loss_rt">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+            <value name="IF0">
+              <block type="logic_compare" id="epa_ap_loss_rt_cmp">
+                <field name="OP">GT</field>
+                <value name="A"><block type="variables_get" id="epa_ap_loss_rt_g"><field name="VAR" id="epa_stake">stake</field></block></value>
+                <value name="B"><block type="math_number" id="epa_ap_loss_rt_n"><field name="NUM">0.35</field></block></value>
+              </block>
+            </value>
+            <statement name="DO0">
+              <!-- Real trade loss: apply martingale -->
+              <block type="variables_set" id="epa_ap_loss_mart">
+                <field name="VAR" id="epa_stake">stake</field>
+                <value name="VALUE">
+                  <block type="math_arithmetic" id="epa_ap_loss_mart_arith">
+                    <field name="OP">MULTIPLY</field>
+                    <value name="A">
+                      <shadow type="math_number" id="epa_ap_loss_mart_as"><field name="NUM">1</field></shadow>
+                      <block type="variables_get" id="epa_ap_loss_mart_a"><field name="VAR" id="epa_stake">stake</field></block>
+                    </value>
+                    <value name="B">
+                      <shadow type="math_number" id="epa_ap_loss_mart_bs"><field name="NUM">1</field></shadow>
+                      <block type="variables_get" id="epa_ap_loss_mart_b"><field name="VAR" id="epa_mart">martingale</field></block>
+                    </value>
+                  </block>
+                </value>
+              </block>
+            </statement>
+            <statement name="ELSE">
+              <!-- Scan trade loss: restore initial stake for next real trade -->
+              <block type="variables_set" id="epa_ap_loss_scan">
+                <field name="VAR" id="epa_stake">stake</field>
+                <value name="VALUE">
+                  <block type="variables_get" id="epa_ap_loss_scan_g"><field name="VAR" id="epa_init">initial_stake</field></block>
+                </value>
+              </block>
+            </statement>
+          </block>
+        </statement>
+      </block>
+      <next>
+        <block type="trade_again" id="epa_ta"></block>
+      </next>
+    </statement>
+  </block>
+</xml>

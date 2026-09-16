@@ -10,6 +10,7 @@ export {
   handleOAuthCallback,
   cleanupUrl,
   OAuthError,
+  DEFAULT_OAUTH_SCOPES,
 } from './oauth';
 
 export {

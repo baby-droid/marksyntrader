@@ -204,7 +204,7 @@ const transformations = {
 
 /**
  * Build the SmartCharts Champion adapter
- * @param transport - Transport layer (wraps chart_api.api)
+ * @param transport - Transport layer (wraps the authenticated api_base.api)
  * @param services - Services layer (wraps ApiHelpers and trading-times)
  * @param config - Optional configuration
  * @returns SmartchartsChampionAdapter instance

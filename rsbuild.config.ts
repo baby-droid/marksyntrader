@@ -36,6 +36,7 @@ export default defineConfig({
         // Redirect URI registered in the Deriv developer portal. Must match exactly.
         // Production: https://marksyntrader.replit.app/callback
         NEXT_PUBLIC_DERIV_REDIRECT_URI: JSON.stringify(process.env.NEXT_PUBLIC_DERIV_REDIRECT_URI ?? ''),
+        NEXT_PUBLIC_DERIV_PREVIEW_REDIRECT_URI: JSON.stringify(process.env.NEXT_PUBLIC_DERIV_PREVIEW_REDIRECT_URI ?? ''),
         // Authoritative environment signal. The bot's URL resolver (config.ts) and
         // the vendored deriv-core OAuth resolver both read this so endpoints stay consistent
         // on a deployed partner domain (where hostname detection can't match Deriv).
@@ -99,10 +100,21 @@ export default defineConfig({
     compress: true,
     port: 5000,
     host: '0.0.0.0',
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      // A dev preview must always fetch the current HTML and async chunks.
+      // Cached chunk URLs from an earlier Rsbuild process cause ChunkLoadError
+      // after a restart even when the current asset exists and is healthy.
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+    },
   },
   dev: {
     hmr: false,
     writeToDisk: false,
+    assetPrefix: '/',
+    // Disable lazy compilation — it generates per-file proxy chunks whose URLs
+    // become stale on server restart, causing ChunkLoadError for icon packages.
+    lazyCompilation: false,
   },
   tools: {
     rspack: {
@@ -114,6 +126,10 @@ export default defineConfig({
             use: 'raw-loader',
           },
         ],
+      },
+      // Ensure lazy compilation is also off at the rspack level
+      experiments: {
+        lazyCompilation: false,
       },
     },
   },

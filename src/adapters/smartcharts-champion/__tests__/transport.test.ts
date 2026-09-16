@@ -1,15 +1,15 @@
 /**
  * Unit tests for Transport Layer
- * Tests the transport wrapper around chart_api
+ * Tests the transport wrapper around the authenticated main API
  */
 
-import chart_api from '@/external/bot-skeleton/services/api/chart-api';
+import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { createTransport } from '../transport';
 
-// Mock chart_api
-jest.mock('@/external/bot-skeleton/services/api/chart-api', () => ({
+// Mock the authenticated main API
+jest.mock('@/external/bot-skeleton/services/api/api-base', () => ({
     __esModule: true,
-    default: {
+    api_base: {
         api: null,
         init: jest.fn(),
     },
@@ -29,12 +29,12 @@ describe('Transport Layer', () => {
             forgetAll: jest.fn(),
         };
 
-        // Set up chart_api.api
-        chart_api.api = mockApi;
+        // Set up authenticated api_base.api
+        api_base.api = mockApi;
     });
 
     afterEach(() => {
-        chart_api.api = null;
+        api_base.api = null;
     });
 
     describe('createTransport', () => {
@@ -63,26 +63,14 @@ describe('Transport Layer', () => {
             expect(result).toEqual(mockResponse);
         });
 
-        it('should initialize API if not available', async () => {
-            chart_api.api = null;
-            const mockResponse = { tick: { quote: 100.5 } };
-
-            (chart_api.init as jest.Mock).mockResolvedValue(undefined);
-
-            // After init, set up the API
-            (chart_api.init as jest.Mock).mockImplementation(() => {
-                chart_api.api = mockApi;
-                mockApi.send.mockResolvedValue(mockResponse);
-                return Promise.resolve();
-            });
+        it('should reject if the authenticated API is not available', async () => {
+            api_base.api = null;
 
             const transport = createTransport();
-            const request = { ticks: 'R_50' };
 
-            const result = await transport.send(request);
-
-            expect(chart_api.init).toHaveBeenCalled();
-            expect(result).toEqual(mockResponse);
+            await expect(transport.send({ ticks: 'R_50' })).rejects.toThrow(
+                'Main authenticated API is not initialized'
+            );
         });
 
         it('should handle send errors', async () => {
@@ -125,13 +113,13 @@ describe('Transport Layer', () => {
         });
 
         it('should throw error if API not initialized', () => {
-            chart_api.api = null;
+            api_base.api = null;
 
             const transport = createTransport();
             const callback = jest.fn();
             const request = { ticks: 'R_50', subscribe: 1 };
 
-            expect(() => transport.subscribe(request, callback)).toThrow('Chart API not initialized');
+            expect(() => transport.subscribe(request, callback)).toThrow('Main authenticated API is not initialized');
         });
 
         it('should handle subscription with callback', done => {
@@ -261,7 +249,7 @@ describe('Transport Layer', () => {
         });
 
         it('should handle unsubscribeAll when API not available', () => {
-            chart_api.api = null;
+            api_base.api = null;
 
             const transport = createTransport();
 

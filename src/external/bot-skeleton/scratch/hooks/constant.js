@@ -19,6 +19,7 @@ window.Blockly.Categories = {
     Candle: 'candle',
     Miscellaneous: 'miscellaneous',
     Loop: 'loops',
+    King_Fisher: 'king_fisher',
 };
 window.Blockly.OUTPUT_SHAPE_HEXAGONAL = 1;
 window.Blockly.OUTPUT_SHAPE_ROUND = 2;

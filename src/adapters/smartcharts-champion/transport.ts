@@ -1,9 +1,10 @@
 /**
  * Transport layer wrapper for SmartCharts Champion Adapter
- * Wraps the existing chart_api.api to match the TTransport interface
+ * Wraps the authenticated main api_base.api connection to match the
+ * TTransport interface.
  */
 
-import chart_api from '@/external/bot-skeleton/services/api/chart-api';
+import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import type { TTransport } from './types';
 
 // Logger utility for transport layer
@@ -14,7 +15,7 @@ const logger = {
 };
 
 /**
- * Create transport wrapper around chart_api.api
+ * Create transport wrapper around the main authenticated API.
  * @returns TTransport implementation
  */
 export function createTransport(): TTransport {
@@ -25,10 +26,10 @@ export function createTransport(): TTransport {
          * Send one-shot API request
          */
         async send(request: any): Promise<any> {
-            if (!chart_api.api) {
-                await chart_api.init();
+            if (!api_base.api) {
+                throw new Error('Main authenticated API is not initialized');
             }
-            return chart_api.api.send(request);
+            return api_base.api.send(request);
         },
 
         /**
@@ -38,8 +39,8 @@ export function createTransport(): TTransport {
          * @returns subscription ID
          */
         subscribe(request: any, callback: (response: any) => void): string {
-            if (!chart_api.api) {
-                throw new Error('Chart API not initialized');
+            if (!api_base.api) {
+                throw new Error('Main authenticated API is not initialized');
             }
             // Generate a unique temporary ID for tracking
             const tempId = `temp-${Date.now()}-${Math.random()}`;
@@ -48,7 +49,7 @@ export function createTransport(): TTransport {
             const subscribeRequest = { ...request, subscribe: 1 };
 
             // Set up global message listener first (before sending request)
-            const messageSubscription = chart_api.api.onMessage()?.subscribe(({ data }: { data: any }) => {
+            const messageSubscription = api_base.api.onMessage()?.subscribe(({ data }: { data: any }) => {
                 const subscriptionId = data?.subscription?.id;
 
                 // Check if this message belongs to our subscription
@@ -76,7 +77,7 @@ export function createTransport(): TTransport {
             });
 
             // Send the subscription request
-            chart_api.api
+            (api_base.api as any)
                 .send(subscribeRequest)
                 .then((response: any) => {
                     const subscriptionId = response?.subscription?.id;
@@ -122,8 +123,8 @@ export function createTransport(): TTransport {
                 }
 
                 // Send forget request to server using the real subscription ID
-                if (chart_api.api && subscription.realSubscriptionId) {
-                    chart_api.api.forget(subscription.realSubscriptionId);
+                if (api_base.api && subscription.realSubscriptionId) {
+                    (api_base.api as any).forget(subscription.realSubscriptionId);
                 }
 
                 // Clean up local storage
@@ -138,12 +139,12 @@ export function createTransport(): TTransport {
          * @param msgType - Message type to unsubscribe from (optional)
          */
         unsubscribeAll(msgType?: string): void {
-            if (chart_api.api) {
+            if (api_base.api) {
                 if (msgType) {
-                    chart_api.api.forgetAll(msgType);
+                    (api_base.api as any).forgetAll(msgType);
                 } else {
                     // Forget all ticks by default
-                    chart_api.api.forgetAll('ticks');
+                    (api_base.api as any).forgetAll('ticks');
                 }
             }
 

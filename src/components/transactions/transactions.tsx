@@ -103,20 +103,6 @@ const Transactions = observer(({ is_drawer_open }: TTransactions) => {
                 'run-panel-tab__content--mobile': !isDesktop && is_drawer_open,
             })}
         >
-            <div className='download__container transaction-details__button-container'>
-                <Download tab='transactions' />
-                <Button
-                    id='download__container__view-detail-button'
-                    className='download__container__view-detail-button'
-                    disabled={!transaction_list?.length}
-                    onClick={() => {
-                        toggleTransactionDetailsModal(true);
-                    }}
-                    secondary
-                >
-                    <Localize i18n_default_text='View Detail' />
-                </Button>
-            </div>
             <div className='transactions__header'>
                 <span className='transactions__header-column transactions__header-type'>
                     <Localize i18n_default_text='Type' />

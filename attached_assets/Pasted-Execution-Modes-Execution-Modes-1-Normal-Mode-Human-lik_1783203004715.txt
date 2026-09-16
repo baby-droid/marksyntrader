@@ -1,0 +1,105 @@
+Execution Modes
+Execution Modes
+
+1. Normal Mode
+- Human-like execution
+- Wait for contract confirmation
+- Uses inter-contract delay
+- Safe and stable
+
+2. Crazy Mode
+- Remove all intentional delays
+- No inter-contract cooldown
+- Prepare next order while current order is processing
+- Purchase immediately when signal is confirmed
+- Skip unnecessary animations and UI updates
+- High execution priority
+
+3. Turbo Mode
+- Everything in Crazy Mode
+- Zero intentional software delays
+- Pre-build purchase payloads before signal
+- Persistent WebSocket connection
+- Instant API request on trigger
+- Parallel processing for analysis and execution
+- Non-blocking order queue
+- Dedicated execution thread
+- Highest execution priority
+- Immediate re-entry after contract settlement
+Pseudocode
+IF mode == NORMAL
+    wait(interContractDelay)
+    analyze()
+    buyContract()
+
+IF mode == CRAZY
+    interContractDelay = 0
+    analyze()
+    buyImmediately()
+
+IF mode == TURBO
+    interContractDelay = 0
+    preloadContract()
+    keepWebSocketAlive()
+
+    IF signal == TRUE
+        sendPurchaseRequestImmediately()
+Configuration Object
+{
+  "normal": {
+    "interContractDelay": 300,
+    "preloadContracts": false,
+    "parallelProcessing": false,
+    "priority": "normal"
+  },
+
+  "crazy": {
+    "interContractDelay": 0,
+    "preloadContracts": true,
+    "parallelProcessing": true,
+    "priority": "high"
+  },
+
+  "turbo": {
+    "interContractDelay": 0,
+    "preloadContracts": true,
+    "parallelProcessing": true,
+    "persistentWebSocket": true,
+    "instantExecution": true,
+    "priority": "maximum"
+  }
+}
+Optimization Flow
+Market Tick
+      │
+      ▼
+Read Tick Data
+      │
+      ▼
+Run Strategy Analysis
+      │
+      ▼
+Signal Detected?
+      │
+   No ─────────► Wait Next Tick
+      │
+     Yes
+      ▼
+Build Purchase Payload
+      │
+      ▼
+Send Purchase Request
+      │
+      ▼
+Receive Confirmation
+      │
+      ▼
+Monitor Contract
+      │
+      ▼
+Repeat Immediately
+Relative Speed Profiles
+Mode	Intentional Delay	Execution Priority	Typical Use
+Normal	200–500 ms	Standard	Stable trading
+Crazy	0 ms	High	Faster automated execution
+Turbo	0 ms	Maximum	Optimized automated execution with preloaded requests and persistent connections

@@ -5,15 +5,23 @@ import { generateOAuthURL } from '@/components/shared';
 import Button from '@/components/shared_ui/button';
 import useActiveAccount from '@/hooks/api/account/useActiveAccount';
 import { useApiBase } from '@/hooks/useApiBase';
+import { useDepositReal } from '@/hooks/useDepositReal';
 import { useLogout } from '@/hooks/useLogout';
+import { useResetDemoBalance } from '@/hooks/useResetDemoBalance';
 import { useStore } from '@/hooks/useStore';
+import { isDemoAccount } from '@/utils/account-helpers';
 import { navigateToTransfer } from '@/utils/transfer-utils';
+import {
+    isASpeedBoostEnabled,
+    setASpeedBoostEnabled,
+    subscribeASpeedBoost,
+} from '@/utils/execution-speed';
 import { Localize } from '@deriv-com/translations';
 import { Header, useDevice, Wrapper } from '@deriv-com/ui';
 import { AppLogo } from '../app-logo';
 import AccountSwitcher from './account-switcher';
-import MenuItems from './menu-items';
 import MobileMenu from './mobile-menu';
+import NavDrawer from '@/components/nav-drawer/NavDrawer';
 import './header.scss';
 
 const ApiTokenLoginModal = lazy(() => import('@/components/login-modal/api-token-login-modal'));
@@ -133,6 +141,18 @@ const AppHeader = observer(() => {
         navigateToTransfer(transferCurrency);
     }, [authData?.currency]);
 
+    // Demo-account reset & real-account deposit hooks
+    const isDemo = Boolean(activeLoginid && isDemoAccount(activeLoginid));
+    const { isResetting, resetError, resetSuccess, resetBalance } = useResetDemoBalance();
+    const { state: depositState, openDeposit } = useDepositReal();
+    const [aSpeedBoost, setASpeedBoost] = useState(isASpeedBoostEnabled());
+
+    useEffect(() => subscribeASpeedBoost(setASpeedBoost), []);
+
+    const handleASpeedBoost = useCallback(() => {
+        setASpeedBoostEnabled(!aSpeedBoost);
+    }, [aSpeedBoost]);
+
     const renderAccountSection = useCallback(
         (position: 'left' | 'right' = 'right') => {
             // Show account switcher and logout when user is fully authenticated
@@ -147,7 +167,7 @@ const AppHeader = observer(() => {
                         </div>
                     );
                 } else if (position === 'right') {
-                    // For right section - transfer button (and account switcher on desktop)
+                    // For right section - account switcher (desktop) + action button
                     return (
                         <div className='auth-actions'>
                             {isDesktop && (
@@ -155,13 +175,44 @@ const AppHeader = observer(() => {
                                     <AccountSwitcher activeAccount={activeAccount} />
                                 </div>
                             )}
-                            <Button
-                                primary
-                                disabled={client?.is_logging_out || !authData?.currency}
-                                onClick={handleTransfer}
-                            >
-                                <Localize i18n_default_text='Transfer' />
-                            </Button>
+                            {isDemo ? (
+                                // Demo account: Transfer button only
+                                <Button
+                                    primary
+                                    disabled={client?.is_logging_out || !authData?.currency}
+                                    onClick={handleTransfer}
+                                >
+                                    <Localize i18n_default_text='Transfer' />
+                                </Button>
+                            ) : (
+                                // Real account: Transfer + Deposit buttons
+                                <div className='header__real-actions'>
+                                    <Button
+                                        primary
+                                        disabled={client?.is_logging_out || !authData?.currency}
+                                        onClick={handleTransfer}
+                                    >
+                                        <Localize i18n_default_text='Transfer' />
+                                    </Button>
+                                    <button
+                                        className='header__deposit-btn'
+                                        disabled={client?.is_logging_out || depositState === 'loading'}
+                                        onClick={openDeposit}
+                                        title='Deposit funds to your real account'
+                                    >
+                                        {depositState === 'loading' ? (
+                                            <span className='header__deposit-btn__spinner' />
+                                        ) : (
+                                            <>
+                                                <svg width='14' height='14' viewBox='0 0 24 24' fill='none' style={{ marginRight: 5 }}>
+                                                    <path d='M12 5v14M5 12l7 7 7-7' stroke='currentColor' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'/>
+                                                </svg>
+                                                Deposit
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     );
                 }
@@ -243,6 +294,9 @@ const AppHeader = observer(() => {
             is_account_regenerating,
             isOAuthPending,
             authData,
+            isDemo,
+            depositState,
+            openDeposit,
             handleLogin,
             handleSignup,
             handleTransfer,
@@ -250,6 +304,58 @@ const AppHeader = observer(() => {
     );
 
     if (client?.should_hide_header) return null;
+
+    // Left-side demo reset button: shown on desktop when logged in with a demo account
+    const demoResetBtn = isDesktop && isDemo && activeLoginid && !is_account_regenerating ? (
+        <button
+            className={clsx('header__demo-reset-btn', {
+                'header__demo-reset-btn--success': resetSuccess,
+                'header__demo-reset-btn--error': Boolean(resetError),
+            })}
+            title={resetError ?? (resetSuccess ? 'Balance reset!' : 'Reset demo balance to 10,000 USD')}
+            disabled={isResetting}
+            onClick={resetBalance}
+        >
+            {isResetting ? (
+                <span className='header__demo-reset-btn__spinner' />
+            ) : resetSuccess ? (
+                <>
+                    <svg width='13' height='13' viewBox='0 0 24 24' fill='none'>
+                        <path d='M5 12l5 5L19 7' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'/>
+                    </svg>
+                    Reset!
+                </>
+            ) : (
+                <>
+                    <svg width='13' height='13' viewBox='0 0 24 24' fill='none'>
+                        <path d='M1 4v6h6M23 20v-6h-6' stroke='currentColor' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'/>
+                        <path d='M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15' stroke='currentColor' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'/>
+                    </svg>
+                    Reset Demo
+                </>
+            )}
+        </button>
+    ) : null;
+
+    // App-wide execution preset. It lives beside the account controls so it
+    // remains available while any bot page is open.
+    const aSpeedBoostBtn = activeLoginid && !is_account_regenerating ? (
+        <button
+            type='button'
+            className={clsx('header__a-speed-btn', {
+                'header__a-speed-btn--active': aSpeedBoost,
+            })}
+            aria-pressed={aSpeedBoost}
+            title={aSpeedBoost
+                ? 'A-SPEED BOOST ON — Normal one-purchase-per-tick with zero intentional delay. Click to turn off.'
+                : 'Turn on A-SPEED BOOST — Normal one-purchase-per-tick with zero intentional delay.'}
+            onClick={handleASpeedBoost}
+        >
+            <span className='header__a-speed-btn__icon'>⚡</span>
+            <span>A-SPEED BOOST</span>
+            <span className='header__a-speed-btn__state'>{aSpeedBoost ? 'ON' : 'OFF'}</span>
+        </button>
+    ) : null;
 
     return (
         <>
@@ -261,8 +367,19 @@ const AppHeader = observer(() => {
             >
                 <Wrapper variant='left'>
                     <MobileMenu onLogout={handleLogout} />
+                    <NavDrawer />
                     <AppLogo />
-                    {isDesktop ? <MenuItems /> : renderAccountSection('left')}
+                    {isDesktop ? (
+                        <>
+                            {demoResetBtn}
+                            {aSpeedBoostBtn}
+                        </>
+                    ) : (
+                        <>
+                            {renderAccountSection('left')}
+                            {aSpeedBoostBtn}
+                        </>
+                    )}
                 </Wrapper>
                 <Wrapper variant='right'>
                     {renderAccountSection('right')}

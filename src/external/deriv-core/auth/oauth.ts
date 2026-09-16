@@ -12,6 +12,12 @@ import {
 } from './storage';
 import { getAuthBaseUrl } from '../config/urls';
 
+// The OAuth client registered for Marksyntrader is currently allowed to
+// request `trade` only. Deriv rejects the whole authorization request when a
+// scope is not enabled for the client, which sends the user to a failed flow
+// page before the login screen can load.
+export const DEFAULT_OAUTH_SCOPES = 'trade';
+
 /**
  * Build the base PKCE URLSearchParams shared by login and sign-up.
  * Stores a fresh CSRF token and code verifier in sessionStorage.
@@ -25,7 +31,7 @@ async function buildPkceParams(config: AuthConfig): Promise<URLSearchParams> {
   storeCodeVerifier(codeVerifier);
 
   return new URLSearchParams({
-    scope: config.scopes ?? 'trade read',
+    scope: config.scopes ?? DEFAULT_OAUTH_SCOPES,
     response_type: 'code',
     client_id: config.clientId,
     redirect_uri: config.redirectUri,
@@ -101,12 +107,18 @@ export async function initiateSignUp(config: AuthConfig): Promise<void> {
  */
 export function parseCallbackParams(url: string): CallbackParams {
   const urlObj = new URL(url);
+  const query = urlObj.searchParams;
+  // Deriv returns the authorization code in the query string. Accepting a
+  // fragment as a fallback keeps the callback resilient to older auth
+  // intermediaries without weakening state validation.
+  const fragment = new URLSearchParams(urlObj.hash.replace(/^#/, ''));
+  const get = (key: string) => query.get(key) ?? fragment.get(key);
   return {
-    code: urlObj.searchParams.get('code'),
-    state: urlObj.searchParams.get('state'),
-    scope: urlObj.searchParams.get('scope'),
-    error: urlObj.searchParams.get('error'),
-    error_description: urlObj.searchParams.get('error_description'),
+    code: get('code'),
+    state: get('state'),
+    scope: get('scope'),
+    error: get('error'),
+    error_description: get('error_description'),
   };
 }
 
@@ -170,6 +182,9 @@ export async function exchangeCodeForTokens(params: TokenExchangeParams): Promis
   }
 
   const tokenData = await response.json();
+  if (!tokenData?.access_token) {
+    throw new OAuthError('Token exchange returned no access token.');
+  }
   const authInfo: AuthInfo = {
     access_token: tokenData.access_token,
     token_type: tokenData.token_type,

@@ -26,6 +26,23 @@ type TMovements = {
     indicative?: number;
 };
 
+export type TBatchSummary = {
+    batchId: string;
+    total: number;
+    bought: number;
+    settled: number;
+    pending: number;
+    wins: number;
+    losses: number;
+    failed: number;
+    totalStake: number;
+    totalProfit: number;
+    currency?: string;
+    contractType?: string;
+    symbol?: string;
+    updatedAt: number;
+};
+
 export default class SummaryCardStore {
     root_store: RootStore;
     core: TStores;
@@ -50,6 +67,7 @@ export default class SummaryCardStore {
     profit?: number = 0;
     indicative?: number = 0;
     is_bot_running?: boolean = false;
+    batch_summary: TBatchSummary | null = null;
 
     constructor(root_store: RootStore, core: TStores) {
         makeObservable(this, {
@@ -63,6 +81,7 @@ export default class SummaryCardStore {
             has_contract_update_take_profit: observable,
             has_contract_update_stop_loss: observable,
             is_bot_running: observable,
+            batch_summary: observable,
             contract_update_config: observable,
             contract_id: observable,
             profit: observable,
@@ -83,6 +102,8 @@ export default class SummaryCardStore {
             setValidationErrorMessages: action,
             validateProperty: action,
             registerReactions: action.bound,
+            setBatchSummary: action.bound,
+            clearBatchSummary: action.bound,
         });
 
         this.root_store = root_store;
@@ -127,6 +148,14 @@ export default class SummaryCardStore {
         this.indicative = 0;
         this.indicative_movement = '';
         this.profit_movement = '';
+    }
+
+    setBatchSummary(summary: TBatchSummary | null) {
+        this.batch_summary = summary;
+    }
+
+    clearBatchSummary() {
+        this.batch_summary = null;
     }
 
     clearContractUpdateConfigValues() {

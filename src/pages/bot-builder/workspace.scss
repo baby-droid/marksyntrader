@@ -6,6 +6,7 @@
     width: calc(100vw - 3.2rem);
     height: var(--bot-content-height);
     top: 0;
+    margin-top: 1.6rem;
 
     @include mobile-or-tablet-screen {
         width: 100%;
@@ -19,7 +20,7 @@
     font-style: normal;
     line-height: 1.43;
     letter-spacing: normal;
-    fill: $color-white;
+    fill: var(--accent, #89c4f4);
 }
 
 .blocklyMainWorkspaceScrollbar {
@@ -31,4 +32,30 @@
     position: relative;
     touch-action: none;
     overflow: hidden;
+}
+
+@media (max-width: 600px) {
+    #scratch_div {
+        margin-top: 0.25rem;
+        height: calc(100dvh - 12rem);
+        overflow: hidden;
+    }
+
+    .injectionDiv {
+        height: 100%;
+        min-width: 0;
+        overflow: hidden;
+    }
+
+    .blocklyToolboxDiv {
+        width: 42px !important;
+    }
+
+    .blocklyFlyout {
+        max-width: 82vw;
+    }
+
+    .blocklyMainBackground {
+        fill: var(--general-main-1, #fff);
+    }
 }

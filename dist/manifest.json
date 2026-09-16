@@ -1,0 +1,27 @@
+{
+  "name": "AHMEDSYNTRADERSITE",
+  "short_name": "AhmedSyn",
+  "description": "Advanced AI Trading Platform on Deriv",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000e06",
+  "theme_color": "#00ff88",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/logo.jpeg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo.jpeg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "categories": ["finance", "productivity"],
+  "lang": "en"
+}

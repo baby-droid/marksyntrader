@@ -1,4 +1,8 @@
 .transaction-details-modal-desktop {
+    .hook-result {
+        font-weight: 800;
+        white-space: nowrap;
+    }
     color: var(--text-general);
 
     .dc-dialog {

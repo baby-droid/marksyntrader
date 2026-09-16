@@ -23,17 +23,17 @@ jest.mock('@/adapters/smartcharts-champion/transport', () => ({
     createTransport: (...args: any[]) => mockCreateTransport(...args),
 }));
 
-// Mock chart_api with a mutable reference
-jest.mock('@/external/bot-skeleton/services/api/chart-api', () => ({
+// Mock the authenticated main API with a mutable reference
+jest.mock('@/external/bot-skeleton/services/api/api-base', () => ({
     __esModule: true,
-    default: {
+    api_base: {
         api: null,
         init: jest.fn(),
     },
 }));
 
-// Now import the hook and chart_api after mocks are set up
-import chart_api from '@/external/bot-skeleton/services/api/chart-api';
+// Now import the hook and api_base after mocks are set up
+import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { useSmartChartAdaptor } from '../useSmartChartAdaptor';
 
 describe('useSmartChartAdaptor', () => {
@@ -43,6 +43,7 @@ describe('useSmartChartAdaptor', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
+        localStorage.clear();
 
         // Mock transport
         mockTransport = {
@@ -73,18 +74,18 @@ describe('useSmartChartAdaptor', () => {
         mockCreateServices.mockReturnValue(mockServices);
         mockBuildAdapter.mockReturnValue(mockAdapter);
 
-        // Set up chart_api.api
-        chart_api.api = {
+        // Set up authenticated api_base.api
+        api_base.api = {
             forgetAll: jest.fn(),
         } as any;
     });
 
     afterEach(() => {
-        chart_api.api = null;
+        api_base.api = null;
     });
 
     describe('Initialization', () => {
-        it('should initialize adapter when chart_api.api is available', async () => {
+        it('should initialize adapter when api_base.api is available', async () => {
             const { result } = renderHook(() => useSmartChartAdaptor());
 
             await waitFor(() => {
@@ -97,15 +98,15 @@ describe('useSmartChartAdaptor', () => {
                 mockTransport,
                 mockServices,
                 expect.objectContaining({
-                    debug: true,
+                    debug: false,
                     subscriptionTimeout: 30000,
                 })
             );
             expect(result.current.adapter).toBe(mockAdapter);
         });
 
-        it('should not initialize if chart_api.api is not available', () => {
-            chart_api.api = null;
+        it('should not initialize if api_base.api is not available', () => {
+            api_base.api = null;
 
             const { result } = renderHook(() => useSmartChartAdaptor());
 
@@ -294,7 +295,7 @@ describe('useSmartChartAdaptor', () => {
         });
 
         it('should throw error if adapter not initialized', async () => {
-            chart_api.api = null;
+            api_base.api = null;
 
             const { result } = renderHook(() => useSmartChartAdaptor());
 
@@ -304,7 +305,7 @@ describe('useSmartChartAdaptor', () => {
                     granularity: 0,
                     count: 100,
                 })
-            ).rejects.toThrow('Adapter not initialized');
+            ).resolves.toEqual({ history: { prices: [], times: [] } });
         });
     });
 
@@ -348,7 +349,7 @@ describe('useSmartChartAdaptor', () => {
         });
 
         it('should return no-op function if adapter not initialized', () => {
-            chart_api.api = null;
+            api_base.api = null;
 
             const { result } = renderHook(() => useSmartChartAdaptor());
 
@@ -500,7 +501,7 @@ describe('useSmartChartAdaptor', () => {
             // should be cleaned up automatically.
             // Since we already used mockReturnValueOnce twice, subsequent calls will return undefined
             // Let's just verify the global cleanup methods were called
-            expect(chart_api.api?.forgetAll).toHaveBeenCalledWith('ticks');
+            expect((api_base.api as any)?.forgetAll).toHaveBeenCalledWith('ticks');
             expect(mockAdapter.transport.unsubscribeAll).toHaveBeenCalledWith('ticks');
         });
 

@@ -18,23 +18,26 @@
 
         <meta charset="UTF-8" />
         <link rel="icon" type="image/svg+xml" href="/deriv-logo.svg" />
+        <link rel="apple-touch-icon" href="/logo.jpeg" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-        <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#1a3a8c" />
+        <meta name="theme-color" content="#00ff88" />
+        <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="Marksyntrader" />
+        <meta name="application-name" content="Marksyntrader" />
         <meta name="title" content="Marksyntrader | Deriv Trading Bot" />
         <meta
             name="description"
-            content="Import your current bot or learn how to create a trading bot from scratch with our detailed guides, FAQs, and tutorials. Start with a quick strategy!"
+            content="Ahmed Syn Trader — Advanced AI trading platform on Deriv with automation, charts, copy trading and more."
         />
-        <meta property="og:title" content="Deriv Bot" />
-        <meta
-            property="og:description"
-            content="Import your current bot or learn how to create a trading bot from scratch with our detailed guides, FAQs, and tutorials. Start with a quick strategy!"
-        />
-        <title>Automate Your Trades | Deriv Bot</title>
+        <meta name="keywords" content="Deriv, trading bot, automated trading, copy trading, synthetic indices" />
+        <meta property="og:title" content="Marksyntrader — Ahmed Syn Trader" />
+        <meta property="og:description" content="Advanced AI trading platform on Deriv" />
+        <meta property="og:image" content="/logo.jpeg" />
+        <meta property="og:type" content="website" />
+        <link rel="manifest" href="/manifest.json" />
+        <title>Marksyntrader — Ahmed Syn Trader</title>
         <style>
             :root {
                 font-size: 62.5%;
@@ -56,7 +59,42 @@
 
         <div id="modal_root" class="modal-root"></div>
         <div id="popup_root" class="popup-root"></div>
-        <div id="root"></div>
+        <div id="root">
+            <div
+                data-boot-fallback
+                style="min-height:100vh;background:#050b1d;color:#e8eefc;display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;text-align:center;padding:24px;box-sizing:border-box"
+            >
+                <div>
+                    <div style="font-size:18px;font-weight:700;letter-spacing:.04em">Marksyntrader</div>
+                    <div data-boot-message style="margin-top:10px;color:#8ea1c7;font-size:13px">
+                        Loading trading workspace…
+                    </div>
+                    <button
+                        data-boot-retry
+                        type="button"
+                        onclick="window.location.reload()"
+                        style="display:none;margin-top:16px;padding:9px 16px;border:1px solid #2ddf8c;border-radius:8px;background:#0c2b2a;color:#d9fff0;cursor:pointer"
+                    >
+                        Reload preview
+                    </button>
+                </div>
+            </div>
+        </div>
+        <script>
+            (function () {
+                function showBootError() {
+                    var root = document.getElementById('root');
+                    var fallback = root && root.querySelector('[data-boot-fallback]');
+                    if (!fallback) return;
+                    var message = fallback.querySelector('[data-boot-message]');
+                    var retry = fallback.querySelector('[data-boot-retry]');
+                    if (message) message.textContent = 'The preview could not start. Reload to try again.';
+                    if (retry) retry.style.display = 'inline-block';
+                }
+                window.addEventListener('error', showBootError, true);
+                window.addEventListener('unhandledrejection', showBootError);
+            }());
+        </script>
         <script type="module" src="/src/main.tsx"></script>
         <!-- LiveChat script -->
         <script type="text/javascript" defer>
@@ -88,12 +126,12 @@
                         i(['call', c.call(arguments)]);
                     },
                     init: function () {
-                        setTimeout(() => {
+                        setTimeout(function () {
                             var n = t.createElement('script');
-                            ((n.async = !0),
-                                (n.type = 'text/javascript'),
-                                (n.src = 'https://cdn.livechatinc.com/tracking.js'),
-                                t.head.appendChild(n));
+                            n.async = true;
+                            n.type = 'text/javascript';
+                            n.src = 'https://cdn.livechatinc.com/tracking.js';
+                            t.head.appendChild(n);
                         }, 3000);
                     },
                 };

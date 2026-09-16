@@ -1,5 +1,5 @@
 // @ts-nocheck — vendored bot code with known upstream type gaps; see AGENTS.md
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import classNames from 'classnames';
 import ContentLoader from 'react-content-loader';
 import Money from '@/components/shared_ui/money';
@@ -8,6 +8,7 @@ import { popover_zindex } from '@/constants/z-indexes';
 import { getContractTypeName } from '@/external/bot-skeleton';
 import { isDbotRTL } from '@/external/bot-skeleton/utils/workspace';
 import { getSymbolDisplayNameSync } from '@/utils/symbol-display-name';
+import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import { LegacyRadioOffIcon, LegacyRadioOnIcon } from '@deriv/quill-icons';
 import { Localize, localize } from '@deriv-com/translations';
 import { MarketIcon } from '../market/market-icon';
@@ -36,6 +37,41 @@ type TTransaction = {
     contract?: TContractInfo | null;
     onClickTransaction?: (transaction_id: null | number) => void;
     active_transaction_id?: number | null;
+};
+
+/**
+ * KSH-aware money display.
+ * When the user's display currency is KSH we convert the USD amount using
+ * fromUsd() and label it KSH.  Otherwise we fall back to the standard
+ * Money component so formatting / rounding stays consistent.
+ */
+const KshMoney: React.FC<{
+    amount: number;
+    contractCurrency: string;
+    showCurrency?: boolean;
+    className?: string;
+}> = ({ amount, contractCurrency, showCurrency = false, className }) => {
+    const [displayCur, setDisplayCur] = useState(getDisplayCurrency());
+    useEffect(() => subscribeCurrency(() => setDisplayCur(getDisplayCurrency())), []);
+
+    if (displayCur === 'USD' || displayCur === contractCurrency) {
+        return (
+            <Money
+                amount={amount}
+                currency={contractCurrency}
+                show_currency={showCurrency}
+                className={className}
+            />
+        );
+    }
+    // KSH (or other non-USD display) mode — convert + label
+    const converted = fromUsd(amount);
+    const formatted = converted.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return (
+        <span className={className}>
+            {formatted}{showCurrency ? ` ${displayCur}` : ''}
+        </span>
+    );
 };
 
 const TransactionIconWithText = ({ icon, title, message, className }: TTransactionIconWithText) => (
@@ -104,6 +140,16 @@ const PopoverContent = ({ contract }: TPopoverContent) => (
                 )}
             </PopoverItem>
         )}
+        {(contract as any).batch_id && (
+            <PopoverItem title={localize('Batch execution')}>
+                <div className='transactions__popover-value'>
+                    {(contract as any).batch_id}
+                </div>
+                <div className='transactions__popover-value'>
+                    {`Position ${(contract as any).batch_index || 1}/${(contract as any).batch_size || 1} · ${((contract as any).execution_mode || 'single') === 'parallel' ? 'Parallel' : 'Single Trade'}`}
+                </div>
+            </PopoverItem>
+        )}
         {contract.tick_count && (
             <PopoverItem title={localize('Duration')}>
                 <div className='transactions__popover-value'>{`${contract.tick_count} ${localize('ticks')}`}</div>
@@ -160,6 +206,9 @@ const PopoverContent = ({ contract }: TPopoverContent) => (
 );
 
 const Transaction = ({ contract, active_transaction_id, onClickTransaction }: TTransaction) => {
+    const isHook = Boolean((contract as any)?.is_virtual_hook);
+    const hookWon = (contract as any)?.hook_result === 'profit';
+    const hookLabel = hookWon ? '✓ HOOK PROFIT' : '✗ HOOK LOSS';
     return (
         <Popover
             zIndex={popover_zindex.TRANSACTION.toString()}
@@ -173,7 +222,7 @@ const Transaction = ({ contract, active_transaction_id, onClickTransaction }: TT
                 className='transactions__item'
                 onClick={() => onClickTransaction && onClickTransaction(contract?.transaction_ids?.buy || null)}
             >
-                <div className='transactions__cell transactions__trade-type'>
+                <div className={classNames('transactions__cell transactions__trade-type', { 'transactions__hook': isHook })}>
                     <div className='transactions__loader-container'>
                         {contract ? (
                             <TransactionIconWithText
@@ -195,10 +244,12 @@ const Transaction = ({ contract, active_transaction_id, onClickTransaction }: TT
                     </div>
                     <div className='transactions__loader-container'>
                         {contract ? (
-                            <TransactionIconWithText
-                                icon={<TradeTypeIcon type={contract.contract_type || ''} size='sm' />}
-                                title={getContractTypeName(contract)}
-                            />
+                            isHook ? <span className='transactions__hook-label'>🔮 HOOK</span> : (
+                                <TransactionIconWithText
+                                    icon={<TradeTypeIcon type={contract.contract_type || ''} size='sm' />}
+                                    title={getContractTypeName(contract)}
+                                />
+                            )
                         ) : (
                             <TransactionIconLoader />
                         )}
@@ -219,21 +270,33 @@ const Transaction = ({ contract, active_transaction_id, onClickTransaction }: TT
                     />
                 </div>
                 <div className='transactions__cell transactions__stake'>
-                    {contract ? (
-                        <Money amount={contract.buy_price} currency={contract.currency} show_currency />
+                    {isHook ? '—' : contract ? (
+                        <KshMoney
+                            amount={contract.buy_price}
+                            contractCurrency={contract.currency}
+                            showCurrency
+                        />
                     ) : (
                         <TransactionFieldLoader />
                     )}
                 </div>
                 <div className='transactions__cell transactions__profit'>
-                    {contract?.is_completed ? (
+                    {isHook ? (
+                        <div className={hookWon ? 'transactions__profit--win transactions__hook-result' : 'transactions__profit--loss transactions__hook-result'}>
+                            {hookLabel}
+                        </div>
+                    ) : contract?.is_completed ? (
                         <div
                             className={classNames({
                                 'transactions__profit--win': contract?.profit && contract?.profit >= 0,
                                 'transactions__profit--loss': contract?.profit && contract?.profit < 0,
                             })}
                         >
-                            <Money amount={Math.abs(contract.profit || 0)} currency={contract.currency} show_currency />
+                            <KshMoney
+                                amount={Math.abs(contract.profit || 0)}
+                                contractCurrency={contract.currency}
+                                showCurrency
+                            />
                         </div>
                     ) : (
                         <TransactionFieldLoader />

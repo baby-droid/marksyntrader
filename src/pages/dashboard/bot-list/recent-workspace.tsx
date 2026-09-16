@@ -116,6 +116,8 @@ const RecentWorkspace = observer(({ workspace, index }: TRecentWorkspace) => {
 
         switch (type) {
             case STRATEGY.OPEN:
+            case STRATEGY.INIT:
+                // Both explicit Open and row-click (INIT) load the bot and go to Bot Builder
                 await handleOpen();
                 break;
 

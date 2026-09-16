@@ -1,0 +1,449 @@
+If you're using an AI website builder like **Lovable, Bolt.new, v0, Replit AI, Cursor, or Windsurf**, these settings and prompt will get you very close to the UI in your screenshot.
+
+---
+
+# UI Theme
+
+```text
+Style: Modern Trading Platform
+Theme: Light
+Primary Color: #00B8A9 (Deriv Teal)
+Secondary Color: #F44336 (Red)
+Background: #F8F9FA
+Card Background: White
+Border Radius: 10px
+Border: #E5E7EB
+Shadow: 0 4px 10px rgba(0,0,0,.08)
+```
+
+---
+
+# Layout
+
+```text
+Desktop
+
+Header
+100%
+
+↓
+
+Digit Frequency Bar
+100%
+
+↓
+
+70% Chart
+30% Trading Panel
+
+↓
+
+Bottom Digit Statistics
+100%
+```
+
+---
+
+# Typography
+
+```text
+Font
+
+Inter
+
+Weights
+
+400
+500
+600
+700
+```
+
+---
+
+# Chart
+
+```text
+Chart Library
+
+TradingView Lightweight Charts
+```
+
+Settings
+
+```text
+Chart Type
+
+Area Chart
+
+Line Width
+
+2
+
+Grid
+
+ON
+
+Crosshair
+
+Normal
+
+Right Price Scale
+
+ON
+
+Time Scale
+
+ON
+
+Watermark
+
+DERIV TRADER
+
+Opacity
+
+0.08
+```
+
+---
+
+# Market Selector
+
+```text
+Dropdown
+
+White
+
+Shadow
+
+Rounded
+
+Height
+
+80px
+
+Font
+
+22px
+
+Bold
+```
+
+---
+
+# Digit Circles
+
+Size
+
+```text
+58px
+```
+
+Border
+
+```text
+6px solid #E5E7EB
+```
+
+Active Green
+
+```text
+#00B8A9
+```
+
+Active Red
+
+```text
+#F44336
+```
+
+Inactive
+
+```text
+#D6D6D6
+```
+
+Font
+
+```text
+Bold
+
+18px
+```
+
+Percentage
+
+```text
+12px
+Gray
+```
+
+---
+
+# Trading Panel
+
+Width
+
+```text
+360px
+```
+
+Cards
+
+```text
+Border Radius
+
+10px
+
+Padding
+
+20px
+
+Gap
+
+16px
+```
+
+---
+
+# Tick Slider
+
+```text
+Min
+
+1
+
+Max
+
+10
+
+Default
+
+5
+```
+
+---
+
+# Prediction Buttons
+
+Grid
+
+```text
+5 columns
+
+2 rows
+```
+
+Button
+
+```text
+50x50
+
+Radius
+
+8px
+
+Selected
+
+Gray Background
+
+Hover
+
+Teal Border
+```
+
+---
+
+# Stake Section
+
+```text
+Width
+
+100%
+
+Height
+
+60px
+
+Radius
+
+8px
+```
+
+---
+
+# Buy Buttons
+
+Over
+
+```text
+Background
+
+#00B8A9
+
+Height
+
+70px
+
+Radius
+
+8px
+
+Text
+
+White
+
+Bold
+```
+
+Under
+
+```text
+Background
+
+#F44336
+
+Height
+
+70px
+
+Radius
+
+8px
+
+Text
+
+White
+
+Bold
+```
+
+---
+
+# Bottom Statistics
+
+```text
+10 circles
+
+Space Between
+
+20px
+
+Centered
+
+Sticky Bottom
+```
+
+---
+
+# Grid
+
+```text
+12-column CSS Grid
+
+Chart
+
+span 8
+
+Trade Panel
+
+span 4
+```
+
+---
+
+# Animation
+
+```text
+Tick updates
+
+200ms
+
+Circle update
+
+150ms
+
+Button Hover
+
+0.2s ease
+
+Chart Update
+
+Live
+
+No Delay
+```
+
+---
+
+# Icons
+
+```text
+Lucide React
+
+Chart
+Settings
+Arrow
+Wallet
+Info
+```
+
+---
+
+# Color Palette
+
+```text
+Primary
+#00B8A9
+
+Danger
+#F44336
+
+Background
+#F8F9FA
+
+Card
+#FFFFFF
+
+Border
+#E5E7EB
+
+Text
+#1F2937
+
+Secondary Text
+#6B7280
+```
+
+---
+
+# Exact Prompt for an AI Builder
+
+```text
+Build a pixel-perfect trading dashboard inspired by the Deriv Trader interface shown in the reference image.
+
+Requirements:
+- React + TypeScript + Tailwind CSS + Vite.
+- Use TradingView Lightweight Charts for the live area chart.
+- Full-width header with market selector card on the left.
+- Horizontal digit-frequency bar at the top displaying digits 0–9 inside circular indicators with percentages beneath each digit.
+- Main content split into two columns:
+  - Left: responsive live area chart with gridlines, right-side price axis, and a faint diagonal "DERIV TRADER" watermark.
+  - Right: trading panel (360px wide) with sections for Contract Type, Duration slider, Last Digit Prediction (0–9 grid), Stake/Payout selector, stake controls, and two large buttons: Over (teal) and Under (red).
+- Bottom of the chart contains another digit-frequency row matching the top style.
+- Theme:
+  - Background: #F8F9FA
+  - Cards: white with 10px radius and subtle shadow
+  - Primary: #00B8A9
+  - Danger: #F44336
+  - Borders: #E5E7EB
+  - Font: Inter
+- Responsive layout:
+  - Desktop: 70% chart / 30% trading panel
+  - Tablet: 60% / 40%
+  - Mobile: stacked layout.
+- Include smooth 200ms transitions for live updates.
+- Use reusable React components and maintain clean, modular code.
+```
+
+These settings will produce a UI that is **very close in look and layout** to the screenshot while remaining an original implementation rather than a literal copy of Deriv's proprietary interface.

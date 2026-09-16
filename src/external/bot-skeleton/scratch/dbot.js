@@ -2,6 +2,7 @@ import { save_types } from '../constants';
 import { config } from '../constants/config';
 import { api_base } from '../services/api/api-base';
 import ApiHelpers from '../services/api/api-helpers';
+import { sellAllSideContracts } from '../services/tradeEngine/trade/Purchase';
 import Interpreter from '../services/tradeEngine/utils/interpreter';
 import { compareXml, observer as globalObserver } from '../utils';
 import { getSavedWorkspaces, saveWorkspaceToRecent } from '../utils/local-storage';
@@ -187,12 +188,25 @@ class DBot {
                     window.Blockly.getMainWorkspace().current_strategy_id = latest_file.id;
                 }
 
+                // A Free Bots / AI-selected strategy takes priority over the default so it
+                // survives the tab remount that occurs when navigating into the Bot Builder.
+                if (window.__pendingBotXml) {
+                    window.Blockly.derivWorkspace.strategy_to_load = window.__pendingBotXml;
+                    window.Blockly.getMainWorkspace().strategy_to_load = window.__pendingBotXml;
+                    if (window.__pendingBotName) file_name = window.__pendingBotName;
+                }
+
                 const event_group = `dbot-load${Date.now()}`;
                 window.Blockly.Events.setGroup(event_group);
                 window.Blockly.Xml.domToWorkspace(
                     window.Blockly.utils.xml.textToDom(window.Blockly.derivWorkspace.strategy_to_load),
                     this.workspace
                 );
+                if (window.__pendingBotXml) {
+                    window.__pendingBotXml = null;
+                    window.__pendingBotName = null;
+                }
+
                 const { save_modal } = DBotStore.instance;
 
                 save_modal.updateBotName(file_name);
@@ -328,7 +342,15 @@ class DBot {
             }
             function BinaryBotPrivateTickAnalysis() {
                 var currentTickTime = Bot.getLastTick(true);
-                while (currentTickTime === 'MarketIsClosed') {
+                /* During first-trade startup/reconnect the tick service can
+                   briefly return no last tick. Treat it like a feed wait,
+                   rather than dereferencing undefined. */
+                while (
+                    currentTickTime === 'MarketIsClosed' ||
+                    !currentTickTime ||
+                    typeof currentTickTime !== 'object' ||
+                    currentTickTime.epoch == null
+                ) {
                     sleep(5);
                     currentTickTime = Bot.getLastTick(true);
                 }
@@ -369,6 +391,30 @@ class DBot {
     }
 
     /**
+     * Halts the running strategy in place without tearing down the interpreter.
+     * Unlike stopBot(), this keeps all workspace variables (stake, martingale
+     * progression, run counters, etc.) exactly as they are — resumeBot() then
+     * continues execution from that exact point instead of restarting the
+     * strategy from "Run once at start".
+     */
+    pauseBot() {
+        if (this.interpreter) this.interpreter.pause();
+    }
+
+    /**
+     * Resumes a strategy halted via pauseBot(). Continues mid-flight with
+     * whatever stake/variable state was live at the moment of pause (e.g. a
+     * martingale-adjusted stake after a loss), it does not restart the bot.
+     */
+    resumeBot() {
+        if (this.interpreter) this.interpreter.resume();
+    }
+
+    isBotPaused() {
+        return !!(this.interpreter && this.interpreter.isPaused());
+    }
+
+    /**
      * Instructs the interpreter to stop the bot. If there is an active trade
      * that trade will be completed first to reflect correct contract status in UI.
      */
@@ -376,6 +422,7 @@ class DBot {
         if (api_base.is_stopping) return;
 
         api_base.setIsRunning(false);
+        sellAllSideContracts();
 
         await this.interpreter.stop();
         this.is_bot_running = false;
@@ -389,6 +436,7 @@ class DBot {
      * Immediately instructs the interpreter to terminate the WS connection and bot.
      */
     async terminateBot() {
+        sellAllSideContracts();
         if (this.interpreter) {
             await this.interpreter.terminateSession();
             this.interpreter = null;
