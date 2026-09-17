@@ -91,8 +91,22 @@
                     if (message) message.textContent = 'The preview could not start. Reload to try again.';
                     if (retry) retry.style.display = 'inline-block';
                 }
-                window.addEventListener('error', showBootError, true);
-                window.addEventListener('unhandledrejection', showBootError);
+
+                function isChunkFailure(value) {
+                    var message = value && (value.message || value.reason || value);
+                    return /chunk|dynamically imported module|failed to fetch|module script|syntaxerror/i.test(String(message || ''));
+                }
+
+                window.addEventListener('error', function (event) {
+                    var target = event && event.target;
+                    var failedScript = target && target.tagName === 'SCRIPT' && target.src;
+                    var bootRuntimeError = (!target || target === window) && isChunkFailure(event && (event.error || event.message));
+                    if (failedScript || bootRuntimeError) showBootError();
+                }, true);
+
+                window.addEventListener('unhandledrejection', function (event) {
+                    if (isChunkFailure(event && event.reason)) showBootError();
+                });
             }());
         </script>
         <script type="module" src="/src/main.tsx"></script>
