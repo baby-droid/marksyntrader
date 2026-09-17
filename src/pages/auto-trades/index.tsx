@@ -630,12 +630,10 @@ const AI_BOTS: AiBotDef[] = [
     },
 ];
 
-// The first four Auto Bots are intentionally managed as small two-market
-// cohorts. The directional/parity AUTO bots below continue using the broader
-// fresh-market scanner.
-const ROTATING_AUTO_BOT_IDS = new Set(AI_BOTS.slice(0, 4).map(bot => bot.id));
+// Every Auto Bot runs as a sequential two-market cohort. A cohort completes
+// seven settled runs per market before the next pair is selected.
 const AUTO_BOT_ROTATION_MARKETS = 2;
-const AUTO_BOT_RUNS_PER_MARKET = 5;
+const AUTO_BOT_RUNS_PER_MARKET = 7;
 
 // ── Per-bot session state ─────────────────────────────────────────────────────
 interface BotSession {
@@ -692,7 +690,7 @@ function AiBotCard({
     const stopRef = useRef(false);
     const pausedStakeRef = useRef<number | null>(null); // for resume-with-martingale
     const { buyAndWait } = useBuyAndWait();
-    const usesPairRotation = ROTATING_AUTO_BOT_IDS.has(bot.id);
+    const usesPairRotation = true;
     const [rotationStatus, setRotationStatus] = useState<{
         symbols: string[];
         counts: Record<string, number>;
@@ -728,7 +726,7 @@ function AiBotCard({
     );
     const visibleMarketCandidates = usesPairRotation && rotationStatus.symbols.length
         ? marketCandidates.filter(candidate => rotationStatus.symbols.includes(candidate.symbol)).slice(0, AUTO_BOT_ROTATION_MARKETS)
-        : marketCandidates.slice(0, usesPairRotation ? AUTO_BOT_ROTATION_MARKETS : 4);
+        : marketCandidates.slice(0, AUTO_BOT_ROTATION_MARKETS);
     const qualifyingMarketCount = marketCandidates.filter(candidate => candidate.qualifies).length;
     useEffect(() => { marketCandidatesRef.current = marketCandidates; }, [marketCandidates]);
     const defaultMarketRisk: MarketRiskConfig = {
@@ -801,6 +799,8 @@ function AiBotCard({
         const stoppedMarkets = new Set<string>();
         let rotationSymbols: string[] = [];
         let rotationCycle = 0;
+        const rotationUsedSymbols = new Set<string>();
+        let carryStakeToNextMarket = false;
         setMarketRiskStatus({});
         setRotationStatus({ symbols: [], counts: {}, cycle: 0 });
         onLog(`🚀 ${bot.name} started | Stake: $${stk.toFixed(2)} | Martingale:${martingale.toFixed(2)}× TP:$${tp.toFixed(2)} SL:$${sl.toFixed(2)}`);
@@ -834,9 +834,13 @@ function AiBotCard({
             } else {
                 const lossStreak = (marketLossStreakBySymbol.get(candidate.symbol) ?? 0) + 1;
                 marketLossStreakBySymbol.set(candidate.symbol, lossStreak);
-                // Skip the immediate next tick and require a stronger setup
-                // before allowing the same market to re-enter.
+                // Keep the martingale stake, but leave a market after three
+                // consecutive losses so the next best market can take over.
                 lossCooldownUntilTick.set(candidate.symbol, candidate.tickVersion + 1);
+                if (usesPairRotation && lossStreak >= 3) {
+                    marketRunsBySymbol.set(candidate.symbol, AUTO_BOT_RUNS_PER_MARKET);
+                    carryStakeToNextMarket = true;
+                }
             }
 
             const marketRisk = marketRiskConfigRef.current[candidate.symbol] ?? { takeProfit: tp, stopLoss: sl };
@@ -865,6 +869,9 @@ function AiBotCard({
                 : Math.max(0.35, +( (marketStakeBySymbol.get(candidate.symbol) ?? globalStake) * martingale).toFixed(2));
             marketStakeBySymbol.set(candidate.symbol, nextStake);
             stk = nextStake;
+            if (!won && (marketLossStreakBySymbol.get(candidate.symbol) ?? 0) >= 3) {
+                onLog(`🔄 ${candidate.label}: 3 consecutive losses · switching to the next best market with $${nextStake.toFixed(2)} stake`);
+            }
             if (won) pausedStakeRef.current = null;
             else pausedStakeRef.current = nextStake;
             publishRotationStatus();
@@ -897,80 +904,87 @@ function AiBotCard({
                         && isValidatedAutoBotEntry(candidate, lossStreak);
                 });
 
-                if (usesPairRotation && !rotationSymbols.length) {
-                    // Pick the next pair from the current scanner snapshot, but
-                    // only execute a candidate when its own tick is fresh.
-                    const nextPair = selectAutoBotMarketsForExecution(
+                if (!rotationSymbols.length) {
+                    // Select two ranked markets, then execute them one at a
+                    // time. Once the available pair is used, select the next
+                    // pair without immediately reusing it.
+                    let rankedMarkets = selectAutoBotMarketsForExecution(
                         marketCandidatesRef.current.filter(candidate =>
                             !stoppedMarkets.has(candidate.symbol)
                             && isValidatedAutoBotEntry(candidate, marketLossStreakBySymbol.get(candidate.symbol) ?? 0),
                         ),
-                    ).slice(0, AUTO_BOT_ROTATION_MARKETS);
+                    ).filter(candidate => !rotationUsedSymbols.has(candidate.symbol));
+                    if (rankedMarkets.length < AUTO_BOT_ROTATION_MARKETS) {
+                        rotationUsedSymbols.clear();
+                        rankedMarkets = selectAutoBotMarketsForExecution(
+                            marketCandidatesRef.current.filter(candidate =>
+                                !stoppedMarkets.has(candidate.symbol)
+                                && isValidatedAutoBotEntry(candidate, marketLossStreakBySymbol.get(candidate.symbol) ?? 0),
+                            ),
+                        );
+                    }
+                    const nextPair = rankedMarkets.slice(0, AUTO_BOT_ROTATION_MARKETS);
                     if (nextPair.length < AUTO_BOT_ROTATION_MARKETS) continue;
                     rotationSymbols = nextPair.map(candidate => candidate.symbol);
+                    rotationSymbols.forEach(symbol => {
+                        rotationUsedSymbols.add(symbol);
+                        marketRunsBySymbol.set(symbol, 0);
+                        if (carryStakeToNextMarket) marketStakeBySymbol.set(symbol, stk);
+                    });
+                    carryStakeToNextMarket = false;
                     rotationCycle += 1;
-                    rotationSymbols.forEach(symbol => marketRunsBySymbol.set(symbol, 0));
                     publishRotationStatus();
-                    onLog(`🔁 Rotation ${rotationCycle}: ${nextPair.map(candidate => candidate.label).join(' + ')} · ${AUTO_BOT_RUNS_PER_MARKET} validated runs each`);
+                    onLog(`🔁 Rotation ${rotationCycle}: ${nextPair.map(candidate => candidate.label).join(' + ')} · ${AUTO_BOT_RUNS_PER_MARKET} settled runs each`);
                 }
 
-                const cohortMarkets = usesPairRotation
-                    ? validatedFreshMarkets.filter(candidate =>
+                const candidates = selectAutoBotMarketsForExecution(
+                    validatedFreshMarkets.filter(candidate =>
                         rotationSymbols.includes(candidate.symbol)
                         && (marketRunsBySymbol.get(candidate.symbol) ?? 0) < AUTO_BOT_RUNS_PER_MARKET,
-                    )
-                    : validatedFreshMarkets;
-                const candidates = selectAutoBotMarketsForExecution(cohortMarkets);
+                    ),
+                );
                 if (!candidates.length) continue;
 
-                // Open every ready market concurrently. Settlement is handled
-                // by the callback so the scanner can keep evaluating new ticks
-                // instead of waiting one full contract at a time.
-                const results = await Promise.allSettled(candidates.map(async candidate => {
-                    inFlightMarkets.add(candidate.symbol);
-                    const marketStake = marketStakeBySymbol.get(candidate.symbol) ?? stk;
-                    try {
-                        await buyAndWait(
-                            candidate.symbol,
-                            candidate.trade.contract,
-                            candidate.trade.barrier,
-                            marketStake,
-                            AUTO_BOT_TICK_DURATION,
-                            {
-                                settle: false,
-                                onSettled: profit => recordSettlement(candidate, Number(profit ?? 0)),
-                                metadata: {
-                                    source: 'auto-bots',
-                                    scan_score: candidate.score,
-                                    scan_ticks: AUTO_BOT_TICK_DURATION,
-                                    scan_markets: candidates.length,
-                                    scan_qualified_markets: freshMarkets.length,
-                                },
+                // Execute one market at a time and wait for settlement. This
+                // guarantees seven real runs per market and keeps martingale
+                // progression ordered instead of racing concurrent buys.
+                const candidate = candidates[0];
+                inFlightMarkets.add(candidate.symbol);
+                const marketStake = marketStakeBySymbol.get(candidate.symbol) ?? stk;
+                try {
+                    const profit = await buyAndWait(
+                        candidate.symbol,
+                        candidate.trade.contract,
+                        candidate.trade.barrier,
+                        marketStake,
+                        AUTO_BOT_TICK_DURATION,
+                        {
+                            metadata: {
+                                source: 'auto-bots',
+                                scan_score: candidate.score,
+                                scan_ticks: AUTO_BOT_TICK_DURATION,
+                                scan_markets: AUTO_BOT_ROTATION_MARKETS,
+                                scan_qualified_markets: freshMarkets.length,
                             },
-                        );
-                        return candidate;
-                    } catch (error) {
-                        inFlightMarkets.delete(candidate.symbol);
-                        throw { candidate, error };
-                    }
-                }));
-
-                results.forEach(result => {
-                    if (result.status === 'fulfilled') {
-                        onLog(`🟢 ${result.value.label} ready · ${result.value.trade.contract}${result.value.trade.barrier !== null ? '@' + result.value.trade.barrier : ''} opened; scanning continues`);
+                        },
+                    );
+                    if (Number.isFinite(profit)) {
+                        recordSettlement(candidate, Number(profit));
                     } else {
-                        const detail = result.reason?.candidate;
-                        onLog(`⚠ ${detail?.label ?? 'Market'}: ${describeTradeError(result.reason?.error ?? result.reason)}`);
+                        inFlightMarkets.delete(candidate.symbol);
+                        onLog(`⚠ ${candidate.label}: settlement pending; keeping the market stake unchanged`);
                     }
-                });
+                } catch (error) {
+                    inFlightMarkets.delete(candidate.symbol);
+                    onLog(`⚠ ${candidate.label}: ${describeTradeError(error)}`);
+                }
 
-                if (usesPairRotation && rotationSymbols.length
-                    && inFlightMarkets.size === 0
+                if (rotationSymbols.length
                     && rotationSymbols.every(symbol =>
                         (marketRunsBySymbol.get(symbol) ?? 0) >= AUTO_BOT_RUNS_PER_MARKET
                         || stoppedMarkets.has(symbol),
                     )) {
-                    onLog(`✅ Rotation ${rotationCycle} complete · moving to the next validated pair`);
+                    onLog(`✅ Rotation ${rotationCycle} complete · selecting the next two markets`);
                     rotationSymbols = [];
                     publishRotationStatus();
                 }
@@ -1028,13 +1042,13 @@ function AiBotCard({
                     <strong>
                         {rotationStatus.symbols.length
                             ? rotationStatus.symbols.map(symbol => `${rotationStatus.counts[symbol] ?? 0}/${AUTO_BOT_RUNS_PER_MARKET}`).join(' · ')
-                            : '5 runs each'}
+                            : '7 runs each'}
                     </strong>
                 </div>
             )}
             <div className='autotrades__botcard-markets'>
                 <div className='autotrades__botcard-markets-title'>
-                    <span>Best markets · 2-tick entry confirmation · 1-tick execution</span>
+                    <span>Best markets · live tick entry · 1-tick execution</span>
                     <span>{visibleMarketCandidates.length ? `${visibleMarketCandidates.length} visible slots` : 'Waiting'}</span>
                 </div>
                 {visibleMarketCandidates.length ? (
@@ -1055,7 +1069,7 @@ function AiBotCard({
                                             {candidate.livePrice == null ? '—' : candidate.livePrice}
                                         </div>
                                         <span className='autotrades__botcard-market-detail'>
-                                            {candidate.score.toFixed(1)}% · {candidate.trade.entryFrame === 'matched' ? '2t match' : 'waiting 2t'} · 1t · {candidate.trade.contract}
+                                             {candidate.score.toFixed(1)}% · {candidate.trade.entryFrame === 'matched' ? 'live entry' : 'waiting'} · 1t · {candidate.trade.contract}
                                             {candidate.trade.barrier !== null ? ` @${candidate.trade.barrier}` : ''}
                                             {status ? ` · ${fmtProfit(status.profit)}` : ''}
                                         </span>
@@ -1255,6 +1269,16 @@ const AutoTrades: React.FC = () => {
     useEffect(() => { smartDigitsRef.current = smartDigits; }, [smartDigits]);
     const smartTickVersionRef = useRef(smartFeed.tickVersion);
     useEffect(() => { smartTickVersionRef.current = smartFeed.tickVersion; }, [smartFeed.tickVersion]);
+    // Keep a snapshot for each live tick so a slow proposal/buy request does
+    // not collapse several incoming ticks into one latest-state evaluation.
+    const smartDigitSnapshotsRef = useRef<Map<number, number[]>>(new Map());
+    useEffect(() => {
+        smartDigitSnapshotsRef.current.set(smartFeed.tickVersion, [...smartDigits]);
+        const oldest = smartFeed.tickVersion - 150;
+        smartDigitSnapshotsRef.current.forEach((_digits, version) => {
+            if (version < oldest) smartDigitSnapshotsRef.current.delete(version);
+        });
+    }, [smartFeed.tickVersion, smartDigits]);
 
     // The header price is from the same authorized stream as the digit history.
     const smartLivePrice = smartFeed.livePrice;
@@ -1399,8 +1423,7 @@ const AutoTrades: React.FC = () => {
         updateSess(id, { running: true, wins: 0, losses: 0, profit: 0, lastLog: 'Starting…' });
 
         let wins = 0, losses = 0, sessionProfit = 0;
-        let evaluatedTick = smartTickVersionRef.current - 1;
-        let waitUntilTick = 0;
+        let evaluatedTick = smartTickVersionRef.current;
 
         const loop = async () => {
             while (isRunActive()) {
@@ -1418,12 +1441,17 @@ const AutoTrades: React.FC = () => {
                         smartStopFlags.current[id] = true;
                         break;
                     }
-                    // Every card evaluates once per new authenticated tick.
-                    while (isRunActive() && smartTickVersionRef.current <= Math.max(evaluatedTick, waitUntilTick)) {
+                    // Every card evaluates every new authenticated tick. In
+                    // each-tick/super-speed modes, process queued snapshots
+                    // one by one instead of jumping to the latest tick.
+                    while (isRunActive() && smartTickVersionRef.current <= evaluatedTick) {
                         await new Promise(r => setTimeout(r, 40));
                     }
                     if (!isRunActive()) break;
-                    evaluatedTick = smartTickVersionRef.current;
+                    const nextTick = evaluatedTick + 1;
+                    evaluatedTick = nextTick;
+                    const digitsForTick = smartDigitSnapshotsRef.current.get(nextTick)
+                        ?? smartDigitsRef.current;
 
                     const currentCfg = smartCardCfgRef.current[id] || cfg;
                     if (sessionProfit >= Number(currentCfg.takeProfit ?? 5)
@@ -1438,7 +1466,7 @@ const AutoTrades: React.FC = () => {
                     }
                     const trade = pickSmartTradeDecision(
                         id,
-                        smartDigitsRef.current,
+                        digitsForTick,
                         currentCfg,
                         smartSharedDepthRef.current,
                     );
@@ -1664,13 +1692,10 @@ const AutoTrades: React.FC = () => {
                             void request.catch(() => {});
                         }
                     }
-                    // Require a completely new lookback window before this
-                    // card can enter again. For example, after "3 Even →
-                    // Buy Odd", the next entry waits for three new ticks.
-                    // Scanner cards re-evaluate as soon as any market produces
-                    // a new tick. The per-market freshness map above prevents
-                    // unchanged markets from being replayed.
-                    waitUntilTick = evaluatedTick + Math.max(1, Math.min(10, currentCfg.lookback || 3));
+                    // The configured sequence itself is the gate. Once the
+                    // current tick completes it (for example, the fourth
+                    // Even in a 3-Even sequence), buy immediately without an
+                    // additional lookback-sized delay.
                 } catch (error) {
                     // A proposal/buy failure is not a taken trade. Remove its
                     // optimistic OPEN row instead of leaving a phantom

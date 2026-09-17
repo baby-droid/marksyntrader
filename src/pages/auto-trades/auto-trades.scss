@@ -341,7 +341,7 @@
 
     &__botcards {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 8px;
     }
 
@@ -1174,7 +1174,7 @@
         }
 
         &__botcards {
-            grid-template-columns: 1fr;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 12px;
         }
     }
@@ -1395,9 +1395,7 @@
     // ── Card grid
     &__cards {
         display: grid;
-        // Compact desktop layout: four cards per row keeps each card close to
-        // half the previous width while leaving controls usable.
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 0;
         padding: 0;
         flex: 1;
@@ -1873,7 +1871,7 @@
         }
 
         &__cards {
-            grid-template-columns: 1fr;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
             padding: 0.65rem;
             gap: 0.65rem;
         }

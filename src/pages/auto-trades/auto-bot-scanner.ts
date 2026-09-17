@@ -140,16 +140,14 @@ export function selectAutoBotMarketsForExecution(
 
 export function isValidatedAutoBotEntry(
     candidate: AutoBotMarketCandidate,
-    lossStreak = 0,
+    _lossStreak = 0,
 ): boolean {
-    if (!candidate.qualifies || candidate.trade.entryFrame !== 'matched') return false;
-
-    // A loss must buy a stronger setup, not simply repeat the last signal with
-    // a larger stake. Two consecutive losses require a strong signal as well
-    // as the higher score threshold.
-    const minimumScore = lossStreak >= 2 ? 72 : lossStreak === 1 ? 62 : 50;
-    return candidate.score >= minimumScore
-        && (lossStreak < 2 || candidate.trade.signal === 'strong');
+    // A live strategy signal is already the entry decision. Do not add a
+    // second confirmation/score gate here: it made bots display NO TRADE
+    // while one of their valid entry rules was already true.
+    return candidate.qualifies
+        && candidate.trade.shouldTrade === true
+        && candidate.trade.entryFrame === 'matched';
 }
 
 export function isAutoBotMarketStopped(
@@ -207,29 +205,21 @@ const chooseBestTicks = (
     const sample = digits.slice(-Math.max(20, Math.min(1000, 1000)));
     const priceSample = prices.slice(-Math.max(20, Math.min(1000, 1000)));
     const trade = bot.pickTrade(sample, priceSample, recoveryMode, cycleConfig);
-    const previousSample = sample.slice(0, -1);
-    const previousPriceSample = priceSample.slice(0, -1);
-    const previousTrade = previousSample.length >= 20
-        ? bot.pickTrade(previousSample, previousPriceSample, recoveryMode, cycleConfig)
-        : null;
-    const sameEntryFrame = Boolean(
-        previousTrade
-        && previousTrade.contract === trade.contract
-        && Number(previousTrade.barrier ?? null) === Number(trade.barrier ?? null)
-        && previousTrade.shouldTrade !== false
-        && trade.shouldTrade !== false,
-    );
+    // The latest tick is the entry frame. Requiring the preceding tick to
+    // repeat the same signal caused valid one-tick opportunities to be shown
+    // as NO TRADE.
+    const hasEntry = trade.shouldTrade === true;
     const confirmedTrade = {
         ...trade,
-        shouldTrade: sameEntryFrame,
-        entryFrame: sameEntryFrame ? 'matched' as const : 'waiting' as const,
-        reason: `${trade.reason ? `${trade.reason} · ` : ''}${sameEntryFrame ? '2-tick match' : 'waiting for 2-tick match'}`,
+        shouldTrade: hasEntry,
+        entryFrame: hasEntry ? 'matched' as const : 'waiting' as const,
+        reason: `${trade.reason ? `${trade.reason} · ` : ''}${hasEntry ? 'live tick entry' : 'no valid entry'}`,
     };
     return {
         ticks: 1 as const,
         score: Number.isFinite(Number(confirmedTrade.score))
             ? Number(confirmedTrade.score)
-            : scoreTrade(confirmedTrade, sample) + (confirmedTrade.shouldTrade === false ? -100 : 0),
+            : scoreTrade(confirmedTrade, sample),
         trade: confirmedTrade,
     };
 };
@@ -259,7 +249,7 @@ export function scanAutoBotMarkets(
                 prices: snapshot.prices,
                 trade: selected.trade,
                 score: rawScore,
-                qualifies: selected.trade.shouldTrade !== false && rawScore >= 50,
+                qualifies: selected.trade.shouldTrade === true,
                 tickVersion: snapshot.tickVersion,
                 livePrice: snapshot.livePrice,
                 ticks: selected.ticks,

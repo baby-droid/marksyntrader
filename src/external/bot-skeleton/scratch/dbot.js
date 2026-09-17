@@ -7,7 +7,9 @@ import Interpreter from '../services/tradeEngine/utils/interpreter';
 import { compareXml, observer as globalObserver } from '../utils';
 import { getSavedWorkspaces, saveWorkspaceToRecent } from '../utils/local-storage';
 import { isDbotRTL } from '../utils/workspace';
-import main_xml from './xml/main.xml';
+// Vite must inline the default workspace XML as text. Without ?raw it serves
+// the file URL, which Blockly then tries to parse as XML and rejects at boot.
+import main_xml from './xml/main.xml?raw';
 import { forgetAccumulatorsProposalRequest } from './accumulators-proposal-handler';
 import { loadBlockly } from './blockly';
 import DBotStore from './dbot-store';

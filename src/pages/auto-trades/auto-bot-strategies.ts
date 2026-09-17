@@ -90,8 +90,8 @@ function directionalScore(
     prices: number[],
     direction: 'rise' | 'fall',
 ): { score: number; confirmed: boolean; reason: string; state: string } {
-    // Keep the long baseline and one recent confirmation window. The old
-    // four-window gate was too restrictive and made entries lag the live tick.
+    // Use the available authenticated history as context, but do not require
+    // a 1000-tick baseline before a live signal can trade.
     const windows = [50, 1000].map(window => movementStats(prices, window));
     const [confirm50, regime1000] = windows;
     const ratios = windows.map(stats => direction === 'rise' ? stats.upPct : stats.downPct);
@@ -115,18 +115,18 @@ function directionalScore(
         - chopPenalty
         - jumpPenalty,
     );
-    const windowsAgree = ratios.every(ratio => ratio >= 60);
+    const windowsAgree = ratios.some(ratio => ratio >= 55);
     const lowChop = confirm50.chop < 62;
     const regimeAgrees = direction === 'rise'
         ? regime1000.upPct >= 50
         : regime1000.downPct >= 50;
-    const confirmed = prices.length >= 1000
+    const confirmed = prices.length >= 20
         && windowsAgree
         && lowChop
-        && regimeAgrees
-        && structure >= 50
+        && (regimeAgrees || ratios[0] >= 60)
+        && (structure >= 35 || ratios[0] >= 65)
         && jumpPenalty === 0
-        && score >= 60;
+        && score >= 52;
     const state = confirmed
         ? score >= 80 ? 'SIGNAL READY' : 'CANDIDATE'
         : score >= 60 ? 'WATCH' : 'NO TRADE';
@@ -142,13 +142,13 @@ function directionalTrade(
     strategy: DirectionalStrategy,
     prices: number[],
 ): StrategyTrade {
-    if (prices.length < 1000) {
+    if (prices.length < 20) {
         return {
             contract: strategy === 'fall' ? 'PUT' : 'CALL',
             barrier: null,
             shouldTrade: false,
             score: 0,
-            reason: 'Waiting for the 1000-tick baseline',
+            reason: 'Waiting for a live directional sample',
             direction: strategy === 'fall' ? 'fall' : 'rise',
             state: 'SCANNING',
         };
@@ -161,17 +161,14 @@ function directionalTrade(
             ? { ...fall, direction: 'fall' as const }
             : rise.score - fall.score >= 10
                 ? { ...rise, direction: 'rise' as const }
-                : fall.score - rise.score >= 10
+                : fall.score >= rise.score
                     ? { ...fall, direction: 'fall' as const }
                     : {
-                        score: Math.max(rise.score, fall.score),
-                        confirmed: false,
-                        state: 'NO TRADE',
+                        ...rise,
                         direction: 'rise' as const,
-                        reason: `Balanced bias · Rise ${rise.score.toFixed(0)} / Fall ${fall.score.toFixed(0)}`,
                     };
     const isConfirmed = strategy === 'bias'
-        ? chosen.confirmed && Math.abs(rise.score - fall.score) >= 10
+        ? chosen.confirmed
         : chosen.confirmed;
     const direction = chosen.direction;
     return {
@@ -234,12 +231,10 @@ function parityTrade(strategy: ParityStrategy, digits: number[]): StrategyTrade 
     );
     const agreement = [baseline.percentage, confirm.percentage]
         .filter(value => value >= 54).length;
-    const confirmed = digits.length >= 1000
-        && baseline.percentage >= 54
-        && confirm.percentage >= 54
-        && agreement >= 2
-        && parityEntryPattern(digits, strategy)
-        && score >= 60;
+    const confirmed = digits.length >= 20
+        && (parityEntryPattern(digits, strategy) || confirm.percentage >= 55)
+        && agreement >= 1
+        && score >= 52;
     const contract = strategy === 'odd' ? 'DIGITODD' : 'DIGITEVEN';
     return {
         contract,
@@ -247,7 +242,7 @@ function parityTrade(strategy: ParityStrategy, digits: number[]): StrategyTrade 
         shouldTrade: confirmed,
         signal: score >= 80 ? 'strong' : score >= 60 ? 'weak' : undefined,
         score,
-        reason: `${strategy.toUpperCase()} ${score.toFixed(0)} · 1000/50 ${[baseline, confirm].map(item => `${item.percentage.toFixed(0)}%`).join('/')} · ${agreement}/2 windows`,
+        reason: `${strategy.toUpperCase()} ${score.toFixed(0)} · available/50 ${[baseline, confirm].map(item => `${item.percentage.toFixed(0)}%`).join('/')} · ${agreement}/2 windows`,
         direction: strategy,
         state: confirmed ? 'SIGNAL READY' : score >= 60 ? 'WATCH' : 'NO TRADE',
     };
