@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en" dir="auto" class="light">
+    <head>
+        <!-- Google Tag Manager -->
+        <script>
+            (function (w, d, s, l, i) {
+                w[l] = w[l] || [];
+                w[l].push({ 'gtm.start': new Date().getTime(), event: 'gtm.js' });
+                var f = d.getElementsByTagName(s)[0],
+                    j = d.createElement(s),
+                    dl = l != 'dataLayer' ? '&l=' + l : '';
+                j.async = true;
+                j.src = 'https://www.googletagmanager.com/gtm.js?id=' + i + dl;
+                f.parentNode.insertBefore(j, f);
+            })(window, document, 'script', 'dataLayer', 'GTM-KV9538TF');
+        </script>
+        <!-- End Google Tag Manager -->
+
+        <meta charset="UTF-8" />
+        <link rel="icon" type="image/svg+xml" href="/deriv-logo.svg" />
+        <link rel="apple-touch-icon" href="/logo.jpeg" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+        <meta name="theme-color" content="#00ff88" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="Marksyntrader" />
+        <meta name="application-name" content="Marksyntrader" />
+        <meta name="title" content="Marksyntrader | Deriv Trading Bot" />
+        <meta
+            name="description"
+            content="Ahmed Syn Trader — Advanced AI trading platform on Deriv with automation, charts, copy trading and more."
+        />
+        <meta name="keywords" content="Deriv, trading bot, automated trading, copy trading, synthetic indices" />
+        <meta property="og:title" content="Marksyntrader — Ahmed Syn Trader" />
+        <meta property="og:description" content="Advanced AI trading platform on Deriv" />
+        <meta property="og:image" content="/logo.jpeg" />
+        <meta property="og:type" content="website" />
+        <link rel="manifest" href="/manifest.json" />
+        <title>Marksyntrader — Ahmed Syn Trader</title>
+        <style>
+            :root {
+                font-size: 62.5%;
+            }
+        </style>
+    <script defer src="/static/js/lib-react.8a0a4cd3.js"></script><script defer src="/static/js/lib-router.06c193e4.js"></script><script defer src="/static/js/8214.42e0827c.js"></script><script defer src="/static/js/index.c7b9a26d.js"></script><link href="/static/css/8214.09a3eff5.css" rel="stylesheet"><link href="/static/css/index.2fca5ca6.css" rel="stylesheet"></head>
+
+    <body class="body theme theme--light">
+        <!-- Google Tag Manager (noscript) -->
+        <noscript
+            ><iframe
+                src="https://www.googletagmanager.com/ns.html?id=GTM-KV9538TF"
+                height="0"
+                width="0"
+                style="display: none; visibility: hidden"
+            ></iframe
+        ></noscript>
+        <!-- End Google Tag Manager (noscript) -->
+
+        <div id="modal_root" class="modal-root"></div>
+        <div id="popup_root" class="popup-root"></div>
+        <div id="root">
+            <div
+                data-boot-fallback
+                style="min-height:100vh;background:#050b1d;color:#e8eefc;display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;text-align:center;padding:24px;box-sizing:border-box"
+            >
+                <div>
+                    <div style="font-size:18px;font-weight:700;letter-spacing:.04em">Marksyntrader</div>
+                    <div data-boot-message style="margin-top:10px;color:#8ea1c7;font-size:13px">
+                        Loading trading workspace…
+                    </div>
+                    <button
+                        data-boot-retry
+                        type="button"
+                        onclick="window.location.reload()"
+                        style="display:none;margin-top:16px;padding:9px 16px;border:1px solid #2ddf8c;border-radius:8px;background:#0c2b2a;color:#d9fff0;cursor:pointer"
+                    >
+                        Reload preview
+                    </button>
+                </div>
+            </div>
+        </div>
+        <script type="module" src="/src/main.tsx"></script>
+        <script>
+            (function () {
+                var appStarted = false;
+                var bootTimer = null;
+
+                function markAppStarted() {
+                    appStarted = true;
+                    if (bootTimer) window.clearTimeout(bootTimer);
+                }
+
+                function showBootError() {
+                    if (appStarted) return;
+                    var root = document.getElementById('root');
+                    var fallback = root && root.querySelector('[data-boot-fallback]');
+                    if (!fallback) return;
+                    var message = fallback.querySelector('[data-boot-message]');
+                    var retry = fallback.querySelector('[data-boot-retry]');
+                    if (message) message.textContent = 'The preview could not start. Reload to try again.';
+                    if (retry) retry.style.display = 'inline-block';
+                }
+
+                function isEntryScript(source) {
+                    return (
+                        typeof source === 'string' &&
+                        (/\/src\/main\.tsx(?:\?|$)/i.test(source) ||
+                            /\/assets\/main-[^/]+\.js(?:\?|$)/i.test(source) ||
+                            /\/static\/js\/(?:main|index)\.[^/]+\.js(?:\?|$)/i.test(source))
+                    );
+                }
+
+                window.addEventListener('error', function (event) {
+                    var target = event && event.target;
+                    var source = target && target.src;
+                    var failedEntryScript = target && target.tagName === 'SCRIPT' && isEntryScript(source);
+                    if (failedEntryScript) showBootError();
+                }, true);
+
+                window.__markMarksyntraderAppStarted = markAppStarted;
+                bootTimer = window.setTimeout(function () {
+                    if (!appStarted) showBootError();
+                }, 15000);
+            }());
+        </script>
+        <!-- LiveChat script -->
+        <script type="text/javascript" defer>
+            window.__lc = window.__lc || {};
+            window.__lc.license = 12049137;
+            window.__lc.asyncInit = true;
+            (function (n, t, c) {
+                function i(n) {
+                    return e._h ? e._h.apply(null, n) : e._q.push(n);
+                }
+                var e = {
+                    _q: [],
+                    _h: null,
+                    _v: '2.0',
+                    on: function () {
+                        i(['on', c.call(arguments)]);
+                    },
+                    once: function () {
+                        i(['once', c.call(arguments)]);
+                    },
+                    off: function () {
+                        i(['off', c.call(arguments)]);
+                    },
+                    get: function () {
+                        if (!e._h) throw new Error('[LiveChatWidget] You can’t use getters before load.');
+                        return i(['get', c.call(arguments)]);
+                    },
+                    call: function () {
+                        i(['call', c.call(arguments)]);
+                    },
+                    init: function () {
+                        setTimeout(function () {
+                            var n = t.createElement('script');
+                            n.async = true;
+                            n.type = 'text/javascript';
+                            n.src = 'https://cdn.livechatinc.com/tracking.js';
+                            t.head.appendChild(n);
+                        }, 3000);
+                    },
+                };
+                (!n.__lc.asyncInit && e.init(), (n.LiveChatWidget = n.LiveChatWidget || e));
+            })(window, document, [].slice);
+        </script>
+        <!-- End LiveChat script -->
+    </body>
+</html>

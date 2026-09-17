@@ -5,6 +5,8 @@ export type KingFisherDirection = 'BELOW' | 'ABOVE';
 export type KingFisherMarket = {
     symbol: string;
     label: string;
+    market: 'synthetic_index';
+    submarket: 'random_index' | 'jump_index' | 'crash_index';
     group: 'plain' | '1s' | 'jump' | 'bear-bull';
     score: number;
     longestStreak: number;
@@ -13,23 +15,23 @@ export type KingFisherMarket = {
 };
 
 export const KING_FISHER_MARKETS = [
-    { symbol: 'R_10', label: 'Volatility 10', group: 'plain' as const, pipSize: 3 },
-    { symbol: 'R_25', label: 'Volatility 25', group: 'plain' as const, pipSize: 3 },
-    { symbol: 'R_50', label: 'Volatility 50', group: 'plain' as const, pipSize: 4 },
-    { symbol: 'R_75', label: 'Volatility 75', group: 'plain' as const, pipSize: 4 },
-    { symbol: 'R_100', label: 'Volatility 100', group: 'plain' as const, pipSize: 2 },
-    { symbol: '1HZ10V', label: 'Volatility 10 (1s)', group: '1s' as const, pipSize: 3 },
-    { symbol: '1HZ25V', label: 'Volatility 25 (1s)', group: '1s' as const, pipSize: 2 },
-    { symbol: '1HZ50V', label: 'Volatility 50 (1s)', group: '1s' as const, pipSize: 4 },
-    { symbol: '1HZ75V', label: 'Volatility 75 (1s)', group: '1s' as const, pipSize: 4 },
-    { symbol: '1HZ100V', label: 'Volatility 100 (1s)', group: '1s' as const, pipSize: 2 },
-    { symbol: 'JD10', label: 'Jump 10', group: 'jump' as const, pipSize: 3 },
-    { symbol: 'JD25', label: 'Jump 25', group: 'jump' as const, pipSize: 2 },
-    { symbol: 'JD50', label: 'Jump 50', group: 'jump' as const, pipSize: 4 },
-    { symbol: 'JD75', label: 'Jump 75', group: 'jump' as const, pipSize: 4 },
-    { symbol: 'JD100', label: 'Jump 100', group: 'jump' as const, pipSize: 2 },
-    { symbol: 'RDBEAR', label: 'Bear Market Index', group: 'bear-bull' as const, pipSize: 4 },
-    { symbol: 'RDBULL', label: 'Bull Market Index', group: 'bear-bull' as const, pipSize: 4 },
+    { symbol: 'R_10', label: 'Volatility 10', market: 'synthetic_index' as const, submarket: 'random_index' as const, group: 'plain' as const, pipSize: 3 },
+    { symbol: 'R_25', label: 'Volatility 25', market: 'synthetic_index' as const, submarket: 'random_index' as const, group: 'plain' as const, pipSize: 3 },
+    { symbol: 'R_50', label: 'Volatility 50', market: 'synthetic_index' as const, submarket: 'random_index' as const, group: 'plain' as const, pipSize: 4 },
+    { symbol: 'R_75', label: 'Volatility 75', market: 'synthetic_index' as const, submarket: 'random_index' as const, group: 'plain' as const, pipSize: 4 },
+    { symbol: 'R_100', label: 'Volatility 100', market: 'synthetic_index' as const, submarket: 'random_index' as const, group: 'plain' as const, pipSize: 2 },
+    { symbol: '1HZ10V', label: 'Volatility 10 (1s)', market: 'synthetic_index' as const, submarket: 'random_index' as const, group: '1s' as const, pipSize: 3 },
+    { symbol: '1HZ25V', label: 'Volatility 25 (1s)', market: 'synthetic_index' as const, submarket: 'random_index' as const, group: '1s' as const, pipSize: 2 },
+    { symbol: '1HZ50V', label: 'Volatility 50 (1s)', market: 'synthetic_index' as const, submarket: 'random_index' as const, group: '1s' as const, pipSize: 4 },
+    { symbol: '1HZ75V', label: 'Volatility 75 (1s)', market: 'synthetic_index' as const, submarket: 'random_index' as const, group: '1s' as const, pipSize: 4 },
+    { symbol: '1HZ100V', label: 'Volatility 100 (1s)', market: 'synthetic_index' as const, submarket: 'random_index' as const, group: '1s' as const, pipSize: 2 },
+    { symbol: 'JD10', label: 'Jump 10', market: 'synthetic_index' as const, submarket: 'jump_index' as const, group: 'jump' as const, pipSize: 3 },
+    { symbol: 'JD25', label: 'Jump 25', market: 'synthetic_index' as const, submarket: 'jump_index' as const, group: 'jump' as const, pipSize: 2 },
+    { symbol: 'JD50', label: 'Jump 50', market: 'synthetic_index' as const, submarket: 'jump_index' as const, group: 'jump' as const, pipSize: 4 },
+    { symbol: 'JD75', label: 'Jump 75', market: 'synthetic_index' as const, submarket: 'jump_index' as const, group: 'jump' as const, pipSize: 4 },
+    { symbol: 'JD100', label: 'Jump 100', market: 'synthetic_index' as const, submarket: 'jump_index' as const, group: 'jump' as const, pipSize: 2 },
+    { symbol: 'RDBEAR', label: 'Bear Market Index', market: 'synthetic_index' as const, submarket: 'crash_index' as const, group: 'bear-bull' as const, pipSize: 4 },
+    { symbol: 'RDBULL', label: 'Bull Market Index', market: 'synthetic_index' as const, submarket: 'crash_index' as const, group: 'bear-bull' as const, pipSize: 4 },
 ];
 
 const getLastDigit = (price: unknown, pipSize: number) => {
@@ -43,7 +45,7 @@ const scoreMarket = (
     prices: unknown[],
     direction: KingFisherDirection,
     pipSize: number
-): Omit<KingFisherMarket, 'symbol' | 'label' | 'group'> => {
+): Omit<KingFisherMarket, 'symbol' | 'label' | 'market' | 'submarket' | 'group'> => {
     const digits = prices.map(price => getLastDigit(price, pipSize)).filter((digit): digit is number => digit !== null);
     const qualifies = (digit: number) => (direction === 'BELOW' ? digit < 5 : digit > 5);
     let currentStreak = 0;
@@ -66,7 +68,7 @@ const scoreMarket = (
         longestStreak,
         qualifyingTicks,
         score: longestStreak * 100 + qualifyingTicks,
-        lastDigit: digits.at(-1) ?? null,
+        lastDigit: digits.length ? digits[digits.length - 1] : null,
     };
 };
 

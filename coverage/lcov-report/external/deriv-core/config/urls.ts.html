@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">79.54% </span>
+                <span class="strong">56.81% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>35/44</span>
+                <span class='fraction'>25/44</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">66.66% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>2/3</span>
+                <span class='fraction'>0/0</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">40% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>2/5</span>
+                <span class='fraction'>0/5</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">79.54% </span>
+                <span class="strong">56.81% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>35/44</span>
+                <span class='fraction'>25/44</span>
             </div>
         
             
@@ -109,13 +109,13 @@
 <a name='L44'></a><a href='#L44'>44</a>
 <a name='L45'></a><a href='#L45'>45</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">6x</span>
-<span class="cline-any cline-yes">6x</span>
-<span class="cline-any cline-yes">6x</span>
-<span class="cline-any cline-yes">6x</span>
-<span class="cline-any cline-yes">6x</span>
-<span class="cline-any cline-yes">6x</span>
-<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -132,9 +132,9 @@
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">6x</span>
-<span class="cline-any cline-yes">6x</span>
-<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -153,13 +153,13 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">type DerivEnv = 'production' | 'preview';
 &nbsp;
-function getEnv(): DerivEnv {
-  // `process.env.NEXT_PUBLIC_DERIV_ENV` is statically replaced at build time by
-  // rsbuild's `source.define`. Do NOT guard on `typeof process` — the bare
-  // `process` identifier is not defined, so it is `'undefined'` in the browser
-  // and would short-circuit this to the production fallback even on staging.
-  return process.env.NEXT_PUBLIC_DERIV_ENV === 'preview' <span class="branch-0 cbranch-no" title="branch not covered" >? 'preview' </span>: 'production';
-}
+<span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >function getEnv(): DerivEnv {</span></span>
+<span class="cstat-no" title="statement not covered" >  // `process.env.NEXT_PUBLIC_DERIV_ENV` is statically replaced at build time by</span>
+<span class="cstat-no" title="statement not covered" >  // rsbuild's `source.define`. Do NOT guard on `typeof process` — the bare</span>
+<span class="cstat-no" title="statement not covered" >  // `process` identifier is not defined, so it is `'undefined'` in the browser</span>
+<span class="cstat-no" title="statement not covered" >  // and would short-circuit this to the production fallback even on staging.</span>
+<span class="cstat-no" title="statement not covered" >  return process.env.NEXT_PUBLIC_DERIV_ENV === 'preview' ? 'preview' : 'production';</span>
+<span class="cstat-no" title="statement not covered" >}</span>
 &nbsp;
 const URLS = {
   production: {
@@ -176,9 +176,9 @@ const URLS = {
   },
 } as const;
 &nbsp;
-export function getAuthBaseUrl(): string {
-  return URLS[getEnv()].authBase;
-}
+<span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >export function getAuthBaseUrl(): string {</span></span>
+<span class="cstat-no" title="statement not covered" >  return URLS[getEnv()].authBase;</span>
+<span class="cstat-no" title="statement not covered" >}</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >export function getApiBaseUrl(): string {</span></span>
 <span class="cstat-no" title="statement not covered" >  return URLS[getEnv()].apiBase;</span>
@@ -202,7 +202,7 @@ export function getAuthBaseUrl(): string {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-09-17T07:48:14.094Z
+                at 2026-09-17T15:06:20.827Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

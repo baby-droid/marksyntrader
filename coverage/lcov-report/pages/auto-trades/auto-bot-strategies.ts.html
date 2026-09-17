@@ -23,9 +23,9 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">14.18% </span>
+                <span class="strong">14.77% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>39/275</span>
+                <span class='fraction'>39/264</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">14.18% </span>
+                <span class="strong">14.77% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>39/275</span>
+                <span class='fraction'>39/264</span>
             </div>
         
             
@@ -326,18 +326,7 @@
 <a name='L261'></a><a href='#L261'>261</a>
 <a name='L262'></a><a href='#L262'>262</a>
 <a name='L263'></a><a href='#L263'>263</a>
-<a name='L264'></a><a href='#L264'>264</a>
-<a name='L265'></a><a href='#L265'>265</a>
-<a name='L266'></a><a href='#L266'>266</a>
-<a name='L267'></a><a href='#L267'>267</a>
-<a name='L268'></a><a href='#L268'>268</a>
-<a name='L269'></a><a href='#L269'>269</a>
-<a name='L270'></a><a href='#L270'>270</a>
-<a name='L271'></a><a href='#L271'>271</a>
-<a name='L272'></a><a href='#L272'>272</a>
-<a name='L273'></a><a href='#L273'>273</a>
-<a name='L274'></a><a href='#L274'>274</a>
-<a name='L275'></a><a href='#L275'>275</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
+<a name='L264'></a><a href='#L264'>264</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -550,17 +539,6 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -703,33 +681,33 @@ export function classifyAutoBotMarket(symbol: string): string {
 <span class="cstat-no" title="statement not covered" >    prices: number[],</span>
 <span class="cstat-no" title="statement not covered" >    direction: 'rise' | 'fall',</span>
 <span class="cstat-no" title="statement not covered" >): { score: number; confirmed: boolean; reason: string; state: string } {</span>
-<span class="cstat-no" title="statement not covered" >    const windows = [20, 50, 100, 1000].map(window =&gt; movementStats(prices, window));</span>
-<span class="cstat-no" title="statement not covered" >    const [flow20, confirm50, trend100, regime1000] = windows;</span>
+<span class="cstat-no" title="statement not covered" >    // Keep the long baseline and one recent confirmation window. The old</span>
+<span class="cstat-no" title="statement not covered" >    // four-window gate was too restrictive and made entries lag the live tick.</span>
+<span class="cstat-no" title="statement not covered" >    const windows = [50, 1000].map(window =&gt; movementStats(prices, window));</span>
+<span class="cstat-no" title="statement not covered" >    const [confirm50, regime1000] = windows;</span>
 <span class="cstat-no" title="statement not covered" >    const ratios = windows.map(stats =&gt; direction === 'rise' ? stats.upPct : stats.downPct);</span>
 <span class="cstat-no" title="statement not covered" >    const momentum = direction === 'rise'</span>
 <span class="cstat-no" title="statement not covered" >        ? mean(windows.map(stats =&gt; stats.momentum))</span>
 <span class="cstat-no" title="statement not covered" >        : mean(windows.map(stats =&gt; 100 - stats.momentum));</span>
 <span class="cstat-no" title="statement not covered" >    const structure = structureScore(prices, direction);</span>
 <span class="cstat-no" title="statement not covered" >    const persistence = mean(windows.map(stats =&gt; stats.persistence));</span>
-<span class="cstat-no" title="statement not covered" >    const chopPenalty = mean(windows.slice(0, 3).map(stats =&gt; Math.max(0, stats.chop - 35) * 0.8));</span>
+<span class="cstat-no" title="statement not covered" >    const chopPenalty = Math.max(0, confirm50.chop - 35) * 0.8;</span>
 <span class="cstat-no" title="statement not covered" >    const averageMove = mean(prices.slice(-100).slice(1).map((price, index) =&gt; Math.abs(price - prices.slice(-100)[index])).filter(Boolean));</span>
 <span class="cstat-no" title="statement not covered" >    const latestMove = Math.abs(prices[prices.length - 1] - prices[prices.length - 2]);</span>
 <span class="cstat-no" title="statement not covered" >    const jumpPenalty = averageMove &gt; 0 &amp;&amp; latestMove &gt; averageMove * 4 ? 22 : 0;</span>
 <span class="cstat-no" title="statement not covered" >    const volatilityQuality = jumpPenalty ? 35 : averageMove &gt; 0 ? 82 : 0;</span>
 <span class="cstat-no" title="statement not covered" >    const score = clamp(</span>
-<span class="cstat-no" title="statement not covered" >        ratios[0] * 0.20</span>
-<span class="cstat-no" title="statement not covered" >        + ratios[1] * 0.20</span>
-<span class="cstat-no" title="statement not covered" >        + ratios[2] * 0.20</span>
-<span class="cstat-no" title="statement not covered" >        + ratios[3] * 0.15</span>
-<span class="cstat-no" title="statement not covered" >        + momentum * 0.10</span>
-<span class="cstat-no" title="statement not covered" >        + structure * 0.05</span>
-<span class="cstat-no" title="statement not covered" >        + persistence * 0.05</span>
-<span class="cstat-no" title="statement not covered" >        + volatilityQuality * 0.05</span>
+<span class="cstat-no" title="statement not covered" >        ratios[0] * 0.30</span>
+<span class="cstat-no" title="statement not covered" >        + ratios[1] * 0.25</span>
+<span class="cstat-no" title="statement not covered" >        + momentum * 0.15</span>
+<span class="cstat-no" title="statement not covered" >        + structure * 0.10</span>
+<span class="cstat-no" title="statement not covered" >        + persistence * 0.10</span>
+<span class="cstat-no" title="statement not covered" >        + volatilityQuality * 0.10</span>
 <span class="cstat-no" title="statement not covered" >        - chopPenalty</span>
 <span class="cstat-no" title="statement not covered" >        - jumpPenalty,</span>
 <span class="cstat-no" title="statement not covered" >    );</span>
 <span class="cstat-no" title="statement not covered" >    const windowsAgree = ratios.every(ratio =&gt; ratio &gt;= 60);</span>
-<span class="cstat-no" title="statement not covered" >    const lowChop = windows.slice(0, 3).every(stats =&gt; stats.chop &lt; 62);</span>
+<span class="cstat-no" title="statement not covered" >    const lowChop = confirm50.chop &lt; 62;</span>
 <span class="cstat-no" title="statement not covered" >    const regimeAgrees = direction === 'rise'</span>
 <span class="cstat-no" title="statement not covered" >        ? regime1000.upPct &gt;= 50</span>
 <span class="cstat-no" title="statement not covered" >        : regime1000.downPct &gt;= 50;</span>
@@ -747,7 +725,7 @@ export function classifyAutoBotMarket(symbol: string): string {
 <span class="cstat-no" title="statement not covered" >        score,</span>
 <span class="cstat-no" title="statement not covered" >        confirmed,</span>
 <span class="cstat-no" title="statement not covered" >        state,</span>
-<span class="cstat-no" title="statement not covered" >        reason: `${direction === 'rise' ? 'Rise' : 'Fall'} ${score.toFixed(0)} · 20/50/100 ${ratios.slice(0, 3).map(value =&gt; `${value.toFixed(0)}%`).join('/')} · ${flow20.direction.toUpperCase()} flow · ${trend100.direction.toUpperCase()} structure`,</span>
+<span class="cstat-no" title="statement not covered" >        reason: `${direction === 'rise' ? 'Rise' : 'Fall'} ${score.toFixed(0)} · 50/1000 ${ratios.map(value =&gt; `${value.toFixed(0)}%`).join('/')} · ${confirm50.direction.toUpperCase()} flow · ${regime1000.direction.toUpperCase()} structure`,</span>
 <span class="cstat-no" title="statement not covered" >    };</span>
 <span class="cstat-no" title="statement not covered" >}</span>
 &nbsp;
@@ -827,8 +805,6 @@ export function classifyAutoBotMarket(symbol: string): string {
 <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >function parityTrade(strategy: ParityStrategy, digits: number[]): StrategyTrade {</span></span>
 <span class="cstat-no" title="statement not covered" >    const baseline = parityStats(digits, strategy, 1000);</span>
 <span class="cstat-no" title="statement not covered" >    const confirm = parityStats(digits, strategy, 50);</span>
-<span class="cstat-no" title="statement not covered" >    const flow = parityStats(digits, strategy, 20);</span>
-<span class="cstat-no" title="statement not covered" >    const entry = parityStats(digits, strategy, 10);</span>
 <span class="cstat-no" title="statement not covered" >    const olderHalf = parityStats(baseline.sample.slice(0, 50), strategy, 25).percentage;</span>
 <span class="cstat-no" title="statement not covered" >    const recentHalf = parityStats(baseline.sample.slice(-25), strategy, 25).percentage;</span>
 <span class="cstat-no" title="statement not covered" >    const acceleration = recentHalf - olderHalf;</span>
@@ -840,28 +816,19 @@ export function classifyAutoBotMarket(symbol: string): string {
 <span class="cstat-no" title="statement not covered" >    const distributionQuality = targetMean &gt; 0</span>
 <span class="cstat-no" title="statement not covered" >        ? clamp(100 - Math.max(...counts.map(count =&gt; Math.abs(count - targetMean))) / targetMean * 100)</span>
 <span class="cstat-no" title="statement not covered" >        : 0;</span>
-<span class="cstat-no" title="statement not covered" >    const sequenceChanges = flow.sample.slice(1).filter((digit, index) =&gt;</span>
-<span class="cstat-no" title="statement not covered" >        (digit % 2 === 0) !== (flow.sample[index] % 2 === 0),</span>
-<span class="cstat-no" title="statement not covered" >    ).length;</span>
-<span class="cstat-no" title="statement not covered" >    const chopPenalty = sequenceChanges / Math.max(1, flow.sample.length - 1) * 25;</span>
 <span class="cstat-no" title="statement not covered" >    const score = clamp(</span>
-<span class="cstat-no" title="statement not covered" >        baseline.percentage * 0.25</span>
-<span class="cstat-no" title="statement not covered" >        + confirm.percentage * 0.20</span>
-<span class="cstat-no" title="statement not covered" >        + flow.percentage * 0.20</span>
-<span class="cstat-no" title="statement not covered" >        + entry.percentage * 0.15</span>
+<span class="cstat-no" title="statement not covered" >        baseline.percentage * 0.40</span>
+<span class="cstat-no" title="statement not covered" >        + confirm.percentage * 0.30</span>
 <span class="cstat-no" title="statement not covered" >        + distributionQuality * 0.10</span>
-<span class="cstat-no" title="statement not covered" >        + clamp(50 + acceleration) * 0.05</span>
-<span class="cstat-no" title="statement not covered" >        + clamp(50 + (flow.percentage - 50)) * 0.05</span>
-<span class="cstat-no" title="statement not covered" >        - chopPenalty,</span>
+<span class="cstat-no" title="statement not covered" >        + clamp(50 + acceleration) * 0.10</span>
+<span class="cstat-no" title="statement not covered" >        + clamp(50 + (confirm.percentage - 50)) * 0.10,</span>
 <span class="cstat-no" title="statement not covered" >    );</span>
-<span class="cstat-no" title="statement not covered" >    const agreement = [baseline.percentage, confirm.percentage, flow.percentage, entry.percentage]</span>
+<span class="cstat-no" title="statement not covered" >    const agreement = [baseline.percentage, confirm.percentage]</span>
 <span class="cstat-no" title="statement not covered" >        .filter(value =&gt; value &gt;= 54).length;</span>
 <span class="cstat-no" title="statement not covered" >    const confirmed = digits.length &gt;= 1000</span>
 <span class="cstat-no" title="statement not covered" >        &amp;&amp; baseline.percentage &gt;= 54</span>
 <span class="cstat-no" title="statement not covered" >        &amp;&amp; confirm.percentage &gt;= 54</span>
-<span class="cstat-no" title="statement not covered" >        &amp;&amp; flow.percentage &gt;= 55</span>
-<span class="cstat-no" title="statement not covered" >        &amp;&amp; entry.percentage &gt;= 50</span>
-<span class="cstat-no" title="statement not covered" >        &amp;&amp; agreement &gt;= 3</span>
+<span class="cstat-no" title="statement not covered" >        &amp;&amp; agreement &gt;= 2</span>
 <span class="cstat-no" title="statement not covered" >        &amp;&amp; parityEntryPattern(digits, strategy)</span>
 <span class="cstat-no" title="statement not covered" >        &amp;&amp; score &gt;= 60;</span>
 <span class="cstat-no" title="statement not covered" >    const contract = strategy === 'odd' ? 'DIGITODD' : 'DIGITEVEN';</span>
@@ -871,7 +838,7 @@ export function classifyAutoBotMarket(symbol: string): string {
 <span class="cstat-no" title="statement not covered" >        shouldTrade: confirmed,</span>
 <span class="cstat-no" title="statement not covered" >        signal: score &gt;= 80 ? 'strong' : score &gt;= 60 ? 'weak' : undefined,</span>
 <span class="cstat-no" title="statement not covered" >        score,</span>
-<span class="cstat-no" title="statement not covered" >        reason: `${strategy.toUpperCase()} ${score.toFixed(0)} · 1000/50/20/10 ${[baseline, confirm, flow, entry].map(item =&gt; `${item.percentage.toFixed(0)}%`).join('/')} · ${agreement}/4 windows`,</span>
+<span class="cstat-no" title="statement not covered" >        reason: `${strategy.toUpperCase()} ${score.toFixed(0)} · 1000/50 ${[baseline, confirm].map(item =&gt; `${item.percentage.toFixed(0)}%`).join('/')} · ${agreement}/2 windows`,</span>
 <span class="cstat-no" title="statement not covered" >        direction: strategy,</span>
 <span class="cstat-no" title="statement not covered" >        state: confirmed ? 'SIGNAL READY' : score &gt;= 60 ? 'WATCH' : 'NO TRADE',</span>
 <span class="cstat-no" title="statement not covered" >    };</span>
@@ -892,7 +859,7 @@ export function classifyAutoBotMarket(symbol: string): string {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-09-14T11:18:50.757Z
+                at 2026-09-17T15:06:20.827Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

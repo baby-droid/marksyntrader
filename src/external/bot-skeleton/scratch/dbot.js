@@ -12,6 +12,7 @@ import { forgetAccumulatorsProposalRequest } from './accumulators-proposal-handl
 import { loadBlockly } from './blockly';
 import DBotStore from './dbot-store';
 import { scanKingFisherMarket } from '@/utils/king-fisher-market-scanner';
+import { dispatchBrowserEvent } from '../utils/browser-event';
 import { isAllRequiredBlocksEnabled, updateDisabledBlocks, validateErrorOnBlockDelete } from './utils';
 
 class DBot {
@@ -299,16 +300,23 @@ class DBot {
                 if (marketBlock && contractBlock) {
                     const direction = contractBlock.getFieldValue('TYPE_LIST') === 'DIGITUNDER' ? 'ABOVE' : 'BELOW';
                     const result = await scanKingFisherMarket(direction);
+                    marketBlock.setFieldValue(result.market, 'MARKET_LIST');
+                    marketBlock.setFieldValue(result.submarket, 'SUBMARKET_LIST');
                     marketBlock.setFieldValue(result.symbol, 'SYMBOL_LIST');
-                    window.dispatchEvent(new CustomEvent('king-fisher:best-market', {
-                        detail: {
-                            symbol: result.symbol,
-                            label: result.label,
-                            group: result.group,
-                            lastDigit: result.lastDigit,
-                            score: result.score,
-                        },
-                    }));
+                    const detail = {
+                        symbol: result.symbol,
+                        label: result.label,
+                        group: result.group,
+                        lastDigit: result.lastDigit,
+                        score: result.score,
+                        direction,
+                    };
+                    dispatchBrowserEvent('king-fisher:best-market', detail);
+                    dispatchBrowserEvent('journal:signal', {
+                        type: 'SCAN',
+                        label: 'BEST MARKET SELECTED',
+                        detail: `${result.label} · ${result.group} · last digit ${result.lastDigit ?? '—'} · score ${result.score}`,
+                    });
                 }
             }
             const code = this.generateCode();
@@ -380,14 +388,12 @@ class DBot {
                 currentTickTime = currentTickTime.epoch;
                 try {
                     var BinaryBotPrivateLastTick = Bot.getLastTick(true);
-                    if (typeof window !== 'undefined' && BinaryBotPrivateLastTick) {
-                        window.dispatchEvent(new CustomEvent('bot:market-digit', {
-                            detail: {
-                                symbol: Bot.getSymbol(),
-                                digit: Number(Bot.getLastDigit()),
-                                epoch: BinaryBotPrivateLastTick.epoch,
-                            },
-                        }));
+                    if (BinaryBotPrivateLastTick && typeof Bot.emitMarketDigit === 'function') {
+                        Bot.emitMarketDigit({
+                            symbol: Bot.getSymbol(),
+                            digit: Number(Bot.getLastDigit()),
+                            epoch: BinaryBotPrivateLastTick.epoch,
+                        });
                     }
                 } catch (e) {}
                 if (currentTickTime === BinaryBotPrivateLastTickTime) {

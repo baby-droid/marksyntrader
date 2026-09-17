@@ -23,9 +23,9 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">41.63% </span>
+                <span class="strong">41.42% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>117/281</span>
+                <span class='fraction'>116/280</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">41.63% </span>
+                <span class="strong">41.42% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>117/281</span>
+                <span class='fraction'>116/280</span>
             </div>
         
             
@@ -343,8 +343,7 @@
 <a name='L278'></a><a href='#L278'>278</a>
 <a name='L279'></a><a href='#L279'>279</a>
 <a name='L280'></a><a href='#L280'>280</a>
-<a name='L281'></a><a href='#L281'>281</a>
-<a name='L282'></a><a href='#L282'>282</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
+<a name='L281'></a><a href='#L281'>281</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -401,10 +400,11 @@
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -517,7 +517,6 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -527,7 +526,6 @@
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -625,8 +623,7 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { isProduction } from '@/components/shared';
-import brandConfig from '../../brand.config.json';
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { getApiBaseUrl } from '@/external/deriv-core';
 &nbsp;
 /**
  * Account information from derivatives/accounts endpoint
@@ -683,8 +680,10 @@ export class DerivWSAccountsService {
      * @returns DerivWS base URL (e.g., "https://api.derivws.com/trading/v1/")
      */
     private static <span class="fstat-no" title="function not covered" >getDerivWSBaseURL(): string {</span>
-<span class="cstat-no" title="statement not covered" >        const environment = isProduction() ? 'production' : 'staging';</span>
-<span class="cstat-no" title="statement not covered" >        return brandConfig.platform.derivws.url[environment];</span>
+<span class="cstat-no" title="statement not covered" >        // Keep account and OTP requests on the same Deriv environment as the</span>
+<span class="cstat-no" title="statement not covered" >        // OAuth/token endpoints. Using hostname detection here made local and</span>
+<span class="cstat-no" title="statement not covered" >        // Replit preview callbacks send a production token to staging.</span>
+<span class="cstat-no" title="statement not covered" >        return getApiBaseUrl();</span>
 <span class="cstat-no" title="statement not covered" >    }</span>
 &nbsp;
     /**
@@ -755,8 +754,7 @@ export class DerivWSAccountsService {
 <span class="cstat-no" title="statement not covered" >        this.accountsFetchPromise = (async () =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >            try {</span>
 <span class="cstat-no" title="statement not covered" >                const baseURL = this.getDerivWSBaseURL();</span>
-<span class="cstat-no" title="statement not covered" >                const OptionsDir = brandConfig.platform.derivws.directories.options;</span>
-<span class="cstat-no" title="statement not covered" >                const endpoint = `${baseURL}${OptionsDir}accounts`;</span>
+<span class="cstat-no" title="statement not covered" >                const endpoint = `${baseURL}/accounts`;</span>
 <span class="cstat-no" title="statement not covered" ></span>
 <span class="cstat-no" title="statement not covered" >                const response = await fetch(endpoint, {</span>
 <span class="cstat-no" title="statement not covered" >                    method: 'GET',</span>
@@ -820,8 +818,7 @@ export class DerivWSAccountsService {
 <span class="cstat-no" title="statement not covered" >        const otpPromise = (async () =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >            try {</span>
 <span class="cstat-no" title="statement not covered" >                const baseURL = this.getDerivWSBaseURL();</span>
-<span class="cstat-no" title="statement not covered" >                const optionsDir = brandConfig.platform.derivws.directories.options;</span>
-<span class="cstat-no" title="statement not covered" >                const endpoint = `${baseURL}${optionsDir}accounts/${accountId}/otp`;</span>
+<span class="cstat-no" title="statement not covered" >                const endpoint = `${baseURL}/accounts/${accountId}/otp`;</span>
 <span class="cstat-no" title="statement not covered" ></span>
 <span class="cstat-no" title="statement not covered" >                const response = await fetch(endpoint, {</span>
 <span class="cstat-no" title="statement not covered" >                    method: 'POST',</span>
@@ -913,7 +910,7 @@ export class DerivWSAccountsService {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-09-14T11:18:50.757Z
+                at 2026-09-17T15:06:20.827Z
             </div>
         <script src="../prettify.js"></script>
         <script>

@@ -71,7 +71,7 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_entry = block
         '    kingFisherEntryState.streak = qualifies ? kingFisherEntryState.streak + 1 : 0;',
         '    kingFisherEntryState.digits.push(digit);',
         '    if (kingFisherEntryState.digits.length > 3) kingFisherEntryState.digits.shift();',
-        '    if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("bot:king-fisher-analysis", { detail: { symbol: Bot.getSymbol(), digit: digit, sequence: kingFisherEntryState.digits.join(","), threshold: threshold, direction: direction, streak: kingFisherEntryState.streak, met: (streakMode === "2" ? kingFisherEntryState.streak === 2 : streakMode === "3" ? kingFisherEntryState.streak === 3 : (kingFisherEntryState.streak === 2 || kingFisherEntryState.streak === 3)) } }));',
+        '    if (typeof Bot.emitKingFisherAnalysis === "function") Bot.emitKingFisherAnalysis({ symbol: Bot.getSymbol(), digit: digit, sequence: kingFisherEntryState.digits.join(","), threshold: threshold, direction: direction, streak: kingFisherEntryState.streak, met: (streakMode === "2" ? kingFisherEntryState.streak === 2 : streakMode === "3" ? kingFisherEntryState.streak === 3 : (kingFisherEntryState.streak === 2 || kingFisherEntryState.streak === 3)) });',
         '  }',
         '  if (streakMode === "2") return kingFisherEntryState.streak === 2;',
         '  if (streakMode === "3") return kingFisherEntryState.streak === 3;',
@@ -148,8 +148,8 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_restart_trade
     const sl = generator().valueToCode(block, 'STOP_LOSS', generator().ORDER_ATOMIC) || '0';
     const multiplier = Number(block.getFieldValue('MULTIPLIER') || 2);
     return [
-        `if (Number(${tp}) > 0 && Bot.getTotalProfit(false) >= Number(${tp})) { if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("journal:signal", { detail: { type: "WIN", label: "TAKE PROFIT HIT", detail: "Keep trading with the best — TP reached" } })); return false; }`,
-        `if (Number(${sl}) > 0 && Bot.getTotalProfit(false) <= -Number(${sl})) { if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("journal:signal", { detail: { type: "LOSS", label: "STOP LOSS HIT", detail: "Trading stopped at the configured limit" } })); return false; }`,
+        `if (Number(${tp}) > 0 && Bot.getTotalProfit(false) >= Number(${tp})) { if (typeof Bot.emitJournalSignal === "function") Bot.emitJournalSignal({ type: "WIN", label: "TAKE PROFIT HIT", detail: "Keep trading with the best — TP reached" }); return false; }`,
+        `if (Number(${sl}) > 0 && Bot.getTotalProfit(false) <= -Number(${sl})) { if (typeof Bot.emitJournalSignal === "function") Bot.emitJournalSignal({ type: "LOSS", label: "STOP LOSS HIT", detail: "Trading stopped at the configured limit" }); return false; }`,
         `/* King Fisher loss multiplier ${multiplier}x is applied by the following result branch. */`,
     ].join('\n');
 };
@@ -213,14 +213,15 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_virtual_hook 
         `function ${generator().FUNCTION_NAME_PLACEHOLDER_}(signal, enabled, required) {`,
         '  if (!enabled) return Boolean(signal);',
         '  var tick = Bot.getLastTick(true);',
-        '  if (!tick || tick.epoch == null || !signal) {',
+        '  if (!tick || tick.epoch == null) {',
         '    kingFisherHookState.confirmations = 0;',
         '    return false;',
         '  }',
         '  if (tick.epoch !== kingFisherHookState.lastEpoch) {',
         '    kingFisherHookState.lastEpoch = tick.epoch;',
-        '    kingFisherHookState.confirmations = signal ? kingFisherHookState.confirmations + 1 : 0;',
-        '    if (typeof Bot.recordVirtualHook === "function") Bot.recordVirtualHook({ id: tick.epoch, time: new Date(tick.epoch * 1000).toISOString(), market: Bot.getSymbol(), result: signal ? "won" : "lost", hookType: "KING_FISHER" });',
+        '    var accepted = Boolean(signal);',
+        '    kingFisherHookState.confirmations = accepted ? kingFisherHookState.confirmations + 1 : 0;',
+        '    if (typeof Bot.recordVirtualHook === "function") Bot.recordVirtualHook({ id: tick.epoch, time: new Date(tick.epoch * 1000).toISOString(), market: Bot.getSymbol(), result: accepted ? "won" : "lost", hookType: "KING_FISHER" });',
         '  }',
         '  return kingFisherHookState.confirmations >= required;',
         '}',
