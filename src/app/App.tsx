@@ -9,7 +9,7 @@ import { useAccountSwitching } from '@/hooks/useAccountSwitching';
 import { useLanguageFromURL } from '@/hooks/useLanguageFromURL';
 import { StoreProvider } from '@/hooks/useStore';
 import { isPreviewMode, PREVIEW_BASE_PATH } from '@/utils/is-preview-mode';
-import { TranslationProvider } from '@deriv-com/translations';
+import { localize, TranslationProvider } from '@deriv-com/translations';
 import CoreStoreProvider from './CoreStoreProvider';
 import i18nInstance from './i18n';
 import './app-root.scss';
