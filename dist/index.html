@@ -116,12 +116,14 @@
 
                 function isChunkFailure(value) {
                     var message = value && (value.message || value.reason || value);
-                    return /chunk|dynamically imported module|failed to fetch|module script|syntaxerror/i.test(String(message || ''));
+                    return /chunk|dynamically imported module|module script|syntaxerror/i.test(String(message || ''));
                 }
 
                 window.addEventListener('error', function (event) {
                     var target = event && event.target;
-                    var failedScript = target && target.tagName === 'SCRIPT' && target.src;
+                    var source = target && target.src;
+                    var sameOriginScript = source && (source.indexOf(window.location.origin) === 0 || source.charAt(0) === '/');
+                    var failedScript = target && target.tagName === 'SCRIPT' && sameOriginScript;
                     var bootRuntimeError = (!target || target === window) && isChunkFailure(event && (event.error || event.message));
                     if (failedScript || bootRuntimeError) showBootError();
                 }, true);
