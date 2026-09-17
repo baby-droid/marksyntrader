@@ -53,6 +53,9 @@ const Xml = ({ ...props }) => {
 export const ToolboxItems = () =>
     ReactDomServer.renderToStaticMarkup(
         <Xml xmlns='http://www.w3.org/1999/xhtml' id='toolbox'>
+            <Category id='best_market_scanner' name={localize('Best market scanner')}>
+                <Block type='king_fisher_best_market_scanner' />
+            </Category>
             <Category id='trade_parameters' name={localize('Trade parameters')}>
                 <Block type='trade_definition'>
                     <Statement name='TRADE_OPTIONS'>

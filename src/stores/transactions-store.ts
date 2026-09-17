@@ -7,6 +7,7 @@ import { TPortfolioPosition, TStores } from '@deriv/stores/types';
 import { TContractInfo } from '../components/summary/summary-card.types';
 import { transaction_elements } from '../constants/transactions';
 import { getStoredItemsByKey, getStoredItemsByUser, setStoredItemsByKey } from '../utils/session-storage';
+import { observer as globalObserver } from '@/external/bot-skeleton';
 import RootStore from './root-store';
 
 type TTransaction = {
@@ -47,6 +48,7 @@ export default class TransactionsStore {
         this.core = core;
         this.is_transaction_details_modal_open = false;
         this.registerAutoTradeListener();
+        globalObserver.register('bot.virtual_hook', this.onVirtualHookEvent);
         this.disposeReactionsFn = this.registerReactions();
 
         makeObservable(this, {
@@ -65,6 +67,7 @@ export default class TransactionsStore {
             updateResultsCompletedContract: action.bound,
             sortOutPositionsBeforeAction: action.bound,
             recoverPendingContractsById: action.bound,
+            onVirtualHookEvent: action.bound,
         });
     }
     TRANSACTION_CACHE = 'transaction_cache';
@@ -78,6 +81,17 @@ export default class TransactionsStore {
     is_called_proposal_open_contract = false;
     is_transaction_details_modal_open = false;
     private auto_trade_listener: ((event: Event) => void) | null = null;
+
+    onVirtualHookEvent = (data: any = {}) => {
+        this.pushVirtualHook({
+            id: data.id,
+            time: data.time,
+            market: data.market || 'King Fisher',
+            result: data.result === 'lost' ? 'lost' : 'won',
+            exitDigit: data.exitDigit,
+            hookType: data.hookType || 'KING_FISHER',
+        });
+    };
 
     get transactions(): TTransaction[] {
         const accountId = this.core?.client?.loginid || localStorage.getItem('active_loginid');
