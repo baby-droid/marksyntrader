@@ -1,4 +1,4 @@
-modules = ["nodejs-20", "web", "python-base-3.13"]
+modules = ["nodejs-20", "web"]
 [agent]
 expertMode = true
 stack = "BEST_EFFORT_FALLBACK"
@@ -30,6 +30,26 @@ task = "shell.exec"
 args = "npm run dev"
 waitForPort = 5000
 
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[[ports]]
+localPort = 5001
+externalPort = 3000
+
+[[ports]]
+localPort = 5002
+externalPort = 3001
+
+[[ports]]
+localPort = 5003
+externalPort = 3002
+
+[[ports]]
+localPort = 5004
+externalPort = 3003
+
 [deployment]
 deploymentTarget = "static"
 build = ["npm", "run", "build"]
@@ -38,24 +58,7 @@ publicDir = "dist"
 [userenv]
 
 [userenv.shared]
-NEXT_PUBLIC_DERIV_REDIRECT_URI = "https://marksyntrader--marksyntrader.replit.app/callback"
+NEXT_PUBLIC_DERIV_REDIRECT_URI = "https://marksyntrader.replit.app/callback"
 NEXT_PUBLIC_DERIV_ENV = "production"
 NEXT_PUBLIC_DERIV_APP_NAME = "Marksyntrader"
 NEXT_PUBLIC_DERIV_APP_ID = "33FxUklO31bUSd9GkznBN"
-NEXT_PUBLIC_DERIV_OAUTH_SCOPES = "trade"
-
-[postMerge]
-path = "scripts/post-merge.sh"
-timeoutMs = 180000
-
-[[ports]]
-localPort = 4173
-externalPort = 3002
-
-[[ports]]
-localPort = 5000
-externalPort = 80
-
-[[ports]]
-localPort = 5001
-externalPort = 3000

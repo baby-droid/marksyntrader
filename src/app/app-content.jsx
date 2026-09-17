@@ -4,7 +4,6 @@ import { ToastContainer } from 'react-toastify';
 import AuthLoadingWrapper from '@/components/auth-loading-wrapper';
 import { botNotification } from '@/components/bot-notification/bot-notification';
 import useLiveChat from '@/components/chat/useLiveChat';
-import ChunkLoader from '@/components/loader/chunk-loader';
 import LoadingScreen from '@/components/loading-screen';
 import { getUrlBase } from '@/components/shared';
 import TransactionDetailsModal from '@/components/transaction-details';
@@ -172,22 +171,7 @@ const AppContent = observer(() => {
         const retrieveActiveSymbols = () => {
             const { active_symbols } = ApiHelpers.instance;
 
-            // Hard fallback: if the API call hangs for > 8 s, force-clear the
-            // loading screen so the app is always usable even on slow connections.
-            const fallbackTimer = setTimeout(() => {
-                setIsLoading(false);
-                has_loaded_once_ref.current = true;
-            }, 8000);
-
-            active_symbols.retrieveActiveSymbols(true).then(() => {
-                clearTimeout(fallbackTimer);
-                setIsLoading(false);
-                has_loaded_once_ref.current = true;
-            }).catch(() => {
-                clearTimeout(fallbackTimer);
-                setIsLoading(false);
-                has_loaded_once_ref.current = true;
-            });
+            active_symbols.retrieveActiveSymbols(true).catch(() => {});
         };
 
         if (ApiHelpers?.instance?.active_symbols) {
@@ -202,10 +186,8 @@ const AppContent = observer(() => {
                     clearInterval(intervalId);
                     retrieveActiveSymbols();
                 } else if (elapsed >= 10000) {
-                    // API helpers never initialised — give up and show the app
+                    // API helpers never initialised — leave the app shell usable.
                     clearInterval(intervalId);
-                    setIsLoading(false);
-                    has_loaded_once_ref.current = true;
                 }
             }, 1000);
         }
@@ -214,12 +196,6 @@ const AppContent = observer(() => {
     React.useEffect(() => {
         if (is_api_initialized) {
             init();
-            // Only show the full-screen loader for the very first connection of the
-            // session — subsequent reconnects (network blips, token refresh) should
-            // not flash "Loading..." over content that's already on screen.
-            if (!has_loaded_once_ref.current) {
-                setIsLoading(true);
-            }
             if (!client.is_logged_in) {
                 changeActiveSymbolLoadingState();
             }

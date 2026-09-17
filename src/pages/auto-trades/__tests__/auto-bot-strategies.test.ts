@@ -41,7 +41,7 @@ describe('Auto Bot strategy cards', () => {
         const trade = evaluateAutoBotStrategy('odd', paritySeries('odd'), []);
         expect(trade.contract).toBe('DIGITODD');
         expect(trade.shouldTrade).toBe(true);
-        expect(trade.reason).toContain('1000/50/20/10');
+        expect(trade.reason).toContain('1000/50');
     });
 
     it('requires multi-window Even confirmation before DIGITEVEN', () => {

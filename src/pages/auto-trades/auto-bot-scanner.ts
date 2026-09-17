@@ -138,6 +138,20 @@ export function selectAutoBotMarketsForExecution(
         .sort(compareAutoBotMarkets);
 }
 
+export function isValidatedAutoBotEntry(
+    candidate: AutoBotMarketCandidate,
+    lossStreak = 0,
+): boolean {
+    if (!candidate.qualifies || candidate.trade.entryFrame !== 'matched') return false;
+
+    // A loss must buy a stronger setup, not simply repeat the last signal with
+    // a larger stake. Two consecutive losses require a strong signal as well
+    // as the higher score threshold.
+    const minimumScore = lossStreak >= 2 ? 72 : lossStreak === 1 ? 62 : 50;
+    return candidate.score >= minimumScore
+        && (lossStreak < 2 || candidate.trade.signal === 'strong');
+}
+
 export function isAutoBotMarketStopped(
     profit: number,
     risk: { takeProfit: number; stopLoss: number },

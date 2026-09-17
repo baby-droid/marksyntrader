@@ -41,8 +41,13 @@ export function installChunkRecovery(): () => void {
 
     const handleError = (event: ErrorEvent) => {
         const target = event.target;
+        const source = target instanceof HTMLScriptElement ? target.src : '';
+        const sameOriginScript =
+            source.startsWith('/') || source.startsWith(window.location.origin);
         const failedScript =
-            target instanceof HTMLScriptElement && /\/static\/js\/|\.js(?:$|\?)/i.test(target.src);
+            target instanceof HTMLScriptElement &&
+            sameOriginScript &&
+            /\/static\/js\/|\.js(?:$|\?)/i.test(source);
 
         if (failedScript || isChunkLoadFailure(event.error ?? event.message)) {
             reloadAfterChunkFailure();

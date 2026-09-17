@@ -17,7 +17,7 @@
 - [Digit widget pip_size bug](digit-widget-pipsize.md) — history batch arrives before live tick; must store raw prices and wait for authoritative pip_size from first live tick before computing digits, or wrong static defaults cause digit-0 at 99%+.
 - [Dashboard STRATEGY.INIT navigation](marksyntrader-dashboard-init.md) — INIT now triggers handleOpen (load + Bot Builder nav); auto-select timer sets is_div_triggered_once before click so it also navigates — intentional "auto-open first bot" behavior, not a regression.
 - [Draggable button pattern](marksyntrader-draggable-buttons.md) — use e.currentTarget (not e.target) for pointer capture/release; persist position with localStorage; suppress post-drag click via addEventListener once+capture; default bottom-left for risk disclaimer, middle-left for Free Bots.
-- [ChunkLoadError recovery](marksyntrader-chunk-error.md) — quill-icons Illustration chunk fails after server restart; fixed by: (1) lazyCompilation:false in rsbuild dev+rspack experiments, (2) ChunkErrorPage errorElement on all React Router routes with sessionStorage one-shot reload guard.
+- [Boot error recovery](boot-error-recovery.md) — boot fallback must react only to script/chunk failures; API and WebSocket errors must not replace the app with a false preview-reload screen.
 - [Header demo/real buttons](marksyntrader-header-buttons.md) — demo account: left-side "Reset Demo" button (useResetDemoBalance shared hook); real account: right-side green "Deposit" button (useDepositReal hook → cashier API → fallback to app.deriv.com/cashier/deposit).
 - [Scalper Bots architecture](marksyntrader-scalper-bots.md) — built-in scalper strategies are Blockly XML files loaded into the real Bot Builder (like Free Bots), not a custom trading engine.
 - [BOT_BUILDER tab constant bug](marksyntrader-bot-builder-tab-bug.md) — DBOT_TABS.BOT_BUILDER must equal AHMED_LEARNING's index or every caller (dashboard cards, tours, announcements) blanks the screen.
@@ -72,3 +72,4 @@
 - [Deriv OAuth endpoint](deriv-oauth.md) — production authorization uses `/oauth2/auth`; the Deriv app must be live before an interactive callback test can succeed.
 - [Dependency repair](dependency-repair.md) — restore an empty node_modules tree without unintentionally upgrading the checked-in manifest.
 - [Blockly fallback execution](unsupported-block-execution.md) — unknown imported blocks need both a visible definition and a JavaScript generator fallback to remain runnable.
+- [Vite merge guardrails](vite-merge-guardrails.md) — resolve the active toolchain before regenerating the lockfile; Vite 8 may need CSS minification disabled for malformed vendor CSS.

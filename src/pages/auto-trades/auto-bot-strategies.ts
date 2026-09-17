@@ -90,33 +90,33 @@ function directionalScore(
     prices: number[],
     direction: 'rise' | 'fall',
 ): { score: number; confirmed: boolean; reason: string; state: string } {
-    const windows = [20, 50, 100, 1000].map(window => movementStats(prices, window));
-    const [flow20, confirm50, trend100, regime1000] = windows;
+    // Keep the long baseline and one recent confirmation window. The old
+    // four-window gate was too restrictive and made entries lag the live tick.
+    const windows = [50, 1000].map(window => movementStats(prices, window));
+    const [confirm50, regime1000] = windows;
     const ratios = windows.map(stats => direction === 'rise' ? stats.upPct : stats.downPct);
     const momentum = direction === 'rise'
         ? mean(windows.map(stats => stats.momentum))
         : mean(windows.map(stats => 100 - stats.momentum));
     const structure = structureScore(prices, direction);
     const persistence = mean(windows.map(stats => stats.persistence));
-    const chopPenalty = mean(windows.slice(0, 3).map(stats => Math.max(0, stats.chop - 35) * 0.8));
+    const chopPenalty = Math.max(0, confirm50.chop - 35) * 0.8;
     const averageMove = mean(prices.slice(-100).slice(1).map((price, index) => Math.abs(price - prices.slice(-100)[index])).filter(Boolean));
     const latestMove = Math.abs(prices[prices.length - 1] - prices[prices.length - 2]);
     const jumpPenalty = averageMove > 0 && latestMove > averageMove * 4 ? 22 : 0;
     const volatilityQuality = jumpPenalty ? 35 : averageMove > 0 ? 82 : 0;
     const score = clamp(
-        ratios[0] * 0.20
-        + ratios[1] * 0.20
-        + ratios[2] * 0.20
-        + ratios[3] * 0.15
-        + momentum * 0.10
-        + structure * 0.05
-        + persistence * 0.05
-        + volatilityQuality * 0.05
+        ratios[0] * 0.30
+        + ratios[1] * 0.25
+        + momentum * 0.15
+        + structure * 0.10
+        + persistence * 0.10
+        + volatilityQuality * 0.10
         - chopPenalty
         - jumpPenalty,
     );
     const windowsAgree = ratios.every(ratio => ratio >= 60);
-    const lowChop = windows.slice(0, 3).every(stats => stats.chop < 62);
+    const lowChop = confirm50.chop < 62;
     const regimeAgrees = direction === 'rise'
         ? regime1000.upPct >= 50
         : regime1000.downPct >= 50;
@@ -134,7 +134,7 @@ function directionalScore(
         score,
         confirmed,
         state,
-        reason: `${direction === 'rise' ? 'Rise' : 'Fall'} ${score.toFixed(0)} · 20/50/100 ${ratios.slice(0, 3).map(value => `${value.toFixed(0)}%`).join('/')} · ${flow20.direction.toUpperCase()} flow · ${trend100.direction.toUpperCase()} structure`,
+        reason: `${direction === 'rise' ? 'Rise' : 'Fall'} ${score.toFixed(0)} · 50/1000 ${ratios.map(value => `${value.toFixed(0)}%`).join('/')} · ${confirm50.direction.toUpperCase()} flow · ${regime1000.direction.toUpperCase()} structure`,
     };
 }
 
@@ -214,8 +214,6 @@ function parityEntryPattern(digits: number[], target: 'odd' | 'even'): boolean {
 function parityTrade(strategy: ParityStrategy, digits: number[]): StrategyTrade {
     const baseline = parityStats(digits, strategy, 1000);
     const confirm = parityStats(digits, strategy, 50);
-    const flow = parityStats(digits, strategy, 20);
-    const entry = parityStats(digits, strategy, 10);
     const olderHalf = parityStats(baseline.sample.slice(0, 50), strategy, 25).percentage;
     const recentHalf = parityStats(baseline.sample.slice(-25), strategy, 25).percentage;
     const acceleration = recentHalf - olderHalf;
@@ -227,28 +225,19 @@ function parityTrade(strategy: ParityStrategy, digits: number[]): StrategyTrade 
     const distributionQuality = targetMean > 0
         ? clamp(100 - Math.max(...counts.map(count => Math.abs(count - targetMean))) / targetMean * 100)
         : 0;
-    const sequenceChanges = flow.sample.slice(1).filter((digit, index) =>
-        (digit % 2 === 0) !== (flow.sample[index] % 2 === 0),
-    ).length;
-    const chopPenalty = sequenceChanges / Math.max(1, flow.sample.length - 1) * 25;
     const score = clamp(
-        baseline.percentage * 0.25
-        + confirm.percentage * 0.20
-        + flow.percentage * 0.20
-        + entry.percentage * 0.15
+        baseline.percentage * 0.40
+        + confirm.percentage * 0.30
         + distributionQuality * 0.10
-        + clamp(50 + acceleration) * 0.05
-        + clamp(50 + (flow.percentage - 50)) * 0.05
-        - chopPenalty,
+        + clamp(50 + acceleration) * 0.10
+        + clamp(50 + (confirm.percentage - 50)) * 0.10,
     );
-    const agreement = [baseline.percentage, confirm.percentage, flow.percentage, entry.percentage]
+    const agreement = [baseline.percentage, confirm.percentage]
         .filter(value => value >= 54).length;
     const confirmed = digits.length >= 1000
         && baseline.percentage >= 54
         && confirm.percentage >= 54
-        && flow.percentage >= 55
-        && entry.percentage >= 50
-        && agreement >= 3
+        && agreement >= 2
         && parityEntryPattern(digits, strategy)
         && score >= 60;
     const contract = strategy === 'odd' ? 'DIGITODD' : 'DIGITEVEN';
@@ -258,7 +247,7 @@ function parityTrade(strategy: ParityStrategy, digits: number[]): StrategyTrade 
         shouldTrade: confirmed,
         signal: score >= 80 ? 'strong' : score >= 60 ? 'weak' : undefined,
         score,
-        reason: `${strategy.toUpperCase()} ${score.toFixed(0)} · 1000/50/20/10 ${[baseline, confirm, flow, entry].map(item => `${item.percentage.toFixed(0)}%`).join('/')} · ${agreement}/4 windows`,
+        reason: `${strategy.toUpperCase()} ${score.toFixed(0)} · 1000/50 ${[baseline, confirm].map(item => `${item.percentage.toFixed(0)}%`).join('/')} · ${agreement}/2 windows`,
         direction: strategy,
         state: confirmed ? 'SIGNAL READY' : score >= 60 ? 'WATCH' : 'NO TRADE',
     };

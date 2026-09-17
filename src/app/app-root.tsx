@@ -69,7 +69,7 @@ const AppRoot = () => {
     if (!store) return <AppRootLoader />;
 
     return (
-        <Suspense fallback={<AppRootLoader />}>
+        <Suspense fallback={null}>
             <ErrorBoundary root_store={store}>
                 <ErrorComponentWrapper />
                 <AppContent />
