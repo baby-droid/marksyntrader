@@ -81,6 +81,8 @@ export default function DesktopTransactionTable({
                 {transactions?.map(transaction => {
                     const { data, type } = transaction;
                     if (type === transaction_elements.CONTRACT) {
+                        const isHook = Boolean((data as any)?.is_virtual_hook);
+                        const hookWon = (data as any)?.hook_result === 'profit';
                         return (
                             <div className={`${PARENT_CLASS}__table-row`} key={data?.transaction_ids?.buy}>
                                 <TableCell
@@ -119,19 +121,25 @@ export default function DesktopTransactionTable({
                                 />
                                 <TableCell label={data?.entry_spot} loader={!data?.entry_spot} />
                                 <TableCell label={data?.exit_spot} loader={!data.exit_spot} />
-                                <TableCell label={ksh(data?.buy_price)} />
+                                 <TableCell label={isHook ? '—' : ksh(data?.buy_price)} />
                                 <TableCell
                                     label={
-                                        <div
-                                            className={classNames({
-                                                [`${PARENT_CLASS}__profit--win`]: data?.profit > 0,
-                                                [`${PARENT_CLASS}__profit--loss`]: data?.profit < 0,
-                                            })}
-                                        >
-                                            {ksh(data?.profit)}
-                                        </div>
+                                         isHook ? (
+                                             <div className={hookWon ? `${PARENT_CLASS}__profit--win hook-result` : `${PARENT_CLASS}__profit--loss hook-result`}>
+                                                 {hookWon ? '✓ HOOK PROFIT' : '✗ HOOK LOSS'}
+                                             </div>
+                                         ) : (
+                                             <div
+                                                 className={classNames({
+                                                     [`${PARENT_CLASS}__profit--win`]: data?.profit > 0,
+                                                     [`${PARENT_CLASS}__profit--loss`]: data?.profit < 0,
+                                                 })}
+                                             >
+                                                 {ksh(data?.profit)}
+                                             </div>
+                                         )
                                     }
-                                    loader={!data.is_completed}
+                                     loader={!data.is_completed && !isHook}
                                 />
                             </div>
                         );

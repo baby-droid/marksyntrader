@@ -1,0 +1,643 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   Chart page — full layout
+   Layout: flex-row  [chart+digits (flex:1)] | [right panel (319px)]
+   Height: locked to viewport so nothing scrolls off-screen
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Horizontal-scroll wrapper ───────────────────────────────────────────────
+   Thin shell — only purpose is overflow-x: auto so the chart+panel can scroll
+   sideways on narrow screens. NO height set here: cw-root carries its own
+   absolute viewport height so SmartChart's ResizeObserver always sees a
+   non-zero container regardless of what the parent tab div's height is.
+   overflow-y MUST be hidden (not visible/auto): CSS spec forces overflow-y to
+   'auto' whenever overflow-x is non-visible, which would add a vertical scroll
+   bar and interfere with SmartChart's layout.                                  */
+.cw-scroll-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(30,136,255,0.5) rgba(0,0,0,0.1);
+    &::-webkit-scrollbar          { height: 6px; }
+    &::-webkit-scrollbar-track    { background: rgba(0,0,0,0.08); border-radius: 4px; }
+    &::-webkit-scrollbar-thumb    { background: rgba(30,136,255,0.45); border-radius: 4px; }
+    &::-webkit-scrollbar-thumb:hover { background: rgba(30,136,255,0.7); }
+}
+
+/* ── Root container ──────────────────────────────────────────────────────── */
+.cw-root {
+    min-width: 900px;
+    display: flex;
+    flex-direction: row;
+    width: 100%;
+    /* Absolute viewport height — does NOT rely on any parent having a height.
+       SmartChart's ResizeObserver uses this as its reference size. */
+    height: calc(100vh - 110px);
+    max-height: calc(100vh - 110px);
+    overflow: hidden;
+    background: #fff;
+
+    @media (max-width: 900px) {
+        flex-direction: column;
+        height: auto;
+        max-height: none;
+    }
+}
+
+/* ── Left column: chart canvas + digit bar ─────────────────────────────────
+   Chart takes 50% of the total width; right panel takes 50%.
+   Height: chart-inner gets flex:1 (~85%), digit bar gets its natural height.
+ */
+.cw-left {
+    width: 50%;
+    flex-shrink: 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+
+    @media (max-width: 900px) {
+        width: 100%;
+    }
+}
+
+/* ── Chart area (fills all remaining height between market card and digit bar) */
+.cw-chart-inner {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    overflow: visible; /* allow SmartChart dropdowns to escape into the page */
+
+    /* SmartChart wrapper — visible so its internal dropdowns are not clipped */
+    .dashboard__chart-wrapper {
+        width: 100% !important;
+        height: 100% !important;
+        max-width: 100% !important;
+        position: relative !important;
+        overflow: visible !important; /* must be visible so title dropdown floats above canvas */
+    }
+
+    /* SmartChart's canvas layer needs an explicit height when it is nested in
+       the flex chart column. Without this, the canvas can mount at zero height
+       and the quote line is technically present but invisible. */
+    .dashboard__chart-wrapper,
+    .dashboard__chart-wrapper > .smartcharts,
+    .dashboard__chart-wrapper > .smartcharts-desktop,
+    .dashboard__chart-wrapper .ciq-chart,
+    .dashboard__chart-wrapper .ciq-chart-area,
+    .dashboard__chart-wrapper canvas {
+        min-height: 0 !important;
+    }
+    .dashboard__chart-wrapper > .smartcharts,
+    .dashboard__chart-wrapper > .smartcharts > .smartcharts-desktop,
+    .dashboard__chart-wrapper .ciq-chart,
+    .dashboard__chart-wrapper .ciq-chart-area,
+    .dashboard__chart-wrapper .chartContainer {
+        height: 100% !important;
+    }
+
+    /* SmartChart root canvas containers */
+    > div, .sc-chart-layout, .chartWrapper, [class*="chart-"] {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+
+    /* ── SmartChart ChartTitle dropdown z-index fix ─────────────────────────
+       The canvas lives inside .ciq-chart-area and paints on top of everything
+       at its natural stacking order. We lift the title and its dropdown ABOVE
+       the canvas so the symbol-selector popup renders in front of the chart.  */
+
+    /* Title bar — needs to sit above the canvas */
+    .cq-chart-title {
+        position: relative !important;
+        z-index: 500 !important;
+        overflow: visible !important;
+    }
+
+    /* The animated dropdown list that appears when clicking the title */
+    .cq-menu-dropdown,
+    .cq-menu-dropdown-enter-active,
+    .cq-menu-dropdown-enter-done,
+    .cq-modal-dropdown {
+        z-index: 9999 !important;
+        position: relative !important;
+        overflow: visible !important;
+    }
+
+    /* Any top-widgets / toolbar row SmartChart renders above the chart */
+    .sc-chart__head,
+    .cq-chart-title-wrapper {
+        position: relative !important;
+        z-index: 300 !important;
+        overflow: visible !important;
+    }
+}
+
+/* ── Right panel — 50% of total width ─────────────────────────────────────── */
+.cw-right-panel {
+    width: 50%;
+    min-width: 280px;
+    flex-shrink: 0;
+    border-left: 1px solid #e0e0e0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    background: #f4f6f9;  /* slightly off-white to contrast the card inside */
+    padding: 8px;
+    box-sizing: border-box;
+    scrollbar-width: thin;
+    scrollbar-color: #ddd transparent;
+    &::-webkit-scrollbar { width: 4px; }
+    &::-webkit-scrollbar-thumb { background: #ddd; border-radius: 4px; }
+
+    @media (max-width: 900px) {
+        width: 100%;
+        min-width: 0;
+        border-left: none;
+        border-top: 1px solid #e0e0e0;
+        padding: 6px;
+    }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   DIGIT CIRCLES SECTION
+   Structure (top → bottom):
+     ① Triangle track (9px) — the ▼ pointer slides here
+     ② Circles + labels row (flex, ~68px)
+   ══════════════════════════════════════════════════════════════════════════ */
+.cdo {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    background: rgba(255, 255, 255, 0.98);
+    border-top: 1.5px solid #e0e0e0;
+    width: 100%;
+    margin-bottom: 6px; /* lift the bar slightly off the very bottom edge */
+
+    /* ── ① Triangle track — exactly the height of the triangle arrow ── */
+    &__triangle-track {
+        position: relative;
+         height: 15px;      /* leaves a clear gap between pointer and circles */
+        width: 100%;
+        flex-shrink: 0;
+        overflow: visible; /* let the pointer bleed down onto circles */
+    }
+
+    /* Single sliding ▼ pointer */
+    &__triangle-pointer {
+        position: absolute;
+        top: 0;            /* wide base at the very top of the track */
+        transform: translateX(-50%);
+        width: 0;
+        height: 0;
+        border-left:  6px solid transparent;
+        border-right: 6px solid transparent;
+        border-top:   9px solid #FF1744;  /* tip points DOWN, sits right on circle */
+        transition: left 0.18s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        will-change: left;
+        z-index: 10;
+        pointer-events: none;
+        filter:
+            drop-shadow(0 0 2px #fff)
+            drop-shadow(0 0 2px #fff)
+            drop-shadow(0 0 1px rgba(255,255,255,0.9));
+
+        &--hidden { visibility: hidden; }
+    }
+
+    /* ── T-badge that rides on the triangle pointer ──────────────────────
+       Floats above the triangle tip and slides with it.  Shows "T1", "T2" …
+       for the current live tick of an active contract. The ★ marks the
+       final (exit) tick.                                                    */
+    &__t-badge {
+        position: absolute;
+        /* sit above the triangle base (9px) + 2px gap */
+        bottom: 11px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #FF1744;
+        color: #fff;
+        font-size: 8px;
+        font-weight: 900;
+        line-height: 1.4;
+        padding: 1px 5px;
+        border-radius: 6px;
+        white-space: nowrap;
+        pointer-events: none;
+        box-shadow: 0 1px 5px rgba(255, 23, 68, 0.45);
+        animation: cdo-tbadge-pop 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+        z-index: 20;
+        /* ensure the badge is visible even when parent pointer is hidden */
+
+        &__star {
+            margin-left: 2px;
+            color: #FFD600;
+        }
+    }
+
+    /* ── ② Body row: price chip + right (triangle + circles) ────────── */
+    &__body {
+        display: flex;
+        align-items: center;
+        width: 100%;
+        padding: 1px 2px 2px;
+    }
+
+    /* Price chip */
+    &__price {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 3px;
+        flex-shrink: 0;
+        width: 56px;
+        border-right: 1px solid #eee;
+        padding-right: 5px;
+        margin-right: 3px;
+    }
+    &__price-val {
+        font-size: 9px;
+        font-weight: 800;
+        color: #000;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.02em;
+        white-space: nowrap;
+    }
+    &__price-digit {
+        width: 22px; height: 22px;
+        border-radius: 50%;
+        background: #1E88FF;
+        color: #fff;
+        font-size: 12px;
+        font-weight: 900;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* Right section — wraps triangle-track + circles so triangle
+       aligns ONLY above the digits, not the price chip */
+    &__right {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* Circles row */
+    &__circles {
+        display: flex;
+        flex: 1;
+        justify-content: space-between;
+        align-items: flex-start;
+        padding: 0 1px;
+        gap: 2px; /* half the previous implicit spacing */
+    }
+
+    /* Individual digit item */
+    &__item {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1px;
+        cursor: pointer;
+        user-select: none;
+        min-width: 0;
+        flex: 1;
+    }
+
+    /* Digit circle */
+    &__circle {
+        width: clamp(44px, 4.4vw, 58px);
+        height: clamp(44px, 4.4vw, 58px);
+        border-radius: 50%;
+        border: 2.5px solid #ccc;
+        background: #f0f0f0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: clamp(17px, 1.9vw, 25px);
+        font-weight: 900;
+        color: #000;
+        transition: transform 0.15s, box-shadow 0.15s;
+        flex-shrink: 0;
+
+        &--green   { background:#00E676; border-color:#00B248; color:#000 !important; box-shadow:0 0 8px rgba(0,230,118,0.55); }
+        &--red     { background:#FF3D57; border-color:#C62828; color:#000 !important; box-shadow:0 0 8px rgba(255,61,87,0.55); }
+        &--blue    { background:#1E88FF; border-color:#0056b3; color:#000 !important; box-shadow:0 0 8px rgba(30,136,255,0.55); }
+        &--yellow  { background:#FFD600; border-color:#c6a800; color:#000 !important; box-shadow:0 0 8px rgba(255,214,0,0.55); }
+        &--default { border-color:#bbb; background:#f0f0f0; color:#000; }
+
+        &--current {
+            box-shadow: 0 0 0 2px #fff, 0 0 0 3.5px rgba(30,136,255,0.7);
+            transform: scale(1.08);
+        }
+        &--barrier {
+            background: rgba(0,0,0,0.1) !important;
+            border-color: rgba(0,0,0,0.4) !important;
+            color: #000 !important;
+        }
+        &--tick-active {
+            border-color: #1E88FF !important;
+            background: #64B5F6 !important;
+            box-shadow: 0 0 0 2px #fff, 0 0 0 3.5px rgba(30,136,255,0.6) !important;
+            animation: cdo-tick-pulse 0.8s ease-out;
+            color: #000 !important;
+        }
+        &--tick-final {
+            border-color: #FFD600 !important;
+            background: #FFE57F !important;
+            color: #000 !important;
+        }
+        &--win {
+            background: #00E676 !important;
+            border-color: #00B248 !important;
+            border-width: 3px !important;
+            color: #000 !important;
+            box-shadow: 0 0 16px 5px rgba(0,230,118,0.7) !important;
+            animation: cdo-pulse-win 0.7s ease-out;
+        }
+        &--loss {
+            background: #FF3D57 !important;
+            border-color: #C62828 !important;
+            border-width: 3px !important;
+            color: #000 !important;
+            box-shadow: 0 0 16px 5px rgba(255,61,87,0.7) !important;
+            animation: cdo-pulse-loss 0.7s ease-out;
+        }
+    }
+
+    /* Percentage label */
+    &__pct {
+        font-size: clamp(9px, 0.85vw, 13px);
+        font-weight: 900;
+        color: #000;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+}
+
+/* ── Animations ───────────────────────────────────────────────────────────── */
+@keyframes cdo-pulse-win  { 0%{transform:scale(1.3)} 100%{transform:scale(1)} }
+@keyframes cdo-pulse-loss { 0%{transform:scale(1.3)} 100%{transform:scale(1)} }
+@keyframes cdo-tick-pulse { 0%{transform:scale(1.15)} 100%{transform:scale(1)} }
+@keyframes cdo-tlabel-in  {
+    from { opacity: 0; transform: translate(-50%, calc(-50% - 4px)); }
+    to   { opacity: 1; transform: translate(-50%, -50%); }
+}
+/* T-badge "pop" — slight overshoot spring for the riding badge */
+@keyframes cdo-tbadge-pop {
+    0%   { opacity: 0; transform: translateX(-50%) scale(0.6); }
+    60%  { transform: translateX(-50%) scale(1.15); }
+    100% { opacity: 1; transform: translateX(-50%) scale(1); }
+}
+
+/* ── Market settlement info strip ─────────────────────────────────────────
+   Sits below the digit bar inside .cw-left.  One-line, horizontally
+   scrollable on very narrow containers.  --strip-color is set inline.     */
+.cdo__market-strip {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    background: rgba(0, 0, 0, 0.03);
+    border-top: 1px solid #e8e8e8;
+    font-size: 9px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    white-space: nowrap;
+    scrollbar-width: none;
+    &::-webkit-scrollbar { display: none; }
+
+    /* Tick-speed pill */
+    &__speed {
+        font-weight: 800;
+        font-size: 8.5px;
+        color: var(--strip-color, #1E88FF);
+        background: color-mix(in srgb, var(--strip-color, #1E88FF) 12%, transparent);
+        padding: 1px 6px;
+        border-radius: 5px;
+        flex-shrink: 0;
+    }
+
+    /* · separator */
+    &__sep {
+        color: #ccc;
+        flex-shrink: 0;
+    }
+
+    /* Settlement description */
+    &__settle {
+        color: #333;
+        font-weight: 600;
+        font-size: 9px;
+        flex-shrink: 0;
+    }
+
+    /* Contract types */
+    &__contracts {
+        color: #888;
+        font-size: 8.5px;
+        flex-shrink: 0;
+    }
+
+    /* Highlight "no digit" markets with a subtle warning tint */
+    &--no-digit {
+        background: color-mix(in srgb, var(--strip-color, #FF3D57) 5%, #fff);
+        border-top-color: color-mix(in srgb, var(--strip-color, #FF3D57) 20%, #eee);
+    }
+}
+
+/* ── Tick counter badge ───────────────────────────────────────────────────── */
+.cdo-tick-counter {
+    position: absolute;
+    left: 12px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px 3px 7px;
+    background: rgba(30,136,255,0.92);
+    border-radius: 16px;
+    color: #fff;
+    font-size: clamp(9px,0.7vw,12px);
+    font-weight: 700;
+    z-index: 31;
+    pointer-events: none;
+    box-shadow: 0 2px 8px rgba(30,136,255,0.4);
+    animation: cdo-fade-in 0.2s ease;
+
+    &__dot   { width:6px;height:6px;border-radius:50%;background:#93c5fd;animation:cdo-dot-pulse 1s ease-in-out infinite;flex-shrink:0; }
+    &__count { font-size:clamp(10px,0.8vw,13px);font-weight:900; }
+    &__label { font-size:clamp(7px,0.55vw,10px);font-weight:600;opacity:0.8; }
+}
+@keyframes cdo-dot-pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.75)} }
+@keyframes cdo-fade-in   { from{opacity:0;transform:translateX(-5px)} to{opacity:1;transform:translateX(0)} }
+
+/* ── Win / Loss — full-width horizontal bar centred on the SmartChart ────── */
+.chart-trade-flag {
+    position: absolute;
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: 40px;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;   /* label + amount flush to the right */
+    padding: 0 0 0 16px;
+    gap: 0;
+    z-index: 30;
+    pointer-events: none;
+    animation: chart-flag-in  0.25s cubic-bezier(.2,1.5,.4,1) both,
+               chart-flag-out 0.35s ease-in 4.8s both;
+
+    /* "Profit" / "Loss" label — sits inside the bar */
+    &__label {
+        flex: 1;
+        text-align: right;
+        font-size: 15px;
+        font-weight: 800;
+        color: #fff;
+        letter-spacing: 0.02em;
+        padding-right: 12px;
+        line-height: 40px;
+        white-space: nowrap;
+    }
+
+    /* Amount badge — right-edge pill */
+    &__amount {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        min-width: 80px;
+        padding: 0 14px;
+        font-size: 15px;
+        font-weight: 900;
+        color: #fff;
+        white-space: nowrap;
+        letter-spacing: 0.01em;
+        border-left: 1px solid rgba(255,255,255,0.25);
+    }
+
+    /* ── Win — emerald ─────────────────────────────────────────── */
+    &--win {
+        background: #00C853;
+        box-shadow: 0 2px 16px rgba(0,200,83,0.45);
+    }
+
+    /* ── Loss — crimson ────────────────────────────────────────── */
+    &--loss {
+        background: #E53935;
+        box-shadow: 0 2px 16px rgba(229,57,53,0.45);
+    }
+}
+
+@keyframes chart-flag-in {
+    from { opacity: 0; transform: translateY(-50%) scaleY(0.4); }
+    to   { opacity: 1; transform: translateY(-50%) scaleY(1); }
+}
+@keyframes chart-flag-out {
+    from { opacity: 1; transform: translateY(-50%) scaleY(1); }
+    to   { opacity: 0; transform: translateY(-50%) scaleY(0.4); }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   RESPONSIVE BREAKPOINTS
+   1440px+  : default (50/50 split)
+   ≤ 1280px : slight digit circle reduction
+   ≤ 1024px : tablet — 60/40 split, smaller circles
+   ≤ 767px  : phone  — stack vertically, full-width panel, compact circles
+   ════════════════════════════════════════════════════════════════ */
+
+/* ── 1280 px — large laptop / monitor: slight circle shrink ─────── */
+@media (max-width: 1280px) {
+    .cdo {
+        &__circle         { width: clamp(34px, 3.5vw, 44px); height: clamp(34px, 3.5vw, 44px); font-size: clamp(11px, 1.1vw, 14px); }
+        &__pct            { font-size: clamp(7px, 0.7vw, 9px); }
+    }
+}
+
+/* ── 1024 px — tablet landscape / small laptop ──────────────────── */
+@media (max-width: 1024px) {
+    /* Switch to 60/40 so chart stays usable */
+    .cw-left  { width: 60%; }
+    .cw-right { width: 40%; }
+
+    .cdo {
+        &__circle         { width: clamp(30px, 3vw, 38px); height: clamp(30px, 3vw, 38px); font-size: clamp(10px, 1vw, 13px); }
+        &__pct            { font-size: clamp(6px, 0.65vw, 8px); }
+        &__price-val      { font-size: 10px; }
+        &__triangle-pointer { border-left-width: 6px; border-right-width: 6px; border-top-width: 9px; }
+        &__tlabel         { font-size: 8px; height: 13px; line-height: 13px; }
+        &__triangle-track { height: 15px; }
+    }
+
+    /* Trade flag: slightly shorter bar on tablets */
+    .chart-trade-flag {
+        height: 34px;
+        &__label  { font-size: 13px; line-height: 34px; }
+        &__amount { font-size: 13px; min-width: 68px; padding: 0 10px; }
+    }
+}
+
+/* ── 767 px — phone / tablet portrait ──────────────────────────── */
+@media (max-width: 767px) {
+    /* ── Root: stack chart above panel ──────────────────────────── */
+    .cw-root {
+        flex-direction: column;
+        height: auto;
+        max-height: none;
+        overflow: visible;
+    }
+
+    /* ── Left column: chart takes full width + fixed height ──────── */
+    .cw-left {
+        width: 100%;
+        flex-shrink: 0;
+        height: 55vw;      /* ~55% of viewport width — keeps chart visible */
+        min-height: 240px;
+        max-height: 360px;
+    }
+
+    /* ── Right column: full width under the chart ────────────────── */
+    .cw-right,
+    .cw-right-panel {
+        width: 100%;
+        flex-shrink: 0;
+        min-height: 0;
+        overflow: visible;
+        border-left: none;
+        border-top: 1px solid #e0e0e0;
+        padding: 6px;
+    }
+
+    /* Digit stat circles — bigger on mobile to match Deriv reference */
+    .cdo {
+        &__circle         { width: 32px; height: 32px; font-size: 12px; }
+        &__pct            { font-size: 7px; }
+        &__price-val      { font-size: 8px; }
+        &__triangle-pointer { border-left-width: 5px; border-right-width: 5px; border-top-width: 8px; }
+        &__tlabel         { font-size: 6px; }
+        &__triangle-track { height: 13px; }
+    }
+
+    /* Win/loss flag — compact bar on mobile (desktop chart only, mobile uses MobileChartView) */
+    .chart-trade-flag {
+        height: 30px;
+        &__label  { font-size: 11px; line-height: 30px; }
+        &__amount { font-size: 11px; min-width: 58px; padding: 0 8px; }
+    }
+}
+
+/* ── 480 px — small phones ──────────────────────────────────────── */
+@media (max-width: 480px) {
+    .cw-left { height: 60vw; min-height: 200px; max-height: 280px; }
+
+    .cdo {
+        &__circle { width: 24px; height: 24px; font-size: 9px; }
+        &__pct    { font-size: 5.5px; }
+    }
+}

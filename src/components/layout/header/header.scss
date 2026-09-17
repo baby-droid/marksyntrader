@@ -356,6 +356,68 @@
     }
 }
 
+// ─── App-wide A-SPEED BOOST ─────────────────────────────────────────────────
+.header__a-speed-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 32px;
+    padding: 5px 10px;
+    margin-inline-start: 0.6rem;
+    border: 1px solid rgba(14, 165, 233, 0.45);
+    border-radius: 17px;
+    background: rgba(14, 165, 233, 0.08);
+    color: #38bdf8;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+
+    &__icon {
+        font-size: 14px;
+        line-height: 1;
+    }
+
+    &__state {
+        padding: 1px 4px;
+        border-radius: 5px;
+        background: rgba(148, 163, 184, 0.16);
+        color: #94a3b8;
+        font-size: 9px;
+        letter-spacing: 0.05em;
+    }
+
+    &:hover:not(:disabled) {
+        background: rgba(14, 165, 233, 0.16);
+        border-color: #38bdf8;
+    }
+
+    &--active {
+        border-color: rgba(34, 211, 238, 0.9);
+        background: linear-gradient(135deg, #0369a1, #0891b2);
+        color: #fff;
+        box-shadow: 0 0 10px rgba(34, 211, 238, 0.45), 0 0 22px rgba(14, 165, 233, 0.2);
+
+        .header__a-speed-btn__state {
+            background: rgba(255, 255, 255, 0.24);
+            color: #fff;
+        }
+    }
+
+    @include mobile-or-tablet-screen {
+        margin-inline-start: 0.35rem;
+        padding-inline: 7px;
+        font-size: 9px;
+        gap: 3px;
+
+        &__icon {
+            font-size: 12px;
+        }
+    }
+}
+
 // ─── Real account: Transfer + Deposit wrapper ────────────────────────────────
 .header__real-actions {
     display: inline-flex;

@@ -1,39 +1,35 @@
 .speed-control {
     display: flex;
     align-items: center;
-    gap: 0.6rem;
-
-    &__label {
-        font-size: 1rem;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        color: var(--text-less-prominent, #999);
-    }
+    gap: 0.4rem;
+    position: relative;
+    /* Shift the whole control 0.5 cm to the left to reclaim header space */
+    margin-left: -0.5cm;
 
     &__group {
         display: inline-flex;
         background: var(--general-section-1, #f2f3f4);
         border: 1px solid var(--border-normal, #d6dadb);
-        border-radius: 1.6rem;
-        padding: 0.2rem;
-        gap: 0.2rem;
+        border-radius: 1.2rem;
+        padding: 0.15rem;
+        gap: 0.1rem;
     }
 
     &__btn {
         border: none;
         background: transparent;
-        border-radius: 1.4rem;
-        padding: 0.4rem 1rem;
-        font-size: 1.1rem;
+        border-radius: 1rem;
+        padding: 0.2rem 0.5rem;
+        font-size: 0.82rem;
         font-weight: 600;
-        color: var(--text-general, #333);
+        color: var(--text-general, #555);
         cursor: pointer;
         transition: all 0.15s ease;
         white-space: nowrap;
+        line-height: 1.3;
 
         &:hover:not(.active) {
-            background: rgba(0, 0, 0, 0.05);
+            background: rgba(0, 0, 0, 0.07);
         }
 
         &.active {
@@ -50,14 +46,197 @@
 
         &--turbo.active {
             background: linear-gradient(135deg, #ef4444, #b91c1c);
-            box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+            box-shadow: 0 0 8px rgba(239, 68, 68, 0.45);
         }
     }
 
+    /* ⚡ Fast — supersonic zero-latency execution toggle */
+    &__fast {
+        border: none;
+        border-radius: 1rem;
+        padding: 0.2rem 0.65rem;
+        font-size: 0.82rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.18s ease;
+        white-space: nowrap;
+        line-height: 1.3;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        background: rgba(34, 197, 94, 0.14);
+        color: #4ade80;
+        border: 1px solid rgba(34, 197, 94, 0.3);
+
+        &:hover:not(.active) {
+            background: rgba(34, 197, 94, 0.24);
+            color: #86efac;
+            border-color: rgba(34, 197, 94, 0.5);
+        }
+
+        &.active {
+            color: #fff;
+            border-color: transparent;
+            background: linear-gradient(135deg, #16a34a, #22c55e, #15803d);
+            box-shadow: 0 0 12px rgba(34, 197, 94, 0.6), 0 0 24px rgba(34, 197, 94, 0.25);
+            animation: fast-pulse-green 1.8s ease-in-out infinite;
+        }
+
+        @keyframes fast-pulse-green {
+            0%, 100% { box-shadow: 0 0 12px rgba(34, 197, 94, 0.6), 0 0 24px rgba(34, 197, 94, 0.2); }
+            50%       { box-shadow: 0 0 20px rgba(74, 222, 128, 0.8), 0 0 36px rgba(34, 197, 94, 0.4); }
+        }
+    }
+
+    /* "ACTIVE" badge inside Fast button */
+    &__fast-badge {
+        font-size: 0.6rem;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        background: rgba(255, 255, 255, 0.25);
+        border-radius: 0.35rem;
+        padding: 0.06rem 0.3rem;
+        line-height: 1.3;
+        vertical-align: middle;
+    }
+
+    /* Diagnostics ms badge */
+    &__diag-wrap {
+        position: relative;
+    }
+
+    &__diag-btn {
+        border: none;
+        background: rgba(6, 182, 212, 0.15);
+        color: #06b6d4;
+        border-radius: 0.8rem;
+        padding: 0.18rem 0.45rem;
+        font-size: 0.72rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: background 0.15s;
+        font-family: monospace;
+        border: 1px solid rgba(6, 182, 212, 0.3);
+        white-space: nowrap;
+
+        &:hover { background: rgba(6, 182, 212, 0.25); }
+    }
+
+    /* Diagnostics floating panel */
+    &__diag-panel {
+        position: absolute;
+        top: calc(100% + 6px);
+        right: 0;
+        z-index: 9999;
+        background: #0f172a;
+        border: 1px solid rgba(6, 182, 212, 0.35);
+        border-radius: 0.75rem;
+        padding: 0.9rem 1rem;
+        width: 270px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.55);
+        color: #e2e8f0;
+        font-size: 0.8rem;
+    }
+
+    &__diag-title {
+        font-weight: 700;
+        font-size: 0.82rem;
+        color: #06b6d4;
+        margin-bottom: 0.4rem;
+        letter-spacing: 0.02em;
+    }
+
+    &__diag-status {
+        font-size: 0.78rem;
+        font-weight: 600;
+        margin-bottom: 0.55rem;
+    }
+
+    &__diag-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 0.6rem;
+
+        td {
+            padding: 0.22rem 0;
+            font-size: 0.78rem;
+            &:first-child { color: #94a3b8; }
+            &:last-child  { text-align: right; font-family: monospace; font-weight: 700; color: #a78bfa; }
+        }
+    }
+
+    &__diag-total {
+        td {
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            padding-top: 0.3rem;
+            font-weight: 700;
+            &:first-child { color: #e2e8f0; }
+            &:last-child  { color: #06b6d4; }
+        }
+    }
+
+    /* WS ping row */
+    &__diag-ping {
+        font-size: 0.78rem;
+        font-weight: 700;
+        font-family: monospace;
+        margin-bottom: 0.3rem;
+        letter-spacing: 0.02em;
+    }
+
+    /* Tick rate row */
+    &__diag-tickrate {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.76rem;
+        color: #94a3b8;
+        margin-bottom: 0.5rem;
+        padding-bottom: 0.45rem;
+        border-bottom: 1px solid rgba(255,255,255,0.07);
+
+        span:last-child {
+            font-family: monospace;
+            font-weight: 700;
+            color: #4ade80;
+        }
+    }
+
+    &__diag-note {
+        font-size: 0.68rem;
+        color: #475569;
+        margin-bottom: 0.55rem;
+        line-height: 1.4;
+    }
+
+    &__diag-features {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.3rem;
+
+        span {
+            background: rgba(6, 182, 212, 0.1);
+            border: 1px solid rgba(6, 182, 212, 0.2);
+            border-radius: 0.4rem;
+            padding: 0.12rem 0.4rem;
+            font-size: 0.65rem;
+            color: #67e8f9;
+            font-weight: 600;
+        }
+    }
+
+    /* Compact variant — used inside the floating run button */
     &--compact {
         .speed-control__btn {
-            padding: 0.3rem 0.7rem;
-            font-size: 1rem;
+            padding: 0.18rem 0.45rem;
+            font-size: 0.78rem;
+        }
+        .speed-control__fast {
+            padding: 0.18rem 0.55rem;
+            font-size: 0.78rem;
+        }
+        .speed-control__diag-btn {
+            font-size: 0.68rem;
+            padding: 0.15rem 0.4rem;
         }
     }
 }

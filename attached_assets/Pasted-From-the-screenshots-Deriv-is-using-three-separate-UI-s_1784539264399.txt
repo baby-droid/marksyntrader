@@ -1,0 +1,731 @@
+From the screenshots, Deriv is using **three separate UI systems** that work together:
+
+1. **Contract Lifecycle Engine** (handles tick counting and contract result)
+2. **Chart Annotation Engine** (places the flags and markers)
+3. **Digit Probability Display** (highlights the winning/losing digit)
+
+If you're building an identical platform, the logic is approximately as follows.
+
+---
+
+# 1. User Executes Contract
+
+Example
+
+```
+Contract : OVER
+Barrier  : 2
+Duration : 1 Tick
+Stake    : $10
+```
+
+Save the trade.
+
+```ts
+const contract = {
+    id: uuid(),
+    type: "OVER",
+    barrier: 2,
+    duration: 1,
+    ticksRemaining: 1,
+    startTickIndex: tickIndex,
+    startPrice: currentQuote,
+    status: "RUNNING"
+}
+```
+
+Immediately draw
+
+```
+Blue vertical line
+Countdown (0/1)
+Blue circle
+```
+
+---
+
+# 2. Tick Counter
+
+Every incoming websocket tick
+
+```
+currentTick++
+
+contract.ticksRemaining--
+```
+
+UI
+
+```
+0/1
+```
+
+becomes
+
+```
+1/1
+```
+
+or
+
+```
+1/2
+
+2/2
+```
+
+for two ticks.
+
+Example
+
+```
+Duration = 5
+
+Start
+
+0/5
+
+tick1
+
+1/5
+
+tick2
+
+2/5
+
+tick3
+
+3/5
+
+tick4
+
+4/5
+
+tick5
+
+5/5
+
+Contract settles
+```
+
+Exactly what Deriv shows.
+
+---
+
+# 3. Countdown Line
+
+Draw
+
+```
+Vertical blue dashed line
+```
+
+at settlement.
+
+Move countdown label
+
+```
+0/5
+
+↓
+
+1/5
+
+↓
+
+2/5
+
+↓
+
+3/5
+
+↓
+
+4/5
+
+↓
+
+5/5
+```
+
+---
+
+# 4. Settlement Tick
+
+When
+
+```
+ticksRemaining == 0
+```
+
+Save
+
+```
+settlementPrice
+
+settlementDigit
+
+settlementTime
+```
+
+Example
+
+```
+811.58
+
+digit = 8
+```
+
+---
+
+# 5. Determine Winner
+
+For OVER
+
+```
+digit > barrier
+```
+
+Example
+
+Barrier
+
+```
+2
+```
+
+Digit
+
+```
+8
+```
+
+Result
+
+```
+8 > 2
+
+WIN
+```
+
+For UNDER
+
+```
+digit < barrier
+```
+
+---
+
+# 6. Highlight Winning Digit
+
+Bottom digit circles
+
+```
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+```
+
+Normal
+
+```
+gray
+```
+
+Winning
+
+```
+green
+```
+
+Example
+
+Digit landed
+
+```
+8
+```
+
+Update
+
+```
+0 gray
+
+1 gray
+
+2 gray
+
+3 gray
+
+4 gray
+
+5 gray
+
+6 gray
+
+7 gray
+
+8 GREEN
+
+9 gray
+```
+
+If contract loses
+
+```
+8 RED
+```
+
+Exactly like Deriv.
+
+Pseudo
+
+```ts
+digits.forEach(d=>{
+    d.color="gray"
+})
+
+digits[settlementDigit].color =
+contract.win
+? "green"
+: "red"
+```
+
+---
+
+# 7. Highlight Barrier
+
+Barrier
+
+```
+OVER 2
+```
+
+Also highlight
+
+```
+2
+```
+
+as selected.
+
+Example
+
+```
+0
+
+1
+
+[2 Selected]
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8 GREEN
+
+9
+```
+
+---
+
+# 8. Graph Marker
+
+Deriv places the flag at settlement.
+
+Win
+
+```
+Green flag
+
+🏁
+```
+
+Loss
+
+```
+Red flag
+```
+
+Marker
+
+```ts
+marker = {
+    x: settlementTime,
+    y: settlementPrice,
+    color: contract.win
+        ? "green"
+        : "red"
+}
+```
+
+---
+
+# 9. Blue Circle
+
+The blue circle contains
+
+```
+remaining ticks
+```
+
+Example
+
+```
+3
+```
+
+means
+
+```
+3 ticks remaining
+```
+
+Every tick
+
+```
+3
+
+↓
+
+2
+
+↓
+
+1
+
+↓
+
+0
+```
+
+Then disappear.
+
+---
+
+# 10. Finished Contract
+
+Store
+
+```
+{
+ entryPrice,
+ settlementPrice,
+ digit,
+ barrier,
+ duration,
+ result,
+ profit,
+ time
+}
+```
+
+Then create history marker.
+
+---
+
+# 11. Logic for Every Contract Type
+
+---
+
+## OVER
+
+```
+digit > barrier
+```
+
+Green if true.
+
+---
+
+## UNDER
+
+```
+digit < barrier
+```
+
+Green if true.
+
+---
+
+## EVEN
+
+```
+digit % 2 == 0
+```
+
+Winning digits
+
+```
+0
+
+2
+
+4
+
+6
+
+8
+```
+
+If lands
+
+```
+6
+
+highlight green
+```
+
+Else red.
+
+---
+
+## ODD
+
+```
+digit % 2 == 1
+```
+
+Winning digits
+
+```
+1
+
+3
+
+5
+
+7
+
+9
+```
+
+---
+
+## MATCHES
+
+Barrier
+
+```
+5
+```
+
+Win
+
+```
+digit == 5
+```
+
+Highlight
+
+```
+5 GREEN
+```
+
+Else
+
+```
+actual digit RED
+```
+
+---
+
+## DIFFERS
+
+Barrier
+
+```
+5
+```
+
+Win
+
+```
+digit != 5
+```
+
+If lands
+
+```
+8
+
+highlight 8 GREEN
+```
+
+---
+
+## OVER 7
+
+Barrier
+
+```
+7
+```
+
+Winning
+
+```
+8
+
+9
+```
+
+---
+
+## UNDER 3
+
+Winning
+
+```
+0
+
+1
+
+2
+```
+
+---
+
+# 12. Tick Timeline
+
+```
+Buy
+
+↓
+
+Blue line
+
+↓
+
+Tick Counter
+
+↓
+
+Settlement Tick
+
+↓
+
+Extract Last Digit
+
+↓
+
+Evaluate Contract
+
+↓
+
+Green / Red Marker
+
+↓
+
+Highlight Winning Digit
+
+↓
+
+Store Trade
+
+↓
+
+Display in Journal
+```
+
+---
+
+# 13. Chart Flags
+
+Use TradingView (or Lightweight Charts) markers.
+
+Win
+
+```ts
+{
+ position:"aboveBar",
+ shape:"flag",
+ color:"#00C853",
+ text:"WIN"
+}
+```
+
+Loss
+
+```ts
+{
+ position:"belowBar",
+ shape:"flag",
+ color:"#F44336",
+ text:"LOSS"
+}
+```
+
+Pending
+
+```ts
+{
+ position:"aboveBar",
+ shape:"circle",
+ color:"#2196F3",
+ text:"3"
+}
+```
+
+---
+
+# 14. State Machine
+
+```
+BUY
+
+↓
+
+Pending
+
+↓
+
+Tick Counter
+
+↓
+
+Settlement
+
+↓
+
+Extract Last Digit
+
+↓
+
+Evaluate
+
+↓
+
+WIN / LOSS
+
+↓
+
+Update Graph
+
+↓
+
+Highlight Digit
+
+↓
+
+Save History
+
+↓
+
+Ready for Next Trade
+```
+
+This architecture can be reused across **all Deriv digit contracts** (Over/Under, Odd/Even, Matches/Differs) by keeping the visualization layer generic and only changing the evaluation rule for each contract type. The chart annotations (blue countdown, settlement marker, win/loss flag), digit highlighting, and history logging remain the same regardless of contract type; only the predicate that determines whether the settlement digit wins changes.

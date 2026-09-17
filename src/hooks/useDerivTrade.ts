@@ -5,6 +5,16 @@ import {
     connectionStatus$,
     isAuthorized$,
 } from '@/external/bot-skeleton/services/api/observables/connection-status-stream';
+import { publishMasterTrade, getMasterSource, createTradeKey } from '@/utils/trade-bus';
+import { observer } from '@/external/bot-skeleton/utils/observer';
+import {
+    isFastExecutionEnabled,
+    recordPhase,
+    recordTick,
+    startPingMonitor,
+    stopPingMonitor,
+    setPingRestartHook,
+} from '@/utils/execution-speed';
 
 /**
  * Trading hook — rides on the SAME authenticated WebSocket connection the rest
@@ -18,6 +28,7 @@ export interface TickData {
     digit: number;
     quote: number;
     epoch: number;
+    pip_size: number;
 }
 
 export interface ContractResult {
@@ -35,6 +46,8 @@ export interface SettledContract {
     status: 'won' | 'lost';
     entry_spot?: number;
     exit_spot?: number;
+    buy_price?: number;
+    pip_size?: number;   // authoritative pip_size from the settled POC
 }
 
 export type ContractType =
@@ -43,31 +56,73 @@ export type ContractType =
 
 export interface BuyParams {
     symbol: string;
-    contract_type: ContractType;
-    duration: number;
+    contract_type: ContractType | string;
+    duration?: number;
     duration_unit?: 't' | 's' | 'm' | 'h';
     stake: number;
-    barrier?: number;
+    barrier?: number | string;
     currency?: string;
+    growth_rate?: number;
+    limit_order?: { take_profit?: number; stop_loss?: number };
+    // Extra app metadata is copied onto the native contract event so
+    // Bot Builder's transaction store can group Auto Trades positions.
+    metadata?: Record<string, unknown>;
 }
 
-function getLastDigit(quote: number): number {
-    const s = quote.toFixed(2).replace('.', '');
+const NEEDS_BARRIER = new Set(['DIGITOVER','DIGITUNDER','DIGITMATCH','DIGITDIFF']);
+
+export function buildProposalRequest(params: BuyParams, fallbackCurrency = 'USD'): Record<string, unknown> {
+    const {
+        symbol,
+        contract_type,
+        duration,
+        duration_unit = 't',
+        stake,
+        barrier,
+        currency,
+        growth_rate,
+        limit_order,
+    } = params;
+    const contractName = String(contract_type).toUpperCase();
+    const isAccumulator = contractName === 'ACCU';
+    const request: Record<string, unknown> = {
+        proposal: 1,
+        amount: stake,
+        basis: 'stake',
+        contract_type,
+        currency: currency || fallbackCurrency,
+        ...(duration != null && !isAccumulator ? { duration } : {}),
+        ...(duration_unit && !isAccumulator ? { duration_unit } : {}),
+        underlying_symbol: symbol,
+    };
+    if (NEEDS_BARRIER.has(contractName) && barrier !== undefined && barrier !== null) {
+        request.barrier = String(barrier);
+    }
+    if (growth_rate != null) request.growth_rate = growth_rate;
+    if (limit_order) request.limit_order = limit_order;
+    return request;
+}
+
+function getLastDigit(quote: number, pipSize = 2): number {
+    const s = quote.toFixed(pipSize).replace('.', '');
     return parseInt(s[s.length - 1], 10);
 }
 
 export function useDerivTrade() {
     const tickCallbacksRef = useRef<Map<string, (t: TickData) => void>>(new Map());
+    const tickSubscriptionsRef = useRef<Map<string, { token: number; id?: number }>>(new Map());
+    const nextTickSubscriptionTokenRef = useRef(0);
     const pocCallbacksRef = useRef<Map<number, (c: SettledContract) => void>>(new Map());
+    const settledContractsRef = useRef<Map<number, SettledContract>>(new Map());
+    const contractMetaRef = useRef<Map<number, any>>(new Map());
+    const settlementRetryTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
     const [connected, setConnected] = useState(connectionStatus$.value === CONNECTION_STATUS.OPENED);
     const [balance, setBalance] = useState<number | null>(null);
     const [currency, setCurrency] = useState('USD');
     const [authorized, setAuthorized] = useState(isAuthorized$.value);
-    const balanceSubscribedRef = useRef(false);
+    const balanceRequestedRef = useRef(false);
     const mountedRef = useRef(true);
 
-    // Track connection + auth off the shared observables — same ones the rest
-    // of the app (header, trade panel, etc.) already relies on.
     useEffect(() => {
         mountedRef.current = true;
         const connSub = connectionStatus$.subscribe(status => {
@@ -77,22 +132,42 @@ export function useDerivTrade() {
         const authSub = isAuthorized$.subscribe(isAuth => {
             if (!mountedRef.current) return;
             setAuthorized(isAuth);
-            if (isAuth && !balanceSubscribedRef.current) {
-                balanceSubscribedRef.current = true;
-                (api_base.api?.send as unknown as ((data: unknown) => Promise<any>) | undefined)?.({ balance: 1, subscribe: 1 })?.catch(() => {});
+            if (isAuth && !balanceRequestedRef.current) {
+                balanceRequestedRef.current = true;
+                // APIBase owns the live balance stream. Request a snapshot here
+                // instead of opening another subscription for every hook instance.
+                (api_base.api?.send as unknown as ((data: unknown) => Promise<any>) | undefined)?.({ balance: 1 })?.catch(() => {});
+                // Start ping monitor once authenticated so Fast mode diagnostics are live
+                try {
+                    const sendFn = (msg: object) =>
+                        (api_base.api?.send as unknown as (d: unknown) => Promise<any>)(msg);
+                    startPingMonitor(sendFn);
+                    // Re-start with correct interval when Fast mode toggled
+                    setPingRestartHook(() => startPingMonitor(sendFn));
+                } catch { /* non-fatal */ }
             }
         });
         return () => {
             mountedRef.current = false;
             connSub.unsubscribe();
             authSub.unsubscribe();
+            stopPingMonitor();
         };
     }, []);
 
-    // Single shared message listener — reads balance/tick/contract pushes
-    // from the same message stream every other part of the app listens on.
     useEffect(() => {
-        const sub = api_base.api?.onMessage()?.subscribe(({ data: d }: { data: any }) => {
+        // api_base.api may be created just after this hook mounts. Re-run when
+        // the connection opens so lazy-loaded pages still receive live ticks.
+        let sub: { unsubscribe: () => void } | undefined;
+        let attachedApi: typeof api_base.api = null;
+        let attachTimer: ReturnType<typeof setInterval> | undefined;
+
+        const attachMessageListener = () => {
+            if (!connected || !api_base.api) return;
+            if (attachedApi === api_base.api && sub) return;
+            sub?.unsubscribe?.();
+            attachedApi = api_base.api;
+            sub = attachedApi.onMessage()?.subscribe(({ data: d }: { data: any }) => {
             if (!d || typeof d !== 'object') return;
 
             if (d.balance && d.balance.balance != null && mountedRef.current) {
@@ -101,14 +176,24 @@ export function useDerivTrade() {
             }
 
             if (d.tick) {
-                const q = d.tick.quote;
+                recordTick(); // count tick for Fast mode tick-rate display
+                const q = Number(d.tick.quote);
+                const epoch = Number(d.tick.epoch);
+                const ps = Number(d.tick.pip_size ?? 2);
+                /* Deriv can emit a partial tick while a subscription is being
+                   attached/re-attached. Never forward that payload: scalpers
+                   and charts both use epoch as the ordering/entry anchor. */
+                if (!Number.isFinite(q) || !Number.isFinite(epoch) || !Number.isFinite(ps) || ps < 0) return;
                 const tick: TickData = {
                     symbol: d.tick.symbol,
-                    digit: getLastDigit(q),
+                    digit: getLastDigit(q, ps),
                     quote: q,
-                    epoch: d.tick.epoch,
+                    epoch,
+                    pip_size: ps,
                 };
-                tickCallbacksRef.current.get(d.tick.symbol)?.(tick);
+                if (typeof d.tick.symbol === 'string' && d.tick.symbol) {
+                    tickCallbacksRef.current.get(d.tick.symbol)?.(tick);
+                }
             }
 
             if (d.proposal_open_contract) {
@@ -116,91 +201,323 @@ export function useDerivTrade() {
                 const cid = Number(poc.contract_id);
                 if (poc.is_sold || poc.status === 'won' || poc.status === 'lost') {
                     const cb = pocCallbacksRef.current.get(cid);
-                    if (cb) {
-                        const profit = parseFloat(poc.profit ?? '0');
-                        cb({
-                            contract_id: cid,
+                    const meta = contractMetaRef.current.get(cid);
+                    const retryTimer = settlementRetryTimersRef.current.get(cid);
+                    if (retryTimer) {
+                        clearTimeout(retryTimer);
+                        settlementRetryTimersRef.current.delete(cid);
+                    }
+                    const profit = parseFloat(poc.profit ?? '0');
+                    // Use the definitive status from the API; fall back to profit sign.
+                    const status: 'won' | 'lost' =
+                        poc.status === 'won' ? 'won'
+                        : poc.status === 'lost' ? 'lost'
+                        : profit > 0 ? 'won' : 'lost';
+                    const settledContract: SettledContract = {
+                        contract_id: cid,
+                        profit,
+                        status,
+                        entry_spot: poc.entry_spot,
+                        exit_spot: poc.exit_spot,
+                        buy_price: poc.buy_price,
+                        pip_size: poc.pip_size != null ? Number(poc.pip_size) : undefined,
+                    };
+                    // Keep a short-lived replay cache. Very short contracts can
+                    // settle between the buy response and registration of the
+                    // local callback; without this, native rows settle while
+                    // Auto Trades waits until its timeout.
+                    settledContractsRef.current.set(cid, settledContract);
+                    if (settledContractsRef.current.size > 300) {
+                        const oldest = settledContractsRef.current.keys().next().value;
+                        if (oldest != null) settledContractsRef.current.delete(oldest);
+                    }
+                    if (cb) cb(settledContract);
+                    // Keep the native transaction page authoritative even if
+                    // the local waiting promise timed out or was interrupted.
+                    if (meta) {
+                        const settledContract = {
+                            ...meta,
+                            transaction_ids: { ...meta.transaction_ids, sell: cid },
+                            is_sold: true,
+                            is_completed: true,
+                            status,
                             profit,
-                            status: poc.status === 'won' || profit > 0 ? 'won' : 'lost',
+                            payout: profit > 0 ? Number(poc.payout ?? meta.buy_price + profit) : 0,
+                            bid_price: Number(poc.bid_price ?? 0),
                             entry_spot: poc.entry_spot,
                             exit_spot: poc.exit_spot,
-                        });
-                        pocCallbacksRef.current.delete(cid);
+                            entry_tick_time: poc.entry_tick_time,
+                            exit_tick_time: poc.exit_tick_time,
+                        };
+                        observer.emit('bot.contract', settledContract);
+                        window.dispatchEvent(new CustomEvent('auto-trade:contract', {
+                            detail: settledContract,
+                        }));
+                        window.dispatchEvent(new CustomEvent('chart:trade-settled', {
+                            detail: {
+                                contractId: cid,
+                                symbol: meta.underlying_symbol,
+                                contractType: meta.contract_type,
+                                won: status === 'won',
+                                profit,
+                                barrier: meta.barrier,
+                                exitDigit: poc.exit_tick_display_value
+                                    ? parseInt(String(poc.exit_tick_display_value).replace('.', '').slice(-1), 10)
+                                    : undefined,
+                            },
+                        }));
+                        contractMetaRef.current.delete(cid);
                     }
+                    pocCallbacksRef.current.delete(cid);
                 }
             }
-        });
-        return () => sub?.unsubscribe?.();
-    }, []);
+            });
+        };
 
-    // NOTE: api_base's TApiBaseApi type declares send() as returning void, but the
-    // underlying DerivAPIBasic implementation actually returns a Promise at runtime
-    // (see e.g. contracts-for.js `await api_base.api.send(...)`, network_monitor.js
-    // `.send(...).then(...)`). Cast to reflect real behavior.
+        attachMessageListener();
+        // connectionStatus$ can become OPENED just before api_base.api is
+        // assigned, or a reconnect can replace the API instance without
+        // changing the boolean connection state. Keep polling only until the
+        // current API listener is attached so no tick stream is missed.
+        if (connected) {
+            attachTimer = setInterval(attachMessageListener, 250);
+        }
+
+        return () => {
+            if (attachTimer) clearInterval(attachTimer);
+            sub?.unsubscribe?.();
+            sub = undefined;
+            attachedApi = null;
+        };
+    }, [connected]);
+
     const send = useCallback((msg: object): Promise<any> => {
         if (!api_base.api) return Promise.reject(new Error('Not connected'));
         return (api_base.api.send as unknown as (data: unknown) => Promise<any>)(msg);
     }, []);
 
     const subscribeTicks = useCallback((symbol: string, cb: (t: TickData) => void) => {
+        const token = ++nextTickSubscriptionTokenRef.current;
+        const previous = tickSubscriptionsRef.current.get(symbol);
+        if (previous?.id != null) send({ forget: previous.id }).catch(() => {});
         tickCallbacksRef.current.set(symbol, cb);
-        send({ ticks: symbol, subscribe: 1 }).catch(() => {});
+        tickSubscriptionsRef.current.set(symbol, { token });
+        send({ ticks: symbol, subscribe: 1 }).then(response => {
+            const id = Number(response?.subscription?.id);
+            if (!Number.isFinite(id) || id <= 0) return;
+            const current = tickSubscriptionsRef.current.get(symbol);
+            if (current?.token === token) {
+                current.id = id;
+            } else {
+                // The subscription was replaced or cleaned up before Deriv
+                // returned its ID. Forget only this stream.
+                send({ forget: id }).catch(() => {});
+            }
+        }).catch(() => {});
         return () => {
+            const current = tickSubscriptionsRef.current.get(symbol);
+            if (current?.token !== token) return;
+            tickSubscriptionsRef.current.delete(symbol);
             tickCallbacksRef.current.delete(symbol);
-            send({ forget_all: 'ticks' }).catch(() => {});
+            if (current.id != null) send({ forget: current.id }).catch(() => {});
         };
     }, [send]);
 
+    /**
+     * buyContract — always uses the proven proposal→buy two-step flow.
+     * The direct-buy shortcut (buy: 1, parameters: {...}) causes
+     * "Input validation failed: parameters" on the DerivAPIBasic client
+     * for digit contract types. The proposal→buy path works for ALL types.
+     */
     const buyContract = useCallback(
         async (params: BuyParams, onSettled?: (c: SettledContract) => void): Promise<ContractResult> => {
-            const { symbol, contract_type, duration, duration_unit = 't', stake, barrier, currency: cur } = params;
-            const buyParams: any = {
+            const { symbol, contract_type, stake, currency: cur, metadata } = params;
+
+            const cur_ = cur || currency || 'USD';
+            const isAccumulator = String(contract_type).toUpperCase() === 'ACCU';
+            const proposalReq = buildProposalRequest(params, currency || 'USD');
+            const {
+                duration,
+                duration_unit = 't',
+                barrier,
+                growth_rate,
+                limit_order,
+            } = params;
+
+            // Step 1 — proposal (get an ask_price and a proposal ID)
+            const t0 = performance.now();
+            const tradeKey = createTradeKey('ui');
+
+            let proposalRes: any;
+            try {
+                proposalRes = await send(proposalReq);
+            } catch (e: any) {
+                throw e?.error ?? e;
+            }
+            if (proposalRes?.error) {
+                throw proposalRes.error;
+            }
+            const proposalId = proposalRes?.proposal?.id;
+            const askPrice   = Number(proposalRes?.proposal?.ask_price ?? stake);
+            if (!proposalId) {
+                throw new Error('Proposal failed — no proposal ID returned');
+            }
+            // Record proposal round-trip time as evalToBuy phase
+            if (isFastExecutionEnabled()) {
+                recordPhase('evalToBuy', Math.round(performance.now() - t0));
+            }
+
+            // ── Publish copy-trade signal IN PARALLEL with master's buy ────
+            // Firing the signal here (after proposal accepted, before buy confirmed)
+            // means follower accounts start their own buy at the SAME TIME as the
+            // master's buy request is in-flight — both enter on the same market tick.
+            // The copy engine deduplicates using a 5-second fingerprint window so
+            // a later publish (with contract_id) won't cause a second mirror.
+            try {
+                publishMasterTrade({
+                    symbol,
+                    contract_type,
+                    stake,
+                    ...(duration != null && !isAccumulator ? { duration } : {}),
+                    ...(duration_unit && !isAccumulator ? { duration_unit } : {}),
+                    barrier,
+                    growth_rate,
+                    limit_order,
+                    source: getMasterSource(),
+                    time:   Date.now(),
+                    trade_key: tradeKey,
+                    // no contract_id yet — engine deduplicates by fingerprint
+                });
+            } catch { /* never let copy-trade errors affect the master trade */ }
+
+            // Step 2 — buy using the proposal ID
+            const t1 = performance.now();
+            let buyRes: any;
+            try {
+                buyRes = await send({ buy: proposalId, price: askPrice });
+            } catch (e: any) {
+                throw e?.error ?? e;
+            }
+            if (buyRes?.error) {
+                throw buyRes.error;
+            }
+            if (isFastExecutionEnabled()) {
+                recordPhase('buyToResponse', Math.round(performance.now() - t1));
+            }
+
+            const contract_id = Number(buyRes?.buy?.contract_id ?? 0);
+            if (!contract_id) {
+                throw new Error('Buy failed — no contract ID returned');
+            }
+
+            // Confirm the identity after the buy so the transaction-stream
+            // fallback cannot duplicate this already pre-signaled trade.
+            try {
+                publishMasterTrade({
+                    symbol,
+                    contract_type,
+                    stake,
+                    ...(duration != null && !isAccumulator ? { duration } : {}),
+                    ...(duration_unit && !isAccumulator ? { duration_unit } : {}),
+                    barrier,
+                    growth_rate,
+                    limit_order,
+                    source: getMasterSource(),
+                    time: Date.now(),
+                    contract_id,
+                    trade_key: tradeKey,
+                });
+            } catch { /* never let copy-trade errors affect the master trade */ }
+
+            const contractMeta = {
+                id: contract_id,
+                contract_id,
+                transaction_ids: { buy: contract_id },
+                underlying_symbol: symbol,
+                display_name: symbol,
                 contract_type,
-                currency: cur || currency || 'USD',
+                currency: cur_,
+                buy_price: Number(buyRes?.buy?.buy_price ?? stake),
+                payout: 0,
+                bid_price: 0,
+                profit: 0,
+                is_sold: false,
+                status: 'open',
+                date_start: Math.floor(Date.now() / 1000),
+                barrier,
                 duration,
                 duration_unit,
-                basis: 'stake',
-                amount: stake,
-                symbol,
+                growth_rate,
+                limit_order,
+                ...(metadata || {}),
             };
-            if (barrier !== undefined) buyParams.barrier = String(barrier);
-
-            // Direct buy — single round-trip, no proposal step needed.
-            let res = await send({ buy: '1', price: stake, parameters: buyParams });
-            let contract_id = res?.buy?.contract_id || 0;
-
-            // Fallback: some contract/symbol combos reject the direct-buy shortcut
-            // (e.g. return an error instead of a buy result). In that case fall
-            // back to the standard proposal → buy two-step, same as the rest of
-            // the app's proven trading flow (useDerivTrading.buyContract).
-            if (!contract_id) {
-                const proposalReq: any = {
-                    proposal: 1,
-                    amount: stake,
-                    basis: 'stake',
-                    contract_type,
-                    currency: cur || currency || 'USD',
-                    duration,
-                    duration_unit,
+            contractMetaRef.current.set(contract_id, contractMeta);
+            observer.emit('bot.contract', contractMeta);
+            window.dispatchEvent(new CustomEvent('auto-trade:contract', {
+                detail: contractMeta,
+            }));
+            window.dispatchEvent(new CustomEvent('chart:trade-started', {
+                detail: {
+                    contractId: contract_id,
+                    ticks: duration,
                     symbol,
-                };
-                if (barrier !== undefined) proposalReq.barrier = String(barrier);
-                const proposalRes = await send(proposalReq);
-                if (!proposalRes?.proposal?.id) {
-                    throw res?.error ? res : (proposalRes?.error ? proposalRes : new Error('Buy failed — no contract id returned'));
+                    contractType: contract_type,
+                    purchaseTime: Number(buyRes?.buy?.purchase_time) || 0,
+                    startTime: Number(buyRes?.buy?.start_time) || 0,
+                },
+            }));
+
+            // Step 3 — subscribe to settlement notifications
+            if (onSettled) {
+                pocCallbacksRef.current.set(contract_id, onSettled);
+                const alreadySettled = settledContractsRef.current.get(contract_id);
+                if (alreadySettled) {
+                    queueMicrotask(() => {
+                        if (pocCallbacksRef.current.get(contract_id) !== onSettled) return;
+                        pocCallbacksRef.current.delete(contract_id);
+                        onSettled(alreadySettled);
+                    });
                 }
-                res = await send({ buy: proposalRes.proposal.id, price: proposalRes.proposal.ask_price });
-                if (res?.error) throw res;
-                contract_id = res?.buy?.contract_id || 0;
+                const requestSettlementSubscription = (attempt = 0) => {
+                    const retryDelays = [250, 500, 1000, 2000];
+                    const request = () => {
+                        send({ proposal_open_contract: 1, contract_id, subscribe: 1 })
+                            .then(response => {
+                                if (!response?.error) {
+                                    settlementRetryTimersRef.current.delete(contract_id);
+                                    return;
+                                }
+                                if (attempt >= retryDelays.length) return;
+                                const timer = setTimeout(() => {
+                                    settlementRetryTimersRef.current.delete(contract_id);
+                                    requestSettlementSubscription(attempt + 1);
+                                }, retryDelays[attempt]);
+                                settlementRetryTimersRef.current.set(contract_id, timer);
+                            })
+                            .catch(() => {
+                                if (attempt >= retryDelays.length) return;
+                                const timer = setTimeout(() => {
+                                    settlementRetryTimersRef.current.delete(contract_id);
+                                    requestSettlementSubscription(attempt + 1);
+                                }, retryDelays[attempt]);
+                                settlementRetryTimersRef.current.set(contract_id, timer);
+                            });
+                    };
+
+                    if (attempt === 0 && isFastExecutionEnabled()) {
+                        // Keep Fast mode non-blocking, but still use the same
+                        // retrying subscription path as normal execution.
+                        requestAnimationFrame(request);
+                    } else {
+                        request();
+                    }
+                };
+                requestSettlementSubscription();
             }
 
-            if (contract_id && onSettled) {
-                pocCallbacksRef.current.set(Number(contract_id), onSettled);
-                send({ proposal_open_contract: 1, contract_id, subscribe: 1 }).catch(() => {});
-            }
             return {
                 contract_id,
-                buy_price: res.buy?.buy_price || stake,
+                buy_price: buyRes?.buy?.buy_price ?? stake,
                 status: 'open',
             };
         },

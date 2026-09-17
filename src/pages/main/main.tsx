@@ -43,16 +43,20 @@ import Dashboard from '../dashboard';
 import RunStrategy from '../dashboard/run-strategy';
 import SettingsPanel from '@/components/settings-panel';
 import FloatingRunButton from '@/components/floating/FloatingRunButton';
-import PWAInstall from '@/components/floating/PWAInstall';
+import WhatsAppFloat from '@/components/floating/WhatsAppFloat';
+import { copyEngine, mirrorEngine } from '@/utils/copy-trading';
 import './main.scss';
 
 const ChartWrapper   = lazy(() => import('../chart/chart-wrapper'));
 const Tutorial       = lazy(() => import('../tutorials'));
 const FreeBots       = lazy(() => import('../free-bots'));
-const DCircles       = lazy(() => import('../d-circles'));
+const DCircles       = lazy(() => import('../dcircles'));
+const AutoDigits     = lazy(() => import('../auto-digits'));
+const TradingSoftware = lazy(() => import('../trading-software'));
 const SpeedLab       = lazy(() => import('../speed-lab'));
 const ProHedge       = lazy(() => import('../hedge-trading'));
 const ManualTrader   = lazy(() => import('../manual-trader'));
+const DTrader        = lazy(() => import('../dtrader'));
 const CopyTrading    = lazy(() => import('../copy-trading'));
 const Reports        = lazy(() => import('../reports'));
 const BulkTrade      = lazy(() => import('../bulk-trade'));
@@ -96,17 +100,20 @@ const AppWrapper = observer(() => {
         'ahmed_learning',   // 1
         'free_bots',        // 2
         'ahmed_scalper_bots', // 3
-        'dcircles',         // 4
-        'speed_lab',        // 5
-        'pro_hedge',        // 6
-        'chart',            // 7
-        'manual_trader',    // 8
-        'auto_trades',      // 9
-        'copy_trading',     // 10
-        'reports',          // 11
-        'bulk_trade',       // 12
-        'analysis',         // 13
-        'tutorial',         // 14
+        'auto_digits',      // 4
+        'dcircles',         // 5
+        'speed_lab',        // 6
+        'pro_hedge',        // 7
+        'chart',            // 8
+        'manual_trader',    // 9
+        'dtrader',          // 10
+        'auto_trades',      // 11
+        'copy_trading',     // 12
+        'reports',          // 13
+        'bulk_trade',       // 14
+        'analysis',         // 15
+        'tutorial',         // 16
+        'trading_software', // 17
     ];
 
     const { isDesktop } = useDevice();
@@ -139,11 +146,14 @@ const AppWrapper = observer(() => {
     };
     const active_hash_tab = GetHashedValue(active_tab);
 
-    // Register service worker for PWA
+    // ── Copy-trading: global restore on every page load ────────────────────
+    // restoreState() reads localStorage, reconnects follower WebSockets, and
+    // auto-restarts the engine if it was running when the page was last closed.
+    // This runs regardless of which tab the user lands on, so the engine stays
+    // active across page refreshes and tab switches for the full 72-hour session.
     useEffect(() => {
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/sw.js').catch(() => {});
-        }
+        copyEngine.restoreState().catch(() => {});
+        mirrorEngine.restoreState().catch(() => {});
     }, []);
 
     React.useEffect(() => {
@@ -224,7 +234,23 @@ const AppWrapper = observer(() => {
 
     const mkIcon = (svg: React.ReactNode, text: string) => (
         <span style={{ display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}>
-            {svg}<span>{text}</span>
+            <span
+                aria-hidden='true'
+                style={{
+                    width: '22px',
+                    height: '22px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: '7px',
+                    background: 'linear-gradient(135deg, #06b6d4 0%, #6366f1 52%, #ec4899 100%)',
+                    boxShadow: '0 2px 8px rgba(99, 102, 241, 0.32)',
+                    flexShrink: 0,
+                }}
+            >
+                {svg}
+            </span>
+            <span>{text}</span>
         </span>
     );
 
@@ -241,7 +267,7 @@ const AppWrapper = observer(() => {
                 })}>
                     <div>
                         {!isDesktop && left_tab_shadow && <span className='tabs-shadow tabs-shadow--left' />}
-                        <Tabs active_index={active_tab} className='main__tabs' onTabItemClick={handleTabChange} top>
+                        <Tabs active_index={active_tab} className='main__tabs main__tabs--drawer-only' onTabItemClick={handleTabChange} top>
 
                             {/* 0 — Dashboard */}
                             <div
@@ -281,7 +307,20 @@ const AppWrapper = observer(() => {
                             {/* 3 — Ahmed Scalper Bots */}
                             <div
                                 label={mkIcon(
-                                    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M13 2L3 14h7l-1 8 10-12h-7l1-8z'/></svg>,
+                                    <svg width='19' height='19' viewBox='0 0 24 24' fill='none' aria-hidden='true'>
+                                        <defs>
+                                            <linearGradient id='scalper-tab-gradient' x1='3' y1='21' x2='21' y2='3' gradientUnits='userSpaceOnUse'>
+                                                <stop offset='0' stopColor='#22d3ee' />
+                                                <stop offset='0.5' stopColor='#a78bfa' />
+                                                <stop offset='1' stopColor='#f472b6' />
+                                            </linearGradient>
+                                        </defs>
+                                        <path d='M13.4 2.5 4 13.4h6.6L9.7 21.5 20 10.2h-6.5l-.1-7.7Z'
+                                            fill='url(#scalper-tab-gradient)' stroke='#e0f2fe' strokeWidth='0.8'
+                                            strokeLinejoin='round' />
+                                        <circle cx='4' cy='5' r='1.2' fill='#fbbf24' />
+                                        <circle cx='20' cy='18.5' r='1' fill='#34d399' />
+                                    </svg>,
                                     'Scalper Bots'
                                 )}
                                 id='id-scalper-bots'
@@ -291,7 +330,20 @@ const AppWrapper = observer(() => {
                                 </Suspense>
                             </div>
 
-                            {/* 4 — D-Circles */}
+                            {/* 4 — Auto-Digits */}
+                            <div
+                                label={mkIcon(
+                                    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='12' cy='12' r='9'/><path d='M12 7v5l3 2'/><path d='M5 4 3 2M19 4l2-2'/></svg>,
+                                    'Auto-Digits'
+                                )}
+                                id='id-auto-digits'
+                            >
+                                <Suspense fallback={tabLoader('Loading Auto-Digits...')}>
+                                    <AutoDigits />
+                                </Suspense>
+                            </div>
+
+                            {/* 5 — D-Circles */}
                             <div
                                 label={mkIcon(
                                     <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='7' cy='12' r='4'/><circle cx='17' cy='12' r='4'/></svg>,
@@ -304,7 +356,7 @@ const AppWrapper = observer(() => {
                                 </Suspense>
                             </div>
 
-                            {/* 4 — Speed Lab */}
+                            {/* 6 — Speed Lab */}
                             <div
                                 label={mkIcon(
                                     <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><polygon points='13 2 3 14 12 14 11 22 21 10 12 10 13 2'/></svg>,
@@ -317,7 +369,7 @@ const AppWrapper = observer(() => {
                                 </Suspense>
                             </div>
 
-                            {/* 5 — Hedge Trading */}
+                            {/* 7 — Hedge Trading */}
                             <div
                                 label={mkIcon(
                                     <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 2L2 7l10 5 10-5-10-5z'/><path d='M2 17l10 5 10-5'/><path d='M2 12l10 5 10-5'/></svg>,
@@ -330,7 +382,7 @@ const AppWrapper = observer(() => {
                                 </Suspense>
                             </div>
 
-                            {/* 6 — Charts */}
+                            {/* 8 — Charts */}
                             <div
                                 label={mkIcon(
                                     <LabelPairedChartLineCaptionRegularIcon height='20px' width='20px' fill='var(--text-general)' />,
@@ -343,7 +395,7 @@ const AppWrapper = observer(() => {
                                 </Suspense>
                             </div>
 
-                            {/* 7 — Manual Trader */}
+                            {/* 9 — Manual Trader */}
                             <div
                                 label={mkIcon(
                                     <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M18 20V10'/><path d='M12 20V4'/><path d='M6 20v-6'/></svg>,
@@ -356,7 +408,20 @@ const AppWrapper = observer(() => {
                                 </Suspense>
                             </div>
 
-                            {/* 8 — Auto Trades */}
+                            {/* 10 — D-Trader */}
+                            <div
+                                label={mkIcon(
+                                    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M4 19V5M4 19h16'/><path d='m7 15 3-4 3 2 5-7'/><circle cx='18' cy='6' r='2' fill='currentColor' stroke='none'/></svg>,
+                                    'D-Trader'
+                                )}
+                                id='id-dtrader'
+                            >
+                                <Suspense fallback={tabLoader('Loading D-Trader...')}>
+                                    <DTrader />
+                                </Suspense>
+                            </div>
+
+                            {/* 11 — Auto Trades */}
                             <div
                                 label={mkIcon(
                                     <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='12' cy='12' r='3'/><path d='M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83'/></svg>,
@@ -369,7 +434,7 @@ const AppWrapper = observer(() => {
                                 </Suspense>
                             </div>
 
-                            {/* 9 — Copy Trading */}
+                            {/* 12 — Copy Trading */}
                             <div
                                 label={mkIcon(
                                     <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><polyline points='17 1 21 5 17 9'/><path d='M3 11V9a4 4 0 014-4h14'/><polyline points='7 23 3 19 7 15'/><path d='M21 13v2a4 4 0 01-4 4H3'/></svg>,
@@ -382,7 +447,7 @@ const AppWrapper = observer(() => {
                                 </Suspense>
                             </div>
 
-                            {/* 10 — Reports */}
+                            {/* 13 — Reports */}
                             <div
                                 label={mkIcon(
                                     <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z'/><polyline points='14 2 14 8 20 8'/><line x1='16' y1='13' x2='8' y2='13'/><line x1='16' y1='17' x2='8' y2='17'/></svg>,
@@ -395,7 +460,7 @@ const AppWrapper = observer(() => {
                                 </Suspense>
                             </div>
 
-                            {/* 11 — Bulk Trade */}
+                            {/* 14 — Bulk Trade */}
                             <div
                                 label={mkIcon(
                                     <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='2' y='3' width='6' height='18' rx='1'/><rect x='9' y='8' width='6' height='13' rx='1'/><rect x='16' y='5' width='6' height='16' rx='1'/></svg>,
@@ -408,7 +473,7 @@ const AppWrapper = observer(() => {
                                 </Suspense>
                             </div>
 
-                            {/* 12 — Analysis */}
+                            {/* 15 — Analysis */}
                             <div
                                 label={mkIcon(
                                     <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='11' cy='11' r='8'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>,
@@ -421,7 +486,7 @@ const AppWrapper = observer(() => {
                                 </Suspense>
                             </div>
 
-                            {/* 13 — Tutorials */}
+                            {/* 16 — Tutorials */}
                             <div
                                 label={mkIcon(
                                     <LegacyGuide1pxIcon height='16px' width='16px' fill='var(--text-general)' className='icon-general-fill-g-path' />,
@@ -436,15 +501,36 @@ const AppWrapper = observer(() => {
                                 </div>
                             </div>
 
+                            {/* 17 — Trading Software */}
+                            <div
+                                label={mkIcon(
+                                    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='2' y='3' width='20' height='14' rx='2'/><line x1='8' y1='21' x2='16' y2='21'/><line x1='12' y1='17' x2='12' y2='21'/></svg>,
+                                    'Trading Software'
+                                )}
+                                id='id-trading-software'
+                            >
+                                <Suspense fallback={tabLoader('Loading Trading Software...')}>
+                                    <TradingSoftware />
+                                </Suspense>
+                            </div>
+
                         </Tabs>
                         {!isDesktop && right_tab_shadow && <span className='tabs-shadow tabs-shadow--right' />}
                     </div>
                 </div>
             </div>
 
-            {/* Floating panels */}
-            <FloatingRunButton />
-            <PWAInstall />
+            {/* Floating runner is not needed on self-contained trading surfaces. */}
+            {![
+                DBOT_TABS.AUTO_DIGITS,
+                DBOT_TABS.CHART,
+                DBOT_TABS.MANUAL_TRADER,
+                DBOT_TABS.TUTORIAL,
+            ].includes(active_tab) && <FloatingRunButton />}
+            {/* Keep the mobile experience focused: WhatsApp is a Dashboard
+                affordance on phones, while desktop retains the existing
+                floating contact button on every page. */}
+            {(isDesktop || active_tab === DASHBOARD) && <WhatsAppFloat />}
 
             <DesktopWrapper>
                 <div className='main__run-strategy-wrapper'>

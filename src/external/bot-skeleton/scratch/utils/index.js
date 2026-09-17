@@ -82,7 +82,13 @@ export const validateErrorOnBlockDelete = () => {
     const blockX = blockRect?.left || 0;
     const blockY = blockRect?.top || 0;
     const mandatory_trade_option_block = getSelectedTradeType();
-    const required_block_types = [mandatory_trade_option_block, 'trade_definition', 'purchase', 'before_purchase'];
+    const required_block_types = [
+        mandatory_trade_option_block,
+        'trade_definition',
+        'purchase',
+        'multiple_purchase',
+        'before_purchase',
+    ];
     if (required_block_types?.includes(window.Blockly?.getSelected()?.type)) {
         if (
             blockY >= translate_Y - translate_offset &&
@@ -239,6 +245,18 @@ export const load = async ({
                         this.setOutput(false);
                     },
                 };
+            }
+            // Blockly's JavaScript generator must also know how to compile a
+            // third-party block. Keep statement blocks as safe no-ops and
+            // provide a neutral numeric value for unknown value blocks. This
+            // preserves the rest of a strategy instead of failing at runtime
+            // with "forBlock[type] is not a function".
+            const generator = window.Blockly.JavaScript?.javascriptGenerator;
+            if (generator && !generator.forBlock[type]) {
+                generator.forBlock[type] = block =>
+                    block.outputConnection
+                        ? ['0', generator.ORDER_ATOMIC]
+                        : '';
             }
         });
         // Log for awareness but do NOT abort the load.
@@ -446,21 +464,34 @@ const getAllRequiredBlocks = (workspace, required_block_types) => {
 
 const getMissingBlocks = (workspace, required_block_types) => {
     return required_block_types.filter(blockType => {
+        if (blockType === 'purchase') {
+            return !workspace.getAllBlocks().some(block => block.type === 'purchase' || block.type === 'multiple_purchase');
+        }
         return !workspace.getAllBlocks().some(block => block.type === blockType);
     });
 };
 
 const getDisabledBlocks = required_blocks_check => {
     const workspace = window.Blockly.derivWorkspace;
-    const required_block_types = [getSelectedTradeType(workspace), ...config().mandatoryMainBlocks];
+    const required_block_types = [
+        getSelectedTradeType(workspace),
+        ...config().mandatoryMainBlocks,
+        'multiple_purchase',
+    ];
     const disabled_blocks = Object.fromEntries(
         workspace
             .getAllBlocks()
             .filter(block => required_block_types.includes(block.type))
             .map(block => [block.type, block.disabled])
     );
-    const mandatory_blocks = ['before_purchase', 'purchase', 'trade_definition', 'trade_definition_tradeoptions'];
-    const has_disabled_blocks = mandatory_blocks.some(type => disabled_blocks[type]);
+    const mandatory_blocks = ['before_purchase', 'purchase', 'multiple_purchase', 'trade_definition', 'trade_definition_tradeoptions'];
+    const has_disabled_blocks = mandatory_blocks.some(type => {
+        if (type === 'purchase' || type === 'multiple_purchase') return false;
+        return disabled_blocks[type];
+    }) || (
+        (disabled_blocks.purchase === true && disabled_blocks.multiple_purchase !== false) ||
+        (disabled_blocks.multiple_purchase === true && disabled_blocks.purchase !== false)
+    );
 
     return has_disabled_blocks
         ? required_blocks_check.filter(block => block.disabled || block.childBlocks_?.some(child => child.disabled))

@@ -1,0 +1,598 @@
+Great. Based on everything we've discussed about your third-party Deriv platform, I would design it as a **complete visual automation platform**, not just a bot builder. The idea is to make it modular like Node-RED, Blockly, and Scratch, but specialized for trading workflows. The focus should be on an extensible architecture rather than hard-coding individual betting strategies.
+
+# ENTITY Architecture
+
+```
+                 ENTITY Trading Platform
+                         │
+ ┌───────────────────────┼────────────────────────┐
+ │                       │                        │
+ ▼                       ▼                        ▼
+Blockly Builder      Scanner Engine         Strategy Engine
+ │                       │                        │
+ ▼                       ▼                        ▼
+XML Compiler      Signal Generation      Runtime Executor
+ │                       │                        │
+ └───────────────────────┼────────────────────────┘
+                         ▼
+                  Execution Pipeline
+                         │
+                         ▼
+                Broker WebSocket API
+```
+
+---
+
+# Core Modules
+
+```
+Entity Platform
+
+├── Blockly Workspace
+├── XML Parser
+├── XML Generator
+├── Runtime Compiler
+├── Strategy Engine
+├── Scanner Engine
+├── Signal Engine
+├── Contract Engine
+├── Risk Manager
+├── Trade Manager
+├── Statistics
+├── AI Assistant
+├── Journal
+├── Backtester
+├── Marketplace
+├── Plugin Manager
+└── Performance Monitor
+```
+
+---
+
+# Blockly Architecture
+
+Every block belongs to a category.
+
+```
+Variables
+
+Conditions
+
+Logic
+
+Math
+
+Indicators
+
+Scanner
+
+Contracts
+
+Risk
+
+Statistics
+
+Notifications
+
+Storage
+
+AI
+
+Utilities
+```
+
+Each block should contain:
+
+```
+ID
+
+Name
+
+Inputs
+
+Outputs
+
+Tooltip
+
+Category
+
+Color
+
+Compiler
+
+Runtime
+
+Serializer
+
+Validator
+```
+
+---
+
+# XML Format
+
+Each workspace is stored as XML.
+
+```
+Workspace
+
+↓
+
+XML
+
+↓
+
+JSON AST
+
+↓
+
+Execution Plan
+
+↓
+
+Runtime
+
+↓
+
+Broker API
+```
+
+The execution engine never runs XML directly. It compiles XML into an execution graph first.
+
+---
+
+# Runtime Engine
+
+```
+Tick Received
+
+↓
+
+Update Runtime State
+
+↓
+
+Execute Event Graph
+
+↓
+
+Evaluate Conditions
+
+↓
+
+Generate Action
+
+↓
+
+Validate
+
+↓
+
+Execute
+
+↓
+
+Receive Response
+
+↓
+
+Update State
+```
+
+---
+
+# Event System
+
+Every component communicates through events.
+
+```
+Tick
+
+Balance
+
+Proposal
+
+Contract Open
+
+Contract Close
+
+Trade Finished
+
+Signal Generated
+
+Connection Lost
+
+Reconnect
+
+Error
+```
+
+Every custom block subscribes only to events it needs.
+
+---
+
+# Scanner Architecture
+
+Rather than embedding specific trading logic, design a scanner that users can configure.
+
+```
+Tick
+
+↓
+
+Feature Extraction
+
+↓
+
+User Rules
+
+↓
+
+Signal Object
+
+↓
+
+Confidence
+
+↓
+
+Display
+
+↓
+
+Optional Strategy Trigger
+```
+
+The scanner should output structured information such as detected conditions, timestamps, and confidence values, leaving the decision to the user's workflow.
+
+---
+
+# Plugin System
+
+```
+plugins/
+
+scanner/
+
+indicators/
+
+contracts/
+
+statistics/
+
+utilities/
+
+themes/
+
+signals/
+
+market-data/
+```
+
+Each plugin registers itself automatically.
+
+```
+Plugin
+
+↓
+
+Register Blocks
+
+↓
+
+Register Compiler
+
+↓
+
+Register Runtime
+
+↓
+
+Ready
+```
+
+---
+
+# Custom Block API
+
+A block should implement interfaces such as:
+
+```
+create()
+
+serialize()
+
+deserialize()
+
+compile()
+
+execute()
+
+validate()
+
+destroy()
+```
+
+This keeps the runtime independent of the visual editor.
+
+---
+
+# Compiler Pipeline
+
+```
+Blockly
+
+↓
+
+XML
+
+↓
+
+Parser
+
+↓
+
+AST
+
+↓
+
+Optimization
+
+↓
+
+Execution Graph
+
+↓
+
+Runtime
+```
+
+Optimization can include removal of unreachable nodes, constant folding, and caching of immutable values.
+
+---
+
+# Execution Engine
+
+The runtime should be asynchronous and event-driven.
+
+```
+Message
+
+↓
+
+Dispatcher
+
+↓
+
+Subscribed Blocks
+
+↓
+
+Runtime Queue
+
+↓
+
+Execution
+
+↓
+
+API Layer
+
+↓
+
+Result
+
+↓
+
+UI
+```
+
+---
+
+# Visual Editor
+
+```
+Left Panel
+
+• Blocks
+
+Middle
+
+• Workspace
+
+Right
+
+• Properties
+
+Bottom
+
+• Console
+• Logs
+• Performance
+```
+
+---
+
+# XML Import / Export
+
+Support:
+
+```
+Export XML
+
+Import XML
+
+Export JSON
+
+Import JSON
+
+Export Strategy Package
+
+Import Plugin Package
+```
+
+---
+
+# AI Module
+
+```
+Prompt
+
+↓
+
+LLM
+
+↓
+
+Generate Blockly
+
+↓
+
+Generate XML
+
+↓
+
+Validate
+
+↓
+
+Preview
+
+↓
+
+Insert Workspace
+```
+
+This lets users describe workflows in natural language and convert them into Blockly graphs for review before execution.
+
+---
+
+# Backtester
+
+```
+Historical Data
+
+↓
+
+Replay Engine
+
+↓
+
+Runtime
+
+↓
+
+Statistics
+
+↓
+
+Report
+```
+
+Keep this separate from live execution so historical testing cannot affect real-time performance.
+
+---
+
+# Performance Monitor
+
+Display metrics such as:
+
+```
+CPU
+
+Memory
+
+WebSocket Latency
+
+Runtime Queue Size
+
+Messages/sec
+
+Execution Time
+
+Render Time
+
+Compiler Time
+
+Reconnect Count
+```
+
+---
+
+# Storage
+
+```
+Workspace
+
+Strategies
+
+Variables
+
+Logs
+
+Settings
+
+Themes
+
+Plugins
+
+Templates
+
+Profiles
+```
+
+---
+
+# Marketplace
+
+Allow users to install:
+
+```
+Indicators
+
+Scanners
+
+Themes
+
+Widgets
+
+Utilities
+
+Templates
+
+AI Prompts
+
+Plugins
+```
+
+---
+
+# Project Structure
+
+```
+entity-platform/
+
+src/
+
+core/
+runtime/
+compiler/
+parser/
+blocks/
+workspace/
+scanner/
+signals/
+plugins/
+backtester/
+performance/
+storage/
+ui/
+api/
+auth/
+ai/
+utils/
+```
+
+## Long-Term Goal
+
+Rather than building a collection of fixed bots, build a **general-purpose visual automation platform**. Users (or AI assistants) can compose workflows from reusable blocks, import/export them as XML, extend the system through plugins, backtest strategies, monitor performance, and execute workflows through documented broker APIs. This architecture is more scalable, easier to maintain, and supports future additions without changing the core engine.

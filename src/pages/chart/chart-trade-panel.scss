@@ -1,0 +1,886 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Chart Trade Panel — right-side panel, fits everything in one viewport
+   Target: all sections visible without scrolling the outer page.
+   Right panel is independently scrollable if the viewport is very short.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Account badge ─────────────────────────────────────────────────────────── */
+.ctp-acct-badge {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+    &.demo { background: rgba(30,100,220,0.1); color: #1e64dc; }
+    &.real { background: rgba(0,165,80,0.1);   color: #00a550; }
+}
+
+/* ── CTP root — compact card, left-aligned in the right panel ──────────────── */
+/* Keep the sections grouped instead of distributing them through the full
+   viewport height. This lets market, duration, digit, stake, and buy controls
+   sit close together while retaining a readable card width. */
+.ctp {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 4px;
+    width: min(50%, 280px);
+    min-width: 210px;
+    min-height: 100%;
+
+    @media (max-width: 767px) {
+        width: 100%;
+        min-width: 0;
+        min-height: auto;
+    }
+    font-family: 'Inter', 'Poppins', sans-serif;
+    font-size: 13px;
+    color: #0E0F11;
+    background: #ffffff;
+    padding: 6px 0;
+    box-sizing: border-box;
+    border-radius: 14px;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.06);
+    overflow: hidden;
+}
+
+/* ── Section — no margin-bottom; space-between on .ctp handles all gaps ──────── */
+.ctp__section {
+    padding: 0 7px;
+    margin-bottom: 0;
+    flex-shrink: 0;
+}
+
+.ctp__section-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: #667085;
+    margin-bottom: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.ctp__section-val {
+    font-size: 12px;
+    font-weight: 900;
+    color: #111827;
+}
+
+/* ── Market section ────────────────────────────────────────────────────────── */
+.ctp__section--market {
+    margin-bottom: 0;
+}
+
+.ctp__type-select--market {
+    font-weight: 700;
+    background: #f0f7ff;
+    border-color: #1E88FF;
+    color: #0e3a6e;
+    border-radius: 12px;
+}
+
+.ctp__market-display {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 31px;
+    border: 1px solid #e0e0e0;
+    border-radius: 12px;
+    padding: 0 7px;
+    background: #fafafa;
+}
+
+.ctp__market-icon {
+    width: 22px; height: 22px;
+    border-radius: 6px;
+    background: #1E88FF;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 900;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.ctp__market-name {
+    flex: 1;
+    font-size: 13px;
+    font-weight: 700;
+    color: #000;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ── Contract type ──────────────────────────────────────────────────────────── */
+.ctp__section--contract {
+    margin-bottom: 0;
+}
+
+.ctp__type-select {
+    width: 100%;
+    height: 31px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #0E0F11;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 9px;
+    padding: 0 7px;
+    cursor: pointer;
+    outline: none;
+    font-family: inherit;
+    appearance: auto;
+    &:focus { border-color: #00C853; }
+}
+
+/* ── Duration Picker ────────────────────────────────────────────────────────── */
+.ctp__section--duration {
+    margin-bottom: 0;
+}
+
+.ctp__dur-display {
+    font-size: 12px;
+    font-weight: 900;
+    color: #111827;
+    background: #f3f4f6;
+    padding: 2px 8px;
+    border-radius: 8px;
+}
+
+/* Main layout: sidebar + right area */
+.ctp__dur-picker {
+    display: flex;
+    gap: 4px;
+    align-items: stretch;
+    min-height: 120px;
+}
+
+/* Left sidebar — unit buttons stacked vertically */
+.ctp__dur-units {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 52px;
+    flex-shrink: 0;
+}
+
+.ctp__dur-unit-btn {
+    padding: 5px 6px;
+    border: none;
+    background: transparent;
+    color: #667085;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    border-radius: 6px;
+    text-align: left;
+    white-space: nowrap;
+    transition: all 0.12s;
+    position: relative;
+    &:hover { color: #0E0F11; background: #f3f4f6; }
+    &.active {
+        color: #e02020;
+        font-weight: 800;
+        background: transparent;
+        &::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 3px;
+            height: 60%;
+            background: #e02020;
+            border-radius: 2px;
+        }
+    }
+}
+
+/* Right area */
+.ctp__dur-right {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+/* Quick picks / Custom tabs */
+.ctp__dur-tabs {
+    display: flex;
+    background: #f3f4f6;
+    border-radius: 8px;
+    padding: 2px;
+}
+
+.ctp__dur-tab {
+    flex: 1;
+    padding: 4px 6px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: #9ca3af;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+    text-align: center;
+    transition: all 0.15s;
+    &.active { background: #fff; color: #0E0F11; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+}
+
+/* Quick pick grid — 2 columns */
+.ctp__dur-picks {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+}
+
+.ctp__dur-pick-btn {
+    padding: 6px 4px;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    background: #fff;
+    color: #0E0F11;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+    text-align: center;
+    transition: all 0.12s;
+    white-space: nowrap;
+    &:hover { border-color: #00C853; background: rgba(0,200,83,0.05); }
+    &.active { background: #111827; border-color: #111827; color: #fff; }
+}
+
+/* Custom input row */
+.ctp__dur-custom {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.ctp__dur-custom-row {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.ctp__dur-custom-adj {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+    background: #fff;
+    color: #0E0F11;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-family: inherit;
+    &:hover { border-color: #00C853; color: #00C853; }
+}
+
+.ctp__dur-custom-inp {
+    flex: 1;
+    height: 30px;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    background: #fff;
+    color: #0E0F11;
+    font-size: 15px;
+    font-weight: 900;
+    text-align: center;
+    outline: none;
+    font-family: inherit;
+    font-variant-numeric: tabular-nums;
+    padding: 0 6px;
+    min-width: 0;
+    &:focus { border-color: #00C853; }
+    &::-webkit-inner-spin-button,
+    &::-webkit-outer-spin-button { -webkit-appearance: none; }
+}
+
+.ctp__dur-custom-range {
+    font-size: 10px;
+    color: #9ca3af;
+    font-weight: 500;
+    text-align: center;
+}
+
+/* Legacy tick/slider styles kept for any remaining uses */
+.ctp__tick-row {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.ctp__tick-btn {
+    flex: 0 0 auto;
+    min-width: 30px;
+    height: 30px;
+    padding: 0 8px;
+    border-radius: 12px;
+    border: 1px solid #e0e0e0;
+    background: #f9f9f9;
+    color: #0E0F11;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.1s;
+    &:hover { border-color: #00C853; background: rgba(0,200,83,0.05); }
+    &.active { background: #111827; border-color: #111827; color: #fff; }
+}
+
+.ctp__slider {
+    width: 100%;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    border-radius: 999px;
+    background: #e0e0e0;
+    outline: none;
+    cursor: pointer;
+    margin-bottom: 3px;
+    &::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 14px; height: 14px;
+        border-radius: 50%;
+        background: #00C853;
+        border: 2px solid #fff;
+        box-shadow: 0 1px 4px rgba(0,0,0,.18);
+        cursor: pointer;
+    }
+}
+
+.ctp__slider-marks {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: #bbb;
+    font-weight: 600;
+    span.active { color: #00C853; font-weight: 900; }
+}
+
+/* ── Last Digit Prediction ──────────────────────────────────────────────────── */
+.ctp__section--digit {
+    margin-bottom: 1px;
+}
+
+.ctp__digits { display: flex; flex-direction: column; gap: 3px; }
+.ctp__digits-row { display: flex; gap: 3px; }
+
+.ctp__digit-btn {
+    flex: 1;
+    height: 22px;          /* half the previous 30px → compact horizontal boxes */
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+    background: #f9f9f9;
+    color: #0E0F11;
+    font-size: 12px;
+    font-weight: 900;
+    cursor: pointer;
+    font-family: inherit;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.1s;
+    min-width: 0;
+    &:hover  { border-color: #667085; background: #f0f0f0; }
+    &.active { background: #1E88FF; border-color: #1E88FF; color: #fff; }
+    &.current { box-shadow: 0 0 0 2px rgba(30,136,255,0.4); }
+}
+
+/* ── Stake ──────────────────────────────────────────────────────────────────── */
+.ctp__section--stake {
+    margin-bottom: 1px;
+}
+
+.ctp__stake-tabs {
+    display: flex;
+    background: #f3f4f6;
+    border-radius: 6px;
+    padding: 2px;
+    margin-bottom: 6px;
+}
+
+.ctp__stake-tab {
+    flex: 1;
+    padding: 5px;
+    border: none;
+    border-radius: 5px;
+    background: transparent;
+    color: #9ca3af;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+    text-align: center;
+    transition: all 0.15s;
+    &.active { background: #fff; color: #0E0F11; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+}
+
+.ctp__stake-ctrl {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 3px;
+}
+
+.ctp__stake-adj {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+    background: #fff;
+    color: #0E0F11;
+    font-size: 18px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    &:hover { border-color: #00C853; color: #00C853; }
+}
+
+.ctp__stake-mid {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    height: 30px;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    background: #fff;
+    padding: 0 6px;
+}
+
+.ctp__stake-inp {
+    width: 46px;
+    border: none;
+    background: transparent;
+    font-size: 16px;
+    font-weight: 900;
+    color: #0E0F11;
+    text-align: center;
+    outline: none;
+    font-family: inherit;
+    font-variant-numeric: tabular-nums;
+    &::-webkit-inner-spin-button,
+    &::-webkit-outer-spin-button { -webkit-appearance: none; }
+}
+
+.ctp__stake-cur {
+    font-size: 11px;
+    font-weight: 700;
+    color: #667085;
+}
+
+.ctp__stake-presets {
+    display: flex;
+    gap: 3px;
+}
+
+.ctp__preset {
+    flex: 1;
+    min-width: 0;
+    height: 27px;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+    background: #f9f9f9;
+    color: #0E0F11;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+    text-align: center;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    position: relative;
+    &:hover  { border-color: #00C853; color: #00C853; background: rgba(0,200,83,0.05); }
+    &.active {
+        background: #111827; border-color: #111827; color: #fff;
+        &:hover { background: #2d3748; border-color: #2d3748; }
+    }
+}
+
+.ctp__preset--ai {
+    background: linear-gradient(135deg, #1769ff, #00a550);
+    border-color: transparent;
+    color: #fff;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    &:hover, &.active {
+        color: #fff;
+        border-color: transparent;
+        background: linear-gradient(135deg, #1258d4, #008b43);
+    }
+}
+
+.ctp__ai-slot {
+    padding: 0 4px;
+    max-height: 500px;
+    opacity: 1;
+    overflow: visible;
+    transition: max-height 0.2s ease, opacity 0.15s ease;
+}
+
+.ctp__ai-slot--closed {
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+/* X indicator on active preset — clicking deselects it */
+.ctp__preset-x {
+    font-size: 9px;
+    opacity: 0.7;
+    line-height: 1;
+    margin-left: 1px;
+}
+
+/* ── Result feedback ────────────────────────────────────────────────────────── */
+.ctp__result {
+    margin: 0 12px 6px;
+    padding: 5px 8px;
+    border-radius: 5px;
+    font-size: 11px;
+    font-weight: 700;
+    flex-shrink: 0;
+    &.ok  { background: rgba(0,200,83,0.08);  color: #00a550; border: 1px solid rgba(0,200,83,0.2); }
+    &.err { background: rgba(255,61,87,0.08); color: #e02020; border: 1px solid rgba(255,61,87,0.2); }
+}
+
+/* ── Accumulator running notice ─────────────────────────────────────────────── */
+.ctp__accu-running {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    padding: 4px 8px;
+    background: rgba(0,200,83,0.08);
+    border: 1px solid rgba(0,200,83,0.25);
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #00a550;
+}
+.ctp__accu-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: #00C853;
+    flex-shrink: 0;
+    animation: ctp-accu-pulse 1s ease-in-out infinite;
+}
+@keyframes ctp-accu-pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
+
+.ctp__accu-stats {
+    margin: 0 7px 3px;
+    padding: 7px;
+    border: 1px solid #cfe0f6;
+    border-radius: 9px;
+    background: linear-gradient(135deg, #f7fbff, #eef6ff);
+}
+
+.ctp__accu-stats-head,
+.ctp__accu-value-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    color: #52647b;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.ctp__accu-status {
+    color: #0b8f51;
+    font-size: 9px;
+    font-weight: 900;
+    text-transform: uppercase;
+    &--sold,
+    &--lost { color: #dc3545; }
+    &--won { color: #0b8f51; }
+}
+
+.ctp__accu-progress {
+    height: 7px;
+    margin: 7px 0;
+    overflow: hidden;
+    border-radius: 99px;
+    background: #dbe8f5;
+    box-shadow: inset 0 1px 2px rgba(20, 53, 90, .12);
+    span {
+        display: block;
+        height: 100%;
+        min-width: 3px;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #1e88ff, #00b86b);
+        transition: width .25s ease;
+    }
+}
+
+.ctp__accu-stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px;
+    margin-bottom: 6px;
+    > div {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+        padding: 4px 5px;
+        border-radius: 6px;
+        background: rgba(255, 255, 255, .75);
+    }
+    span {
+        color: #8492a6;
+        font-size: 9px;
+        font-weight: 700;
+    }
+    strong {
+        overflow: hidden;
+        color: #172033;
+        font-size: 11px;
+        font-weight: 900;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        &.is-positive { color: #079455; }
+        &.is-negative { color: #d9363e; }
+    }
+}
+
+.ctp__accu-value-row {
+    padding-top: 5px;
+    border-top: 1px solid rgba(142, 177, 212, .35);
+    strong { color: #172033; font-size: 11px; font-weight: 900; }
+}
+
+/* ── Accumulator Take Profit section ───────────────────────────────────────── */
+.ctp__accu-tp-section {
+    padding: 0 10px;
+    margin-bottom: 5px;
+}
+
+.ctp__accu-tp-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+}
+
+.ctp__accu-tp-label {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #0E0F11;
+    cursor: pointer;
+    user-select: none;
+}
+
+.ctp__accu-tp-check {
+    width: 16px;
+    height: 16px;
+    accent-color: #00C853;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.ctp__info-icon {
+    font-size: 14px;
+    color: #9ca3af;
+    cursor: help;
+    flex-shrink: 0;
+    &:hover { color: #6b7280; }
+}
+
+.ctp__accu-tp-ctrl {
+    margin-bottom: 6px;
+}
+
+/* ── Accumulator max payout / ticks info ────────────────────────────────────── */
+.ctp__accu-info {
+    border-top: 1px solid #f0f0f0;
+    padding-top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.ctp__accu-info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+}
+
+.ctp__accu-info-key {
+    color: #6b7280;
+    font-weight: 500;
+}
+
+.ctp__accu-info-val {
+    font-weight: 800;
+    color: #0E0F11;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ── Over / Under buttons ───────────────────────────────────────────────────── */
+.ctp__section--over,
+.ctp__section--under {
+    margin-bottom: 0;
+}
+
+.ctp__buy-btn {
+    width: 100%;
+    min-height: 44px;
+    border-radius: 14px;
+    border: none;
+    display: flex;
+    align-items: stretch;
+    padding: 0;
+    cursor: pointer;
+    font-family: inherit;
+    transition: filter 0.15s, box-shadow 0.15s;
+    overflow: hidden;
+
+    &:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    &--over {
+        background: linear-gradient(120deg, #00C853 0%, #00E676 100%);
+        box-shadow: 0 2px 8px rgba(0,200,83,0.3);
+        &:hover:not(:disabled) { filter: brightness(1.06); box-shadow: 0 4px 14px rgba(0,230,118,0.45); }
+    }
+    &--under {
+        background: linear-gradient(120deg, #FF3D57 0%, #C62828 100%);
+        box-shadow: 0 2px 8px rgba(255,61,87,0.3);
+        &:hover:not(:disabled) { filter: brightness(1.06); box-shadow: 0 4px 14px rgba(255,61,87,0.45); }
+    }
+    &--accu-sell {
+        background: linear-gradient(120deg, #FF9800 0%, #F57C00 100%);
+        box-shadow: 0 2px 8px rgba(255,152,0,0.3);
+        &:hover:not(:disabled) { filter: brightness(1.06); box-shadow: 0 4px 14px rgba(255,152,0,0.45); }
+        .ctp__buy-arrow, .ctp__buy-label, .ctp__buy-pct, .ctp__buy-sub { color: #fff; }
+    }
+}
+
+.ctp__buy-inner {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 5px 10px 4px;
+    gap: 1px;
+}
+
+.ctp__buy-top {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.ctp__buy-btn--over  .ctp__buy-arrow,
+.ctp__buy-btn--over  .ctp__buy-label,
+.ctp__buy-btn--over  .ctp__buy-pct,
+.ctp__buy-btn--over  .ctp__buy-sub  { color: #003c1a; }
+
+.ctp__buy-btn--under .ctp__buy-arrow,
+.ctp__buy-btn--under .ctp__buy-label,
+.ctp__buy-btn--under .ctp__buy-pct,
+.ctp__buy-btn--under .ctp__buy-sub  { color: #fff; }
+
+.ctp__buy-arrow { font-size: 15px; line-height: 1; flex-shrink: 0; }
+.ctp__buy-label { flex: 1; font-size: 15px; font-weight: 900; letter-spacing: 0.01em; text-align: left; }
+.ctp__buy-pct   { font-size: 17px; font-weight: 900; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.ctp__buy-sub   { font-size: 10px; font-weight: 600; opacity: 0.85; text-align: left; }
+
+/* ════════════════════════════════════════════════════════════════
+   RESPONSIVE — Trade panel card & right column
+   ════════════════════════════════════════════════════════════════ */
+
+/* ── 1024 px: tablet / small laptop — narrow the card a bit ─────── */
+@media (max-width: 1024px) {
+    .ctp {
+        width: min(60%, 260px); /* slightly wider on 40% right column */
+        min-width: 180px;
+    }
+}
+
+/* ── 767 px: phone / portrait tablet — full-width card ─────────── */
+@media (max-width: 767px) {
+    /* Right panel + card go full-width, stacked under the chart */
+    .cw-right-inner {
+        padding: 8px 0 0;
+    }
+
+    .ctp {
+        width: 100%;
+        min-width: 0;
+        min-height: 0;
+        border-radius: 10px;
+        padding: 8px 0;
+    }
+
+    /* Tighten up sections so everything fits without scrolling */
+    .ctp__section    { padding: 0 8px; }
+    .ctp__section-label { font-size: 9px; margin-bottom: 2px; }
+
+    /* Tick buttons: smaller */
+    .ctp__tick-btn   { height: 26px; font-size: 12px; min-width: 26px; padding: 0 6px; border-radius: 10px; }
+
+    /* Digit buttons: slightly smaller */
+    .ctp__digit-btn  { height: 26px; font-size: 13px; border-radius: 10px; }
+
+    /* Stake row */
+    .ctp__stake-adj  { width: 30px; height: 30px; font-size: 16px; border-radius: 8px; }
+    .ctp__stake-mid  { height: 30px; }
+    .ctp__stake-inp  { font-size: 16px; width: 50px; }
+
+    /* Buy buttons */
+    .ctp__buy-btn    { min-height: 40px; border-radius: 12px; }
+    .ctp__buy-label  { font-size: 14px; }
+    .ctp__buy-pct    { font-size: 15px; }
+    .ctp__buy-sub    { font-size: 9px; }
+
+    /* Result feedback */
+    .ctp__result { margin: 0 8px 4px; padding: 4px 7px; font-size: 10px; }
+}
+
+/* ── 480 px: small phones — extra compaction ────────────────────── */
+@media (max-width: 480px) {
+    .ctp {
+        border-radius: 8px;
+        padding: 6px 0;
+    }
+
+    .ctp__section       { padding: 0 6px; }
+    .ctp__tick-btn      { height: 24px; font-size: 11px; min-width: 22px; padding: 0 4px; }
+    .ctp__digit-btn     { height: 24px; font-size: 12px; }
+    .ctp__stake-adj     { width: 28px; height: 28px; font-size: 15px; }
+    .ctp__stake-inp     { font-size: 14px; width: 46px; }
+    .ctp__stake-mid     { height: 28px; }
+    .ctp__buy-btn       { min-height: 38px; }
+    .ctp__buy-label     { font-size: 13px; }
+    .ctp__buy-pct       { font-size: 14px; }
+}

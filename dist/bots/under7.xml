@@ -288,7 +288,11 @@
                       </block>
                     </value>
                     <next>
-                      <block type="notify" id="UUoRxKV63Bn6-*~KMvfA">
+                      <block type="variables_set" id="recovery_under7">
+                        <field name="VAR" id="25k[][Yh5xmK{i_!v8=t">Prediction</field>
+                        <value name="VALUE"><block type="math_number" id="recovery_under7_digit"><field name="NUM">6</field></block></value>
+                        <next>
+                          <block type="notify" id="UUoRxKV63Bn6-*~KMvfA">
                         <field name="NOTIFICATION_TYPE">success</field>
                         <field name="NOTIFICATION_SOUND">error</field>
                         <value name="MESSAGE">
@@ -299,6 +303,8 @@
                             <field name="CHECK_RESULT">loss</field>
                           </block>
                         </value>
+                          </block>
+                        </next>
                       </block>
                     </next>
                   </block>
@@ -429,19 +435,7 @@
                         <statement name="ELSE">
                           <block type="controls_if" id="x6JDf}5wG0;EKa1}1Emr">
                             <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
-                            <value name="IF0">
-                              <block type="logic_compare" id=".,tu9}e/8~TQ8}@*iz3V">
-                                <field name="OP">EQ</field>
-                                <value name="A">
-                                  <block type="last_digit" id="^Y,odPZNkZh2:V=(Kzjm"></block>
-                                </value>
-                                <value name="B">
-                                  <block type="math_number" id="I296QP=#n-7lZOlW89d1">
-                                    <field name="NUM">6</field>
-                                  </block>
-                                </value>
-                              </block>
-                            </value>
+                            <value name="IF0"><block type="ahmed_repeated_digit" id="repeated_entry_under7"></block></value>
                             <statement name="DO0">
                               <block type="purchase" id=")K)~:(}-_uf-eD)a/BCu">
                                 <field name="PURCHASE_LIST">DIGITUNDER</field>

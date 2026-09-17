@@ -4,6 +4,8 @@ import { observer } from 'mobx-react-lite';
 import DigitCircles from '@/components/digit-circles';
 import { useDigitStats } from '@/hooks/useDigitStats';
 import { useDerivTrade } from '@/hooks/useDerivTrade';
+import { isFastExecutionEnabled, subscribeFastExecution } from '@/utils/execution-speed';
+import { setTradeContext } from '@/utils/trade-metadata';
 import './speed-lab.scss';
 
 const AccountBadge: React.FC = () => {
@@ -100,6 +102,10 @@ const SpeedLab = observer(() => {
     const [sessionProfit, setSessionProfit] = useState(0);
     const [winCount, setWinCount]         = useState(0);
     const [lossCount, setLossCount]       = useState(0);
+    const [lastTrade, setLastTrade]       = useState<{
+        entry?: number; exit?: number; buy_price?: number;
+        profit?: number; balance?: number; contract_id?: number;
+    } | null>(null);
 
     const runRef            = useRef(false);
     const sessionProfitRef  = useRef(0);
@@ -127,7 +133,10 @@ const SpeedLab = observer(() => {
         logEntry(`⏹ ${reason} | Total: ${fmtProfit(sessionProfitRef.current)}`);
     }, [logEntry]);
 
-    const applyResult = useCallback((profit: number, boughtStake: number, speed: SpeedMode) => {
+    const applyResult = useCallback((
+        profit: number, boughtStake: number, speed: SpeedMode,
+        extra?: { entry_spot?: number; exit_spot?: number; buy_price?: number; contract_id?: number; }
+    ) => {
         const won = profit >= 0;
         sessionProfitRef.current += profit;
         fireCountRef.current++;
@@ -136,7 +145,21 @@ const SpeedLab = observer(() => {
         if (won) setWinCount(p => p + 1);
         else     setLossCount(p => p + 1);
 
-        logEntry(`${won ? '✅' : '❌'} [${SPEED_MODES[speed].name}] #${fireCountRef.current} ${contractType} ${fmtProfit(profit)} @ ${fmtVal(boughtStake)} | Session: ${fmtProfit(sessionProfitRef.current)}`);
+        // Update last-trade panel
+        const bal = derivTradeRef.current.balance;
+        setLastTrade({
+            entry: extra?.entry_spot,
+            exit: extra?.exit_spot,
+            buy_price: extra?.buy_price ?? boughtStake,
+            profit,
+            balance: bal ?? undefined,
+            contract_id: extra?.contract_id,
+        });
+
+        const spotPart = extra?.entry_spot != null
+            ? ` | Entry:${extra.entry_spot} Exit:${extra.exit_spot ?? '?'}`
+            : '';
+        logEntry(`${won ? '✅' : '❌'} [${SPEED_MODES[speed].name}] #${fireCountRef.current} ${contractType} ${fmtProfit(profit)} @ ${fmtVal(boughtStake)}${spotPart} | Session: ${fmtProfit(sessionProfitRef.current)}`);
 
         // Martingale
         if (won) {
@@ -154,6 +177,12 @@ const SpeedLab = observer(() => {
      * Run the trading loop.
      * We close over the current speed/contract settings at start time,
      * but use refs for stake (so martingale updates are immediate).
+     *
+     * ⚡ FAST BOOST: when the global Fast toggle is active, fires up to 20
+     * contracts simultaneously (Promise.allSettled) so that ~20 contracts
+     * settle per contract-duration window — achieving ~20 runs/second on
+     * 1-tick markets. The batch size is locked at loop-start so toggling
+     * Fast mid-session takes effect on the next Start.
      */
     const runLoop = useCallback(async (speed: SpeedMode, sym: string, cType: string, dur: number, bar: number, withBarrier: boolean) => {
         const buildParams = (s: number) => ({
@@ -165,68 +194,36 @@ const SpeedLab = observer(() => {
             ...(withBarrier ? { barrier: bar } : {}),
         });
 
-        // Crazy mode: fire-and-forget with very high in-flight cap for maximum throughput
-        let inFlight = 0;
-        const CRAZY_MAX = 50; // increased from 12 — saturate the API pipeline
-
-        const fireAndForget = (curStake: number) => {
-            inFlight++;
-            derivTradeRef.current.buyContract(
-                buildParams(curStake),
-                settled => {
-                    inFlight = Math.max(0, inFlight - 1);
-                    if (runRef.current || settled.profit !== 0) applyResult(settled.profit ?? 0, curStake, speed);
-                }
-            ).catch(err => {
-                inFlight = Math.max(0, inFlight - 1);
-                const msg = err?.message || err?.error?.message || 'Buy error';
-                logEntry(`❌ ${msg}`);
-            });
-        };
+        // Zero inter-trade delay in Fast mode; otherwise tier-specific.
+        // ⚡ Fast = individual contracts at maximum speed (0ms between each).
+        const POST_DELAY = isFastExecutionEnabled() ? 0 : speed === 'turbo' ? 0 : speed === 'crazy' ? 50 : 200;
 
         while (runRef.current) {
             const curStake = currentStakeRef.current;
+
+            // Sequential path: buy → await settlement → inter-trade delay → repeat.
+            // Fast mode keeps this sequential but with 0ms POST_DELAY for super speed.
             try {
-                if (speed === 'turbo') {
-                    // Turbo: zero-delay fire-and-forget — maximum throughput, no cap
+                const { profit, extra } = await new Promise<{ profit: number; extra?: any }>(resolve => {
+                    const bail = setTimeout(() => { logEntry('⏱ Settlement timeout'); resolve({ profit: 0 }); }, 15_000);
                     derivTradeRef.current.buyContract(
                         buildParams(curStake),
-                        settled => { if (runRef.current || settled.profit !== 0) applyResult(settled.profit ?? 0, curStake, speed); }
-                    ).catch(err => {
-                        const msg = err?.message || err?.error?.message || 'Buy error';
+                        settled => { clearTimeout(bail); resolve({ profit: settled.profit ?? 0, extra: settled }); }
+                    ).then(result => {
+                        if (!result?.contract_id) { clearTimeout(bail); resolve({ profit: 0 }); }
+                    }).catch(err => {
+                        clearTimeout(bail);
+                        const msg = err?.message || err?.error?.message || 'Buy failed';
                         logEntry(`❌ ${msg}`);
+                        resolve({ profit: 0 });
                     });
-                    // No await — loop fires immediately for next contract
-                } else if (speed === 'crazy') {
-                    // Crazy: pipelined fire-and-forget with high cap — over 100% speed
-                    if (inFlight >= CRAZY_MAX) {
-                        await new Promise(r => setTimeout(r, 0));
-                        continue;
-                    }
-                    fireAndForget(curStake);
-                    // No await — loop immediately for next fire
-                } else {
-                    // Normal: sequential — buy then wait for full settlement
-                    const profit = await new Promise<number>(resolve => {
-                        const bail = setTimeout(() => { logEntry('⏱ Settlement timeout'); resolve(0); }, 15000);
-                        derivTradeRef.current.buyContract(
-                            buildParams(curStake),
-                            settled => { clearTimeout(bail); resolve(settled.profit ?? 0); }
-                        ).then(result => {
-                            if (!result?.contract_id) { clearTimeout(bail); resolve(0); }
-                        }).catch(err => {
-                            clearTimeout(bail);
-                            const msg = err?.message || err?.error?.message || 'Buy failed';
-                            logEntry(`❌ ${msg}`);
-                            resolve(0);
-                        });
-                    });
-                    if (!runRef.current) break;
-                    applyResult(profit, curStake, speed);
-                }
+                });
+                if (!runRef.current) break;
+                applyResult(profit, curStake, speed, extra);
+                if (POST_DELAY > 0) await new Promise(r => setTimeout(r, POST_DELAY));
             } catch (e: any) {
                 logEntry(`❌ ${e?.message || 'Unknown error'}`);
-                await new Promise(r => setTimeout(r, 300));
+                await new Promise(r => setTimeout(r, isFastExecutionEnabled() ? 0 : 300));
             }
         }
         setIsRunning(false);
@@ -250,6 +247,7 @@ const SpeedLab = observer(() => {
         setWinCount(0);
         setLossCount(0);
 
+        setTradeContext({ page: 'Speed Lab', bot: `${contractType} on ${symbol}` });
         runRef.current = true;
         setIsRunning(true);
         const cfg = SPEED_MODES[speedMode];
@@ -308,7 +306,7 @@ const SpeedLab = observer(() => {
 
                     <div className='speed-lab__card speed-lab__digits-card'>
                         <h3>Digit Distribution</h3>
-                        <DigitCircles digits={digits} lastDigit={lastDigit} size='sm' nowrap />
+                        <DigitCircles digits={digits} lastDigit={lastDigit} size='sm' />
                     </div>
 
                     <div className='speed-lab__card'>
@@ -360,6 +358,60 @@ const SpeedLab = observer(() => {
                 </div>
 
                 <div className='speed-lab__right'>
+                    {/* ── Last trade / API response panel ── */}
+                    {lastTrade && (
+                        <div className='speed-lab__card speed-lab__last-trade'>
+                            <h3>
+                                Last Trade
+                                <span className={`speed-lab__mode-badge ${lastTrade.profit != null && lastTrade.profit >= 0 ? 'speed-lab__mode-badge--won' : 'speed-lab__mode-badge--lost'}`}>
+                                    {lastTrade.profit != null ? (lastTrade.profit >= 0 ? '✅ WIN' : '❌ LOSS') : ''}
+                                </span>
+                            </h3>
+                            <div className='speed-lab__last-trade-grid'>
+                                {lastTrade.contract_id && (
+                                    <div className='speed-lab__lti'>
+                                        <span>Contract ID</span>
+                                        <strong>{lastTrade.contract_id}</strong>
+                                    </div>
+                                )}
+                                {lastTrade.buy_price != null && (
+                                    <div className='speed-lab__lti'>
+                                        <span>Buy price</span>
+                                        <strong>{Number(lastTrade.buy_price).toFixed(2)} {derivTrade.currency}</strong>
+                                    </div>
+                                )}
+                                {lastTrade.profit != null && (
+                                    <div className='speed-lab__lti'>
+                                        <span>P / L</span>
+                                        <strong className={lastTrade.profit >= 0 ? 'pos' : 'neg'}>
+                                            {lastTrade.profit >= 0 ? '+' : ''}{lastTrade.profit.toFixed(2)} {derivTrade.currency}
+                                        </strong>
+                                    </div>
+                                )}
+                                {lastTrade.entry != null && (
+                                    <div className='speed-lab__lti'>
+                                        <span>Entry spot</span>
+                                        <strong>{lastTrade.entry}</strong>
+                                    </div>
+                                )}
+                                {lastTrade.exit != null && (
+                                    <div className='speed-lab__lti'>
+                                        <span>Exit spot</span>
+                                        <strong>{lastTrade.exit}</strong>
+                                    </div>
+                                )}
+                                {lastTrade.balance != null && (
+                                    <div className='speed-lab__lti'>
+                                        <span>Balance after</span>
+                                        <strong style={{ color: '#4C7DFF' }}>
+                                            {lastTrade.balance.toFixed(2)} {derivTrade.currency}
+                                        </strong>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
                     <div className='speed-lab__card speed-lab__log-card'>
                         <h3>
                             Execution Log

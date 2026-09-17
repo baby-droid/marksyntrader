@@ -1,0 +1,246 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<data><![CDATA[
+{
+  "botName": "EVEN_MULTIPLE_SCALPER",
+  "description": "Superior Trading Bot With Advanced System Strategies,Trade speed = every tick",
+  "youtube": "",
+  "createdDate": 1780656694203,
+  "updatedDate": 1783863142590,
+  "riskManagement": {
+    "isShared": true,
+    "isRiskManagerInjection": false,
+    "baseStake": 8,
+    "selected": {
+      "name": "martingaleFn",
+      "isActive": true,
+      "stakeArr": [
+        20
+      ],
+      "multiplier": 2,
+      "activeOnLose": true,
+      "activateLimit": 1,
+      "deactivateLimit": 100
+    }
+  },
+  "executionTime": {
+    "isShared": true,
+    "duration": 1,
+    "duration_unit": "t"
+  },
+  "strategy": {
+    "isActive": false,
+    "isShared": true,
+    "selected": []
+  },
+  "volatilities": {
+    "isShared": true,
+    "symbols": [
+      "1HZ50V",
+      "1HZ100V",
+      "1HZ75V"
+    ],
+    "switch": {
+      "isActive": true,
+      "condition": "loses",
+      "count": 2
+    }
+  },
+  "pauseTrading": {
+    "isShared": true,
+    "pause": {
+      "isActive": false,
+      "condition": "runs",
+      "count": 3,
+      "ticksToPause": 5
+    }
+  },
+  "virtualHook": {
+    "isShared": true,
+    "switch": {
+      "isActive": false,
+      "condition": "loses",
+      "count": 3,
+      "liveCount": 8,
+      "isRealUntilRecovery": true
+    }
+  },
+  "sequenceAfterSignal": {
+    "isShared": true,
+    "selected": {
+      "isActive": false,
+      "name": "InstantRecovery",
+      "limit": 1
+    }
+  },
+  "stopCondition": {
+    "isShared": true,
+    "isActive": true,
+    "condition": "ConsecutiveLosses",
+    "limit": 4
+  },
+  "tpsl": {
+    "isShared": true,
+    "isActive": true,
+    "tp": 100,
+    "sl": 500
+  },
+  "marketSwitch": {
+    "isActive": false,
+    "isOverRide": true,
+    "isHedgeReset": false,
+    "isContinuous": false,
+    "switch": {
+      "condition": "recovery",
+      "limit": 2,
+      "markets": [
+        "market1"
+      ]
+    }
+  },
+  "markets": {
+    "market1": {
+      "name": "market1",
+      "signalId": "Signal_1",
+      "contract_type": "DIGITEVEN",
+      "barrier": "8",
+      "isAdvancedSettingsActive": false,
+      "advancedSettings": {
+        "isPromptMarket": false,
+        "isPromptPrediction": false
+      },
+      "isRandomSettingsActive": false,
+      "randomSettings": {
+        "isRandomMarket": false,
+        "randomMarketList": [
+          "DIGITEVEN",
+          "DIGITODD"
+        ],
+        "isRandomPrediction": false,
+        "randomPredictionList": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ],
+        "isRandomTime": false,
+        "randomTimeList": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ]
+      },
+      "isAnalysisInjectedSettingsActive": false,
+      "analysisInjectedSettings": {
+        "isInjected": false,
+        "injectionTimestamp": 0
+      },
+      "config": {
+        "riskManagement": {
+          "isShared": true,
+          "isRiskManagerInjection": false,
+          "baseStake": 8,
+          "selected": {
+            "name": "martingaleFn",
+            "isActive": true,
+            "stakeArr": [
+              10
+            ],
+            "multiplier": 2,
+            "activeOnLose": true,
+            "activateLimit": 1,
+            "deactivateLimit": 100
+          }
+        },
+        "executionTime": {
+          "isShared": false,
+          "duration": 1,
+          "duration_unit": "t"
+        },
+        "strategy": {
+          "isActive": true,
+          "isShared": false,
+          "selected": [
+            [
+              {
+                "name": "ldpFn",
+                "market": "DIGITODD",
+                "barrier": "4",
+                "limit": 5,
+                "recoveryLimit": 1,
+                "isStrict": true
+              }
+            ]
+          ]
+        },
+        "volatilities": {
+          "isShared": false,
+          "symbols": [
+            "1HZ100V",
+            "1HZ75V",
+            "1HZ50V",
+            "1HZ25V",
+            "1HZ10V"
+          ],
+          "switch": {
+            "isActive": false,
+            "condition": "loses",
+            "count": 2
+          }
+        },
+        "pauseTrading": {
+          "isShared": false,
+          "pause": {
+            "isActive": false,
+            "condition": "runs",
+            "count": 5,
+            "ticksToPause": 5
+          }
+        },
+        "virtualHook": {
+          "isShared": false,
+          "switch": {
+            "isActive": false,
+            "condition": "loses",
+            "count": 4,
+            "liveCount": 1,
+            "isRealUntilRecovery": false
+          }
+        },
+        "sequenceAfterSignal": {
+          "isShared": false,
+          "selected": {
+            "isActive": false,
+            "name": "QuickRun",
+            "limit": 5
+          }
+        },
+        "stopCondition": {
+          "isShared": false,
+          "isActive": false,
+          "condition": "OverallWins",
+          "limit": 8
+        },
+        "tpsl": {
+          "isShared": false,
+          "isActive": false,
+          "tp": 280,
+          "sl": 170
+        }
+      }
+    }
+  }
+}
+]]></data>

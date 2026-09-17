@@ -1,0 +1,311 @@
+A **FAST** button cannot literally make Deriv execute trades faster than its own infrastructure allows. What it *can* do is remove delays inside **your own application**, so that the broker receives a valid purchase request as soon as your strategy decides to trade.
+
+The fastest practical implementation focuses on reducing **software latency** in your client.
+
+## 1. Persistent WebSocket (Highest Impact)
+
+Instead of:
+
+```
+Connect
+↓
+
+Authenticate
+↓
+
+Subscribe
+↓
+
+Trade
+```
+
+Do:
+
+```
+App Starts
+
+↓
+
+Connect Once
+
+↓
+
+Authenticate Once
+
+↓
+
+Subscribe Once
+
+↓
+
+Stay Connected
+
+↓
+
+Trade Instantly
+```
+
+This removes the connection overhead before each trade.
+
+---
+
+## 2. Preloaded Trading State
+
+Prepare everything before the signal arrives.
+
+Keep in RAM:
+
+* Stake
+* Contract type
+* Symbol
+* Duration
+* Currency
+* Barrier
+* Proposal parameters
+
+When a signal occurs, there should be almost nothing left to compute.
+
+---
+
+## 3. Event-Driven Execution
+
+Instead of checking conditions every few milliseconds:
+
+```
+while(true){
+
+sleep(50ms)
+
+check()
+
+}
+```
+
+Use:
+
+```
+Tick Arrives
+
+↓
+
+Evaluate Strategy
+
+↓
+
+Signal?
+
+↓
+
+Submit Request
+```
+
+No polling, no waiting.
+
+---
+
+## 4. Memory-Only Decisions
+
+Don't read from disk or repeatedly query databases during live trading.
+
+Keep the latest state in memory:
+
+```
+Current Tick
+
+Previous Tick
+
+Current Proposal
+
+Current Balance
+
+Settings
+```
+
+Memory access is much faster than storage access.
+
+---
+
+## 5. Dedicated Trading Engine
+
+Separate trading from the UI.
+
+```
+Tick
+
+├── Trading Engine
+
+├── Charts
+
+├── Statistics
+
+└── Journal
+```
+
+The trading engine should never wait for charts or animations.
+
+---
+
+## 6. Lightweight Strategy
+
+Instead of recalculating everything:
+
+```
+EMA(500)
+
+RSI
+
+ADX
+
+History
+
+Patterns
+
+Every Tick
+```
+
+Only compute what changed since the last tick.
+
+---
+
+## 7. Batched Rendering
+
+Update the interface once per animation frame instead of on every internal state change.
+
+```
+Tick
+
+↓
+
+Collect Changes
+
+↓
+
+Render Once
+```
+
+This leaves more CPU time for the trading engine.
+
+---
+
+## 8. Parallel Background Tasks
+
+After a purchase request is sent:
+
+```
+Purchase Sent
+
+├── Journal
+
+├── Analytics
+
+├── Statistics
+
+└── History
+```
+
+These should run asynchronously so they never delay the next market event.
+
+---
+
+## 9. Proposal Management
+
+If your workflow requires proposals, avoid unnecessary proposal requests by reusing valid information where appropriate and refreshing only when parameters or market conditions require it, in line with the API's behavior.
+
+---
+
+## 10. Connection Health
+
+Monitor WebSocket latency using periodic ping/pong messages.
+
+If latency increases:
+
+* Detect it.
+* Display it.
+* Reconnect only if necessary.
+
+---
+
+## 11. Efficient Code
+
+Avoid:
+
+* unnecessary object creation
+* blocking loops
+* synchronous network calls
+* repeated parsing of the same data
+* large array scans on every tick
+
+Favor:
+
+* reusable objects
+* asynchronous processing
+* efficient data structures
+* incremental updates
+
+---
+
+# Fast Execution Pipeline
+
+```
+Persistent WebSocket
+        │
+        ▼
+Message Router
+        │
+        ▼
+Tick Event
+        │
+        ▼
+Strategy Evaluation
+        │
+        ▼
+Trading Signal
+        │
+        ▼
+Purchase Request Created
+        │
+        ▼
+Send to Deriv
+        │
+        ▼
+Purchase Confirmation
+        │
+        ▼
+Background Updates
+```
+
+---
+
+# Internal Performance Goals
+
+A well-optimized application might target:
+
+| Stage                               |                Target |
+| ----------------------------------- | --------------------: |
+| Tick received → strategy evaluation |                < 5 ms |
+| Strategy → request creation         |                < 2 ms |
+| Request creation → WebSocket send   |                < 2 ms |
+| UI update                           | ~16 ms/frame (60 FPS) |
+
+These are **client-side goals**. The total time until a trade is accepted also depends on network conditions and Deriv's servers.
+
+## What the FAST Button Cannot Do
+
+A FAST button **cannot**:
+
+* bypass Deriv's API validation
+* ignore API rate limits
+* guarantee a specific number of purchases within a fixed time (for example, "10 contracts in under 0.5 seconds")
+* make the broker execute orders faster than its infrastructure allows
+* eliminate internet latency
+
+## What It Can Do
+
+A well-engineered FAST mode can:
+
+* keep a persistent connection open
+* react immediately to each incoming tick
+* minimize software-induced latency
+* dispatch purchase requests without unnecessary delay
+* maintain responsive performance under sustained tick streams
+* provide consistent, low-latency behavior within the limits of the broker's API and the user's network connection.

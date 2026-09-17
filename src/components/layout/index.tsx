@@ -20,7 +20,8 @@ const Layout = observer(() => {
     const store = useStore();
     const { activeLoginid, isAuthorizing } = useApiBase();
     const is_quick_strategy_active = store?.quick_strategy?.is_open;
-    const isCallbackPage = window.location.pathname === '/callback';
+    const isCallbackPage = window.location.pathname === '/callback'
+        || window.location.pathname.endsWith('/callback');
 
     const checkClientAccount = JSON.parse(localStorage.getItem('clientAccounts') ?? '{}');
     const getQueryParams = new URLSearchParams(window.location.search);

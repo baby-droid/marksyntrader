@@ -4,7 +4,6 @@ import { ToastContainer } from 'react-toastify';
 import AuthLoadingWrapper from '@/components/auth-loading-wrapper';
 import { botNotification } from '@/components/bot-notification/bot-notification';
 import useLiveChat from '@/components/chat/useLiveChat';
-import ChunkLoader from '@/components/loader/chunk-loader';
 import LoadingScreen from '@/components/loading-screen';
 import { getUrlBase } from '@/components/shared';
 import TransactionDetailsModal from '@/components/transaction-details';
@@ -25,6 +24,11 @@ import BotBuilder from '../pages/bot-builder';
 import Main from '../pages/main';
 import AIAssistant from '../components/ai-assistant';
 import InstallPrompt from '../components/install-prompt';
+import RiskDisclaimer from '../components/floating/RiskDisclaimer';
+// ── Global copy-trading boot ──────────────────────────────────────────────
+// Importing copy-trading initialises the bot-contract bridge (copy-trade-bridge.ts)
+// so bot trades are captured for mirroring regardless of which page is active.
+import { copyEngine } from '../utils/copy-trading';
 import './app.scss';
 import 'react-toastify/dist/ReactToastify.css';
 import '../components/bot-notification/bot-notification.scss';
@@ -38,21 +42,8 @@ const PreviewBranding =
 
 const AppContent = observer(() => {
     const [is_api_initialized, setIsApiInitialized] = React.useState(false);
-    const [is_loading, setIsLoading] = React.useState(true);
-    const [min_time_elapsed, setMinTimeElapsed] = React.useState(false);
-    // Content is only swapped in once the loading screen's own finish
-    // animation has actually reached 100% (via onDone) — not the instant
-    // `is_loading`/`min_time_elapsed` flip true — so the viewer always sees
-    // the bar complete instead of the screen being replaced mid-ramp.
-    const [reveal_content, setRevealContent] = React.useState(false);
-    // Once the app has shown its initial loading screen and revealed content, we
-    // never show the full-screen loader again for the rest of the session — brief
-    // reconnects/token refreshes should not re-trigger the "Loading..." screen.
-    const has_loaded_once_ref = React.useRef(false);
-    React.useEffect(() => {
-        const t = setTimeout(() => setMinTimeElapsed(true), 1200);
-        return () => clearTimeout(t);
-    }, []);
+    const [startup_ready, setStartupReady] = React.useState(false);
+    const [startup_complete, setStartupComplete] = React.useState(false);
 
     const store = useStore();
     const { app, transactions, common, client } = store;
@@ -62,6 +53,17 @@ const AppContent = observer(() => {
     const is_subscribed_to_msg_listener = React.useRef(false);
     const msg_listener = React.useRef(null);
     const { connectionStatus } = useApiBase();
+
+    React.useEffect(() => {
+        if (is_api_initialized) return undefined;
+
+        const startupFallback = setTimeout(() => {
+            setIsApiInitialized(true);
+            setStartupReady(true);
+        }, 7000);
+
+        return () => clearTimeout(startupFallback);
+    }, [is_api_initialized]);
 
     // Initialize dev mode keyboard shortcuts
     useDevMode();
@@ -96,6 +98,7 @@ const AppContent = observer(() => {
     useEffect(() => {
         if (connectionStatus === CONNECTION_STATUS.OPENED) {
             setIsApiInitialized(true);
+            setStartupReady(true);
             common.setSocketOpened(true);
         } else if (connectionStatus !== CONNECTION_STATUS.OPENED) {
             common.setSocketOpened(false);
@@ -159,22 +162,7 @@ const AppContent = observer(() => {
         const retrieveActiveSymbols = () => {
             const { active_symbols } = ApiHelpers.instance;
 
-            // Hard fallback: if the API call hangs for > 8 s, force-clear the
-            // loading screen so the app is always usable even on slow connections.
-            const fallbackTimer = setTimeout(() => {
-                setIsLoading(false);
-                has_loaded_once_ref.current = true;
-            }, 8000);
-
-            active_symbols.retrieveActiveSymbols(true).then(() => {
-                clearTimeout(fallbackTimer);
-                setIsLoading(false);
-                has_loaded_once_ref.current = true;
-            }).catch(() => {
-                clearTimeout(fallbackTimer);
-                setIsLoading(false);
-                has_loaded_once_ref.current = true;
-            });
+            active_symbols.retrieveActiveSymbols(true).catch(() => {});
         };
 
         if (ApiHelpers?.instance?.active_symbols) {
@@ -189,10 +177,8 @@ const AppContent = observer(() => {
                     clearInterval(intervalId);
                     retrieveActiveSymbols();
                 } else if (elapsed >= 10000) {
-                    // API helpers never initialised — give up and show the app
+                    // API helpers never initialised — leave the app shell usable.
                     clearInterval(intervalId);
-                    setIsLoading(false);
-                    has_loaded_once_ref.current = true;
                 }
             }, 1000);
         }
@@ -201,12 +187,6 @@ const AppContent = observer(() => {
     React.useEffect(() => {
         if (is_api_initialized) {
             init();
-            // Only show the full-screen loader for the very first connection of the
-            // session — subsequent reconnects (network blips, token refresh) should
-            // not flash "Loading..." over content that's already on screen.
-            if (!has_loaded_once_ref.current) {
-                setIsLoading(true);
-            }
             if (!client.is_logged_in) {
                 changeActiveSymbolLoadingState();
             }
@@ -221,7 +201,67 @@ const AppContent = observer(() => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [is_api_initialized, client.loginid]);
 
-    if (common?.error) return null;
+    // ── Global copy-trading restore ───────────────────────────────────────────
+    // Restores saved follower sessions and auto-starts the copy engine when the
+    // user logs in — independently of whether the copy-trading page is open.
+    // The engine only starts if there are stored followers; otherwise it's a no-op.
+    React.useEffect(() => {
+        if (!client.is_logged_in || !is_api_initialized) return;
+        // Delay slightly so api_base is fully initialised
+        const t = setTimeout(() => {
+            copyEngine.restoreState().catch(() => {});
+        }, 2000);
+        return () => clearTimeout(t);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [client.is_logged_in, is_api_initialized]);
+
+    if (common?.error && startup_complete) {
+        return (
+            <div
+                role='alert'
+                style={{
+                    minHeight: '100vh',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '2rem',
+                    boxSizing: 'border-box',
+                    background: '#050b1d',
+                    color: '#e8eefc',
+                    fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+                    textAlign: 'center',
+                }}
+            >
+                <div style={{ maxWidth: 520 }}>
+                    <div style={{ fontSize: '1.25rem', fontWeight: 800, letterSpacing: '0.04em' }}>
+                        Marksyntrader
+                    </div>
+                    <h1 style={{ margin: '1.25rem 0 0.5rem', fontSize: '1.1rem' }}>
+                        The trading workspace could not connect
+                    </h1>
+                    <p style={{ margin: 0, color: '#9fb0d0', lineHeight: 1.6 }}>
+                        {common.error.message || 'The live connection is temporarily unavailable. Reload the preview to try again.'}
+                    </p>
+                    <button
+                        type='button'
+                        onClick={() => window.location.reload()}
+                        style={{
+                            marginTop: '1.25rem',
+                            padding: '0.65rem 1rem',
+                            border: '1px solid #2ddf8c',
+                            borderRadius: 8,
+                            background: '#0c2b2a',
+                            color: '#d9fff0',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                        }}
+                    >
+                        Reload preview
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <React.Fragment>
@@ -230,14 +270,8 @@ const AppContent = observer(() => {
                     <PreviewBranding />
                 </Suspense>
             )}
-            {!reveal_content ? (
-                <LoadingScreen
-                    ready={!is_loading && min_time_elapsed}
-                    onDone={() => {
-                        has_loaded_once_ref.current = true;
-                        setRevealContent(true);
-                    }}
-                />
+            {!startup_complete ? (
+                <LoadingScreen ready={startup_ready} onDone={() => setStartupComplete(true)} />
             ) : (
                 <AuthLoadingWrapper>
                     <ThemeProvider theme={is_dark_mode_on ? 'dark' : 'light'}>
@@ -251,6 +285,7 @@ const AppContent = observer(() => {
                             <ToastContainer limit={3} draggable={false} />
                             <InstallPrompt />
                             <AIAssistant />
+                            <RiskDisclaimer />
                         </div>
                     </ThemeProvider>
                 </AuthLoadingWrapper>

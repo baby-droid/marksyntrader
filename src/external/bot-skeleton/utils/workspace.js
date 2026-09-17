@@ -5,8 +5,9 @@ export const hasAllRequiredBlocks = () => {
     const { mandatoryMainBlocks } = config();
     const required_block_types = ['trade_definition_tradeoptions', ...mandatoryMainBlocks];
     const all_block_types = blocks_in_workspace.map(block => block.type);
+    const has_purchase_entry = all_block_types.includes('purchase') || all_block_types.includes('multiple_purchase');
     const has_all_required_blocks = required_block_types.every(required_block_type =>
-        all_block_types.includes(required_block_type)
+        required_block_type === 'purchase' ? has_purchase_entry : all_block_types.includes(required_block_type)
     );
 
     return has_all_required_blocks;

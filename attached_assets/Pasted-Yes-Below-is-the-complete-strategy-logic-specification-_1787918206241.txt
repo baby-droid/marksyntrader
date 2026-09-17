@@ -1,0 +1,1088 @@
+Yes. Below is the complete **strategy/logic specification** for the app, organized by each contract family. I’m treating your rules as the core logic and separating **entry conditions, confirmation, duration/ticks, loss handling, and examples**.
+
+> These are statistical/pattern rules, not guarantees of profitable outcomes. A “strong signal” should mean that the configured conditions agree—not that the next tick is predictable.
+
+# 1. EVEN / ODD
+
+## A. ODD — primary strategy
+
+### Distribution conditions
+
+Analyze the last **1,000 ticks**, then compare 100, 50 and 20 tick windows.
+
+For an ODD signal:
+
+1. Find the 5 odd digits:
+
+   * 1
+   * 3
+   * 5
+   * 7
+   * 9
+
+2. Prefer when **3–5 odd digits are ≥ 10.5%**.
+
+3. At the same time, look for weak even digits:
+
+   * ideally several below **10–10.4%**.
+
+4. Calculate total parity:
+
+```text
+ODD = frequency(1,3,5,7,9)
+EVEN = frequency(0,2,4,6,8)
+```
+
+5. Stronger condition:
+
+```text
+ODD >= 55%
+```
+
+6. Stronger still if Odd is **increasing** across the windows.
+
+### Example
+
+```text
+1 = 11.2%
+3 = 10.8%
+5 = 11.0%
+7 = 10.7%
+9 = 11.1%
+
+Odd total = 55.0%
+
+0 = 9.5%
+2 = 9.4%
+4 = 9.8%
+6 = 9.7%
+8 = 10.1%
+```
+
+This qualifies as an **ODD candidate**.
+
+### Entry selection
+
+Among the weak even digits, identify:
+
+* lowest even %
+* highest even %
+* most recently appearing even digit
+
+Then observe what happens immediately afterward.
+
+Your intended entry concept is:
+
+```text
+weak even distribution
++
+odd dominance
++
+1–2 even occurrences
++
+odd continuation
+```
+
+---
+
+# 2. EVEN
+
+EVEN is the mirror of ODD.
+
+### Conditions
+
+Find:
+
+```text
+0,2,4,6,8
+```
+
+Prefer:
+
+```text
+3–5 even digits >= 10.5%
+```
+
+while odd digits are weak.
+
+Then:
+
+```text
+EVEN >= 55%
+```
+
+and preferably increasing.
+
+### Example
+
+```text
+0 = 11.0%
+2 = 10.8%
+4 = 11.2%
+6 = 10.7%
+8 = 11.1%
+
+EVEN = 54.8%
+```
+
+If the short windows show:
+
+```text
+20T = 57%
+50T = 56%
+100T = 55%
+```
+
+the Even side has stronger confirmation.
+
+### Entry
+
+Use the:
+
+* lowest odd %
+* highest odd %
+* recent odd digit
+* sequence pattern
+
+to determine the entry.
+
+---
+
+# 3. EVEN/ODD SEQUENCE PATTERNS
+
+The pattern detector watches the actual sequence.
+
+### Odd patterns
+
+```text
+E E O
+E E O O
+```
+
+Potential ODD setup.
+
+### Even patterns
+
+```text
+O O E
+O O E E
+```
+
+Potential EVEN setup.
+
+But:
+
+**pattern ≠ automatic trade.**
+
+The pattern must agree with the distribution.
+
+---
+
+# 4. 55% DOMINANCE ENGINE
+
+This is a separate confirmation model.
+
+Calculate:
+
+```text
+Odd % vs Even %
+```
+
+Example:
+
+```text
+20 ticks  → Odd 60%
+50 ticks  → Odd 57%
+100 ticks → Odd 55%
+1000 ticks → Odd 53%
+```
+
+This can be considered a short-term Odd dominance setup.
+
+The strongest situation is:
+
+```text
+53 → 54 → 55 → 57 → 59%
+```
+
+because dominance is increasing.
+
+---
+
+# 5. BALANCED EVEN/ODD SCALP
+
+When:
+
+```text
+Odd ≈ Even
+```
+
+the bot should not force continuous trades.
+
+Example:
+
+```text
+Odd = 50.4%
+Even = 49.6%
+```
+
+Logic:
+
+```text
+BALANCED
+ ↓
+Find exceptionally clean short-term setup
+ ↓
+1 trade
+ ↓
+WIN → STOP
+LOSS → recovery validation
+ ↓
+WIN → STOP
+```
+
+This is your “one-run scalp” mode.
+
+---
+
+# 6. MATCHES
+
+Matches attempts to identify a digit that has a strong recurrence/concentration structure.
+
+### Analyze
+
+* 1,000-tick frequency
+* 100-tick frequency
+* 50-tick frequency
+* 20-tick frequency
+* recurrence
+* clustering
+* recent increase
+
+### Example
+
+Digit 7:
+
+```text
+1000T = 10.1%
+100T  = 12.0%
+50T   = 13.2%
+20T   = 15.0%
+```
+
+The digit is becoming increasingly concentrated.
+
+Then check:
+
+```text
+7
+other digit
+7
+other digit
+7
+```
+
+If recurrence remains strong, Matches becomes a candidate.
+
+### Confirmation
+
+```text
+dominant digit
++
+increasing concentration
++
+recurrence
++
+short-window confirmation
+```
+
+---
+
+# 7. DIFFERS
+
+Differs is essentially the opposite statistical environment.
+
+Look for:
+
+```text
+No dominant digit
++
+high distribution dispersion
++
+candidate digit weak
++
+many different digits appearing
+```
+
+Example:
+
+```text
+0 = 9.8%
+1 = 10.3%
+2 = 9.7%
+3 = 10.4%
+4 = 9.9%
+5 = 10.1%
+6 = 9.8%
+7 = 10.2%
+8 = 9.9%
+9 = 9.9%
+```
+
+No digit is strongly dominant.
+
+If recent 20/50 ticks also show high diversity, Differs becomes stronger.
+
+---
+
+# 8. MATCHES ↔ DIFFERS SWITCH
+
+After a Matches loss:
+
+```text
+MATCH
+ ↓
+LOSS
+ ↓
+Recalculate dominant digit
+ ↓
+Is concentration still strong?
+```
+
+If yes:
+
+```text
+revalidate MATCH
+```
+
+If concentration has disappeared:
+
+```text
+check DIFFERS
+```
+
+The bot should **not reverse automatically**.
+
+---
+
+# 9. OVER
+
+For an Over barrier:
+
+```text
+OVER X
+```
+
+the bot identifies the losing digits:
+
+```text
+0 → X
+```
+
+### Example: OVER 3
+
+Losing digits:
+
+```text
+0,1,2,3
+```
+
+The engine measures:
+
+* their distribution
+* recent touches
+* clustering
+* weakening
+* above-barrier digits
+* retention above barrier
+
+---
+
+# 10. OVER 3 TOUCH LOGIC
+
+Your rule:
+
+Look at the latest 10 ticks.
+
+Example:
+
+```text
+4
+1
+7
+2
+5
+0
+8
+3
+9
+6
+```
+
+The losing range `0–3` appeared:
+
+```text
+1
+2
+0
+3
+```
+
+= 4 touches.
+
+Your candidate range:
+
+```text
+2–5 touches / 10 ticks
+```
+
+is satisfied.
+
+Then check the digits above 3.
+
+If:
+
+```text
+4,5,6,7,8,9
+```
+
+are beginning to dominate, Over 3 becomes stronger.
+
+---
+
+# 11. OVER RETENTION
+
+You specifically wanted to identify **which digit above the barrier retains above it**.
+
+Example:
+
+```text
+4 → 7 → 6 → 8
+```
+
+All remain >3.
+
+That is stronger than:
+
+```text
+4 → 2 → 1 → 3
+```
+
+because the first sequence shows above-barrier persistence.
+
+So the entry score can include:
+
+```text
+above-barrier frequency
++
+retention
++
+losing-side weakness
+```
+
+---
+
+# 12. OVER 6
+
+For:
+
+```text
+OVER 6
+```
+
+losing digits:
+
+```text
+0 1 2 3 4 5 6
+```
+
+There are seven losing digits.
+
+The system checks:
+
+```text
+losing-side distribution
++
+1–2 touches above 6
++
+which digit >6 appeared
++
+whether that digit is retaining
++
+20/50/100 confirmation
+```
+
+Example:
+
+```text
+Recent:
+
+2
+4
+6
+1
+8
+5
+9
+3
+7
+2
+```
+
+Above 6:
+
+```text
+8,9,7
+```
+
+Then examine whether those high digits are becoming stronger in the larger windows.
+
+---
+
+# 13. UNDER
+
+Under uses the exact opposite framework.
+
+For:
+
+```text
+UNDER 6
+```
+
+the winning region is:
+
+```text
+0–5
+```
+
+and losing region:
+
+```text
+6–9
+```
+
+The bot looks for:
+
+```text
+6–9 weakness
++
+0–5 dominance
++
+touches below barrier
++
+retention below barrier
++
+short-window confirmation
+```
+
+---
+
+# 14. OVER/UNDER BARRIER ENGINE
+
+The generalized model is:
+
+```text
+Barrier
+ ↓
+Identify winning region
+ ↓
+Identify losing region
+ ↓
+Measure losing-region touches
+ ↓
+Measure winning-region strength
+ ↓
+Identify strongest winning digit
+ ↓
+Measure retention
+ ↓
+Compare 20/50/100/1000 windows
+ ↓
+Generate score
+```
+
+This means the same engine can handle:
+
+```text
+Over 0
+Over 1
+Over 2
+Over 3
+Over 4
+Over 5
+Over 6
+Over 7
+Over 8
+```
+
+and the corresponding Under contracts.
+
+---
+
+# 15. RISE
+
+Rise/Fall switches from digit statistics to **price-direction statistics**.
+
+Calculate:
+
+```text
+UP moves
+DOWN moves
+```
+
+over:
+
+```text
+20T
+50T
+100T
+1000T
+```
+
+Example:
+
+```text
+20T  → UP 65%
+50T  → UP 61%
+100T → UP 58%
+```
+
+This creates a stronger Rise candidate.
+
+Additional confirmation:
+
+* increasing slope
+* higher highs
+* higher lows
+* directional persistence
+* reduced counter-movement
+
+---
+
+# 16. FALL
+
+Mirror of Rise.
+
+Example:
+
+```text
+20T  → DOWN 67%
+50T  → DOWN 62%
+100T → DOWN 59%
+```
+
+Additional confirmation:
+
+```text
+lower highs
++
+lower lows
++
+downward acceleration
++
+limited counter-moves
+```
+
+---
+
+# 17. ONLY UPS
+
+Only Ups uses stricter directional conditions.
+
+Look for:
+
+```text
+UP dominance
++
+consecutive UP structure
++
+few counter-moves
++
+positive short-term acceleration
+```
+
+Example:
+
+```text
+↑ ↑ ↑ ↓ ↑ ↑ ↑
+```
+
+is potentially acceptable.
+
+But:
+
+```text
+↑ ↓ ↑ ↓ ↑ ↓
+```
+
+is a choppy market and should score poorly.
+
+---
+
+# 18. ONLY DOWNS
+
+Mirror:
+
+```text
+↓ ↓ ↓ ↑ ↓ ↓
+```
+
+can qualify if the overall downward structure remains strong.
+
+But:
+
+```text
+↓ ↑ ↓ ↑ ↓ ↑
+```
+
+should be rejected as excessive chop.
+
+---
+
+# 19. HIGH TICK
+
+High Tick uses recent tick/range structure.
+
+Calculate:
+
+```text
+recent high
+recent low
+current position
+distance from high
+momentum
+recent directional movement
+```
+
+Example:
+
+```text
+HIGH ───────────● Current
+       ↑
+   repeated upward movement
+```
+
+If price repeatedly approaches/retains the upper portion of its recent range, the High Tick setup becomes stronger.
+
+---
+
+# 20. LOW TICK
+
+Mirror of High Tick.
+
+Look for:
+
+```text
+current price near lower range
++
+downward momentum
++
+lower lows
++
+weak recovery
+```
+
+Example:
+
+```text
+Current ●──────────
+        ↓
+      LOW
+```
+
+---
+
+# 21. ADAPTIVE DURATION
+
+Every strategy can use:
+
+```text
+1 tick
+2 ticks
+3 ticks
+4 ticks
+5 ticks
+```
+
+The engine chooses based on:
+
+```text
+signal strength
++
+market structure
++
+short-window agreement
++
+recent outcomes
++
+strategy
+```
+
+Your specific rule:
+
+```text
+WIN → LOSS → WIN → LOSS
+```
+
+can trigger:
+
+```text
+duration = 2 ticks
+```
+
+rather than continuously using 1 tick.
+
+---
+
+# 22. LOSS ENGINE
+
+Every trade stores:
+
+```text
+stake
+result
+profit/loss
+previous cumulative profit
+loss streak
+strategy
+market
+duration
+signal score
+```
+
+After a loss:
+
+```text
+LOSS
+ ↓
+Calculate actual deficit
+ ↓
+Check previous profit
+ ↓
+Check recovery requirement
+ ↓
+Search for new clean entry
+```
+
+---
+
+# 23. MARTINGALE / RECOVERY
+
+Your concept is **recovery-based**, not simply “double every loss.”
+
+Example:
+
+```text
+Profit before loss = $10
+Loss = $3
+```
+
+Remaining profit:
+
+```text
+$7
+```
+
+The next recovery trade should only target recovery of the relevant deficit, subject to the configured stake/risk ceiling.
+
+If the loss grows:
+
+```text
+LOSS
+LOSS
+LOSS
+```
+
+the recovery requirement increases, but the system should eventually **stop recovery** rather than create an unlimited martingale sequence.
+
+---
+
+# 24. OPPOSITE-SIDE RECOVERY
+
+After loss:
+
+```text
+ODD LOSS
+ ↓
+Analyze EVEN
+```
+
+```text
+EVEN LOSS
+ ↓
+Analyze ODD
+```
+
+```text
+OVER LOSS
+ ↓
+Analyze UNDER
+```
+
+```text
+UNDER LOSS
+ ↓
+Analyze OVER
+```
+
+```text
+RISE LOSS
+ ↓
+Analyze FALL
+```
+
+```text
+FALL LOSS
+ ↓
+Analyze RISE
+```
+
+etc.
+
+But:
+
+```text
+LOSS ≠ REVERSE
+```
+
+The opposite strategy must independently produce a clean signal.
+
+---
+
+# 25. 3–4 LOSS SWITCH
+
+After 3–4 consecutive losses:
+
+```text
+STOP CURRENT SETUP
+        ↓
+RECALCULATE 1000T
+        ↓
+RECALCULATE 100T
+        ↓
+RECALCULATE 50T
+        ↓
+RECALCULATE 20T
+        ↓
+CHECK OPPOSITE
+        ↓
+CHECK OTHER MARKET
+        ↓
+CHECK DIFFERENT DURATION
+        ↓
+REVALIDATE
+```
+
+This prevents the bot from repeatedly trading a regime that has stopped behaving according to its assumptions.
+
+---
+
+# 26. VIRTUAL TRADE ENGINE
+
+Before actual execution:
+
+```text
+Candidate signal
+      ↓
+Virtual trade #1
+      ↓
+Virtual trade #2
+```
+
+Your preferred rule:
+
+```text
+WIN + WIN
+   ↓
+LIVE ENTRY
+```
+
+If either loses:
+
+```text
+RESET
+ ↓
+WAIT
+ ↓
+NEW SIGNAL
+```
+
+---
+
+# 27. FINAL SIGNAL SCORE
+
+Every contract can be scored using the same general framework:
+
+```text
+Distribution      25
+Pattern           15
+20T confirmation  10
+50T confirmation  10
+100T confirmation 15
+1000T context     10
+Retention          5
+Momentum           5
+Risk               5
+--------------------
+TOTAL             100
+```
+
+For example:
+
+```text
+92/100 → Very Strong
+85/100 → Strong
+76/100 → Candidate
+68/100 → Watch
+<70     → No Trade
+```
+
+The exact thresholds should be configurable.
+
+---
+
+# 28. Complete contract matrix
+
+| Contract       | Main data   | Primary logic                                             |
+| -------------- | ----------- | --------------------------------------------------------- |
+| **Even**       | Digits      | Even distribution + 55%+ dominance + pattern              |
+| **Odd**        | Digits      | Odd distribution + 55%+ dominance + pattern               |
+| **Matches**    | Digits      | Dominant/repeating digit + increasing concentration       |
+| **Differs**    | Digits      | High dispersion + no dominant digit                       |
+| **Over**       | Digits      | Losing-range weakness + touches + retention above barrier |
+| **Under**      | Digits      | Losing-range weakness + touches + retention below barrier |
+| **Rise**       | Price       | Upward directional dominance + momentum                   |
+| **Fall**       | Price       | Downward directional dominance + momentum                 |
+| **Only Ups**   | Price/ticks | Sustained upward movement + low counter-movement          |
+| **Only Downs** | Price/ticks | Sustained downward movement + low counter-movement        |
+| **High Tick**  | Price/range | Upper-range structure + momentum                          |
+| **Low Tick**   | Price/range | Lower-range structure + momentum                          |
+
+---
+
+# 29. The unified decision engine
+
+Ultimately, **every contract uses the same five-stage architecture**, while each contract has a different signal model:
+
+```text
+STAGE 1
+DATA
+1000 / 100 / 50 / 20 ticks
+        ↓
+STAGE 2
+STRATEGY ANALYSIS
+Even/Odd/Match/Diff/Over/Under/
+Rise/Fall/Only Up/Only Down/
+High/Low
+        ↓
+STAGE 3
+PATTERN + DISTRIBUTION
+        ↓
+STAGE 4
+VIRTUAL VALIDATION
+        ↓
+STAGE 5
+RISK + EXECUTION
+```
+
+The most important implementation detail is that **the 1,000-tick distribution should be the baseline, while 100/50/20 ticks determine current entry timing**. That prevents the bot from treating a short sequence as meaningful without checking whether it is supported by the broader distribution.

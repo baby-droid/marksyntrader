@@ -13,6 +13,7 @@ import Summary from '@/components/summary';
 import TradeAnimation from '@/components/trade-animation';
 import Transactions from '@/components/transactions';
 import DigitPercentWidget from '@/components/digit-percent-widget/digit-percent-widget';
+import CyclePatternDetector from '@/components/cycle-pattern-detector/cycle-pattern-detector';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { popover_zindex } from '@/constants/z-indexes';
 import { useStore } from '@/hooks/useStore';
@@ -192,23 +193,39 @@ const DrawerContent = ({ active_index, is_drawer_open, active_tour, setActiveTab
     }, [is_drawer_open, isDesktop]);
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+        <div
+            className='run-panel__drawer-content'
+            style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}
+        >
             <div style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
                 <Tabs active_index={active_index} onTabItemClick={setActiveTabIndex} top>
                     <div id='db-run-panel-tab__summary' label={<Localize i18n_default_text='Summary' />}>
-                        <DigitPercentWidget />
                         <Summary is_drawer_open={is_drawer_open} />
                     </div>
-                    <div id='db-run-panel-tab__transactions' label={<Localize i18n_default_text='Transactions' />}>
-                        <DigitPercentWidget />
-                        <Transactions is_drawer_open={is_drawer_open} />
+                    <div
+                        id='db-run-panel-tab__transactions'
+                        label={<Localize i18n_default_text='Transactions' />}
+                    >
+                        <div className='run-panel__transactions-tab'>
+                            <DigitPercentWidget showTrigger={false} />
+                            <Transactions is_drawer_open={is_drawer_open} />
+                        </div>
                     </div>
                     <div id='db-run-panel-tab__journal' label={<Localize i18n_default_text='Journal' />}>
-                        <DigitPercentWidget />
                         <Journal />
                     </div>
                 </Tabs>
             </div>
+            <button
+                type='button'
+                className='run-panel__analyzer-trigger'
+                title='Open Digit Analyzer'
+                aria-label='Open Digit Analyzer'
+                onClick={() => window.dispatchEvent(new CustomEvent('digit-analyzer:open'))}
+            >
+                <span /><span /><span /><span />
+            </button>
+            <CyclePatternDetector />
             {(is_drawer_open || active_tour) && (
                 <div style={{ flexShrink: 0 }}>
                     <StatisticsSummary {...props} />
@@ -369,7 +386,13 @@ const RunPanel = observer(() => {
     const { statistics } = transactions;
     const { active_tour, active_tab } = dashboard;
     const { total_payout, total_profit, total_stake, won_contracts, lost_contracts, number_of_runs } = statistics;
-    const { BOT_BUILDER, CHART, AHMED_LEARNING } = DBOT_TABS;
+    const { BOT_BUILDER, AHMED_SCALPER_BOTS, BULK_TRADE, AUTO_TRADES } = DBOT_TABS;
+
+    // Summary/Transactions/Journal are intentionally available on mobile only
+    // for the four bot execution surfaces requested by the mobile layout:
+    // Bot Builder, Scalper Bots, Bulk Trade, and Auto Trades.
+    const MOBILE_RUN_PANEL_TABS = [BOT_BUILDER, AHMED_SCALPER_BOTS, BULK_TRADE, AUTO_TRADES];
+    const hide_on_mobile = !isDesktop && !MOBILE_RUN_PANEL_TABS.includes(active_tab);
 
     React.useEffect(() => {
         onMount();
@@ -382,6 +405,8 @@ const RunPanel = observer(() => {
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    if (hide_on_mobile) return null;
 
     const content = (
         <DrawerContent
@@ -414,7 +439,6 @@ const RunPanel = observer(() => {
         />
     );
 
-    const show_run_panel = [BOT_BUILDER, CHART, AHMED_LEARNING].includes(active_tab) || active_tour;
     if (active_tour === 'bot_builder') return null;
 
     return (

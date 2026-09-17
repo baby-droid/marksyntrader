@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { observer } from 'mobx-react-lite';
 import SpeedControl from '@/components/speed-control/speed-control';
 import { useStore } from '@/hooks/useStore';
+import { useDevice } from '@deriv-com/ui';
 import './floating-run-button.scss';
 
 const STORAGE_KEY = 'floating_run_btn_pos';
@@ -24,6 +25,7 @@ function savePos(pos: { x: number; y: number }) {
 
 const FloatingRunButton: React.FC = observer(() => {
     const { run_panel } = useStore();
+    const { isDesktop } = useDevice();
     const {
         is_running,
         is_paused: paused,
@@ -34,11 +36,11 @@ const FloatingRunButton: React.FC = observer(() => {
     } = run_panel as any;
     const [collapsed, setCollapsed] = useState(false);
 
-    // Draggable position — load from localStorage, default to right side
+    // Draggable position — load from localStorage, default to middle-left
     const [pos, setPos] = useState<{ x: number; y: number } | null>(() => {
         const saved = loadPos();
         if (saved) return saved;
-        return { x: window.innerWidth - 220, y: Math.floor(window.innerHeight * 0.45) };
+        return { x: 20, y: Math.floor(window.innerHeight * 0.45) };
     });
     const dragRef = useRef<{
         startX: number; startY: number;
@@ -102,7 +104,7 @@ const FloatingRunButton: React.FC = observer(() => {
 
     const style: React.CSSProperties = pos
         ? { left: pos.x, top: pos.y, right: 'auto', bottom: 'auto' }
-        : { right: 24, bottom: 24 };
+        : { left: 20, top: '45vh', right: 'auto', bottom: 'auto' };
 
     // Derive display state cleanly. The bot stays "running" (loaded, active)
     // while paused — only the interpreter's tick loop is halted, so Stop is
@@ -110,6 +112,11 @@ const FloatingRunButton: React.FC = observer(() => {
     const showPause  = is_running && !paused;
     const showResume = is_running && paused;
     const showStop   = is_running;
+
+    // The mobile run bar owns the idle/run affordance on supported pages.
+    // Keeping this floating surface hidden while idle prevents the old
+    // "○ Bot Idle" pill from covering page content on every mobile tab.
+    if (!isDesktop && !is_running) return null;
 
     return (
         <div

@@ -53,6 +53,13 @@ const Xml = ({ ...props }) => {
 export const ToolboxItems = () =>
     ReactDomServer.renderToStaticMarkup(
         <Xml xmlns='http://www.w3.org/1999/xhtml' id='toolbox'>
+            <Category id='best_market_scanner' name={localize('Best market scanner')}>
+                <Block type='king_fisher_best_market_scanner' />
+                <Block type='king_fisher_restart_trade'>
+                    <Value name='TAKE_PROFIT'><Shadow type='math_number'><Field name='NUM'>5</Field></Shadow></Value>
+                    <Value name='STOP_LOSS'><Shadow type='math_number'><Field name='NUM'>20</Field></Shadow></Value>
+                </Block>
+            </Category>
             <Category id='trade_parameters' name={localize('Trade parameters')}>
                 <Block type='trade_definition'>
                     <Statement name='TRADE_OPTIONS'>
@@ -169,6 +176,24 @@ export const ToolboxItems = () =>
             <Category id='trade_results' name={localize('Restart trading conditions')}>
                 <Block type='after_purchase' />
                 <Block type='trade_again' />
+            </Category>
+            <Category id='king_fisher' name={localize('King Fisher')}>
+                <Block type='king_fisher_entry'>
+                    <Field name='DIRECTION'>BELOW</Field>
+                    <Field name='THRESHOLD'>3</Field>
+                    <Field name='STREAK'>2_3</Field>
+                </Block>
+                <Block type='king_fisher_virtual_hook'>
+                    <Field name='ENABLED'>TRUE</Field>
+                    <Field name='CONFIRMATIONS'>1</Field>
+                    <Value name='SIGNAL'>
+                        <Block type='king_fisher_entry'>
+                            <Field name='DIRECTION'>BELOW</Field>
+                            <Field name='THRESHOLD'>3</Field>
+                            <Field name='STREAK'>2_3</Field>
+                        </Block>
+                    </Value>
+                </Block>
             </Category>
 
             <Category id='analysis' name={localize('Analysis')}>

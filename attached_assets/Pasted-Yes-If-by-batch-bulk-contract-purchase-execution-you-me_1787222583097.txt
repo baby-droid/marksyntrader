@@ -1,0 +1,646 @@
+Yes. If by **“batch/bulk contract purchase execution”** you mean your third-party Deriv site should let a user press **BUY 5 / BUY 10 / BUY 20** and have the contracts executed as close together as possible, you can build this.
+
+The important distinction is:
+
+1. **Multiple contracts on one Deriv account** → use your authenticated WebSocket connection and execute multiple `buy` requests.
+2. **The same contract across multiple users/accounts** → Deriv now has an official **Bulk Purchase REST endpoint**, supporting up to 100 accounts per request. ([Deriv API][1])
+3. **Repeated automated purchases according to a strategy** → Deriv also exposes `auto_start` for predefined automated runs. ([Deriv API][2])
+
+## 1. Architecture I recommend for your site
+
+For your type of trading site, I'd build this:
+
+```text
+                    YOUR THIRD-PARTY SITE
+                            │
+                    ┌───────▼────────┐
+                    │ Trading Engine │
+                    └───────┬────────┘
+                            │
+                 ┌──────────▼──────────┐
+                 │ Batch Order Manager │
+                 └──────────┬──────────┘
+                            │
+              ┌─────────────┼─────────────┐
+              │             │             │
+           Order 1       Order 2       Order 3
+              │             │             │
+              └─────────────┼─────────────┘
+                            │
+                    Deriv WebSocket
+                            │
+                 ┌──────────▼──────────┐
+                 │   Deriv Trading API │
+                 └──────────┬──────────┘
+                            │
+                     Contract Results
+                            │
+                 ┌──────────▼──────────┐
+                 │ Transaction Manager │
+                 └──────────┬──────────┘
+                            │
+                 UI / Journal / History
+```
+
+The key component is the **Batch Order Manager**.
+
+---
+
+# 2. The execution flow
+
+Suppose the user selects:
+
+```text
+Market: Volatility 100 (1s)
+Contract: Over 2
+Duration: 2 ticks
+Stake: $1
+Number of contracts: 10
+
+[ BUY 10 CONTRACTS ]
+```
+
+Your system should NOT simply blindly send ten requests.
+
+Instead:
+
+```text
+USER
+ ↓
+Validate order
+ ↓
+Check balance
+ ↓
+Create/obtain proposal
+ ↓
+Create execution batch
+ ↓
+Send BUY requests
+ ↓
+Receive contract IDs
+ ↓
+Subscribe to contract status
+ ↓
+Update UI
+ ↓
+Record every transaction
+```
+
+Deriv's current API workflow is essentially **authenticate → market/tick data → proposal → buy → monitor open contract**. ([Deriv API][3])
+
+---
+
+# 3. For one account: parallel batch buying
+
+This is probably what you want.
+
+For example:
+
+```javascript
+const batch = [
+    {
+        id: "ORDER-001",
+        contract: "OVER",
+        barrier: "2",
+        stake: 1
+    },
+    {
+        id: "ORDER-002",
+        contract: "OVER",
+        barrier: "2",
+        stake: 1
+    },
+    {
+        id: "ORDER-003",
+        contract: "OVER",
+        barrier: "2",
+        stake: 1
+    }
+];
+```
+
+Your execution engine can process them through the same authenticated WebSocket.
+
+Conceptually:
+
+```javascript
+for (const order of batch) {
+
+    ws.send(JSON.stringify({
+        buy: order.proposalId,
+        price: order.maxPrice,
+        req_id: order.requestId
+    }));
+
+}
+```
+
+Deriv's `buy` endpoint accepts a proposal ID and maximum purchase price. ([Deriv API][4])
+
+The response gives you the important identifiers:
+
+```text
+contract_id
+transaction_id
+buy_price
+payout
+purchase_time
+```
+
+Those should immediately be stored against your internal order ID.
+
+---
+
+# 4. Don't use one proposal ID blindly
+
+This is an important part of the design.
+
+Your engine should understand:
+
+```text
+PROPOSAL
+    ↓
+ASK PRICE
+    ↓
+BUY
+    ↓
+CONTRACT ID
+```
+
+A proposal is the price for a particular contract configuration. Deriv's proposal API accepts parameters such as:
+
+* underlying symbol
+* contract type
+* amount
+* duration
+* duration unit
+* barrier
+* currency
+
+and returns a proposal ID and pricing information. ([Deriv API][5])
+
+So your engine could have:
+
+```javascript
+async function createProposal(contract) {
+    return sendProposal({
+        proposal: 1,
+        amount: contract.stake,
+        basis: "stake",
+        contract_type: contract.type,
+        currency: "USD",
+        duration: contract.duration,
+        duration_unit: "t",
+        barrier: contract.barrier,
+        underlying_symbol: contract.symbol
+    });
+}
+```
+
+Then:
+
+```javascript
+const proposal = await createProposal(order);
+
+await buyContract({
+    proposalId: proposal.id,
+    price: proposal.ask_price
+});
+```
+
+---
+
+# 5. Use a Batch ID
+
+This is something I strongly recommend for your site.
+
+Every bulk execution should receive a unique ID:
+
+```text
+BATCH-20260815-00001
+```
+
+Then:
+
+```text
+BATCH-20260815-00001
+
+├── ORDER-001
+│    └── Contract 123456
+│
+├── ORDER-002
+│    └── Contract 123457
+│
+├── ORDER-003
+│    └── Contract 123458
+│
+├── ORDER-004
+│    └── Contract 123459
+│
+└── ORDER-005
+     └── Contract 123460
+```
+
+This makes your **Transactions**, **Summary**, and **Journal** systems much easier to build.
+
+---
+
+# 6. Your UI could look like this
+
+```text
+┌─────────────────────────────────────────────┐
+│              BATCH CONTRACT BUY             │
+├─────────────────────────────────────────────┤
+│ Market       Volatility 100 (1s)             │
+│ Contract     OVER 2                          │
+│ Duration     2 Ticks                         │
+│ Stake        $1.00                           │
+│ Contracts    [ 10 ]                          │
+│                                             │
+│ [ BUY 10 CONTRACTS ]                        │
+└─────────────────────────────────────────────┘
+
+
+EXECUTION
+───────────────────────────────────────────────
+
+Batch: BATCH-000124
+
+Contract        Status        Stake
+───────────────────────────────────────────────
+#1              ✓ BOUGHT      $1.00
+#2              ✓ BOUGHT      $1.00
+#3              ✓ BOUGHT      $1.00
+#4              ✓ BOUGHT      $1.00
+#5              ✓ BOUGHT      $1.00
+#6              ⟳ BUYING      $1.00
+#7              WAITING       $1.00
+#8              WAITING       $1.00
+#9              WAITING       $1.00
+#10             WAITING       $1.00
+
+Executed: 5 / 10
+```
+
+Then when the contracts settle:
+
+```text
+BATCH RESULT
+
+Contracts:       10
+Wins:             7
+Losses:           3
+
+Total Stake:     $10.00
+Total Payout:    $17.50
+Profit:           $7.50
+```
+
+---
+
+# 7. Real-time contract monitoring
+
+After each `buy` response gives you a `contract_id`, immediately subscribe to its status.
+
+For example:
+
+```javascript
+ws.send(JSON.stringify({
+    proposal_open_contract: 1,
+    contract_id: contractId,
+    subscribe: 1,
+    req_id: requestId
+}));
+```
+
+Deriv's `proposal_open_contract` endpoint provides the current status of an open contract and supports subscriptions for real-time updates. ([Deriv API][6])
+
+That lets your site display:
+
+```text
+BUY
+ ↓
+CONTRACT ID
+ ↓
+OPEN
+ ↓
+TICK 1
+ ↓
+TICK 2
+ ↓
+WON / LOST
+```
+
+This is particularly useful for the **digit / Over / Under / Even / Odd** interfaces you've been building.
+
+---
+
+# 8. For true simultaneous execution
+
+If your objective is:
+
+> "When my signal occurs, execute 10 contracts as close to the same moment as technically possible."
+
+Don't do:
+
+```javascript
+await buy1();
+await buy2();
+await buy3();
+await buy4();
+```
+
+because that's sequential:
+
+```text
+BUY 1
+   ↓
+response
+   ↓
+BUY 2
+   ↓
+response
+   ↓
+BUY 3
+```
+
+Instead, your execution layer should prepare the orders first and dispatch them concurrently:
+
+```javascript
+const requests = orders.map(order =>
+    executeBuy(order)
+);
+
+const results = await Promise.allSettled(requests);
+```
+
+Conceptually:
+
+```text
+                    SIGNAL
+                      │
+          ┌───────────┼───────────┐
+          ↓           ↓           ↓
+       BUY #1      BUY #2      BUY #3
+          ↓           ↓           ↓
+       Deriv       Deriv       Deriv
+          │           │           │
+          └───────────┼───────────┘
+                      ↓
+                RESULT MANAGER
+```
+
+**Important:** concurrent requests do not guarantee mathematically identical execution timestamps or prices. The network, Deriv's execution infrastructure, proposal pricing, and market movement can introduce small differences.
+
+---
+
+# 9. If you mean MULTIPLE USER ACCOUNTS
+
+This is different.
+
+Deriv currently provides:
+
+```text
+POST
+/trading/v1/options/contracts/bulk-purchase/{account_type}
+```
+
+with:
+
+```text
+real
+```
+
+or:
+
+```text
+demo
+```
+
+and the endpoint supports **up to 100 accounts per request**. Each account is supplied with its own Personal Access Token, and the same contract parameters are applied to every account. ([Deriv API][1])
+
+Architecture:
+
+```text
+                 YOUR SIGNAL
+                      │
+                      ▼
+             BULK PURCHASE ENGINE
+                      │
+        ┌─────────────┼─────────────┐
+        ↓             ↓             ↓
+    Account A     Account B     Account C
+        │             │             │
+        ↓             ↓             ↓
+      Deriv         Deriv         Deriv
+```
+
+This is intended for things such as **copy-trading platforms**, where the same options contract is purchased for multiple end-user accounts. ([Deriv API][1])
+
+---
+
+# 10. Very important security architecture
+
+Do **not** put users' Deriv tokens directly into browser JavaScript.
+
+Bad:
+
+```text
+Browser
+   ↓
+Deriv token
+   ↓
+Deriv API
+```
+
+Better:
+
+```text
+Browser
+   ↓
+Your Backend
+   ↓
+Encrypted Credential Store
+   ↓
+Deriv API
+```
+
+For OAuth-based applications, Deriv recommends delegated authorization; PATs are another option depending on your application model. ([Deriv API][3])
+
+Your frontend should only send something like:
+
+```json
+{
+  "batchSize": 10,
+  "symbol": "1HZ100V",
+  "contract": "OVER",
+  "barrier": "2",
+  "duration": 2,
+  "durationUnit": "t",
+  "stake": 1
+}
+```
+
+Your server handles the authentication.
+
+---
+
+# 11. I would build your execution engine as 6 modules
+
+For your existing trading-bot project, I'd structure it like this:
+
+```text
+/src
+   /deriv
+      websocket.js
+      authentication.js
+      proposal.js
+      buy.js
+      contracts.js
+
+   /execution
+      batchManager.js
+      orderQueue.js
+      executionEngine.js
+      retryManager.js
+      riskManager.js
+
+   /strategy
+      signalEngine.js
+      digitEngine.js
+      contractSelector.js
+
+   /account
+      balance.js
+      portfolio.js
+      transactions.js
+
+   /journal
+      tradeLogger.js
+      batchLogger.js
+      statistics.js
+
+   /ui
+      BatchPurchase.jsx
+      ExecutionMonitor.jsx
+      TransactionTable.jsx
+      Journal.jsx
+```
+
+### Execution pipeline
+
+```text
+TICK
+ │
+ ▼
+SIGNAL ENGINE
+ │
+ ▼
+RISK CHECK
+ │
+ ├── FAIL → STOP
+ │
+ ▼
+CREATE BATCH
+ │
+ ▼
+PROPOSALS
+ │
+ ▼
+PRICE VALIDATION
+ │
+ ▼
+PARALLEL BUY
+ │
+ ▼
+CONTRACT IDs
+ │
+ ▼
+OPEN CONTRACT SUBSCRIPTIONS
+ │
+ ▼
+SETTLEMENT
+ │
+ ▼
+TRANSACTION DATABASE
+ │
+ ▼
+JOURNAL + STATISTICS
+```
+
+---
+
+## 12. For your Deriv digit bot specifically
+
+If you're trying to achieve something like:
+
+```text
+Signal:
+Last digit = 7
+
+Strategy:
+OVER 2
+Duration:
+2 ticks
+
+Stake:
+$1
+
+Batch:
+5 contracts
+```
+
+I'd make the engine execute:
+
+```text
+T0
+│
+├── Signal detected
+│
+├── Validate balance
+│
+├── Generate/refresh proposal
+│
+├── Create Batch #A
+│
+├── BUY #1
+├── BUY #2
+├── BUY #3
+├── BUY #4
+└── BUY #5
+│
+▼
+Monitor 5 contract IDs
+│
+├── Contract #1 → WIN
+├── Contract #2 → WIN
+├── Contract #3 → LOSS
+├── Contract #4 → WIN
+└── Contract #5 → WIN
+│
+▼
+Batch completed
+```
+
+That gives you a much more robust implementation than trying to make the frontend itself perform repeated clicks.
+
+### One more option
+
+If what you actually want is **“automatically purchase contracts repeatedly according to my strategy”**, rather than a fixed simultaneous batch, Deriv's current `auto_start` capability may be relevant because it accepts a contract template and strategy parameters and can stream updates for the run. ([Deriv API][2])
+
+So for your site, I would use:
+
+**Fixed batch:** WebSocket `proposal` → concurrent `buy` → `proposal_open_contract`
+
+**Multi-account copy trading:** Deriv Bulk Purchase REST endpoint
+
+**Repeated strategy execution:** `auto_start` where its supported strategy model fits your use case.
+
+If you want, I can next give you the **complete backend + frontend architecture and actual JavaScript/TypeScript code for a “BUY 10 CONTRACTS” Deriv batch engine**, including the queue, WebSocket connection, proposal handling, concurrent execution, contract monitoring, transaction database, and UI.
+
+[1]: https://developers.deriv.com/docs/trading/bulk-purchase/?utm_source=chatgpt.com "Bulk Purchase — Trading Operations | Deriv API"
+[2]: https://developers.deriv.com/docs/trading/auto-start/?utm_source=chatgpt.com "Auto Start — WebSocket API | Deriv API"
+[3]: https://developers.deriv.com/docs/workflows/?utm_source=chatgpt.com "Complete Workflows | Deriv API"
+[4]: https://developers.deriv.com/docs/trading/buy/?utm_source=chatgpt.com "Buy Contract — WebSocket API | Deriv API"
+[5]: https://developers.deriv.com/docs/trading/proposal/?utm_source=chatgpt.com "Price Proposal — WebSocket API | Deriv API"
+[6]: https://developers.deriv.com/docs/trading/proposal-open-contract/?utm_source=chatgpt.com "Open Contract Status — WebSocket API | Deriv API"

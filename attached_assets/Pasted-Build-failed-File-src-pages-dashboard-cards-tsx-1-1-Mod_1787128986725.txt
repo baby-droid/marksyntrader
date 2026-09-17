@@ -1,0 +1,50 @@
+Build failed
+
+File: ./src/pages/dashboard/cards.tsx:1:1
+  × Module build failed (from builtin:swc-loader):
+  ├─▶   ×   × Merge conflict marker encountered.
+  │     │     ╭─[./src/pages/dashboard/cards.tsx:67:1]
+  │     │  64 │             ) : (
+  │     │  65 │                 <DerivLightMyComputerIcon height='48px' width='48px' />
+  │     │  66 │             ),
+  │     │  67 │ <<<<<<< HEAD
+  │     │     · ───────
+  │     │  68 │             content: <Localize i18n_default_text='Import a Bot' />,
+  │     │  69 │ =======
+  │     │  70 │             content: <Localize i18n_default_text='Import Bot' />,
+  │     │     ╰────
+  │     │   × Merge conflict marker encountered.
+  │     │     ╭─[./src/pages/dashboard/cards.tsx:69:1]
+  │     │  66 │             ),
+  │     │  67 │ <<<<<<< HEAD
+  │     │  68 │             content: <Localize i18n_default_text='Import a Bot' />,
+  │     │  69 │ =======
+  │     │     · ───────
+  │     │  70 │             content: <Localize i18n_default_text='Import Bot' />,
+  │     │  71 │ >>>>>>> 3520f5d2a8438ba8bc6e9fff6f98d5972750df83
+  │     │  72 │             callback: () => {
+  │     │     ╰────
+  │     │   × Merge conflict marker encountered.
+  │     │     ╭─[./src/pages/dashboard/cards.tsx:71:1]
+  │     │  68 │             content: <Localize i18n_default_text='Import a Bot' />,
+  │     │  69 │ =======
+  │     │  70 │             content: <Localize i18n_default_text='Import Bot' />,
+  │     │  71 │ >>>>>>> 3520f5d2a8438ba8bc6e9fff6f98d5972750df83
+  │     │     · ───────
+  │     │  72 │             callback: () => {
+  │     │  73 │                 openFileLoader();
+  │     │  74 │                 /* [AI] - Analytics event tracking removed - see migrate-docs/MONITORING_PACKAGES.md for re-implementation guide */
+  │     │     ╰────
+  │     │
+  │   
+  ╰─▶   × Syntax Error
+      
+Import traces (entry → error):
+  ./src/main.tsx
+  ./src/app/AuthWrapper.tsx
+  … (6 hidden)
+  ./src/pages/dashboard/dashboard.tsx
+  ./src/pages/dashboard/cards.tsx ×
+Fix error, click outside, or press Esc to close the overlay.
+
+Disable overlay by setting Rsbuild's dev.client.overlay config to false.

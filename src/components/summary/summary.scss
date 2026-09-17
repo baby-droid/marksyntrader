@@ -70,3 +70,78 @@
         }
     }
 }
+
+.batch-summary-card {
+    width: min(100% - 32px, 460px);
+    margin: 16px auto;
+    padding: 16px;
+    border: 1px solid var(--general-section-1);
+    border-radius: 12px;
+    background: var(--general-main-1);
+    box-shadow: 0 8px 24px rgb(0 0 0 / 8%);
+
+    &__eyebrow {
+        color: var(--text-less-prominent);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+    }
+
+    &__heading {
+        align-items: center;
+        display: flex;
+        gap: 8px;
+        justify-content: space-between;
+        margin: 5px 0 14px;
+
+        h3 {
+            color: var(--text-general);
+            font-size: 16px;
+            margin: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+    }
+
+    &__status {
+        background: rgb(76 125 255 / 12%);
+        border-radius: 999px;
+        color: #4c7dff;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 4px 8px;
+        white-space: nowrap;
+    }
+
+    &__grid {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(3, 1fr);
+
+        div {
+            background: var(--general-section-1);
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            padding: 9px;
+        }
+
+        span {
+            color: var(--text-less-prominent);
+            font-size: 10px;
+            text-transform: uppercase;
+        }
+
+        strong {
+            color: var(--text-general);
+            font-size: 14px;
+        }
+    }
+
+    &__positive { color: var(--text-profit-success) !important; }
+    &__negative { color: var(--text-loss-danger) !important; }
+    &__meta { color: var(--text-less-prominent); font-size: 12px; margin-top: 12px; }
+}

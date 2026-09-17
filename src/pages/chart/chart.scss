@@ -121,6 +121,47 @@
     }
 }
 
+/* ── Compact SmartChart market title card (matches reference screenshot) ── */
+.cq-chart-title {
+    /* Keep the market selector card compact */
+    .cq-symbol-select-btn {
+        max-width: 240px !important;
+        font-size: 12px !important;
+    }
+    .cq-symbol {
+        font-size: 12px !important;
+        font-weight: 700 !important;
+        max-width: 180px !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        white-space: nowrap !important;
+    }
+    /* Compact the market-change display */
+    .cq-change-value,
+    .cq-change-pct {
+        font-size: 10px !important;
+    }
+    /* The floating dropdown list — cap height and width for compact appearance */
+    .cq-menu-dropdown {
+        max-width: 320px !important;
+        max-height: 420px !important;
+        overflow-y: auto !important;
+        font-size: 13px !important;
+    }
+}
+
+/* Market selector wrapper at top-left of chart */
+.cq-top-ui-widgets .cq-symbols-display {
+    max-width: 260px;
+    overflow: hidden;
+
+    .cq-symbol-select-btn {
+        padding: 4px 8px !important;
+        height: auto !important;
+        min-height: 36px !important;
+    }
+}
+
 // Safari-specific fixes
 .dashboard__chart-wrapper--safari {
     .smartcharts-mobile {
@@ -143,4 +184,225 @@
 .cq-modal-dropdown.stxMenuActive {
     left: 0;
     top: 0;
+}
+
+/* Keep the SmartChart action buttons visible beside the graph. The embedded
+ * chart owns its zoom navigation and the custom rail only proxies the native
+ * menus, so all chart actions remain inside SmartChart.
+ *
+ * This is the compact left-side rail shown in the Smart Chart reference:
+ * chart type, views, drawing tools, indicators, and download/share. The
+ * controls remain SmartChart's native components so their menus and drawing
+ * state continue to be managed by the chart itself. */
+.dashboard__chart-wrapper {
+    /* SmartChart creates an internal absolute canvas layer. Establish a
+       visible host stacking context so the controls can sit above it. */
+    isolation: isolate;
+    overflow: visible !important;
+    position: relative !important;
+
+    .smartcharts,
+    .smartcharts-desktop,
+    .smartcharts-mobile,
+    .ciq-chart-area,
+    .ciq-chart {
+        overflow: visible !important;
+    }
+
+    /* The visible controls are rendered by ChartSettingsSidebar. Keep the
+       SmartChart-native controls mounted (the sidebar proxies clicks to them)
+       but visually out of the way so two tool rails are never shown. */
+    .sc-toolbar-widget {
+        align-items: center;
+        background: transparent !important;
+        border: 0 !important;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        left: -10000px !important;
+        overflow: visible;
+        padding: 0 !important;
+        pointer-events: none;
+        position: absolute !important;
+        right: auto !important;
+        top: 50% !important;
+        transform: translateY(-50%);
+        bottom: auto !important;
+        width: 40px !important;
+        display: none !important;
+        opacity: 0 !important;
+        visibility: hidden !important;
+        z-index: 100000 !important;
+    }
+
+    /* Reset SmartChart's native controls so they stay compact instead of
+       inheriting a full-width black toolbar row from the chart layout. */
+    .sc-toolbar-widget > *,
+    .sc-toolbar-widget .ciq-menu,
+    .sc-toolbar-widget .ciq-menu .cq-menu-btn,
+    .sc-toolbar-widget .ciq-menu .cq-menu-btn > * {
+        box-sizing: border-box !important;
+        flex: 0 0 40px !important;
+        height: 40px !important;
+        max-height: 40px !important;
+        min-height: 40px !important;
+        width: 40px !important;
+        max-width: 40px !important;
+        min-width: 40px !important;
+    }
+
+    .sc-toolbar-widget > * {
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    .sc-toolbar-widget .ciq-menu {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    .sc-toolbar-widget .ciq-menu .cq-menu-btn {
+        align-items: center;
+        background: rgba(242, 243, 244, 0.96) !important;
+        border: 0 !important;
+        border-radius: 50%;
+        display: flex;
+        justify-content: center;
+        padding: 0;
+        box-shadow: 0 1px 4px rgba(29, 39, 49, 0.08);
+    }
+
+    .sc-toolbar-widget .ciq-menu .cq-menu-btn:hover,
+    .sc-toolbar-widget .ciq-menu .cq-menu-btn:focus-visible {
+        background: #e2e5e7 !important;
+        outline: 2px solid rgba(30, 136, 255, 0.45);
+        outline-offset: 2px;
+    }
+
+    /* Keep the native toolbar menus above the chart canvas and trade overlay. */
+    .sc-toolbar-widget .cq-menu-dropdown,
+    .sc-toolbar-widget .cq-modal-dropdown {
+        z-index: 9999 !important;
+    }
+
+    /* Native minus / crosshair / plus navigation from the reference.
+       Keep them horizontal and docked along the lower-left graph edge. The
+       library still owns the click behavior: minus reduces visible history,
+       crosshair toggles the cursor, and plus increases visible history. */
+    .sc-navigation-widget {
+        bottom: 18px !important;
+        left: 50% !important;
+        right: auto !important;
+        transform: translateX(-50%) !important;
+        z-index: 100001 !important;
+    }
+
+    .sc-navigation-widget__buttons {
+        gap: 8px !important;
+    }
+
+    .sc-navigation-widget__item {
+        width: 40px !important;
+        height: 40px !important;
+        background: rgba(242, 243, 244, 0.96) !important;
+        box-shadow: 0 1px 4px rgba(29, 39, 49, 0.08) !important;
+    }
+
+    .sc-navigation-widget__item:hover,
+    .sc-navigation-widget__item:focus-visible {
+        background: #e2e5e7 !important;
+        box-shadow:
+            0 0 0 2px rgba(157, 188, 241, 0.6),
+            0 1px 4px rgba(29, 39, 49, 0.08) !important;
+    }
+
+    .sc-navigation-widget__item .ic-icon,
+    .sc-navigation-widget__item .ic-icon svg {
+        width: 24px !important;
+        height: 24px !important;
+    }
+}
+
+/* Keep the official SmartChart controls mounted for proxy clicks, but never
+   let the library's own toolbar create a second wide row of buttons. */
+.dashboard__chart-wrapper .smartchart-native-toolbar-proxy {
+    display: none !important;
+    position: absolute !important;
+    width: 0 !important;
+    height: 0 !important;
+    overflow: hidden !important;
+    pointer-events: none !important;
+}
+
+/* SmartChart's current ChartMode/Indicators/DrawTools/Share components render
+   their real content in a per-chart Quill portal. Keep each native surface as
+   a small popover beside the lower-left control rail, never a full-height
+   drawer over the chart. */
+.smartcharts-quill-portal.smartcharts-desktop {
+    position: fixed !important;
+    z-index: 100010 !important;
+    pointer-events: none;
+
+    .quill-modal__background {
+        position: fixed !important;
+        inset: 0 !important;
+        display: block !important;
+        background: transparent !important;
+        pointer-events: none;
+    }
+
+    .quill-modal__container.sc-quill-dialog {
+        position: absolute !important;
+        top: 50% !important;
+        left: 76px !important;
+        box-sizing: border-box !important;
+        width: min(360px, calc(100vw - 92px)) !important;
+        min-width: 0 !important;
+        height: auto !important;
+        max-height: min(560px, calc(100vh - 112px)) !important;
+        margin: 0 !important;
+        border-radius: 10px !important;
+        box-shadow: 0 8px 24px rgba(22, 28, 36, 0.18) !important;
+        overflow: hidden auto !important;
+        pointer-events: auto;
+        transform: translateY(-50%) !important;
+    }
+
+    .quill-modal__container.sc-quill-dialog .quill-modal__content-wrapper {
+        min-height: 0;
+    }
+
+    .quill-modal__container.sc-quill-dialog .quill-modal__close-icon {
+        z-index: 2;
+    }
+}
+
+@media screen and (max-width: 767px) {
+    .dashboard__chart-wrapper .sc-toolbar-widget {
+        left: -10000px !important;
+        right: auto !important;
+        top: 72px !important;
+        transform: none;
+    }
+
+    .dashboard__chart-wrapper .sc-navigation-widget {
+        left: 50% !important;
+        bottom: 12px !important;
+        transform: translateX(-50%) !important;
+    }
+
+    .smartcharts-quill-portal.smartcharts-desktop .quill-modal__container.sc-quill-dialog {
+        top: 50% !important;
+        left: 70px !important;
+        width: calc(100vw - 82px) !important;
+        max-height: calc(100vh - 96px) !important;
+    }
+
+    .smartcharts-quill-portal.smartcharts-mobile {
+        z-index: 100010 !important;
+    }
 }

@@ -7,6 +7,11 @@ import { useDerivTrade } from '@/hooks/useDerivTrade';
 import { useDerivTrading } from '@/hooks/useDerivTrading';
 import { buildKillerXml, KillerContract } from '@/utils/killer-bot';
 import { getExecutionSpeed } from '@/utils/execution-speed';
+import { observer as globalObserver } from '@/external/bot-skeleton';
+import { api_base } from '@/external/bot-skeleton';
+import { CONNECTION_STATUS } from '@/external/bot-skeleton/services/api/observables/connection-status-stream';
+import { useApiBase } from '@/hooks/useApiBase';
+import { isEnded } from '@/components/shared';
 import './ai-assistant.scss';
 
 /**
@@ -553,6 +558,7 @@ const DEFAULT_SIGNAL: Signal = {
 
 const AIAssistant: React.FC = () => {
     const { dashboard, load_modal, run_panel } = useStore() as any;
+    const { connectionStatus } = useApiBase();
     const { currency: accountCurrency } = useDerivTrading();
     // useDerivTrade rides the app's existing authenticated connection — same login, no separate token
     const derivTrade = useDerivTrade();
@@ -602,7 +608,16 @@ const AIAssistant: React.FC = () => {
     // T007: antenna on/off toggle + live last-digit readout for the currently tracked market
     const [antennaOn, setAntennaOn] = useState(true);
     const [liveDigit, setLiveDigit] = useState<number | null>(null);
-    const antennaWsRef = useRef<WebSocket | null>(null);
+    const antennaSubscriptionRef = useRef<any>(null);
+    const antennaSubscriptionIdRef = useRef<string | null>(null);
+
+    // Dark/light theme toggle — persisted to localStorage, defaults to dark
+    const [aiThemeDark, setAiThemeDark] = useState<boolean>(() => {
+        try { const v = localStorage.getItem('ai_assistant_theme'); return v === null ? true : v === 'dark'; } catch { return true; }
+    });
+    useEffect(() => {
+        try { localStorage.setItem('ai_assistant_theme', aiThemeDark ? 'dark' : 'light'); } catch {}
+    }, [aiThemeDark]);
 
     const wsRefs    = useRef<WebSocket[]>([]);
     const freqRef   = useRef<Map<string, DigitFreq>>(new Map());
@@ -627,24 +642,53 @@ const AIAssistant: React.FC = () => {
 
     // Antenna: live last-digit stream for whichever symbol the AI is currently tracking (best signal, or first scan target)
     useEffect(() => {
-        if (antennaWsRef.current) { try { antennaWsRef.current.close(); } catch { } antennaWsRef.current = null; }
+        antennaSubscriptionRef.current?.unsubscribe?.();
+        antennaSubscriptionRef.current = null;
+        if (antennaSubscriptionIdRef.current && api_base.api) {
+            (api_base.api as any).send({ forget: antennaSubscriptionIdRef.current }).catch(() => {});
+            antennaSubscriptionIdRef.current = null;
+        }
         setLiveDigit(null);
         if (!antennaOn) return;
         const symbol = best?.symbol ?? SCAN_SYMBOLS[0]?.symbol;
         if (!symbol) return;
-        const ws = new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
-        antennaWsRef.current = ws;
-        ws.onopen = () => ws.send(JSON.stringify({ ticks: symbol, subscribe: 1 }));
-        ws.onmessage = e => {
-            const d = JSON.parse(e.data);
-            const quote = d.tick?.quote;
-            if (typeof quote === 'number') {
-                const s = quote.toFixed(quote < 10 ? 4 : 2).replace('.', '');
-                setLiveDigit(parseInt(s[s.length - 1], 10));
+        let cancelled = false;
+        let retryTimer: ReturnType<typeof setTimeout> | null = null;
+        const start = () => {
+            if (cancelled) return;
+            const api = api_base.api as any;
+            if (!api || connectionStatus !== CONNECTION_STATUS.OPENED) {
+                retryTimer = setTimeout(start, 350);
+                return;
+            }
+            try {
+                const stream = api.subscribe({ ticks: symbol, subscribe: 1 });
+                antennaSubscriptionRef.current = stream?.subscribe?.((message: any) => {
+                    const d = message?.data ?? message;
+                    if (d?.subscription?.id) antennaSubscriptionIdRef.current = String(d.subscription.id);
+                    const quote = d?.tick?.quote;
+                    if (!cancelled && typeof quote === 'number') {
+                        const pipSize = Number(d.tick.pip_size ?? (quote < 10 ? 4 : 2));
+                        const s = quote.toFixed(pipSize);
+                        setLiveDigit(parseInt(s[s.length - 1], 10));
+                    }
+                });
+            } catch {
+                retryTimer = setTimeout(start, 700);
             }
         };
-        return () => { try { ws.close(); } catch { } };
-    }, [antennaOn, best?.symbol]);
+        start();
+        return () => {
+            cancelled = true;
+            if (retryTimer) clearTimeout(retryTimer);
+            antennaSubscriptionRef.current?.unsubscribe?.();
+            antennaSubscriptionRef.current = null;
+            if (antennaSubscriptionIdRef.current && api_base.api) {
+                (api_base.api as any).send({ forget: antennaSubscriptionIdRef.current }).catch(() => {});
+                antennaSubscriptionIdRef.current = null;
+            }
+        };
+    }, [antennaOn, best?.symbol, connectionStatus]);
 
     // AI always operates in USD — no display-currency conversion here.
     const fmtProfit = (usd: number) => `${usd >= 0 ? '+' : ''}${usd.toFixed(2)} USD`;
@@ -709,7 +753,7 @@ const AIAssistant: React.FC = () => {
         wsRefs.current = [];
         setScanning(false);
         setScanProgress('');
-        scanDoneRef.current = false;
+        scanDoneRef.current = true;
     }, []);
 
     const recompute = useCallback(() => {
@@ -726,6 +770,11 @@ const AIAssistant: React.FC = () => {
 
     const startScan = useCallback(() => {
         stopScan();
+        const api = api_base.api as any;
+        if (!api || connectionStatus !== CONNECTION_STATUS.OPENED) {
+            setScanProgress('Waiting for the Deriv account connection…');
+            return;
+        }
         freqRef.current.clear();
         setBest(null); setAllSignals([]); setScannedCount(0);
         setScanning(true); scanDoneRef.current = false;
@@ -737,45 +786,58 @@ const AIAssistant: React.FC = () => {
             if (idx >= SCAN_SYMBOLS.length || scanDoneRef.current) { setScanning(false); setScanProgress(`Scan complete — ${SCAN_SYMBOLS.length} markets`); return; }
             const { symbol, label } = SCAN_SYMBOLS[idx];
             setScanProgress(`Scanning ${label}... (${idx + 1}/${SCAN_SYMBOLS.length})`);
-            const ws = new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
-            wsRefs.current.push(ws);
             let received = false;
-            ws.onopen = () => ws.send(JSON.stringify({ ticks_history: symbol, count: 500, end: 'latest', style: 'ticks' }));
-            ws.onmessage = e => {
-                if (received) return;
-                const d = JSON.parse(e.data);
-                const freq = freqRef.current.get(symbol);
-                if (!freq) return;
-                if (d.history?.prices) {
-                    received = true;
-                    const prices = d.history.prices as number[];
-                    freq.prices = prices.slice(-500);
-                    freq.ticks = prices.map((p: number) => { const s = p.toFixed(2).replace('.', ''); return parseInt(s[s.length - 1], 10); });
-                    freq.total = freq.ticks.length;
-                    const counts = new Array(10).fill(0);
-                    freq.ticks.forEach(t => counts[t]++);
-                    freq.pcts = counts.map(c => freq.total > 0 ? (c / freq.total) * 100 : 10);
-                    recompute();
-                    try { ws.close(); } catch { }
-                    idx++; setTimeout(scanNext, 80);
+            const scanMarket = async () => {
+                try {
+                    const d = await api.send({ ticks_history: symbol, count: 500, end: 'latest', style: 'ticks' });
+                    if (received || scanDoneRef.current) return;
+                    const freq = freqRef.current.get(symbol);
+                    if (!freq) return;
+                    if (d?.history?.prices) {
+                        received = true;
+                        const prices = d.history.prices as number[];
+                        freq.prices = prices.slice(-500);
+                        const pipSize = Number(api_base.pip_sizes?.[symbol] ?? 2);
+                        freq.ticks = prices.map((p: number) => {
+                            const s = p.toFixed(pipSize);
+                            return parseInt(s[s.length - 1], 10);
+                        });
+                        freq.total = freq.ticks.length;
+                        const counts = new Array(10).fill(0);
+                        freq.ticks.forEach(t => counts[t]++);
+                        freq.pcts = counts.map(c => freq.total > 0 ? (c / freq.total) * 100 : 10);
+                        recompute();
+                        idx++;
+                        setTimeout(scanNext, 80);
+                    } else {
+                        received = true;
+                        idx++;
+                        setTimeout(scanNext, 80);
+                    }
+                } catch {
+                    if (!received) {
+                        received = true;
+                        idx++;
+                        setTimeout(scanNext, 80);
+                    }
                 }
-                if (d.error) { received = true; try { ws.close(); } catch { } idx++; setTimeout(scanNext, 80); }
             };
-            ws.onerror = () => { if (!received) { received = true; idx++; setTimeout(scanNext, 80); } };
-            setTimeout(() => { if (!received) { received = true; try { ws.close(); } catch { } idx++; scanNext(); } }, 5000);
+            scanMarket();
         };
         scanNext();
-    }, [recompute, stopScan]);
+    }, [connectionStatus, recompute, stopScan]);
 
     useEffect(() => { if (!scanning) recompute(); }, [contractType, predictionDigit]);
     useEffect(() => () => { stopScan(); scanDoneRef.current = true; runRef.current = false; }, [stopScan]);
 
-    /* ─────────── Direct-fire bot loop ─────────── */
+    /* ─────────── Bot control ─────────── */
     const stopBot = useCallback(() => {
         runRef.current = false;
         setBotRunning(false);
+        /* Kill the Blockly bot engine immediately — same signal as the dashboard Stop button */
+        try { run_panel?.onStopButtonClick?.(); } catch {}
         addLog('⏹ Bot stopped by user.');
-    }, [addLog]);
+    }, [addLog, run_panel]);
 
     // Keep a stable ref so auto-restart can call loadAndRun without stale closure
     const loadAndRunRef = useRef<(sig?: Signal) => void>(() => {});
@@ -803,34 +865,9 @@ const AIAssistant: React.FC = () => {
         // Use best scanned signal, or instant-fire with the default if none available
         const signal = sig ?? best ?? DEFAULT_SIGNAL;
         if (botRunning) { stopBot(); return; }
-        maxRunsRef.current = maxWins != null ? maxWins * 10 : null; // safety cap on trade count
         maxWinsRef.current = maxWins ?? null;
 
-        // ─── Guard: refuse to fire without a live, authenticated trading connection ───
-        // useDerivTrade now rides the SAME connection the user is already logged in
-        // with (no separate token/login) — this just waits out the brief moment
-        // right after app load where that connection is still authorizing.
-        if (!derivTradeRef.current.authorized) {
-            setIsOpen(true);
-            addLog('⏳ Waiting for your account connection to be ready...');
-            const ready = await new Promise<boolean>(resolve => {
-                const start = Date.now();
-                const poll = () => {
-                    if (derivTradeRef.current.authorized) return resolve(true);
-                    if (Date.now() - start > 8000) return resolve(false);
-                    setTimeout(poll, 250);
-                };
-                poll();
-            });
-            if (!ready) {
-                addLog('🛑 Not connected to your Deriv account yet. Please make sure you are logged in.');
-                return;
-            }
-            addLog('✅ Connected — ready to trade.');
-        }
-
         const barrier = signal.autoDigit !== undefined ? signal.autoDigit : (signal.barrier ?? predictionDigit);
-        const apiContractType = CONTRACT_TYPE_MAP[signal.type];
 
         // Reset session state
         sessionProfitRef.current = 0;
@@ -842,15 +879,16 @@ const AIAssistant: React.FC = () => {
         setBotLog([]);
         setBotRunning(true);
         runRef.current = true;
-        // DO NOT close the panel — keep it open so the user can see logs and stop the bot
 
-        // Load the XML strategy to Bot Builder for display (trading still runs via direct-fire loop)
+        addLog(`🚀 ${signal.type.toUpperCase()}${barrier !== undefined ? barrier : ''} | ${signal.label} | Stake:${fmtVal(stake)} | Mart:${martingale}x | TP:${fmtVal(takeProfit)} | SL:${fmtVal(stopLoss)}${maxWins != null ? ` | Fire:${maxWins} wins` : ''}`);
+
+        // ─── Build killer XML and load into the Bot Builder workspace ───
         try {
             const { buildKillerXml: bkx } = await import('@/utils/killer-bot');
             const xmlStr = bkx(KILLER_XML_TEMPLATE, {
                 symbol: signal.symbol,
                 contract: signal.type,
-                barrier: signal.autoDigit !== undefined ? signal.autoDigit : (signal.barrier ?? predictionDigit),
+                barrier,
                 ticks: signal.ticks,
                 stake,
                 martingale,
@@ -858,140 +896,80 @@ const AIAssistant: React.FC = () => {
                 stopLoss,
             });
             tryLoadXmlToWorkspace(xmlStr);
-        } catch { /* ignore build/load errors */ }
+            addLog('📂 XML loaded into Bot Builder.');
+        } catch (e: any) {
+            addLog(`⚠ XML load failed: ${e?.message || 'unknown'}`);
+        }
 
-        // NOTE: We do NOT call run_panel?.setIsRunning?.(true) here because that
-        // activates the Blockly bot engine which enforces its own buy limits and
-        // would conflict with the direct-fire loop below. The AI assistant runs
-        // its own independent trading loop without any buy-count restrictions.
+        // ─── Navigate to Bot Builder so the user can see the live bot ───
+        try { dashboard?.setActiveTab?.(DBOT_TABS.BOT_BUILDER); } catch {}
 
-        addLog(`🚀 Starting ${signal.type.toUpperCase()}${barrier !== undefined ? barrier : ''} on ${signal.label} | Stake:${fmtVal(stake)} | Mart:${martingale}x | TP:${fmtVal(takeProfit)} | SL:${fmtVal(stopLoss)}`);
+        // ─── Monitor contract results via Blockly event bus ───
+        // bot.contract fires on every settled contract; bot.stop fires when the engine stops.
+        const onBotContract = (contract: any) => {
+            if (!contract || !runRef.current) return;
+            if (!isEnded(contract)) return; // only settled contracts
+            const profit = Number(contract.profit) || 0;
+            const won = profit > 0;
+            tradeCountRef.current++;
+            sessionProfitRef.current = +(sessionProfitRef.current + profit).toFixed(2);
+            const tc = tradeCountRef.current;
+            const sp = sessionProfitRef.current;
+            setTradeCount(tc);
+            setSessionProfit(sp);
 
-        // ─── Direct-fire loop via useDerivTrade (own authenticated WS) ───
-        // Speed modes:
-        //   Normal  — buy + await settlement (full P/L capture, sequential)
-        //   Crazy   — same but no micro-delay between trades (slightly faster)
-        //   Turbo   — fire-and-forget: settlement tracked in background, loop fires immediately
-        (async () => {
-            const tradeParams = {
-                symbol: signal.symbol,
-                contract_type: apiContractType as any,
-                duration: signal.ticks,
-                duration_unit: 't' as any,
-                stake: 0,               // filled each iteration
-                ...(NEEDS_BARRIER.has(signal.type) ? { barrier } : {}),
-            };
-
-            /** Buys one contract and resolves with the settlement profit. */
-            const buyAndSettle = (curStake: number): Promise<number> =>
-                new Promise(resolve => {
-                    const bail = setTimeout(() => { addLog('⏱ Timeout waiting for settlement'); resolve(0); }, 15000);
-                    derivTradeRef.current.buyContract(
-                        { ...tradeParams, stake: curStake },
-                        settled => { clearTimeout(bail); resolve(settled.profit ?? 0); }
-                    ).then(result => {
-                        if (!result?.contract_id) { clearTimeout(bail); resolve(0); }
-                    }).catch(err => {
-                        clearTimeout(bail);
-                        const msg = err?.message || err?.error?.message || 'Buy failed';
-                        addLog(`⚠️ ${msg}`);
-                        resolve(0);
-                    });
-                });
-
-            const applyResult = (profit: number) => {
-                tradeCountRef.current++;
-                sessionProfitRef.current += profit;
-                const sp = sessionProfitRef.current;
-                const tc = tradeCountRef.current;
-                setTradeCount(tc);
-                setSessionProfit(sp);
-                const won = profit > 0;
-                addLog(`${won ? '✅' : '❌'} #${tc} ${won ? 'WIN' : 'LOSS'} ${fmtProfit(profit)} | Session: ${fmtProfit(sp)} | Stake: ${fmtVal(stakeRef.current)}`);
-                // Martingale: all in USD
-                stakeRef.current = won ? stake : Math.max(0.35, +(stakeRef.current * martingale).toFixed(2));
-
-                // Fire Now: stop after N total trades (runs), regardless of win/loss
-                if (maxWinsRef.current != null && tc >= maxWinsRef.current) {
-                    addLog(`🏁 Fire Now: ${tc} run${tc > 1 ? 's' : ''} completed! Session P/L: ${fmtProfit(sp)}`);
-                    runRef.current = false;
-                    setBotRunning(false);
-                    return;
-                }
-
-                if (sp >= takeProfit) {
-                    addLog(`🏆 TAKE PROFIT hit! Session P/L: ${fmtProfit(sp)}`);
-                    runRef.current = false;
-                    setBotRunning(false);
-                    if (autoRestartRef.current) {
-                        addLog('🔄 Auto-restarting in 2s...');
-                        setTimeout(() => { if (autoRestartRef.current) loadAndRunRef.current?.(); }, 2000);
-                    }
-                }
-                if (sp <= -stopLoss) {
-                    addLog(`🛑 STOP LOSS hit! Session P/L: ${fmtProfit(sp)}`);
-                    runRef.current = false;
-                    setBotRunning(false);
-                    if (autoRestartRef.current) {
-                        addLog('🔄 Auto-restarting in 2s...');
-                        setTimeout(() => { if (autoRestartRef.current) loadAndRunRef.current?.(); }, 2000);
-                    }
-                }
-            };
-
-            // Speed mode controls how many purchases fire within a single tick:
-            // Normal = 1 purchase per tick (sequential, await settlement)
-            // Crazy  = 5 parallel purchases fired together in under 1 second, on 1 tick
-            // Turbo  = 10 parallel purchases fired together in under 1 second, on 1 tick
-            const PURCHASES_PER_TICK = { normal: 1, crazy: 5, turbo: 10 } as const;
-
-            const fireAndForget = (curStake: number) => {
-                derivTradeRef.current.buyContract(
-                    { ...tradeParams, stake: curStake },
-                    // Only apply settlement if the bot is still running — once stopped
-                    // (e.g. Fire Now cap hit) in-flight contracts should not count further.
-                    settled => { if (runRef.current) applyResult(settled.profit ?? 0); }
-                ).catch(err => {
-                    const msg = err?.message || err?.error?.message || 'Buy error';
-                    addLog(`⚠️ ${msg}`);
-                });
-            };
-
-            while (runRef.current) {
-                // Pause: spin-wait until resumed
-                if (pausedRef.current) {
-                    await new Promise(r => setTimeout(r, 120));
-                    continue;
-                }
-                const curStake = stakeRef.current;
-                // Read AI-local speed mode (not the global FloatingRunButton speed)
-                const speed = aiModeRef.current;
-                try {
-                    if (speed === 'turbo' || speed === 'crazy') {
-                        // Fire all purchases instantly, then yield just enough to
-                        // keep the event loop responsive (no artificial 900ms stall).
-                        const count = PURCHASES_PER_TICK[speed];
-                        for (let _i = 0; _i < count; _i++) fireAndForget(curStake);
-                        await Promise.resolve(); // zero-delay yield — no tick-throttle
-                    } else {
-                        // Normal: sequential — one contract per tick, full settlement
-                        const profit = await buyAndSettle(curStake);
-                        if (!runRef.current) break;
-                        applyResult(profit);
-                    }
-                } catch (err: any) {
-                    const msg = err?.error?.message || err?.message || 'Unknown error';
-                    addLog(`⚠️ ${msg}`);
-                    await new Promise(r => setTimeout(r, 300));
+            // Fire Now: stop after N successful WINS
+            if (won) {
+                profitWinsRef.current++;
+                const mw = maxWinsRef.current;
+                if (mw != null && profitWinsRef.current >= mw) {
+                    addLog(`🏁 ${profitWinsRef.current} win${profitWinsRef.current > 1 ? 's' : ''} reached — stopping bot.`);
+                    try { run_panel?.onStopButtonClick?.(); } catch {}
                 }
             }
+        };
 
+        const onBotStop = () => {
+            if (!runRef.current) return; // already cleaned up
             runRef.current = false;
             setBotRunning(false);
             setBotPaused(false);
             pausedRef.current = false;
-        })();
-    }, [best, predictionDigit, stake, martingale, takeProfit, stopLoss, botRunning, addLog, stopBot, tryLoadXmlToWorkspace]);
+            const sp = sessionProfitRef.current;
+            const tc = tradeCountRef.current;
+            addLog(`⏹ Bot stopped. Trades: ${tc} | Session P/L: ${fmtProfit(sp)}`);
+            try { globalObserver.unregister('bot.contract', onBotContract); } catch {}
+            try { globalObserver.unregister('bot.stop', onBotStop); } catch {}
+            if (autoRestartRef.current && sp >= 0) {
+                addLog('🔄 Auto-restarting in 2s...');
+                setTimeout(() => { if (autoRestartRef.current) loadAndRunRef.current?.(); }, 2000);
+            }
+        };
+
+        globalObserver.register('bot.contract', onBotContract);
+        globalObserver.register('bot.stop', onBotStop);
+
+        // ─── Activate the Bot Builder run button — this starts the Blockly engine ───
+        // Retry up to 8 times while the workspace may still be loading the XML.
+        let started = false;
+        for (let i = 0; i < 8 && !started; i++) {
+            await new Promise(r => setTimeout(r, i === 0 ? 400 : 300));
+            try {
+                if (run_panel?.is_running) { started = true; break; }
+                await run_panel?.onRunButtonClick?.();
+                started = true;
+            } catch { /* retry */ }
+        }
+        if (!started) {
+            addLog('⚠ Could not activate bot engine — make sure Bot Builder is loaded.');
+            runRef.current = false;
+            setBotRunning(false);
+            try { globalObserver.unregister('bot.contract', onBotContract); } catch {}
+            try { globalObserver.unregister('bot.stop', onBotStop); } catch {}
+        } else {
+            addLog('✅ Bot engine running — monitoring via Bot Builder.');
+        }
+    }, [best, predictionDigit, stake, martingale, takeProfit, stopLoss, botRunning, addLog, stopBot, tryLoadXmlToWorkspace, dashboard, run_panel, fmtProfit, fmtVal]);
 
     // Keep ref in sync so auto-restart can call without stale closure
     useEffect(() => { loadAndRunRef.current = loadAndRun; }, [loadAndRun]);
@@ -1029,19 +1007,22 @@ const AIAssistant: React.FC = () => {
 
             {isOpen && (
                 <div className='ai-assistant__overlay' onClick={() => setIsOpen(false)}>
-                    <div className='ai-assistant__modal' onClick={e => e.stopPropagation()}>
+                    <div className={`ai-assistant__modal${aiThemeDark ? ' ai-assistant--dark' : ' ai-assistant--light'}`} onClick={e => e.stopPropagation()}>
                         <div className='ai-assistant__modal-header'>
                             <div
                                 className='ai-assistant__live-digit'
                                 title={antennaOn ? 'Live last digit of tracked market' : 'Antenna is off'}
-                                style={{ display: 'flex', alignItems: 'center', gap: 4, marginRight: 6, opacity: antennaOn ? 1 : 0.35 }}
+                                style={{ display: 'flex', alignItems: 'center', gap: 6, marginRight: 8, opacity: antennaOn ? 1 : 0.35 }}
                             >
-                                <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#8aa0b8' }}>DIGIT</span>
+                                <span style={{ fontSize: '0.72rem', fontWeight: 800, color: aiThemeDark ? '#8aa0b8' : '#555', letterSpacing: '0.06em' }}>DIGIT</span>
                                 <span style={{
-                                    minWidth: 22, height: 22, borderRadius: '50%', display: 'inline-flex',
-                                    alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.8rem',
-                                    background: antennaOn && liveDigit !== null ? '#00ff9622' : 'rgba(255,255,255,0.06)',
-                                    color: antennaOn && liveDigit !== null ? '#00ff96' : '#8aa0b8', border: '1px solid rgba(255,255,255,0.12)',
+                                    minWidth: 46, height: 46, borderRadius: '50%', display: 'inline-flex',
+                                    alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '1.7rem',
+                                    background: antennaOn && liveDigit !== null ? '#0b0f1a' : '#0b0f1a',
+                                    color: antennaOn && liveDigit !== null ? '#00ff96' : '#445566',
+                                    border: `2px solid ${antennaOn && liveDigit !== null ? '#00ff9655' : 'rgba(255,255,255,0.10)'}`,
+                                    boxShadow: antennaOn && liveDigit !== null ? '0 0 12px rgba(0,255,150,0.35)' : 'none',
+                                    padding: '4px',
                                 }}>
                                     {antennaOn && liveDigit !== null ? liveDigit : '–'}
                                 </span>
@@ -1049,7 +1030,7 @@ const AIAssistant: React.FC = () => {
                             <div className={`ai-assistant__status-dot ${scanning ? 'live' : botRunning ? 'running' : ''}`} />
                             <h3>AI Market Scanner</h3>
                             {scanning && <span className='ai-assistant__live'>SCANNING {scannedCount}/{SCAN_SYMBOLS.length}</span>}
-                            {botRunning && <span className='ai-assistant__live' style={{ color: '#00ff96' }}>🤖 #{tradeCount} | {fmtProfit(sessionProfit)}</span>}
+                            {botRunning && <span className='ai-assistant__live' style={{ color: '#00ff96' }}>🤖 RUNNING</span>}
                             <button
                                 className='ai-assistant__antenna-toggle'
                                 onClick={() => setAntennaOn(v => !v)}
@@ -1061,6 +1042,18 @@ const AIAssistant: React.FC = () => {
                                 }}
                             >
                                 📡 {antennaOn ? 'ON' : 'OFF'}
+                            </button>
+                            {/* Dark / Light theme toggle */}
+                            <button
+                                onClick={() => setAiThemeDark(d => !d)}
+                                title={aiThemeDark ? 'Switch to Light mode' : 'Switch to Dark mode'}
+                                style={{
+                                    border: 'none', borderRadius: 6, padding: '3px 8px', fontSize: '0.85rem',
+                                    cursor: 'pointer', background: aiThemeDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+                                    color: aiThemeDark ? '#e2e8f0' : '#555',
+                                }}
+                            >
+                                {aiThemeDark ? '☀' : '🌙'}
                             </button>
                             <button className='ai-assistant__close' onClick={() => setIsOpen(false)}>✕</button>
                         </div>
@@ -1083,13 +1076,6 @@ const AIAssistant: React.FC = () => {
                                 </div>
                             )}
 
-                            {/* Bot live log */}
-                            {botRunning && botLog.length > 0 && (
-                                <div className='ai-assistant__bot-log'>
-                                    {botLog.slice(0, 5).map((l, i) => <div key={i} className='ai-assistant__bot-log-entry'>{l}</div>)}
-                                </div>
-                            )}
-
                             {best ? (
                                 <div className={`ai-assistant__signal ai-assistant__signal--${confClass}`}>
                                     <div className='ai-assistant__signal-head'>
@@ -1105,6 +1091,24 @@ const AIAssistant: React.FC = () => {
                                         {isMatchesDiffers && best.autoDigit !== undefined && <span className='ai-assistant__auto-tag'>🤖 auto</span>}
                                     </div>
                                     <div className='ai-assistant__signal-note'>{best.note}</div>
+                                    {/* ⚡ ENTER NOW — prominent call-to-action when antenna has a live confirmed signal */}
+                                    {antennaOn && !botRunning && (
+                                        <div className='ai-assistant__enter-now'>
+                                            <span className='ai-assistant__enter-now-pulse' />
+                                            <span className='ai-assistant__enter-now-label'>⚡ ENTER NOW</span>
+                                            <span className='ai-assistant__enter-now-market'>
+                                                {best.type.toUpperCase()}{(best.autoDigit !== undefined ? best.autoDigit : best.barrier) !== undefined ? ` ${best.autoDigit !== undefined ? best.autoDigit : best.barrier}` : ''} · {best.label}
+                                            </span>
+                                            <button
+                                                className='ai-assistant__enter-now-btn'
+                                                onClick={() => loadAndRun(best)}
+                                                disabled={!derivTrade.connected}
+                                                title='Load XML into Bot Builder and start executing trades'
+                                            >
+                                                ▶ Load &amp; Run
+                                            </button>
+                                        </div>
+                                    )}
                                     {allSignals.length > 1 && (
                                         <div className='ai-assistant__alt-signals'>
                                             <span>Alt: </span>
@@ -1200,16 +1204,16 @@ const AIAssistant: React.FC = () => {
                             ) : (
                                 <button className='ai-assistant__btn ai-assistant__btn--scan' onClick={startScan}>🔍 SCAN ALL MARKETS</button>
                             )}
-                            {/* FIRE NOW — fires exactly 3 trades then auto-stops */}
+                            {/* FIRE NOW — loads XML + runs via Bot Builder, stops after 3 successful WINS */}
                             {!botRunning && (
                                 <button
                                     className='ai-assistant__btn ai-assistant__btn--load'
                                     style={{ background: 'linear-gradient(135deg,#f97316,#ef4444)', fontSize: '0.8rem' }}
                                     onClick={() => loadAndRun(best ?? DEFAULT_SIGNAL, 3)}
                                     disabled={!derivTrade.connected}
-                                    title={!derivTrade.connected ? 'Waiting for account connection...' : 'Fires exactly 3 trades then auto-stops'}
+                                    title={!derivTrade.connected ? 'Waiting for account connection...' : 'Loads XML into Bot Builder and auto-stops after 3 successful wins'}
                                 >
-                                    ⚡ FIRE NOW (3 runs)
+                                    ⚡ FIRE NOW (3 wins)
                                 </button>
                             )}
                             {/* Pause / Resume — only visible while bot is running */}

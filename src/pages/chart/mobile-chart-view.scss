@@ -1,0 +1,860 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   MobileChartView — Deriv-style mobile trade interface
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Root container ─────────────────────────────────────────────────────── */
+.mcv {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-height: 100dvh;
+    background: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Market header ──────────────────────────────────────────────────────── */
+.mcv__header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    margin: 10px 12px 0;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+    user-select: none;
+
+    &:active { background: #f9fafb; }
+}
+
+.mcv__market-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #0e3348 0%, #1a5276 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.mcv__market-icon-sym {
+    font-size: 9px;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: -0.5px;
+}
+.mcv__market-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.mcv__market-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: #111827;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.mcv__market-price {
+    font-size: 12px;
+    color: #6b7280;
+    display: flex;
+    align-items: center;
+}
+.mcv__price-val  { font-weight: 600; color: #374151; }
+.mcv__price-change { font-size: 11px; font-weight: 600; }
+.mcv__market-arrow { font-size: 16px; color: #9ca3af; flex-shrink: 0; }
+
+/* ── Tick info bar (active trade) ───────────────────────────────────────── */
+.mcv__tick-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 7px 16px;
+    background: #f8fafc;
+    border-bottom: 1px solid #e5e7eb;
+    font-size: 13px;
+    font-weight: 600;
+    color: #374151;
+    gap: 8px;
+}
+.mcv__tick-digit {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 2px solid #374151;
+    font-size: 13px;
+    font-weight: 800;
+    color: #374151;
+    margin-left: 4px;
+    vertical-align: middle;
+}
+
+/* ── Win/Loss toast notification ────────────────────────────────────────── */
+.mcv-toast {
+    position: fixed;
+    top: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 20px;
+    border-radius: 28px;
+    font-size: 15px;
+    font-weight: 800;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.25);
+    animation: mcv-toast-in 0.3s cubic-bezier(0.2,1.5,0.4,1) both,
+               mcv-toast-out 0.3s ease-in 3.5s both;
+    pointer-events: none;
+    white-space: nowrap;
+
+    &--win  { background: #00C853; color: #fff; border: 2px solid #00a042; }
+    &--loss { background: #E53935; color: #fff; border: 2px solid #b71c1c; }
+}
+.mcv-toast__icon { font-size: 18px; }
+.mcv-toast__msg  { font-size: 14px; font-weight: 800; }
+
+@keyframes mcv-toast-in  {
+    from { opacity: 0; transform: translateX(-50%) translateY(-14px) scale(0.88); }
+    to   { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}
+@keyframes mcv-toast-out {
+    from { opacity: 1; }
+    to   { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+}
+
+/* ── Digit circles area ─────────────────────────────────────────────────── */
+.mcv-digits {
+    display: flex;
+    flex-direction: column;
+    padding: 18px 2px 12px;
+    gap: 0;
+    background: #fff;
+    position: relative;
+    overflow: visible;
+}
+
+.mcv-digits__row {
+    display: flex;
+    justify-content: space-around;
+    align-items: flex-end;
+    width: 100%;
+    padding: 0 2px;
+}
+
+/* ── Triangle pointer rows ────────────────────────────────────────────────── */
+.mcv-digits__pointer-row {
+    position: relative;
+    width: 100%;
+    height: 36px;
+    overflow: visible;
+    flex-shrink: 0;
+
+    /* sits just above the top row */
+    &--top    { margin: 8px 0 -2px; }
+    /* sits just below the bottom row */
+    &--bottom { margin: -2px 0 0; }
+}
+
+/* Base triangle — shared transition */
+.mcv-digits__triangle {
+    position: absolute;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left:  11px solid transparent;
+    border-right: 11px solid transparent;
+    transition: left 0.18s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    will-change: left;
+
+    /* ▼ pointing DOWN — for digits 0-4, appears above top row */
+    &--down {
+        bottom: 0;                         /* tip at bottom → points at circles below */
+        border-top:    16px solid #e74c3c;
+        border-bottom: none;
+        filter: drop-shadow(0 2px 5px rgba(231,76,60,0.55));
+    }
+
+    /* ▲ pointing UP — for digits 5-9, appears below bottom row */
+    &--up {
+        top: 0;                            /* tip at top → points at circles above */
+        border-bottom: 16px solid #e74c3c;
+        border-top:    none;
+        filter: drop-shadow(0 -2px 5px rgba(231,76,60,0.55));
+    }
+}
+
+/* The active contract's tick number rides with the moving triangle. It is
+   positioned on the outside of the row so 0–4 and 5–9 mirror each other. */
+.mcv-digits__tick-badge {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 24px;
+    height: 17px;
+    padding: 0 5px;
+    border-radius: 4px;
+    background: #e74c3c;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 900;
+    line-height: 17px;
+    white-space: nowrap;
+    box-shadow: 0 2px 5px rgba(231, 76, 60, 0.35);
+    pointer-events: none;
+}
+
+.mcv-digits__triangle--down .mcv-digits__tick-badge {
+    bottom: 18px;
+}
+
+.mcv-digits__triangle--up .mcv-digits__tick-badge {
+    top: 18px;
+}
+
+.mcv-digits__tick-badge-star {
+    font-size: 9px;
+    line-height: 1;
+}
+
+/* ── Individual digit circle ────────────────────────────────────────────── */
+.mcv-circle {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    cursor: pointer;
+    padding: 2px 1px;
+    border-radius: 8px;
+    transition: background 0.12s;
+    position: relative;
+
+    &:active { background: rgba(0,0,0,0.04); }
+
+    svg { display: block; }
+}
+
+.mcv-circle__pct {
+    font-size: 11px;
+    font-weight: 900;
+    color: #000;
+    line-height: 1.2;
+    letter-spacing: -0.03em;
+
+    &--barrier { color: #0e3348; font-weight: 900; }
+}
+
+/* ── Navigation arrows ──────────────────────────────────────────────────── */
+.mcv__nav {
+    display: flex;
+    align-items: center;
+    padding: 10px 16px;
+    margin-top: 4px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.mcv__nav-btn {
+    background: none;
+    border: none;
+    font-size: 20px;
+    color: #9ca3af;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    line-height: 1;
+    font-weight: 700;
+    transition: color 0.15s;
+
+    &:active { color: #374151; }
+}
+
+.mcv__nav-divider {
+    flex: 1;
+    height: 1px;
+    background: #e5e7eb;
+    margin: 0 8px;
+}
+
+/* ── Trade panel ────────────────────────────────────────────────────────── */
+.mcv-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    padding-bottom: env(safe-area-inset-bottom, 12px);
+}
+
+/* "Learn about this trade type" */
+.mcv-panel__learn {
+    padding: 10px 16px 6px;
+    font-size: 12px;
+    color: #6366f1;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    user-select: none;
+}
+
+/* Trade type selector row */
+.mcv-panel__type-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    background: #fff;
+    border: none;
+    border-bottom: 1px solid #f0f0f0;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+    font-family: inherit;
+    transition: background 0.12s;
+
+    &:active { background: #f9fafb; }
+}
+.mcv-panel__type-icon  { font-size: 18px; }
+.mcv-panel__type-label {
+    flex: 1;
+    font-size: 15px;
+    font-weight: 700;
+    color: #111827;
+}
+.mcv-panel__type-arrow {
+    font-size: 20px;
+    color: #9ca3af;
+    font-weight: 400;
+}
+
+/* ── Digit barrier grid ──────────────────────────────────────────────────── */
+.mcv-panel__digit-grid {
+    padding: 10px 12px 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.mcv-panel__digit-row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 6px;
+}
+.mcv-panel__dgt {
+    height: 40px;
+    border-radius: 6px;
+    border: 1px solid #e5e7eb;
+    background: #f9fafb;
+    font-size: 16px;
+    font-weight: 600;
+    color: #374151;
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s;
+    font-family: inherit;
+
+    &.active {
+        background: #e5e7eb;
+        border-color: #9ca3af;
+        font-weight: 800;
+        color: #111827;
+    }
+    &.current:not(.active) {
+        border-color: #00c2c7;
+        color: #00c2c7;
+    }
+    &:active { background: #e5e7eb; }
+}
+
+/* ── Duration / Stake summary row ────────────────────────────────────────── */
+.mcv-panel__summary {
+    display: flex;
+    align-items: stretch;
+    border-top: 1px solid #f0f0f0;
+    border-bottom: 1px solid #f0f0f0;
+    margin: 8px 0 0;
+}
+.mcv-panel__summary-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 2px;
+    padding: 10px 14px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.12s;
+
+    &:active { background: #f9fafb; }
+}
+.mcv-panel__summary-sep {
+    width: 1px;
+    background: #f0f0f0;
+    align-self: stretch;
+}
+.mcv-panel__summary-val {
+    font-size: 14px;
+    font-weight: 700;
+    color: #111827;
+
+    &--bold { font-weight: 800; font-size: 15px; }
+}
+.mcv-panel__summary-lbl {
+    font-size: 11px;
+    color: #9ca3af;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+
+    &--cur { text-transform: none; letter-spacing: 0; font-size: 12px; margin-left: 3px; }
+}
+
+/* ── Inline stake section ────────────────────────────────────────────────── */
+.mcv-panel__stake-inline {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 12px;
+}
+
+.mcv-panel__ai-btn {
+    flex-shrink: 0;
+    border: 0;
+    border-radius: 8px;
+    padding: 7px 10px;
+    background: linear-gradient(135deg, #1769ff, #00a550);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    &.active { box-shadow: 0 0 0 2px rgba(23,105,255,.22); }
+}
+
+.mcv-panel__ai {
+    max-height: 500px;
+    opacity: 1;
+    overflow: visible;
+    transition: max-height 0.2s ease, opacity 0.15s ease;
+}
+
+.mcv-panel__ai--closed {
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+/* Directly editable stake number input */
+.mcv-stake-input {
+    flex: 1;
+    min-width: 0;
+    max-width: 110px;
+    border: 1.5px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 6px 8px;
+    font-size: 16px;
+    font-weight: 800;
+    color: #111827;
+    background: #f9fafb;
+    font-family: inherit;
+    text-align: right;
+    outline: none;
+    transition: border-color 0.15s, background 0.15s;
+    -moz-appearance: textfield;  /* hide arrows FF */
+
+    &::-webkit-inner-spin-button,
+    &::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
+    &:focus {
+        border-color: #6366f1;
+        background: #fff;
+        box-shadow: 0 0 0 3px rgba(99,102,241,0.12);
+    }
+}
+
+/* ── Result feedback ─────────────────────────────────────────────────────── */
+.mcv-panel__result {
+    margin: 6px 12px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    text-align: center;
+
+    &.ok  { background: rgba(34,197,94,0.1);  color: #16a34a; }
+    &.err { background: rgba(239,68,68,0.1);  color: #dc2626; }
+}
+
+/* ── Buy buttons ─────────────────────────────────────────────────────────── */
+.mcv-panel__btns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 8px 12px 10px;
+    margin-top: 4px;   /* was 'auto' — caused big empty gap; now close to stake row */
+}
+
+.mcv-panel__buy {
+    display: flex;
+    flex-direction: column;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    padding: 0;
+    overflow: hidden;
+    font-family: inherit;
+    transition: filter 0.15s, box-shadow 0.15s;
+
+    &:disabled { opacity: 0.55; cursor: not-allowed; }
+
+    &--over {
+        background: #0b9c8f;
+        box-shadow: 0 2px 8px rgba(11,156,143,0.35);
+        &:active:not(:disabled) { filter: brightness(0.93); }
+    }
+    &--under {
+        background: #cc2c2c;
+        box-shadow: 0 2px 8px rgba(204,44,44,0.35);
+        &:active:not(:disabled) { filter: brightness(0.93); }
+    }
+}
+
+.mcv-panel__buy-top {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 8px 10px;
+}
+.mcv-panel__buy-icon  { font-size: 18px; color: #fff; }
+.mcv-panel__buy-label {
+    font-size: 17px;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: 0.02em;
+}
+
+.mcv-panel__buy-payout {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 10px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.85);
+    border-top: 1px solid rgba(255,255,255,0.15);
+    gap: 4px;
+
+    span:last-child {
+        font-weight: 800;
+        color: #fff;
+        font-size: 12px;
+    }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Bottom Sheet components
+   ════════════════════════════════════════════════════════════════════════ */
+.mcv-sheet {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 9999;
+    display: flex;
+    align-items: flex-end;
+    animation: mcv-sheet-fade-in 0.18s ease;
+}
+
+@keyframes mcv-sheet-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+.mcv-sheet__panel {
+    width: 100%;
+    background: #fff;
+    border-radius: 20px 20px 0 0;
+    padding: 0 0 max(20px, env(safe-area-inset-bottom));
+    max-height: 85dvh;
+    display: flex;
+    flex-direction: column;
+    animation: mcv-sheet-slide-up 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+@keyframes mcv-sheet-slide-up {
+    from { transform: translateY(100%); }
+    to   { transform: translateY(0);    }
+}
+
+.mcv-sheet__handle {
+    width: 36px;
+    height: 4px;
+    background: #d1d5db;
+    border-radius: 2px;
+    margin: 10px auto 0;
+    flex-shrink: 0;
+}
+
+.mcv-sheet__title {
+    padding: 14px 18px 10px;
+    font-size: 16px;
+    font-weight: 800;
+    color: #111827;
+    border-bottom: 1px solid #f0f0f0;
+    flex-shrink: 0;
+}
+
+.mcv-sheet__scroll {
+    overflow-y: auto;
+    flex: 1;
+    -webkit-overflow-scrolling: touch;
+}
+
+.mcv-sheet__item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 13px 18px;
+    background: none;
+    border: none;
+    border-bottom: 1px solid #f9fafb;
+    cursor: pointer;
+    font-family: inherit;
+    text-align: left;
+    transition: background 0.1s;
+
+    &:active { background: #f3f4f6; }
+
+    &.active {
+        background: rgba(99,102,241,0.05);
+        .mcv-sheet__item-label { color: #6366f1; font-weight: 800; }
+    }
+}
+.mcv-sheet__item-icon  { font-size: 20px; flex-shrink: 0; }
+.mcv-sheet__item-label {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 600;
+    color: #374151;
+}
+.mcv-sheet__item-check { font-size: 16px; color: #6366f1; font-weight: 800; }
+
+/* ── Duration sheet ──────────────────────────────────────────────────────── */
+
+/* Unit selector row */
+.mcv-dur__units {
+    display: flex;
+    gap: 6px;
+    padding: 10px 18px 6px;
+    flex-wrap: wrap;
+}
+.mcv-dur__unit-btn {
+    flex: 1;
+    min-width: 64px;
+    padding: 7px 10px;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+    background: #f9fafb;
+    color: #6b7280;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+    text-align: center;
+    transition: all 0.12s;
+    &:active { background: #e5e7eb; }
+    &.active {
+        background: #0e3348;
+        color: #fff;
+        border-color: #0e3348;
+    }
+}
+
+/* Quick picks / Custom tabs */
+.mcv-dur__tabs {
+    display: flex;
+    background: #f3f4f6;
+    border-radius: 8px;
+    padding: 3px;
+    margin: 4px 18px 8px;
+}
+.mcv-dur__tab {
+    flex: 1;
+    padding: 6px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: #9ca3af;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+    text-align: center;
+    transition: all 0.15s;
+    &.active { background: #fff; color: #0e3348; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+}
+
+/* Quick pick grid — 2 columns */
+.mcv-dur__grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    padding: 4px 18px 10px;
+}
+.mcv-dur__opt {
+    height: 44px;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+    background: #f9fafb;
+    font-size: 14px;
+    font-weight: 600;
+    color: #374151;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.1s;
+    &.active { background: #0e3348; color: #fff; border-color: #0e3348; }
+    &:active:not(.active) { background: #e5e7eb; }
+}
+
+/* Custom input */
+.mcv-dur {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 10px 18px;
+}
+.mcv-dur__adj {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 2px solid #e5e7eb;
+    background: #f9fafb;
+    font-size: 22px;
+    font-weight: 700;
+    color: #374151;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: inherit;
+    transition: background 0.1s;
+    &:active { background: #e5e7eb; }
+}
+.mcv-dur__custom-inp {
+    flex: 1;
+    max-width: 120px;
+    height: 44px;
+    border: 2px solid #e5e7eb;
+    border-radius: 10px;
+    background: #fff;
+    font-size: 20px;
+    font-weight: 900;
+    color: #111827;
+    text-align: center;
+    outline: none;
+    font-family: inherit;
+    font-variant-numeric: tabular-nums;
+    &:focus { border-color: #0e3348; }
+    &::-webkit-inner-spin-button,
+    &::-webkit-outer-spin-button { -webkit-appearance: none; }
+}
+.mcv-dur__range-hint {
+    text-align: center;
+    font-size: 11px;
+    color: #9ca3af;
+    font-weight: 500;
+    padding: 0 18px 8px;
+}
+.mcv-dur__apply {
+    display: block;
+    width: calc(100% - 36px);
+    margin: 0 18px;
+    height: 46px;
+    border-radius: 10px;
+    border: none;
+    background: #0e3348;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 800;
+    cursor: pointer;
+    font-family: inherit;
+    transition: filter 0.15s;
+
+    &:active:not(:disabled)  { filter: brightness(0.88); }
+    &:disabled { opacity: 0.45; cursor: not-allowed; }
+}
+
+/* ── Amount sheet ────────────────────────────────────────────────────────── */
+.mcv-amt__display {
+    padding: 14px 18px 8px;
+    font-size: 28px;
+    font-weight: 800;
+    color: #111827;
+    text-align: center;
+}
+.mcv-amt__cur {
+    font-size: 14px;
+    font-weight: 600;
+    color: #6b7280;
+    margin-left: 4px;
+}
+.mcv-amt__presets {
+    display: flex;
+    gap: 6px;
+    padding: 0 18px 12px;
+    flex-wrap: wrap;
+}
+.mcv-amt__preset {
+    padding: 5px 12px;
+    border-radius: 20px;
+    border: 1px solid #e5e7eb;
+    background: #f9fafb;
+    font-size: 13px;
+    font-weight: 600;
+    color: #374151;
+    cursor: pointer;
+    font-family: inherit;
+    &:active { background: #e5e7eb; }
+}
+.mcv-amt__pad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    padding: 0 18px 16px;
+}
+.mcv-amt__key {
+    height: 50px;
+    border-radius: 10px;
+    border: 1px solid #e5e7eb;
+    background: #f9fafb;
+    font-size: 20px;
+    font-weight: 600;
+    color: #374151;
+    cursor: pointer;
+    font-family: inherit;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.1s;
+
+    &:active { background: #e5e7eb; }
+    &--back  { font-size: 16px; }
+}

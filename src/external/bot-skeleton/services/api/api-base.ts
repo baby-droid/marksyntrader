@@ -22,7 +22,6 @@ import {
 } from './observables/connection-status-stream';
 import ApiHelpers from './api-helpers';
 import { generateDerivApiInstance, V2GetActiveAccountId } from './appId';
-import chart_api from './chart-api';
 
 type CurrentSubscription = {
     id: string;
@@ -70,6 +69,8 @@ class APIBase {
     // Separate handle for the live-balance message listener so it is always
     // torn down in init()/reinit paths before the old API instance is replaced.
     private balance_listener: { unsubscribe: () => void } | null = null;
+    private auth_subscriptions_api: TApiBaseApi | null = null;
+    private auth_subscriptions_promise: Promise<void> | null = null;
 
     // Constants for timeouts - extracted magic numbers for better maintainability
     private readonly ACTIVE_SYMBOLS_TIMEOUT_MS = 10000; // 10 seconds
@@ -77,6 +78,7 @@ class APIBase {
     private readonly MAX_RECONNECTION_ATTEMPTS = 5; // Maximum number of reconnection attempts before session reset
 
     unsubscribeAllSubscriptions = () => {
+        this.auth_subscriptions_api = null;
         this.current_auth_subscriptions?.forEach(subscription_promise => {
             subscription_promise.then(({ subscription }) => {
                 if (subscription?.id) {
@@ -208,7 +210,8 @@ class APIBase {
         if (this.time_interval) clearInterval(this.time_interval);
         this.time_interval = null;
 
-        chart_api.init(force_create_connection);
+        // Chart data is served through this authenticated connection. Do not
+        // create the legacy public chart WebSocket here.
     }
 
     getConnectionStatus() {
@@ -282,14 +285,14 @@ class APIBase {
                 return { ...error, localizedMessage: errorMessage };
             }
 
+            const account_type = getAccountType(balance?.loginid);
             this.account_info = {
-                balance: balance?.balance,
-                currency: balance?.currency,
-                loginid: balance?.loginid,
+                balance:    balance?.balance,
+                currency:   balance?.currency,
+                loginid:    balance?.loginid,
+                is_virtual: account_type === 'real' ? 0 : 1,
             };
             this.token = balance?.loginid;
-
-            const account_type = getAccountType(balance?.loginid);
             const currentAccount = balance?.loginid
                 ? {
                       balance: balance.balance,
@@ -377,10 +380,16 @@ class APIBase {
     }
 
     async subscribe() {
+        if (!this.api) return;
+        if (this.auth_subscriptions_promise) return this.auth_subscriptions_promise;
+        if (this.auth_subscriptions_api === this.api && this.current_auth_subscriptions.length > 0) return;
+
+        const active_api = this.api;
+        const subscribe_promise = (async () => {
         const subscribeToStream = (streamName: string) => {
             return doUntilDone(
                 () => {
-                    const subscription = this.api?.send({
+                    const subscription = active_api.send({
                         [streamName]: 1,
                         subscribe: 1,
                     });
@@ -404,8 +413,8 @@ class APIBase {
         // Stored separately from bot-trade subscriptions so it is always torn down
         // in reinit/reconnect paths (see teardownBalanceListener).
         this.teardownBalanceListener();
-        if (this.api) {
-            this.balance_listener = this.api.onMessage().subscribe(({ data }: any) => {
+        if (this.api === active_api) {
+            this.balance_listener = active_api.onMessage().subscribe(({ data }: any) => {
                 if (data?.msg_type === 'balance' && data?.balance) {
                     const { loginid, balance: newBalance, currency } = data.balance;
                     if (!loginid) return;
@@ -431,6 +440,16 @@ class APIBase {
                     }
                 }
             }) as any;
+            this.auth_subscriptions_api = active_api;
+        }
+        })();
+        this.auth_subscriptions_promise = subscribe_promise;
+        try {
+            await subscribe_promise;
+        } finally {
+            if (this.auth_subscriptions_promise === subscribe_promise) {
+                this.auth_subscriptions_promise = null;
+            }
         }
     }
 

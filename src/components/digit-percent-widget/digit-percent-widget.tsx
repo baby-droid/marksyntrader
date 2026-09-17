@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { api_base } from '@/external/bot-skeleton';
+import { CONNECTION_STATUS } from '@/external/bot-skeleton/services/api/observables/connection-status-stream';
+import { useApiBase } from '@/hooks/useApiBase';
 import './digit-percent-widget.scss';
-
-const APP_ID = (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_DERIV_APP_ID) || '36300';
 
 const MARKETS: { value: string; label: string; pipSize: number }[] = [
     { value: 'R_10',      label: 'Volatility 10 Index',       pipSize: 3 },
@@ -101,7 +102,8 @@ function computeStreamStats(ticks: number[], threshold: number) {
     };
 }
 
-const DigitPercentWidget: React.FC = () => {
+const DigitPercentWidget: React.FC<{ showTrigger?: boolean }> = ({ showTrigger = true }) => {
+    const { connectionStatus } = useApiBase();
     const [open, setOpen] = useState(false);
     const [symbol, setSymbol] = useState(() => {
         try { return localStorage.getItem('digit_widget_market') || 'R_100'; } catch { return 'R_100'; }
@@ -111,11 +113,20 @@ const DigitPercentWidget: React.FC = () => {
     const [ticks, setTicks] = useState<number[]>([]);
     const [currentDigit, setCurrentDigit] = useState<number | null>(null);
     const [currentPrice, setCurrentPrice] = useState<string | null>(null);
+    const [lastLiveTickAt, setLastLiveTickAt] = useState(0);
     const [threshold, setThreshold] = useState(5);
     const [darkMode, setDarkMode] = useState(() => {
         try { return localStorage.getItem('digit_widget_dark') === '1'; } catch { return false; }
     });
-    const wsRef    = useRef<WebSocket | null>(null);
+    // AI analyser tick count — adjustable 5–100, default 50
+    const [aiTickCount, setAiTickCount] = useState(() => {
+        try { return parseInt(localStorage.getItem('digit_widget_ai_ticks') || '50', 10) || 50; } catch { return 50; }
+    });
+    const [aiTickInput, setAiTickInput] = useState(() => {
+        try { return localStorage.getItem('digit_widget_ai_ticks') || '50'; } catch { return '50'; }
+    });
+    const tickSubscriptionRef = useRef<any>(null);
+    const tickSubscriptionIdRef = useRef<string | null>(null);
     // Resolve current market first so pipSizeRef can use it for its initial value
     const currentMarket = MARKETS.find(m => m.value === symbol) ?? MARKETS[0];
     // pip_size starts from our static table; the live stream overrides it authoritatively
@@ -132,6 +143,12 @@ const DigitPercentWidget: React.FC = () => {
     });
     const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number; dragging: boolean } | null>(null);
     const panelRef = useRef<HTMLDivElement | null>(null);
+
+    useEffect(() => {
+        const openAnalyzer = () => setOpen(true);
+        window.addEventListener('digit-analyzer:open', openAnalyzer);
+        return () => window.removeEventListener('digit-analyzer:open', openAnalyzer);
+    }, []);
 
     useEffect(() => {
         if (panelPos) try { localStorage.setItem('digit_widget_pos', JSON.stringify(panelPos)); } catch {}
@@ -173,39 +190,67 @@ const DigitPercentWidget: React.FC = () => {
 
     useEffect(() => {
         if (!open) return;
-        wsRef.current?.close();
+        tickSubscriptionRef.current?.unsubscribe?.();
+        tickSubscriptionRef.current = null;
+        if (tickSubscriptionIdRef.current && api_base.api) {
+            (api_base.api as any).send({ forget: tickSubscriptionIdRef.current }).catch(() => {});
+            tickSubscriptionIdRef.current = null;
+        }
         setTicks([]);
         setCurrentDigit(null);
         setCurrentPrice(null);
-
-        const wsUrl = `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`;
-        const ws = new WebSocket(wsUrl);
-        wsRef.current = ws;
+        setLastLiveTickAt(0);
 
         // Reset state for this new subscription
         pipSizeRef.current = currentMarket.pipSize;
         rawHistoryRef.current = [];
         pipSizeConfirmedRef.current = false;
 
-        ws.onopen = () => {
-            ws.send(JSON.stringify({
+        let cancelled = false;
+        let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
+    let messageSubscription: any = null;
+    const clearWatchdog = () => {
+        if (watchdogTimer) {
+            clearTimeout(watchdogTimer);
+            watchdogTimer = null;
+        }
+    };
+    const armWatchdog = () => {
+        clearWatchdog();
+        watchdogTimer = setTimeout(() => {
+            if (cancelled) return;
+            messageSubscription?.unsubscribe?.();
+            messageSubscription = null;
+            if (tickSubscriptionIdRef.current && api_base.api) {
+                (api_base.api as any).send({ forget: tickSubscriptionIdRef.current }).catch(() => {});
+                tickSubscriptionIdRef.current = null;
+            }
+            retryTimer = setTimeout(start, 100);
+        }, 20_000);
+    };
+        const start = async () => {
+            if (cancelled) return;
+            const api = api_base.api as any;
+            if (!api) {
+                retryTimer = setTimeout(start, 350);
+                return;
+            }
+
+            try {
+                // Fetch history through the same API instance that is authorized by
+                // the app. The response is returned directly by DerivAPIBasic.send().
+                const historyResponse = await api.send({
                 ticks_history: symbol,
                 count: tickCount,
                 end: 'latest',
                 style: 'ticks',
-                subscribe: 1,
-            }));
-        };
-
-        ws.onmessage = e => {
-            try {
-                const data = JSON.parse(e.data);
+                });
+                if (cancelled) return;
+                const data = historyResponse;
                 if (data.error) {
                     console.warn('[DigitWidget] WS error:', data.error.message);
-                    return;
-                }
-
-                if (data.history?.prices && Array.isArray(data.history.prices)) {
+                } else if (data.history?.prices && Array.isArray(data.history.prices)) {
                     // History batch arrives first — store raw prices.
                     // We do NOT compute digits yet because the API pip_size hasn't
                     // been confirmed. Processing with the wrong pip_size is what
@@ -225,53 +270,83 @@ const DigitPercentWidget: React.FC = () => {
                         rawHistoryRef.current = [];
                     }
                     // else: wait for live tick pip_size below
-
-                } else if (data.tick) {
-                    // Live tick — this is the authoritative pip_size source.
-                    if (data.tick.pip_size != null) {
-                        const confirmedPs = Number(data.tick.pip_size);
-
-                        if (!pipSizeConfirmedRef.current) {
-                            // First live tick: confirm pip_size and retroactively
-                            // recompute any history that was stored with the wrong default.
-                            pipSizeRef.current = confirmedPs;
-                            pipSizeConfirmedRef.current = true;
-
-                            const stored = rawHistoryRef.current;
-                            if (stored.length > 0) {
-                                const digits = stored.map(p => getLastDigit(p, confirmedPs));
-                                setTicks(digits);
-                                if (digits.length > 0) setCurrentDigit(digits[digits.length - 1]);
-                                const last = stored[stored.length - 1];
-                                if (last != null) setCurrentPrice(last.toFixed(confirmedPs));
-                                rawHistoryRef.current = [];
-                            }
-                        } else {
-                            // Subsequent ticks — update pip_size in case API changes it
-                            pipSizeRef.current = confirmedPs;
-                        }
-                    }
-
-                    const ps = pipSizeRef.current;
-                    const quote = Number(data.tick.quote);
-                    const digit = getLastDigit(quote, ps);
-                    setCurrentDigit(digit);
-                    setCurrentPrice(quote.toFixed(ps));
-                    setTicks(prev => [...prev.slice(-(tickCount - 1)), digit]);
                 }
+
+                // Subscribe via RxJS observable — same robust pattern as chart-wrapper.tsx.
+                // This is more reliable than api.onMessage which can miss messages on
+                // some API versions.
+                const tickObservable = api.subscribe({ ticks: symbol, subscribe: 1 });
+                messageSubscription = tickObservable.subscribe({
+                    next: (res: any) => {
+                        if (cancelled) return;
+                        // Capture server-side subscription id for explicit forget on cleanup
+                        if (!tickSubscriptionIdRef.current && res?.subscription?.id) {
+                            tickSubscriptionIdRef.current = String(res.subscription.id);
+                        }
+                        const tick = res?.tick;
+                        if (!tick) return;
+
+                        // Live tick — authoritative pip_size source
+                        if (tick.pip_size != null) {
+                            const confirmedPs = Number(tick.pip_size);
+                            if (!pipSizeConfirmedRef.current) {
+                                // First live tick: confirm pip_size and retroactively
+                                // recompute history stored with the wrong static default.
+                                pipSizeRef.current = confirmedPs;
+                                pipSizeConfirmedRef.current = true;
+                                const stored = rawHistoryRef.current;
+                                if (stored.length > 0) {
+                                    const digits = stored.map((p: number) => getLastDigit(p, confirmedPs));
+                                    setTicks(digits);
+                                    if (digits.length > 0) setCurrentDigit(digits[digits.length - 1]);
+                                    const last = stored[stored.length - 1];
+                                    if (last != null) setCurrentPrice(last.toFixed(confirmedPs));
+                                    // Keep the authoritative price history alive for the
+                                    // AI's Rise/Fall, High/Low and streak analysis.
+                                    rawHistoryRef.current = stored.slice(-tickCount);
+                                }
+                            } else {
+                                pipSizeRef.current = confirmedPs;
+                            }
+                        }
+
+                        const ps    = pipSizeRef.current;
+                        const quote = Number(tick.quote);
+                        const digit = getLastDigit(quote, ps);
+                        setCurrentDigit(digit);
+                        setCurrentPrice(quote.toFixed(ps));
+                        rawHistoryRef.current = [...rawHistoryRef.current, quote].slice(-tickCount);
+                        setTicks(prev => [...prev.slice(-(tickCount - 1)), digit]);
+                        setLastLiveTickAt(Date.now());
+                        armWatchdog();
+                    },
+                    error: () => {
+                        if (!cancelled) retryTimer = setTimeout(start, 500);
+                    },
+                });
             } catch (err) {
-                console.warn('[DigitWidget] parse error', err);
+                if (!cancelled) {
+                    console.warn('[DigitWidget] authenticated market data error:', err);
+                    retryTimer = setTimeout(start, 700);
+                }
             }
         };
+        start();
 
-        ws.onerror = err => console.warn('[DigitWidget] WS error', err);
-
-        return () => { ws.close(); };
+        return () => {
+            cancelled = true;
+            if (retryTimer) clearTimeout(retryTimer);
+            clearWatchdog();
+            tickSubscriptionRef.current?.unsubscribe?.();
+            tickSubscriptionRef.current = null;
+            messageSubscription?.unsubscribe?.();
+            messageSubscription = null;
+            if (tickSubscriptionIdRef.current && api_base.api) {
+                (api_base.api as any).send({ forget: tickSubscriptionIdRef.current }).catch(() => {});
+                tickSubscriptionIdRef.current = null;
+            }
+        };
     }, [open, symbol, tickCount]); // eslint-disable-line react-hooks/exhaustive-deps
-
-    useEffect(() => {
-        return () => { wsRef.current?.close(); };
-    }, []);
 
     const stats: TDigitStat[] = Array.from({ length: 10 }, (_, d) => {
         const count = ticks.filter(t => t === d).length;
@@ -288,9 +363,13 @@ const DigitPercentWidget: React.FC = () => {
     const stats100     = computeStreamStats(last100Ticks, threshold);
     const statsAll     = computeStreamStats(ticks, threshold);
 
+    // Default: right side on small screens so it never blocks page headings on mobile
+    const isMobileWidth = typeof window !== 'undefined' && window.innerWidth <= 600;
     const panelStyle: React.CSSProperties = panelPos
         ? { position: 'fixed', left: panelPos.x, top: panelPos.y, transform: 'none', zIndex: 9999 }
-        : { position: 'fixed', left: '0.8rem', top: '50%', transform: 'translateY(-50%)', zIndex: 9999 };
+        : isMobileWidth
+            ? { position: 'fixed', right: '0.4rem', top: '8rem', zIndex: 9999 }
+            : { position: 'fixed', left: '0.8rem', top: '50%', transform: 'translateY(-50%)', zIndex: 9999 };
 
     const dmBg    = darkMode ? '#0f172a' : undefined;
     const dmBd    = darkMode ? '#334155' : undefined;
@@ -299,16 +378,18 @@ const DigitPercentWidget: React.FC = () => {
 
     return (
         <div className='digit-percent-widget'>
-            <button
-                className='digit-percent-widget__trigger'
-                title='Digit % Analyzer'
-                onClick={() => setOpen(o => !o)}
-            >
-                <span className='digit-percent-widget__dot' />
-                <span className='digit-percent-widget__dot' />
-                <span className='digit-percent-widget__dot' />
-                <span className='digit-percent-widget__dot' />
-            </button>
+            {showTrigger && (
+                <button
+                    className='digit-percent-widget__trigger'
+                    title='Digit % Analyzer'
+                    onClick={() => setOpen(o => !o)}
+                >
+                    <span className='digit-percent-widget__dot' />
+                    <span className='digit-percent-widget__dot' />
+                    <span className='digit-percent-widget__dot' />
+                    <span className='digit-percent-widget__dot' />
+                </button>
+            )}
 
             {open && createPortal(
                 <div
@@ -570,33 +651,76 @@ const DigitPercentWidget: React.FC = () => {
 
                     {/* ── AI Contract Type Analyser ─────────────────────── */}
                     {ticks.length >= 20 && (() => {
-                        const last50 = ticks.slice(-50);
-                        const n = last50.length;
-                        const evenCount  = last50.filter(d => d % 2 === 0).length;
-                        const oddCount   = n - evenCount;
-                        const evenPct    = (evenCount / n * 100);
-                        const oddPct     = (oddCount  / n * 100);
-                        const freq       = Array.from({ length: 10 }, (_, i) => last50.filter(d => d === i).length);
-                        const minDigit   = freq.indexOf(Math.min(...freq));
-                        const maxDigit   = freq.indexOf(Math.max(...freq));
-                        const overCount  = last50.filter(d => d > threshold).length;
-                        const underCount = last50.filter(d => d < threshold).length;
+                        const aiTicks   = Math.min(Math.max(aiTickCount, 5), Math.min(100, ticks.length));
+                        const lastN     = ticks.slice(-aiTicks);
+                        const n         = lastN.length;
+                        const evenCount = lastN.filter(d => d % 2 === 0).length;
+                        const oddCount  = n - evenCount;
+                        const evenPct   = (evenCount / n * 100);
+                        const oddPct    = (oddCount  / n * 100);
+                        const freq      = Array.from({ length: 10 }, (_, i) => lastN.filter(d => d === i).length);
+                        const minDigit  = freq.indexOf(Math.min(...freq));
+                        const maxDigit  = freq.indexOf(Math.max(...freq));
+                        const overCount  = lastN.filter(d => d > threshold).length;
+                        const underCount = lastN.filter(d => d < threshold).length;
                         const overPct    = (overCount  / n * 100);
                         const underPct   = (underCount / n * 100);
+
+                        // Rise / Fall — based on recent price direction streaks
+                        const recentPrices = rawHistoryRef.current.slice(-aiTicks);
+                        let riseCount = 0, fallCount = 0;
+                        for (let i = 1; i < recentPrices.length; i++) {
+                            if (recentPrices[i] > recentPrices[i - 1]) riseCount++;
+                            else if (recentPrices[i] < recentPrices[i - 1]) fallCount++;
+                        }
+                        const priceMoves = riseCount + fallCount || 1;
+                        const risePct  = riseCount / priceMoves * 100;
+                        const fallPct  = fallCount / priceMoves * 100;
+
+                        // High Tick / Low Tick — last tick vs window
+                        const windowHigh = recentPrices.length > 0 ? Math.max(...recentPrices) : 0;
+                        const windowLow  = recentPrices.length > 0 ? Math.min(...recentPrices) : 0;
+                        const lastPrice  = recentPrices[recentPrices.length - 1] ?? 0;
+                        const priceRange = windowHigh - windowLow || 1;
+                        const highTickScore = ((lastPrice - windowLow) / priceRange) * 100;
+                        const lowTickScore  = ((windowHigh - lastPrice) / priceRange) * 100;
+
+                        // Only Ups / Only Downs — streak detection
+                        let upsStreak = 0, downsStreak = 0, curUpRun = 0, curDownRun = 0;
+                        for (let i = 1; i < recentPrices.length; i++) {
+                            if (recentPrices[i] > recentPrices[i - 1]) { curUpRun++; curDownRun = 0; }
+                            else if (recentPrices[i] < recentPrices[i - 1]) { curDownRun++; curUpRun = 0; }
+                            upsStreak   = Math.max(upsStreak, curUpRun);
+                            downsStreak = Math.max(downsStreak, curDownRun);
+                        }
+                        const onlyUpsScore   = Math.min(100, (upsStreak / (n * 0.3)) * 100);
+                        const onlyDownsScore = Math.min(100, (downsStreak / (n * 0.3)) * 100);
 
                         // Score each contract type
                         const scores: { contract: string; score: number; reason: string; tag: string }[] = [
                             {
+                                contract: '↑ Rise (Call)',
+                                score: risePct,
+                                reason: `${riseCount}/${priceMoves} price moves upward`,
+                                tag: risePct > 55 ? '✅ BULLISH' : risePct < 40 ? '❌ BEARISH' : '⚠ NEUTRAL',
+                            },
+                            {
+                                contract: '↓ Fall (Put)',
+                                score: fallPct,
+                                reason: `${fallCount}/${priceMoves} price moves downward`,
+                                tag: fallPct > 55 ? '✅ BEARISH' : fallPct < 40 ? '❌ BULLISH' : '⚠ NEUTRAL',
+                            },
+                            {
                                 contract: 'Even',
                                 score: evenPct,
-                                reason: `Even dominates at ${evenPct.toFixed(0)}%`,
-                                tag: evenPct > oddPct ? '✅ BULLISH' : '⚠ WEAK',
+                                reason: `${evenCount}/${n} digits even`,
+                                tag: evenPct > oddPct ? '✅ DOMINANT' : '⚠ WEAK',
                             },
                             {
                                 contract: 'Odd',
                                 score: oddPct,
-                                reason: `Odd dominates at ${oddPct.toFixed(0)}%`,
-                                tag: oddPct > evenPct ? '✅ BULLISH' : '⚠ WEAK',
+                                reason: `${oddCount}/${n} digits odd`,
+                                tag: oddPct > evenPct ? '✅ DOMINANT' : '⚠ WEAK',
                             },
                             {
                                 contract: `Over ${threshold}`,
@@ -613,14 +737,38 @@ const DigitPercentWidget: React.FC = () => {
                             {
                                 contract: `Differs (≠${minDigit})`,
                                 score: (1 - freq[minDigit] / n) * 100,
-                                reason: `Digit ${minDigit} appears least (${freq[minDigit]} times)`,
+                                reason: `Digit ${minDigit} appears least (${freq[minDigit]}×)`,
                                 tag: freq[minDigit] < n * 0.07 ? '✅ RARE' : '⚠ COMMON',
                             },
                             {
                                 contract: `Matches (=${maxDigit})`,
                                 score: freq[maxDigit] / n * 100,
-                                reason: `Digit ${maxDigit} appears most (${freq[maxDigit]} times)`,
+                                reason: `Digit ${maxDigit} appears most (${freq[maxDigit]}×)`,
                                 tag: freq[maxDigit] > n * 0.14 ? '✅ HOT' : '⚠ NORMAL',
+                            },
+                            {
+                                contract: '🔺 High Tick',
+                                score: highTickScore,
+                                reason: `Last price near window high (${(highTickScore).toFixed(0)}%)`,
+                                tag: highTickScore > 70 ? '✅ NEAR HIGH' : highTickScore < 30 ? '❌ FAR' : '⚠ MID',
+                            },
+                            {
+                                contract: '🔻 Low Tick',
+                                score: lowTickScore,
+                                reason: `Last price near window low (${(lowTickScore).toFixed(0)}%)`,
+                                tag: lowTickScore > 70 ? '✅ NEAR LOW' : lowTickScore < 30 ? '❌ FAR' : '⚠ MID',
+                            },
+                            {
+                                contract: '📈 Only Ups',
+                                score: onlyUpsScore,
+                                reason: `Max up-streak: ${upsStreak} consecutive rises`,
+                                tag: upsStreak >= 4 ? '✅ STRONG' : upsStreak >= 2 ? '⚠ POSSIBLE' : '❌ WEAK',
+                            },
+                            {
+                                contract: '📉 Only Downs',
+                                score: onlyDownsScore,
+                                reason: `Max down-streak: ${downsStreak} consecutive falls`,
+                                tag: downsStreak >= 4 ? '✅ STRONG' : downsStreak >= 2 ? '⚠ POSSIBLE' : '❌ WEAK',
                             },
                         ];
                         scores.sort((a, b) => b.score - a.score);
@@ -636,12 +784,51 @@ const DigitPercentWidget: React.FC = () => {
                             }}>
                                 <div style={{
                                     display: 'flex', alignItems: 'center', gap: '6px',
-                                    marginBottom: '10px', fontSize: '12px', fontWeight: 700,
+                                    marginBottom: '8px', fontSize: '12px', fontWeight: 700,
                                     color: darkMode ? '#a78bfa' : '#7b3fe4',
                                 }}>
                                     🤖 AI Contract Type Analyser
-                                    <span style={{ marginLeft: 'auto', fontSize: '10px', color: darkMode ? '#64748b' : '#9ca3af' }}>
-                                        Last {n} ticks • {currentMarket.label}
+                                    <span style={{
+                                        display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                        marginLeft: '2px', fontSize: '9px', fontWeight: 700,
+                                        color: connectionStatus === 'opened' && lastLiveTickAt ? '#22c55e' : '#f59e0b',
+                                    }}>
+                                        <span style={{
+                                            width: '6px', height: '6px', borderRadius: '50%',
+                                            background: connectionStatus === 'opened' && lastLiveTickAt ? '#22c55e' : '#f59e0b',
+                                        }} />
+                                        {connectionStatus === 'opened' && lastLiveTickAt ? 'LIVE MARKET' : 'CONNECTING'}
+                                    </span>
+                                    {/* Adjustable AI tick count */}
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: 'auto' }}>
+                                        <span style={{ fontSize: '10px', color: darkMode ? '#64748b' : '#9ca3af', fontWeight: 400 }}>Ticks:</span>
+                                        <input
+                                            type='number'
+                                            min={5} max={100}
+                                            value={aiTickInput}
+                                            onChange={e => setAiTickInput(e.target.value)}
+                                            onBlur={() => {
+                                                const v = Math.min(100, Math.max(5, parseInt(aiTickInput, 10) || 50));
+                                                setAiTickCount(v);
+                                                setAiTickInput(String(v));
+                                                try { localStorage.setItem('digit_widget_ai_ticks', String(v)); } catch {}
+                                            }}
+                                            onKeyDown={e => {
+                                                if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                                            }}
+                                            style={{
+                                                width: '44px', padding: '1px 4px',
+                                                fontSize: '11px', textAlign: 'center',
+                                                background: darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+                                                border: `1px solid ${darkMode ? '#334155' : '#d1d5db'}`,
+                                                borderRadius: '4px',
+                                                color: darkMode ? '#e2e8f0' : '#374151',
+                                                outline: 'none',
+                                            }}
+                                        />
+                                    </span>
+                                    <span style={{ fontSize: '10px', color: darkMode ? '#64748b' : '#9ca3af', fontWeight: 400, marginLeft: '4px' }}>
+                                        {n} used • {currentMarket.label}
                                     </span>
                                 </div>
                                 {/* Best recommendation */}

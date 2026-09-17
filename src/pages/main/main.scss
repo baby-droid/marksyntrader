@@ -11,7 +11,7 @@ body {
     overflow-x: hidden;
     width: 100%;
     height: calc(100vh - 9rem);
-    padding: 1.6rem;
+    padding: 0;  /* removed outer padding; full-page apps fill 100% */
 
     &--green {
         background: linear-gradient(160deg, #021a0a 0%, #011208 50%, #000a04 100%);
@@ -24,9 +24,29 @@ body {
 
     &__container {
         position: relative;
+        display: flex;
+        flex: 1 1 auto;
+        flex-direction: column;
+        min-width: 0;
+        min-height: 0;
         border: none;
         max-width: 100%;
         width: 100%;
+
+        // Keep full-page tools inside the same viewport as the rest of the
+        // application. Without an explicit flex height, the tab content can
+        // collapse beneath the fixed header on desktop and narrow screens.
+        > .dc-tabs--main__tabs {
+            flex: 1 1 auto;
+            min-height: 0;
+            min-width: 0;
+        }
+
+        > .dc-tabs--main__tabs > .dc-tabs__content--main__tabs {
+            min-height: 0;
+            overflow-x: hidden;
+            overflow-y: auto;
+        }
 
         &.no-scroll { overflow: hidden; }
 
@@ -82,6 +102,15 @@ body {
 
                 &--border-bottom {
                     @include mobile-or-tablet-screen { border-bottom: 0; }
+                }
+            }
+
+            // Navigation is intentionally provided by the three-dash drawer.
+            // Keep Tabs mounted so active content still switches correctly,
+            // but remove the duplicate horizontal menu from the page.
+            &--drawer-only {
+                > .dc-tabs__list {
+                    display: none;
                 }
             }
 

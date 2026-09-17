@@ -11,11 +11,15 @@ import { useResetDemoBalance } from '@/hooks/useResetDemoBalance';
 import { useStore } from '@/hooks/useStore';
 import { isDemoAccount } from '@/utils/account-helpers';
 import { navigateToTransfer } from '@/utils/transfer-utils';
+import {
+    isASpeedBoostEnabled,
+    setASpeedBoostEnabled,
+    subscribeASpeedBoost,
+} from '@/utils/execution-speed';
 import { Localize } from '@deriv-com/translations';
 import { Header, useDevice, Wrapper } from '@deriv-com/ui';
 import { AppLogo } from '../app-logo';
 import AccountSwitcher from './account-switcher';
-import MenuItems from './menu-items';
 import MobileMenu from './mobile-menu';
 import NavDrawer from '@/components/nav-drawer/NavDrawer';
 import './header.scss';
@@ -141,6 +145,13 @@ const AppHeader = observer(() => {
     const isDemo = Boolean(activeLoginid && isDemoAccount(activeLoginid));
     const { isResetting, resetError, resetSuccess, resetBalance } = useResetDemoBalance();
     const { state: depositState, openDeposit } = useDepositReal();
+    const [aSpeedBoost, setASpeedBoost] = useState(isASpeedBoostEnabled());
+
+    useEffect(() => subscribeASpeedBoost(setASpeedBoost), []);
+
+    const handleASpeedBoost = useCallback(() => {
+        setASpeedBoostEnabled(!aSpeedBoost);
+    }, [aSpeedBoost]);
 
     const renderAccountSection = useCallback(
         (position: 'left' | 'right' = 'right') => {
@@ -326,6 +337,26 @@ const AppHeader = observer(() => {
         </button>
     ) : null;
 
+    // App-wide execution preset. It lives beside the account controls so it
+    // remains available while any bot page is open.
+    const aSpeedBoostBtn = activeLoginid && !is_account_regenerating ? (
+        <button
+            type='button'
+            className={clsx('header__a-speed-btn', {
+                'header__a-speed-btn--active': aSpeedBoost,
+            })}
+            aria-pressed={aSpeedBoost}
+            title={aSpeedBoost
+                ? 'A-SPEED BOOST ON — Normal one-purchase-per-tick with zero intentional delay. Click to turn off.'
+                : 'Turn on A-SPEED BOOST — Normal one-purchase-per-tick with zero intentional delay.'}
+            onClick={handleASpeedBoost}
+        >
+            <span className='header__a-speed-btn__icon'>⚡</span>
+            <span>A-SPEED BOOST</span>
+            <span className='header__a-speed-btn__state'>{aSpeedBoost ? 'ON' : 'OFF'}</span>
+        </button>
+    ) : null;
+
     return (
         <>
             <Header
@@ -340,10 +371,15 @@ const AppHeader = observer(() => {
                     <AppLogo />
                     {isDesktop ? (
                         <>
-                            <MenuItems />
                             {demoResetBtn}
+                            {aSpeedBoostBtn}
                         </>
-                    ) : renderAccountSection('left')}
+                    ) : (
+                        <>
+                            {renderAccountSection('left')}
+                            {aSpeedBoostBtn}
+                        </>
+                    )}
                 </Wrapper>
                 <Wrapper variant='right'>
                     {renderAccountSection('right')}

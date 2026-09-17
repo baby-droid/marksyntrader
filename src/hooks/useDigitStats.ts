@@ -1,8 +1,8 @@
 // @ts-nocheck
 import { useEffect, useRef, useState, useCallback } from 'react';
-
-const APP_ID = (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_DERIV_APP_ID) || '36300';
-const DERIV_WS_URL = `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`;
+import { api_base } from '@/external/bot-skeleton';
+import { CONNECTION_STATUS } from '@/external/bot-skeleton/services/api/observables/connection-status-stream';
+import { useApiBase } from '@/hooks/useApiBase';
 
 export interface DigitStat {
   digit: number;
@@ -33,6 +33,7 @@ function extractLastDigit(price: number, pipSize: number): number {
 }
 
 export function useDigitStats(initialSymbol = 'R_10'): UseDigitStatsReturn {
+  const { connectionStatus } = useApiBase();
   const [symbol, setSymbol] = useState(initialSymbol);
   const [digits, setDigits] = useState<DigitStat[]>(
     Array.from({ length: 10 }, (_, i) => ({ digit: i, count: 0, percentage: 10 }))
@@ -44,7 +45,8 @@ export function useDigitStats(initialSymbol = 'R_10'): UseDigitStatsReturn {
 
   const tickHistory = useRef<number[]>([]);
   const pipSizeRef = useRef<number>(2); // updated from first tick response
-  const wsRef = useRef<WebSocket | null>(null);
+  const tickSubscriptionRef = useRef<any>(null);
+  const tickSubscriptionIdRef = useRef<string | null>(null);
   const symbolRef = useRef(symbol);
   symbolRef.current = symbol;
 
@@ -63,71 +65,120 @@ export function useDigitStats(initialSymbol = 'R_10'): UseDigitStatsReturn {
   }, []);
 
   const subscribe = useCallback((sym: string) => {
-    if (wsRef.current) {
-      try { wsRef.current.close(); } catch (_) {}
-      wsRef.current = null;
+    tickSubscriptionRef.current?.unsubscribe?.();
+    tickSubscriptionRef.current = null;
+    if (tickSubscriptionIdRef.current && api_base.api) {
+      (api_base.api as any).send({ forget: tickSubscriptionIdRef.current }).catch(() => {});
+      tickSubscriptionIdRef.current = null;
     }
     tickHistory.current = [];
     pipSizeRef.current = 2;
     setIsConnected(false);
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
+    let messageSubscription: any = null;
 
-    const ws = new WebSocket(DERIV_WS_URL);
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      ws.send(JSON.stringify({ ticks_history: sym, count: 500, end: 'latest', style: 'ticks' }));
-      ws.send(JSON.stringify({ ticks: sym, subscribe: 1 }));
+    const clearWatchdog = () => {
+      if (watchdogTimer) {
+        clearTimeout(watchdogTimer);
+        watchdogTimer = null;
+      }
     };
 
-    ws.onmessage = (e: MessageEvent) => {
-      if (sym !== symbolRef.current) return;
-      let data;
-      try { data = JSON.parse(e.data); } catch (_) { return; }
+    const armWatchdog = () => {
+      clearWatchdog();
+      watchdogTimer = setTimeout(() => {
+        if (cancelled) return;
+        tickSubscriptionRef.current?.unsubscribe?.();
+        tickSubscriptionRef.current = null;
+        messageSubscription?.unsubscribe?.();
+        messageSubscription = null;
+        if (tickSubscriptionIdRef.current && api_base.api) {
+          (api_base.api as any).send({ forget: tickSubscriptionIdRef.current }).catch(() => {});
+          tickSubscriptionIdRef.current = null;
+        }
+        retryTimer = setTimeout(start, 100);
+      }, 20_000);
+    };
 
-      if (data.msg_type === 'history' && data.history?.prices) {
+    const start = async () => {
+      if (cancelled) return;
+      const api = api_base.api as any;
+      if (!api) {
+        retryTimer = setTimeout(start, 350);
+        return;
+      }
+      try {
+        const data = await api.send({ ticks_history: sym, count: 1000, end: 'latest', style: 'ticks' });
+        if (cancelled || sym !== symbolRef.current) return;
+        if (data?.error) throw new Error(data.error.message || 'History request failed');
+        if (data.history?.prices) {
         const prices: number[] = data.history.prices.map(Number);
         tickHistory.current = prices.slice(-HISTORY_SIZE);
         setCurrentPrice(prices[prices.length - 1]);
         setLastTicks(prices.slice(-50));
-        // pipSize from history isn't given directly — use current ref (will be updated by first tick)
-        setDigits(computeDigits(tickHistory.current, pipSizeRef.current));
-        const lastP = prices[prices.length - 1];
-        setLastDigit(extractLastDigit(lastP, pipSizeRef.current));
-        setIsConnected(true);
-      } else if (data.msg_type === 'tick' && data.tick?.quote != null) {
-        setIsConnected(true);
-        const p = Number(data.tick.quote);
-        if (!isFinite(p)) return;
-        if (sym !== symbolRef.current) return;
-
-        // Capture pip_size from the live feed — this is the authoritative source
-        if (data.tick.pip_size != null) {
-          pipSizeRef.current = Number(data.tick.pip_size);
+        // Show digit stats immediately from history — don't wait for first live tick
+        setDigits(computeDigits(prices, pipSizeRef.current));
         }
 
-        const pipSize = pipSizeRef.current;
-        const d = extractLastDigit(p, pipSize);
+        // Listen on the authenticated API's message bus before subscribing.
+        // DerivAPIBasic.subscribe() can stop forwarding after a reconnect;
+        // the shared message bus lets us identify and recover the exact stream.
+        messageSubscription = api.onMessage?.()?.subscribe?.(({ data: message }: any) => {
+          if (cancelled || sym !== symbolRef.current) return;
+          const data = message?.data ?? message;
+          if (tickSubscriptionIdRef.current && data?.subscription?.id &&
+              String(data.subscription.id) !== String(tickSubscriptionIdRef.current)) return;
+          if (data?.subscription?.id) tickSubscriptionIdRef.current = String(data.subscription.id);
+          if (data?.error) return;
+          if (data?.tick?.quote != null) {
+          setIsConnected(true);
+          const p = Number(data.tick.quote);
+          if (!isFinite(p)) return;
 
-        setCurrentPrice(p);
-        tickHistory.current = [...tickHistory.current, p].slice(-HISTORY_SIZE);
-        setLastTicks(prev => [...prev, p].slice(-50));
-        if (!isNaN(d)) setLastDigit(d);
-        setDigits(computeDigits(tickHistory.current, pipSize));
+          if (data.tick.pip_size != null) pipSizeRef.current = Number(data.tick.pip_size);
+
+          const pipSize = pipSizeRef.current;
+          const d = extractLastDigit(p, pipSize);
+
+          setCurrentPrice(p);
+          tickHistory.current = [...tickHistory.current, p].slice(-HISTORY_SIZE);
+          setLastTicks(prev => [...prev, p].slice(-50));
+          if (!isNaN(d)) setLastDigit(d);
+          setDigits(computeDigits(tickHistory.current, pipSize));
+          armWatchdog();
+          }
+        });
+        const subscriptionResponse = await api.send({ ticks: sym, subscribe: 1 });
+        if (cancelled) return;
+        if (subscriptionResponse?.error) throw new Error(subscriptionResponse.error.message || 'Tick subscription failed');
+        if (subscriptionResponse?.subscription?.id) {
+          tickSubscriptionIdRef.current = String(subscriptionResponse.subscription.id);
+        }
+        armWatchdog();
+      } catch (_) {
+        if (!cancelled) retryTimer = setTimeout(start, 700);
       }
     };
-
-    ws.onerror = () => setIsConnected(false);
-    ws.onclose = () => setIsConnected(false);
+    start();
+    return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+      clearWatchdog();
+      tickSubscriptionRef.current?.unsubscribe?.();
+      tickSubscriptionRef.current = null;
+      messageSubscription?.unsubscribe?.();
+      messageSubscription = null;
+      if (tickSubscriptionIdRef.current && api_base.api) {
+        (api_base.api as any).send({ forget: tickSubscriptionIdRef.current }).catch(() => {});
+        tickSubscriptionIdRef.current = null;
+      }
+    };
   }, [computeDigits]);
 
   useEffect(() => {
-    subscribe(symbol);
-    return () => {
-      if (wsRef.current) {
-        try { wsRef.current.close(); } catch (_) {}
-        wsRef.current = null;
-      }
-    };
+    return subscribe(symbol);
   }, [symbol, subscribe]);
 
   return { digits, lastDigit, currentPrice, lastTicks, symbol, setSymbol, isConnected };

@@ -13,18 +13,23 @@ interface SettingsPanelProps {
 }
 
 const NAV_ITEMS = [
-  { tab: DBOT_TABS.FREE_BOTS,     icon: '🤖', label: 'Free Bots' },
-  { tab: DBOT_TABS.DASHBOARD,     icon: '🏠', label: 'Dashboard' },
-  { tab: DBOT_TABS.BOT_BUILDER,   icon: '🧩', label: 'Bot Builder' },
-  { tab: DBOT_TABS.DCIRCLES,      icon: '⭕', label: 'DCircles' },
-  { tab: DBOT_TABS.SPEED_LAB,     icon: '⚡', label: 'Speed Lab' },
-  { tab: DBOT_TABS.PRO_HEDGE,     icon: '⚖', label: 'Pro Hedge' },
-  { tab: DBOT_TABS.CHART,         icon: '📈', label: 'Charts' },
+  { tab: DBOT_TABS.DASHBOARD, icon: '🏠', label: 'Dashboard' },
+  { tab: DBOT_TABS.BOT_BUILDER, icon: '🧩', label: 'Bot Builder' },
+  { tab: DBOT_TABS.FREE_BOTS, icon: '🤖', label: 'Free Bots & Personal Bots' },
+  { tab: DBOT_TABS.AHMED_SCALPER_BOTS, icon: '⚡', label: 'Scalper Bots' },
+  { tab: DBOT_TABS.AUTO_DIGITS, icon: '◉', label: 'Auto-Digits' },
+  { tab: DBOT_TABS.DCIRCLES, icon: '⭕', label: 'D-Circles' },
+  { tab: DBOT_TABS.SPEEDLAB, icon: '🚀', label: 'Speed Lab' },
+  { tab: DBOT_TABS.HEDGE, icon: '⚖', label: 'Hedge Trading' },
+  { tab: DBOT_TABS.CHART, icon: '📈', label: 'Charts' },
   { tab: DBOT_TABS.MANUAL_TRADER, icon: '🖐', label: 'Manual Trader' },
-  { tab: DBOT_TABS.TUTORIAL,      icon: '📚', label: 'Tutorials' },
-  { tab: DBOT_TABS.BOT_LIBRARY,   icon: '📦', label: 'Bot Library' },
-  { tab: DBOT_TABS.COPY_TRADING,  icon: '🔄', label: 'Copy Trading' },
-  { tab: DBOT_TABS.REPORTS,       icon: '📊', label: 'Reports' },
+  { tab: DBOT_TABS.AUTO_TRADES, icon: '🔄', label: 'Auto Trades' },
+  { tab: DBOT_TABS.COPY_TRADING, icon: '📋', label: 'Copy Trading' },
+  { tab: DBOT_TABS.REPORT, icon: '📊', label: 'Reports' },
+  { tab: DBOT_TABS.BULK_TRADE, icon: '📦', label: 'Bulk Trade' },
+  { tab: DBOT_TABS.ANALYSIS, icon: '🔍', label: 'Analysis' },
+  { tab: DBOT_TABS.TUTORIAL, icon: '📚', label: 'Tutorials' },
+  { tab: DBOT_TABS.TRADING_SOFTWARE, icon: '💻', label: 'Trading Software' },
 ];
 
 const SettingsPanel = observer(({ onTabChange, currentTab }: SettingsPanelProps) => {

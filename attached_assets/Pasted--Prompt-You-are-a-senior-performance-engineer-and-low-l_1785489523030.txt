@@ -1,0 +1,27 @@
+**Prompt:**
+
+You are a senior performance engineer and low-latency systems architect. Your task is to optimize my trading application for maximum speed, responsiveness, and throughput while maintaining stability, accuracy, and clean code. Treat this project as a real-time, event-driven system where every millisecond matters. Analyze the complete architecture from frontend to backend and eliminate every possible bottleneck.
+
+Design the application around a single persistent WebSocket connection that remains active throughout the session instead of repeatedly reconnecting. Implement an efficient message router that categorizes incoming messages into independent channels such as ticks, proposals, contract updates, balance updates, transactions, notifications, and logs. Ensure that processing one message never blocks another. Introduce asynchronous queues for each message type and prioritize time-critical events such as incoming ticks and purchase confirmations.
+
+Optimize the event pipeline so that incoming ticks are processed immediately without unnecessary delays, polling, sleeps, or blocking operations. Ensure all strategy calculations occur locally in memory with O(1) or near O(1) access whenever possible. Cache reusable computations, avoid repeated parsing, minimize object allocations, and reduce garbage collection pressure. Use efficient data structures including circular buffers, typed arrays, hash maps, and immutable state only where appropriate.
+
+Redesign the rendering pipeline so that the interface updates only the components affected by new data instead of re-rendering the entire application. Batch UI updates using requestAnimationFrame or equivalent scheduling mechanisms. Group DOM updates together to avoid layout thrashing. Use GPU-accelerated animations through CSS transforms and opacity instead of width, height, margins, or expensive layout recalculations. Ensure charts, digit displays, balance, journal, transactions, and statistics update independently.
+
+Implement background workers or worker threads for computationally intensive tasks such as statistical calculations, strategy evaluation, historical analysis, logging, and report generation so the main thread remains responsive. Use concurrent execution where safe, allowing market analysis, UI rendering, logging, and transaction recording to execute in parallel without race conditions.
+
+Reduce network latency by minimizing API requests, batching non-critical updates, compressing payloads where possible, and maintaining efficient serialization. Implement automatic reconnection with exponential backoff, heartbeat monitoring, latency measurement, and seamless recovery without interrupting active trading sessions.
+
+Optimize memory usage by removing memory leaks, clearing unused references, recycling objects where practical, and limiting historical data kept in memory while preserving enough information for analysis. Store large historical datasets efficiently and load them lazily only when needed.
+
+Profile every function, component, hook, event handler, and network request. Identify CPU hotspots, excessive re-renders, slow loops, blocking synchronous code, and unnecessary computations. Replace inefficient algorithms with optimized alternatives and reduce algorithmic complexity whenever possible.
+
+Ensure transaction history, journal entries, and contract summaries update incrementally by inserting only new records rather than rebuilding entire tables. Virtualize long lists so thousands of records can be displayed without affecting performance. Optimize chart rendering to process only new data points instead of redrawing complete datasets.
+
+Implement comprehensive benchmarking tools that continuously measure tick processing latency, decision latency, rendering time, network latency, frame rate, memory consumption, CPU utilization, WebSocket throughput, garbage collection pauses, and trade execution timing. Display these metrics in a developer performance dashboard to identify regressions quickly.
+
+Introduce configurable performance modes including Ultra Fast, Fast, Balanced, and Power Saver. Ultra Fast should prioritize the lowest possible latency with immediate processing. Fast should balance responsiveness and resource usage. Balanced should optimize overall stability. Power Saver should reduce rendering frequency while preserving accurate strategy execution.
+
+Review every dependency, library, framework, and package for performance overhead. Remove unnecessary abstractions, reduce bundle size through tree shaking, lazy loading, code splitting, and asset optimization. Optimize startup time, initialization sequence, and first-render performance.
+
+Finally, produce a complete optimization report containing every identified bottleneck, the reasoning behind each optimization, estimated latency improvements, implementation priority, architectural diagrams, benchmark expectations, and production-ready recommendations. The goal is to achieve a highly responsive, scalable, low-latency trading platform capable of processing continuous real-time market data while maintaining smooth 60–120 FPS rendering, minimal CPU usage, efficient memory management, rapid trade execution, and excellent long-term stability under sustained high-frequency workloads.
