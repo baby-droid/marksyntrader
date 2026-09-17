@@ -2,14 +2,13 @@ import { lazy, Suspense } from 'react';
 import React from 'react';
 import { createBrowserRouter, createRoutesFromElements, Route, RouterProvider } from 'react-router-dom';
 import ChunkErrorPage from '@/components/error-component/chunk-error-boundary';
-import ChunkLoader from '@/components/loader/chunk-loader';
 import LocalStorageSyncWrapper from '@/components/localStorage-sync-wrapper';
 import RoutePromptDialog from '@/components/route-prompt-dialog';
 import { useAccountSwitching } from '@/hooks/useAccountSwitching';
 import { useLanguageFromURL } from '@/hooks/useLanguageFromURL';
 import { StoreProvider } from '@/hooks/useStore';
 import { isPreviewMode, PREVIEW_BASE_PATH } from '@/utils/is-preview-mode';
-import { localize, TranslationProvider } from '@deriv-com/translations';
+import { TranslationProvider } from '@deriv-com/translations';
 import CoreStoreProvider from './CoreStoreProvider';
 import i18nInstance from './i18n';
 import './app-root.scss';
@@ -33,7 +32,7 @@ const router = createBrowserRouter(
             errorElement={<ChunkErrorPage />}
             element={
                 <Suspense
-                    fallback={<ChunkLoader message={localize('Please wait while we connect to the server...')} />}
+                    fallback={null}
                 >
                     <TranslationProvider defaultLang='EN' i18nInstance={i18nInstance}>
                         <LanguageHandler>
@@ -55,7 +54,7 @@ const router = createBrowserRouter(
             <Route
                 path='dtrader'
                 element={
-                    <Suspense fallback={<ChunkLoader message={localize('Loading D-Trader...')} />}>
+                    <Suspense fallback={null}>
                         <DTraderPage />
                     </Suspense>
                 }
@@ -65,7 +64,7 @@ const router = createBrowserRouter(
                 path='callback'
                 errorElement={<ChunkErrorPage />}
                 element={
-                    <Suspense fallback={<ChunkLoader message={localize('Completing login…')} />}>
+                    <Suspense fallback={null}>
                         <CallbackPage />
                     </Suspense>
                 }
