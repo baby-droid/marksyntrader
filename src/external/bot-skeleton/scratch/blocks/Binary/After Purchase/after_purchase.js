@@ -73,12 +73,23 @@ window.Blockly.Blocks.after_purchase = {
 
 window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block => {
     const stack = window.Blockly.JavaScript.javascriptGenerator.statementToCode(block, 'AFTERPURCHASE_STACK');
+    // King Fisher templates deliberately keep scanning after every settlement.
+    // Their risk variables are still updated by the workspace blocks, but a
+    // TP/SL branch must not end the interpreter after the first contract.
+    const workspaceBlocks = block.workspace?.getAllBlocks?.()
+        ?? window.Blockly.derivWorkspace?.getAllBlocks?.()
+        ?? [];
+    const isKingFisher = workspaceBlocks.some(candidate =>
+        String(candidate.type || '').startsWith('king_fisher_')
+    );
+    const continuation = isKingFisher
+        ? 'Bot.isTradeAgain(true); return true;'
+        : 'Bot.isTradeAgain(false); return false;';
     const code = `
     BinaryBotPrivateAfterPurchase = function BinaryBotPrivateAfterPurchase() {
         Bot.highlightBlock('${block.id}');
         ${stack}
-        Bot.isTradeAgain(false);
-        return false;
+        ${continuation}
     };`;
     return code;
 };

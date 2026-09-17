@@ -1,0 +1,1 @@
+var e=`/assets/oscars_grind-3kqV6Py6.xml`;export{e as default};

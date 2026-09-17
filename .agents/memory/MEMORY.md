@@ -73,3 +73,4 @@
 - [Dependency repair](dependency-repair.md) — restore an empty node_modules tree without unintentionally upgrading the checked-in manifest.
 - [Blockly fallback execution](unsupported-block-execution.md) — unknown imported blocks need both a visible definition and a JavaScript generator fallback to remain runnable.
 - [Vite merge guardrails](vite-merge-guardrails.md) — resolve the active toolchain before regenerating the lockfile; Vite 8 may need CSS minification disabled for malformed vendor CSS.
+- [King Fisher continuation](king-fisher-continuation.md) — King Fisher after-purchase generation must force trade_again after settlement; TP/SL branches otherwise can end the interpreter after one run.

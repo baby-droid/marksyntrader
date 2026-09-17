@@ -1,0 +1,1 @@
+var e=`/assets/dalembert_max-stake-CUJFZrgb.xml`;export{e as default};

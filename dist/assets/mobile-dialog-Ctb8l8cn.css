@@ -1,0 +1,539 @@
+/**
+ * Define Breakpoints here.
+ */
+/** Need to add new breakpoints for mixins */
+/** @define dc-themed-scrollbars */
+.dc-themed-scrollbars {
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  scroll-behavior: smooth;
+  /* Firefox only */
+  scrollbar-color: var(--state-active) var(--general-main-1);
+  scrollbar-width: thin;
+}
+.dc-themed-scrollbars__autohide::-webkit-scrollbar-thumb {
+  display: none;
+}
+.dc-themed-scrollbars__autohide--is-hovered::-webkit-scrollbar-thumb {
+  display: unset;
+}
+.dc-themed-scrollbars--has-horizontal {
+  overflow-x: auto;
+}
+.dc-themed-scrollbars--hidden-scrollbar::-webkit-scrollbar {
+  display: none !important;
+}
+.dc-themed-scrollbars--only-horizontal {
+  overflow-y: hidden;
+  overflow-x: auto;
+}
+.dc-themed-scrollbars--only-horizontal-overlay {
+  overflow-y: hidden;
+  overflow-x: overlay;
+}
+.dc-themed-scrollbars-wrapper {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: -3rem;
+  padding-bottom: 3rem;
+  white-space: nowrap;
+}
+.dc-themed-scrollbars-wrapper li {
+  display: inline-block;
+  box-sizing: border-box;
+  padding: 0 3rem;
+  vertical-align: middle;
+  width: unset;
+  height: 40px;
+}
+@media (max-width: 1279px) {
+  .dc-themed-scrollbars-wrapper li {
+    padding: 0 1.1rem;
+  }
+}
+.dc-themed-scrollbars::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+  background-color: transparent;
+  border-radius: 10px;
+}
+.dc-themed-scrollbars::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+.dc-themed-scrollbars::-webkit-scrollbar-thumb {
+  border-radius: 10px;
+  background-color: var(--state-active);
+}/* ------------------------------------*
+ *  # Constants
+ *------------------------------------ */
+/* stylelint-disable color-no-hex */
+/* COLOR PALETTE */
+/* colors */
+/* status colors */
+/* alpha colors */
+/* gradient colors */
+/* Preserve legacy variables */
+/* Primary */
+/* stylelint-enable color-no-hex */
+/* Wallet gradient background */
+/* App Cards gradient background */
+/* Wallets */
+/**
+ * Define Breakpoints here.
+ */
+/** Need to add new breakpoints for mixins */
+/*
+    Constants
+*/
+/*
+    Variables
+*/
+/*
+ * Generate typefaces key-value pair of variable name and config
+ * Example:
+   --paragraph-center-bold-black: (14px, center, bold, black)
+ */
+/*
+    List of all typefaces variables in the format: --$FONT_SIZES-$TEXT_ALIGN-$FONT_WEIGHTS-COLORS.
+    See $FONT_SIZES, $TEXT_ALIGN, $FONT_WEIGHTS, $COLORS maps above for references.
+    Variables name example: --title-center-semibold-red
+ */
+/* ------------------------------------*
+ *  # SASS Mixins and Functions
+ *------------------------------------ */
+/*
+ * SASS interpolation
+ */
+/*
+ * PX to EM
+ * @param $px - px value to be converted
+ * @param $base - base font size (in `em`)
+ * Note: 'em' values are calculate based on the element font-size
+ *       to properly converts 'px' to 'em', please pass in the element font-size with it
+ * Usage example:
+    padding: em(16px, 1.6em); // font-size in 'em'
+ */
+/*
+ * Set property by passing a property name, and values.
+ * @param $property name - padding, margin etc.
+ * @param $values        - values in `px` (space separated for multiple values)
+ * @param $font-size     - base font-size in `em`
+ * Usage example:
+   @include toEm(padding, 8px 16px 8px, 1.6em);
+ */
+/*
+ * Generate typefaces key-value pair of variable name and config
+ * Example:
+   --paragraph-center-bold-black: (14px, center, bold, black)
+ */
+/*
+ * Sets font-size, font-weight, color, text-transform, text-align and line-height
+ * Usage example:
+   @include setTypeface(16px, bold, black, uppercase);
+ */
+/*
+ * Set typefaces by passing a typeface variable name
+ * @param $var   - typeface variable
+ * @param $tt    - text-transform property
+ * @param $align - text-align property
+ * Usage example:
+   @include typeface(--paragraph-bold-black, uppercase, center);
+ */
+/*
+ * Range Slider Thumb styling is set here
+ */
+/*
+ * SVG icons colors
+ */
+/*
+ * Bar Spinner Animation
+ * @param $count    - number of bars
+ * @param $duration - duration of animation
+ * @param $phase    - each bar phase change delay
+ * Usage example:
+   @include createBarspinnerAnimation(5, 1.2s, 0,1);
+ */
+/*
+ * Tooltip colors
+ * @param $color - color property
+ * Usage example:
+   @include tooltipColor($COLOR_RED);
+ */
+/*
+ * Convert Tooltip colors
+ * @param $color - css color property
+ * Usage example:
+   @include convertTooltipColor(var(--status-default));
+ */
+/*
+ * Check if the page is in RTL mode
+ * Usage example:
+   @include is-RTL { left: 0 };
+ */
+/* RTL Language Mixin */
+/** Need to add new breakpoints for mixins */
+/** @define dc-modal; weak */
+.dc-modal__container {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+  transition: transform 0.25s cubic-bezier(0.25, 0.1, 0.1, 0.25), opacity 0.25s cubic-bezier(0.25, 0.1, 0.1, 0.25);
+  background-color: var(--general-main-2);
+  box-shadow: 0 4px 6px 0 var(--shadow-menu);
+}
+.dc-modal__container_trade-modal-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.dc-modal__container_trade-modal-wrapper .currency-icon {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 4rem;
+}
+.dc-modal__container--is-vertical-centered {
+  position: absolute;
+  top: 50vh;
+  transform: translateY(-50%) !important;
+}
+.dc-modal__container--is-vertical-centered .dc-modal__container {
+  min-width: unset;
+  top: 2rem;
+}
+@media (max-width: 1279px) {
+  .dc-modal__container--is-vertical-centered {
+    left: 2.4rem;
+    width: calc(100vw - 4.8rem) !important;
+  }
+}
+.dc-modal__container--is-vertical-top {
+  top: 48px;
+  position: absolute;
+}
+@media (max-width: 600px) {
+  .dc-modal__container--is-vertical-top {
+    top: 40px;
+    left: 1.6rem;
+    width: calc(100vw - 3.2rem) !important;
+  }
+}
+.dc-modal__container--is-vertical-bottom {
+  bottom: 36px;
+  position: absolute;
+}
+@media (max-width: 600px) {
+  .dc-modal__container--is-vertical-bottom {
+    left: 1.6rem;
+    width: calc(100vw - 3.2rem) !important;
+  }
+}
+.dc-modal__container--hide {
+  display: none;
+}
+.dc-modal__container--enter, .dc-modal__container--exit {
+  transform: translateY(50px);
+  opacity: 0;
+  pointer-events: none;
+}
+.dc-modal__container--enter-done {
+  transform: translateY(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+.dc-modal__container--small {
+  max-width: 440px;
+}
+.dc-modal__container--small .dc-modal-header {
+  border-bottom: none;
+}
+.dc-modal__container--is-confirmation-modal .dc-modal-header {
+  border-bottom: none;
+}
+.dc-modal__container--is-confirmation-modal .dc-modal-header__title {
+  padding: 2.4rem;
+}
+.dc-modal__container--is-confirmation-modal .dc-modal-body {
+  padding: 0 2.4rem;
+}
+.dc-modal__container--is-confirmation-modal .dc-modal-footer {
+  padding: 2.4rem;
+}
+@media (min-width: 601px) {
+  .dc-modal__container {
+    min-width: 440px !important;
+    max-height: calc(100vh - 48px - 36px) !important;
+  }
+}
+@media (max-width: 600px) {
+  .dc-modal__container {
+    max-width: calc(100vw - 3.2rem) !important;
+  }
+}
+@media (max-width: 1279px) {
+  .dc-modal__container_sent-email__modal {
+    height: 42rem !important;
+    overflow-y: scroll !important;
+  }
+}
+.dc-modal {
+  /** @define dc-modal-header */
+}
+.dc-modal-header {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  line-height: 24px;
+  align-items: center;
+}
+.dc-modal-header__border-bottom {
+  border-bottom: 2px solid var(--general-section-5) !important;
+}
+.dc-modal-header__icon {
+  margin-right: 1rem;
+}
+.dc-modal-header__icon:hover {
+  cursor: pointer;
+}
+.dc-modal-header__title {
+  padding: 1.6rem 2.4rem;
+  display: flex;
+  align-items: center;
+  height: 100%;
+}
+.dc-modal-header__title:empty {
+  padding: 0;
+  border: none;
+}
+@media (max-width: 1279px) {
+  .dc-modal-header__title {
+    font-size: 1.4rem;
+    padding: 1.6rem;
+    line-height: 1.2;
+  }
+}
+.dc-modal-header__section {
+  flex-grow: 1;
+  padding: 1.6rem;
+  line-height: 24px;
+  display: flex;
+  align-items: center;
+}
+.dc-modal-header__close {
+  display: block;
+  cursor: pointer;
+  padding: 0.6rem 0.8rem;
+  height: 30px;
+  width: 32px;
+  margin: 1.2rem 1.6rem 1.2rem auto;
+}
+@media (max-width: 1279px) {
+  .dc-modal-header__close {
+    margin: 0.8rem;
+  }
+}
+html[dir=rtl] .dc-modal-header__close {
+  margin: 1.2rem auto 1.2rem 1.6rem;
+}
+.dc-modal-header--is-title-centered {
+  justify-content: flex-end;
+  position: relative;
+}
+.dc-modal-header--is-title-centered .dc-modal-header__title {
+  justify-content: center;
+  width: 100%;
+}
+@media (max-width: 1279px) {
+  .dc-modal-header--is-title-centered .dc-modal-header__title {
+    position: absolute;
+  }
+}
+.dc-modal-header--is-title-centered .dc-modal-header__close {
+  z-index: 1;
+}
+@media not all and (resolution >= 0.001dpcm) {
+  @supports (-webkit-appearance: none) {
+    .dc-modal-header {
+      /* postcss-bem-linter: ignore */
+      min-height: 4.8rem;
+    }
+  }
+}
+.dc-modal {
+  /** @define dc-modal-body */
+}
+.dc-modal-body {
+  padding: 2.4rem;
+  font-size: 1.4rem;
+  line-height: 1.43;
+  color: var(--text-prominent);
+}
+.dc-modal-body:first-child {
+  padding-top: 2.4rem;
+}
+.dc-modal-body__expiration {
+  min-height: 12rem;
+  padding: 1.6rem;
+}
+@media (max-width: 1279px) {
+  .dc-modal-body {
+    font-size: 1.2rem;
+    padding: 0.8rem 2.4rem;
+  }
+}
+.dc-modal {
+  /** @define dc-modal-footer; weak */
+}
+.dc-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 1.6rem;
+  margin-top: auto;
+}
+.dc-modal-footer .dc-btn {
+  margin: 0 0.8rem;
+}
+.dc-modal-footer .dc-btn:last-child {
+  margin: 0;
+}
+.dc-modal-footer--separator {
+  border-top: 2px solid var(--general-section-1);
+}/* ------------------------------------*
+ *  # Constants
+ *------------------------------------ */
+/* stylelint-disable color-no-hex */
+/* COLOR PALETTE */
+/* colors */
+/* status colors */
+/* alpha colors */
+/* gradient colors */
+/* Preserve legacy variables */
+/* Primary */
+/* stylelint-enable color-no-hex */
+/* Wallet gradient background */
+/* App Cards gradient background */
+/* Wallets */
+/** @define dc-mobile-dialog; weak */
+.dc-mobile-dialog {
+  box-sizing: border-box;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 999;
+  overflow: auto;
+  transition: opacity 0.2s;
+  opacity: 0;
+  pointer-events: none;
+  background: var(--fill-normal);
+}
+.dc-mobile-dialog--enter, .dc-mobile-dialog--exit {
+  opacity: 0;
+  pointer-events: none;
+}
+.dc-mobile-dialog--enter .dc-mobile-dialog__content, .dc-mobile-dialog--exit .dc-mobile-dialog__content {
+  transform: scale(0);
+}
+.dc-mobile-dialog--enter .dc-mobile-dialog__header, .dc-mobile-dialog--exit .dc-mobile-dialog__header {
+  transform: translateY(-100%);
+}
+.dc-mobile-dialog--enter-done {
+  opacity: 1;
+  pointer-events: auto;
+}
+.dc-mobile-dialog--enter-done .dc-mobile-dialog__content {
+  transform: scale(1);
+}
+.dc-mobile-dialog--enter-done .dc-mobile-dialog__header {
+  transform: translateY(0);
+}
+.dc-mobile-dialog__content {
+  margin-top: 0.4rem;
+  box-sizing: border-box;
+  position: relative;
+  padding-top: 3.6rem;
+  z-index: 1;
+  background: var(--fill-normal);
+  transition: all 0.2s ease-out;
+}
+.dc-mobile-dialog__content--is-full-height {
+  height: calc(100% - 0.4rem);
+}
+.dc-mobile-dialog__content > div {
+  height: 100%;
+}
+.dc-mobile-dialog__header {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  position: fixed;
+  top: 0;
+  padding: 1rem;
+  height: 40px;
+  z-index: 4;
+  background: var(--fill-normal);
+  transition: all 0.2s ease-out;
+  transition-delay: 0.2s;
+  border-bottom: 1px solid var(--border-disabled);
+}
+.dc-mobile-dialog__container--has-scroll {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+.dc-mobile-dialog__container--has-info-banner .dc-mobile-dialog__header {
+  position: relative;
+  top: unset;
+  z-index: unset;
+  background: unset;
+}
+.dc-mobile-dialog__container--has-info-banner .dc-mobile-dialog__header-wrapper {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  background: var(--fill-normal);
+  width: 100%;
+  border-bottom: 0.01rem solid transparent;
+}
+.dc-mobile-dialog__container--has-info-banner .dc-mobile-dialog__header-wrapper .inline-message__information {
+  margin: 1.6rem 0.8rem -0.8rem;
+}
+.dc-mobile-dialog__container--has-info-banner .dc-mobile-dialog__header-wrapper .learn-more {
+  height: 5rem;
+  width: calc(100% - 1.6rem);
+  margin: 1.6rem 0.8rem 0.8rem;
+  padding: 1.6rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: none;
+  background-color: var(--general-section-1);
+  cursor: pointer;
+  border-radius: 4px;
+}
+.dc-mobile-dialog__container--has-info-banner .dc-mobile-dialog__content {
+  margin-top: unset;
+  padding-top: unset;
+}
+.dc-mobile-dialog__footer {
+  position: fixed;
+  width: 100%;
+  bottom: 0;
+  z-index: 4;
+}
+.dc-mobile-dialog__title {
+  padding: 1.2rem 1.2rem 1.2rem 0.4rem;
+  margin: 0;
+}
+.dc-mobile-dialog__close-btn-icon {
+  margin: 1.2rem 0.4rem;
+  width: 1.6rem;
+  height: 1.6rem;
+  /* postcss-bem-linter: ignore */
+  --fill-color1: var(--text-prominent) !important;
+}

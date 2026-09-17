@@ -1,0 +1,1 @@
+var e=`/assets/martingale_max-stake-DNGDZzfo.xml`;export{e as default};

@@ -14,13 +14,11 @@ import {
     invalidateSmartRun,
     isSmartRunActive,
     isSmartRunCurrent,
-    normalizeSmartBarrier,
     pickSmartTradeDecision,
     type SmartCardConfig,
     type SmartCardId,
 } from './smart-trading-guards';
 import {
-    AUTO_BOT_MARKETS,
     AUTO_BOT_TICK_DURATION,
     getFreshAutoBotMarkets,
     isValidatedAutoBotEntry,
@@ -35,41 +33,6 @@ import { evaluateAutoBotStrategy } from './auto-bot-strategies';
 import './auto-trades.scss';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-// The original Smart Trading cards use the shared selected-symbol feed.
-// Market-scanner strategies remain available in the separate Auto Bots tab.
-const SCANNER_SMART_CARD_IDS = new Set<SmartCardId>();
-
-function scanSmartCardMarkets(
-    id: SmartCardId,
-    snapshots: Record<string, AutoBotMarketSnapshot>,
-    cfg: SmartCardConfig,
-    depth: number,
-): AutoBotMarketCandidate[] {
-    return Object.values(snapshots)
-        .filter(snapshot => snapshot.ready && snapshot.digits.length >= 20)
-        .map(snapshot => {
-            const decision = pickSmartTradeDecision(id, snapshot.digits, cfg, depth);
-            const score = Math.max(0, Math.min(100, Number(decision.score ?? 0)));
-            return {
-                symbol: snapshot.symbol,
-                label: snapshot.label,
-                digits: snapshot.digits,
-                trade: {
-                    contract: decision.contract,
-                    barrier: decision.barrier,
-                    shouldTrade: decision.meetsCondition,
-                    signal: decision.meetsCondition ? 'strong' as const : undefined,
-                },
-                score,
-                qualifies: decision.meetsCondition,
-                tickVersion: snapshot.tickVersion,
-                livePrice: snapshot.livePrice,
-                ticks: AUTO_BOT_TICK_DURATION,
-            };
-        })
-        .sort((left, right) => right.score - left.score);
-}
-
 function fmtProfit(v: number) {
     return (v >= 0 ? '+' : '') + v.toFixed(2);
 }
@@ -325,16 +288,6 @@ function useAuthenticatedLiveDigits(symbol: string) {
     }, [symbol]);
 
     return { digits, digitsRef, livePrice, priceRef, tickVersion };
-}
-
-function useLiveDigitsRef(symbol: string): React.MutableRefObject<number[]> {
-    const { digitsRef } = useAuthenticatedLiveDigits(symbol);
-    return digitsRef;
-}
-
-function useLiveDigitsState(symbol: string): number[] {
-    const { digits } = useAuthenticatedLiveDigits(symbol);
-    return digits;
 }
 
 // ── Shared buy-and-wait via app's API connection ──────────────────────────────
@@ -683,7 +636,6 @@ const AI_BOTS: AiBotDef[] = [
 const ROTATING_AUTO_BOT_IDS = new Set(AI_BOTS.slice(0, 4).map(bot => bot.id));
 const AUTO_BOT_ROTATION_MARKETS = 2;
 const AUTO_BOT_RUNS_PER_MARKET = 5;
-const AI_RUNS_PER_SCAN = 6;
 
 // ── Per-bot session state ─────────────────────────────────────────────────────
 interface BotSession {
@@ -696,15 +648,6 @@ interface BotSession {
 
 const initSessions = (): Record<string, BotSession> =>
     Object.fromEntries(AI_BOTS.map(b => [b.id, { active: false, wins: 0, losses: 0, profit: 0, logs: [] }]));
-
-// ── Smart Analysis helper ────────────────────────────────────────────────────
-function computeSmartAnalysis(digits: number[], analysisDepth: number) {
-    const last = digits.slice(-analysisDepth);
-    const n = last.length;
-    const freq = Array.from({ length: 10 }, (_, i) => last.filter(d => d === i).length);
-    const prediction = freq.indexOf(Math.min(...freq));
-    return { last10: last.slice(-10), prediction, ticks: n, digitFreq: freq };
-}
 
 // ── Smart bot live digit state (for display) ──────────────────────────────────
 // ── Individual AI bot runner ──────────────────────────────────────────────────
@@ -1322,10 +1265,6 @@ const AutoTrades: React.FC = () => {
         tickVersion: autoBotTickVersion,
         connected: autoBotScannerConnected,
     } = useAuthenticatedAutoBotScanner();
-    const autoBotSnapshotsRef = useRef<Record<string, AutoBotMarketSnapshot>>(autoBotSnapshots);
-    const autoBotTickVersionRef = useRef(autoBotTickVersion);
-    useEffect(() => { autoBotSnapshotsRef.current = autoBotSnapshots; }, [autoBotSnapshots]);
-    useEffect(() => { autoBotTickVersionRef.current = autoBotTickVersion; }, [autoBotTickVersion]);
     type SmartExecutionMode = 'normal' | 'eachTick' | 'superSpeed';
     const [smartExecutionMode, setSmartExecutionMode] = useState<SmartExecutionMode>('normal');
     const smartExecutionModeRef = useRef<SmartExecutionMode>('normal');
@@ -1460,12 +1399,8 @@ const AutoTrades: React.FC = () => {
         updateSess(id, { running: true, wins: 0, losses: 0, profit: 0, lastLog: 'Starting…' });
 
         let wins = 0, losses = 0, sessionProfit = 0;
-        const usesMarketScanner = SCANNER_SMART_CARD_IDS.has(id);
-        let evaluatedTick = usesMarketScanner
-            ? autoBotTickVersionRef.current - 1
-            : smartTickVersionRef.current - 1;
+        let evaluatedTick = smartTickVersionRef.current - 1;
         let waitUntilTick = 0;
-        const lastEvaluatedTickByMarket = new Map<string, number>();
 
         const loop = async () => {
             while (isRunActive()) {
@@ -1483,16 +1418,12 @@ const AutoTrades: React.FC = () => {
                         smartStopFlags.current[id] = true;
                         break;
                     }
-                    const tickRef = usesMarketScanner ? autoBotTickVersionRef : smartTickVersionRef;
                     // Every card evaluates once per new authenticated tick.
-                    // Scanner cards additionally use each market's own tick
-                    // version, so a quiet market is not replayed because an
-                    // unrelated market moved.
-                    while (isRunActive() && tickRef.current <= Math.max(evaluatedTick, waitUntilTick)) {
+                    while (isRunActive() && smartTickVersionRef.current <= Math.max(evaluatedTick, waitUntilTick)) {
                         await new Promise(r => setTimeout(r, 40));
                     }
                     if (!isRunActive()) break;
-                    evaluatedTick = tickRef.current;
+                    evaluatedTick = smartTickVersionRef.current;
 
                     const currentCfg = smartCardCfgRef.current[id] || cfg;
                     if (sessionProfit >= Number(currentCfg.takeProfit ?? 5)
@@ -1505,33 +1436,22 @@ const AutoTrades: React.FC = () => {
                         });
                         break;
                     }
-                    const scannerCandidates = usesMarketScanner
-                        ? selectAutoBotMarketsForExecution(
-                            getFreshAutoBotMarkets(
-                                scanSmartCardMarkets(
-                                    id,
-                                    autoBotSnapshotsRef.current,
-                                    currentCfg,
-                                    smartSharedDepthRef.current,
-                                ),
-                                lastEvaluatedTickByMarket,
-                            ),
-                        )
-                        : [];
-                    const trade = usesMarketScanner
-                        ? scannerCandidates[0]?.trade
-                        : pickSmartTradeDecision(id, smartDigitsRef.current, currentCfg, smartSharedDepthRef.current);
-                    if (!trade || !trade.meetsCondition && !usesMarketScanner) {
+                    const trade = pickSmartTradeDecision(
+                        id,
+                        smartDigitsRef.current,
+                        currentCfg,
+                        smartSharedDepthRef.current,
+                    );
+                    if (!trade || !trade.meetsCondition) {
                         // Conditions are tick-gated. Do not repeatedly buy while
                         // the same non-matching window is on screen.
                         continue;
                     }
-                    if (usesMarketScanner && !scannerCandidates.length) continue;
                     if (!isRunActive()) break;
                     const { contract, barrier } = trade;
                     const stk = Number(smartCurrentStakes.current[id]);
                     const sym = smartSharedSymbolRef.current;
-                    if ((!usesMarketScanner && !sym) || !Number.isFinite(stk) || stk < 0.35) {
+                    if (!sym || !Number.isFinite(stk) || stk < 0.35) {
                         throw new Error('Invalid symbol or stake');
                     }
                     const batchEnabled = Boolean(currentCfg.bulkEnabled);
@@ -1543,31 +1463,13 @@ const AutoTrades: React.FC = () => {
                     const batchId = `BATCH-${id}-${Date.now()}-${wins + losses}`;
                     const transactionId = `${batchId}-ORDER-1`;
                     const transactionTime = new Date().toLocaleTimeString('en', { hour12: false });
-                    const scannerOrderIds = usesMarketScanner
-                        ? scannerCandidates.map((_, index) => `${batchId}-MARKET-${index + 1}`)
-                        : [];
                     const batchTransactionIds = Array.from({ length: batchCount }, (_, index) =>
                         `${batchId}-ORDER-${index + 1}`
                     );
-                    pendingTransactionIds = usesMarketScanner
-                        ? scannerOrderIds
-                        : batchEnabled ? batchTransactionIds : [transactionId];
+                    pendingTransactionIds = batchEnabled ? batchTransactionIds : [transactionId];
                     setTransactions(prev => [
-                        ...prev.slice(-(usesMarketScanner
-                            ? Math.max(99, scannerCandidates.length * 2)
-                            : batchEnabled ? Math.max(99, batchCount * 2) : 99)),
-                        ...(usesMarketScanner
-                            ? scannerCandidates.map((candidate, index) => ({
-                                id: scannerOrderIds[index],
-                                time: transactionTime,
-                                contract: `${candidate.trade.contract}${candidate.trade.barrier !== null ? '@' + candidate.trade.barrier : ''}`,
-                                profit: null,
-                                symbol: candidate.symbol,
-                                stake: stk,
-                                status: 'open',
-                                batchId,
-                            }))
-                            : batchEnabled
+                        ...prev.slice(-(batchEnabled ? Math.max(99, batchCount * 2) : 99)),
+                        ...(batchEnabled
                             ? batchTransactionIds.map((id, index) => ({
                                 id,
                                 time: transactionTime,
@@ -1636,65 +1538,7 @@ const AutoTrades: React.FC = () => {
                         }
                     };
 
-                    if (usesMarketScanner) {
-                        // Scanner cards trade every fresh eligible market in
-                        // parallel. Each market gets its own one-tick
-                        // proposal, buy, and settlement; one slow market must
-                        // not block the others from being dispatched.
-                        const scannerResults = await Promise.allSettled(
-                            scannerCandidates.map((candidate, index) =>
-                                buyAndWait(
-                                    candidate.symbol,
-                                    candidate.trade.contract,
-                                    candidate.trade.barrier,
-                                    stk,
-                                    AUTO_BOT_TICK_DURATION,
-                                    {
-                                        metadata: {
-                                            source: 'auto-trades',
-                                            execution_mode: 'market-scan',
-                                            batch_id: batchId,
-                                            batch_index: index + 1,
-                                            batch_size: scannerCandidates.length,
-                                            scan_score: candidate.score,
-                                        },
-                                    },
-                                )
-                            )
-                        );
-                        let settled = 0;
-                        let roundLoss = false;
-                        scannerResults.forEach((result, index) => {
-                            if (result.status !== 'fulfilled' || !Number.isFinite(result.value)) return;
-                            settled++;
-                            const candidate = scannerCandidates[index];
-                            const profit = Number(result.value);
-                            if (profit <= 0) roundLoss = true;
-                            recordResult(
-                                profit,
-                                scannerOrderIds[index],
-                                false,
-                                undefined,
-                                true,
-                                {
-                                    symbol: candidate.symbol,
-                                    contract: candidate.trade.contract,
-                                    barrier: candidate.trade.barrier,
-                                },
-                            );
-                        });
-                        if (settled > 0) {
-                            smartCurrentStakes.current[id] = roundLoss
-                                ? Math.max(0.35, +(stk * currentCfg.martingale).toFixed(2))
-                                : currentCfg.stake;
-                        }
-                        if (settled < scannerCandidates.length) {
-                            setJournal(prev => [
-                                `[${new Date().toLocaleTimeString('en', { hour12: false })}] [${id}] ${settled}/${scannerCandidates.length} market settlements received; pending markets remain open`,
-                                ...prev,
-                            ].slice(0, 50));
-                        }
-                    } else if (batchEnabled) {
+                    if (batchEnabled) {
                         // Dispatch all identical orders from the same signal
                         // signal without awaiting one before starting the
                         // next. Each buy has its own proposal and settlement
@@ -1826,9 +1670,7 @@ const AutoTrades: React.FC = () => {
                     // Scanner cards re-evaluate as soon as any market produces
                     // a new tick. The per-market freshness map above prevents
                     // unchanged markets from being replayed.
-                    waitUntilTick = usesMarketScanner
-                        ? evaluatedTick
-                        : evaluatedTick + Math.max(1, Math.min(10, currentCfg.lookback || 3));
+                    waitUntilTick = evaluatedTick + Math.max(1, Math.min(10, currentCfg.lookback || 3));
                 } catch (error) {
                     // A proposal/buy failure is not a taken trade. Remove its
                     // optimistic OPEN row instead of leaving a phantom

@@ -1,0 +1,1 @@
+var e=`/assets/dalembert-BGML9WAp.xml`;export{e as default};

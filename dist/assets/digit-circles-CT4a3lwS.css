@@ -1,0 +1,299 @@
+@charset "UTF-8";
+.digit-circles {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.4rem;
+  padding: 1.2rem 0;
+  font-family: "Inter", sans-serif;
+  /* ── row wrapper keeps cursor in the flow ── */
+}
+.digit-circles__row-wrap {
+  position: relative;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+.digit-circles__row {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.2rem;
+  justify-content: center;
+  padding: 1.6rem 0.8rem;
+}
+.digit-circles {
+  /* ── animated cursor ring (hidden — replaced by __pointer triangle) ── */
+}
+.digit-circles__cursor {
+  display: none;
+}
+.digit-circles {
+  /* ── black triangle pointer — appears ABOVE the active circle ── */
+}
+.digit-circles__pointer {
+  font-size: 1rem;
+  font-weight: 900;
+  color: #000000;
+  text-align: center;
+  height: 18px;
+  line-height: 18px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+  /* Always occupies space so circles don't jump */
+  visibility: hidden;
+}
+.digit-circles__pointer--on {
+  opacity: 1;
+  visibility: visible;
+  animation: pointerBounce 0.5s ease-in-out infinite alternate;
+}
+.digit-circles__pointer {
+  /* Adapt to light backgrounds — pointer stays black */
+}
+.theme--dark .digit-circles__pointer {
+  /* Keep black — it sits above the circle, not on it */
+  color: #000000;
+}
+.digit-circles {
+  /* ── each digit wrapper ── */
+}
+.digit-circles__wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  gap: 0.3rem;
+}
+.digit-circles__wrapper--current .digit-circles__circle {
+  transform: scale(1.12);
+  z-index: 5;
+}
+.digit-circles {
+  /* ── the circle itself ── */
+}
+.digit-circles__circle {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+  transition: transform 0.2s, box-shadow 0.25s;
+  position: relative;
+}
+.digit-circles__circle:hover {
+  transform: scale(1.06);
+}
+.digit-circles__number {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+}
+.digit-circles__percent {
+  font-size: 10px;
+  font-weight: 500;
+  opacity: 0.88;
+  margin-top: 2px;
+}
+.digit-circles {
+  /* rank badges */
+}
+.digit-circles__rank {
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 4px;
+  border-radius: 3px;
+  line-height: 1.4;
+  /* --current is no longer rendered inline; pointer is handled by __pointer */
+}
+.digit-circles__rank--1st {
+  background: #42B883;
+  color: #fff;
+}
+.digit-circles__rank--2nd {
+  background: #4E7CF5;
+  color: #fff;
+}
+.digit-circles__rank--low {
+  background: #E24A43;
+  color: #fff;
+}
+.digit-circles__rank--low2 {
+  background: #F5C842;
+  color: #1a1a2e;
+}
+.digit-circles {
+  /* ── no-wrap variant (speed lab single line) ── */
+}
+.digit-circles--nowrap .digit-circles__row {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: 0.7rem;
+  padding: 0.8rem 0.4rem;
+}
+.digit-circles--nowrap .digit-circles__row::-webkit-scrollbar {
+  height: 3px;
+}
+.digit-circles--nowrap .digit-circles__row::-webkit-scrollbar-track {
+  background: transparent;
+}
+.digit-circles--nowrap .digit-circles__row::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 246, 0.4);
+  border-radius: 2px;
+}
+.digit-circles--nowrap .digit-circles__circle {
+  width: 66px !important;
+  height: 66px !important;
+}
+.digit-circles--nowrap .digit-circles__number {
+  font-size: 20px !important;
+}
+.digit-circles--nowrap .digit-circles__percent {
+  font-size: 9px !important;
+}
+.digit-circles--nowrap .digit-circles__legend {
+  display: none;
+}
+.digit-circles--nowrap .digit-circles__stats {
+  display: none;
+}
+.digit-circles {
+  /* ── legend ── */
+}
+.digit-circles__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem 1.4rem;
+  justify-content: center;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+.digit-circles__legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: #888;
+}
+.digit-circles__legend-item--green {
+  color: #42B883;
+}
+.digit-circles__legend-item--blue {
+  color: #4E7CF5;
+}
+.digit-circles__legend-item--red {
+  color: #E24A43;
+}
+.digit-circles__legend-item--yellow {
+  color: #c8a000;
+}
+.digit-circles__legend-item--cursor {
+  color: #fff;
+}
+.digit-circles {
+  /* ── stats bar ── */
+}
+.digit-circles__stats {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  width: 100%;
+}
+.digit-circles__stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.8rem 1.4rem;
+  border-radius: 0.8rem;
+  background: var(--general-section-1, #f4f4f4);
+  min-width: 8rem;
+  flex: 1;
+  max-width: 12rem;
+}
+.digit-circles__stat span {
+  font-size: 1rem;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.digit-circles__stat strong {
+  font-size: 1.5rem;
+  font-weight: 800;
+}
+.digit-circles__stat em {
+  font-size: 2rem;
+  font-weight: 900;
+  font-style: normal;
+  line-height: 1;
+}
+.digit-circles__stat--green strong, .digit-circles__stat--green em {
+  color: #42B883;
+}
+.digit-circles__stat--blue strong, .digit-circles__stat--blue em {
+  color: #4E7CF5;
+}
+.digit-circles__stat--red strong, .digit-circles__stat--red em {
+  color: #E24A43;
+}
+.digit-circles__stat--yellow strong, .digit-circles__stat--yellow em {
+  color: #c8a000;
+}
+.digit-circles {
+  /* ── size variants ── */
+}
+.digit-circles--sm .digit-circles__circle {
+  width: 52px;
+  height: 52px;
+}
+.digit-circles--sm .digit-circles__number {
+  font-size: 16px;
+}
+.digit-circles--sm .digit-circles__percent {
+  font-size: 9px;
+}
+.digit-circles--sm .digit-circles__cursor {
+  border-width: 2px;
+}
+.digit-circles--lg .digit-circles__circle {
+  width: 88px;
+  height: 88px;
+}
+.digit-circles--lg .digit-circles__number {
+  font-size: 28px;
+}
+.digit-circles--lg .digit-circles__percent {
+  font-size: 13px;
+}
+
+@keyframes cursorPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(0, 0, 0, 0.08);
+  }
+}
+@keyframes pointerBounce {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-3px);
+  }
+}
+@keyframes triangleBounce {
+  0%, 100% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+  50% {
+    transform: translateY(1px);
+    opacity: 0.8;
+  }
+}

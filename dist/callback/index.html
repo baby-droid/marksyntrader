@@ -43,6 +43,31 @@
                 font-size: 62.5%;
             }
         </style>
+      <script type="module" crossorigin src="/assets/index-5ynRmkfM.js"></script>
+      <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-DAXXjFlN.js">
+      <link rel="modulepreload" crossorigin href="/assets/mobx.esm-DGq-wj_-.js">
+      <link rel="modulepreload" crossorigin href="/assets/react-Bb3IsNbi.js">
+      <link rel="modulepreload" crossorigin href="/assets/react-dom-C6aoWSfl.js">
+      <link rel="modulepreload" crossorigin href="/assets/jsx-runtime-CtMZ-PAS.js">
+      <link rel="modulepreload" crossorigin href="/assets/types-B-QBXO7H.js">
+      <link rel="modulepreload" crossorigin href="/assets/deriv-core-B9i-BY2g.js">
+      <link rel="modulepreload" crossorigin href="/assets/urls-B2en9znf.js">
+      <link rel="modulepreload" crossorigin href="/assets/oauth-redirect-BNhDkvuW.js">
+      <link rel="modulepreload" crossorigin href="/assets/derivws-accounts.service-DQrAEsn4.js">
+      <link rel="modulepreload" crossorigin href="/assets/shared-MWUaM_RG.js">
+      <link rel="modulepreload" crossorigin href="/assets/execution-speed-N-tofZU4.js">
+      <link rel="modulepreload" crossorigin href="/assets/appId-BBDs6GSA.js">
+      <link rel="modulepreload" crossorigin href="/assets/utils-pJIDFjs6.js">
+      <link rel="modulepreload" crossorigin href="/assets/preload-helper-CZgWQFsJ.js">
+      <link rel="modulepreload" crossorigin href="/assets/lodash.debounce-BMzng6ks.js">
+      <link rel="modulepreload" crossorigin href="/assets/main-DAo7jX11.js">
+      <link rel="modulepreload" crossorigin href="/assets/accumulators-proposal-handler-p4QIz__u.js">
+      <link rel="modulepreload" crossorigin href="/assets/javascript-BpStZRcn.js">
+      <link rel="modulepreload" crossorigin href="/assets/bot-skeleton-mO8ELDA5.js">
+      <link rel="modulepreload" crossorigin href="/assets/gtm-BFFlCT8V.js">
+      <link rel="stylesheet" crossorigin href="/assets/shared-tn0RQdqM.css">
+      <link rel="stylesheet" crossorigin href="/assets/bot-skeleton-Mp406Nrs.css">
+      <link rel="stylesheet" crossorigin href="/assets/index-BIIE56U0.css">
     </head>
 
     <body class="body theme theme--light">
@@ -82,7 +107,16 @@
         </div>
         <script>
             (function () {
+                var appStarted = false;
+                var bootTimer = null;
+
+                function markAppStarted() {
+                    appStarted = true;
+                    if (bootTimer) window.clearTimeout(bootTimer);
+                }
+
                 function showBootError() {
+                    if (appStarted) return;
                     var root = document.getElementById('root');
                     var fallback = root && root.querySelector('[data-boot-fallback]');
                     if (!fallback) return;
@@ -92,23 +126,26 @@
                     if (retry) retry.style.display = 'inline-block';
                 }
 
-                function isChunkFailure(value) {
-                    var message = value && (value.message || value.reason || value);
-                    return /chunk|dynamically imported module|module script|syntaxerror/i.test(String(message || ''));
+                function isEntryScript(source) {
+                    return (
+                        typeof source === 'string' &&
+                        (/\/src\/main\.tsx(?:\?|$)/i.test(source) ||
+                            /\/assets\/main-[^/]+\.js(?:\?|$)/i.test(source) ||
+                            /\/static\/js\/(?:main|index)\.[^/]+\.js(?:\?|$)/i.test(source))
+                    );
                 }
 
                 window.addEventListener('error', function (event) {
                     var target = event && event.target;
                     var source = target && target.src;
-                    var sameOriginScript = source && (source.indexOf(window.location.origin) === 0 || source.charAt(0) === '/');
-                    var failedScript = target && target.tagName === 'SCRIPT' && sameOriginScript;
-                    var bootRuntimeError = (!target || target === window) && isChunkFailure(event && (event.error || event.message));
-                    if (failedScript || bootRuntimeError) showBootError();
+                    var failedEntryScript = target && target.tagName === 'SCRIPT' && isEntryScript(source);
+                    if (failedEntryScript) showBootError();
                 }, true);
 
-                window.addEventListener('unhandledrejection', function (event) {
-                    if (isChunkFailure(event && event.reason)) showBootError();
-                });
+                window.__markMarksyntraderAppStarted = markAppStarted;
+                bootTimer = window.setTimeout(function () {
+                    if (!appStarted) showBootError();
+                }, 15000);
             }());
         </script>
         <!-- LiveChat script -->
