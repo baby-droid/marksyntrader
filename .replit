@@ -50,7 +50,11 @@ timeoutMs = 180000
 [[ports]]
 localPort = 5000
 externalPort = 80
+<<<<<<< HEAD
 
 [[ports]]
 localPort = 5001
 externalPort = 3000
+=======
+exposeLocalhost = true
+>>>>>>> 6793a151ce0d487d58473fbdc968f7b293c6efec

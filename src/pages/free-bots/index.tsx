@@ -129,6 +129,39 @@ const FREE_BOTS = [
     xmlFile: '/bots/under6.xml',
     badge: 'RECOVERY', badgeColor: '#60a5fa', icon: '↘', winRate: '—',
   },
+  // ── King Fisher digit-streak bots ─────────────────────────────────────────
+  {
+    id: 'king-fisher-over-2',
+    name: 'King Fisher Over 2',
+    description: '🐟 Detects 2 or 3 consecutive digits below 3, then buys DIGIT OVER 2. Configurable stake, martingale, TP/SL and Virtual Hook confirmation.',
+    category: 'Over/Under', market: 'Best market · V50 1s', type: 'DIGITOVER', prediction: '2',
+    xmlFile: '/bots/king-fisher-over-2.xml',
+    badge: 'KING FISHER', badgeColor: '#f59e0b', icon: '🐟', winRate: '—',
+  },
+  {
+    id: 'king-fisher-over-3',
+    name: 'King Fisher Over 3',
+    description: '🐟 Detects 2 or 3 consecutive digits below 4, then buys DIGIT OVER 3. Configurable stake, martingale, TP/SL and Virtual Hook confirmation.',
+    category: 'Over/Under', market: 'Best market · V50 1s', type: 'DIGITOVER', prediction: '3',
+    xmlFile: '/bots/king-fisher-over-3.xml',
+    badge: 'KING FISHER', badgeColor: '#f59e0b', icon: '🐟', winRate: '—',
+  },
+  {
+    id: 'king-fisher-under-6',
+    name: 'King Fisher Under 6',
+    description: '🐟 Detects 2 or 3 consecutive digits above 5, then buys DIGIT UNDER 6. Configurable stake, martingale, TP/SL and Virtual Hook confirmation.',
+    category: 'Over/Under', market: 'Best market · V50 1s', type: 'DIGITUNDER', prediction: '6',
+    xmlFile: '/bots/king-fisher-under-6.xml',
+    badge: 'KING FISHER', badgeColor: '#7c3aed', icon: '🐟', winRate: '—',
+  },
+  {
+    id: 'king-fisher-under-7',
+    name: 'King Fisher Under 7',
+    description: '🐟 Detects 2 or 3 consecutive digits above 6, then buys DIGIT UNDER 7. Configurable stake, martingale, TP/SL and Virtual Hook confirmation.',
+    category: 'Over/Under', market: 'Best market · V50 1s', type: 'DIGITUNDER', prediction: '7',
+    xmlFile: '/bots/king-fisher-under-7.xml',
+    badge: 'KING FISHER', badgeColor: '#7c3aed', icon: '🐟', winRate: '—',
+  },
   // ── NEW signature bots — Omni Cycle Trader Pro & Smart Entry Pattern Pro V2 ─
   {
     id: 'omni-cycle-trader-pro',

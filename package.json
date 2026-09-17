@@ -6,12 +6,12 @@
     "node": "20.x"
   },
   "scripts": {
-    "dev": "node scripts/ensure-node-modules.js && ./node_modules/.bin/rsbuild dev --port 5000",
-    "build": "rsbuild build",
+    "dev": "vite --port 5000",
+    "build": "vite build",
     "test": "jest",
     "type-check": "tsc --noEmit",
     "generate:brand-css": "node scripts/generate-brand-css.js",
-    "prebuild": "node scripts/ensure-node-modules.js && node scripts/generate-brand-css.js"
+    "prebuild": "node scripts/generate-brand-css.js"
   },
   "dependencies": {
     "@deriv-com/quill-ui": "^1.24.12",
@@ -80,9 +80,6 @@
     "@babel/preset-typescript": "^7.29.7",
     "@deriv/api-types": "^1.0.4830",
     "@jest/globals": "^29.7.0",
-    "@rsbuild/core": "^1.7.6",
-    "@rsbuild/plugin-react": "^1.4.6",
-    "@rsbuild/plugin-sass": "^1.5.3",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.3",
@@ -97,6 +94,7 @@
     "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
     "@typescript-eslint/parser": "^6.21.0",
+    "@vitejs/plugin-react": "^6.0.3",
     "babel-core": "^7.0.0-bridge.0",
     "babel-jest": "^29.7.0",
     "babel-plugin-syntax-dynamic-import": "^6.18.0",
@@ -116,6 +114,8 @@
     "stylelint-config-standard-scss": "^13.1.0",
     "ts-jest": "^29.4.12",
     "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vite": "^8.1.0",
+    "vite-plugin-sass-dts": "^1.3.37"
   }
 }
