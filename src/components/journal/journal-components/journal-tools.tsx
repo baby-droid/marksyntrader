@@ -20,6 +20,14 @@ const JournalTools = ({
         <>
             <div className='journal-tools__container'>
                 <Download tab='journal' />
+                <button
+                    type='button'
+                    className='journal-tools__market-log'
+                    title='Show the latest digit for every loaded market'
+                    onClick={() => window.dispatchEvent(new CustomEvent('journal:log-market-digits'))}
+                >
+                    📊 Log digits
+                </button>
                 <div ref={toggle_ref} className='journal-tools__container-filter' onClick={toggleFilterDialog}>
                     <Text size='xs' className='journal-tools__container-filter--label'>
                         <Localize i18n_default_text='Filters' />

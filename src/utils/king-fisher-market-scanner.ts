@@ -5,31 +5,47 @@ export type KingFisherDirection = 'BELOW' | 'ABOVE';
 export type KingFisherMarket = {
     symbol: string;
     label: string;
+    group: 'plain' | '1s' | 'jump' | 'bear-bull';
     score: number;
     longestStreak: number;
     qualifyingTicks: number;
+    lastDigit: number | null;
 };
 
-const KING_FISHER_MARKETS = [
-    { symbol: '1HZ10V', label: 'Volatility 10 (1s)' },
-    { symbol: '1HZ25V', label: 'Volatility 25 (1s)' },
-    { symbol: '1HZ50V', label: 'Volatility 50 (1s)' },
-    { symbol: '1HZ75V', label: 'Volatility 75 (1s)' },
-    { symbol: '1HZ100V', label: 'Volatility 100 (1s)' },
+export const KING_FISHER_MARKETS = [
+    { symbol: 'R_10', label: 'Volatility 10', group: 'plain' as const, pipSize: 3 },
+    { symbol: 'R_25', label: 'Volatility 25', group: 'plain' as const, pipSize: 3 },
+    { symbol: 'R_50', label: 'Volatility 50', group: 'plain' as const, pipSize: 4 },
+    { symbol: 'R_75', label: 'Volatility 75', group: 'plain' as const, pipSize: 4 },
+    { symbol: 'R_100', label: 'Volatility 100', group: 'plain' as const, pipSize: 2 },
+    { symbol: '1HZ10V', label: 'Volatility 10 (1s)', group: '1s' as const, pipSize: 3 },
+    { symbol: '1HZ25V', label: 'Volatility 25 (1s)', group: '1s' as const, pipSize: 2 },
+    { symbol: '1HZ50V', label: 'Volatility 50 (1s)', group: '1s' as const, pipSize: 4 },
+    { symbol: '1HZ75V', label: 'Volatility 75 (1s)', group: '1s' as const, pipSize: 4 },
+    { symbol: '1HZ100V', label: 'Volatility 100 (1s)', group: '1s' as const, pipSize: 2 },
+    { symbol: 'JD10', label: 'Jump 10', group: 'jump' as const, pipSize: 3 },
+    { symbol: 'JD25', label: 'Jump 25', group: 'jump' as const, pipSize: 2 },
+    { symbol: 'JD50', label: 'Jump 50', group: 'jump' as const, pipSize: 4 },
+    { symbol: 'JD75', label: 'Jump 75', group: 'jump' as const, pipSize: 4 },
+    { symbol: 'JD100', label: 'Jump 100', group: 'jump' as const, pipSize: 2 },
+    { symbol: 'RDBEAR', label: 'Bear Market Index', group: 'bear-bull' as const, pipSize: 4 },
+    { symbol: 'RDBULL', label: 'Bull Market Index', group: 'bear-bull' as const, pipSize: 4 },
 ];
 
-const getLastDigit = (price: unknown) => {
+const getLastDigit = (price: unknown, pipSize: number) => {
     const value = Number(price);
     if (!Number.isFinite(value)) return null;
-    // The 1-second synthetic indices use three decimal places. Keeping this
-    // conversion here also avoids the string-formatting digit-0 bug.
-    const formatted = value.toFixed(3);
+    const formatted = value.toFixed(pipSize);
     return Number(formatted[formatted.length - 1]);
 };
 
-const scoreMarket = (prices: unknown[], direction: KingFisherDirection): Omit<KingFisherMarket, 'symbol' | 'label'> => {
-    const digits = prices.map(getLastDigit).filter((digit): digit is number => digit !== null);
-    const qualifies = (digit: number) => (direction === 'BELOW' ? digit <= 5 : digit >= 5);
+const scoreMarket = (
+    prices: unknown[],
+    direction: KingFisherDirection,
+    pipSize: number
+): Omit<KingFisherMarket, 'symbol' | 'label' | 'group'> => {
+    const digits = prices.map(price => getLastDigit(price, pipSize)).filter((digit): digit is number => digit !== null);
+    const qualifies = (digit: number) => (direction === 'BELOW' ? digit < 5 : digit > 5);
     let currentStreak = 0;
     let longestStreak = 0;
     let qualifyingTicks = 0;
@@ -50,6 +66,7 @@ const scoreMarket = (prices: unknown[], direction: KingFisherDirection): Omit<Ki
         longestStreak,
         qualifyingTicks,
         score: longestStreak * 100 + qualifyingTicks,
+        lastDigit: digits.at(-1) ?? null,
     };
 };
 
@@ -57,7 +74,7 @@ export const scanKingFisherMarket = async (direction: KingFisherDirection): Prom
     const api = api_base.api as any;
     if (!api) throw new Error('The authenticated market connection is not ready yet.');
 
-    const results = await Promise.all(
+    const results = (await Promise.allSettled(
         KING_FISHER_MARKETS.map(async market => {
             const response = await api.send({
                 ticks_history: market.symbol,
@@ -69,9 +86,11 @@ export const scanKingFisherMarket = async (direction: KingFisherDirection): Prom
             if (!Array.isArray(prices) || prices.length < 20) {
                 throw new Error(`No tick history was returned for ${market.label}.`);
             }
-            return { ...market, ...scoreMarket(prices, direction) };
+            return { ...market, ...scoreMarket(prices, direction, market.pipSize) };
         })
-    );
+    )).flatMap(result => result.status === 'fulfilled' ? [result.value] : []);
 
-    return results.sort((a, b) => b.score - a.score)[0];
+    const best = results.sort((a, b) => b.score - a.score)[0];
+    if (!best) throw new Error('No King Fisher market returned usable tick history.');
+    return best;
 };

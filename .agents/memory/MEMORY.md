@@ -73,3 +73,4 @@
 - [Dependency repair](dependency-repair.md) — restore an empty node_modules tree without unintentionally upgrading the checked-in manifest.
 - [Blockly fallback execution](unsupported-block-execution.md) — unknown imported blocks need both a visible definition and a JavaScript generator fallback to remain runnable.
 - [Vite merge guardrails](vite-merge-guardrails.md) — resolve the active toolchain before regenerating the lockfile; Vite 8 may need CSS minification disabled for malformed vendor CSS.
+- [King Fisher runtime reporting](marksyntrader-kingfisher.md) — best-market selection runs before Bot Builder starts; live digits, Fisher sequences, hooks, and settled P/L feed the shared Journal/Transactions surface.

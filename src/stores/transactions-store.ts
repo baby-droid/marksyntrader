@@ -81,6 +81,7 @@ export default class TransactionsStore {
     is_called_proposal_open_contract = false;
     is_transaction_details_modal_open = false;
     private auto_trade_listener: ((event: Event) => void) | null = null;
+    private journal_reported_contracts = new Set<number>();
 
     onVirtualHookEvent = (data: any = {}) => {
         this.pushVirtualHook({
@@ -189,6 +190,15 @@ export default class TransactionsStore {
             ...this.elements[current_account],
         ].slice(0, 5000);
         this.elements = { ...this.elements };
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('journal:signal', {
+                detail: {
+                    type: hookResult === 'profit' ? 'WIN' : 'LOSS',
+                    label: hookResult === 'profit' ? 'HOOK PROFIT' : 'HOOK LOSS',
+                    detail: `${data.market} · virtual ${hookResult}`,
+                },
+            }));
+        }
     }
 
     toggleTransactionDetailsModal = (is_open: boolean) => {
@@ -243,6 +253,20 @@ export default class TransactionsStore {
             exit_tick_time: data.exit_tick_time && formatDate(data.exit_tick_time, 'YYYY-M-D HH:mm:ss [GMT]'),
             profit: is_completed ? data.profit : 0,
         };
+
+        if (is_completed && !this.journal_reported_contracts.has(Number(data.contract_id))) {
+            this.journal_reported_contracts.add(Number(data.contract_id));
+            const profit = Number(data.profit) || 0;
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('journal:signal', {
+                    detail: {
+                        type: profit > 0 ? 'WIN' : 'LOSS',
+                        label: profit > 0 ? 'PROFIT MADE' : 'LOSS MADE',
+                        detail: `${data.underlying_symbol || data.display_name || 'King Fisher'} · ${profit > 0 ? '+' : '-'}${Math.abs(profit).toFixed(2)} ${data.currency || 'USD'}`,
+                    },
+                }));
+            }
+        }
 
         if (!this.elements[current_account]) {
             this.elements = {
