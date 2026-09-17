@@ -83,7 +83,16 @@
         <script type="module" src="/src/main.tsx"></script>
         <script>
             (function () {
+                var appStarted = false;
+                var bootTimer = null;
+
+                function markAppStarted() {
+                    appStarted = true;
+                    if (bootTimer) window.clearTimeout(bootTimer);
+                }
+
                 function showBootError() {
+                    if (appStarted) return;
                     var root = document.getElementById('root');
                     var fallback = root && root.querySelector('[data-boot-fallback]');
                     if (!fallback) return;
@@ -93,23 +102,26 @@
                     if (retry) retry.style.display = 'inline-block';
                 }
 
-                function isChunkFailure(value) {
-                    var message = value && (value.message || value.reason || value);
-                    return /chunk|dynamically imported module|module script|syntaxerror/i.test(String(message || ''));
+                function isEntryScript(source) {
+                    return (
+                        typeof source === 'string' &&
+                        (/\/src\/main\.tsx(?:\?|$)/i.test(source) ||
+                            /\/assets\/main-[^/]+\.js(?:\?|$)/i.test(source) ||
+                            /\/static\/js\/(?:main|index)\.[^/]+\.js(?:\?|$)/i.test(source))
+                    );
                 }
 
                 window.addEventListener('error', function (event) {
                     var target = event && event.target;
                     var source = target && target.src;
-                    var sameOriginScript = source && (source.indexOf(window.location.origin) === 0 || source.charAt(0) === '/');
-                    var failedScript = target && target.tagName === 'SCRIPT' && sameOriginScript;
-                    var bootRuntimeError = (!target || target === window) && isChunkFailure(event && (event.error || event.message));
-                    if (failedScript || bootRuntimeError) showBootError();
+                    var failedEntryScript = target && target.tagName === 'SCRIPT' && isEntryScript(source);
+                    if (failedEntryScript) showBootError();
                 }, true);
 
-                window.addEventListener('unhandledrejection', function (event) {
-                    if (isChunkFailure(event && event.reason)) showBootError();
-                });
+                window.__markMarksyntraderAppStarted = markAppStarted;
+                bootTimer = window.setTimeout(function () {
+                    if (!appStarted) showBootError();
+                }, 15000);
             }());
         </script>
         <!-- LiveChat script -->

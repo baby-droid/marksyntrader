@@ -40,4 +40,12 @@ applyPrimaryColorFromConfig();
 // App Builder preview branding (incl. PREVIEW_READY handshake) is handled by the
 // src/preview/ listener, mounted from app-content only in the preview deployment
 // (NEXT_PUBLIC_APP_BUILD === 'true') and stripped from standalone partner deploys.
-ReactDOM.createRoot(document.getElementById('root')!).render(<AuthWrapper />);
+const appRoot = document.getElementById('root');
+
+if (!appRoot) {
+    throw new Error('Marksyntrader root element is missing.');
+}
+
+const bootWindow = window as Window & { __markMarksyntraderAppStarted?: () => void };
+bootWindow.__markMarksyntraderAppStarted?.();
+ReactDOM.createRoot(appRoot).render(<AuthWrapper />);
