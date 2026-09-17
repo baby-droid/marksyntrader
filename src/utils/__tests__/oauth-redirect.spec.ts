@@ -11,7 +11,7 @@ describe('OAuth redirect URI resolution', () => {
   beforeEach(() => {
     sessionStorage.clear();
     window.history.replaceState({}, '', '/');
-    process.env.NEXT_PUBLIC_DERIV_REDIRECT_URI = 'https://marksyntrader.replit.app/callback';
+    process.env.NEXT_PUBLIC_DERIV_REDIRECT_URI = 'https://marksyntrader--marksyntrader.replit.app/callback';
     process.env.NEXT_PUBLIC_DERIV_PREVIEW_REDIRECT_URI = '';
     process.env.NEXT_PUBLIC_APP_BUILD = '';
   });
@@ -24,10 +24,10 @@ describe('OAuth redirect URI resolution', () => {
     window.history.replaceState({}, '', '/');
     Object.defineProperty(window, 'location', {
       configurable: true,
-      value: new URL('https://marksyntrader.replit.app/'),
+      value: new URL('https://marksyntrader--marksyntrader.replit.app/'),
     });
 
-    expect(getOAuthRedirectUri()).toBe('https://marksyntrader.replit.app/callback');
+    expect(getOAuthRedirectUri()).toBe('https://marksyntrader--marksyntrader.replit.app/callback');
   });
 
   it('uses the preview origin and basename callback in a static preview build', () => {

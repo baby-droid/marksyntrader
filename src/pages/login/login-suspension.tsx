@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useState } from 'react';
 import { generateOAuthURL } from '@/components/shared';
+import { getOAuthRedirectUri } from '@/utils/oauth-redirect';
 import './login-suspension.scss';
 
 const ApiTokenLoginModal = lazy(() => import('@/components/login-modal/api-token-login-modal'));
@@ -7,6 +8,7 @@ const ApiTokenLoginModal = lazy(() => import('@/components/login-modal/api-token
 const LoginSuspensionPage = () => {
     const [loading, setLoading] = useState<'login' | 'signup' | null>(null);
     const [isTokenModalOpen, setIsTokenModalOpen] = useState(false);
+    const callbackUri = getOAuthRedirectUri();
 
     const handleLogin = useCallback(async () => {
         setLoading('login');
@@ -122,7 +124,7 @@ const LoginSuspensionPage = () => {
 
                 <p className='login-suspension__footer'>
                     To register your redirect URI{' '}
-                    <code>https://marksyntrader.replit.app/callback</code>{' '}
+                     <code>{callbackUri}</code>{' '}
                     visit the{' '}
                     <a href='https://developers.deriv.com' target='_blank' rel='noreferrer'>
                         Deriv Developer Portal

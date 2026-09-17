@@ -39,7 +39,21 @@ export const getOAuthRedirectUri = (): string => {
         return `${window.location.origin}${callbackPath}`;
     }
 
-    return configuredUri || `${window.location.origin}/callback`;
+    // A stale deployment URL must not override the host the user is currently
+    // using. This keeps OAuth on the actual published app when a Replit
+    // deployment has been renamed or moved to its generated -- hostname.
+    if (configuredUri) {
+        try {
+            const configuredUrl = new URL(configuredUri);
+            if (configuredUrl.origin === window.location.origin) {
+                return configuredUri;
+            }
+        } catch {
+            // Fall through to the current origin when the configured value is invalid.
+        }
+    }
+
+    return `${window.location.origin}/callback`;
 };
 
 /**

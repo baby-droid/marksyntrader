@@ -15,7 +15,7 @@ Object.defineProperty(globalThis, 'crypto', { value: webcrypto, configurable: tr
 describe('Deriv OAuth', () => {
   const publishedConfig = {
     clientId: 'test-client',
-    redirectUri: 'https://marksyntrader.replit.app/callback',
+    redirectUri: 'https://marksyntrader--marksyntrader.replit.app/callback',
   };
   const previewConfig = {
     clientId: 'test-client',
@@ -84,7 +84,7 @@ describe('Deriv OAuth', () => {
     );
 
     const authInfo = await handleOAuthCallback(
-      `https://marksyntrader.replit.app/callback?code=auth-code&state=${encodeURIComponent(state)}`,
+      `https://marksyntrader--marksyntrader.replit.app/callback?code=auth-code&state=${encodeURIComponent(state)}`,
       publishedConfig
     );
 
@@ -111,7 +111,7 @@ describe('Deriv OAuth', () => {
 
     await expect(
       handleOAuthCallback(
-        'https://marksyntrader.replit.app/callback?code=auth-code&state=wrong-state',
+        'https://marksyntrader--marksyntrader.replit.app/callback?code=auth-code&state=wrong-state',
         publishedConfig
       )
     ).rejects.toThrow(OAuthError);
@@ -122,7 +122,7 @@ describe('Deriv OAuth', () => {
 
     await expect(
       handleOAuthCallback(
-        'https://marksyntrader.replit.app/callback?error=access_denied&error_description=User%20cancelled',
+        'https://marksyntrader--marksyntrader.replit.app/callback?error=access_denied&error_description=User%20cancelled',
         publishedConfig
       )
     ).rejects.toThrow('OAuth error: access_denied - User cancelled');

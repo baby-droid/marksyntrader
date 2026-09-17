@@ -34,7 +34,7 @@ export default defineConfig({
         // sibling templates use the same name.
         NEXT_PUBLIC_DERIV_APP_ID: JSON.stringify(process.env.NEXT_PUBLIC_DERIV_APP_ID ?? ''),
         // Redirect URI registered in the Deriv developer portal. Must match exactly.
-        // Production: https://marksyntrader.replit.app/callback
+        // Production: https://marksyntrader--marksyntrader.replit.app/callback
         NEXT_PUBLIC_DERIV_REDIRECT_URI: JSON.stringify(process.env.NEXT_PUBLIC_DERIV_REDIRECT_URI ?? ''),
         NEXT_PUBLIC_DERIV_PREVIEW_REDIRECT_URI: JSON.stringify(process.env.NEXT_PUBLIC_DERIV_PREVIEW_REDIRECT_URI ?? ''),
         // Space-separated OAuth scopes enabled for the Deriv application.
