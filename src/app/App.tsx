@@ -3,7 +3,6 @@ import React from 'react';
 import { createBrowserRouter, createRoutesFromElements, Route, RouterProvider } from 'react-router-dom';
 import ChunkErrorPage from '@/components/error-component/chunk-error-boundary';
 import ChunkLoader from '@/components/loader/chunk-loader';
-import LoadingScreen from '@/components/loading-screen';
 import LocalStorageSyncWrapper from '@/components/localStorage-sync-wrapper';
 import RoutePromptDialog from '@/components/route-prompt-dialog';
 import { useAccountSwitching } from '@/hooks/useAccountSwitching';
@@ -34,7 +33,7 @@ const router = createBrowserRouter(
             errorElement={<ChunkErrorPage />}
             element={
                 <Suspense
-                    fallback={<LoadingScreen />}
+                    fallback={<ChunkLoader message={localize('Please wait while we connect to the server...')} />}
                 >
                     <TranslationProvider defaultLang='EN' i18nInstance={i18nInstance}>
                         <LanguageHandler>

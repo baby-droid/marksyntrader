@@ -3,15 +3,14 @@ name: Marksyntrader initialization loading screen
 description: Understanding the "Initializing Deriv Bot account..." loading state
 ---
 
-The app shows the landing-style startup screen for a fixed 1.5 seconds, then renders the app shell. API initialization and active-symbol retrieval continue in the background.
+The pre-change startup flow uses the colored-bar ChunkLoader while the store/API and lazy route initialize. AppContent keeps the branded LoadingScreen for its own existing loading branch, with the prior 1.2-second minimum and 7-second API fallback.
 
 Flow:
-1. The landing screen mounts as soon as app content is available.
-2. A fixed 1.5-second timer reveals the app shell; it does not wait for the API.
-3. API initialization updates `is_api_initialized` when the connection opens or timeout fallback fires.
-4. `init()` and `changeActiveSymbolLoadingState()` run without extending the landing delay.
-5. `retrieveActiveSymbols()` populates market data in the background.
+1. The outer route suspense uses ChunkLoader with the connection message.
+2. AppRoot waits for the store and API initialization before rendering AppContent.
+3. AppRoot suspense uses ChunkLoader with the Loading message.
+4. AppContent keeps its previous minimum-delay and API fallback behavior.
 
-**Why:** The user wants the branded landing page restored briefly, without API handshakes extending startup or reintroducing the second loading stage.
+**Why:** The branded full-screen loading page was introduced by a later change; restoring the previous behavior prevents the pulled loading-screen changes from altering startup UX.
 
-**How to apply:** Preserve the fixed 1.5-second landing delay and keep the second phase disabled. Do not tie the delay to API or active-symbol initialization; keep contextual loaders for page-specific operations.
+**How to apply:** Keep route/API suspense on ChunkLoader and do not replace it with LoadingScreen unless the user explicitly asks to restore the newer branded startup flow.

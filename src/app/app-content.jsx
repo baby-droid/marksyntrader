@@ -49,7 +49,7 @@ const AppContent = observer(() => {
     // reconnects/token refreshes should not re-trigger the "Loading..." screen.
     const has_loaded_once_ref = React.useRef(false);
     React.useEffect(() => {
-        const t = setTimeout(() => setMinTimeElapsed(true), 900);
+        const t = setTimeout(() => setMinTimeElapsed(true), 1200);
         return () => clearTimeout(t);
     }, []);
 
@@ -62,18 +62,17 @@ const AppContent = observer(() => {
     const msg_listener = React.useRef(null);
     const { connectionStatus } = useApiBase();
 
-    // Never let the first meaningful landing render depend on a socket,
-    // active-symbol request, or other network handshake. Those services
-    // continue in the background and the trading views reconnect as needed.
     React.useEffect(() => {
-        const startupReveal = setTimeout(() => {
+        if (is_api_initialized) return undefined;
+
+        const startupFallback = setTimeout(() => {
             setIsApiInitialized(true);
             setIsLoading(false);
             has_loaded_once_ref.current = true;
-        }, 1400);
+        }, 7000);
 
-        return () => clearTimeout(startupReveal);
-    }, []);
+        return () => clearTimeout(startupFallback);
+    }, [is_api_initialized]);
 
     // Initialize dev mode keyboard shortcuts
     useDevMode();

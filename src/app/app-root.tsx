@@ -2,15 +2,16 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import ErrorBoundary from '@/components/error-component/error-boundary';
 import ErrorComponent from '@/components/error-component/error-component';
-import LoadingScreen from '@/components/loading-screen';
+import ChunkLoader from '@/components/loader/chunk-loader';
 import { api_base } from '@/external/bot-skeleton';
 import { useStore } from '@/hooks/useStore';
+import { localize } from '@deriv-com/translations';
 import './app-root.scss';
 
 const AppContent = lazy(() => import('./app-content'));
 
 const AppRootLoader = () => {
-    return <LoadingScreen />;
+    return <ChunkLoader message={localize('Loading...')} />;
 };
 
 const ErrorComponentWrapper = observer(() => {
@@ -64,12 +65,10 @@ const AppRoot = () => {
         return () => clearTimeout(timeoutId);
     }, []);
 
-    // The shell and branded landing screen must not wait for the API handshake.
-    // Trading views reconnect independently once api_base becomes available.
-    if (!store) return <AppRootLoader />;
+    if (!store || !is_api_initialized) return <AppRootLoader />;
 
     return (
-        <Suspense fallback={null}>
+        <Suspense fallback={<AppRootLoader />}>
             <ErrorBoundary root_store={store}>
                 <ErrorComponentWrapper />
                 <AppContent />
