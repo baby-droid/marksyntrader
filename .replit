@@ -1,4 +1,4 @@
-modules = ["nodejs-20", "web", "python-base-3.13"]
+modules = ["nodejs-20", "web"]
 [agent]
 expertMode = true
 stack = "BEST_EFFORT_FALLBACK"
@@ -22,39 +22,23 @@ args = "Start application"
 name = "Start application"
 author = "agent"
 
-[workflows.workflow.metadata]
-outputType = "webview"
-
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "npm run dev"
 waitForPort = 5000
 
-[deployment]
-deploymentTarget = "static"
-build = ["npm", "run", "build"]
-publicDir = "dist"
-
-[userenv]
-
-[userenv.shared]
-NEXT_PUBLIC_DERIV_REDIRECT_URI = "https://marksyntrader.replit.app/callback"
-NEXT_PUBLIC_DERIV_ENV = "production"
-NEXT_PUBLIC_DERIV_APP_NAME = "Marksyntrader"
-NEXT_PUBLIC_DERIV_APP_ID = "33FxUklO31bUSd9GkznBN"
-
-[postMerge]
-path = "scripts/post-merge.sh"
-timeoutMs = 180000
+[workflows.workflow.metadata]
+outputType = "webview"
 
 [[ports]]
 localPort = 5000
 externalPort = 80
-<<<<<<< HEAD
 
 [[ports]]
 localPort = 5001
-externalPort = 3000
-=======
-exposeLocalhost = true
->>>>>>> 6793a151ce0d487d58473fbdc968f7b293c6efec
+externalPort = 3001
+
+[deployment]
+deploymentTarget = "static"
+build = ["npm", "run", "build"]
+publicDir = "dist"
