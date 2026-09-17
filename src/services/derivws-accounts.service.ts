@@ -135,6 +135,7 @@ export class DerivWSAccountsService {
                     method: 'GET',
                     headers: {
                         Authorization: `Bearer ${accessToken}`,
+                        'Deriv-App-ID': process.env.NEXT_PUBLIC_DERIV_APP_ID || '',
                     },
                 });
 
@@ -198,6 +199,7 @@ export class DerivWSAccountsService {
                     method: 'POST',
                     headers: {
                         Authorization: `Bearer ${accessToken}`,
+                        'Deriv-App-ID': process.env.NEXT_PUBLIC_DERIV_APP_ID || '',
                     },
                 });
 
