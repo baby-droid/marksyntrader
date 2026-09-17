@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">46.42% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>13/28</span>
+                <span class='fraction'>28/28</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">100% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>0/0</span>
+                <span class='fraction'>3/3</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>0/3</span>
+                <span class='fraction'>3/3</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">46.42% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>13/28</span>
+                <span class='fraction'>28/28</span>
             </div>
         
             
@@ -61,7 +61,7 @@
             </div>
         </template>
     </div>
-    <div class='status-line low'></div>
+    <div class='status-line high'></div>
     <pre><table class="coverage">
 <tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
 <a name='L2'></a><a href='#L2'>2</a>
@@ -94,59 +94,59 @@
 <a name='L29'></a><a href='#L29'>29</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">10x</span>
+<span class="cline-any cline-yes">10x</span>
+<span class="cline-any cline-yes">10x</span>
+<span class="cline-any cline-yes">10x</span>
+<span class="cline-any cline-yes">10x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">15x</span>
+<span class="cline-any cline-yes">15x</span>
+<span class="cline-any cline-yes">15x</span>
+<span class="cline-any cline-yes">15x</span>
+<span class="cline-any cline-yes">15x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">5x</span>
+<span class="cline-any cline-yes">5x</span>
+<span class="cline-any cline-yes">5x</span>
+<span class="cline-any cline-yes">5x</span>
+<span class="cline-any cline-yes">5x</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">/**
  * Generate cryptographically secure random bytes and return as base64url string.
  */
-<span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >export function generateRandomBase64url(byteLength: number = 32): string {</span></span>
-<span class="cstat-no" title="statement not covered" >  const bytes = new Uint8Array(byteLength);</span>
-<span class="cstat-no" title="statement not covered" >  crypto.getRandomValues(bytes);</span>
-<span class="cstat-no" title="statement not covered" >  return base64urlEncode(bytes);</span>
-<span class="cstat-no" title="statement not covered" >}</span>
+export function generateRandomBase64url(byteLength: number = 32): string {
+  const bytes = new Uint8Array(byteLength);
+  crypto.getRandomValues(bytes);
+  return base64urlEncode(bytes);
+}
 &nbsp;
 /**
  * Encode a Uint8Array to a base64url string (RFC 4648 §5).
  */
-<span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >export function base64urlEncode(bytes: Uint8Array): string {</span></span>
-<span class="cstat-no" title="statement not covered" >  const binary = String.fromCharCode(...bytes);</span>
-<span class="cstat-no" title="statement not covered" >  const base64 = btoa(binary);</span>
-<span class="cstat-no" title="statement not covered" >  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');</span>
-<span class="cstat-no" title="statement not covered" >}</span>
+export function base64urlEncode(bytes: Uint8Array): string {
+  const binary = String.fromCharCode(...bytes);
+  const base64 = btoa(binary);
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
 &nbsp;
 /**
  * Compute SHA-256 hash of a string and return as base64url.
  * Used for PKCE code_challenge = BASE64URL(SHA256(code_verifier)).
  */
-export <span class="fstat-no" title="function not covered" >async function sha256Base64url(input: string): Promise&lt;string&gt; {</span>
-<span class="cstat-no" title="statement not covered" >  const encoder = new TextEncoder();</span>
-<span class="cstat-no" title="statement not covered" >  const data = encoder.encode(input);</span>
-<span class="cstat-no" title="statement not covered" >  const hashBuffer = await crypto.subtle.digest('SHA-256', data);</span>
-<span class="cstat-no" title="statement not covered" >  return base64urlEncode(new Uint8Array(hashBuffer));</span>
-<span class="cstat-no" title="statement not covered" >}</span>
+export async function sha256Base64url(input: string): Promise&lt;string&gt; {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(input);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  return base64urlEncode(new Uint8Array(hashBuffer));
+}
 &nbsp;</pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
@@ -154,7 +154,7 @@ export <span class="fstat-no" title="function not covered" >async function sha25
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-09-14T11:18:50.757Z
+                at 2026-09-17T07:48:14.094Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>
