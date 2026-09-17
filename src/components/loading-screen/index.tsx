@@ -2,14 +2,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import './loading-screen.scss';
 
-const RAMP_MS      = 2200;
+const RAMP_MS      = 5200;
 const FAKE_CEILING = 92;
 const FINISH_MS    = 300;
 
 interface LoadingScreenProps {
     ready?: boolean;
     onDone?: () => void;
-    showPhaseTwo?: boolean;
 }
 
 /* Phase-1 ticker */
@@ -132,7 +131,7 @@ const Phase2Screen: React.FC<{ progress: number; phraseIdx: number }> = ({ progr
     </div>
 );
 
-const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready = false, onDone, showPhaseTwo = true }) => {
+const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready = false, onDone }) => {
     const [progress, setProgress]   = useState(0);
     const [phraseIdx, setPhraseIdx] = useState(0);
     const [phase, setPhase]         = useState<1 | 2>(1);
@@ -183,15 +182,15 @@ const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready = false, onDone, sh
 
     /* Switch to phase 2 at 50% */
     useEffect(() => {
-        if (showPhaseTwo && progress >= 50 && phase === 1) {
+        if (progress >= 50 && phase === 1) {
             setPhase(2);
         }
-    }, [progress, phase, showPhaseTwo]);
+    }, [progress, phase]);
 
     const pct = Math.floor(progress);
 
     /* ── Phase 2 ── */
-    if (showPhaseTwo && phase === 2) {
+    if (phase === 2) {
         return <Phase2Screen progress={pct} phraseIdx={phraseIdx} />;
     }
 

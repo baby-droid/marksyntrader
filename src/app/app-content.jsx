@@ -42,16 +42,8 @@ const PreviewBranding =
 
 const AppContent = observer(() => {
     const [is_api_initialized, setIsApiInitialized] = React.useState(false);
-    const [is_loading, setIsLoading] = React.useState(true);
-    const [min_time_elapsed, setMinTimeElapsed] = React.useState(false);
-    // Once the app has shown its initial loading screen and revealed content, we
-    // never show the full-screen loader again for the rest of the session — brief
-    // reconnects/token refreshes should not re-trigger the "Loading..." screen.
-    const has_loaded_once_ref = React.useRef(false);
-    React.useEffect(() => {
-        const t = setTimeout(() => setMinTimeElapsed(true), 1200);
-        return () => clearTimeout(t);
-    }, []);
+    const [startup_ready, setStartupReady] = React.useState(false);
+    const [startup_complete, setStartupComplete] = React.useState(false);
 
     const store = useStore();
     const { app, transactions, common, client } = store;
@@ -67,8 +59,7 @@ const AppContent = observer(() => {
 
         const startupFallback = setTimeout(() => {
             setIsApiInitialized(true);
-            setIsLoading(false);
-            has_loaded_once_ref.current = true;
+            setStartupReady(true);
         }, 7000);
 
         return () => clearTimeout(startupFallback);
@@ -107,6 +98,7 @@ const AppContent = observer(() => {
     useEffect(() => {
         if (connectionStatus === CONNECTION_STATUS.OPENED) {
             setIsApiInitialized(true);
+            setStartupReady(true);
             common.setSocketOpened(true);
         } else if (connectionStatus !== CONNECTION_STATUS.OPENED) {
             common.setSocketOpened(false);
@@ -223,7 +215,7 @@ const AppContent = observer(() => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [client.is_logged_in, is_api_initialized]);
 
-    if (common?.error) {
+    if (common?.error && startup_complete) {
         return (
             <div
                 role='alert'
@@ -278,8 +270,8 @@ const AppContent = observer(() => {
                     <PreviewBranding />
                 </Suspense>
             )}
-            {(is_loading || !min_time_elapsed) ? (
-                <LoadingScreen />
+            {!startup_complete ? (
+                <LoadingScreen ready={startup_ready} onDone={() => setStartupComplete(true)} />
             ) : (
                 <AuthLoadingWrapper>
                     <ThemeProvider theme={is_dark_mode_on ? 'dark' : 'light'}>
