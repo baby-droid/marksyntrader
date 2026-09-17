@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "node scripts/ensure-node-modules.js && ./node_modules/.bin/rsbuild dev --port 5000",
     "build": "rsbuild build",
+    "postbuild": "node scripts/prepare-static-routes.js",
     "test": "jest",
     "type-check": "tsc --noEmit",
     "generate:brand-css": "node scripts/generate-brand-css.js",
