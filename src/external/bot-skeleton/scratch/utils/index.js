@@ -226,9 +226,9 @@ export const load = async ({
     // then continue loading. This lets the workspace display the strategy
     // without the "unsupported elements" error while keeping the Blockly
     // workspace valid.
-    const unknown_block_types = Array.from(blockly_xml)
+    const unknown_block_types = [...new Set(Array.from(blockly_xml)
         .map(block => block.getAttribute('type'))
-        .filter(t => t && !Object.keys(window.Blockly.Blocks).includes(t));
+        .filter(t => t && !Object.keys(window.Blockly.Blocks).includes(t)))];
 
     if (unknown_block_types.length > 0) {
         // Register lightweight stub definitions so Blockly won't crash when
@@ -238,11 +238,14 @@ export const load = async ({
                 window.Blockly.Blocks[type] = {
                     init() {
                         this.setColour(230);
-                        this.setTooltip(`Custom block: ${type}`);
-                        this.appendDummyInput().appendField(type.replace(/_/g, ' '));
+                        this.setTooltip(`Imported block "${type}" is not available in this workspace.`);
+                        this.appendDummyInput().appendField(`Imported: ${type.replace(/_/g, ' ')}`);
                         this.setPreviousStatement(true, null);
                         this.setNextStatement(true, null);
-                        this.setOutput(false);
+                        // Some third-party blocks are value blocks. Keeping an
+                        // output connection prevents Blockly from rejecting a
+                        // valid parent block during import.
+                        this.setOutput(true);
                     },
                 };
             }
