@@ -19,7 +19,17 @@ const getBotInterface = tradeEngine => {
         getSellPrice: () => getSellPrice(tradeEngine),
         isResult: result => getDetail(10) === result,
         isTradeAgain: result => globalObserver.emit('bot.trade_again', result),
-        recordVirtualHook: data => globalObserver.emit('bot.virtual_hook', data),
+        recordVirtualHook: data => {
+            globalObserver.emit('bot.virtual_hook', data);
+            const hookResult = data?.result === 'won' ? 'profit' : 'loss';
+            const market = data?.market || 'King Fisher';
+            const digitDetail = data?.exitDigit == null ? '' : ` · digit ${data.exitDigit}`;
+            dispatchBrowserEvent('journal:signal', {
+                type: hookResult === 'profit' ? 'WIN' : 'LOSS',
+                label: hookResult === 'profit' ? 'HOOK PROFIT' : 'HOOK LOSS',
+                detail: `${market} · virtual ${hookResult}${digitDetail}`,
+            });
+        },
         emitJournalSignal: detail => dispatchBrowserEvent('journal:signal', detail),
         emitKingFisherAnalysis: detail => dispatchBrowserEvent('bot:king-fisher-analysis', detail),
         emitMarketDigit: detail => dispatchBrowserEvent('bot:market-digit', detail),

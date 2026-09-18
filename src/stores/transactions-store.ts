@@ -158,10 +158,10 @@ export default class TransactionsStore {
         exitDigit?: number | null;
         hookType?: string;
     }) {
+        const hookResult = data.result === 'won' ? 'profit' : 'loss';
         const current_account = (this.core?.client?.loginid || localStorage.getItem('active_loginid')) as string;
         if (!current_account) return;
 
-        const hookResult = data.result === 'won' ? 'profit' : 'loss';
         const contract: any = {
             is_virtual_hook: true,
             hook_result: hookResult,
@@ -191,11 +191,6 @@ export default class TransactionsStore {
             ...this.elements[current_account],
         ].slice(0, 5000);
         this.elements = { ...this.elements };
-        dispatchBrowserEvent('journal:signal', {
-            type: hookResult === 'profit' ? 'WIN' : 'LOSS',
-            label: hookResult === 'profit' ? 'HOOK PROFIT' : 'HOOK LOSS',
-            detail: `${data.market} · virtual ${hookResult}${data.exitDigit == null ? '' : ` · digit ${data.exitDigit}`}`,
-        });
     }
 
     toggleTransactionDetailsModal = (is_open: boolean) => {
