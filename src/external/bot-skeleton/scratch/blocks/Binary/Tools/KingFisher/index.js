@@ -150,7 +150,8 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_restart_trade
     return [
         `if (Number(${tp}) > 0 && Bot.getTotalProfit(false) >= Number(${tp})) { if (typeof Bot.emitJournalSignal === "function") Bot.emitJournalSignal({ type: "WIN", label: "TAKE PROFIT HIT", detail: "Keep trading with the best — TP reached" }); return false; }`,
         `if (Number(${sl}) > 0 && Bot.getTotalProfit(false) <= -Number(${sl})) { if (typeof Bot.emitJournalSignal === "function") Bot.emitJournalSignal({ type: "LOSS", label: "STOP LOSS HIT", detail: "Trading stopped at the configured limit" }); return false; }`,
-        `/* King Fisher loss multiplier ${multiplier}x is applied by the following result branch. */`,
+        `if (typeof Bot.emitJournalSignal === "function") Bot.emitJournalSignal({ type: Bot.isResult("win") ? "WIN" : "LOSS", label: Bot.isResult("win") ? "TRADE WON" : "TRADE LOST", detail: Bot.isResult("win") ? "Stake reset to base" : "Next stake uses ${multiplier}× martingale" });`,
+        `/* The following King Fisher result blocks own the stake variable. The ${multiplier}× setting is retained here for the journal and XML-visible risk control. */`,
     ].join('\n');
 };
 
@@ -221,7 +222,7 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_virtual_hook 
         '    kingFisherHookState.lastEpoch = tick.epoch;',
         '    var accepted = Boolean(signal);',
         '    kingFisherHookState.confirmations = accepted ? kingFisherHookState.confirmations + 1 : 0;',
-        '    if (typeof Bot.recordVirtualHook === "function") Bot.recordVirtualHook({ id: tick.epoch, time: new Date(tick.epoch * 1000).toISOString(), market: Bot.getSymbol(), result: accepted ? "won" : "lost", hookType: "KING_FISHER" });',
+        '    if (typeof Bot.recordVirtualHook === "function") Bot.recordVirtualHook({ id: tick.epoch, time: new Date(tick.epoch * 1000).toISOString(), market: Bot.getSymbol(), exitDigit: digit, result: accepted ? "won" : "lost", hookType: "KING_FISHER" });',
         '  }',
         '  return kingFisherHookState.confirmations >= required;',
         '}',

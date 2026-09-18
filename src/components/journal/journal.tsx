@@ -17,7 +17,7 @@ import { JournalItem, JournalLoader, JournalTools } from './journal-components';
 // the bot publishes a 'journal:signal' CustomEvent.
 interface JournalSignal {
     id: number;
-    type: 'BUY_EVEN' | 'BUY_ODD' | 'BUY_OVER' | 'BUY_UNDER' | 'BUY_CALL' | 'BUY_PUT' | 'BUY_DIFF' | 'CYCLE' | 'SCAN' | 'WIN' | 'LOSS' | 'RECOVERY';
+    type: 'BUY_EVEN' | 'BUY_ODD' | 'BUY_OVER' | 'BUY_UNDER' | 'BUY_CALL' | 'BUY_PUT' | 'BUY_DIFF' | 'CYCLE' | 'SCAN' | 'WIN' | 'LOSS' | 'RECOVERY' | string;
     label: string;
     detail?: string;
     ts: number;
@@ -43,8 +43,8 @@ const JournalNotificationBlock = () => {
     const nextId = useRef(0);
 
     useEffect(() => {
-        const handler = (e: CustomEvent) => {
-            const { type, label, detail } = e.detail ?? {};
+        const handler = (event: Event) => {
+            const { type, label, detail } = (event as CustomEvent).detail ?? {};
             if (!type) return;
             const sig: JournalSignal = { id: nextId.current++, type, label: label ?? type, detail, ts: Date.now() };
             setSignals(prev => [sig, ...prev].slice(0, 8)); // keep last 8
@@ -97,17 +97,17 @@ const MarketDigitLog = () => {
     const [visible, setVisible] = useState(false);
 
     useEffect(() => {
-        const onDigit = (event: CustomEvent) => {
-            const { symbol, digit, epoch } = event.detail ?? {};
+        const onDigit = (event: Event) => {
+            const { symbol, digit, epoch } = (event as CustomEvent).detail ?? {};
             if (!symbol || !Number.isFinite(Number(digit))) return;
             setDigits(previous => ({ ...previous, [symbol]: { digit: Number(digit), epoch } }));
         };
-        const onAnalysis = (event: CustomEvent) => {
-            const item = event.detail ?? {};
+        const onAnalysis = (event: Event) => {
+            const item = (event as CustomEvent).detail ?? {};
             if (!item.symbol) return;
             setAnalysis(previous => [{ ...item, time: Date.now() }, ...previous].slice(0, 24));
         };
-        const onBestMarket = (event: CustomEvent) => setBestMarket(event.detail ?? null);
+        const onBestMarket = (event: Event) => setBestMarket((event as CustomEvent).detail ?? null);
         const onLog = () => setVisible(true);
         window.addEventListener('bot:market-digit' as any, onDigit);
         window.addEventListener('bot:king-fisher-analysis' as any, onAnalysis);

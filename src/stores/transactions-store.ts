@@ -8,6 +8,7 @@ import { TContractInfo } from '../components/summary/summary-card.types';
 import { transaction_elements } from '../constants/transactions';
 import { getStoredItemsByKey, getStoredItemsByUser, setStoredItemsByKey } from '../utils/session-storage';
 import { observer as globalObserver } from '@/external/bot-skeleton';
+import { dispatchBrowserEvent } from '@/external/bot-skeleton/utils/browser-event';
 import RootStore from './root-store';
 
 type TTransaction = {
@@ -157,7 +158,7 @@ export default class TransactionsStore {
         exitDigit?: number | null;
         hookType?: string;
     }) {
-        const current_account = this.core?.client?.loginid as string;
+        const current_account = (this.core?.client?.loginid || localStorage.getItem('active_loginid')) as string;
         if (!current_account) return;
 
         const hookResult = data.result === 'won' ? 'profit' : 'loss';
@@ -190,15 +191,11 @@ export default class TransactionsStore {
             ...this.elements[current_account],
         ].slice(0, 5000);
         this.elements = { ...this.elements };
-        if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('journal:signal', {
-                detail: {
-                    type: hookResult === 'profit' ? 'WIN' : 'LOSS',
-                    label: hookResult === 'profit' ? 'HOOK PROFIT' : 'HOOK LOSS',
-                    detail: `${data.market} · virtual ${hookResult}`,
-                },
-            }));
-        }
+        dispatchBrowserEvent('journal:signal', {
+            type: hookResult === 'profit' ? 'WIN' : 'LOSS',
+            label: hookResult === 'profit' ? 'HOOK PROFIT' : 'HOOK LOSS',
+            detail: `${data.market} · virtual ${hookResult}${data.exitDigit == null ? '' : ` · digit ${data.exitDigit}`}`,
+        });
     }
 
     toggleTransactionDetailsModal = (is_open: boolean) => {
@@ -258,13 +255,11 @@ export default class TransactionsStore {
             this.journal_reported_contracts.add(Number(data.contract_id));
             const profit = Number(data.profit) || 0;
             if (typeof window !== 'undefined') {
-                window.dispatchEvent(new CustomEvent('journal:signal', {
-                    detail: {
-                        type: profit > 0 ? 'WIN' : 'LOSS',
-                        label: profit > 0 ? 'PROFIT MADE' : 'LOSS MADE',
-                        detail: `${data.underlying_symbol || data.display_name || 'King Fisher'} · ${profit > 0 ? '+' : '-'}${Math.abs(profit).toFixed(2)} ${data.currency || 'USD'}`,
-                    },
-                }));
+                dispatchBrowserEvent('journal:signal', {
+                    type: profit > 0 ? 'WIN' : 'LOSS',
+                    label: profit > 0 ? 'PROFIT MADE' : 'LOSS MADE',
+                    detail: `${data.underlying_symbol || data.display_name || 'King Fisher'} · ${profit > 0 ? '+' : '-'}${Math.abs(profit).toFixed(2)} ${data.currency || 'USD'}`,
+                });
             }
         }
 

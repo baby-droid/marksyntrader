@@ -7,6 +7,9 @@
 export const dispatchBrowserEvent = (name, detail) => {
     if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
 
+    // Some interpreter sandboxes do not expose CustomEvent as a global. Read
+    // it from the browser window and keep a document.createEvent fallback for
+    // older previews and test environments.
     const EventConstructor = window.CustomEvent;
     if (typeof EventConstructor === 'function') {
         window.dispatchEvent(new EventConstructor(name, { detail }));
