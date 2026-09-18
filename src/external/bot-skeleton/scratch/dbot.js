@@ -344,7 +344,30 @@ class DBot {
             this.is_bot_running = true;
 
             api_base.setIsRunning(true);
-            this.interpreter.run(code).catch(error => {
+            const activeInterpreter = this.interpreter;
+            activeInterpreter.run(code).then(async () => {
+                // A King Fisher TP/SL ends the current market cycle, not the
+                // user's run request. Cleanly tear down the completed
+                // interpreter, re-scan, update the market fields, and start
+                // the next cycle on the same Run action.
+                const rescanRequested = Boolean(
+                    activeInterpreter.bot?.tradeEngine?.kingFisherRescanRequested
+                );
+                if (
+                    !rescanRequested ||
+                    this.interpreter !== activeInterpreter ||
+                    api_base.is_stopping ||
+                    !this.is_bot_running
+                ) {
+                    return;
+                }
+
+                activeInterpreter.bot.tradeEngine.kingFisherRescanRequested = null;
+                this.is_bot_running = false;
+                api_base.setIsRunning(false);
+                await this.stopBot();
+                if (!api_base.is_stopping) await this.runBot();
+            }).catch(error => {
                 globalObserver.emit('Error', error);
                 this.stopBot();
             });

@@ -75,3 +75,4 @@
 - [Vite merge guardrails](vite-merge-guardrails.md) — resolve the active toolchain before regenerating the lockfile; Vite 8 may need CSS minification disabled for malformed vendor CSS.
 - [King Fisher continuation](king-fisher-continuation.md) — King Fisher after-purchase generation must force trade_again after settlement; TP/SL branches otherwise can end the interpreter after one run.
 - [King Fisher runtime reporting](marksyntrader-kingfisher.md) — best-market selection runs before Bot Builder starts; live digits, Fisher sequences, hooks, and settled P/L feed the shared Journal/Transactions surface.
+- [Interpreter-safe generated code](interpreter-safe-generated-code.md) — Blockly interpreter code cannot assume browser globals or Number static helpers; use primitive checks and host bridge methods.

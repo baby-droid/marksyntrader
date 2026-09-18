@@ -66,7 +66,7 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_entry = block
         '  var tick = Bot.getLastTick(true);',
         '  if (!tick || tick.epoch == null) return false;',
         '  var digit = Number(Bot.getLastDigit());',
-        '  if (!Number.isFinite(digit)) return false;',
+        '  if (typeof digit !== "number" || digit !== digit || digit === Infinity || digit === -Infinity) return false;',
         '  if (tick.epoch !== state.lastEpoch) {',
         '    state.lastEpoch = tick.epoch;',
         '    var qualifies = direction === "above" ? digit > threshold : digit < threshold;',
@@ -151,8 +151,8 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_restart_trade
     const sl = generator().valueToCode(block, 'STOP_LOSS', generator().ORDER_ATOMIC) || '0';
     const multiplier = Number(block.getFieldValue('MULTIPLIER') || 2);
     return [
-        `if (Number(${tp}) > 0 && Bot.getTotalProfit(false) >= Number(${tp})) { if (typeof Bot.emitJournalSignal === "function") Bot.emitJournalSignal({ type: "WIN", label: "TAKE PROFIT HIT", detail: "Keep trading with the best — TP reached" }); return false; }`,
-        `if (Number(${sl}) > 0 && Bot.getTotalProfit(false) <= -Number(${sl})) { if (typeof Bot.emitJournalSignal === "function") Bot.emitJournalSignal({ type: "LOSS", label: "STOP LOSS HIT", detail: "Trading stopped at the configured limit" }); return false; }`,
+        `if (Number(${tp}) > 0 && Bot.getTotalProfit(false) >= Number(${tp})) { if (typeof Bot.emitJournalSignal === "function") Bot.emitJournalSignal({ type: "WIN", label: "TAKE PROFIT HIT", detail: "Keep trading with the best — TP reached" }); if (typeof Bot.requestKingFisherRescan === "function") Bot.requestKingFisherRescan({ reason: "take-profit", profit: Bot.getTotalProfit(false) }); return false; }`,
+        `if (Number(${sl}) > 0 && Bot.getTotalProfit(false) <= -Number(${sl})) { if (typeof Bot.emitJournalSignal === "function") Bot.emitJournalSignal({ type: "LOSS", label: "STOP LOSS HIT", detail: "Trading stopped at the configured limit" }); if (typeof Bot.requestKingFisherRescan === "function") Bot.requestKingFisherRescan({ reason: "stop-loss", profit: Bot.getTotalProfit(false) }); return false; }`,
         `if (typeof Bot.emitJournalSignal === "function") Bot.emitJournalSignal({ type: Bot.isResult("win") ? "WIN" : "LOSS", label: Bot.isResult("win") ? "TRADE WON" : "TRADE LOST", detail: Bot.isResult("win") ? "Stake reset to base" : "Next stake uses ${multiplier}× martingale" });`,
         `/* The following King Fisher result blocks own the stake variable. The ${multiplier}× setting is retained here for the journal and XML-visible risk control. */`,
     ].join('\n');
@@ -239,10 +239,11 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_virtual_hook 
         '  }',
         '  if (state.pendingEpoch != null && tick.epoch !== state.pendingEpoch) {',
         '    var exitDigit = Number(Bot.getLastDigit());',
-        '    var hookWon = Number.isFinite(exitDigit) && (contractType === "DIGITUNDER" ? exitDigit < barrier : exitDigit > barrier);',
+        '    var exitDigitIsFinite = typeof exitDigit === "number" && exitDigit === exitDigit && exitDigit !== Infinity && exitDigit !== -Infinity;',
+        '    var hookWon = exitDigitIsFinite && (contractType === "DIGITUNDER" ? exitDigit < barrier : exitDigit > barrier);',
         '    var result = hookWon ? "won" : "lost";',
-        '    if (typeof Bot.recordVirtualHook === "function") Bot.recordVirtualHook({ id: state.pendingEpoch, time: new Date(state.pendingEpoch * 1000).toISOString(), market: Bot.getSymbol(), exitDigit: Number.isFinite(exitDigit) ? exitDigit : null, result: result, hookType: targetResult === "profit" ? "HOOK PROFIT" : "HOOK LOSS" });',
-        '    if (typeof Bot.emitJournalSignal === "function") Bot.emitJournalSignal({ type: hookWon ? "WIN" : "LOSS", label: hookWon ? "HOOK PROFIT" : "HOOK LOSS", detail: Bot.getSymbol() + " · digit " + (Number.isFinite(exitDigit) ? exitDigit : "—") });',
+        '    if (typeof Bot.recordVirtualHook === "function") Bot.recordVirtualHook({ id: state.pendingEpoch, time: new Date(state.pendingEpoch * 1000).toISOString(), market: Bot.getSymbol(), exitDigit: exitDigitIsFinite ? exitDigit : null, result: result, hookType: targetResult === "profit" ? "HOOK PROFIT" : "HOOK LOSS" });',
+        '    if (typeof Bot.emitJournalSignal === "function") Bot.emitJournalSignal({ type: hookWon ? "WIN" : "LOSS", label: hookWon ? "HOOK PROFIT" : "HOOK LOSS", detail: Bot.getSymbol() + " · digit " + (exitDigitIsFinite ? exitDigit : "—") });',
         '    state.pendingEpoch = null;',
         '    state.pendingDigit = null;',
         '    state.confirmations = result === targetResult ? state.confirmations + 1 : 0;',

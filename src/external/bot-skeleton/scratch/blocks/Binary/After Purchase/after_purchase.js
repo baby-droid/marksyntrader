@@ -102,15 +102,17 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
         riskGuard = `
         if (Number(${takeProfit}) > 0 && Bot.getTotalProfit(false) >= Number(${takeProfit})) {
             if (typeof Bot.emitJournalSignal === "function") Bot.emitJournalSignal({ type: "WIN", label: "TAKE PROFIT HIT", detail: "Keep trading with the best — TP reached" });
+            if (typeof Bot.requestKingFisherRescan === "function") Bot.requestKingFisherRescan({ reason: "take-profit", profit: Bot.getTotalProfit(false) });
             return false;
         }
         if (Number(${stopLoss}) > 0 && Bot.getTotalProfit(false) <= -Number(${stopLoss})) {
             if (typeof Bot.emitJournalSignal === "function") Bot.emitJournalSignal({ type: "LOSS", label: "STOP LOSS HIT", detail: "Trading stopped at the configured limit" });
+            if (typeof Bot.requestKingFisherRescan === "function") Bot.requestKingFisherRescan({ reason: "stop-loss", profit: Bot.getTotalProfit(false) });
             return false;
         }`;
     }
     const continuation = isKingFisher
-        ? 'Bot.isTradeAgain(true); return true;'
+        ? 'if (typeof Bot.shouldRescanKingFisher === "function" && Bot.shouldRescanKingFisher()) return false; Bot.isTradeAgain(true); return true;'
         : 'Bot.isTradeAgain(false); return false;';
     const code = `
     BinaryBotPrivateAfterPurchase = function BinaryBotPrivateAfterPurchase() {

@@ -23,6 +23,10 @@ const getBotInterface = tradeEngine => {
         emitJournalSignal: detail => dispatchBrowserEvent('journal:signal', detail),
         emitKingFisherAnalysis: detail => dispatchBrowserEvent('bot:king-fisher-analysis', detail),
         emitMarketDigit: detail => dispatchBrowserEvent('bot:market-digit', detail),
+        requestKingFisherRescan: detail => {
+            tradeEngine.kingFisherRescanRequested = detail || { reason: 'risk-limit' };
+        },
+        shouldRescanKingFisher: () => Boolean(tradeEngine.kingFisherRescanRequested),
         getSymbol: () => tradeEngine.tradeOptions?.symbol || tradeEngine.options?.symbol || '',
         readDetails: i => getDetail(i - 1),
     };
