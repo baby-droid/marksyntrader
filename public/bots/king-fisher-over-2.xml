@@ -6,6 +6,7 @@
     <variable id="kf2_tp">take profit</variable>
     <variable id="kf2_sl">stop loss</variable>
   </variables>
+  <block type="king_fisher_best_market_scanner" id="kf2_best_market" x="20" y="-80"><field name="ENABLED">TRUE</field></block>
   <block type="trade_definition" id="kf2_trade" deletable="false" x="20" y="20">
     <statement name="TRADE_OPTIONS">
       <block type="trade_definition_market" id="kf2_market" deletable="false" movable="false">
@@ -58,7 +59,7 @@
   </block>
   <block type="after_purchase" id="kf2_after" x="760" y="20">
     <statement name="AFTERPURCHASE_STACK">
-      <block type="controls_if" id="kf2_tp_if">
+      <block type="king_fisher_restart_trade" id="kf2_guard"><value name="TAKE_PROFIT"><block type="variables_get" id="kf2_guard_tp"><field name="VAR" id="kf2_tp">take profit</field></block></value><value name="STOP_LOSS"><block type="variables_get" id="kf2_guard_sl"><field name="VAR" id="kf2_sl">stop loss</field></block></value><field name="MULTIPLIER">2</field><next><block type="controls_if" id="kf2_tp_if">
         <value name="IF0"><block type="logic_compare" id="kf2_tp_cmp"><field name="OP">GTE</field><value name="A"><block type="total_profit" id="kf2_profit"></block></value><value name="B"><block type="variables_get" id="kf2_tp_get"><field name="VAR" id="kf2_tp">take profit</field></block></value></block></value>
         <statement name="ELSE">
           <block type="controls_if" id="kf2_sl_if">
@@ -73,7 +74,7 @@
             </statement>
           </block>
         </statement>
-      </block>
+      </block></next>
     </statement>
   </block>
   <block type="before_purchase" id="kf2_before" x="20" y="900">

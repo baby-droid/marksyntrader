@@ -23,16 +23,16 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">88.96% </span>
+                <span class="strong">89.03% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>137/154</span>
+                <span class='fraction'>138/155</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">81.25% </span>
+                <span class="strong">82.35% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>13/16</span>
+                <span class='fraction'>14/17</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">88.96% </span>
+                <span class="strong">89.03% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>137/154</span>
+                <span class='fraction'>138/155</span>
             </div>
         
             
@@ -217,7 +217,9 @@
 <a name='L152'></a><a href='#L152'>152</a>
 <a name='L153'></a><a href='#L153'>153</a>
 <a name='L154'></a><a href='#L154'>154</a>
-<a name='L155'></a><a href='#L155'>155</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
+<a name='L155'></a><a href='#L155'>155</a>
+<a name='L156'></a><a href='#L156'>156</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -247,7 +249,7 @@
 <span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-yes">13x</span>
 <span class="cline-any cline-yes">13x</span>
 <span class="cline-any cline-yes">13x</span>
@@ -373,10 +375,11 @@
 <span class="cline-any cline-yes">13x</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">/**
  * Transport layer wrapper for SmartCharts Champion Adapter
- * Wraps the existing chart_api.api to match the TTransport interface
+ * Wraps the authenticated main api_base.api connection to match the
+ * TTransport interface.
  */
 &nbsp;
-import chart_api from '@/external/bot-skeleton/services/api/chart-api';
+import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import type { TTransport } from './types';
 &nbsp;
 // Logger utility for transport layer
@@ -387,7 +390,7 @@ const logger = {
 };
 &nbsp;
 /**
- * Create transport wrapper around chart_api.api
+ * Create transport wrapper around the main authenticated API.
  * @returns TTransport implementation
  */
 export function createTransport(): TTransport {
@@ -398,10 +401,10 @@ export function createTransport(): TTransport {
          * Send one-shot API request
          */
         async send(request: any): Promise&lt;any&gt; {
-            if (!chart_api.api) {
-                await chart_api.init();
+            if (!api_base.api) {
+                throw new Error('Main authenticated API is not initialized');
             }
-            return chart_api.api.send(request);
+            return api_base.api.send(request);
         },
 &nbsp;
         /**
@@ -411,8 +414,8 @@ export function createTransport(): TTransport {
          * @returns subscription ID
          */
         subscribe(request: any, callback: (response: any) =&gt; void): string {
-            if (!chart_api.api) {
-                throw new Error('Chart API not initialized');
+            if (!api_base.api) {
+                throw new Error('Main authenticated API is not initialized');
             }
             // Generate a unique temporary ID for tracking
             const tempId = `temp-${Date.now()}-${Math.random()}`;
@@ -421,7 +424,7 @@ export function createTransport(): TTransport {
             const subscribeRequest = { ...request, subscribe: 1 };
 &nbsp;
             // Set up global message listener first (before sending request)
-            const messageSubscription = chart_api.api.onMessage()?.subscribe(({ data }: { data: any }) =&gt; {
+            const messageSubscription = api_base.api.onMessage()?.subscribe(({ data }: { data: any }) =&gt; {
                 const subscriptionId = data?.subscription?.id;
 &nbsp;
                 // Check if this message belongs to our subscription
@@ -449,7 +452,7 @@ export function createTransport(): TTransport {
             });
 &nbsp;
             // Send the subscription request
-            chart_api.api
+            (api_base.api as any)
                 .send(subscribeRequest)
                 .then((response: any) =&gt; {
                     const subscriptionId = response?.subscription?.id;
@@ -495,8 +498,8 @@ export function createTransport(): TTransport {
 <span class="cstat-no" title="statement not covered" >                }</span>
 <span class="cstat-no" title="statement not covered" ></span>
 <span class="cstat-no" title="statement not covered" >                // Send forget request to server using the real subscription ID</span>
-<span class="cstat-no" title="statement not covered" >                if (chart_api.api &amp;&amp; subscription.realSubscriptionId) {</span>
-<span class="cstat-no" title="statement not covered" >                    chart_api.api.forget(subscription.realSubscriptionId);</span>
+<span class="cstat-no" title="statement not covered" >                if (api_base.api &amp;&amp; subscription.realSubscriptionId) {</span>
+<span class="cstat-no" title="statement not covered" >                    (api_base.api as any).forget(subscription.realSubscriptionId);</span>
 <span class="cstat-no" title="statement not covered" >                }</span>
 <span class="cstat-no" title="statement not covered" ></span>
 <span class="cstat-no" title="statement not covered" >                // Clean up local storage</span>
@@ -511,12 +514,12 @@ export function createTransport(): TTransport {
          * @param msgType - Message type to unsubscribe from (optional)
          */
         unsubscribeAll(msgType?: string): void {
-            if (chart_api.api) {
+            if (api_base.api) {
                 if (msgType) {
-                    chart_api.api.forgetAll(msgType);
+                    (api_base.api as any).forgetAll(msgType);
                 } else {
                     // Forget all ticks by default
-                    chart_api.api.forgetAll('ticks');
+                    (api_base.api as any).forgetAll('ticks');
                 }
             }
 &nbsp;
@@ -532,7 +535,7 @@ export function createTransport(): TTransport {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-09-02T11:16:22.954Z
+                at 2026-09-17T15:05:41.805Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

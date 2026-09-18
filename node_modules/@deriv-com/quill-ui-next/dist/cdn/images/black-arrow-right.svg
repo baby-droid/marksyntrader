@@ -1,0 +1,15 @@
+<svg width="4" height="8" viewBox="0 0 4 8" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="4" height="8" fill="#F5F5F5"/>
+<g id="basic">
+<path d="M-344 -602C-344 -603.105 -343.105 -604 -342 -604H571C572.105 -604 573 -603.105 573 -602V692C573 693.105 572.105 694 571 694H-342C-343.105 694 -344 693.105 -344 692V-602Z" fill="#F2E7FA"/>
+<g id="tooltip - basic">
+<rect x="-296.5" y="-531.5" width="822" height="1119" rx="4.5" fill="#F2E7FA"/>
+<rect x="-296.5" y="-531.5" width="822" height="1119" rx="4.5" stroke="#7F0DCF" stroke-dasharray="10 5"/>
+<g id="status=neutral, arrow-position=right-bottom">
+<g id="container - arrow">
+<path id="arrow" d="M0 8L0 0L4 4L0 8Z" fill="black"/>
+</g>
+</g>
+</g>
+</g>
+</svg>

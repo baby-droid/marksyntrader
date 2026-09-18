@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">56.53% </span>
+                <span class="strong">54.41% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>238/421</span>
+                <span class='fraction'>234/430</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">78.57% </span>
+                <span class="strong">78.84% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>44/56</span>
+                <span class='fraction'>41/52</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">61.53% </span>
+                <span class="strong">57.14% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>8/13</span>
+                <span class='fraction'>8/14</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">56.53% </span>
+                <span class="strong">54.41% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>238/421</span>
+                <span class='fraction'>234/430</span>
             </div>
         
             
@@ -484,7 +484,16 @@
 <a name='L419'></a><a href='#L419'>419</a>
 <a name='L420'></a><a href='#L420'>420</a>
 <a name='L421'></a><a href='#L421'>421</a>
-<a name='L422'></a><a href='#L422'>422</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
+<a name='L422'></a><a href='#L422'>422</a>
+<a name='L423'></a><a href='#L423'>423</a>
+<a name='L424'></a><a href='#L424'>424</a>
+<a name='L425'></a><a href='#L425'>425</a>
+<a name='L426'></a><a href='#L426'>426</a>
+<a name='L427'></a><a href='#L427'>427</a>
+<a name='L428'></a><a href='#L428'>428</a>
+<a name='L429'></a><a href='#L429'>429</a>
+<a name='L430'></a><a href='#L430'>430</a>
+<a name='L431'></a><a href='#L431'>431</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -623,11 +632,20 @@
 <span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-yes">2x</span>
-<span class="cline-any cline-yes">2x</span>
-<span class="cline-any cline-yes">2x</span>
-<span class="cline-any cline-yes">2x</span>
-<span class="cline-any cline-yes">2x</span>
-<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-yes">3x</span>
@@ -1037,18 +1055,27 @@ export function getFreshAutoBotMarkets(
 export function selectAutoBotMarketsForExecution(
     freshMarkets: AutoBotMarketCandidate[],
 ): AutoBotMarketCandidate[] {
-    // A fresh signal is independent per market. Keep up to five of them so a
-    // strong burst across the prioritized synthetic groups can be traded on
-    // the same tick rather than silently dropping the fourth or fifth market.
-    const rankedMarkets = freshMarkets
+    // Every market with a fresh qualifying entry is independently tradable.
+    // Do not downgrade a ready market to "watch" just because another market
+    // has a weaker score; the user's enabled market set owns execution.
+    return freshMarkets
         .slice()
-        .sort(compareAutoBotMarkets)
-        .slice(0, 5);
-    if (!rankedMarkets.length) <span class="branch-0 cbranch-no" title="branch not covered" >return [];</span>
-    return rankedMarkets.every(candidate =&gt; candidate.trade.signal === 'strong')
-        ? rankedMarkets
-        : rankedMarkets.slice(0, 1);
+        .sort(compareAutoBotMarkets);
 }
+&nbsp;
+<span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >export function isValidatedAutoBotEntry(</span></span>
+<span class="cstat-no" title="statement not covered" >    candidate: AutoBotMarketCandidate,</span>
+<span class="cstat-no" title="statement not covered" >    lossStreak = 0,</span>
+<span class="cstat-no" title="statement not covered" >): boolean {</span>
+<span class="cstat-no" title="statement not covered" >    if (!candidate.qualifies || candidate.trade.entryFrame !== 'matched') return false;</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >    // A loss must buy a stronger setup, not simply repeat the last signal with</span>
+<span class="cstat-no" title="statement not covered" >    // a larger stake. Two consecutive losses require a strong signal as well</span>
+<span class="cstat-no" title="statement not covered" >    // as the higher score threshold.</span>
+<span class="cstat-no" title="statement not covered" >    const minimumScore = lossStreak &gt;= 2 ? 72 : lossStreak === 1 ? 62 : 50;</span>
+<span class="cstat-no" title="statement not covered" >    return candidate.score &gt;= minimumScore</span>
+<span class="cstat-no" title="statement not covered" >        &amp;&amp; (lossStreak &lt; 2 || candidate.trade.signal === 'strong');</span>
+<span class="cstat-no" title="statement not covered" >}</span>
 &nbsp;
 export function isAutoBotMarketStopped(
     profit: number,
@@ -1333,7 +1360,7 @@ export function scanAutoBotMarkets(
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-09-14T11:18:50.757Z
+                at 2026-09-17T15:06:20.827Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

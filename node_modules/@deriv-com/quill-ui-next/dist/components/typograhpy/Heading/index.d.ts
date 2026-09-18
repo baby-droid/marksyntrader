@@ -1,0 +1,16 @@
+import { BaseTypographyType } from '../base';
+export type HeadingType = Omit<BaseTypographyType, "type" | "level" | "size">;
+export declare const Mega: (props: HeadingType) => import("react/jsx-runtime").JSX.Element;
+export declare const H1: (props: HeadingType) => import("react/jsx-runtime").JSX.Element;
+export declare const H2: (props: HeadingType) => import("react/jsx-runtime").JSX.Element;
+export declare const H3: (props: HeadingType) => import("react/jsx-runtime").JSX.Element;
+export declare const H4: (props: HeadingType) => import("react/jsx-runtime").JSX.Element;
+export declare const H5: (props: HeadingType) => import("react/jsx-runtime").JSX.Element;
+export declare const H6: (props: HeadingType) => import("react/jsx-runtime").JSX.Element;
+export type MegaType = HeadingType;
+export type H1Type = HeadingType;
+export type H2Type = HeadingType;
+export type H3Type = HeadingType;
+export type H4Type = HeadingType;
+export type H5Type = HeadingType;
+export type H6Type = HeadingType;

@@ -13,6 +13,8 @@ import main_xml from './xml/main.xml?raw';
 import { forgetAccumulatorsProposalRequest } from './accumulators-proposal-handler';
 import { loadBlockly } from './blockly';
 import DBotStore from './dbot-store';
+import { scanKingFisherMarket } from '@/utils/king-fisher-market-scanner';
+import { dispatchBrowserEvent } from '../utils/browser-event';
 import { isAllRequiredBlocksEnabled, updateDisabledBlocks, validateErrorOnBlockDelete } from './utils';
 
 class DBot {
@@ -285,11 +287,40 @@ class DBot {
      * Runs the bot. Does a sanity check before attempting to generate the
      * JavaScript code that's fed to the interpreter.
      */
-    runBot() {
+    async runBot() {
         if (api_base.is_stopping) return;
 
         try {
             api_base.is_stopping = false;
+            const bestMarketBlock = this.workspace?.getAllBlocks?.(false)
+                ?.find(block => block.type === 'king_fisher_best_market_scanner');
+            if (bestMarketBlock && bestMarketBlock.getFieldValue?.('ENABLED') !== 'FALSE') {
+                const marketBlock = this.workspace?.getAllBlocks?.(false)
+                    ?.find(block => block.type === 'trade_definition_market');
+                const contractBlock = this.workspace?.getAllBlocks?.(false)
+                    ?.find(block => block.type === 'trade_definition_contracttype');
+                if (marketBlock && contractBlock) {
+                    const direction = contractBlock.getFieldValue('TYPE_LIST') === 'DIGITUNDER' ? 'ABOVE' : 'BELOW';
+                    const result = await scanKingFisherMarket(direction);
+                    marketBlock.setFieldValue(result.market, 'MARKET_LIST');
+                    marketBlock.setFieldValue(result.submarket, 'SUBMARKET_LIST');
+                    marketBlock.setFieldValue(result.symbol, 'SYMBOL_LIST');
+                    const detail = {
+                        symbol: result.symbol,
+                        label: result.label,
+                        group: result.group,
+                        lastDigit: result.lastDigit,
+                        score: result.score,
+                        direction,
+                    };
+                    dispatchBrowserEvent('king-fisher:best-market', detail);
+                    dispatchBrowserEvent('journal:signal', {
+                        type: 'SCAN',
+                        label: 'BEST MARKET SELECTED',
+                        detail: `${result.label} · ${result.group} · last digit ${result.lastDigit ?? '—'} · score ${result.score}`,
+                    });
+                }
+            }
             const code = this.generateCode();
             if (!this.interpreter.bot.tradeEngine.checkTicksPromiseExists()) this.interpreter = Interpreter();
 
@@ -357,6 +388,16 @@ class DBot {
                     currentTickTime = Bot.getLastTick(true);
                 }
                 currentTickTime = currentTickTime.epoch;
+                try {
+                    var BinaryBotPrivateLastTick = Bot.getLastTick(true);
+                    if (BinaryBotPrivateLastTick && typeof Bot.emitMarketDigit === 'function') {
+                        Bot.emitMarketDigit({
+                            symbol: Bot.getSymbol(),
+                            digit: Number(Bot.getLastDigit()),
+                            epoch: BinaryBotPrivateLastTick.epoch,
+                        });
+                    }
+                } catch (e) {}
                 if (currentTickTime === BinaryBotPrivateLastTickTime) {
                     return;
                 }

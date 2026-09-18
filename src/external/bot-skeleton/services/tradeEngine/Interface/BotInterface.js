@@ -1,5 +1,6 @@
 import { observer as globalObserver } from '../../../utils/observer';
 import { createDetails } from '../utils/helpers';
+import { dispatchBrowserEvent } from '../../../utils/browser-event';
 
 const getBotInterface = tradeEngine => {
     const getDetail = i => createDetails(tradeEngine.data.contract)[i];
@@ -19,6 +20,10 @@ const getBotInterface = tradeEngine => {
         isResult: result => getDetail(10) === result,
         isTradeAgain: result => globalObserver.emit('bot.trade_again', result),
         recordVirtualHook: data => globalObserver.emit('bot.virtual_hook', data),
+        emitJournalSignal: detail => dispatchBrowserEvent('journal:signal', detail),
+        emitKingFisherAnalysis: detail => dispatchBrowserEvent('bot:king-fisher-analysis', detail),
+        emitMarketDigit: detail => dispatchBrowserEvent('bot:market-digit', detail),
+        getSymbol: () => tradeEngine.tradeOptions?.symbol || tradeEngine.options?.symbol || '',
         readDetails: i => getDetail(i - 1),
     };
 };
