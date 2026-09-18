@@ -69,6 +69,7 @@ export default class TransactionsStore {
             sortOutPositionsBeforeAction: action.bound,
             recoverPendingContractsById: action.bound,
             onVirtualHookEvent: action.bound,
+            flushPendingVirtualHooks: action.bound,
         });
     }
     TRANSACTION_CACHE = 'transaction_cache';
@@ -83,6 +84,14 @@ export default class TransactionsStore {
     is_transaction_details_modal_open = false;
     private auto_trade_listener: ((event: Event) => void) | null = null;
     private journal_reported_contracts = new Set<number>();
+    private pending_virtual_hooks: Array<{
+        id: number;
+        time: string;
+        market: string;
+        result: 'won' | 'lost';
+        exitDigit?: number | null;
+        hookType?: string;
+    }> = [];
 
     onVirtualHookEvent = (data: any = {}) => {
         this.pushVirtualHook({
@@ -158,9 +167,24 @@ export default class TransactionsStore {
         exitDigit?: number | null;
         hookType?: string;
     }) {
-        const hookResult = data.result === 'won' ? 'profit' : 'loss';
         const current_account = (this.core?.client?.loginid || localStorage.getItem('active_loginid')) as string;
-        if (!current_account) return;
+        if (!current_account) {
+            this.pending_virtual_hooks.push(data);
+            return;
+        }
+
+        this.appendVirtualHook(current_account, data);
+    }
+
+    private appendVirtualHook(current_account: string, data: {
+        id: number;
+        time: string;
+        market: string;
+        result: 'won' | 'lost';
+        exitDigit?: number | null;
+        hookType?: string;
+    }) {
+        const hookResult = data.result === 'won' ? 'profit' : 'loss';
 
         const contract: any = {
             is_virtual_hook: true,
@@ -192,6 +216,14 @@ export default class TransactionsStore {
         ].slice(0, 5000);
         this.elements = { ...this.elements };
     }
+
+    flushPendingVirtualHooks = () => {
+        const current_account = (this.core?.client?.loginid || localStorage.getItem('active_loginid')) as string;
+        if (!current_account || !this.pending_virtual_hooks.length) return;
+
+        const pending = this.pending_virtual_hooks.splice(0);
+        pending.forEach(data => this.appendVirtualHook(current_account, data));
+    };
 
     toggleTransactionDetailsModal = (is_open: boolean) => {
         this.is_transaction_details_modal_open = is_open;
@@ -345,9 +377,15 @@ export default class TransactionsStore {
             () => this.recoverPendingContracts()
         );
 
+        const disposePendingVirtualHooks = reaction(
+            () => client?.loginid,
+            () => this.flushPendingVirtualHooks()
+        );
+
         return () => {
             disposeTransactionElementsListener();
             disposeRecoverContracts();
+            disposePendingVirtualHooks();
         };
     }
 

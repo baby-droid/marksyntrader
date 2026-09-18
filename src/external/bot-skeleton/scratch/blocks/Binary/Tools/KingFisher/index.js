@@ -243,7 +243,6 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_virtual_hook 
         '    var hookWon = exitDigitIsFinite && (contractType === "DIGITUNDER" ? exitDigit < barrier : exitDigit > barrier);',
         '    var result = hookWon ? "won" : "lost";',
         '    if (typeof Bot.recordVirtualHook === "function") Bot.recordVirtualHook({ id: state.pendingEpoch, time: new Date(state.pendingEpoch * 1000).toISOString(), market: Bot.getSymbol(), exitDigit: exitDigitIsFinite ? exitDigit : null, result: result, hookType: targetResult === "profit" ? "HOOK PROFIT" : "HOOK LOSS" });',
-        '    if (typeof Bot.emitJournalSignal === "function") Bot.emitJournalSignal({ type: hookWon ? "WIN" : "LOSS", label: hookWon ? "HOOK PROFIT" : "HOOK LOSS", detail: Bot.getSymbol() + " · digit " + (exitDigitIsFinite ? exitDigit : "—") });',
         '    state.pendingEpoch = null;',
         '    state.pendingDigit = null;',
         '    state.confirmations = result === targetResult ? state.confirmations + 1 : 0;',
