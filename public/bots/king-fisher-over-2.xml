@@ -75,7 +75,7 @@
             </statement>
           </block>
         </statement>
-      </block></next>
+      </block></next></block>
     </statement>
   </block>
   <block type="before_purchase" id="kf2_before" x="20" y="900">

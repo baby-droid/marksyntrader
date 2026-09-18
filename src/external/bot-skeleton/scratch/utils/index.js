@@ -210,6 +210,29 @@ export const load = async ({
     } catch (e) {
         return showInvalidStrategyError();
     }
+
+    // Older King Fisher exports kept the scanner as a top-level block. Move it
+    // into Trade Parameters before Blockly instantiates the workspace so the
+    // scanner is part of the same definition chain as the market selector.
+    const tradeDefinition = Array.from(xml.children).find(
+        child => child.tagName === 'block' && child.getAttribute('type') === 'trade_definition'
+    );
+    const tradeOptions = Array.from(tradeDefinition?.children || []).find(
+        child => child.tagName === 'statement' && child.getAttribute('name') === 'TRADE_OPTIONS'
+    );
+    const topLevelBestMarket = Array.from(xml.children).find(
+        child => child.tagName === 'block' && child.getAttribute('type') === 'king_fisher_best_market_scanner'
+    );
+    const tradeMarket = Array.from(tradeOptions?.children || []).find(
+        child => child.tagName === 'block' && child.getAttribute('type') === 'trade_definition_market'
+    );
+    if (topLevelBestMarket && tradeOptions && tradeMarket) {
+        const next = xml.ownerDocument.createElement('next');
+        next.appendChild(tradeMarket);
+        topLevelBestMarket.appendChild(next);
+        tradeOptions.replaceChild(topLevelBestMarket, tradeMarket);
+    }
+
     const blockConversion = new BlockConversion();
     xml = blockConversion.convertStrategy(xml, showIncompatibleStrategyDialog);
     const blockly_xml = xml.querySelectorAll('block');

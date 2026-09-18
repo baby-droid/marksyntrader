@@ -82,6 +82,33 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
     const isKingFisher = workspaceBlocks.some(candidate =>
         String(candidate.type || '').startsWith('king_fisher_')
     );
+    const hasKingFisherRestartGuard = workspaceBlocks.some(candidate =>
+        candidate.type === 'king_fisher_restart_trade'
+    );
+    let riskGuard = '';
+    if (isKingFisher && !hasKingFisherRestartGuard) {
+        const takeProfitBlock = workspaceBlocks.find(
+            candidate => candidate.type === 'variables_get' && candidate.getFieldValue?.('VAR') === 'take profit'
+        );
+        const stopLossBlock = workspaceBlocks.find(
+            candidate => candidate.type === 'variables_get' && candidate.getFieldValue?.('VAR') === 'stop loss'
+        );
+        const takeProfit = takeProfitBlock
+            ? window.Blockly.JavaScript.javascriptGenerator.forBlock.variables_get(takeProfitBlock)[0]
+            : '0';
+        const stopLoss = stopLossBlock
+            ? window.Blockly.JavaScript.javascriptGenerator.forBlock.variables_get(stopLossBlock)[0]
+            : '0';
+        riskGuard = `
+        if (Number(${takeProfit}) > 0 && Bot.getTotalProfit(false) >= Number(${takeProfit})) {
+            if (typeof Bot.emitJournalSignal === "function") Bot.emitJournalSignal({ type: "WIN", label: "TAKE PROFIT HIT", detail: "Keep trading with the best — TP reached" });
+            return false;
+        }
+        if (Number(${stopLoss}) > 0 && Bot.getTotalProfit(false) <= -Number(${stopLoss})) {
+            if (typeof Bot.emitJournalSignal === "function") Bot.emitJournalSignal({ type: "LOSS", label: "STOP LOSS HIT", detail: "Trading stopped at the configured limit" });
+            return false;
+        }`;
+    }
     const continuation = isKingFisher
         ? 'Bot.isTradeAgain(true); return true;'
         : 'Bot.isTradeAgain(false); return false;';
@@ -89,6 +116,7 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
     BinaryBotPrivateAfterPurchase = function BinaryBotPrivateAfterPurchase() {
         Bot.highlightBlock('${block.id}');
         ${stack}
+        ${riskGuard}
         ${continuation}
     };`;
     return code;

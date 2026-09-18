@@ -60,26 +60,29 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_entry = block
     const threshold = Number(block.getFieldValue('THRESHOLD') || 3);
     const streak = block.getFieldValue('STREAK') || '2_3';
     const helperName = ensureHelper('kingFisherEntry', [
-        'var kingFisherEntryState = { lastEpoch: null, streak: 0, digits: [] };',
-        `function ${generator().FUNCTION_NAME_PLACEHOLDER_}(direction, threshold, streakMode) {`,
+        'var kingFisherEntryStates = {};',
+        `function ${generator().FUNCTION_NAME_PLACEHOLDER_}(key, direction, threshold, streakMode) {`,
+        '  var state = kingFisherEntryStates[key] || (kingFisherEntryStates[key] = { lastEpoch: null, streak: 0, digits: [] });',
         '  var tick = Bot.getLastTick(true);',
         '  if (!tick || tick.epoch == null) return false;',
         '  var digit = Number(Bot.getLastDigit());',
-        '  if (tick.epoch !== kingFisherEntryState.lastEpoch) {',
-        '    kingFisherEntryState.lastEpoch = tick.epoch;',
+        '  if (!Number.isFinite(digit)) return false;',
+        '  if (tick.epoch !== state.lastEpoch) {',
+        '    state.lastEpoch = tick.epoch;',
         '    var qualifies = direction === "above" ? digit > threshold : digit < threshold;',
-        '    kingFisherEntryState.streak = qualifies ? kingFisherEntryState.streak + 1 : 0;',
-        '    kingFisherEntryState.digits.push(digit);',
-        '    if (kingFisherEntryState.digits.length > 3) kingFisherEntryState.digits.shift();',
-        '    if (typeof Bot.emitKingFisherAnalysis === "function") Bot.emitKingFisherAnalysis({ symbol: Bot.getSymbol(), digit: digit, sequence: kingFisherEntryState.digits.join(","), threshold: threshold, direction: direction, streak: kingFisherEntryState.streak, met: (streakMode === "2" ? kingFisherEntryState.streak === 2 : streakMode === "3" ? kingFisherEntryState.streak === 3 : (kingFisherEntryState.streak === 2 || kingFisherEntryState.streak === 3)) });',
+        '    state.streak = qualifies ? state.streak + 1 : 0;',
+        '    state.digits.push(digit);',
+        '    if (state.digits.length > 3) state.digits.shift();',
+        '    if (typeof Bot.emitMarketDigit === "function") Bot.emitMarketDigit({ symbol: Bot.getSymbol(), digit: digit, epoch: tick.epoch });',
+        '    if (typeof Bot.emitKingFisherAnalysis === "function") Bot.emitKingFisherAnalysis({ symbol: Bot.getSymbol(), digit: digit, sequence: state.digits.join(","), threshold: threshold, direction: direction, streak: state.streak, met: (streakMode === "2" ? state.streak === 2 : streakMode === "3" ? state.streak === 3 : (state.streak === 2 || state.streak === 3)) });',
         '  }',
-        '  if (streakMode === "2") return kingFisherEntryState.streak === 2;',
-        '  if (streakMode === "3") return kingFisherEntryState.streak === 3;',
-        '  return kingFisherEntryState.streak === 2 || kingFisherEntryState.streak === 3;',
+        '  if (streakMode === "2") return state.streak === 2;',
+        '  if (streakMode === "3") return state.streak === 3;',
+        '  return state.streak === 2 || state.streak === 3;',
         '}',
     ]);
     return [
-        `${helperName}('${direction}', ${threshold}, '${streak}')`,
+        `${helperName}('${block.id}', '${direction}', ${threshold}, '${streak}')`,
         generator().ORDER_FUNCTION_CALL,
     ];
 };
@@ -158,7 +161,7 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_restart_trade
 window.Blockly.Blocks.king_fisher_virtual_hook = {
     init() {
         this.jsonInit({
-            message0: localize('King Fisher Virtual Hook %1 after %2 signal %3'),
+            message0: localize('King Fisher Virtual Hook %1 after %2 %3 signal %4'),
             args0: [
                 {
                     type: 'field_dropdown',
@@ -174,6 +177,14 @@ window.Blockly.Blocks.king_fisher_virtual_hook = {
                     options: [
                         [localize('1 tick'), '1'],
                         [localize('2 ticks'), '2'],
+                    ],
+                },
+                {
+                    type: 'field_dropdown',
+                    name: 'RESULT',
+                    options: [
+                        [localize('Hook profit'), 'PROFIT'],
+                        [localize('Hook loss'), 'LOSS'],
                     ],
                 },
                 {
@@ -207,28 +218,46 @@ window.Blockly.Blocks.king_fisher_virtual_hook = {
 window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_virtual_hook = block => {
     const enabled = block.getFieldValue('ENABLED') !== 'FALSE';
     const confirmations = Math.max(1, Number(block.getFieldValue('CONFIRMATIONS') || 1));
+    const targetResult = block.getFieldValue('RESULT') === 'PROFIT' ? 'profit' : 'loss';
     const signal =
         generator().valueToCode(block, 'SIGNAL', generator().ORDER_ATOMIC) || 'false';
+    const workspaceBlocks = block.workspace?.getAllBlocks?.() ?? [];
+    const contractBlock = workspaceBlocks.find(candidate => candidate.type === 'trade_definition_contracttype');
+    const optionsBlock = workspaceBlocks.find(candidate => candidate.type === 'trade_definition_tradeoptions');
+    const contractType = contractBlock?.getFieldValue?.('TYPE_LIST') || 'DIGITOVER';
+    const predictionBlock = optionsBlock?.getInputTargetBlock?.('PREDICTION');
+    const barrier = Number(predictionBlock?.getFieldValue?.('NUM') || 0);
     const helperName = ensureHelper('kingFisherVirtualHook', [
-        'var kingFisherHookState = { lastEpoch: null, confirmations: 0 };',
-        `function ${generator().FUNCTION_NAME_PLACEHOLDER_}(signal, enabled, required) {`,
+        'var kingFisherHookStates = {};',
+        `function ${generator().FUNCTION_NAME_PLACEHOLDER_}(key, signal, enabled, required, targetResult, contractType, barrier) {`,
         '  if (!enabled) return Boolean(signal);',
+        '  var state = kingFisherHookStates[key] || (kingFisherHookStates[key] = { lastEpoch: null, pendingEpoch: null, pendingDigit: null, confirmations: 0 });',
         '  var tick = Bot.getLastTick(true);',
         '  if (!tick || tick.epoch == null) {',
-        '    kingFisherHookState.confirmations = 0;',
+        '    state.confirmations = 0;',
         '    return false;',
         '  }',
-        '  if (tick.epoch !== kingFisherHookState.lastEpoch) {',
-        '    kingFisherHookState.lastEpoch = tick.epoch;',
-        '    var accepted = Boolean(signal);',
-        '    kingFisherHookState.confirmations = accepted ? kingFisherHookState.confirmations + 1 : 0;',
-        '    if (typeof Bot.recordVirtualHook === "function") Bot.recordVirtualHook({ id: tick.epoch, time: new Date(tick.epoch * 1000).toISOString(), market: Bot.getSymbol(), exitDigit: digit, result: accepted ? "won" : "lost", hookType: "KING_FISHER" });',
+        '  if (state.pendingEpoch != null && tick.epoch !== state.pendingEpoch) {',
+        '    var exitDigit = Number(Bot.getLastDigit());',
+        '    var hookWon = Number.isFinite(exitDigit) && (contractType === "DIGITUNDER" ? exitDigit < barrier : exitDigit > barrier);',
+        '    var result = hookWon ? "won" : "lost";',
+        '    if (typeof Bot.recordVirtualHook === "function") Bot.recordVirtualHook({ id: state.pendingEpoch, time: new Date(state.pendingEpoch * 1000).toISOString(), market: Bot.getSymbol(), exitDigit: Number.isFinite(exitDigit) ? exitDigit : null, result: result, hookType: targetResult === "profit" ? "HOOK PROFIT" : "HOOK LOSS" });',
+        '    if (typeof Bot.emitJournalSignal === "function") Bot.emitJournalSignal({ type: hookWon ? "WIN" : "LOSS", label: hookWon ? "HOOK PROFIT" : "HOOK LOSS", detail: Bot.getSymbol() + " · digit " + (Number.isFinite(exitDigit) ? exitDigit : "—") });',
+        '    state.pendingEpoch = null;',
+        '    state.pendingDigit = null;',
+        '    state.confirmations = result === targetResult ? state.confirmations + 1 : 0;',
+        '    return state.confirmations >= required;',
         '  }',
-        '  return kingFisherHookState.confirmations >= required;',
+        '  if (Boolean(signal) && state.pendingEpoch == null && tick.epoch !== state.lastEpoch) {',
+        '    state.lastEpoch = tick.epoch;',
+        '    state.pendingEpoch = tick.epoch;',
+        '    state.pendingDigit = Number(Bot.getLastDigit());',
+        '  }',
+        '  return false;',
         '}',
     ]);
     return [
-        `${helperName}(${signal}, ${enabled}, ${confirmations})`,
+        `${helperName}('${block.id}', ${signal}, ${enabled}, ${confirmations}, '${targetResult}', '${contractType}', ${barrier})`,
         generator().ORDER_FUNCTION_CALL,
     ];
 };

@@ -1,6 +1,0 @@
-import{r as e}from"./rolldown-runtime-DAXXjFlN.js";import{o as t,u as n}from"./mobx.esm-DGq-wj_-.js";var r=e({default:()=>i});t();var i=(()=>{let e,t=!1,r=e=>{window.dataLayer?.push(e)},i=r=>{if(t)return;t=!0;function i(){(function(e,t,n,r,i){e[r]=e[r]||[],e[r].push({"gtm.start":new Date().getTime(),event:`gtm.js`});let a=t.getElementsByTagName(n)[0],o=t.createElement(n),s=r==`dataLayer`?``:`&l=`+r;o.defer=!0,o.src=`https://www.googletagmanager.com/gtm.js?id=`+i+s,a.parentNode.insertBefore(o,a)})(window,document,`script`,`dataLayer`,`GTM-NF7884S`)}setTimeout(()=>{i()},3e3);try{let{run_panel:t,transactions:i,client:o,common:s}=r;n(()=>t.is_running,()=>{t.is_running&&(clearTimeout(e),e=setTimeout(()=>{a(o?.loginid,s?.server_time?.unix(),i?.statistics)},500))})}catch(e){console.warn(`Error initializing GTM reactions `,e)}},a=(e,t,n)=>{try{let i=`${e}-${t}`;r({counters:`tr:${n.number_of_runs},\
-                ts:${n.total_stake},\
-                py:${n.total_payout},\
-                lc:${n.lost_contracts},\
-                wc:${n.won_contracts},\
-                pr:${n.total_profit}`.replace(/\s/g,``),event:`dbot_run`,run_id:i})}catch(e){console.warn(`Error pushing run data to datalayer `,e)}};return{init:i,pushDataLayer:r,onTransactionClosed:e=>{r({event:`dbot_run_transaction`,reference_id:e?.contract_id??``})},onRunBot:a}})();export{r as n,i as t};

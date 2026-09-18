@@ -1,1 +1,0 @@
-var e=`/assets/martingale-C0H_hBMR.xml`;export{e as default};

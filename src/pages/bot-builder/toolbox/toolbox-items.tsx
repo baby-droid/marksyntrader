@@ -53,16 +53,13 @@ const Xml = ({ ...props }) => {
 export const ToolboxItems = () =>
     ReactDomServer.renderToStaticMarkup(
         <Xml xmlns='http://www.w3.org/1999/xhtml' id='toolbox'>
-            <Category id='best_market_scanner' name={localize('Best market scanner')}>
-                <Block type='king_fisher_best_market_scanner' />
-                <Block type='king_fisher_restart_trade'>
-                    <Value name='TAKE_PROFIT'><Shadow type='math_number'><Field name='NUM'>5</Field></Shadow></Value>
-                    <Value name='STOP_LOSS'><Shadow type='math_number'><Field name='NUM'>20</Field></Shadow></Value>
-                </Block>
-            </Category>
             <Category id='trade_parameters' name={localize('Trade parameters')}>
                 <Block type='trade_definition'>
                     <Statement name='TRADE_OPTIONS'>
+                        <Block type='king_fisher_best_market_scanner'>
+                            <Field name='ENABLED'>FALSE</Field>
+                        </Block>
+                        <Next>
                         <Block type='trade_definition_market' deletable='false' movable='false'>
                             <Field name='MARKET_LIST' />
                             <Field name='SUBMARKET_LIST' />
@@ -106,6 +103,7 @@ export const ToolboxItems = () =>
                                 </Block>
                             </Next>
                         </Block>
+                        </Next>
                     </Statement>
                 </Block>
                 <Block type='trade_definition_tradeoptions'>

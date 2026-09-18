@@ -6,9 +6,9 @@
     <variable id="kf2_tp">take profit</variable>
     <variable id="kf2_sl">stop loss</variable>
   </variables>
-  <block type="king_fisher_best_market_scanner" id="kf2_best_market" x="20" y="-80"><field name="ENABLED">TRUE</field></block>
   <block type="trade_definition" id="kf2_trade" deletable="false" x="20" y="20">
     <statement name="TRADE_OPTIONS">
+      <block type="king_fisher_best_market_scanner" id="kf2_best_market"><field name="ENABLED">TRUE</field><next>
       <block type="trade_definition_market" id="kf2_market" deletable="false" movable="false">
         <field name="MARKET_LIST">synthetic_index</field>
         <field name="SUBMARKET_LIST">random_index</field>
@@ -35,6 +35,7 @@
           </block>
         </next>
       </block>
+      </next></block>
     </statement>
     <statement name="INITIALIZATION">
       <block type="variables_set" id="kf2_set_base"><field name="VAR" id="kf2_base">base stake</field><value name="VALUE"><block type="math_number" id="kf2_base_num"><field name="NUM">1</field></block></value>
@@ -74,7 +75,7 @@
             </statement>
           </block>
         </statement>
-      </block></next>
+      </block></next></block>
     </statement>
   </block>
   <block type="before_purchase" id="kf2_before" x="20" y="900">

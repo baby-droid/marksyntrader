@@ -301,24 +301,41 @@ class DBot {
                     ?.find(block => block.type === 'trade_definition_contracttype');
                 if (marketBlock && contractBlock) {
                     const direction = contractBlock.getFieldValue('TYPE_LIST') === 'DIGITUNDER' ? 'ABOVE' : 'BELOW';
-                    const result = await scanKingFisherMarket(direction);
-                    marketBlock.setFieldValue(result.market, 'MARKET_LIST');
-                    marketBlock.setFieldValue(result.submarket, 'SUBMARKET_LIST');
-                    marketBlock.setFieldValue(result.symbol, 'SYMBOL_LIST');
-                    const detail = {
-                        symbol: result.symbol,
-                        label: result.label,
-                        group: result.group,
-                        lastDigit: result.lastDigit,
-                        score: result.score,
-                        direction,
-                    };
-                    dispatchBrowserEvent('king-fisher:best-market', detail);
-                    dispatchBrowserEvent('journal:signal', {
-                        type: 'SCAN',
-                        label: 'BEST MARKET SELECTED',
-                        detail: `${result.label} · ${result.group} · last digit ${result.lastDigit ?? '—'} · score ${result.score}`,
-                    });
+                    let result = null;
+                    try {
+                        result = await scanKingFisherMarket(direction);
+                    } catch (scanError) {
+                        dispatchBrowserEvent('journal:signal', {
+                            type: 'SCAN',
+                            label: 'BEST MARKET SCAN FAILED',
+                            detail: scanError?.message || 'Using the manually selected King Fisher market.',
+                        });
+                    }
+                    if (result) {
+                        marketBlock.setFieldValue(result.market, 'MARKET_LIST');
+                        marketBlock.setFieldValue(result.submarket, 'SUBMARKET_LIST');
+                        marketBlock.setFieldValue(result.symbol, 'SYMBOL_LIST');
+                        const detail = {
+                            symbol: result.symbol,
+                            label: result.label,
+                            group: result.group,
+                            lastDigit: result.lastDigit,
+                            score: result.score,
+                            direction,
+                        };
+                        dispatchBrowserEvent('king-fisher:best-market', detail);
+                        dispatchBrowserEvent('journal:signal', {
+                            type: 'SCAN',
+                            label: 'BEST MARKET SELECTED',
+                            detail: `${result.label} · ${result.group} · last digit ${result.lastDigit ?? '—'} · score ${result.score}`,
+                        });
+                    } else {
+                        dispatchBrowserEvent('journal:signal', {
+                            type: 'SCAN',
+                            label: 'BEST MARKET UNAVAILABLE',
+                            detail: 'Using the manually selected King Fisher market.',
+                        });
+                    }
                 }
             }
             const code = this.generateCode();

@@ -1,1 +1,0 @@
-var e=`/assets/oscars_grind_max-stake-CJg0qVYD.xml`;export{e as default};

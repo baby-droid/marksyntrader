@@ -72,7 +72,7 @@ const scoreMarket = (
     };
 };
 
-export const scanKingFisherMarket = async (direction: KingFisherDirection): Promise<KingFisherMarket> => {
+export const scanKingFisherMarket = async (direction: KingFisherDirection): Promise<KingFisherMarket | null> => {
     const api = api_base.api as any;
     if (!api) throw new Error('The authenticated market connection is not ready yet.');
 
@@ -92,7 +92,5 @@ export const scanKingFisherMarket = async (direction: KingFisherDirection): Prom
         })
     )).flatMap(result => result.status === 'fulfilled' ? [result.value] : []);
 
-    const best = results.sort((a, b) => b.score - a.score)[0];
-    if (!best) throw new Error('No King Fisher market returned usable tick history.');
-    return best;
+    return results.sort((a, b) => b.score - a.score)[0] ?? null;
 };
