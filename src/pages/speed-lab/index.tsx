@@ -4,7 +4,7 @@ import { observer } from 'mobx-react-lite';
 import DigitCircles from '@/components/digit-circles';
 import { useDigitStats } from '@/hooks/useDigitStats';
 import { useDerivTrade } from '@/hooks/useDerivTrade';
-import { isFastExecutionEnabled, subscribeFastExecution } from '@/utils/execution-speed';
+import { isFastExecutionEnabled, isTickWiseExecutionEnabled, subscribeFastExecution } from '@/utils/execution-speed';
 import { setTradeContext } from '@/utils/trade-metadata';
 import './speed-lab.scss';
 
@@ -178,11 +178,10 @@ const SpeedLab = observer(() => {
      * We close over the current speed/contract settings at start time,
      * but use refs for stake (so martingale updates are immediate).
      *
-     * ⚡ FAST BOOST: when the global Fast toggle is active, fires up to 20
-     * contracts simultaneously (Promise.allSettled) so that ~20 contracts
-     * settle per contract-duration window — achieving ~20 runs/second on
-     * 1-tick markets. The batch size is locked at loop-start so toggling
-     * Fast mid-session takes effect on the next Start.
+     * ⚡ FAST BOOST: when the global Fast toggle is active, the live tick
+     * stream is the execution clock. One buy is dispatched for each new tick;
+     * settlement is tracked in the background so a slow payout cannot hold up
+     * the next tick or make the same tick execute twice.
      */
     const runLoop = useCallback(async (speed: SpeedMode, sym: string, cType: string, dur: number, bar: number, withBarrier: boolean) => {
         const buildParams = (s: number) => ({
@@ -194,9 +193,65 @@ const SpeedLab = observer(() => {
             ...(withBarrier ? { barrier: bar } : {}),
         });
 
+        const fastMode = isTickWiseExecutionEnabled();
         // Zero inter-trade delay in Fast mode; otherwise tier-specific.
-        // ⚡ Fast = individual contracts at maximum speed (0ms between each).
-        const POST_DELAY = isFastExecutionEnabled() ? 0 : speed === 'turbo' ? 0 : speed === 'crazy' ? 50 : 200;
+        const POST_DELAY = fastMode ? 0 : speed === 'turbo' ? 0 : speed === 'crazy' ? 50 : 200;
+
+        if (fastMode) {
+            let lastTickEpoch = 0;
+            let waitingForTick: ((tick: any) => void) | null = null;
+            let tickTimeout: ReturnType<typeof setTimeout> | null = null;
+            const unsubscribe = derivTradeRef.current.subscribeTicks(sym, tick => {
+                if (!Number.isFinite(tick?.epoch) || tick.epoch <= lastTickEpoch) return;
+                lastTickEpoch = tick.epoch;
+                if (tickTimeout) {
+                    clearTimeout(tickTimeout);
+                    tickTimeout = null;
+                }
+                const resolve = waitingForTick;
+                waitingForTick = null;
+                resolve?.(tick);
+            });
+            const nextTick = () => new Promise<any>(resolve => {
+                waitingForTick = resolve;
+                tickTimeout = setTimeout(() => {
+                    tickTimeout = null;
+                    waitingForTick = null;
+                    resolve(null);
+                }, 2_000);
+            });
+
+            try {
+                while (runRef.current) {
+                    // Exactly one dispatch is allowed for each produced live
+                    // tick. Do not wait for settlement here: the callback
+                    // below independently accounts for every contract.
+                    const tick = await nextTick();
+                    if (!runRef.current) break;
+                    if (!tick) continue;
+                    const curStake = currentStakeRef.current;
+                    void derivTradeRef.current.buyContract(
+                        buildParams(curStake),
+                        settled => {
+                            applyResult(settled?.profit ?? 0, curStake, speed, settled);
+                        },
+                    ).then(result => {
+                        if (!result?.contract_id) {
+                            logEntry('❌ Fast execution did not receive a contract id');
+                        }
+                    }).catch(err => {
+                        logEntry(`❌ ${err?.message || err?.error?.message || 'Buy failed'}`);
+                    });
+                }
+            } finally {
+                unsubscribe?.();
+                if (tickTimeout) clearTimeout(tickTimeout);
+                tickTimeout = null;
+                waitingForTick = null;
+            }
+            setIsRunning(false);
+            return;
+        }
 
         while (runRef.current) {
             const curStake = currentStakeRef.current;

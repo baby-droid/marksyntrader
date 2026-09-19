@@ -504,13 +504,13 @@ export function useDerivTrade() {
                             });
                     };
 
-                    if (attempt === 0 && isFastExecutionEnabled()) {
-                        // Keep Fast mode non-blocking, but still use the same
-                        // retrying subscription path as normal execution.
-                        requestAnimationFrame(request);
-                    } else {
-                        request();
-                    }
+                    // Fast mode is already non-blocking because the
+                    // subscription request is not awaited. Starting it
+                    // immediately matters on one-tick contracts: an
+                    // animation-frame defer can miss the next settlement
+                    // tick and makes the after-purchase path look slower
+                    // than the buy path.
+                    request();
                 };
                 requestSettlementSubscription();
             }

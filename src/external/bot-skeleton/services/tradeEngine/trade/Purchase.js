@@ -97,7 +97,7 @@ function _acquireBuySlot() {
     const speed = getExecutionSpeed();
     const limit  = _buyRateLimit[speed] ?? 1;
     // In crazy / turbo / Fast mode skip the throttle entirely — resolve immediately.
-    if (limit === 0 || isFastExecutionEnabled()) return Promise.resolve();
+    if (limit === 0 || isFastExecutionEnabled() || isASpeedBoostEnabled()) return Promise.resolve();
     const now    = Date.now();
     // Remove timestamps older than 1 second
     _buyTimestamps = _buyTimestamps.filter(t => now - t < 1000);
@@ -257,7 +257,7 @@ export default Engine =>
                 try {
                     recordTradeMeta(buy.contract_id, {
                         speed: getExecutionSpeed(),
-                        fast:  isFastExecutionEnabled(),
+                         fast:  isFastExecutionEnabled() || isASpeedBoostEnabled(),
                     });
                 } catch { /* non-fatal */ }
 

@@ -88,6 +88,10 @@ export const isFastExecutionEnabled = (): boolean => fastExecutionEnabled;
 /** True while the header's app-wide A-SPEED BOOST preset is active. */
 export const isASpeedBoostEnabled = (): boolean => aSpeedBoostEnabled;
 
+/** True when an execution path must be driven by live ticks instead of settlement timing. */
+export const isTickWiseExecutionEnabled = (): boolean =>
+    fastExecutionEnabled || aSpeedBoostEnabled;
+
 /**
  * Effective inter-trade delay (ms). Fast Execution always wins — 0ms,
  * seamless, no cooldown, no contract-switch pause, no next-execution reload
