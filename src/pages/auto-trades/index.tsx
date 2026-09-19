@@ -43,10 +43,38 @@ function extractDigit(quote: any, pipSize: number): number {
 function describeTradeError(error: unknown): string {
     if (!error) return 'Trade request failed';
     if (typeof error === 'string') return error;
-    const candidate = error as { message?: unknown; code?: unknown };
-    const message = typeof candidate.message === 'string' ? candidate.message : '';
+    const candidate = error as { message?: unknown; error_message?: unknown; code?: unknown };
+    const message = typeof candidate.message === 'string'
+        ? candidate.message
+        : typeof candidate.error_message === 'string' ? candidate.error_message : '';
     const code = typeof candidate.code === 'string' ? candidate.code : '';
     return [code, message].filter(Boolean).join(': ') || 'Trade request failed';
+}
+
+const AUTO_TRADE_CONTRACTS = new Set([
+    'CALL',
+    'PUT',
+    'DIGITEVEN',
+    'DIGITODD',
+    'DIGITMATCH',
+    'DIGITDIFF',
+    'DIGITOVER',
+    'DIGITUNDER',
+]);
+
+function normalizeAutoTradeContract(contractType: unknown): string {
+    const normalized = String(contractType ?? '').trim().toUpperCase();
+    if (normalized === 'RISE') return 'CALL';
+    if (normalized === 'FALL') return 'PUT';
+    return normalized;
+}
+
+function normalizeAutoTradeBarrier(contractType: string, barrier: number | null): number | null {
+    if (barrier == null || !Number.isFinite(Number(barrier))) return null;
+    const value = Math.floor(Number(barrier));
+    if (contractType === 'DIGITOVER') return Math.max(0, Math.min(8, value));
+    if (contractType === 'DIGITUNDER') return Math.max(1, Math.min(9, value));
+    return Math.max(0, Math.min(9, value));
 }
 
 // ── Authenticated per-symbol live digit hook ─────────────────────────────────
@@ -311,6 +339,12 @@ function useBuyAndWait() {
     ): Promise<number> => {
         if (!connected) throw new Error('Deriv connection is not open');
         if (!authorized) throw new Error('Log in to a demo or real account before trading');
+        const normalizedContract = normalizeAutoTradeContract(contractType);
+        if (!AUTO_TRADE_CONTRACTS.has(normalizedContract)) {
+            throw new Error(`Unsupported Auto Trades contract: ${normalizedContract || 'empty'}`);
+        }
+        const normalizedBarrier = normalizeAutoTradeBarrier(normalizedContract, barrier);
+        const normalizedDuration = Math.max(1, Math.floor(Number(duration) || 1));
 
         // All Smart Trading buys use the same authenticated proposal → buy →
         // settlement path as Manual Trader. This keeps the selected demo/real
@@ -318,11 +352,11 @@ function useBuyAndWait() {
         if (options.settle === false) {
             const bought = await buyContract({
                 symbol,
-                contract_type: contractType,
-                duration,
+                contract_type: normalizedContract,
+                duration: normalizedDuration,
                 duration_unit: 't',
                 stake,
-                ...(barrier !== null ? { barrier } : {}),
+                ...(normalizedBarrier !== null ? { barrier: normalizedBarrier } : {}),
                 currency,
                 metadata: options.metadata,
             }, settlement => options.onSettled?.(Number(settlement?.profit ?? 0)));
@@ -343,11 +377,11 @@ function useBuyAndWait() {
             try {
                 const bought = await buyContract({
                     symbol,
-                    contract_type: contractType,
-                    duration,
+                    contract_type: normalizedContract,
+                    duration: normalizedDuration,
                     duration_unit: 't',
                     stake,
-                    ...(barrier !== null ? { barrier } : {}),
+                    ...(normalizedBarrier !== null ? { barrier: normalizedBarrier } : {}),
                     currency,
                     metadata: options.metadata,
                 }, profit => {
@@ -979,12 +1013,11 @@ function AiBotCard({
                     onLog(`🔁 Rotation ${rotationCycle}: ${nextPair.map(candidate => candidate.label).join(' + ')} · ${AUTO_BOT_RUNS_PER_MARKET} settled runs each`);
                 }
 
-                const candidates = selectAutoBotMarketsForExecution(
-                    validatedFreshMarkets.filter(candidate =>
-                        rotationSymbols.includes(candidate.symbol)
-                        && (marketRunsBySymbol.get(candidate.symbol) ?? 0) < AUTO_BOT_RUNS_PER_MARKET,
-                    ),
-                );
+                // The ranked pair is display/rotation context only. Execution
+                // must continue scanning every supported market independently:
+                // a signal on a market outside the previous pair is still a
+                // valid entry, and a pair must not become a one-run lock.
+                const candidates = selectAutoBotMarketsForExecution(validatedFreshMarkets);
                 if (!candidates.length) continue;
 
                 // Dispatch every fresh qualifying market immediately. The
@@ -1051,9 +1084,13 @@ function AiBotCard({
             onLog('⏹ Stop requested. Waiting for any open contract to settle safely.');
         } else {
             const resumeStake = pausedStakeRef.current;
-            start(resumeStake ?? undefined);
+            void start(resumeStake ?? undefined).catch(error => {
+                if (runVersionRef.current === 0) return;
+                onSessionUpdate({ active: false });
+                onLog(`⚠️ ${describeTradeError(error)}`);
+            });
         }
-    }, [session.active, start]);
+    }, [session.active, start, onLog, onSessionUpdate]);
 
     const canResume = !session.active && pausedStakeRef.current !== null;
 
