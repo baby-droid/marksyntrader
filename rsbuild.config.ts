@@ -72,6 +72,12 @@ export default defineConfig({
       '@/stores': path.resolve(__dirname, './src/stores'),
     },
   },
+  resolve: {
+    // The vendored bot runtime and shared UI still contain JSX modules.
+    // Explicit extensions prevent Rsbuild from treating those imports as
+    // missing modules during a hot rebuild.
+    extensions: ['.tsx', '.ts', '.jsx', '.js', '.json'],
+  },
   output: {
     assetPrefix: isStaticBuild ? '/bot/preview/' : '/',
     distPath: {

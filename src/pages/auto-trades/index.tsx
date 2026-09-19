@@ -6,7 +6,7 @@ import {
     connectionStatus$,
 } from '@/external/bot-skeleton/services/api/observables/connection-status-stream';
 import { useDerivTrade } from '@/hooks/useDerivTrade';
-import { isFastExecutionEnabled } from '@/utils/execution-speed';
+import { isFastExecutionEnabledForContext } from '@/utils/execution-speed';
 import NumberField from '@/components/number-field';
 import { setTradeContext } from '@/utils/trade-metadata';
 import {
@@ -695,10 +695,12 @@ const AI_BOTS: AiBotDef[] = [
     },
 ];
 
-// Auto Bots keep a small ranked market cohort for the UI, but execution is
-// independent: one qualifying contract may trade by itself and every fresh
-// tick can dispatch without waiting for an earlier contract to settle.
-const AUTO_BOT_ROTATION_MARKETS = 2;
+// Auto Bots run a complete eligible market cohort. Every fresh entry gets one
+// contract per market, and each market remains in the cohort for seven
+// settled runs before the next cohort is selected.
+// A positive value can be used to cap a cohort, but zero means all eligible
+// markets as required by the Auto Bots execution contract.
+const AUTO_BOT_ROTATION_MARKETS = 0;
 const AUTO_BOT_RUNS_PER_MARKET = 7;
 
 // ── Per-bot session state ─────────────────────────────────────────────────────
@@ -791,8 +793,8 @@ function AiBotCard({
         [bot, scannerSnapshots, isCycleBot, cycleConfig],
     );
     const visibleMarketCandidates = usesPairRotation && rotationStatus.symbols.length
-        ? marketCandidates.filter(candidate => rotationStatus.symbols.includes(candidate.symbol)).slice(0, AUTO_BOT_ROTATION_MARKETS)
-        : marketCandidates.slice(0, AUTO_BOT_ROTATION_MARKETS);
+        ? marketCandidates.filter(candidate => rotationStatus.symbols.includes(candidate.symbol))
+        : marketCandidates;
     const qualifyingMarketCount = marketCandidates.filter(candidate => candidate.qualifies).length;
     useEffect(() => { marketCandidatesRef.current = marketCandidates; }, [marketCandidates]);
     const defaultMarketRisk: MarketRiskConfig = {
@@ -944,7 +946,7 @@ function AiBotCard({
                     (marketRunsBySymbol.get(symbol) ?? 0) >= AUTO_BOT_RUNS_PER_MARKET
                     || stoppedMarkets.has(symbol),
                 )) {
-                onLog(`✅ Rotation ${rotationCycle} complete · selecting the next two markets`);
+                onLog(`✅ Rotation ${rotationCycle} complete · selecting the next market cohort`);
                 rotationSymbols = [];
                 publishRotationStatus();
             }
@@ -957,10 +959,10 @@ function AiBotCard({
                 // loop; each market still needs its own fresh tick before it
                 // can be selected.
                 while (isCurrentRun() && scannerTickVersionRef.current <= 0) {
-                    await new Promise(r => setTimeout(r, isFastExecutionEnabled() ? 0 : 80));
+                    await new Promise(r => setTimeout(r, isFastExecutionEnabledForContext() ? 0 : 80));
                 }
                 while (isCurrentRun() && scannerTickVersionRef.current === Number(lastScanKey)) {
-                    await new Promise(r => setTimeout(r, isFastExecutionEnabled() ? 0 : 80));
+                    await new Promise(r => setTimeout(r, isFastExecutionEnabledForContext() ? 0 : 80));
                 }
                 if (!isCurrentRun()) break;
                 lastScanKey = String(scannerTickVersionRef.current);
@@ -978,16 +980,20 @@ function AiBotCard({
                 });
 
                 if (!rotationSymbols.length) {
-                    // Select two ranked markets, then execute them one at a
-                    // time. Once the available pair is used, select the next
-                    // pair without immediately reusing it.
+                    // Select the complete eligible cohort, then execute one
+                    // contract per fresh entry on each member. Once every
+                    // member reaches seven settled runs, select the next
+                    // cohort without immediately reusing the prior one.
                     let rankedMarkets = selectAutoBotMarketsForExecution(
                         marketCandidatesRef.current.filter(candidate =>
                             !stoppedMarkets.has(candidate.symbol)
                             && isValidatedAutoBotEntry(candidate, marketLossStreakBySymbol.get(candidate.symbol) ?? 0),
                         ),
                     ).filter(candidate => !rotationUsedSymbols.has(candidate.symbol));
-                    if (rankedMarkets.length < AUTO_BOT_ROTATION_MARKETS) {
+                    if (
+                        rankedMarkets.length === 0
+                        || (AUTO_BOT_ROTATION_MARKETS > 0 && rankedMarkets.length < AUTO_BOT_ROTATION_MARKETS)
+                    ) {
                         rotationUsedSymbols.clear();
                         rankedMarkets = selectAutoBotMarketsForExecution(
                             marketCandidatesRef.current.filter(candidate =>
@@ -996,12 +1002,11 @@ function AiBotCard({
                             ),
                         );
                     }
-                    const nextPair = rankedMarkets.slice(0, AUTO_BOT_ROTATION_MARKETS);
-                    // A single validated market is enough to run. Requiring a
-                    // second market made valid cards appear ready but never
-                    // execute when only one market had a fresh signal.
-                    if (!nextPair.length) continue;
-                    rotationSymbols = nextPair.map(candidate => candidate.symbol);
+                    const nextCohort = AUTO_BOT_ROTATION_MARKETS > 0
+                        ? rankedMarkets.slice(0, AUTO_BOT_ROTATION_MARKETS)
+                        : rankedMarkets;
+                    if (!nextCohort.length) continue;
+                    rotationSymbols = nextCohort.map(candidate => candidate.symbol);
                     rotationSymbols.forEach(symbol => {
                         rotationUsedSymbols.add(symbol);
                         marketRunsBySymbol.set(symbol, 0);
@@ -1010,14 +1015,19 @@ function AiBotCard({
                     carryStakeToNextMarket = false;
                     rotationCycle += 1;
                     publishRotationStatus();
-                    onLog(`🔁 Rotation ${rotationCycle}: ${nextPair.map(candidate => candidate.label).join(' + ')} · ${AUTO_BOT_RUNS_PER_MARKET} settled runs each`);
+                    onLog(`🔁 Rotation ${rotationCycle}: ${nextCohort.map(candidate => candidate.label).join(' + ')} · ${AUTO_BOT_RUNS_PER_MARKET} settled runs each`);
                 }
 
-                // The ranked pair is display/rotation context only. Execution
-                // must continue scanning every supported market independently:
-                // a signal on a market outside the previous pair is still a
-                // valid entry, and a pair must not become a one-run lock.
-                const candidates = selectAutoBotMarketsForExecution(validatedFreshMarkets);
+                // Only markets in the current cohort execute. A fresh signal
+                // outside the cohort is evaluated on the next rotation; this
+                // prevents a market from receiving a single stray trade before
+                // the current seven-run sequence is complete.
+                const candidates = selectAutoBotMarketsForExecution(validatedFreshMarkets)
+                    .filter(candidate =>
+                        rotationSymbols.includes(candidate.symbol)
+                        && (marketRunsBySymbol.get(candidate.symbol) ?? 0) < AUTO_BOT_RUNS_PER_MARKET
+                        && !stoppedMarkets.has(candidate.symbol),
+                    );
                 if (!candidates.length) continue;
 
                 // Dispatch every fresh qualifying market immediately. The
@@ -1038,7 +1048,7 @@ function AiBotCard({
                                 execution_mode: 'one-contract-per-tick',
                                 scan_score: candidate.score,
                                 scan_ticks: AUTO_BOT_TICK_DURATION,
-                                scan_markets: AUTO_BOT_ROTATION_MARKETS,
+                                scan_markets: rotationSymbols.length,
                                 scan_qualified_markets: freshMarkets.length,
                             },
                             onSettled: profit => {
@@ -1059,13 +1069,13 @@ function AiBotCard({
                         (marketRunsBySymbol.get(symbol) ?? 0) >= AUTO_BOT_RUNS_PER_MARKET
                         || stoppedMarkets.has(symbol),
                     )) {
-                    onLog(`✅ Rotation ${rotationCycle} complete · selecting the next two markets`);
+                    onLog(`✅ Rotation ${rotationCycle} complete · selecting the next market cohort`);
                     rotationSymbols = [];
                     publishRotationStatus();
                 }
             } catch (err: any) {
                 onLog(`⚠️ ${err?.message || 'Error'}`);
-                await new Promise(r => setTimeout(r, isFastExecutionEnabled() ? 0 : 1500));
+                await new Promise(r => setTimeout(r, isFastExecutionEnabledForContext() ? 0 : 1500));
             }
         }
 
@@ -1115,8 +1125,8 @@ function AiBotCard({
                 <div className='autotrades__botcard-rotation'>
                     <span>
                         {rotationStatus.symbols.length
-                            ? `Pair ${rotationStatus.symbols.map(symbol => scannerSnapshots[symbol]?.label ?? symbol).join(' + ')}`
-                            : 'Waiting for two validated markets'}
+                            ? `Cohort ${rotationStatus.symbols.map(symbol => scannerSnapshots[symbol]?.label ?? symbol).join(' + ')}`
+                            : 'Waiting for an eligible market cohort'}
                     </span>
                     <strong>
                         {rotationStatus.symbols.length
@@ -1790,7 +1800,7 @@ const AutoTrades: React.FC = () => {
                         ].slice(0, 50));
                         updateSess(id, { lastLog: `⚠ ${message}` });
                     }
-                    await new Promise(r => setTimeout(r, isFastExecutionEnabled() ? 0 : 1500));
+                    await new Promise(r => setTimeout(r, isFastExecutionEnabledForContext() ? 0 : 1500));
                 }
             }
             if (isSmartRunCurrent(smartRunTokens.current, id, runToken)) {

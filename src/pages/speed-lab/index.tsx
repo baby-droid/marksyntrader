@@ -4,7 +4,7 @@ import { observer } from 'mobx-react-lite';
 import DigitCircles from '@/components/digit-circles';
 import { useDigitStats } from '@/hooks/useDigitStats';
 import { useDerivTrade } from '@/hooks/useDerivTrade';
-import { isFastExecutionEnabled, isTickWiseExecutionEnabled, subscribeFastExecution } from '@/utils/execution-speed';
+import { isFastExecutionEnabledForContext, isTickWiseExecutionEnabled, subscribeFastExecution } from '@/utils/execution-speed';
 import { setTradeContext } from '@/utils/trade-metadata';
 import './speed-lab.scss';
 
@@ -278,7 +278,7 @@ const SpeedLab = observer(() => {
                 if (POST_DELAY > 0) await new Promise(r => setTimeout(r, POST_DELAY));
             } catch (e: any) {
                 logEntry(`❌ ${e?.message || 'Unknown error'}`);
-                await new Promise(r => setTimeout(r, isFastExecutionEnabled() ? 0 : 300));
+                await new Promise(r => setTimeout(r, isFastExecutionEnabledForContext() ? 0 : 300));
             }
         }
         setIsRunning(false);

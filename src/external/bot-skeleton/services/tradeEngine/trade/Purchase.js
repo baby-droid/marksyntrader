@@ -1,4 +1,4 @@
-import { getExecutionSpeed, getExecutionSpeedDelay, isFastExecutionEnabled, isASpeedBoostEnabled, getPurchasesPerTick } from '../../../../../utils/execution-speed';
+import { getExecutionSpeed, getExecutionSpeedDelay, isFastExecutionEnabledForContext, isASpeedBoostEnabled, getPurchasesPerTick } from '../../../../../utils/execution-speed';
 import { recordTradeMeta } from '../../../../../utils/trade-metadata';
 import { isBotPaused } from '../../../../../utils/bot-pause-flag';
 import { LogTypes } from '../../../constants/messages';
@@ -97,7 +97,7 @@ function _acquireBuySlot() {
     const speed = getExecutionSpeed();
     const limit  = _buyRateLimit[speed] ?? 1;
     // In crazy / turbo / Fast mode skip the throttle entirely — resolve immediately.
-    if (limit === 0 || isFastExecutionEnabled() || isASpeedBoostEnabled()) return Promise.resolve();
+    if (limit === 0 || isFastExecutionEnabledForContext() || isASpeedBoostEnabled()) return Promise.resolve();
     const now    = Date.now();
     // Remove timestamps older than 1 second
     _buyTimestamps = _buyTimestamps.filter(t => now - t < 1000);
@@ -257,7 +257,7 @@ export default Engine =>
                 try {
                     recordTradeMeta(buy.contract_id, {
                         speed: getExecutionSpeed(),
-                         fast:  isFastExecutionEnabled() || isASpeedBoostEnabled(),
+                         fast:  isFastExecutionEnabledForContext() || isASpeedBoostEnabled(),
                     });
                 } catch { /* non-fatal */ }
 
@@ -300,7 +300,7 @@ export default Engine =>
             // Crazy/Turbo — the biggest single source of purchase latency.
             const useDirectBuy =
                 forceDirect ||
-                (isFastExecutionEnabled() || isASpeedBoostEnabled() || speed === 'crazy' || speed === 'turbo' || speed === 'supersonic') &&
+                (isFastExecutionEnabledForContext() || isASpeedBoostEnabled() || speed === 'crazy' || speed === 'turbo' || speed === 'supersonic') &&
                 !this.options.timeMachineEnabled;
 
             if (this.is_proposal_subscription_required && !useDirectBuy) {

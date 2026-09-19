@@ -37,7 +37,7 @@ export function classifyAutoBotMarket(symbol: string): string {
 }
 
 function movementStats(prices: number[], window: number): MovementStats {
-    const sample = prices.slice(-window).filter(Number.isFinite);
+    const sample = (Array.isArray(prices) ? prices : []).slice(-window).filter(Number.isFinite);
     const moves = sample.slice(1).map((price, index) => price - sample[index]);
     const up = moves.filter(move => move > 0).length;
     const down = moves.filter(move => move < 0).length;
@@ -90,19 +90,21 @@ function directionalScore(
     prices: number[],
     direction: 'rise' | 'fall',
 ): { score: number; confirmed: boolean; reason: string; state: string } {
+    const safePrices = (Array.isArray(prices) ? prices : []).filter(Number.isFinite);
     // Use the available authenticated history as context, but do not require
     // a 1000-tick baseline before a live signal can trade.
-    const windows = [50, 1000].map(window => movementStats(prices, window));
+    const windows = [50, 1000].map(window => movementStats(safePrices, window));
     const [confirm50, regime1000] = windows;
     const ratios = windows.map(stats => direction === 'rise' ? stats.upPct : stats.downPct);
     const momentum = direction === 'rise'
         ? mean(windows.map(stats => stats.momentum))
         : mean(windows.map(stats => 100 - stats.momentum));
-    const structure = structureScore(prices, direction);
+    const structure = structureScore(safePrices, direction);
     const persistence = mean(windows.map(stats => stats.persistence));
     const chopPenalty = Math.max(0, confirm50.chop - 35) * 0.8;
-    const averageMove = mean(prices.slice(-100).slice(1).map((price, index) => Math.abs(price - prices.slice(-100)[index])).filter(Boolean));
-    const latestMove = Math.abs(prices[prices.length - 1] - prices[prices.length - 2]);
+    const recentPrices = safePrices.slice(-100);
+    const averageMove = mean(recentPrices.slice(1).map((price, index) => Math.abs(price - recentPrices[index])).filter(Boolean));
+    const latestMove = Math.abs(safePrices[safePrices.length - 1] - safePrices[safePrices.length - 2]);
     const jumpPenalty = averageMove > 0 && latestMove > averageMove * 4 ? 22 : 0;
     const volatilityQuality = jumpPenalty ? 35 : averageMove > 0 ? 82 : 0;
     const score = clamp(
@@ -120,7 +122,7 @@ function directionalScore(
     const regimeAgrees = direction === 'rise'
         ? regime1000.upPct >= 50
         : regime1000.downPct >= 50;
-    const confirmed = prices.length >= 20
+    const confirmed = safePrices.length >= 20
         && windowsAgree
         && lowChop
         && (regimeAgrees || ratios[0] >= 60)
@@ -142,7 +144,8 @@ function directionalTrade(
     strategy: DirectionalStrategy,
     prices: number[],
 ): StrategyTrade {
-    if (prices.length < 20) {
+    const safePrices = (Array.isArray(prices) ? prices : []).filter(Number.isFinite);
+    if (safePrices.length < 20) {
         return {
             contract: strategy === 'fall' ? 'PUT' : 'CALL',
             barrier: null,
@@ -153,8 +156,8 @@ function directionalTrade(
             state: 'SCANNING',
         };
     }
-    const rise = directionalScore(prices, 'rise');
-    const fall = directionalScore(prices, 'fall');
+    const rise = directionalScore(safePrices, 'rise');
+    const fall = directionalScore(safePrices, 'fall');
     const chosen = strategy === 'rise'
         ? { ...rise, direction: 'rise' as const }
         : strategy === 'fall'
@@ -251,7 +254,7 @@ function parityTrade(strategy: ParityStrategy, digits: number[]): StrategyTrade 
 export function evaluateAutoBotStrategy(
     strategy: AutoBotStrategyId,
     digits: number[],
-    prices: number[],
+    prices: number[] = [],
 ): StrategyTrade {
     return strategy === 'rise' || strategy === 'fall' || strategy === 'bias'
         ? directionalTrade(strategy, prices)

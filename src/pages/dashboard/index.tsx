@@ -7,7 +7,7 @@ const Dashboard = observer(() => {
     return (
         <div style={{ paddingTop: '12px' }}>
             <div>Dashboard observing from mobx store.</div>
-            <div>isAuthorized: {isAuthorized.toString()}</div>
+            <div>isAuthorized: {String(Boolean(isAuthorized))}</div>
         </div>
     );
 });

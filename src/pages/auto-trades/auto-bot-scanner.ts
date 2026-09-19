@@ -202,9 +202,27 @@ const chooseBestTicks = (
     // Auto Bots are tick-wise. The previous implementation selected a
     // duration from 1–4 ticks while scanning, which made the displayed
     // probability and the actual contract duration disagree.
-    const sample = digits.slice(-Math.max(20, Math.min(1000, 1000)));
-    const priceSample = prices.slice(-Math.max(20, Math.min(1000, 1000)));
-    const trade = bot.pickTrade(sample, priceSample, recoveryMode, cycleConfig);
+    const sample = (Array.isArray(digits) ? digits : [])
+        .filter(Number.isFinite)
+        .slice(-1000);
+    const priceSample = (Array.isArray(prices) ? prices : [])
+        .filter(Number.isFinite)
+        .slice(-1000);
+    let trade: AutoBotTrade;
+    try {
+        trade = bot.pickTrade(sample, priceSample, recoveryMode, cycleConfig);
+    } catch (error) {
+        // A malformed/stale market payload must disable this market only. One
+        // directional card must never take down the Auto Trades page.
+        trade = {
+            contract: 'CALL',
+            barrier: null,
+            shouldTrade: false,
+            score: 0,
+            reason: `strategy unavailable: ${error instanceof Error ? error.message : 'invalid market data'}`,
+            state: 'NO TRADE',
+        };
+    }
     // The latest tick is the entry frame. Requiring the preceding tick to
     // repeat the same signal caused valid one-tick opportunities to be shown
     // as NO TRADE.
@@ -234,6 +252,8 @@ export function scanAutoBotMarkets(
         .filter(snapshot =>
             isSupportedAutoBotMarket(snapshot.symbol)
             && snapshot.ready
+            && Array.isArray(snapshot.digits)
+            && Array.isArray(snapshot.prices)
             && snapshot.digits.length >= 20
         )
         .map(snapshot => {

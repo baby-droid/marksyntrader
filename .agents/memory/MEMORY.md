@@ -77,3 +77,4 @@
 - [King Fisher runtime reporting](marksyntrader-kingfisher.md) — best-market selection runs before Bot Builder starts; live digits, Fisher sequences, hooks, and settled P/L feed the shared Journal/Transactions surface.
 - [King Fisher hook purchase gate](king-fisher-hook-gate.md) — Virtual Hook must be the direct before-purchase gate; an outer AND rechecks a stale entry streak and can drop confirmed real trades.
 - [Interpreter-safe generated code](interpreter-safe-generated-code.md) — Blockly interpreter code cannot assume browser globals or Number static helpers; use primitive checks and host bridge methods.
+- [Fast execution scope](fast-execution-scope.md) — shared Fast behavior is limited to Bot Builder and Scalper Bots; other surfaces keep their own speed modes.

@@ -37,6 +37,11 @@ describe('Auto Bot strategy cards', () => {
         expect(trade.state).toBe('NO TRADE');
     });
 
+    it('does not throw when a directional market has no usable prices', () => {
+        expect(() => evaluateAutoBotStrategy('rise', [], undefined as any)).not.toThrow();
+        expect(() => evaluateAutoBotStrategy('fall', [], [Number.NaN] as any)).not.toThrow();
+    });
+
     it('requires multi-window Odd confirmation before DIGITODD', () => {
         const trade = evaluateAutoBotStrategy('odd', paritySeries('odd'), []);
         expect(trade.contract).toBe('DIGITODD');

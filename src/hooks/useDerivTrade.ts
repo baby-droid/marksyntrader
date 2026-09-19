@@ -9,6 +9,7 @@ import { publishMasterTrade, getMasterSource, createTradeKey } from '@/utils/tra
 import { observer } from '@/external/bot-skeleton/utils/observer';
 import {
     isFastExecutionEnabled,
+    isFastExecutionEnabledForContext,
     recordPhase,
     recordTick,
     startPingMonitor,
@@ -363,7 +364,7 @@ export function useDerivTrade() {
                 throw new Error('Proposal failed — no proposal ID returned');
             }
             // Record proposal round-trip time as evalToBuy phase
-            if (isFastExecutionEnabled()) {
+            if (isFastExecutionEnabledForContext()) {
                 recordPhase('evalToBuy', Math.round(performance.now() - t0));
             }
 
@@ -401,7 +402,7 @@ export function useDerivTrade() {
             if (buyRes?.error) {
                 throw buyRes.error;
             }
-            if (isFastExecutionEnabled()) {
+            if (isFastExecutionEnabledForContext()) {
                 recordPhase('buyToResponse', Math.round(performance.now() - t1));
             }
 

@@ -4,7 +4,7 @@ import AiCycleGuide from '@/components/ai-cycle-guide/ai-cycle-guide';
 import { useStore } from '@/hooks/useStore';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { api_base, load, save_types } from '@/external/bot-skeleton';
-import { isFastExecutionEnabled } from '@/utils/execution-speed';
+import { isFastExecutionEnabledForContext } from '@/utils/execution-speed';
 import { setTradeContext } from '@/utils/trade-metadata';
 import { patchGuidedCycleXml, DiffersCycleBotId, GuidedCycleSettings } from '@/utils/differs-cycle';
 import './cycle-pattern-detector.scss';
@@ -123,7 +123,7 @@ const CyclePatternDetector: React.FC = () => {
             if (loaded) {
                 window.setTimeout(() => {
                     if (!runPanel?.is_running) void runPanel?.onRunButtonClick?.();
-                }, isFastExecutionEnabled() ? 0 : 900);
+                }, isFastExecutionEnabledForContext() ? 0 : 900);
             }
         } catch (error) {
             console.error('AI Engine guided Load & Run failed', error);

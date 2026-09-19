@@ -31,4 +31,23 @@ describe('execution speed controls', () => {
 
         speed.setASpeedBoostEnabled(false);
     });
+
+    it('keeps Fast scoped to Bot Builder and Scalper execution contexts', async () => {
+        const speed = await import('../execution-speed');
+        const { setTradeContext } = await import('../trade-metadata');
+
+        speed.setExecutionSpeed('normal');
+        speed.setFastExecutionEnabled(true);
+
+        setTradeContext({ page: 'Auto Trades', bot: 'Odd' });
+        expect(speed.isFastExecutionEnabledForContext()).toBe(false);
+        expect(speed.getExecutionSpeedDelay()).toBe(200);
+
+        setTradeContext({ page: 'Scalper Bots', bot: 'Rise' });
+        expect(speed.isFastExecutionEnabledForContext()).toBe(true);
+        expect(speed.getExecutionSpeedDelay()).toBe(0);
+
+        speed.setFastExecutionEnabled(false);
+        setTradeContext({ page: 'Bot Builder', bot: '' });
+    });
 });
