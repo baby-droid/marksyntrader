@@ -1,0 +1,817 @@
+Use this as the **core Fast Execution Engine**. It is designed so FAST applies to Bot Builder bots, scalpers, cards, and other automations through one shared execution layer.
+
+> Replace your current timer/polling-based execution path with this architecture. The `purchaseContract()` function should call your existing Deriv API purchase implementation.
+
+```javascript
+/* ============================================================
+   FAST EXECUTION ENGINE
+   Tick-synchronized, non-blocking trading execution
+   ============================================================ */
+
+class FastExecutionEngine {
+  constructor({
+    mode = "NORMAL",
+    maxConcurrentPurchases = 1,
+    onExecution,
+    onResult,
+    onError,
+    onStats
+  } = {}) {
+    this.mode = mode;
+
+    this.maxConcurrentPurchases =
+      mode === "FAST"
+        ? Math.max(1, maxConcurrentPurchases)
+        : 1;
+
+    this.onExecution = onExecution || (() => {});
+    this.onResult = onResult || (() => {});
+    this.onError = onError || (() => {});
+    this.onStats = onStats || (() => {});
+
+    this.bots = new Map();
+
+    this.stats = {
+      ticksReceived: 0,
+      signalsDetected: 0,
+      purchaseRequests: 0,
+      executions: 0,
+      wins: 0,
+      losses: 0,
+      rejected: 0,
+      errors: 0
+    };
+
+    this.activePurchases = new Map();
+
+    this.lastTickByBot = new Map();
+
+    this.running = false;
+  }
+
+  /* ----------------------------------------------------------
+     GLOBAL FAST BUTTON
+     ---------------------------------------------------------- */
+
+  setMode(mode) {
+    this.mode = mode;
+
+    this.maxConcurrentPurchases =
+      mode === "FAST"
+        ? 3
+        : 1;
+
+    console.log(
+      `[EXECUTION] Mode changed to ${mode}`
+    );
+  }
+
+  enableFast() {
+    this.setMode("FAST");
+  }
+
+  disableFast() {
+    this.setMode("NORMAL");
+  }
+
+  /* ----------------------------------------------------------
+     REGISTER ANY BOT
+     ---------------------------------------------------------- */
+
+  registerBot(botId, botConfig) {
+    this.bots.set(botId, {
+      id: botId,
+
+      ...botConfig,
+
+      enabled: true,
+
+      executions: 0,
+      wins: 0,
+      losses: 0,
+
+      lastTick: null,
+      lastDigit: null,
+
+      pending: 0
+    });
+  }
+
+  removeBot(botId) {
+    this.bots.delete(botId);
+    this.lastTickByBot.delete(botId);
+  }
+
+  enableBot(botId) {
+    const bot = this.bots.get(botId);
+
+    if (bot) {
+      bot.enabled = true;
+    }
+  }
+
+  disableBot(botId) {
+    const bot = this.bots.get(botId);
+
+    if (bot) {
+      bot.enabled = false;
+    }
+  }
+
+  /* ----------------------------------------------------------
+     MARKET TICK ENTRY POINT
+     
+     THIS should be connected directly to the Deriv
+     WebSocket tick stream.
+     ---------------------------------------------------------- */
+
+  async onTick(tick) {
+
+    if (!tick) return;
+
+    this.stats.ticksReceived++;
+
+    const digit = this.getLastDigit(tick.quote);
+
+    const normalizedTick = {
+      ...tick,
+      digit,
+      receivedAt: performance.now()
+    };
+
+    /*
+       Process every loaded bot immediately.
+       No setTimeout.
+       No setInterval.
+       No polling.
+    */
+
+    for (const bot of this.bots.values()) {
+
+      if (!bot.enabled) continue;
+
+      if (bot.symbol && tick.symbol !== bot.symbol) {
+        continue;
+      }
+
+      await this.processBotTick(
+        bot,
+        normalizedTick
+      );
+    }
+  }
+
+  /* ----------------------------------------------------------
+     PROCESS ONE BOT
+     ---------------------------------------------------------- */
+
+  async processBotTick(bot, tick) {
+
+    /*
+       Prevent the same market tick from being
+       executed twice by the same bot.
+    */
+
+    const previousTick =
+      this.lastTickByBot.get(bot.id);
+
+    const tickId =
+      `${tick.symbol}:${tick.epoch}`;
+
+    if (previousTick === tickId) {
+      return;
+    }
+
+    this.lastTickByBot.set(
+      bot.id,
+      tickId
+    );
+
+    bot.lastTick = tick.epoch;
+    bot.lastDigit = tick.digit;
+
+    /*
+       Maintain rolling tick buffers.
+    */
+
+    this.updateTickBuffers(
+      bot,
+      tick
+    );
+
+    /*
+       Strategy evaluation happens immediately.
+    */
+
+    let signal;
+
+    try {
+
+      signal = await this.evaluateStrategy(
+        bot,
+        tick
+      );
+
+    } catch (error) {
+
+      this.stats.errors++;
+
+      this.onError({
+        botId: bot.id,
+        stage: "strategy",
+        error
+      });
+
+      return;
+    }
+
+    if (!signal || !signal.shouldTrade) {
+      return;
+    }
+
+    this.stats.signalsDetected++;
+
+    /*
+       Purchase immediately.
+    */
+
+    await this.executeSignal(
+      bot,
+      tick,
+      signal
+    );
+  }
+
+  /* ----------------------------------------------------------
+     ROLLING TICK DATA
+     ---------------------------------------------------------- */
+
+  updateTickBuffers(bot, tick) {
+
+    if (!bot.ticks) {
+      bot.ticks = [];
+    }
+
+    bot.ticks.push(tick);
+
+    /*
+       Keep enough history for your
+       1000 / 100 / 50 / 20 / 10 analysis.
+    */
+
+    if (bot.ticks.length > 1000) {
+      bot.ticks.shift();
+    }
+  }
+
+  /* ----------------------------------------------------------
+     STRATEGY ENGINE
+     
+     Replace this function with your actual
+     Odd / Even / Over / Under / Rise / Fall
+     strategy.
+     ---------------------------------------------------------- */
+
+  async evaluateStrategy(bot, tick) {
+
+    /*
+       Example:
+
+       bot.strategy.evaluate({
+          tick,
+          ticks: bot.ticks
+       })
+
+       Your existing strategy should return:
+
+       {
+          shouldTrade: true,
+          contractType: "DIGITOVER",
+          barrier: 2,
+          stake: 1,
+          duration: 1,
+          durationUnit: "t"
+       }
+    */
+
+    if (
+      typeof bot.strategy?.evaluate !==
+      "function"
+    ) {
+      return null;
+    }
+
+    return bot.strategy.evaluate({
+      tick,
+      ticks: bot.ticks,
+      mode: this.mode
+    });
+  }
+
+  /* ----------------------------------------------------------
+     EXECUTE SIGNAL
+     ---------------------------------------------------------- */
+
+  async executeSignal(
+    bot,
+    tick,
+    signal
+  ) {
+
+    /*
+       Protect against uncontrolled concurrency.
+    */
+
+    if (
+      bot.pending >=
+      this.maxConcurrentPurchases
+    ) {
+      return;
+    }
+
+    bot.pending++;
+
+    this.stats.purchaseRequests++;
+
+    const requestId =
+      `${bot.id}-${tick.epoch}-${performance.now()}`;
+
+    const startTime =
+      performance.now();
+
+    try {
+
+      const purchase =
+        await this.purchaseContract({
+          bot,
+          tick,
+          signal,
+          requestId
+        });
+
+      /*
+         IMPORTANT:
+
+         Execution count increments ONLY when
+         Deriv actually accepts the purchase.
+      */
+
+      if (
+        !purchase ||
+        !purchase.accepted
+      ) {
+
+        this.stats.rejected++;
+
+        return;
+      }
+
+      this.stats.executions++;
+
+      bot.executions++;
+
+      const execution = {
+        executionNumber:
+          bot.executions,
+
+        requestId,
+
+        botId: bot.id,
+
+        symbol: tick.symbol,
+
+        tick: tick.epoch,
+
+        digit: tick.digit,
+
+        contractId:
+          purchase.contractId,
+
+        contractType:
+          signal.contractType,
+
+        barrier:
+          signal.barrier,
+
+        stake:
+          signal.stake,
+
+        executionLatency:
+          performance.now() - startTime,
+
+        executedAt:
+          Date.now()
+      };
+
+      /*
+         Keep contract independently monitored.
+         
+         Settlement must NOT block the next tick.
+      */
+
+      if (purchase.contractId) {
+
+        this.activePurchases.set(
+          purchase.contractId,
+          execution
+        );
+
+      }
+
+      this.onExecution(
+        execution
+      );
+
+      /*
+         Result monitoring runs separately.
+      */
+
+      if (
+        purchase.contractId &&
+        typeof this.monitorContract ===
+          "function"
+      ) {
+
+        this.monitorContract(
+          purchase.contractId
+        ).catch(error => {
+
+          this.onError({
+            botId: bot.id,
+            contractId:
+              purchase.contractId,
+            stage: "monitor",
+            error
+          });
+
+        });
+      }
+
+    } catch (error) {
+
+      this.stats.errors++;
+
+      this.onError({
+        botId: bot.id,
+        stage: "purchase",
+        error
+      });
+
+    } finally {
+
+      bot.pending--;
+
+      this.emitStats();
+    }
+  }
+
+  /* ----------------------------------------------------------
+     DERIV PURCHASE ADAPTER
+     
+     CONNECT YOUR EXISTING DERIV API HERE.
+     ---------------------------------------------------------- */
+
+  async purchaseContract({
+    bot,
+    tick,
+    signal,
+    requestId
+  }) {
+
+    /*
+       Example interface expected from your
+       existing Deriv connection:
+
+       const response =
+          await deriv.buyContract({
+             symbol: tick.symbol,
+             contractType: signal.contractType,
+             barrier: signal.barrier,
+             duration: signal.duration,
+             durationUnit: signal.durationUnit,
+             amount: signal.stake
+          });
+
+       return {
+          accepted: true,
+          contractId: response.buy.contract_id
+       };
+    */
+
+    if (
+      typeof window.derivPurchaseContract !==
+      "function"
+    ) {
+      throw new Error(
+        "derivPurchaseContract() is not connected."
+      );
+    }
+
+    const response =
+      await window.derivPurchaseContract({
+        symbol: tick.symbol,
+
+        contractType:
+          signal.contractType,
+
+        barrier:
+          signal.barrier,
+
+        duration:
+          signal.duration ?? 1,
+
+        durationUnit:
+          signal.durationUnit ?? "t",
+
+        amount:
+          signal.stake,
+
+        requestId
+      });
+
+    return {
+      accepted:
+        response?.accepted === true,
+
+      contractId:
+        response?.contractId ??
+        response?.buy?.contract_id ??
+        null
+    };
+  }
+
+  /* ----------------------------------------------------------
+     CONTRACT RESULT
+     ---------------------------------------------------------- */
+
+  handleContractResult({
+    contractId,
+    profit,
+    status
+  }) {
+
+    const execution =
+      this.activePurchases.get(
+        contractId
+      );
+
+    if (!execution) {
+      return;
+    }
+
+    const bot =
+      this.bots.get(
+        execution.botId
+      );
+
+    if (!bot) {
+      return;
+    }
+
+    const win =
+      Number(profit) > 0;
+
+    const loss =
+      Number(profit) < 0;
+
+    if (win) {
+
+      bot.wins++;
+      this.stats.wins++;
+
+    } else if (loss) {
+
+      bot.losses++;
+      this.stats.losses++;
+    }
+
+    const result = {
+      ...execution,
+
+      status,
+
+      profit:
+        Number(profit),
+
+      outcome:
+        win
+          ? "WIN"
+          : loss
+            ? "LOSS"
+            : "BREAKEVEN",
+
+      wins:
+        bot.wins,
+
+      losses:
+        bot.losses
+    };
+
+    this.activePurchases.delete(
+      contractId
+    );
+
+    this.onResult(result);
+
+    this.emitStats();
+  }
+
+  /* ----------------------------------------------------------
+     DIGIT EXTRACTION
+     ---------------------------------------------------------- */
+
+  getLastDigit(price) {
+
+    const value =
+      String(price);
+
+    const parts =
+      value.split(".");
+
+    const decimals =
+      parts[1] || "";
+
+    if (decimals.length > 0) {
+      return Number(
+        decimals[decimals.length - 1]
+      );
+    }
+
+    return Number(
+      value[value.length - 1]
+    );
+  }
+
+  /* ----------------------------------------------------------
+     GLOBAL STATISTICS
+     ---------------------------------------------------------- */
+
+  getStats() {
+
+    const total =
+      this.stats.executions;
+
+    return {
+      ...this.stats,
+
+      winRate:
+        total > 0
+          ? (
+              this.stats.wins /
+              total
+            ) * 100
+          : 0
+    };
+  }
+
+  emitStats() {
+    this.onStats(
+      this.getStats()
+    );
+  }
+}
+```
+
+### Connect the Fast button
+
+```javascript
+const executionEngine =
+  new FastExecutionEngine({
+
+    mode: "NORMAL",
+
+    maxConcurrentPurchases: 1,
+
+    onExecution(execution) {
+
+      console.log(
+        "EXECUTED:",
+        execution
+      );
+
+      updateExecutionCounter(
+        execution.botId,
+        execution.executionNumber
+      );
+    },
+
+    onResult(result) {
+
+      console.log(
+        "RESULT:",
+        result
+      );
+
+      updateTradingStats(result);
+    },
+
+    onError(error) {
+
+      console.error(
+        "EXECUTION ERROR:",
+        error
+      );
+    },
+
+    onStats(stats) {
+
+      updateGlobalStats(stats);
+    }
+  });
+```
+
+Then your **FAST button** should simply do:
+
+```javascript
+function enableFastMode() {
+
+  executionEngine.enableFast();
+
+  document.body.dataset.executionMode =
+    "FAST";
+}
+```
+
+And OFF:
+
+```javascript
+function disableFastMode() {
+
+  executionEngine.disableFast();
+
+  document.body.dataset.executionMode =
+    "NORMAL";
+}
+```
+
+### Connect the Deriv tick stream
+
+Your WebSocket handler should be essentially:
+
+```javascript
+derivSocket.onmessage = async (event) => {
+
+  const message =
+    JSON.parse(event.data);
+
+  if (message.msg_type !== "tick") {
+    return;
+  }
+
+  await executionEngine.onTick({
+    symbol:
+      message.tick.symbol,
+
+    quote:
+      message.tick.quote,
+
+    epoch:
+      message.tick.epoch
+  });
+};
+```
+
+**Do not use `setInterval()` to drive trading.**
+
+---
+
+## The important part for your exact requirement
+
+For:
+
+```text
+3 → 4 → 1 → 4 → 6
+```
+
+the engine processes:
+
+```text
+TICK 1 → signal → purchase accepted → EXECUTION #1
+TICK 2 → signal → purchase accepted → EXECUTION #2
+TICK 3 → signal → purchase accepted → EXECUTION #3
+TICK 4 → signal → purchase accepted → EXECUTION #4
+TICK 5 → signal → purchase accepted → EXECUTION #5
+```
+
+Results arrive independently:
+
+```text
+#1 WIN
+#2 WIN
+#3 LOSS
+#4 WIN
+#5 WIN
+```
+
+So the dashboard gets:
+
+```text
+EXECUTIONS     5
+WINS           4
+LOSSES         1
+WIN RATE       80%
+```
+
+The **next tick does not wait for the previous contract's settlement**.
+
+One important limitation: the code cannot make the underlying 1-second market generate ticks faster than the market actually supplies them. What it does is eliminate the application's avoidable latency between **tick → signal → purchase**, while keeping execution counts tied to genuinely accepted purchases.
