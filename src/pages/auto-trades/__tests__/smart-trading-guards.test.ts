@@ -1,3 +1,5 @@
+jest.mock('@/external/bot-skeleton', () => ({ api_base: { api: null } }));
+
 import {
     beginSmartRun,
     invalidateSmartRun,

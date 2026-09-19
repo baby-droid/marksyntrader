@@ -242,7 +242,7 @@ function parityTrade(strategy: ParityStrategy, digits: number[]): StrategyTrade 
         shouldTrade: confirmed,
         signal: score >= 80 ? 'strong' : score >= 60 ? 'weak' : undefined,
         score,
-        reason: `${strategy.toUpperCase()} ${score.toFixed(0)} · available/50 ${[baseline, confirm].map(item => `${item.percentage.toFixed(0)}%`).join('/')} · ${agreement}/2 windows`,
+        reason: `${strategy.toUpperCase()} ${score.toFixed(0)} · ${Math.min(1000, digits.length)}/50 ${[baseline, confirm].map(item => `${item.percentage.toFixed(0)}%`).join('/')} · ${agreement}/2 windows`,
         direction: strategy,
         state: confirmed ? 'SIGNAL READY' : score >= 60 ? 'WATCH' : 'NO TRADE',
     };

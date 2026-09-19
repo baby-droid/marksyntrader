@@ -1,3 +1,5 @@
+jest.mock('@/external/bot-skeleton', () => ({ api_base: { api: null } }));
+
 import {
     AUTO_BOT_TICK_DURATION,
     getFreshAutoBotMarkets,
@@ -57,11 +59,11 @@ describe('Auto Bot market execution rules', () => {
         expect(AUTO_BOT_TICK_DURATION).toBe(1);
     });
 
-    it('requires the current and previous frame to select the same entry', () => {
+    it('uses the current live signal as a one-tick entry', () => {
         const bot: AutoBotDefinition = {
             pickTrade: digits => digits[digits.length - 1] === 7
-                ? { contract: 'DIGITOVER', barrier: 2 }
-                : { contract: 'DIGITUNDER', barrier: 7 },
+                ? { contract: 'DIGITOVER', barrier: 2, shouldTrade: true }
+                : { contract: 'DIGITUNDER', barrier: 7, shouldTrade: false },
         };
         const snapshot = (digits: number[]): AutoBotMarketSnapshot => ({
             symbol: '1HZ10V',
@@ -74,10 +76,10 @@ describe('Auto Bot market execution rules', () => {
         });
 
         const matching = scanAutoBotMarkets(bot, {
-            match: snapshot(Array.from({ length: 19 }, () => 5).concat([7, 7])),
+            match: snapshot(Array.from({ length: 20 }, () => 5).concat([7])),
         })[0];
         const changing = scanAutoBotMarkets(bot, {
-            change: snapshot(Array.from({ length: 19 }, () => 5).concat([7, 4])),
+            change: snapshot(Array.from({ length: 20 }, () => 5).concat([4])),
         })[0];
 
         expect(matching.trade.entryFrame).toBe('matched');

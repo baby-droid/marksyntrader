@@ -3,14 +3,14 @@ name: Auto Bots market execution
 description: Durable rules for Auto Bots authenticated scanning, one-tick selection, and independent market risk.
 ---
 
-Auto Bots use the authenticated Deriv market feed as a background scanner. Each market is evaluated only when its own tick version advances; a global scanner tick may wake the runner but must not replay unchanged markets.
+Auto Bots use the authenticated Deriv market feed as a background scanner. Each market is evaluated only when its own tick version advances; a global scanner tick may wake the runner but must not replay unchanged markets. A qualifying strategy dispatches one 1-tick contract immediately and leaves settlement to an asynchronous callback.
 
-**Why:** A shared global candidate list caused the UI to hide watch markets and made execution depend on unrelated market ticks. One-tick contracts also keep displayed probability, entry timing, and settlement semantics aligned.
+**Why:** A shared global candidate list caused the UI to hide watch markets and make execution depend on unrelated market ticks. Waiting for settlement before scanning the next tick silently reduced a live 1-second stream to sequential trades. One-tick contracts also keep displayed probability, entry timing, and settlement semantics aligned.
 
-**How to apply:** Keep the visible market set compact and ranked, show non-qualified live markets as watch cards, prioritize 1-second Volatility, Jump, plain Volatility, Bear, then Bull markets, and execute up to five fresh eligible markets concurrently. TP/SL state belongs to each market in Auto Bots, so one stopped market must not stop the other markets in the same bot run.
+**How to apply:** Keep the visible market set compact and ranked, show non-qualified live markets as watch cards, prioritize 1-second Volatility, Jump, plain Volatility, Bear, then Bull markets, and dispatch every fresh eligible market without an in-flight settlement gate. TP/SL state belongs to each market in Auto Bots, so one stopped market must not stop the other markets in the same bot run. Digit strategies must explicitly return `shouldTrade: true`; selecting a contract alone is not an entry signal.
 
-The first four Auto Bots are an intentional exception: they trade a two-market cohort, count five settled validated runs per market, then rotate to the next pair. After a loss, skip the immediate next market tick and require a higher score; after two losses require a strong signal.
+The ranked Auto Bot cohort is a small execution scope, but a single validated market is enough to start. The cohort rotates after its configured settled-run count; settlement callbacks update market risk and can reset the cohort when the count is reached.
 
-**Why:** Pair cohorts make the first four bots compare a stable market sample instead of chasing every fresh signal, while the post-loss gate reduces repeated weak entries without bypassing the existing stake and TP/SL controls.
+**Why:** Requiring a second qualifying market made a valid card display READY but never buy when only one market had a fresh signal. Resetting only from the dispatch loop also left the cohort stuck after asynchronous settlements completed.
 
-**How to apply:** Preserve the pair-of-two/five-runs-per-market rule for those first four definitions only. Keep the broader Auto Bots eligible for independent fresh-market execution unless the product requirement explicitly changes.
+**How to apply:** Keep the ranked cohort for display and rotation, but never use it as a settlement/concurrency lock. Re-evaluate risk and rotation state when each contract settles.

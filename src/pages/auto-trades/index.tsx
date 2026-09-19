@@ -465,7 +465,13 @@ const AI_BOTS: AiBotDef[] = [
                 sample.filter(value => value === digit).length,
             );
             const barrier = freq.indexOf(Math.min(...freq));
-            return { contract: 'DIGITDIFF', barrier };
+            return {
+                contract: 'DIGITDIFF',
+                barrier,
+                shouldTrade: sample.length >= 20,
+                score: sample.length ? (sample.filter(digit => digit !== barrier).length / sample.length) * 100 : 0,
+                reason: `Least frequent digit ${barrier} · live tick entry`,
+            };
         },
     },
     {
@@ -482,9 +488,14 @@ const AI_BOTS: AiBotDef[] = [
         pickTrade: (digits) => {
             const sample = digits.slice(-20);
             const overCount = sample.filter(digit => digit > 4).length;
-            return overCount > 10
-                ? { contract: 'DIGITOVER', barrier: 2 }
-                : { contract: 'DIGITUNDER', barrier: 7 };
+            const over = overCount > 10;
+            return {
+                contract: over ? 'DIGITOVER' : 'DIGITUNDER',
+                barrier: over ? 2 : 7,
+                shouldTrade: sample.length >= 20,
+                score: sample.length ? (over ? overCount / sample.length : sample.filter(digit => digit < 7).length / sample.length) * 100 : 0,
+                reason: `${over ? 'Over 2' : 'Under 7'} selected from the live digit flow`,
+            };
         },
     },
     {
@@ -502,9 +513,14 @@ const AI_BOTS: AiBotDef[] = [
             const sample = digits.slice(-20);
             const over5 = sample.filter(digit => digit > 5).length;
             const under4 = sample.filter(digit => digit < 4).length;
-            return over5 >= under4
-                ? { contract: 'DIGITOVER', barrier: 5 }
-                : { contract: 'DIGITUNDER', barrier: 4 };
+            const over = over5 >= under4;
+            return {
+                contract: over ? 'DIGITOVER' : 'DIGITUNDER',
+                barrier: over ? 5 : 4,
+                shouldTrade: sample.length >= 20,
+                score: sample.length ? (over ? over5 / sample.length : under4 / sample.length) * 100 : 0,
+                reason: `${over ? 'Over 5' : 'Under 4'} selected from the live digit flow`,
+            };
         },
     },
     {
@@ -519,14 +535,29 @@ const AI_BOTS: AiBotDef[] = [
         defaultTakeProfit: 5,
         defaultStopLoss: 10,
         pickTrade: (digits, _prices = [], recoveryMode = false) => {
-            if (recoveryMode) return { contract: 'DIGITUNDER', barrier: 5 };
+            if (recoveryMode) {
+                return {
+                    contract: 'DIGITUNDER',
+                    barrier: 5,
+                    shouldTrade: digits.length >= 20,
+                    score: digits.length ? digits.filter(digit => digit < 5).length / digits.length * 100 : 0,
+                    reason: 'Recovery Under 5 selected after the previous loss',
+                };
+            }
             const sample = digits.slice(-5);
             const average = sample.length
                 ? sample.reduce((sum, digit) => sum + digit, 0) / sample.length
                 : 0;
-            return average > 4.5
-                ? { contract: 'DIGITOVER', barrier: 2 }
-                : { contract: 'DIGITUNDER', barrier: 7 };
+            const over = average > 4.5;
+            return {
+                contract: over ? 'DIGITOVER' : 'DIGITUNDER',
+                barrier: over ? 2 : 7,
+                shouldTrade: digits.length >= 20,
+                score: sample.length
+                    ? (over ? sample.filter(digit => digit > 2).length : sample.filter(digit => digit < 7).length) / sample.length * 100
+                    : 0,
+                reason: `${over ? 'Over 2' : 'Under 7'} selected from the last-five average`,
+            };
         },
     },
     {
@@ -630,8 +661,9 @@ const AI_BOTS: AiBotDef[] = [
     },
 ];
 
-// Every Auto Bot runs as a sequential two-market cohort. A cohort completes
-// seven settled runs per market before the next pair is selected.
+// Auto Bots keep a small ranked market cohort for the UI, but execution is
+// independent: one qualifying contract may trade by itself and every fresh
+// tick can dispatch without waiting for an earlier contract to settle.
 const AUTO_BOT_ROTATION_MARKETS = 2;
 const AUTO_BOT_RUNS_PER_MARKET = 7;
 
@@ -788,7 +820,6 @@ function AiBotCard({
         let recoveryMode = false;
         let lastScanKey = '';
         const lastEvaluatedTickByMarket = new Map<string, number>();
-        const inFlightMarkets = new Set<string>();
         const marketStakeBySymbol = new Map<string, number>();
         const marketProfitBySymbol = new Map<string, number>();
         const marketWinsBySymbol = new Map<string, number>();
@@ -815,7 +846,6 @@ function AiBotCard({
         };
 
         const recordSettlement = (candidate: AutoBotMarketCandidate, profit: number) => {
-            inFlightMarkets.delete(candidate.symbol);
             if (runVersionRef.current !== runVersion) return;
 
             const won = profit > 0;
@@ -875,6 +905,15 @@ function AiBotCard({
             if (won) pausedStakeRef.current = null;
             else pausedStakeRef.current = nextStake;
             publishRotationStatus();
+            if (rotationSymbols.length
+                && rotationSymbols.every(symbol =>
+                    (marketRunsBySymbol.get(symbol) ?? 0) >= AUTO_BOT_RUNS_PER_MARKET
+                    || stoppedMarkets.has(symbol),
+                )) {
+                onLog(`✅ Rotation ${rotationCycle} complete · selecting the next two markets`);
+                rotationSymbols = [];
+                publishRotationStatus();
+            }
         };
 
         while (isCurrentRun()) {
@@ -893,7 +932,7 @@ function AiBotCard({
                 lastScanKey = String(scannerTickVersionRef.current);
                 const freshMarkets = getFreshAutoBotMarkets(
                     marketCandidatesRef.current.filter(candidate =>
-                        !stoppedMarkets.has(candidate.symbol) && !inFlightMarkets.has(candidate.symbol)
+                            !stoppedMarkets.has(candidate.symbol)
                     ),
                     lastEvaluatedTickByMarket,
                 );
@@ -924,7 +963,10 @@ function AiBotCard({
                         );
                     }
                     const nextPair = rankedMarkets.slice(0, AUTO_BOT_ROTATION_MARKETS);
-                    if (nextPair.length < AUTO_BOT_ROTATION_MARKETS) continue;
+                    // A single validated market is enough to run. Requiring a
+                    // second market made valid cards appear ready but never
+                    // execute when only one market had a fresh signal.
+                    if (!nextPair.length) continue;
                     rotationSymbols = nextPair.map(candidate => candidate.symbol);
                     rotationSymbols.forEach(symbol => {
                         rotationUsedSymbols.add(symbol);
@@ -945,39 +987,39 @@ function AiBotCard({
                 );
                 if (!candidates.length) continue;
 
-                // Execute one market at a time and wait for settlement. This
-                // guarantees seven real runs per market and keeps martingale
-                // progression ordered instead of racing concurrent buys.
-                const candidate = candidates[0];
-                inFlightMarkets.add(candidate.symbol);
-                const marketStake = marketStakeBySymbol.get(candidate.symbol) ?? stk;
-                try {
-                    const profit = await buyAndWait(
+                // Dispatch every fresh qualifying market immediately. The
+                // settlement callback owns wins/losses, stake progression and
+                // risk state; it must not block the next live tick.
+                candidates.forEach(candidate => {
+                    const marketStake = marketStakeBySymbol.get(candidate.symbol) ?? stk;
+                    void buyAndWait(
                         candidate.symbol,
                         candidate.trade.contract,
                         candidate.trade.barrier,
                         marketStake,
                         AUTO_BOT_TICK_DURATION,
                         {
+                            settle: false,
                             metadata: {
                                 source: 'auto-bots',
+                                execution_mode: 'one-contract-per-tick',
                                 scan_score: candidate.score,
                                 scan_ticks: AUTO_BOT_TICK_DURATION,
                                 scan_markets: AUTO_BOT_ROTATION_MARKETS,
                                 scan_qualified_markets: freshMarkets.length,
                             },
+                            onSettled: profit => {
+                                if (Number.isFinite(profit)) {
+                                    recordSettlement(candidate, Number(profit));
+                                } else {
+                                    onLog(`⚠ ${candidate.label}: settlement pending; keeping the market stake unchanged`);
+                                }
+                            },
                         },
-                    );
-                    if (Number.isFinite(profit)) {
-                        recordSettlement(candidate, Number(profit));
-                    } else {
-                        inFlightMarkets.delete(candidate.symbol);
-                        onLog(`⚠ ${candidate.label}: settlement pending; keeping the market stake unchanged`);
-                    }
-                } catch (error) {
-                    inFlightMarkets.delete(candidate.symbol);
-                    onLog(`⚠ ${candidate.label}: ${describeTradeError(error)}`);
-                }
+                    ).catch(error => {
+                        onLog(`⚠ ${candidate.label}: ${describeTradeError(error)}`);
+                    });
+                });
 
                 if (rotationSymbols.length
                     && rotationSymbols.every(symbol =>

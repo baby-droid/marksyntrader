@@ -151,8 +151,11 @@ export function pickSmartTradeDecision(
         };
     }
 
-    const freq = Array.from({ length: 10 }, (_, digit) => last.filter(value => value === digit).length);
-    const maxDigit = freq.indexOf(Math.max(...freq));
+    // Differs is based on the configured lookback window. Using the full
+    // analysis depth made a valid latest-digit difference disappear whenever
+    // an unrelated older digit was the global mode.
+    const recentFreq = Array.from({ length: 10 }, (_, digit) => sample.filter(value => value === digit).length);
+    const maxDigit = recentFreq.indexOf(Math.max(...recentFreq));
     const isMatch = sample.length === requiredDigits && sample.every(digit => digit === sample[0]);
     const isDifferent = sample.length === requiredDigits
         && new Set(sample).size > 1
@@ -162,7 +165,7 @@ export function pickSmartTradeDecision(
         contract: matchesAction('Buy Matches') ? 'DIGITMATCH' : 'DIGITDIFF',
         barrier: matchesAction('Buy Matches') ? (sample[0] ?? 0) : maxDigit,
         meetsCondition: cfg.ifValue === 'Matches' ? isMatch : isDifferent,
-        freq,
+        freq: Array.from({ length: 10 }, (_, digit) => last.filter(value => value === digit).length),
     };
 }
 

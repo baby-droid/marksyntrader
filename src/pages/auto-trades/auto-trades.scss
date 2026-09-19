@@ -1396,16 +1396,18 @@
     &__cards {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 0;
-        padding: 0;
-        flex: 1;
+        gap: 10px;
+        width: min(100%, 760px);
+        align-self: center;
+        padding: 10px 12px;
+        flex: 0 0 auto;
     }
 
     // ── Individual card
     &__card {
         background: #0d1520;
-        border-right: 1px solid rgba(255,255,255,0.05);
-        border-bottom: 1px solid rgba(255,255,255,0.05);
+        border: 1px solid rgba(255,255,255,0.05);
+        border-radius: 8px;
         display: flex;
         flex-direction: column;
         gap: 0;

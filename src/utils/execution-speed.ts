@@ -2,7 +2,7 @@
  * Global bot execution speed.
  *
  * Two independent axes:
- *  1. `speed` (normal | crazy | turbo) — how many purchases fan out per tick
+ *  1. `speed` (normal | crazy | turbo) — how many purchases are allowed per tick
  *     and how the engine reacts to rate limits.
  *  2. `fastExecution` (on/off) — an independent "Fast Execution" toggle that
  *     forces zero delay for EVERY single trade regardless of which speed
@@ -40,15 +40,15 @@ export const SPEED_MAX_INFLIGHT: Record<ExecutionSpeed, number> = {
 };
 const FAST_EXEC_MAX_INFLIGHT = 10_000;
 
-// Purchases fired per tick for each speed tier. Normal fires a single
-// purchase per tick. Crazy and Turbo retain their legacy multi-contract
+// Purchases fired per tick for each speed tier. Normal and Turbo fire a
+// single purchase per live tick. Crazy retains its legacy multi-contract
 // fan-out when explicitly selected. Fast Execution is deliberately different:
 // it is a latency preset, not a volume preset, so it always allows exactly
 // one purchase per tick.
 export const SPEED_PURCHASES_PER_TICK: Record<ExecutionSpeed, number> = {
     normal: 1,
     crazy: 5,
-    turbo: 10,
+    turbo: 1,
 };
 const FAST_EXEC_PURCHASES_PER_TICK = 1; // individual contracts — no bulk side-fires
 
