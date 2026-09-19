@@ -105,26 +105,24 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
     const stakeVariable = variableName('stake');
     const baseStakeVariable = variableName('base stake');
     const recoveryStateDeclaration = isRecoveryStakeBot && stakeVariable && baseStakeVariable
-        ? 'var kingFisherRecoveryStake = 0; var kingFisherRecoveryRunsRemaining = 0;'
+        ? 'var kingFisherRecoveryStake = 0; var kingFisherRecoveryCarryWins = 0;'
         : '';
     const recoveryStakeCode = isRecoveryStakeBot && stakeVariable && baseStakeVariable
         ? `
         // Over 2 and Under 7 keep the recovered martingale stake for three
-        // runs after the recovery trade wins. A new loss starts a new recovery.
+        // additional trades after the recovery trade wins. A new loss starts
+        // a new recovery and replaces the carried stake.
         if (Bot.isResult("win")) {
             if (kingFisherRecoveryStake > 0) {
-                if (kingFisherRecoveryRunsRemaining === 0) {
-                    ${stakeVariable} = kingFisherRecoveryStake;
-                    kingFisherRecoveryRunsRemaining = 3;
+                if (kingFisherRecoveryCarryWins === 0) {
+                    kingFisherRecoveryCarryWins = 3;
                 } else {
-                    kingFisherRecoveryRunsRemaining -= 1;
-                    if (kingFisherRecoveryRunsRemaining === 0) {
-                        kingFisherRecoveryStake = 0;
-                        ${stakeVariable} = ${baseStakeVariable};
-                    } else {
-                        ${stakeVariable} = kingFisherRecoveryStake;
-                    }
+                    kingFisherRecoveryCarryWins -= 1;
                 }
+                ${stakeVariable} = kingFisherRecoveryCarryWins > 0
+                    ? kingFisherRecoveryStake
+                    : ${baseStakeVariable};
+                if (kingFisherRecoveryCarryWins === 0) kingFisherRecoveryStake = 0;
             } else {
                 ${stakeVariable} = ${baseStakeVariable};
             }
@@ -132,7 +130,7 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
             kingFisherRecoveryStake = Number(${stakeVariable}) > 0
                 ? Number(${stakeVariable})
                 : Number(${baseStakeVariable});
-            kingFisherRecoveryRunsRemaining = 0;
+            kingFisherRecoveryCarryWins = 0;
         }`
         : '';
     let riskGuard = '';

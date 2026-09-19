@@ -306,16 +306,24 @@ class DBot {
                         ?.find(block => block.type === 'trade_definition_tradeoptions');
                     const predictionBlock = tradeOptionsBlock?.getInputTargetBlock?.('PREDICTION');
                     const barrier = Number(predictionBlock?.getFieldValue?.('NUM'));
-                    const scanBarrier = Number.isFinite(barrier) ? barrier : 5;
+                    const hasValidBarrier = Number.isInteger(barrier) && barrier >= 0 && barrier <= 9;
                     let result = null;
-                    try {
-                        result = await scanKingFisherMarket(direction, scanBarrier);
-                    } catch (scanError) {
+                    if (!hasValidBarrier) {
                         dispatchBrowserEvent('journal:signal', {
                             type: 'SCAN',
                             label: 'BEST MARKET SCAN FAILED',
-                            detail: scanError?.message || 'Using the manually selected King Fisher market.',
+                            detail: 'The King Fisher contract must have a fixed digit barrier from 0 to 9. Using the manually selected market.',
                         });
+                    } else {
+                        try {
+                            result = await scanKingFisherMarket(direction, barrier);
+                        } catch (scanError) {
+                            dispatchBrowserEvent('journal:signal', {
+                                type: 'SCAN',
+                                label: 'BEST MARKET SCAN FAILED',
+                                detail: scanError?.message || 'Using the manually selected King Fisher market.',
+                            });
+                        }
                     }
                     if (result) {
                         marketBlock.setFieldValue(result.market, 'MARKET_LIST');
@@ -328,7 +336,7 @@ class DBot {
                             lastDigit: result.lastDigit,
                             score: result.score,
                             direction,
-                            barrier: scanBarrier,
+                            barrier,
                         };
                         dispatchBrowserEvent('king-fisher:best-market', detail);
                         dispatchBrowserEvent('journal:signal', {

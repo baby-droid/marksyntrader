@@ -41,13 +41,11 @@ const getLastDigit = (price: unknown, pipSize: number) => {
     return Number(formatted[formatted.length - 1]);
 };
 
-const scoreMarket = (
-    prices: unknown[],
+export const scoreKingFisherDigits = (
+    digits: number[],
     direction: KingFisherDirection,
     barrier: number,
-    pipSize: number
 ): Omit<KingFisherMarket, 'symbol' | 'label' | 'market' | 'submarket' | 'group'> => {
-    const digits = prices.map(price => getLastDigit(price, pipSize)).filter((digit): digit is number => digit !== null);
     const qualifies = (digit: number) => direction === 'BELOW'
         ? digit > barrier
         : digit < barrier;
@@ -75,10 +73,26 @@ const scoreMarket = (
     };
 };
 
+const scoreMarket = (
+    prices: unknown[],
+    direction: KingFisherDirection,
+    barrier: number,
+    pipSize: number
+): Omit<KingFisherMarket, 'symbol' | 'label' | 'market' | 'submarket' | 'group'> => {
+    const digits = prices
+        .map(price => getLastDigit(price, pipSize))
+        .filter((digit): digit is number => digit !== null);
+    return scoreKingFisherDigits(digits, direction, barrier);
+};
+
 export const scanKingFisherMarket = async (
     direction: KingFisherDirection,
-    barrier = 5,
+    barrier: number,
 ): Promise<KingFisherMarket | null> => {
+    if (!Number.isInteger(barrier) || barrier < 0 || barrier > 9) {
+        throw new Error(`King Fisher requires a digit barrier from 0 to 9; received "${barrier}".`);
+    }
+
     const api = api_base.api as any;
     if (!api) throw new Error('The authenticated market connection is not ready yet.');
 

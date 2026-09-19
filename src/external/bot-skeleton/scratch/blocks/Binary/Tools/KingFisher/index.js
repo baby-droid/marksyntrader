@@ -21,7 +21,18 @@ window.Blockly.Blocks.king_fisher_entry = {
                 {
                     type: 'field_dropdown',
                     name: 'THRESHOLD',
-                    options: [['3', '3'], ['4', '4'], ['5', '5'], ['6', '6']],
+                    options: [
+                        ['0', '0'],
+                        ['1', '1'],
+                        ['2', '2'],
+                        ['3', '3'],
+                        ['4', '4'],
+                        ['5', '5'],
+                        ['6', '6'],
+                        ['7', '7'],
+                        ['8', '8'],
+                        ['9', '9'],
+                    ],
                 },
                 {
                     type: 'field_dropdown',
