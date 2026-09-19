@@ -300,10 +300,16 @@ class DBot {
                 const contractBlock = this.workspace?.getAllBlocks?.(false)
                     ?.find(block => block.type === 'trade_definition_contracttype');
                 if (marketBlock && contractBlock) {
-                    const direction = contractBlock.getFieldValue('TYPE_LIST') === 'DIGITUNDER' ? 'ABOVE' : 'BELOW';
+                    const contractType = contractBlock.getFieldValue('TYPE_LIST');
+                    const direction = contractType === 'DIGITUNDER' ? 'ABOVE' : 'BELOW';
+                    const tradeOptionsBlock = this.workspace?.getAllBlocks?.(false)
+                        ?.find(block => block.type === 'trade_definition_tradeoptions');
+                    const predictionBlock = tradeOptionsBlock?.getInputTargetBlock?.('PREDICTION');
+                    const barrier = Number(predictionBlock?.getFieldValue?.('NUM'));
+                    const scanBarrier = Number.isFinite(barrier) ? barrier : 5;
                     let result = null;
                     try {
-                        result = await scanKingFisherMarket(direction);
+                        result = await scanKingFisherMarket(direction, scanBarrier);
                     } catch (scanError) {
                         dispatchBrowserEvent('journal:signal', {
                             type: 'SCAN',
@@ -322,6 +328,7 @@ class DBot {
                             lastDigit: result.lastDigit,
                             score: result.score,
                             direction,
+                            barrier: scanBarrier,
                         };
                         dispatchBrowserEvent('king-fisher:best-market', detail);
                         dispatchBrowserEvent('journal:signal', {

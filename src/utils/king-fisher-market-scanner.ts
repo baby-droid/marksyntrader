@@ -44,10 +44,13 @@ const getLastDigit = (price: unknown, pipSize: number) => {
 const scoreMarket = (
     prices: unknown[],
     direction: KingFisherDirection,
+    barrier: number,
     pipSize: number
 ): Omit<KingFisherMarket, 'symbol' | 'label' | 'market' | 'submarket' | 'group'> => {
     const digits = prices.map(price => getLastDigit(price, pipSize)).filter((digit): digit is number => digit !== null);
-    const qualifies = (digit: number) => (direction === 'BELOW' ? digit < 5 : digit > 5);
+    const qualifies = (digit: number) => direction === 'BELOW'
+        ? digit > barrier
+        : digit < barrier;
     let currentStreak = 0;
     let longestStreak = 0;
     let qualifyingTicks = 0;
@@ -72,7 +75,10 @@ const scoreMarket = (
     };
 };
 
-export const scanKingFisherMarket = async (direction: KingFisherDirection): Promise<KingFisherMarket | null> => {
+export const scanKingFisherMarket = async (
+    direction: KingFisherDirection,
+    barrier = 5,
+): Promise<KingFisherMarket | null> => {
     const api = api_base.api as any;
     if (!api) throw new Error('The authenticated market connection is not ready yet.');
 
@@ -88,7 +94,7 @@ export const scanKingFisherMarket = async (direction: KingFisherDirection): Prom
             if (!Array.isArray(prices) || prices.length < 20) {
                 throw new Error(`No tick history was returned for ${market.label}.`);
             }
-            return { ...market, ...scoreMarket(prices, direction, market.pipSize) };
+            return { ...market, ...scoreMarket(prices, direction, barrier, market.pipSize) };
         })
     )).flatMap(result => result.status === 'fulfilled' ? [result.value] : []);
 

@@ -27,9 +27,13 @@ window.Blockly.Blocks.king_fisher_entry = {
                     type: 'field_dropdown',
                     name: 'STREAK',
                     options: [
+                        [localize('exactly 1'), '1'],
+                        [localize('1 or 2'), '1_2'],
                         [localize('2 or 3'), '2_3'],
                         [localize('exactly 2'), '2'],
                         [localize('exactly 3'), '3'],
+                        [localize('3 or 4'), '3_4'],
+                        [localize('exactly 4'), '4'],
                     ],
                 },
             ],
@@ -46,7 +50,7 @@ window.Blockly.Blocks.king_fisher_entry = {
         return {
             display_name: localize('King Fisher entry'),
             description: localize(
-                'Detects a 2- or 3-digit consecutive pattern below or above a configurable threshold.'
+                'Detects a configurable 1-, 2-, 3- or 4-digit consecutive pattern below or above a configurable threshold.'
             ),
         };
     },
@@ -72,12 +76,16 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_entry = block
         '    var qualifies = direction === "above" ? digit > threshold : digit < threshold;',
         '    state.streak = qualifies ? state.streak + 1 : 0;',
         '    state.digits.push(digit);',
-        '    if (state.digits.length > 3) state.digits.shift();',
+        '    if (state.digits.length > 4) state.digits.shift();',
         '    if (typeof Bot.emitMarketDigit === "function") Bot.emitMarketDigit({ symbol: Bot.getSymbol(), digit: digit, epoch: tick.epoch });',
-        '    if (typeof Bot.emitKingFisherAnalysis === "function") Bot.emitKingFisherAnalysis({ symbol: Bot.getSymbol(), digit: digit, sequence: state.digits.join(","), threshold: threshold, direction: direction, streak: state.streak, met: (streakMode === "2" ? state.streak === 2 : streakMode === "3" ? state.streak === 3 : (state.streak === 2 || state.streak === 3)) });',
+        '    if (typeof Bot.emitKingFisherAnalysis === "function") Bot.emitKingFisherAnalysis({ symbol: Bot.getSymbol(), digit: digit, sequence: state.digits.join(","), threshold: threshold, direction: direction, streak: state.streak, met: (streakMode === "1" ? state.streak === 1 : streakMode === "1_2" ? (state.streak === 1 || state.streak === 2) : streakMode === "2" ? state.streak === 2 : streakMode === "3" ? state.streak === 3 : streakMode === "3_4" ? (state.streak === 3 || state.streak === 4) : streakMode === "4" ? state.streak === 4 : (state.streak === 2 || state.streak === 3)) });',
         '  }',
+        '  if (streakMode === "1") return state.streak === 1;',
+        '  if (streakMode === "1_2") return state.streak === 1 || state.streak === 2;',
         '  if (streakMode === "2") return state.streak === 2;',
         '  if (streakMode === "3") return state.streak === 3;',
+        '  if (streakMode === "3_4") return state.streak === 3 || state.streak === 4;',
+        '  if (streakMode === "4") return state.streak === 4;',
         '  return state.streak === 2 || state.streak === 3;',
         '}',
     ]);

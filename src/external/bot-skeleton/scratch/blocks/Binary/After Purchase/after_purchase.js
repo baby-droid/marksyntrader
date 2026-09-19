@@ -85,6 +85,56 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
     const hasKingFisherRestartGuard = workspaceBlocks.some(candidate =>
         candidate.type === 'king_fisher_restart_trade'
     );
+    const variableName = variableNameText => {
+        const variable = block.workspace?.getVariableMap?.()
+            ?.getVariables?.()
+            ?.find(candidate => candidate.name === variableNameText);
+        return variable
+            ? window.Blockly.JavaScript.variableDB_.getName(
+                variable.getId(),
+                window.Blockly.Variables.CATEGORY_NAME
+            )
+            : null;
+    };
+    const tradeOptionsBlock = workspaceBlocks.find(
+        candidate => candidate.type === 'trade_definition_tradeoptions'
+    );
+    const predictionBlock = tradeOptionsBlock?.getInputTargetBlock?.('PREDICTION');
+    const contractBarrier = Number(predictionBlock?.getFieldValue?.('NUM'));
+    const isRecoveryStakeBot = isKingFisher && (contractBarrier === 2 || contractBarrier === 7);
+    const stakeVariable = variableName('stake');
+    const baseStakeVariable = variableName('base stake');
+    const recoveryStateDeclaration = isRecoveryStakeBot && stakeVariable && baseStakeVariable
+        ? 'var kingFisherRecoveryStake = 0; var kingFisherRecoveryRunsRemaining = 0;'
+        : '';
+    const recoveryStakeCode = isRecoveryStakeBot && stakeVariable && baseStakeVariable
+        ? `
+        // Over 2 and Under 7 keep the recovered martingale stake for three
+        // runs after the recovery trade wins. A new loss starts a new recovery.
+        if (Bot.isResult("win")) {
+            if (kingFisherRecoveryStake > 0) {
+                if (kingFisherRecoveryRunsRemaining === 0) {
+                    ${stakeVariable} = kingFisherRecoveryStake;
+                    kingFisherRecoveryRunsRemaining = 3;
+                } else {
+                    kingFisherRecoveryRunsRemaining -= 1;
+                    if (kingFisherRecoveryRunsRemaining === 0) {
+                        kingFisherRecoveryStake = 0;
+                        ${stakeVariable} = ${baseStakeVariable};
+                    } else {
+                        ${stakeVariable} = kingFisherRecoveryStake;
+                    }
+                }
+            } else {
+                ${stakeVariable} = ${baseStakeVariable};
+            }
+        } else {
+            kingFisherRecoveryStake = Number(${stakeVariable}) > 0
+                ? Number(${stakeVariable})
+                : Number(${baseStakeVariable});
+            kingFisherRecoveryRunsRemaining = 0;
+        }`
+        : '';
     let riskGuard = '';
     if (isKingFisher && !hasKingFisherRestartGuard) {
         const takeProfitBlock = workspaceBlocks.find(
@@ -114,11 +164,12 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
     const continuation = isKingFisher
         ? 'if (typeof Bot.shouldRescanKingFisher === "function" && Bot.shouldRescanKingFisher()) return false; Bot.isTradeAgain(true); return true;'
         : 'Bot.isTradeAgain(false); return false;';
-    const code = `
+    const code = `${recoveryStateDeclaration}
     BinaryBotPrivateAfterPurchase = function BinaryBotPrivateAfterPurchase() {
         Bot.highlightBlock('${block.id}');
         ${stack}
         ${riskGuard}
+        ${recoveryStakeCode}
         ${continuation}
     };`;
     return code;
