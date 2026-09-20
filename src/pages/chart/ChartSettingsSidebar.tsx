@@ -80,8 +80,8 @@ const ChartSettingsSidebar: React.FC = () => {
         badge?: string;
     }> = [
         { id: 'chart', label: 'Chart type and time interval', icon: <IconChart />, badge: intervalLabel },
-        { id: 'indicators', label: 'Indicators', icon: <IconIndicators /> },
         { id: 'drawing', label: 'Drawing tools and lines', icon: <IconDrawing /> },
+        { id: 'indicators', label: 'Indicators', icon: <IconIndicators /> },
         { id: 'download', label: 'Download and share chart', icon: <IconDownload /> },
     ];
 

@@ -14,11 +14,11 @@
         top: auto !important;
         right: auto !important;
         bottom: 20px !important;
-        left: 16px !important;
+        left: 10px !important;
         display: flex !important;
         flex-direction: column !important;
         align-items: flex-start !important;
-        gap: 8px;
+        gap: 7px;
         width: 40px !important;
         min-width: 40px !important;
         max-width: 40px !important;
@@ -112,8 +112,8 @@
 @media (max-width: 767px) {
     .chart-settings-sidebar__rail {
         bottom: 16px;
-        left: 16px;
-        gap: 8px;
+        left: 10px;
+        gap: 7px;
     }
 
     .chart-settings-sidebar__tool {
