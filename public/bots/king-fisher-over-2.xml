@@ -81,7 +81,7 @@
   <block type="before_purchase" id="kf2_before" x="20" y="900">
     <statement name="BEFOREPURCHASE_STACK">
       <block type="controls_if" id="kf2_gate">
-        <value name="IF0"><block type="king_fisher_virtual_hook" id="kf2_hook"><field name="ENABLED">TRUE</field><field name="CONFIRMATIONS">1</field><value name="SIGNAL"><block type="king_fisher_entry" id="kf2_hook_entry"><field name="DIRECTION">BELOW</field><field name="THRESHOLD">3</field><field name="STREAK">2_3</field></block></value></block></value>
+        <value name="IF0"><block type="king_fisher_virtual_hook" id="kf2_hook"><field name="ENABLED">TRUE</field><field name="CONFIRMATIONS">1</field><field name="RESULT">LOSS</field><value name="SIGNAL"><block type="king_fisher_entry" id="kf2_hook_entry"><field name="DIRECTION">BELOW</field><field name="THRESHOLD">3</field><field name="STREAK">2_3</field></block></value></block></value>
         <statement name="DO0"><block type="purchase" id="kf2_buy"><field name="PURCHASE_LIST">DIGITOVER</field></block></statement>
       </block>
     </statement>

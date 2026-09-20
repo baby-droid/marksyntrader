@@ -104,6 +104,7 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
     const isRecoveryStakeBot = isKingFisher && (contractBarrier === 2 || contractBarrier === 7);
     const stakeVariable = variableName('stake');
     const baseStakeVariable = variableName('base stake');
+    const martingaleVariable = variableName('martingale');
     const recoveryStateDeclaration = isRecoveryStakeBot && stakeVariable && baseStakeVariable
         ? 'var kingFisherRecoveryStake = 0; var kingFisherRecoveryCarryWins = 0;'
         : '';
@@ -131,6 +132,25 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
                 ? Number(${stakeVariable})
                 : Number(${baseStakeVariable});
             kingFisherRecoveryCarryWins = 0;
+        }`
+        : '';
+    const kingFisherStakeSnapshot = isKingFisher && stakeVariable
+        ? `var kingFisherSettledStake = Number(${stakeVariable});`
+        : '';
+    const kingFisherStakeHandoff = isKingFisher && stakeVariable && baseStakeVariable && martingaleVariable
+        ? `
+        /*
+         * King Fisher owns the next purchase stake at settlement time. The
+         * XML result blocks remain visible/editable in the workspace, while
+         * this handoff is the runtime guard that makes a loss always carry
+         * the configured multiplier into the following real contract.
+         * Over 2 and Under 7 retain their recovery-win carry logic below.
+         */
+        if (!Bot.isResult("win") && !(${isRecoveryStakeBot ? 'true' : 'false'}) &&
+            (!(Number(${stakeVariable}) > Number(kingFisherSettledStake) && Number(kingFisherSettledStake) > 0))) {
+            ${stakeVariable} = Number(kingFisherSettledStake) > 0
+                ? Number(kingFisherSettledStake) * Number(${martingaleVariable})
+                : Number(${baseStakeVariable}) * Number(${martingaleVariable});
         }`
         : '';
     let riskGuard = '';
@@ -165,8 +185,10 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
     const code = `${recoveryStateDeclaration}
     BinaryBotPrivateAfterPurchase = function BinaryBotPrivateAfterPurchase() {
         Bot.highlightBlock('${block.id}');
+        ${kingFisherStakeSnapshot}
         ${stack}
         ${riskGuard}
+        ${kingFisherStakeHandoff}
         ${recoveryStakeCode}
         ${continuation}
     };`;

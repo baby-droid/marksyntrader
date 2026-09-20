@@ -7,4 +7,4 @@ Market-data panels that are part of the logged-in trading app must use `api_base
 
 **Why:** Separate public sockets can appear connected while bypassing the app's token/account lifecycle, so history and live tick data remain empty or become stale after a user authorizes a token.
 
-**How to apply:** Wait/retry until the shared API is open, request history through `api_base.api.send`, subscribe through `api_base.api.subscribe`, and send `forget` plus unsubscribe on market changes, account changes, and unmount. Capture live `tick.pip_size` before calculating digit statistics.
+**How to apply:** Wait/retry until the shared API is open, request history through `api_base.api.send`, subscribe through `api_base.api.subscribe`, and unsubscribe on market changes, account changes, and unmount. The RxJS subscription owns the matching server-side forget; do not send a second manual forget. Capture live `tick.pip_size` before calculating digit statistics.

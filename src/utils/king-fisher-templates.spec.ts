@@ -41,6 +41,8 @@ describe('King Fisher virtual-hook purchase gate', () => {
         expect(source).toContain('purchaseAuthorized: false');
         expect(source).toContain('if (state.purchaseAuthorized)');
         expect(source).toContain('state.purchaseAuthorized = true;');
+        expect(source).toContain('state.purchaseAuthorizationEpoch = tick.epoch;');
+        expect(source).toContain('hookType: result === "won" ? "HOOK PROFIT" : "HOOK LOSS"');
         expect(source).toContain('state.confirmations = 0;');
         expect(source).toMatch(
             /if \(state\.purchaseAuthorized\) \{[\s\S]*?state\.purchaseAuthorized = false;[\s\S]*?return true;/,
@@ -48,6 +50,20 @@ describe('King Fisher virtual-hook purchase gate', () => {
         expect(source).toMatch(
             /state\.purchaseAuthorized = true;[\s\S]*?return false;/,
         );
+    });
+
+    it('keeps the runtime stake handoff behind the visible XML result blocks', () => {
+        const source = fs.readFileSync(
+            path.resolve(
+                __dirname,
+                '../external/bot-skeleton/scratch/blocks/Binary/After Purchase/after_purchase.js',
+            ),
+            'utf8',
+        );
+
+        expect(source).toContain('kingFisherSettledStake');
+        expect(source).toContain('Number(kingFisherSettledStake) * Number(${martingaleVariable})');
+        expect(source).toContain('Bot.isResult("win")');
     });
 
     it.each(['PROFIT', 'LOSS'])(
