@@ -430,7 +430,7 @@ const DigitPercentWidget: React.FC<{ showTrigger?: boolean }> = ({ showTrigger =
 
             {open && createPortal(
                 <div
-                    className={`digit-percent-widget__panel ${darkMode ? 'digit-percent-widget__panel--dark' : ''}`}
+                    className={`digit-percent-widget__panel ${darkMode ? 'digit-percent-widget__panel--dark' : 'digit-percent-widget__panel--light'}`}
                     ref={panelRef}
                     style={{ ...panelStyle, background: dmBg, borderColor: dmBd, color: dmText }}
                 >
@@ -449,18 +449,22 @@ const DigitPercentWidget: React.FC<{ showTrigger?: boolean }> = ({ showTrigger =
                         </span>
                         {/* Dark / Light toggle */}
                         <button
-                            className='digit-percent-widget__close-btn'
-                            style={darkMode ? { borderColor: dmBd, color: '#94a3b8', background: dmSec } : undefined}
+                            type='button'
+                            className='digit-percent-widget__theme-btn'
+                            onPointerDown={e => e.stopPropagation()}
                             onClick={e => { e.stopPropagation(); setDarkMode(d => !d); }}
                             title={darkMode ? 'Switch to Light mode' : 'Switch to Dark mode'}
+                            aria-label={darkMode ? 'Switch to Light mode' : 'Switch to Dark mode'}
                         >
                             {darkMode ? '☀' : '🌙'}
                         </button>
                         <button
+                            type='button'
                             className='digit-percent-widget__close-btn'
-                            style={darkMode ? { borderColor: dmBd, color: '#94a3b8', background: dmSec } : undefined}
-                            onClick={() => setOpen(false)}
+                            onPointerDown={e => e.stopPropagation()}
+                            onClick={e => { e.stopPropagation(); setOpen(false); }}
                             title='Close'
+                            aria-label='Close Digit % Analyzer'
                         >✕</button>
                     </div>
 
