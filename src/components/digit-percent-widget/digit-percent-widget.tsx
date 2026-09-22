@@ -12,6 +12,7 @@ const MARKETS: { value: string; label: string; pipSize: number }[] = [
     { value: 'R_75',      label: 'Volatility 75 Index',       pipSize: 4 },
     { value: 'R_100',     label: 'Volatility 100 Index',      pipSize: 2 },
     { value: '1HZ10V',    label: 'Volatility 10 (1s) Index',  pipSize: 3 },
+    { value: '1HZ15V',    label: 'Volatility 15 (1s) Index',  pipSize: 3 },
     { value: '1HZ25V',    label: 'Volatility 25 (1s) Index',  pipSize: 2 },
     { value: '1HZ30V',    label: 'Volatility 30 (1s) Index',  pipSize: 3 },
     { value: '1HZ50V',    label: 'Volatility 50 (1s) Index',  pipSize: 4 },

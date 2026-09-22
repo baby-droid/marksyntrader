@@ -60,13 +60,13 @@
   </block>
   <block type="after_purchase" id="kf2_after" x="760" y="20">
     <statement name="AFTERPURCHASE_STACK">
-      <block type="king_fisher_restart_trade" id="kf2_guard"><value name="TAKE_PROFIT"><block type="variables_get" id="kf2_guard_tp"><field name="VAR" id="kf2_tp">take profit</field></block></value><value name="STOP_LOSS"><block type="variables_get" id="kf2_guard_sl"><field name="VAR" id="kf2_sl">stop loss</field></block></value><field name="MULTIPLIER">2</field><next><block type="controls_if" id="kf2_tp_if">
+      <block type="king_fisher_restart_trade" id="kf2_guard"><value name="TAKE_PROFIT"><block type="variables_get" id="kf2_guard_tp"><field name="VAR" id="kf2_tp">take profit</field></block></value><value name="STOP_LOSS"><block type="variables_get" id="kf2_guard_sl"><field name="VAR" id="kf2_sl">stop loss</field></block></value><field name="MULTIPLIER">2</field><next><block type="controls_if" id="kf2_tp_if"><mutation else="1"></mutation>
         <value name="IF0"><block type="logic_compare" id="kf2_tp_cmp"><field name="OP">GTE</field><value name="A"><block type="total_profit" id="kf2_profit"></block></value><value name="B"><block type="variables_get" id="kf2_tp_get"><field name="VAR" id="kf2_tp">take profit</field></block></value></block></value>
         <statement name="ELSE">
-          <block type="controls_if" id="kf2_sl_if">
+          <block type="controls_if" id="kf2_sl_if"><mutation else="1"></mutation>
             <value name="IF0"><block type="logic_compare" id="kf2_sl_cmp"><field name="OP">LTE</field><value name="A"><block type="total_profit" id="kf2_loss"></block></value><value name="B"><block type="math_single" id="kf2_neg"><field name="OP">NEG</field><value name="NUM"><block type="variables_get" id="kf2_sl_get"><field name="VAR" id="kf2_sl">stop loss</field></block></value></block></value></block></value>
             <statement name="ELSE">
-              <block type="controls_if" id="kf2_result">
+              <block type="controls_if" id="kf2_result"><mutation else="1"></mutation>
                 <value name="IF0"><block type="contract_check_result" id="kf2_win"><field name="CHECK_RESULT">win</field></block></value>
                 <statement name="DO0"><block type="variables_set" id="kf2_reset"><field name="VAR" id="kf2_stake">stake</field><value name="VALUE"><block type="variables_get" id="kf2_reset_value"><field name="VAR" id="kf2_base">base stake</field></block></value></block></statement>
                 <statement name="ELSE"><block type="variables_set" id="kf2_raise"><field name="VAR" id="kf2_stake">stake</field><value name="VALUE"><block type="math_arithmetic" id="kf2_multiply"><field name="OP">MULTIPLY</field><value name="A"><block type="variables_get" id="kf2_stake_get"><field name="VAR" id="kf2_stake">stake</field></block></value><value name="B"><block type="variables_get" id="kf2_mg_get"><field name="VAR" id="kf2_mg">martingale</field></block></value></block></value></block></statement>
