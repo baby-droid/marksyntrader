@@ -7,7 +7,13 @@ Hand-authored compact Blockly XML must close each child `value` or `statement` w
 
 **Why:** Inline nesting errors can leave the XML well-shaped enough to look plausible while Blockly rejects or silently drops parts of the bot during loading.
 
-**How to apply:** Parse every new or edited bot with an XML parser, verify the explicit block IDs are unique, and validate the copied `public` and `dist` files after the build.
+**How to apply:** Prefer multiline XML for new assets; parse every new or edited bot, verify explicit block IDs are unique, and validate copied `public` and `dist` files after the build.
+
+Compact hand-authored XML is especially prone to missing one closing `block` around the final item in an initialization `next` chain, or to closing a nested arithmetic block before its `value` wrapper.
+
+**Why:** These defects repeatedly survived visual inspection and only surfaced when a parser reached a later section of the asset.
+
+**How to apply:** Keep initialization and nested trade-definition chains expanded across lines, then run parser validation before relying on the application build.
 
 For digit bots, the Trade Parameters `TYPE_LIST` must be `both`; `DIGITODD` and `DIGITEVEN` belong in purchase blocks, not the trade-definition dropdown.
 

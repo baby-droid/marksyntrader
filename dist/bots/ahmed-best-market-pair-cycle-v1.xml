@@ -24,7 +24,7 @@
         <next><block type="variables_set" id="abmp1_i_base"><field name="VAR" id="abmp1_base">base_stake</field><value name="VALUE"><block type="math_number"><field name="NUM">1</field></block></value>
           <next><block type="variables_set" id="abmp1_i_mg"><field name="VAR" id="abmp1_mg">martingale</field><value name="VALUE"><block type="math_number"><field name="NUM">2</field></block></value>
             <next><block type="variables_set" id="abmp1_i_tp"><field name="VAR" id="abmp1_tp">take_profit</field><value name="VALUE"><block type="math_number"><field name="NUM">5</field></block></value>
-              <next><block type="variables_set" id="abmp1_i_sl"><field name="VAR" id="abmp1_sl">stop_loss</field><value name="VALUE"><block type="math_number"><field name="NUM">20</field></block></value></next>
+              <next><block type="variables_set" id="abmp1_i_sl"><field name="VAR" id="abmp1_sl">stop_loss</field><value name="VALUE"><block type="math_number"><field name="NUM">20</field></block></value></block></next>
             </block></next>
           </block></next>
         </block></next>
