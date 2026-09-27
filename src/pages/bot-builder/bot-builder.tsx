@@ -27,7 +27,7 @@ const FREE_BOTS_LIST = [
     // ── Signature bots (top of panel) ─────────────────────────────────────────
     { id: 'ahmed-differ-over-under-cycle-v1', name: 'AHMED DIFFER OVER/UNDER CYCLE V1', market: 'V50 1s', badge: 'DIFFER CYCLE', badgeColor: '#38bdf8', xmlFile: '/bots/ahmed-differ-over-under-cycle-v1.xml', icon: '🔁' },
     { id: 'ahmed-differ-recovery-cycle-v2', name: 'AHMED DIFFER RECOVERY CYCLE V2', market: 'V25 1s', badge: 'RECOVERY V2', badgeColor: '#fb7185', xmlFile: '/bots/ahmed-differ-recovery-cycle-v2.xml', icon: '⚡' },
-    { id: 'ahmed-best-market-pair-cycle-v1', name: 'AHMED BEST MARKET CYCLE V1', market: 'Best market', badge: 'CYCLE SCAN', badgeColor: '#34d399', xmlFile: '/bots/ahmed-best-market-pair-cycle-v1.xml', icon: '🧠' },
+    { id: 'ahmed-best-market-pair-cycle-v1', name: 'AHMED BEST MARKET 10-PHASE CYCLE V1', market: 'Best market', badge: 'CYCLE SCAN', badgeColor: '#34d399', xmlFile: '/bots/ahmed-best-market-pair-cycle-v1.xml', icon: '🧠' },
     { id: 'ahmed-best-market-pair-cycle-v2', name: 'AHMED BEST MARKET PAIR CYCLE V2', market: 'Best market', badge: 'PAIR CYCLE', badgeColor: '#a78bfa', xmlFile: '/bots/ahmed-best-market-pair-cycle-v2.xml', icon: '🔎' },
     { id: 'ahmed-killer-bot-myth-v1', name: 'AHMED KILLER BOT MYTH V1', market: 'Best market', badge: 'MYTH V1', badgeColor: '#f59e0b', xmlFile: '/bots/ahmed-killer-bot-myth-v1.xml', icon: '👑' },
     { id: 'under-cycle-auto', name: 'Under Cycle Auto', market: 'V50 1s', badge: 'UNDER CYCLE', badgeColor: '#38bdf8', xmlFile: '/bots/under-cycle-auto.xml', icon: '🔄' },
