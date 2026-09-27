@@ -106,6 +106,72 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_entry = block
     ];
 };
 
+window.Blockly.Blocks.king_fisher_bias_scan = {
+    init() {
+        this.jsonInit({
+            message0: localize('King Fisher bias scan: %1 %2-tick window'),
+            args0: [
+                {
+                    type: 'field_dropdown',
+                    name: 'DIRECTION',
+                    options: [
+                        [localize('bullish / high digits'), 'HIGH'],
+                        [localize('bearish / low digits'), 'LOW'],
+                    ],
+                },
+                {
+                    type: 'field_dropdown',
+                    name: 'WINDOW',
+                    options: [['10', '10'], ['20', '20']],
+                },
+            ],
+            output: 'Boolean',
+            outputShape: window.Blockly.OUTPUT_SHAPE_ROUND,
+            colour: '#22c55e',
+            tooltip: localize('Uses the latest 10 or 20 live digits and requires a 60% directional bias before entry.'),
+            helpUrl: '',
+        });
+    },
+    meta() {
+        return {
+            display_name: localize('10/20-Tick Bias Scan'),
+            description: localize('Gates an entry when the latest 10 or 20 ticks show a 60% high- or low-digit bias.'),
+        };
+    },
+    customContextMenu(menu) {
+        modifyContextMenu(menu);
+    },
+};
+
+window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_bias_scan = block => {
+    const direction = block.getFieldValue('DIRECTION') === 'LOW' ? 'LOW' : 'HIGH';
+    const windowSize = block.getFieldValue('WINDOW') === '20' ? 20 : 10;
+    const helperName = ensureHelper('kingFisherBiasScan', [
+        'var kingFisherBiasStates = {};',
+        `function ${generator().FUNCTION_NAME_PLACEHOLDER_}(key, direction, windowSize) {`,
+        '  var state = kingFisherBiasStates[key] || (kingFisherBiasStates[key] = { lastEpoch: null, digits: [] });',
+        '  var tick = Bot.getLastTick(true);',
+        '  if (!tick || tick.epoch == null) return false;',
+        '  if (tick.epoch !== state.lastEpoch) {',
+        '    state.lastEpoch = tick.epoch;',
+        '    var digit = Number(Bot.getLastDigit());',
+        '    if (digit === digit && digit >= 0 && digit <= 9) state.digits.push(digit);',
+        '    while (state.digits.length > windowSize) state.digits.shift();',
+        '    if (typeof Bot.emitMarketDigit === "function") Bot.emitMarketDigit({ symbol: Bot.getSymbol(), digit: digit, epoch: tick.epoch });',
+        '  }',
+        '  if (state.digits.length < windowSize) return false;',
+        '  var qualifying = 0;',
+        '  for (var i = 0; i < state.digits.length; i += 1) {',
+        '    if (direction === "HIGH" ? state.digits[i] >= 5 : state.digits[i] <= 4) qualifying += 1;',
+        '  }',
+        '  var ratio = qualifying / state.digits.length;',
+        '  if (typeof Bot.emitKingFisherAnalysis === "function") Bot.emitKingFisherAnalysis({ symbol: Bot.getSymbol(), direction: direction, window: windowSize, qualifying: qualifying, ratio: ratio, biasMet: ratio >= 0.6 });',
+        '  return ratio >= 0.6;',
+        '}',
+    ]);
+    return [`${helperName}('${block.id}', '${direction}', ${windowSize})`, generator().ORDER_FUNCTION_CALL];
+};
+
 window.Blockly.Blocks.king_fisher_best_market_scanner = {
     init() {
         this.jsonInit({

@@ -13,6 +13,51 @@ import './free-bots.scss';
 
 const FREE_BOTS = [
   {
+    id: 'ahmed-differ-over-under-cycle-v1',
+    name: 'AHMED DIFFER OVER/UNDER CYCLE V1',
+    description: '🔁 DIFFERS 9 → OVER 3 → OVER 2 → OVER 0 → OVER 1 → DIFFERS 9 → UNDER 6 → UNDER 9 → UNDER 7 → UNDER 8. Losses switch into Even/Odd recovery.',
+    category: 'Cycle', market: 'V50 1s', type: 'Multi-Strategy', prediction: '10-PHASE',
+    xmlFile: '/bots/ahmed-differ-over-under-cycle-v1.xml',
+    badge: 'DIFFER CYCLE', badgeColor: '#38bdf8', icon: '🔁', winRate: '—',
+    theme: 'ahmed-differ-cycle', artwork: '/bot-art/ahmed-cycle.png', artworkPosition: 'banner',
+  },
+  {
+    id: 'ahmed-differ-recovery-cycle-v2',
+    name: 'AHMED DIFFER RECOVERY CYCLE V2',
+    description: '⚡ DIFFERS 0 → OVER 1 → OVER 2 → OVER 3 → DIFFERS 4 → UNDER 6 → UNDER 7 → UNDER 8 → UNDER 9, with parity recovery after a loss.',
+    category: 'Cycle', market: 'V25 1s', type: 'Multi-Strategy', prediction: '9-PHASE',
+    xmlFile: '/bots/ahmed-differ-recovery-cycle-v2.xml',
+    badge: 'RECOVERY V2', badgeColor: '#fb7185', icon: '⚡', winRate: '—',
+    theme: 'ahmed-recovery-cycle', artwork: '/bot-art/ahmed-pairs.png', artworkPosition: 'side',
+  },
+  {
+    id: 'ahmed-best-market-pair-cycle-v1',
+    name: 'AHMED BEST MARKET PAIR CYCLE V1',
+    description: '🧠 Scans plain, 1s, Jump, Bear and Bull markets, then chooses a paired Over + Under entry from a live 10-tick bias.',
+    category: 'Scanner', market: 'Best market', type: 'Paired DIGIT', prediction: '10-TICK',
+    xmlFile: '/bots/ahmed-best-market-pair-cycle-v1.xml',
+    badge: 'PAIR SCAN', badgeColor: '#34d399', icon: '🧠', winRate: '—',
+    theme: 'ahmed-pair-scan', artwork: '/bot-art/ahmed-cycle.png', artworkPosition: 'side',
+  },
+  {
+    id: 'ahmed-best-market-pair-cycle-v2',
+    name: 'AHMED BEST MARKET PAIR CYCLE V2',
+    description: '🔎 Best-market selector with paired Under + Over contracts and a 20-tick low-digit bias route. Journal records each market scan.',
+    category: 'Scanner', market: 'Best market', type: 'Paired DIGIT', prediction: '20-TICK',
+    xmlFile: '/bots/ahmed-best-market-pair-cycle-v2.xml',
+    badge: 'PAIR CYCLE', badgeColor: '#a78bfa', icon: '🔎', winRate: '—',
+    theme: 'ahmed-pair-cycle', artwork: '/bot-art/ahmed-pairs.png', artworkPosition: 'banner',
+  },
+  {
+    id: 'ahmed-killer-bot-myth-v1',
+    name: 'AHMED KILLER BOT MYTH V1',
+    description: '👑 Best-market scan plus 10/20-tick bias routing into paired Over/Differs or Under/Differs contracts. Includes stake, martingale, TP and SL.',
+    category: 'Scanner', market: 'Best market', type: 'Paired DIGIT', prediction: '10/20-TICK',
+    xmlFile: '/bots/ahmed-killer-bot-myth-v1.xml',
+    badge: 'MYTH V1', badgeColor: '#f59e0b', icon: '👑', winRate: '—',
+    theme: 'ahmed-myth', artwork: '/bot-art/ahmed-pairs.png', artworkPosition: 'side',
+  },
+  {
     id: 'under-cycle-auto',
     name: 'Under Cycle Auto',
     description: '🔁 DIFFERS 9 → UNDER 9 → UNDER 8 → UNDER 7 → DIFFERS 0 → OVER 0 → OVER 1 → OVER 2. After a loss, waits for 2 consecutive evens or odds and buys the matching recovery contract.',
@@ -813,6 +858,12 @@ const FreeBots = observer(() => {
             style={{ '--accent': bot.badgeColor } as React.CSSProperties}
           >
             <div className='free-bots__card-glow' />
+            {bot.artwork && (
+              <div className={`free-bots__artwork free-bots__artwork--${bot.artworkPosition || 'banner'}`}>
+                <img src={bot.artwork} alt={`${bot.name} strategy artwork`} loading='lazy' />
+                <span className='free-bots__artwork-label'>AHMED SYN</span>
+              </div>
+            )}
             <div className='free-bots__card-top'>
               <div className='free-bots__card-icon-ring'>
                 <div className='free-bots__card-icon'>{bot.icon}</div>
