@@ -172,6 +172,62 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_bias_scan = b
     return [`${helperName}('${block.id}', '${direction}', ${windowSize})`, generator().ORDER_FUNCTION_CALL];
 };
 
+window.Blockly.Blocks.king_fisher_pair_purchase = {
+    init() {
+        const contractOptions = [
+            [localize('None'), 'NONE'],
+            [localize('Over'), 'DIGITOVER'],
+            [localize('Under'), 'DIGITUNDER'],
+            [localize('Even'), 'DIGITEVEN'],
+            [localize('Odd'), 'DIGITODD'],
+            [localize('Differs'), 'DIGITDIFF'],
+        ];
+        const predictionOptions = [
+            [localize('None'), 'NONE'],
+            ...Array.from({ length: 10 }, (_, digit) => [String(digit), String(digit)]),
+        ];
+        this.jsonInit({
+            message0: localize('King Fisher pair: %1 %2 + %3 %4'),
+            args0: [
+                { type: 'field_dropdown', name: 'CONTRACT_1', options: contractOptions },
+                { type: 'field_dropdown', name: 'PREDICTION_1', options: predictionOptions },
+                { type: 'field_dropdown', name: 'CONTRACT_2', options: contractOptions },
+                { type: 'field_dropdown', name: 'PREDICTION_2', options: predictionOptions },
+            ],
+            previousStatement: null,
+            colour: '#f97316',
+            tooltip: localize('Buys two independent digit contracts with separate barriers on the same entry tick.'),
+            helpUrl: '',
+        });
+        this.setNextStatement(false);
+    },
+    meta() {
+        return {
+            display_name: localize('King Fisher pair purchase'),
+            description: localize('Buys two selected contracts with independent digit predictions.'),
+        };
+    },
+    customContextMenu(menu) {
+        modifyContextMenu(menu);
+    },
+};
+
+window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_pair_purchase = block => {
+    const specs = [1, 2]
+        .map(index => ({
+            contract: block.getFieldValue(`CONTRACT_${index}`),
+            prediction: block.getFieldValue(`PREDICTION_${index}`),
+        }))
+        .filter(({ contract }) => contract && contract !== 'NONE')
+        .map(({ contract, prediction }) => {
+            const predictionPart =
+                prediction && prediction !== 'NONE' ? `, prediction: ${Number(prediction)}` : '';
+            return `{ contract_type: ${JSON.stringify(contract)}, amount: stake${predictionPart}, dynamic: true }`;
+        });
+
+    return specs.length ? `Bot.purchaseMultiple([${specs.join(', ')}]);\n` : '';
+};
+
 window.Blockly.Blocks.king_fisher_best_market_scanner = {
     init() {
         this.jsonInit({
