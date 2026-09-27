@@ -1,5 +1,10 @@
 import fs from 'fs';
 import path from 'path';
+import { scoreKingFisherDigits } from './king-fisher-market-scanner';
+
+jest.mock('@/external/bot-skeleton', () => ({
+    api_base: { api: null },
+}));
 
 const templates = [
     { file: 'king-fisher-over-2.xml', contract: 'DIGITOVER', barrier: '2', threshold: '3' },
@@ -25,6 +30,24 @@ describe('King Fisher bundled templates', () => {
         expect(xml).toContain(`<field name="THRESHOLD">${template.threshold}</field>`);
         expect(xml).toContain('<block type="after_purchase"');
         expect(xml).toContain('<block type="trade_again"');
+    });
+});
+
+describe('King Fisher market scoring', () => {
+    it('scores low-digit streaks for BELOW entries', () => {
+        const result = scoreKingFisherDigits([1, 2, 0, 8], 'BELOW', 3);
+
+        expect(result.longestStreak).toBe(3);
+        expect(result.qualifyingTicks).toBe(3);
+        expect(result.lastDigit).toBe(8);
+    });
+
+    it('scores high-digit streaks for ABOVE entries', () => {
+        const result = scoreKingFisherDigits([7, 8, 9, 2], 'ABOVE', 6);
+
+        expect(result.longestStreak).toBe(3);
+        expect(result.qualifyingTicks).toBe(3);
+        expect(result.lastDigit).toBe(2);
     });
 });
 

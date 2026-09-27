@@ -2,7 +2,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import classNames from 'classnames';
 import { observer } from 'mobx-react-lite';
-import { load, save_types } from '@/external/bot-skeleton';
+import { load, registerXmlBlockFallbacks, save_types } from '@/external/bot-skeleton';
 import { botNotification } from '@/components/bot-notification/bot-notification';
 import { notification_message } from '@/components/bot-notification/bot-notification-utils';
 import { useStore } from '@/hooks/useStore';
@@ -113,42 +113,16 @@ const FreeBotsSidePanel: React.FC<TFreeBotsPanelProps> = ({ onClose, onLoadDone 
         }
 
         // ── Unsupported-block guard ──────────────────────────────────────────
-        // Pre-scan the XML for block types not registered in the current Blockly
-        // instance. Register a coloured "Unsupported" dummy for each missing type
-        // so Blockly renders a placeholder instead of silently deleting the block.
+        // Use the same connection-aware fallback as the core loader. A Blockly
+        // block cannot expose output and statement connections simultaneously.
         try {
             const Blockly = (window as any).Blockly;
             if (Blockly?.Blocks && block_string) {
                 const parser = new DOMParser();
                 const xmlDoc = parser.parseFromString(block_string, 'text/xml');
-                const blockEls = xmlDoc.querySelectorAll('block');
-                const missingTypes = new Set<string>();
-                blockEls.forEach(el => {
-                    const type = el.getAttribute('type');
-                    if (type && !Blockly.Blocks[type]) missingTypes.add(type);
-                });
-                missingTypes.forEach(type => {
-                    Blockly.Blocks[type] = {
-                        init(this: any) {
-                            this.jsonInit({
-                                message0: `⚠ Unsupported: ${type}`,
-                                colour: '#555',
-                                tooltip: `Block type "${type}" is not available in this workspace. It was loaded from an external bot file.`,
-                                helpUrl: '',
-                            });
-                            this.setOutput(true);
-                            this.setPreviousStatement(true);
-                            this.setNextStatement(true);
-                        },
-                    };
-                    const generator = Blockly.JavaScript?.javascriptGenerator;
-                    if (generator && !generator.forBlock[type]) {
-                        generator.forBlock[type] = (block: any) =>
-                            block.outputConnection ? ['0', generator.ORDER_ATOMIC] : '';
-                    }
-                });
-                if (missingTypes.size > 0) {
-                    console.info(`[Bot Loader] Registered ${missingTypes.size} unsupported-block placeholder(s):`, [...missingTypes]);
+                const missingTypes = registerXmlBlockFallbacks(xmlDoc, Blockly);
+                if (missingTypes.length > 0) {
+                    console.info(`[Bot Loader] Registered ${missingTypes.length} unsupported-block placeholder(s):`, missingTypes);
                 }
             }
         } catch (e) {

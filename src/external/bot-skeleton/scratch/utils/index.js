@@ -163,6 +163,69 @@ export const save = (filename = '@deriv/bot', collection = false, xmlDom) => {
 
 const delayExecution = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+/**
+ * Register safe Blockly definitions for custom block types that are present in
+ * imported XML but are not available in this build.
+ *
+ * Blockly rejects blocks that expose both an output connection and
+ * previous/next statement connections. The old fallback did exactly that,
+ * which made domToWorkspace throw and surfaced the generic unsupported XML
+ * error. Infer the connection shape from the XML parent.
+ */
+export const registerXmlBlockFallbacks = (
+    xml_or_document,
+    BlocklyInstance = typeof window !== 'undefined' ? window.Blockly : undefined
+) => {
+    if (!BlocklyInstance?.Blocks || !xml_or_document) return [];
+
+    const elements = Array.from(xml_or_document.querySelectorAll?.('block, shadow') || []);
+    const usage = new Map();
+    elements.forEach(element => {
+        const type = element.getAttribute('type');
+        if (!type || BlocklyInstance.Blocks[type]) return;
+
+        const parent = element.parentElement;
+        const is_shadow = element.tagName === 'shadow';
+        const is_value = !is_shadow && (parent?.tagName === 'value' || parent?.tagName === 'shadow');
+        const is_statement =
+            !is_shadow &&
+            (parent?.tagName === 'statement' || parent?.tagName === 'next' || parent?.tagName === 'xml');
+        const current = usage.get(type) || { value: false, statement: false };
+        current.value = current.value || is_value;
+        current.statement = current.statement || is_statement;
+        usage.set(type, current);
+    });
+
+    usage.forEach(({ value, statement }, type) => {
+        if (!BlocklyInstance.Blocks[type]) {
+            // Prefer a value definition when a type appears in both positions;
+            // it is the only shape that can satisfy an input safely.
+            const output = value || !statement;
+            BlocklyInstance.Blocks[type] = {
+                init() {
+                    this.setColour(230);
+                    this.setTooltip(`Imported block "${type}" is not available in this workspace.`);
+                    this.appendDummyInput().appendField(`Imported: ${type.replace(/_/g, ' ')}`);
+                    if (output) {
+                        this.setOutput(true, null);
+                    } else {
+                        this.setPreviousStatement(true, null);
+                        this.setNextStatement(true, null);
+                    }
+                },
+            };
+        }
+
+        const generator = BlocklyInstance.JavaScript?.javascriptGenerator;
+        if (generator && !generator.forBlock[type]) {
+            generator.forBlock[type] = block =>
+                block.outputConnection ? ['0', generator.ORDER_ATOMIC] : '';
+        }
+    });
+
+    return [...usage.keys()];
+};
+
 export const load = async ({
     block_string,
     drop_event,
@@ -249,42 +312,9 @@ export const load = async ({
     // then continue loading. This lets the workspace display the strategy
     // without the "unsupported elements" error while keeping the Blockly
     // workspace valid.
-    const unknown_block_types = [...new Set(Array.from(blockly_xml)
-        .map(block => block.getAttribute('type'))
-        .filter(t => t && !Object.keys(window.Blockly.Blocks).includes(t)))];
+    const unknown_block_types = registerXmlBlockFallbacks(xml, window.Blockly);
 
     if (unknown_block_types.length > 0) {
-        // Register lightweight stub definitions so Blockly won't crash when
-        // it tries to instantiate these blocks during domToWorkspace.
-        unknown_block_types.forEach(type => {
-            if (!window.Blockly.Blocks[type]) {
-                window.Blockly.Blocks[type] = {
-                    init() {
-                        this.setColour(230);
-                        this.setTooltip(`Imported block "${type}" is not available in this workspace.`);
-                        this.appendDummyInput().appendField(`Imported: ${type.replace(/_/g, ' ')}`);
-                        this.setPreviousStatement(true, null);
-                        this.setNextStatement(true, null);
-                        // Some third-party blocks are value blocks. Keeping an
-                        // output connection prevents Blockly from rejecting a
-                        // valid parent block during import.
-                        this.setOutput(true);
-                    },
-                };
-            }
-            // Blockly's JavaScript generator must also know how to compile a
-            // third-party block. Keep statement blocks as safe no-ops and
-            // provide a neutral numeric value for unknown value blocks. This
-            // preserves the rest of a strategy instead of failing at runtime
-            // with "forBlock[type] is not a function".
-            const generator = window.Blockly.JavaScript?.javascriptGenerator;
-            if (generator && !generator.forBlock[type]) {
-                generator.forBlock[type] = block =>
-                    block.outputConnection
-                        ? ['0', generator.ORDER_ATOMIC]
-                        : '';
-            }
-        });
         // Log for awareness but do NOT abort the load.
         console.warn('[DBot] Auto-registered stub blocks for unknown types:', unknown_block_types);
     }

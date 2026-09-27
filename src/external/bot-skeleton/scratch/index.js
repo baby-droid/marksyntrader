@@ -2,6 +2,7 @@ import './index.scss';
 
 export {
     load,
+    registerXmlBlockFallbacks,
     runGroupedEvents,
     runIrreversibleEvents,
     save,

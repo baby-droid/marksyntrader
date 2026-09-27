@@ -49,8 +49,8 @@ export const scoreKingFisherDigits = (
     barrier: number,
 ): Omit<KingFisherMarket, 'symbol' | 'label' | 'market' | 'submarket' | 'group'> => {
     const qualifies = (digit: number) => direction === 'BELOW'
-        ? digit > barrier
-        : digit < barrier;
+        ? digit < barrier
+        : digit > barrier;
     let currentStreak = 0;
     let longestStreak = 0;
     let qualifyingTicks = 0;
