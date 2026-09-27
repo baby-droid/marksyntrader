@@ -32,8 +32,8 @@ const FREE_BOTS = [
   },
   {
     id: 'ahmed-best-market-pair-cycle-v1',
-    name: 'AHMED BEST MARKET PAIR CYCLE V1',
-    description: '🧠 Scans plain, 1s, Jump, Bear and Bull markets, then chooses a paired Over + Under entry from a live 10-tick bias.',
+    name: 'AHMED BEST MARKET CYCLE V1',
+    description: '🧠 Scans the best market, then cycles Differs → Over 2 → Over 3 → Over 0 → Over 1 → Differs → Under 6 → Under 7 → Under 8 → Under 9, with parity recovery after a loss.',
     category: 'Scanner', market: 'Best market', type: 'Paired DIGIT', prediction: '10-TICK',
     xmlFile: '/bots/ahmed-best-market-pair-cycle-v1.xml',
     badge: 'PAIR SCAN', badgeColor: '#34d399', icon: '🧠', winRate: '—',
@@ -42,7 +42,7 @@ const FREE_BOTS = [
   {
     id: 'ahmed-best-market-pair-cycle-v2',
     name: 'AHMED BEST MARKET PAIR CYCLE V2',
-    description: '🔎 Best-market selector with paired Under + Over contracts and a 20-tick low-digit bias route. Journal records each market scan.',
+    description: '🔎 Best-market selector for Over 2 + Over 3 or Under 6 + Under 7 pairs, with 20-tick routing, parity recovery, stake, martingale, TP and SL.',
     category: 'Scanner', market: 'Best market', type: 'Paired DIGIT', prediction: '20-TICK',
     xmlFile: '/bots/ahmed-best-market-pair-cycle-v2.xml',
     badge: 'PAIR CYCLE', badgeColor: '#a78bfa', icon: '🔎', winRate: '—',
@@ -51,7 +51,7 @@ const FREE_BOTS = [
   {
     id: 'ahmed-killer-bot-myth-v1',
     name: 'AHMED KILLER BOT MYTH V1',
-    description: '👑 Best-market scan plus 10/20-tick bias routing into paired Over/Differs or Under/Differs contracts. Includes stake, martingale, TP and SL.',
+    description: '👑 AHMED KILLER BOT MYTH V1 scans the best market, gates Over 1 + Over 2 on a 10/20-tick bias, recovers with parity, then trades Over 3 and Over 4 before returning to the main pair.',
     category: 'Scanner', market: 'Best market', type: 'Paired DIGIT', prediction: '10/20-TICK',
     xmlFile: '/bots/ahmed-killer-bot-myth-v1.xml',
     badge: 'MYTH V1', badgeColor: '#f59e0b', icon: '👑', winRate: '—',

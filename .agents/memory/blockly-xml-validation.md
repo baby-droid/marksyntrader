@@ -15,6 +15,12 @@ Compact hand-authored XML is especially prone to missing one closing `block` aro
 
 **How to apply:** Keep initialization and nested trade-definition chains expanded across lines, then run parser validation before relying on the application build.
 
+When several bot files are repaired together, validate each file independently rather than stopping at the first parser failure; the same missing terminal `</block>` can recur in multiple initialization or loss-state `next` chains.
+
+**Why:** A batch parser that aborts on the first error can falsely suggest the remaining files are healthy, while compact XML makes the same structural mistake easy to repeat.
+
+**How to apply:** Report every target’s parse result, then validate both `public/bots` and the generated `dist/bots` copies after building.
+
 For digit bots, the Trade Parameters `TYPE_LIST` must be `both`; `DIGITODD` and `DIGITEVEN` belong in purchase blocks, not the trade-definition dropdown.
 
 **Why:** The contract-type dropdown is populated from the `evenodd` trade category and rejects individual parity purchase codes, leaving the first trade-parameter controls blank when loaded.
