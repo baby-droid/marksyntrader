@@ -194,7 +194,7 @@ window.Blockly.Blocks.king_fisher_pair_purchase = {
                 { type: 'field_dropdown', name: 'CONTRACT_2', options: contractOptions },
                 { type: 'field_dropdown', name: 'PREDICTION_2', options: predictionOptions },
             ],
-            previousStatement: null,
+            previousStatement: 'Purchase',
             colour: '#f97316',
             tooltip: localize('Buys two independent digit contracts with separate barriers on the same entry tick.'),
             helpUrl: '',
@@ -226,6 +226,53 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_pair_purchase
         });
 
     return specs.length ? `Bot.purchaseMultiple([${specs.join(', ')}]);\n` : '';
+};
+
+window.Blockly.Blocks.king_fisher_parity_purchase = {
+    init() {
+        this.jsonInit({
+            message0: localize('King Fisher parity recovery: trade the dominant %1/ %2 parity'),
+            args0: [
+                { type: 'field_label', name: 'EVEN_LABEL', text: localize('Even') },
+                { type: 'field_label', name: 'ODD_LABEL', text: localize('Odd') },
+            ],
+            previousStatement: 'Purchase',
+            colour: '#22c55e',
+            tooltip: localize('Scans the latest digits and buys only the currently dominant Even or Odd contract.'),
+            helpUrl: '',
+        });
+        this.setNextStatement(false);
+    },
+    meta() {
+        return {
+            display_name: localize('King Fisher parity recovery'),
+            description: localize('Selects Even when even digits dominate, otherwise selects Odd.'),
+        };
+    },
+    customContextMenu(menu) {
+        modifyContextMenu(menu);
+    },
+};
+
+window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_parity_purchase = block => {
+    const helperName = ensureHelper('kingFisherParityPurchase', [
+        'var kingFisherParityStates = {};',
+        'function PLACEHOLDER() {',
+        '  var state = kingFisherParityStates.parity || (kingFisherParityStates.parity = { lastEpoch: null, digits: [] });',
+        '  var tick = Bot.getLastTick(true);',
+        '  if (!tick || tick.epoch == null) return false;',
+        '  if (tick.epoch !== state.lastEpoch) { state.lastEpoch = tick.epoch; state.digits.push(Number(Bot.getLastDigit())); while (state.digits.length > 20) state.digits.shift(); }',
+        '  var digits = state.digits;',
+        '  var even = 0;',
+        '  var odd = 0;',
+        '  for (var i = 0; i < digits.length; i += 1) { if (digits[i] % 2 === 0) even += 1; else odd += 1; }',
+        '  var contract = even >= odd ? "DIGITEVEN" : "DIGITODD";',
+        '  if (typeof Bot.emitKingFisherAnalysis === "function") Bot.emitKingFisherAnalysis({ symbol: Bot.getSymbol(), direction: contract === "DIGITEVEN" ? "EVEN" : "ODD", window: digits.length, qualifying: Math.max(even, odd), ratio: digits.length ? Math.max(even, odd) / digits.length : 0, biasMet: digits.length > 0 });',
+        '  Bot.purchaseMultiple([{ contract_type: contract, amount: stake, dynamic: true }]);',
+        '  return true;',
+        '}',
+    ]);
+    return `${helperName}();\n`;
 };
 
 window.Blockly.Blocks.king_fisher_best_market_scanner = {

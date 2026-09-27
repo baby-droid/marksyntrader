@@ -115,8 +115,8 @@
               <block type="controls_if" id="akbm_main_bias">
                 <mutation else="1"/>
                 <value name="IF0"><block type="king_fisher_bias_scan" id="akbm_bias_high"><field name="DIRECTION">HIGH</field><field name="WINDOW">10</field></block></value>
-                <statement name="DO0"><block type="king_fisher_pair_purchase" id="akbm_over_pair"><field name="CONTRACT_1">DIGITOVER</field><field name="PREDICTION_1">2</field><field name="CONTRACT_2">DIGITOVER</field><field name="PREDICTION_2">3</field></block></statement>
-                <statement name="ELSE"><block type="king_fisher_pair_purchase" id="akbm_under_pair"><field name="CONTRACT_1">DIGITUNDER</field><field name="PREDICTION_1">6</field><field name="CONTRACT_2">DIGITUNDER</field><field name="PREDICTION_2">7</field></block></statement>
+                <statement name="DO0"><block type="king_fisher_pair_purchase" id="akbm_over_pair"><field name="CONTRACT_1">DIGITOVER</field><field name="PREDICTION_1">1</field><field name="CONTRACT_2">DIGITOVER</field><field name="PREDICTION_2">2</field></block></statement>
+                <statement name="ELSE"><block type="king_fisher_pair_purchase" id="akbm_over_pair_low_bias"><field name="CONTRACT_1">DIGITOVER</field><field name="PREDICTION_1">1</field><field name="CONTRACT_2">DIGITOVER</field><field name="PREDICTION_2">2</field></block></statement>
               </block>
             </statement>
             <value name="IF1">
@@ -125,7 +125,7 @@
                 <value name="B"><block type="math_number"><field name="NUM">1</field></block></value>
               </block>
             </value>
-            <statement name="DO1"><block type="king_fisher_pair_purchase" id="akbm_parity_pair"><field name="CONTRACT_1">DIGITEVEN</field><field name="PREDICTION_1">NONE</field><field name="CONTRACT_2">DIGITODD</field><field name="PREDICTION_2">NONE</field></block></statement>
+            <statement name="DO1"><block type="king_fisher_parity_purchase" id="akbm_parity_recovery"/></statement>
             <value name="IF2">
               <block type="logic_compare"><field name="OP">EQ</field>
                 <value name="A"><block type="variables_get"><field name="VAR" id="akbm_phase">recovery_phase</field></block></value>

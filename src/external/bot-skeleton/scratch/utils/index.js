@@ -521,7 +521,11 @@ const getAllRequiredBlocks = (workspace, required_block_types) => {
 const getMissingBlocks = (workspace, required_block_types) => {
     return required_block_types.filter(blockType => {
         if (blockType === 'purchase') {
-            return !workspace.getAllBlocks().some(block => block.type === 'purchase' || block.type === 'multiple_purchase');
+            return !workspace.getAllBlocks().some(block =>
+                block.type === 'purchase' ||
+                block.type === 'multiple_purchase' ||
+                block.type === 'king_fisher_pair_purchase'
+            );
         }
         return !workspace.getAllBlocks().some(block => block.type === blockType);
     });

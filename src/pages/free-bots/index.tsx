@@ -28,7 +28,7 @@ const FREE_BOTS = [
     category: 'Cycle', market: 'V25 1s', type: 'Multi-Strategy', prediction: '9-PHASE',
     xmlFile: '/bots/ahmed-differ-recovery-cycle-v2.xml',
     badge: 'RECOVERY V2', badgeColor: '#fb7185', icon: '⚡', winRate: '—',
-    theme: 'ahmed-recovery-cycle', artwork: '/bot-art/ahmed-pairs.png', artworkPosition: 'side',
+    theme: 'ahmed-recovery-cycle', artwork: '/bot-art/ahmed-cycle.png', artworkPosition: 'banner',
   },
   {
     id: 'ahmed-best-market-pair-cycle-v1',
@@ -37,7 +37,7 @@ const FREE_BOTS = [
     category: 'Scanner', market: 'Best market', type: 'Paired DIGIT', prediction: '10-TICK',
     xmlFile: '/bots/ahmed-best-market-pair-cycle-v1.xml',
     badge: 'PAIR SCAN', badgeColor: '#34d399', icon: '🧠', winRate: '—',
-    theme: 'ahmed-pair-scan', artwork: '/bot-art/ahmed-cycle.png', artworkPosition: 'side',
+    theme: 'ahmed-pair-scan', artwork: '/bot-art/ahmed-cycle.png', artworkPosition: 'banner',
   },
   {
     id: 'ahmed-best-market-pair-cycle-v2',
@@ -46,7 +46,7 @@ const FREE_BOTS = [
     category: 'Scanner', market: 'Best market', type: 'Paired DIGIT', prediction: '20-TICK',
     xmlFile: '/bots/ahmed-best-market-pair-cycle-v2.xml',
     badge: 'PAIR CYCLE', badgeColor: '#a78bfa', icon: '🔎', winRate: '—',
-    theme: 'ahmed-pair-cycle', artwork: '/bot-art/ahmed-pairs.png', artworkPosition: 'banner',
+    theme: 'ahmed-pair-cycle', artwork: '/bot-art/ahmed-cycle.png', artworkPosition: 'banner',
   },
   {
     id: 'ahmed-killer-bot-myth-v1',
