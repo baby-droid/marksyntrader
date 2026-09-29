@@ -51,7 +51,7 @@ const FREE_BOTS = [
   {
     id: 'ahmed-killer-bot-myth-v1',
     name: 'AHMED KILLER BOT MYTH V1',
-    description: '👑 AHMED KILLER BOT MYTH V1 scans the best market, gates Over 1 + Over 2 on a 10/20-tick bias, recovers with parity, then trades Over 3 and Over 4 before returning to the main pair.',
+    description: '👑 AHMED KILLER BOT MYTH V1 scans the best market, gates Over 1 + Over 2 on a 10/20-tick bias, recovers with parity, then trades Over 3 for 3 wins and Over 4 for 2 wins before returning to the main pair.',
     category: 'Scanner', market: 'Best market', type: 'Paired DIGIT', prediction: '10/20-TICK',
     xmlFile: '/bots/ahmed-killer-bot-myth-v1.xml',
     badge: 'MYTH V1', badgeColor: '#f59e0b', icon: '👑', winRate: '—',

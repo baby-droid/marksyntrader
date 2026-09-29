@@ -52,16 +52,12 @@
   <block type="before_purchase" id="abmp2_before" deletable="false" x="0" y="760">
     <statement name="BEFOREPURCHASE_STACK">
       <block type="notify" id="abmp2_note"><field name="NOTIFICATION_TYPE">info</field><field name="NOTIFICATION_SOUND">silent</field><value name="MESSAGE"><block type="text"><field name="TEXT">AHMED BEST MARKET PAIR V2 · scanning best market · Over 2 + Over 3 / Under 6 + Under 7</field></block></value>
-        <next><block type="controls_if" id="abmp2_router"><mutation else="1"/>
+        <next><block type="controls_if" id="abmp2_router"><mutation elseif="1"/>
           <value name="IF0"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get"><field name="VAR" id="abmp2_phase">recovery_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">0</field></block></value></block></value>
-          <statement name="DO0">
-            <block type="controls_if" id="abmp2_bias_router"><mutation else="1"/>
-              <value name="IF0"><block type="king_fisher_bias_scan" id="abmp2_bias"><field name="DIRECTION">HIGH</field><field name="WINDOW">20</field></block></value>
-              <statement name="DO0"><block type="king_fisher_pair_purchase" id="abmp2_over_pair"><field name="CONTRACT_1">DIGITOVER</field><field name="PREDICTION_1">2</field><field name="CONTRACT_2">DIGITOVER</field><field name="PREDICTION_2">3</field></block></statement>
-              <statement name="ELSE"><block type="king_fisher_pair_purchase" id="abmp2_under_pair"><field name="CONTRACT_1">DIGITUNDER</field><field name="PREDICTION_1">6</field><field name="CONTRACT_2">DIGITUNDER</field><field name="PREDICTION_2">7</field></block></statement>
-            </block>
-          </statement>
-          <statement name="ELSE"><block type="king_fisher_parity_purchase" id="abmp2_parity_recovery"/></statement>
+          <statement name="DO0"><block type="king_fisher_pair_purchase" id="abmp2_over_pair"><field name="CONTRACT_1">DIGITOVER</field><field name="PREDICTION_1">2</field><field name="CONTRACT_2">DIGITOVER</field><field name="PREDICTION_2">3</field></block></statement>
+          <value name="IF1"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="abmp2_phase_get1"><field name="VAR" id="abmp2_phase">recovery_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">1</field></block></value></block></value>
+          <statement name="DO1"><block type="king_fisher_pair_purchase" id="abmp2_under_pair"><field name="CONTRACT_1">DIGITUNDER</field><field name="PREDICTION_1">6</field><field name="CONTRACT_2">DIGITUNDER</field><field name="PREDICTION_2">7</field></block></statement>
+          <statement name="ELSE"><block type="king_fisher_parity_sequence_purchase" id="abmp2_parity_recovery"/></statement>
         </block></next>
       </block>
     </statement>
@@ -72,10 +68,16 @@
         <next><block type="controls_if" id="abmp2_result"><mutation else="1"/>
           <value name="IF0"><block type="contract_check_result"><field name="CHECK_RESULT">win</field></block></value>
           <statement name="DO0"><block type="variables_set" id="abmp2_win_stake"><field name="VAR" id="abmp2_stake">stake</field><value name="VALUE"><block type="variables_get"><field name="VAR" id="abmp2_base">base_stake</field></block></value>
-            <next><block type="variables_set" id="abmp2_win_phase"><field name="VAR" id="abmp2_phase">recovery_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">0</field></block></value></block></next>
+            <next><block type="controls_if" id="abmp2_phase_advance"><mutation elseif="1"/>
+              <value name="IF0"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="abmp2_phase_read0"><field name="VAR" id="abmp2_phase">recovery_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">0</field></block></value></block></value>
+              <statement name="DO0"><block type="variables_set" id="abmp2_to_under"><field name="VAR" id="abmp2_phase">recovery_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">1</field></block></value></block></statement>
+              <value name="IF1"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="abmp2_phase_read1"><field name="VAR" id="abmp2_phase">recovery_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">1</field></block></value></block></value>
+              <statement name="DO1"><block type="variables_set" id="abmp2_to_over"><field name="VAR" id="abmp2_phase">recovery_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">0</field></block></value></block></statement>
+              <statement name="ELSE"><block type="variables_set" id="abmp2_recovery_win"><field name="VAR" id="abmp2_phase">recovery_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">0</field></block></value></block></statement>
+            </block></next>
           </block></statement>
           <statement name="ELSE"><block type="variables_set" id="abmp2_loss_stake"><field name="VAR" id="abmp2_stake">stake</field><value name="VALUE"><block type="math_arithmetic"><field name="OP">MULTIPLY</field><value name="A"><block type="variables_get"><field name="VAR" id="abmp2_stake">stake</field></block></value><value name="B"><block type="variables_get" id="abmp2_mg_get"><field name="VAR" id="abmp2_mg">martingale</field></block></value></block></value>
-            <next><block type="variables_set" id="abmp2_loss_phase"><field name="VAR" id="abmp2_phase">recovery_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">1</field></block></value></block></next>
+             <next><block type="variables_set" id="abmp2_loss_phase"><field name="VAR" id="abmp2_phase">recovery_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">2</field></block></value></block></next>
           </block></statement>
           <next><block type="trade_again"/></next>
         </block></next>
