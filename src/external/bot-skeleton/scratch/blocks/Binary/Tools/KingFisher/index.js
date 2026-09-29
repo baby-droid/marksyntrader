@@ -257,7 +257,7 @@ window.Blockly.Blocks.king_fisher_parity_purchase = {
 window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_parity_purchase = block => {
     const helperName = ensureHelper('kingFisherParityPurchase', [
         'var kingFisherParityStates = {};',
-        'function PLACEHOLDER() {',
+        `function ${generator().FUNCTION_NAME_PLACEHOLDER_}() {`,
         '  var state = kingFisherParityStates.parity || (kingFisherParityStates.parity = { lastEpoch: null, digits: [] });',
         '  var tick = Bot.getLastTick(true);',
         '  if (!tick || tick.epoch == null) return false;',
@@ -318,7 +318,7 @@ window.Blockly.Blocks.king_fisher_parity_sequence_purchase = {
 window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_parity_sequence_purchase = block => {
     const helperName = ensureHelper('kingFisherParitySequencePurchase', [
         'var kingFisherParitySequenceStates = {};',
-        'function PLACEHOLDER(key) {',
+        `function ${generator().FUNCTION_NAME_PLACEHOLDER_}(key) {`,
         '  var state = kingFisherParitySequenceStates[key] || (kingFisherParitySequenceStates[key] = { lastEpoch: null, triggerEpoch: null, digits: [], triggered: false });',
         '  if (state.triggered) {',
         '    state.digits = [];',
