@@ -6,7 +6,7 @@ import { DBOT_TABS } from '@/constants/bot-contents';
 import { useDerivTrade } from '@/hooks/useDerivTrade';
 import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import { applyCommission } from '@/utils/commission';
-import { isFastExecutionEnabled } from '@/utils/execution-speed';
+import { isFastExecutionEnabledForContext } from '@/utils/execution-speed';
 import { setTradeContext } from '@/utils/trade-metadata';
 import { getMasterSource } from '@/utils/trade-bus';
 import { observer as globalObserver, api_base } from '@/external/bot-skeleton';
@@ -1275,7 +1275,7 @@ const BotDetail: React.FC<{
                ULTRA TURBO / ULTRA FAST caps this at 300 ms — enough for normal
                teardown but tight enough to catch the digit window before the
                next tick. */
-            const teardownMax = params.ultraTurbo ? 50 : (isFastExecutionEnabled() ? 150 : 3000);
+            const teardownMax = params.ultraTurbo ? 50 : (isFastExecutionEnabledForContext() ? 150 : 3000);
             const teardownStart = Date.now();
             while (api_base.is_stopping && Date.now() - teardownStart < teardownMax) {
                 await new Promise(r => setTimeout(r, 20));
@@ -1306,7 +1306,7 @@ const BotDetail: React.FC<{
                false "win", stopping the bot after every loss.
                50 ms for ultra/turbo (increased from 25 ms for more reliable drain),
                60 ms normal. */
-            const drainMs = params.ultraTurbo ? 0 : (isFastExecutionEnabled() ? 10 : 60);
+            const drainMs = params.ultraTurbo ? 0 : (isFastExecutionEnabledForContext() ? 10 : 60);
             await new Promise(r => setTimeout(r, drainMs));
 
              patchWorkspaceParams({

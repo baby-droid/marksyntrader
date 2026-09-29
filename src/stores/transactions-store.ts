@@ -7,6 +7,8 @@ import { TPortfolioPosition, TStores } from '@deriv/stores/types';
 import { TContractInfo } from '../components/summary/summary-card.types';
 import { transaction_elements } from '../constants/transactions';
 import { getStoredItemsByKey, getStoredItemsByUser, setStoredItemsByKey } from '../utils/session-storage';
+import { observer as globalObserver } from '@/external/bot-skeleton';
+import { dispatchBrowserEvent } from '@/external/bot-skeleton/utils/browser-event';
 import RootStore from './root-store';
 
 type TTransaction = {
@@ -18,6 +20,25 @@ type TElement = {
     [key: string]: TTransaction[];
 };
 
+const dedupeStoredElements = (elements: TElement): TElement =>
+    Object.fromEntries(Object.entries(elements || {}).map(([accountId, rows]) => {
+        const seen = new Set<string>();
+        const deduped = rows.filter(row => {
+            if (row.type !== transaction_elements.CONTRACT || typeof row.data === 'string') return true;
+            const contract = row.data as any;
+            const identity = contract?.contract_id != null
+                ? `contract:${contract.contract_id}`
+                : contract?.transaction_ids?.buy != null
+                    ? `buy:${contract.transaction_ids.buy}`
+                    : null;
+            if (!identity) return true;
+            if (seen.has(identity)) return false;
+            seen.add(identity);
+            return true;
+        });
+        return [accountId, deduped];
+    }));
+
 export default class TransactionsStore {
     root_store: RootStore;
     core: TStores;
@@ -27,6 +48,8 @@ export default class TransactionsStore {
         this.root_store = root_store;
         this.core = core;
         this.is_transaction_details_modal_open = false;
+        this.registerAutoTradeListener();
+        globalObserver.register('bot.virtual_hook', this.onVirtualHookEvent);
         this.disposeReactionsFn = this.registerReactions();
 
         makeObservable(this, {
@@ -45,16 +68,41 @@ export default class TransactionsStore {
             updateResultsCompletedContract: action.bound,
             sortOutPositionsBeforeAction: action.bound,
             recoverPendingContractsById: action.bound,
+            onVirtualHookEvent: action.bound,
+            flushPendingVirtualHooks: action.bound,
         });
     }
     TRANSACTION_CACHE = 'transaction_cache';
 
-    elements: TElement = getStoredItemsByUser(this.TRANSACTION_CACHE, this.core?.client?.loginid, []);
+    elements: TElement = dedupeStoredElements(
+        getStoredItemsByUser(this.TRANSACTION_CACHE, this.core?.client?.loginid, [])
+    );
     active_transaction_id: null | number = null;
     recovered_completed_transactions: number[] = [];
     recovered_transactions: number[] = [];
     is_called_proposal_open_contract = false;
     is_transaction_details_modal_open = false;
+    private auto_trade_listener: ((event: Event) => void) | null = null;
+    private journal_reported_contracts = new Set<number>();
+    private pending_virtual_hooks: Array<{
+        id: number;
+        time: string;
+        market: string;
+        result: 'won' | 'lost';
+        exitDigit?: number | null;
+        hookType?: string;
+    }> = [];
+
+    onVirtualHookEvent = (data: any = {}) => {
+        this.pushVirtualHook({
+            id: data.id,
+            time: data.time,
+            market: data.market || 'King Fisher',
+            result: data.result === 'lost' ? 'lost' : 'won',
+            exitDigit: data.exitDigit,
+            hookType: data.hookType || 'KING_FISHER',
+        });
+    };
 
     get transactions(): TTransaction[] {
         const accountId = this.core?.client?.loginid || localStorage.getItem('active_loginid');
@@ -119,10 +167,25 @@ export default class TransactionsStore {
         exitDigit?: number | null;
         hookType?: string;
     }) {
-        const current_account = this.core?.client?.loginid as string;
-        if (!current_account) return;
+        const current_account = (this.core?.client?.loginid || localStorage.getItem('active_loginid')) as string;
+        if (!current_account) {
+            this.pending_virtual_hooks.push(data);
+            return;
+        }
 
+        this.appendVirtualHook(current_account, data);
+    }
+
+    private appendVirtualHook(current_account: string, data: {
+        id: number;
+        time: string;
+        market: string;
+        result: 'won' | 'lost';
+        exitDigit?: number | null;
+        hookType?: string;
+    }) {
         const hookResult = data.result === 'won' ? 'profit' : 'loss';
+
         const contract: any = {
             is_virtual_hook: true,
             hook_result: hookResult,
@@ -154,6 +217,14 @@ export default class TransactionsStore {
         this.elements = { ...this.elements };
     }
 
+    flushPendingVirtualHooks = () => {
+        const current_account = (this.core?.client?.loginid || localStorage.getItem('active_loginid')) as string;
+        if (!current_account || !this.pending_virtual_hooks.length) return;
+
+        const pending = this.pending_virtual_hooks.splice(0);
+        pending.forEach(data => this.appendVirtualHook(current_account, data));
+    };
+
     toggleTransactionDetailsModal = (is_open: boolean) => {
         this.is_transaction_details_modal_open = is_open;
     };
@@ -162,8 +233,32 @@ export default class TransactionsStore {
         this.pushTransaction(data);
     }
 
+    /**
+     * Keep non-Bot-Builder trade events connected for the lifetime of the root
+     * store. The Run Panel can mount and unmount independently, so this must
+     * not be part of its disposable reaction bundle.
+     */
+    private registerAutoTradeListener() {
+        if (typeof window === 'undefined' || this.auto_trade_listener) return;
+
+        this.auto_trade_listener = (event: Event) => {
+            const contract = (event as CustomEvent).detail;
+            if (contract?.contract_id) this.onBotContractEvent(contract);
+        };
+        window.addEventListener('auto-trade:contract', this.auto_trade_listener);
+    }
+
     pushTransaction(data: TContractInfo) {
-        const is_completed = isEnded(data as ProposalOpenContract);
+        // isEnded covers native DBot payloads. The shared authenticated trader
+        // also marks its definitive POC update explicitly, so accept those
+        // flags/statuses as completed as well instead of leaving a settled
+        // Auto Trades/Auto-Digits row open when the payload shape differs.
+        const is_completed = Boolean(
+            (data as any).is_completed ||
+            (data as any).is_sold ||
+            ['won', 'lost', 'sold'].includes(String((data as any).status || '').toLowerCase()) ||
+            isEnded(data as ProposalOpenContract)
+        );
         // Auto Trades supplies a batch ID so its contracts are grouped in the
         // native Bot Builder transaction page. Regular Bot Builder contracts
         // continue using the current run-panel run ID.
@@ -183,6 +278,18 @@ export default class TransactionsStore {
             profit: is_completed ? data.profit : 0,
         };
 
+        if (is_completed && !this.journal_reported_contracts.has(Number(data.contract_id))) {
+            this.journal_reported_contracts.add(Number(data.contract_id));
+            const profit = Number(data.profit) || 0;
+            if (typeof window !== 'undefined') {
+                dispatchBrowserEvent('journal:signal', {
+                    type: profit > 0 ? 'WIN' : 'LOSS',
+                    label: profit > 0 ? 'PROFIT MADE' : 'LOSS MADE',
+                    detail: `${data.underlying_symbol || data.display_name || 'King Fisher'} · ${profit > 0 ? '+' : '-'}${Math.abs(profit).toFixed(2)} ${data.currency || 'USD'}`,
+                });
+            }
+        }
+
         if (!this.elements[current_account]) {
             this.elements = {
                 ...this.elements,
@@ -192,11 +299,19 @@ export default class TransactionsStore {
 
         const same_contract_index = this.elements[current_account]?.findIndex(c => {
             if (typeof c.data === 'string') return false;
-            return (
-                c.type === transaction_elements.CONTRACT &&
-                c.data?.transaction_ids &&
-                c.data.transaction_ids.buy === data.transaction_ids?.buy
-            );
+            if (c.type !== transaction_elements.CONTRACT) return false;
+            const existing = c.data as any;
+            const incoming = data as any;
+            // The same purchase reaches this store through both the native
+            // bot.contract observer and Auto Trades' browser event. Contract
+            // IDs are the canonical identity; the buy transaction id is only a
+            // fallback for older recovered payloads.
+            if (existing?.contract_id && incoming?.contract_id) {
+                return Number(existing.contract_id) === Number(incoming.contract_id);
+            }
+            const existingBuy = existing?.transaction_ids?.buy;
+            const incomingBuy = incoming?.transaction_ids?.buy;
+            return existingBuy != null && incomingBuy != null && existingBuy === incomingBuy;
         });
 
         if (same_contract_index === -1) {
@@ -243,14 +358,6 @@ export default class TransactionsStore {
 
     registerReactions() {
         const { client } = this.core;
-        const autoTradeListener = (event: CustomEvent) => {
-            if (event.detail?.contract_id) {
-                this.onBotContractEvent(event.detail);
-            }
-        };
-        if (typeof window !== 'undefined') {
-            window.addEventListener('auto-trade:contract', autoTradeListener as EventListener);
-        }
 
         // Write transactions to session storage on each change in transaction elements.
         const disposeTransactionElementsListener = reaction(
@@ -270,12 +377,15 @@ export default class TransactionsStore {
             () => this.recoverPendingContracts()
         );
 
+        const disposePendingVirtualHooks = reaction(
+            () => client?.loginid,
+            () => this.flushPendingVirtualHooks()
+        );
+
         return () => {
             disposeTransactionElementsListener();
             disposeRecoverContracts();
-            if (typeof window !== 'undefined') {
-                window.removeEventListener('auto-trade:contract', autoTradeListener as EventListener);
-            }
+            disposePendingVirtualHooks();
         };
     }
 

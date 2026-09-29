@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
+  <variables>
+    <variable id="abmp2_stake">stake</variable>
+    <variable id="abmp2_base">base_stake</variable>
+    <variable id="abmp2_mg">martingale</variable>
+    <variable id="abmp2_phase">recovery_phase</variable>
+    <variable id="abmp2_tp">take_profit</variable>
+    <variable id="abmp2_sl">stop_loss</variable>
+  </variables>
+  <block type="trade_definition" id="abmp2_definition" deletable="false" x="0" y="0">
+    <statement name="TRADE_OPTIONS">
+      <block type="king_fisher_best_market_scanner" id="abmp2_scan"><field name="ENABLED">TRUE</field>
+        <next><block type="trade_definition_market" id="abmp2_market" deletable="false" movable="false">
+          <field name="MARKET_LIST">synthetic_index</field><field name="SUBMARKET_LIST">random_index</field><field name="SYMBOL_LIST">R_50</field>
+          <next><block type="trade_definition_tradetype" id="abmp2_type" deletable="false" movable="false">
+            <field name="TRADETYPECAT_LIST">digits</field><field name="TRADETYPE_LIST">overunder</field>
+            <next><block type="trade_definition_contracttype" id="abmp2_contract" deletable="false" movable="false"><field name="TYPE_LIST">both</field>
+              <next><block type="trade_definition_candleinterval" id="abmp2_interval" deletable="false" movable="false"><field name="CANDLEINTERVAL_LIST">60</field>
+                <next><block type="trade_definition_restartbuysell" id="abmp2_restart" deletable="false" movable="false"><field name="TIME_MACHINE_ENABLED">FALSE</field>
+                  <next><block type="trade_definition_restartonerror" id="abmp2_error" deletable="false" movable="false"><field name="RESTARTONERROR">TRUE</field></block></next>
+                </block></next>
+              </block></next>
+            </block></next>
+          </block></next>
+        </block></next>
+      </block>
+    </statement>
+    <statement name="INITIALIZATION">
+      <block type="variables_set" id="abmp2_i_stake"><field name="VAR" id="abmp2_stake">stake</field><value name="VALUE"><block type="math_number"><field name="NUM">0.5</field></block></value>
+        <next><block type="variables_set" id="abmp2_i_base"><field name="VAR" id="abmp2_base">base_stake</field><value name="VALUE"><block type="math_number"><field name="NUM">0.5</field></block></value>
+          <next><block type="variables_set" id="abmp2_i_mg"><field name="VAR" id="abmp2_mg">martingale</field><value name="VALUE"><block type="math_number"><field name="NUM">2.2</field></block></value>
+            <next><block type="variables_set" id="abmp2_i_phase"><field name="VAR" id="abmp2_phase">recovery_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">0</field></block></value>
+              <next><block type="variables_set" id="abmp2_i_tp"><field name="VAR" id="abmp2_tp">take_profit</field><value name="VALUE"><block type="math_number"><field name="NUM">5</field></block></value>
+                <next><block type="variables_set" id="abmp2_i_sl"><field name="VAR" id="abmp2_sl">stop_loss</field><value name="VALUE"><block type="math_number"><field name="NUM">20</field></block></value></block></next>
+              </block></next>
+            </block></next>
+          </block></next>
+        </block></next>
+      </block>
+    </statement>
+    <statement name="SUBMARKET">
+      <block type="trade_definition_tradeoptions" id="abmp2_options">
+        <mutation has_first_barrier="false" has_second_barrier="false" has_prediction="true"/>
+        <field name="DURATIONTYPE_LIST">t</field>
+        <value name="DURATION"><shadow type="math_number_positive"><field name="NUM">1</field></shadow></value>
+        <value name="AMOUNT"><shadow type="math_number_positive"><field name="NUM">0.5</field></shadow><block type="variables_get"><field name="VAR" id="abmp2_stake">stake</field></block></value>
+        <value name="PREDICTION"><shadow type="math_number_positive"><field name="NUM">2</field></shadow></value>
+      </block>
+    </statement>
+  </block>
+  <block type="before_purchase" id="abmp2_before" deletable="false" x="0" y="760">
+    <statement name="BEFOREPURCHASE_STACK">
+      <block type="notify" id="abmp2_note"><field name="NOTIFICATION_TYPE">info</field><field name="NOTIFICATION_SOUND">silent</field><value name="MESSAGE"><block type="text"><field name="TEXT">AHMED BEST MARKET PAIR V2 · waits for high bias + Over 2/3 entry or low bias + Under 7/6 entry</field></block></value>
+        <next><block type="controls_if" id="abmp2_router"><mutation elseif="1"/>
+          <value name="IF0"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get"><field name="VAR" id="abmp2_phase">recovery_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">0</field></block></value></block></value>
+          <statement name="DO0"><block type="controls_if" id="abmp2_over_entry_gate">
+            <value name="IF0"><block type="logic_operation" id="abmp2_over_gate"><field name="OP">AND</field>
+              <value name="A"><block type="king_fisher_bias_scan" id="abmp2_high_bias"><field name="DIRECTION">HIGH</field><field name="WINDOW">10</field></block></value>
+              <value name="B"><block type="logic_operation" id="abmp2_over_streaks"><field name="OP">AND</field>
+                <value name="A"><block type="king_fisher_entry" id="abmp2_over2_entry"><field name="DIRECTION">ABOVE</field><field name="THRESHOLD">2</field><field name="STREAK">2_3</field></block></value>
+                <value name="B"><block type="king_fisher_entry" id="abmp2_over3_entry"><field name="DIRECTION">ABOVE</field><field name="THRESHOLD">3</field><field name="STREAK">2_3</field></block></value>
+              </block></value>
+            </block></value>
+            <statement name="DO0"><block type="king_fisher_pair_purchase" id="abmp2_over_pair"><field name="CONTRACT_1">DIGITOVER</field><field name="PREDICTION_1">2</field><field name="CONTRACT_2">DIGITOVER</field><field name="PREDICTION_2">3</field></block></statement>
+          </block></statement>
+          <value name="IF1"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="abmp2_phase_get1"><field name="VAR" id="abmp2_phase">recovery_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">1</field></block></value></block></value>
+          <statement name="DO1"><block type="controls_if" id="abmp2_under_entry_gate">
+            <value name="IF0"><block type="logic_operation" id="abmp2_under_gate"><field name="OP">AND</field>
+              <value name="A"><block type="king_fisher_bias_scan" id="abmp2_low_bias"><field name="DIRECTION">LOW</field><field name="WINDOW">10</field></block></value>
+              <value name="B"><block type="logic_operation" id="abmp2_under_streaks"><field name="OP">AND</field>
+                <value name="A"><block type="king_fisher_entry" id="abmp2_under7_entry"><field name="DIRECTION">BELOW</field><field name="THRESHOLD">7</field><field name="STREAK">2_3</field></block></value>
+                <value name="B"><block type="king_fisher_entry" id="abmp2_under6_entry"><field name="DIRECTION">BELOW</field><field name="THRESHOLD">6</field><field name="STREAK">2_3</field></block></value>
+              </block></value>
+            </block></value>
+            <statement name="DO0"><block type="king_fisher_pair_purchase" id="abmp2_under_pair"><field name="CONTRACT_1">DIGITUNDER</field><field name="PREDICTION_1">7</field><field name="CONTRACT_2">DIGITUNDER</field><field name="PREDICTION_2">6</field></block></statement>
+          </block></statement>
+          <statement name="ELSE"><block type="king_fisher_parity_sequence_purchase" id="abmp2_parity_recovery"/></statement>
+        </block></next>
+      </block>
+    </statement>
+  </block>
+  <block type="after_purchase" id="abmp2_after" deletable="false" x="850" y="0">
+    <statement name="AFTERPURCHASE_STACK">
+      <block type="king_fisher_restart_trade" id="abmp2_guard"><field name="MULTIPLIER">2</field><value name="TAKE_PROFIT"><block type="variables_get"><field name="VAR" id="abmp2_tp">take_profit</field></block></value><value name="STOP_LOSS"><block type="variables_get"><field name="VAR" id="abmp2_sl">stop_loss</field></block></value>
+        <next><block type="controls_if" id="abmp2_result"><mutation else="1"/>
+          <value name="IF0"><block type="contract_check_result"><field name="CHECK_RESULT">win</field></block></value>
+          <statement name="DO0"><block type="variables_set" id="abmp2_win_stake"><field name="VAR" id="abmp2_stake">stake</field><value name="VALUE"><block type="variables_get"><field name="VAR" id="abmp2_base">base_stake</field></block></value>
+            <next><block type="controls_if" id="abmp2_phase_advance"><mutation elseif="1"/>
+              <value name="IF0"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="abmp2_phase_read0"><field name="VAR" id="abmp2_phase">recovery_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">0</field></block></value></block></value>
+              <statement name="DO0"><block type="variables_set" id="abmp2_to_under"><field name="VAR" id="abmp2_phase">recovery_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">1</field></block></value></block></statement>
+              <value name="IF1"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="abmp2_phase_read1"><field name="VAR" id="abmp2_phase">recovery_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">1</field></block></value></block></value>
+              <statement name="DO1"><block type="variables_set" id="abmp2_to_over"><field name="VAR" id="abmp2_phase">recovery_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">0</field></block></value></block></statement>
+              <statement name="ELSE"><block type="variables_set" id="abmp2_recovery_win"><field name="VAR" id="abmp2_phase">recovery_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">0</field></block></value></block></statement>
+            </block></next>
+          </block></statement>
+          <statement name="ELSE"><block type="variables_set" id="abmp2_loss_stake"><field name="VAR" id="abmp2_stake">stake</field><value name="VALUE"><block type="math_arithmetic"><field name="OP">MULTIPLY</field><value name="A"><block type="variables_get"><field name="VAR" id="abmp2_stake">stake</field></block></value><value name="B"><block type="variables_get" id="abmp2_mg_get"><field name="VAR" id="abmp2_mg">martingale</field></block></value></block></value>
+             <next><block type="variables_set" id="abmp2_loss_phase"><field name="VAR" id="abmp2_phase">recovery_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">2</field></block></value></block></next>
+          </block></statement>
+          <next><block type="trade_again"/></next>
+        </block></next>
+      </block>
+    </statement>
+  </block>
+</xml>

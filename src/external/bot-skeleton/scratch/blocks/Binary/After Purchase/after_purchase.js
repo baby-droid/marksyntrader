@@ -73,12 +73,144 @@ window.Blockly.Blocks.after_purchase = {
 
 window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block => {
     const stack = window.Blockly.JavaScript.javascriptGenerator.statementToCode(block, 'AFTERPURCHASE_STACK');
-    const code = `
+    // King Fisher templates deliberately keep scanning after every settlement.
+    // Their risk variables are still updated by the workspace blocks, but a
+    // TP/SL branch must not end the interpreter after the first contract.
+    const workspaceBlocks = block.workspace?.getAllBlocks?.()
+        ?? window.Blockly.derivWorkspace?.getAllBlocks?.()
+        ?? [];
+    const isKingFisher = workspaceBlocks.some(candidate =>
+        String(candidate.type || '').startsWith('king_fisher_')
+    );
+    const shouldRotateContinuousMarkets = workspaceBlocks.some(candidate =>
+        candidate.type === 'trade_definition_market' &&
+        candidate.getFieldValue?.('ALTERNATE_MARKETS') === 'TRUE'
+    );
+    const hasKingFisherRestartGuard = workspaceBlocks.some(candidate =>
+        candidate.type === 'king_fisher_restart_trade'
+    );
+    const normalizeVariableName = value => String(value ?? '')
+        .trim()
+        .toLowerCase()
+        .replace(/[\s_-]+/g, ' ');
+    const workspaceVariables = block.workspace?.getVariableMap?.()?.getVariables?.() ?? [];
+    const variableName = variableNameText => {
+        const targetName = normalizeVariableName(variableNameText);
+        const variable = workspaceVariables.find(candidate => candidate.name === variableNameText)
+            || workspaceVariables.find(candidate => normalizeVariableName(candidate.name) === targetName);
+        return variable
+            ? window.Blockly.JavaScript.variableDB_.getName(
+                variable.getId(),
+                window.Blockly.Variables.CATEGORY_NAME
+            )
+            : null;
+    };
+    const tradeOptionsBlock = workspaceBlocks.find(
+        candidate => candidate.type === 'trade_definition_tradeoptions'
+    );
+    const predictionBlock = tradeOptionsBlock?.getInputTargetBlock?.('PREDICTION');
+    const contractBarrier = Number(predictionBlock?.getFieldValue?.('NUM'));
+    const isRecoveryStakeBot = isKingFisher && (contractBarrier === 2 || contractBarrier === 7);
+    const stakeVariable = variableName('stake');
+    const baseStakeVariable = variableName('base stake');
+    const martingaleVariable = variableName('martingale');
+    const recoveryStateDeclaration = isRecoveryStakeBot && stakeVariable && baseStakeVariable
+        ? 'var kingFisherRecoveryStake = 0; var kingFisherRecoveryCarryWins = 0;'
+        : '';
+    const recoveryStakeCode = isRecoveryStakeBot && stakeVariable && baseStakeVariable
+        ? `
+        // Over 2 and Under 7 keep the recovered martingale stake for three
+        // additional trades after the recovery trade wins. A new loss starts
+        // a new recovery and replaces the carried stake.
+        if (Bot.isResult("win")) {
+            if (kingFisherRecoveryStake > 0) {
+                if (kingFisherRecoveryCarryWins === 0) {
+                    kingFisherRecoveryCarryWins = 3;
+                } else {
+                    kingFisherRecoveryCarryWins -= 1;
+                }
+                ${stakeVariable} = kingFisherRecoveryCarryWins > 0
+                    ? kingFisherRecoveryStake
+                    : ${baseStakeVariable};
+                if (kingFisherRecoveryCarryWins === 0) kingFisherRecoveryStake = 0;
+            } else {
+                ${stakeVariable} = ${baseStakeVariable};
+            }
+        } else {
+            kingFisherRecoveryStake = Number(${stakeVariable}) > 0
+                ? Number(${stakeVariable})
+                : Number(${baseStakeVariable});
+            kingFisherRecoveryCarryWins = 0;
+        }`
+        : '';
+    const kingFisherStakeSnapshot = isKingFisher && stakeVariable
+        ? `var kingFisherSettledStake = Number(${stakeVariable});`
+        : '';
+    const kingFisherStakeHandoff = isKingFisher && stakeVariable && baseStakeVariable && martingaleVariable
+        ? `
+        /*
+         * King Fisher owns the next purchase stake at settlement time. The
+         * XML result blocks remain visible/editable in the workspace, while
+         * this handoff is the runtime guard that makes a loss always carry
+         * the configured multiplier into the following real contract.
+         * Over 2 and Under 7 retain their recovery-win carry logic below.
+         */
+        if (!Bot.isResult("win") && !(${isRecoveryStakeBot ? 'true' : 'false'}) &&
+            (!(Number(${stakeVariable}) > Number(kingFisherSettledStake) && Number(kingFisherSettledStake) > 0))) {
+            ${stakeVariable} = Number(kingFisherSettledStake) > 0
+                ? Number(kingFisherSettledStake) * Number(${martingaleVariable})
+                : Number(${baseStakeVariable}) * Number(${martingaleVariable});
+        }`
+        : '';
+    let riskGuard = '';
+    if (isKingFisher && !hasKingFisherRestartGuard) {
+        const takeProfitBlock = workspaceBlocks.find(
+            candidate => candidate.type === 'variables_get'
+                && normalizeVariableName(
+                    candidate.getField?.('VAR')?.getText?.()
+                    || workspaceVariables.find(variable => variable.getId() === candidate.getFieldValue?.('VAR'))?.name
+                    || candidate.getFieldValue?.('VAR')
+                ) === 'take profit'
+        );
+        const stopLossBlock = workspaceBlocks.find(
+            candidate => candidate.type === 'variables_get'
+                && normalizeVariableName(
+                    candidate.getField?.('VAR')?.getText?.()
+                    || workspaceVariables.find(variable => variable.getId() === candidate.getFieldValue?.('VAR'))?.name
+                    || candidate.getFieldValue?.('VAR')
+                ) === 'stop loss'
+        );
+        const takeProfit = takeProfitBlock
+            ? window.Blockly.JavaScript.javascriptGenerator.forBlock.variables_get(takeProfitBlock)[0]
+            : '0';
+        const stopLoss = stopLossBlock
+            ? window.Blockly.JavaScript.javascriptGenerator.forBlock.variables_get(stopLossBlock)[0]
+            : '0';
+        riskGuard = `
+        if (Number(${takeProfit}) > 0 && Bot.getTotalProfit(false) >= Number(${takeProfit})) {
+            if (typeof Bot.emitJournalSignal === "function") Bot.emitJournalSignal({ type: "WIN", label: "TAKE PROFIT HIT", detail: "Keep trading with the best — TP reached" });
+            if (typeof Bot.requestKingFisherRescan === "function") Bot.requestKingFisherRescan({ reason: "take-profit", profit: Bot.getTotalProfit(false) });
+            return false;
+        }
+        if (Number(${stopLoss}) > 0 && Bot.getTotalProfit(false) <= -Number(${stopLoss})) {
+            if (typeof Bot.emitJournalSignal === "function") Bot.emitJournalSignal({ type: "LOSS", label: "STOP LOSS HIT", detail: "Trading stopped at the configured limit" });
+            if (typeof Bot.requestKingFisherRescan === "function") Bot.requestKingFisherRescan({ reason: "stop-loss", profit: Bot.getTotalProfit(false) });
+            return false;
+        }`;
+    }
+    const continuation = isKingFisher
+        ? 'if (typeof Bot.shouldRescanKingFisher === "function" && Bot.shouldRescanKingFisher()) return false; Bot.isTradeAgain(true); return true;'
+        : 'Bot.isTradeAgain(false); return false;';
+    const code = `${recoveryStateDeclaration}
     BinaryBotPrivateAfterPurchase = function BinaryBotPrivateAfterPurchase() {
         Bot.highlightBlock('${block.id}');
+        ${kingFisherStakeSnapshot}
         ${stack}
-        Bot.isTradeAgain(false);
-        return false;
+        ${riskGuard}
+        ${kingFisherStakeHandoff}
+        ${recoveryStakeCode}
+        ${shouldRotateContinuousMarkets ? 'Bot.rotateContinuousMarket();' : ''}
+        ${continuation}
     };`;
     return code;
 };

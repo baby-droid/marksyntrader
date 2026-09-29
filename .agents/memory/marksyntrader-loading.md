@@ -3,15 +3,14 @@ name: Marksyntrader initialization loading screen
 description: Understanding the "Initializing Deriv Bot account..." loading state
 ---
 
-The app always shows "Initializing Deriv Bot account..." on startup. This is controlled by `is_loading` in `src/app/app-content.jsx`.
+The pre-change startup flow uses the colored-bar ChunkLoader while the store/API and lazy route initialize. AppContent keeps the branded LoadingScreen for its own existing loading branch, with the prior 1.2-second minimum and 7-second API fallback.
 
 Flow:
-1. API connects → `is_api_initialized = true`
-2. `init()` + `changeActiveSymbolLoadingState()` are called
-3. `is_loading = true`
-4. `retrieveActiveSymbols()` resolves → `is_loading = false`
-5. Main UI renders
+1. The outer route suspense uses ChunkLoader with the connection message.
+2. AppRoot waits for the store and API initialization before rendering AppContent.
+3. AppRoot suspense uses ChunkLoader with the Loading message.
+4. AppContent keeps its previous minimum-delay and API fallback behavior.
 
-**Why:** Active symbols must be fetched before the Blockly workspace and contract panels work correctly.
+**Why:** The branded full-screen loading page was introduced by a later change; restoring the previous behavior prevents the pulled loading-screen changes from altering startup UX.
 
-**How to apply:** Do not mistake the loading screen for a broken app. It resolves in a few seconds after the DerivAPI WebSocket connects. If it never resolves, check `ApiHelpers.instance.active_symbols`.
+**How to apply:** Keep route/API suspense on ChunkLoader and do not replace it with LoadingScreen unless the user explicitly asks to restore the newer branded startup flow.

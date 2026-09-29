@@ -20,7 +20,13 @@ export function getCSRFToken(): string | null {
   const raw = sessionStorage.getItem(CSRF_TOKEN_KEY);
   if (!raw) return null;
 
-  const stored: StoredCSRFToken = JSON.parse(raw);
+  let stored: StoredCSRFToken;
+  try {
+    stored = JSON.parse(raw);
+  } catch {
+    clearCSRFToken();
+    return null;
+  }
   if (Date.now() - stored.createdAt > TOKEN_MAX_AGE_MS) {
     clearCSRFToken();
     return null;
@@ -43,7 +49,13 @@ export function getCodeVerifier(): string | null {
   const raw = sessionStorage.getItem(CODE_VERIFIER_KEY);
   if (!raw) return null;
 
-  const stored: StoredCodeVerifier = JSON.parse(raw);
+  let stored: StoredCodeVerifier;
+  try {
+    stored = JSON.parse(raw);
+  } catch {
+    clearCodeVerifier();
+    return null;
+  }
   if (Date.now() - stored.createdAt > TOKEN_MAX_AGE_MS) {
     clearCodeVerifier();
     return null;

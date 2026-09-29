@@ -91,7 +91,9 @@ export const useResetDemoBalance = () => {
                 // Restart the live balance subscription so every component that
                 // reads the balance (header, account-switcher, etc.) gets the new
                 // amount pushed through without needing a page reload.
-                (api_base.api as any).send({ balance: 1, subscribe: 1 }).catch(() => {});
+                // APIBase owns the live balance stream; request a fresh snapshot
+                // instead of opening a duplicate subscription after top-up.
+                (api_base.api as any).send({ balance: 1 }).catch(() => {});
                 // Also ask for an account-status refresh so the store is current.
                 (api_base.api as any).send({ get_account_status: 1 }).catch(() => {});
                 // Clear success flash after 2 s

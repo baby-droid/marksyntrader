@@ -20,7 +20,13 @@
  *  real_demo → listen to 'real' master trades → follower needs DEMO account
  */
 
-import { MasterTradeSignal, subscribeMasterTrades, getMasterSource, publishMasterTrade } from './trade-bus';
+import {
+    MasterTradeSignal,
+    subscribeMasterTrades,
+    getMasterSource,
+    publishMasterTrade,
+    normalizeLimitOrder,
+} from './trade-bus';
 // Auto-initialises the DBot→copy-trade bridge (bot.contract listener).
 // Must be imported here so it activates as soon as copy-trading loads.
 import './copy-trade-bridge';
@@ -244,6 +250,9 @@ class CopyEngine {
      *  subsequent transaction-backup signal (which HAS a contract_id) can be
      *  blocked and won't cause a duplicate follower buy. */
     private preSignaledFps:    Map<string, number>  = new Map();
+    /** Exact pre-signal identities for rapid repeated trades, such as a batch
+     *  of identical contracts. */
+    private preSignaledKeys:   Map<string, number>  = new Map();
     /** Kept alive for the engine lifetime — DerivAPIBasic sends a real WS
      *  subscribe message on every api.onMessage().subscribe() call, so we must
      *  create it only once and never unsubscribe it. */
@@ -769,13 +778,17 @@ class CopyEngine {
                         const contract_type = poc.contract_type;
                         // buy_price = actual stake debited
                         const stake         = Number(poc.buy_price ?? txn.amount ?? 0);
-                        // Deriv POC: tick_count for tick contracts, duration for time-based
-                        const duration      = Number(poc.tick_count ?? poc.duration ?? 1);
-                        const duration_unit = (poc.duration_unit as string | undefined) ?? 't';
+                        // Accumulators do not use duration; other contracts do.
+                        const isAccumulator = poc.contract_type === 'ACCU';
+                        const duration      = isAccumulator ? undefined : Number(poc.tick_count ?? poc.duration ?? 1);
+                        const duration_unit = isAccumulator ? undefined : (poc.duration_unit as string | undefined) ?? 't';
                         const barrier       = poc.barrier ?? undefined;
+                        const growth_rate   = poc.growth_rate != null ? Number(poc.growth_rate) : undefined;
+                        const limit_order   = normalizeLimitOrder(poc.limit_order);
                         if (!symbol || !contract_type || stake <= 0) return;
                         publishMasterTrade({
-                            symbol, contract_type, stake, duration, duration_unit, barrier,
+                            symbol, contract_type, stake, duration, duration_unit, barrier, growth_rate,
+                            limit_order,
                             source: getMasterSource(),
                             time:   Date.now(),
                             contract_id,   // onMasterTrade will deduplicate via mirroredContracts
@@ -801,6 +814,17 @@ class CopyEngine {
         // fire for the same trade.
         if (sig.contract_id) {
             if (this.mirroredContracts.has(sig.contract_id)) return;
+
+            // A direct post-buy confirmation for a pre-signal carries the
+            // exact trade key. Register the contract ID but do not buy again.
+            if (sig.trade_key) {
+                const preTs = this.preSignaledKeys.get(sig.trade_key);
+                if (preTs && Date.now() - preTs < 5000) {
+                    this.preSignaledKeys.delete(sig.trade_key);
+                    this.mirroredContracts.add(sig.contract_id);
+                    return;
+                }
+            }
 
             // ── Cross-check: was this trade already handled by a pre-signal? ──
             // When the manual-trader fires publishMasterTrade WITHOUT a contract_id
@@ -841,9 +865,19 @@ class CopyEngine {
         if (!sig.contract_id) {
             const fp     = `${sig.symbol}|${sig.contract_type}|${sig.duration}|${sig.barrier ?? ''}`;
             const fpNow  = Date.now();
-            const fpLast = this.recentSignals.get(fp);
-            if (fpLast && fpNow - fpLast < 5000) return;   // same manual trade within 5 s → skip
-            this.recentSignals.set(fp, fpNow);
+            if (sig.trade_key) {
+                const keyLast = this.preSignaledKeys.get(sig.trade_key);
+                if (keyLast && fpNow - keyLast < 5000) return;
+                this.preSignaledKeys.set(sig.trade_key, fpNow);
+                if (this.preSignaledKeys.size > 200) {
+                    const oldestKey = this.preSignaledKeys.keys().next().value as string | undefined;
+                    if (oldestKey) this.preSignaledKeys.delete(oldestKey);
+                }
+            } else {
+                const fpLast = this.recentSignals.get(fp);
+                if (fpLast && fpNow - fpLast < 5000) return;   // same legacy signal within 5 s → skip
+                this.recentSignals.set(fp, fpNow);
+            }
             // Record in preSignaledFps so the transaction-backup (with contract_id)
             // for this same trade is blocked by the cross-check in layer 1 above.
             this.preSignaledFps.set(fp, fpNow);
@@ -862,18 +896,26 @@ class CopyEngine {
 
         // Separate: bulk-eligible (same account type, ratio=1, commission tracked separately)
         // vs individual (custom ratio or mixed type)
-        const bulkGroup:     { f: Follower; conn: FollowerConn }[] = [];
+        const bulkGroups = new Map<string, { f: Follower; conn: FollowerConn }[]>();
         const individualGroup: { f: Follower; conn: FollowerConn }[] = [];
 
         for (const f of activeFollowers) {
             const conn = this.conns.get(f.id);
             if (!conn || conn.dead) continue;
-            // Use bulk-purchase when ratio=1 and WS isn't open (or as fallback)
             // Always prefer WS (already connected) — it supports per-follower ratio
             if (conn.ws?.readyState === WebSocket.OPEN) {
                 individualGroup.push({ f, conn });
+            } else if (Math.abs((f.ratio ?? 1) - 1) < 0.000001) {
+                // Bulk-purchase has one shared stake/currency for every account.
+                // Only ratio-1 followers can use it without changing the trade.
+                const currency = f.currency === '---' ? 'USD' : f.currency;
+                const group = bulkGroups.get(currency) ?? [];
+                group.push({ f, conn });
+                bulkGroups.set(currency, group);
             } else {
-                bulkGroup.push({ f, conn });
+                // Never silently send a ratio-1 trade to a custom-ratio follower
+                // while its private socket is reconnecting.
+                this.log(`⚠️ ${f.loginid}: waiting for reconnect; custom ratio trade was not scaled incorrectly.`);
             }
         }
 
@@ -902,10 +944,12 @@ class CopyEngine {
                 basis:             'stake',
                 contract_type:     sig.contract_type,   // e.g. DIGITMATCH, CALL, PUT …
                 currency,
-                duration:          sig.duration,        // e.g. 1 (one tick)
-                duration_unit:     sig.duration_unit,   // e.g. 't'
                 underlying_symbol: sig.symbol,          // e.g. R_100
             };
+            if (sig.duration != null) contractParams.duration = sig.duration;
+            if (sig.duration_unit) contractParams.duration_unit = sig.duration_unit;
+            if (sig.growth_rate != null) contractParams.growth_rate = sig.growth_rate;
+            if (sig.limit_order) contractParams.limit_order = sig.limit_order;
             // barrier = digit prediction (e.g. "8" for DIGITMATCH) or barrier level — must be string
             if (sig.barrier != null && sig.barrier !== '') {
                 contractParams.barrier = String(sig.barrier);
@@ -924,7 +968,8 @@ class CopyEngine {
                     });
                     const barrierStr = sig.barrier != null ? ` [barrier:${sig.barrier}]` : '';
                     const commLog    = commissionAmt > 0 ? ` | 💰 +${commissionAmt}` : '';
-                    this.log(`🔁 ${f.loginid}: ${sig.contract_type}${barrierStr} ×${stake} ${currency} ${sig.duration}${sig.duration_unit}${commLog}`);
+                    const durationLabel = sig.duration != null ? ` ${sig.duration}${sig.duration_unit ?? ''}` : '';
+                    this.log(`🔁 ${f.loginid}: ${sig.contract_type}${barrierStr} ×${stake} ${currency}${durationLabel}${commLog}`);
                 })
                 .catch(() => {
                     // ── FALLBACK: proposal → buy — 2 RTTs ─────────────────
@@ -944,14 +989,15 @@ class CopyEngine {
                             });
                             const barrierStr = sig.barrier != null ? ` [barrier:${sig.barrier}]` : '';
                             const commLog    = commissionAmt > 0 ? ` | 💰 +${commissionAmt}` : '';
-                            this.log(`🔁 ${f.loginid}: ${sig.contract_type}${barrierStr} ×${stake} ${currency} ${sig.duration}${sig.duration_unit}${commLog} [via proposal]`);
+                            const durationLabel = sig.duration != null ? ` ${sig.duration}${sig.duration_unit ?? ''}` : '';
+                            this.log(`🔁 ${f.loginid}: ${sig.contract_type}${barrierStr} ×${stake} ${currency}${durationLabel}${commLog} [via proposal]`);
                         })
                         .catch(err => this.log(`❌ ${f.loginid}: ${err?.message ?? 'trade failed'}`));
                 });
         }
 
         // ── Bulk-purchase (WS not open — fallback path) ───────────────────
-        if (bulkGroup.length > 0) {
+        for (const [bulkCurrency, bulkGroup] of bulkGroups) {
             const stake = Math.max(0.35, +(sig.stake).toFixed(2)); // ratio=1 for bulk
             const accounts = bulkGroup.map(({ f }) => ({
                 account_id: f.loginid,
@@ -961,11 +1007,13 @@ class CopyEngine {
                 amount:            stake,
                 basis:             'stake',
                 contract_type:     sig.contract_type,
-                currency:          'USD',
-                duration:          sig.duration,
-                duration_unit:     sig.duration_unit,
+                currency:          bulkCurrency,
                 underlying_symbol: sig.symbol,
             };
+            if (sig.duration != null) contractParams.duration = sig.duration;
+            if (sig.duration_unit) contractParams.duration_unit = sig.duration_unit;
+            if (sig.growth_rate != null) contractParams.growth_rate = sig.growth_rate;
+            if (sig.limit_order) contractParams.limit_order = sig.limit_order;
             if (sig.barrier != null) contractParams.barrier = String(sig.barrier);
 
             bulkPurchase(wantType, contractParams, accounts).then(results => {
@@ -974,8 +1022,14 @@ class CopyEngine {
                     if (!entry) continue;
                     if (r.ok) {
                         const cur = this.followers.find(x => x.id === entry.f.id);
-                        if (cur) this.updateFollower(entry.f.id, { replicated: cur.replicated + 1 });
-                        this.log(`🔁 ${r.account_id}: ${sig.contract_type} ×${stake} (bulk)`);
+                        if (cur) {
+                            this.updateFollower(entry.f.id, {
+                                replicated: cur.replicated + 1,
+                                commissionEarned: +(cur.commissionEarned + stake * (entry.f.commission ?? 0) / 100).toFixed(2),
+                            });
+                        }
+                        const durationLabel = sig.duration != null ? ` ${sig.duration}${sig.duration_unit ?? ''}` : '';
+                        this.log(`🔁 ${r.account_id}: ${sig.contract_type} ×${stake} ${bulkCurrency}${durationLabel} (bulk)`);
                     } else {
                         this.log(`❌ ${r.account_id}: ${r.error}`);
                     }

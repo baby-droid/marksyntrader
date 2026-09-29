@@ -1,0 +1,2052 @@
+Yes. The logic should be made much more explicit so another LLM can implement the **strategy engine, scanner, validation, signal generation, market routing, and execution rules** without having to infer missing pieces.
+
+Below is the refined **logic-only specification** for the three directional cards.
+
+# 1. CORE OBJECTIVE
+
+Build a directional market-selection engine with three strategies:
+
+### Card 1 — RISE
+
+Trades **Rise/Call only**.
+
+### Card 2 — FALL
+
+Trades **Fall/Put only**.
+
+### Card 3 — RISE/FALL BIAS
+
+Can trade either **Rise or Fall**, automatically selecting the stronger direction from market bias, price flow, momentum, structure, and multi-window confirmation.
+
+The engine should prioritize:
+
+1. High-quality setups
+2. Strong directional agreement
+3. Low-chop markets
+4. Multi-time-window confirmation
+5. Market-specific behavior
+6. Few but higher-quality trades
+7. Capital preservation
+8. Automatic market switching when conditions deteriorate
+
+It must **not assume that a high score guarantees a winning contract**. A signal is only an entry candidate after all required filters pass.
+
+---
+
+# 2. SUPPORTED MARKET FAMILIES
+
+The scanner should dynamically discover available markets and classify them into:
+
+```text
+1. 1s Volatility
+2. Jump Indices
+3. Plain Volatility Indices
+4. Bear Markets
+5. Bull Markets
+```
+
+The engine must not assume every market behaves identically.
+
+Each market receives a classification:
+
+```text
+market_family
+market_symbol
+tick_speed
+volatility_regime
+directional_regime
+data_quality
+tradability
+```
+
+Example:
+
+```text
+Market:
+Volatility 100 (1s)
+
+Family:
+1s Volatility
+
+Regime:
+Bullish trend
+
+Volatility:
+High
+
+Chop:
+Low
+
+Rise suitability:
+Excellent
+
+Fall suitability:
+Poor
+
+Bias suitability:
+Excellent
+```
+
+---
+
+# 3. MARKET DISCOVERY ENGINE
+
+The scanner starts by discovering active instruments.
+
+For every discovered market:
+
+```text
+GET market metadata
+        ↓
+GET current price
+        ↓
+LOAD 1000 historical ticks
+        ↓
+START live tick stream
+        ↓
+BUILD rolling 1000-tick buffer
+        ↓
+CALCULATE indicators
+        ↓
+CLASSIFY market
+        ↓
+CALCULATE Rise score
+        ↓
+CALCULATE Fall score
+        ↓
+CALCULATE Bias score
+        ↓
+RANK market
+```
+
+A market cannot become tradable until its required historical buffer is available.
+
+---
+
+# 4. 1000-TICK BASELINE
+
+The **1000-tick dataset is the long-term statistical baseline**.
+
+It should not directly trigger an entry.
+
+Its purpose is to determine:
+
+* dominant direction
+* long-term slope
+* volatility
+* trend strength
+* directional persistence
+* market stability
+* recent regime relative to historical behavior
+* whether the current 20/50/100-tick behavior is unusual
+
+Calculate:
+
+```text
+1000T direction
+1000T slope
+1000T volatility
+1000T high
+1000T low
+1000T range
+1000T average movement
+1000T upward movement %
+1000T downward movement %
+1000T alternation %
+1000T persistence
+```
+
+The 1000-tick baseline acts as the **regime filter**.
+
+---
+
+# 5. SHORT-TERM WINDOWS
+
+Use three entry windows:
+
+```text
+20 ticks
+50 ticks
+100 ticks
+```
+
+Their purposes are different.
+
+### 20 ticks
+
+Detect immediate flow.
+
+```text
+What is happening RIGHT NOW?
+```
+
+### 50 ticks
+
+Detect short-term structure.
+
+```text
+Is the current move persistent?
+```
+
+### 100 ticks
+
+Confirm the local trend.
+
+```text
+Is this more than a short burst?
+```
+
+Therefore:
+
+```text
+1000 = regime
+100  = local trend
+50   = confirmation
+20   = entry flow
+```
+
+---
+
+# 6. PRICE MOVEMENT CLASSIFICATION
+
+Every consecutive tick should be classified:
+
+```text
+UP
+DOWN
+FLAT
+```
+
+For each window:
+
+```text
+up_count
+down_count
+flat_count
+up_ratio
+down_ratio
+flat_ratio
+```
+
+Example:
+
+```text
+20 ticks:
+
+UP   = 14
+DOWN = 5
+FLAT = 1
+
+UP ratio = 70%
+DOWN ratio = 25%
+```
+
+This is a strong short-term bullish flow.
+
+---
+
+# 7. DIRECTIONAL DOMINANCE
+
+For each window calculate:
+
+```text
+directional_edge = abs(up_ratio - down_ratio)
+```
+
+Example:
+
+```text
+UP = 68%
+DOWN = 27%
+
+edge = 41%
+```
+
+This is much stronger than:
+
+```text
+UP = 53%
+DOWN = 47%
+```
+
+The second condition should generally be rejected because the market is balanced.
+
+Suggested minimum directional dominance:
+
+```text
+<55%      weak
+55–59%    marginal
+60–64%    usable
+65–69%    strong
+70%+      very strong
+```
+
+These are **filters/heuristics**, not guarantees. They should ultimately be calibrated from backtesting.
+
+---
+
+# 8. MULTI-WINDOW CONFIRMATION
+
+A directional signal becomes stronger when:
+
+```text
+20T
+50T
+100T
+```
+
+agree.
+
+Example:
+
+```text
+20T = UP 72%
+50T = UP 65%
+100T = UP 61%
+```
+
+Excellent alignment.
+
+But:
+
+```text
+20T = UP 75%
+50T = DOWN 57%
+100T = DOWN 55%
+```
+
+should be rejected for Rise because the immediate move may be a temporary spike.
+
+The engine should therefore distinguish:
+
+```text
+FULL ALIGNMENT
+PARTIAL ALIGNMENT
+CONFLICT
+```
+
+---
+
+# 9. TREND STRUCTURE ENGINE
+
+Do not rely only on percentage movement.
+
+Analyze price structure.
+
+## Rise structure
+
+Look for:
+
+```text
+Higher High
+Higher Low
+Higher High
+Higher Low
+```
+
+Example:
+
+```text
+100.00
+100.20  HH
+100.10  HL
+100.35  HH
+100.25  HL
+100.50  HH
+```
+
+This indicates bullish continuation.
+
+## Fall structure
+
+Look for:
+
+```text
+Lower Low
+Lower High
+Lower Low
+Lower High
+```
+
+Example:
+
+```text
+100.00
+99.80   LL
+99.90   LH
+99.60   LL
+99.70   LH
+99.40   LL
+```
+
+This indicates bearish continuation.
+
+---
+
+# 10. MOMENTUM ENGINE
+
+Calculate momentum over multiple windows.
+
+For example:
+
+```text
+momentum20
+momentum50
+momentum100
+```
+
+Momentum should consider:
+
+```text
+price displacement
+movement frequency
+movement consistency
+acceleration
+```
+
+A market moving upward is not necessarily strongly bullish if the upward movement is slowing rapidly.
+
+---
+
+# 11. ACCELERATION
+
+Compare recent momentum against previous momentum.
+
+Example:
+
+```text
+Previous 20T momentum = +0.04
+Current 20T momentum  = +0.09
+```
+
+Acceleration is positive.
+
+This strengthens Rise.
+
+Conversely:
+
+```text
+Previous = +0.09
+Current  = +0.02
+```
+
+Bullish momentum is weakening.
+
+The Rise score should be reduced.
+
+---
+
+# 12. PERSISTENCE ENGINE
+
+Measure how long directional movement survives.
+
+Example:
+
+```text
+UP UP UP DOWN UP UP UP
+```
+
+has better bullish persistence than:
+
+```text
+UP DOWN UP DOWN UP DOWN
+```
+
+Calculate:
+
+```text
+average_up_run
+average_down_run
+maximum_up_run
+maximum_down_run
+current_run
+```
+
+A directional strategy should prefer persistent movement rather than alternating movement.
+
+---
+
+# 13. CHOP DETECTOR
+
+This is one of the most important filters.
+
+Detect:
+
+```text
+UP DOWN UP DOWN UP DOWN
+```
+
+or:
+
+```text
+DOWN UP DOWN UP DOWN UP
+```
+
+These conditions should reduce or completely block directional trades.
+
+Calculate:
+
+```text
+alternation_rate
+direction_changes
+average_run_length
+```
+
+Example:
+
+```text
+20T:
+
+UP/DOWN changes = 15
+average run = 1.25
+```
+
+This is highly choppy.
+
+Result:
+
+```text
+NO TRADE
+```
+
+---
+
+# 14. REVERSAL DETECTOR
+
+Do not immediately switch direction because of one opposite tick.
+
+Example:
+
+```text
+UP UP UP UP UP DOWN
+```
+
+is still potentially bullish.
+
+But:
+
+```text
+UP UP UP DOWN DOWN DOWN DOWN
+```
+
+indicates possible reversal.
+
+Require confirmation from:
+
+```text
+20T
+50T
+100T
+```
+
+before declaring a reversal.
+
+A reversal becomes credible when:
+
+```text
+20T direction changes
++
+50T momentum weakens
++
+100T structure breaks
+```
+
+---
+
+# 15. RISE CARD LOGIC
+
+The Rise card can **only execute Rise contracts**.
+
+It should require:
+
+### Regime
+
+```text
+1000T = bullish or neutral-bullish
+```
+
+### Short-term direction
+
+```text
+20T = UP
+50T = UP
+100T = UP
+```
+
+Prefer:
+
+```text
+UP ratio >= 60%
+```
+
+across the important windows.
+
+### Structure
+
+Require some evidence of:
+
+```text
+HH + HL
+```
+
+### Momentum
+
+```text
+momentum > 0
+```
+
+and preferably increasing.
+
+### Persistence
+
+```text
+up runs > down runs
+```
+
+### Chop
+
+```text
+chop = LOW
+```
+
+### Counter-movement
+
+Small counter-moves are acceptable.
+
+Large repeated counter-moves are not.
+
+---
+
+# 16. RISE SCORE
+
+Example scoring model:
+
+```text
+Rise Score =
+    20% × 20T direction
+  + 20% × 50T direction
+  + 20% × 100T direction
+  + 15% × 1000T regime
+  + 10% × momentum
+  + 5%  × structure
+  + 5%  × persistence
+  + 5%  × volatility quality
+  - counter-move penalty
+  - chop penalty
+```
+
+Example:
+
+```text
+20T = 91
+50T = 84
+100T = 81
+1000T = 76
+Momentum = 88
+Structure = 90
+Persistence = 86
+Volatility = 80
+
+Rise Score = 85+
+```
+
+Only then can it become a candidate.
+
+---
+
+# 17. FALL CARD LOGIC
+
+Fall is the exact directional mirror.
+
+Require:
+
+```text
+1000T = bearish / neutral-bearish
+
+20T = DOWN
+50T = DOWN
+100T = DOWN
+
+down ratio >= preferred threshold
+
+Lower Low
+Lower High
+Lower Low
+
+negative momentum
+
+strong downward persistence
+
+low chop
+```
+
+Reject when:
+
+```text
+20T DOWN
+50T UP
+100T UP
+```
+
+because the immediate decline may simply be a pullback.
+
+---
+
+# 18. FALL SCORE
+
+Use:
+
+```text
+Fall Score =
+    20% × 20T downward direction
+  + 20% × 50T downward direction
+  + 20% × 100T downward direction
+  + 15% × 1000T bearish regime
+  + 10% × negative momentum
+  + 5%  × bearish structure
+  + 5%  × persistence
+  + 5%  × volatility quality
+  - counter-move penalty
+  - chop penalty
+```
+
+---
+
+# 19. RISE/FALL BIAS CARD
+
+This is the most flexible card.
+
+It does not have a permanently assigned direction.
+
+It calculates:
+
+```text
+Rise Score
+Fall Score
+```
+
+and compares them.
+
+Example:
+
+```text
+Rise = 87
+Fall = 59
+```
+
+Therefore:
+
+```text
+BIAS = RISE
+```
+
+The engine may consider a Rise contract.
+
+Another market:
+
+```text
+Rise = 58
+Fall = 89
+```
+
+Therefore:
+
+```text
+BIAS = FALL
+```
+
+A third market:
+
+```text
+Rise = 72
+Fall = 70
+```
+
+Result:
+
+```text
+NO TRADE
+```
+
+because there is insufficient directional separation.
+
+---
+
+# 20. BIAS SEPARATION
+
+Do not simply choose the larger score.
+
+Require a minimum difference.
+
+```text
+bias_gap = RiseScore - FallScore
+```
+
+Use absolute value:
+
+```text
+abs(RiseScore - FallScore)
+```
+
+Suggested interpretation:
+
+```text
+0–5      completely balanced
+6–9      weak bias
+10–14    usable bias
+15–24    strong bias
+25+      very strong bias
+```
+
+The Bias card should normally require a meaningful gap before trading.
+
+---
+
+# 21. MARKET FLOW ENGINE
+
+Flow should be independent from the directional score.
+
+Measure:
+
+```text
+current direction
+movement frequency
+run length
+momentum
+acceleration
+counter-moves
+direction changes
+```
+
+Example:
+
+```text
+UP ratio = 69%
+Average UP run = 3.4
+Average DOWN run = 1.4
+Momentum = positive
+Acceleration = positive
+Alternation = low
+```
+
+Flow classification:
+
+```text
+STRONG BULLISH FLOW
+```
+
+The same logic mirrored produces:
+
+```text
+STRONG BEARISH FLOW
+```
+
+---
+
+# 22. FLOW + PATTERN CONFIRMATION
+
+A market should ideally have both:
+
+```text
+FLOW
++
+STRUCTURE
+```
+
+Example:
+
+```text
+Flow = bullish
+Structure = HH/HL
+Momentum = bullish
+```
+
+Strong.
+
+But:
+
+```text
+Flow = bullish
+Structure = lower highs
+```
+
+Conflict.
+
+Reject or downgrade.
+
+This prevents the system from entering simply because the last few ticks moved upward.
+
+---
+
+# 23. MARKET REGIME CLASSIFIER
+
+Every market should be classified into one of:
+
+```text
+STRONG BULL
+WEAK BULL
+RANGE
+STRONG BEAR
+WEAK BEAR
+CHOP
+REVERSAL
+HIGH VOLATILITY
+LOW VOLATILITY
+```
+
+The classifier should use:
+
+```text
+1000T
+100T
+50T
+20T
+```
+
+rather than only the last tick.
+
+---
+
+# 24. MARKET-SPECIFIC ROUTING
+
+## 1s Volatility
+
+Primary:
+
+```text
+Rise
+Fall
+Rise/Fall Bias
+```
+
+Characteristics to prioritize:
+
+```text
+short-term flow
+momentum
+acceleration
+20T confirmation
+50T confirmation
+```
+
+Avoid trading when:
+
+```text
+rapid alternation
+extreme micro-chop
+directional conflict
+```
+
+---
+
+# 25. JUMP MARKETS
+
+Primary:
+
+```text
+Rise
+Fall
+Rise/Fall Bias
+```
+
+But the engine must account for abrupt price movements.
+
+Use:
+
+```text
+jump detection
+range expansion
+outlier movement
+post-jump stabilization
+```
+
+Do not immediately enter after an unusually large movement.
+
+Instead:
+
+```text
+large movement
+      ↓
+wait for confirmation
+      ↓
+20T flow
+      ↓
+50T structure
+      ↓
+direction confirmation
+```
+
+This prevents chasing an isolated spike.
+
+---
+
+# 26. PLAIN VOLATILITY INDICES
+
+Primary:
+
+```text
+Rise
+Fall
+Rise/Fall Bias
+```
+
+Secondary strategies can later use:
+
+```text
+Even
+Odd
+Over
+Under
+Matches
+Differs
+```
+
+But directional cards should first determine whether the market has a meaningful directional regime.
+
+---
+
+# 27. BEAR MARKETS
+
+Bear markets should receive a natural Fall bias.
+
+However:
+
+**Do not automatically buy Fall simply because the market is called Bear.**
+
+The name of the market is only a prior.
+
+Require:
+
+```text
+bear regime
++
+current downward flow
++
+short-term confirmation
+```
+
+Example:
+
+```text
+Market family = Bear
+1000T = bearish
+100T = bearish
+50T = bearish
+20T = bearish
+```
+
+Excellent Fall candidate.
+
+But:
+
+```text
+Bear market
+1000T bearish
+20T bullish
+50T bullish
+100T bullish
+```
+
+should not immediately trade Fall.
+
+---
+
+# 28. BULL MARKETS
+
+Mirror the Bear logic.
+
+Bull markets naturally favor Rise, but still require:
+
+```text
+bull regime
++
+positive flow
++
+multi-window confirmation
+```
+
+Do not blindly trade Rise.
+
+---
+
+# 29. MARKET SUITABILITY SCORE
+
+Each market should receive a separate suitability score.
+
+Example:
+
+```text
+Market Suitability =
+    Trend Quality
+  + Flow Quality
+  + Data Quality
+  + Signal Strength
+  + Window Agreement
+  + Low Chop
+  + Stability
+```
+
+Then:
+
+```text
+Market A = 91
+Market B = 83
+Market C = 76
+Market D = 61
+```
+
+The engine selects Market A.
+
+---
+
+# 30. DO NOT TRADE THE FIRST SIGNAL
+
+The scanner should continuously evaluate markets.
+
+Pipeline:
+
+```text
+SCAN
+ ↓
+CANDIDATE
+ ↓
+VALIDATE
+ ↓
+VIRTUAL TEST
+ ↓
+RECONFIRM
+ ↓
+SIGNAL READY
+ ↓
+RISK CHECK
+ ↓
+EXECUTE
+```
+
+This is critical.
+
+---
+
+# 31. VIRTUAL VALIDATION
+
+Before executing, simulate the proposed direction.
+
+Example:
+
+```text
+Candidate:
+RISE
+
+Virtual trade #1
+Result = WIN
+
+Virtual trade #2
+Result = WIN
+```
+
+Then:
+
+```text
+SIGNAL VALIDATED
+```
+
+If:
+
+```text
+WIN
+LOSS
+```
+
+then:
+
+```text
+RESET VALIDATION
+```
+
+Do not execute immediately.
+
+---
+
+# 32. VIRTUAL VALIDATION MUST BE OUT-OF-SAMPLE
+
+The system should not validate using data that was already used to create the signal.
+
+Conceptually:
+
+```text
+Historical data
+     ↓
+Signal generation
+     ↓
+Freeze signal
+     ↓
+Observe next ticks
+     ↓
+Virtual result
+```
+
+This prevents look-ahead bias.
+
+---
+
+# 33. ENTRY TIMING
+
+A valid direction does not mean enter immediately.
+
+The engine should wait for an entry condition.
+
+For Rise:
+
+```text
+Bullish regime
++
+bullish flow
++
+short-term confirmation
++
+acceptable current position
++
+no reversal
++
+no chop
+```
+
+For Fall:
+
+```text
+Bearish regime
++
+bearish flow
++
+short-term confirmation
++
+acceptable current position
++
+no reversal
++
+no chop
+```
+
+---
+
+# 34. ENTRY STATE MACHINE
+
+Use explicit states:
+
+```text
+IDLE
+SCANNING
+CANDIDATE
+VALIDATING
+WAITING_ENTRY
+SIGNAL_READY
+RISK_CHECK
+EXECUTING
+MONITORING
+WIN
+LOSS
+COOLDOWN
+RESCAN
+```
+
+Never allow execution directly from `SCANNING`.
+
+---
+
+# 35. SIGNAL EXPIRATION
+
+A signal must expire.
+
+Example:
+
+```text
+Signal generated at tick T
+```
+
+If the market has moved through several new ticks without execution:
+
+```text
+SIGNAL EXPIRED
+```
+
+Recalculate.
+
+This prevents stale signals.
+
+---
+
+# 36. POST-LOSS LOGIC
+
+After one loss:
+
+```text
+DO NOT immediately reverse direction.
+```
+
+Instead:
+
+```text
+recalculate market
+recalculate Rise score
+recalculate Fall score
+recalculate flow
+recalculate structure
+```
+
+If the same direction remains strong:
+
+```text
+revalidate same direction
+```
+
+If the opposite direction becomes dominant:
+
+```text
+switch bias
+```
+
+If both become weak:
+
+```text
+STOP
+```
+
+---
+
+# 37. THREE-LOSS PROTECTION
+
+After 3 consecutive losses:
+
+```text
+STOP CURRENT MARKET
+```
+
+Then:
+
+```text
+clear active signal
+reload/revalidate market state
+scan alternative markets
+```
+
+The system should not simply increase stake to recover losses.
+
+---
+
+# 38. FOUR-LOSS PATTERN RESET
+
+If the engine reaches 4 consecutive losses:
+
+```text
+invalidate current strategy state
+reset virtual validation
+reclassify market
+switch market if necessary
+```
+
+Possible result:
+
+```text
+CURRENT MARKET = REJECTED
+```
+
+for a cooldown period.
+
+---
+
+# 39. NO-MARKET CONDITION
+
+The correct action is sometimes:
+
+```text
+NO TRADE
+```
+
+If:
+
+```text
+Rise score = 64
+Fall score = 66
+```
+
+do nothing.
+
+If:
+
+```text
+Rise = 78
+Fall = 77
+```
+
+do nothing.
+
+If:
+
+```text
+Rise = 84
+Fall = 52
+```
+
+Rise becomes a candidate.
+
+The scanner's job is not to always produce a trade.
+
+---
+
+# 40. CONFIDENCE STATES
+
+Use:
+
+```text
+0–59   NO TRADE
+60–69  WATCH
+70–79  CANDIDATE
+80–89  STRONG
+90–100 ELITE
+```
+
+However, an "elite" score should be rare and should only be assigned after the score has been empirically calibrated.
+
+---
+
+# 41. CROSS-CHECK ENGINE
+
+Before execution, perform an independent confirmation.
+
+Example:
+
+```text
+Rise Score       = 88
+Flow Score       = 91
+Structure        = Bullish
+20T              = UP
+50T              = UP
+100T             = UP
+1000T            = Bullish
+Chop             = Low
+Reversal         = False
+```
+
+Result:
+
+```text
+HIGH-QUALITY RISE CANDIDATE
+```
+
+Another:
+
+```text
+Rise Score = 83
+Flow = 61
+Structure = mixed
+20T = UP
+50T = DOWN
+100T = UP
+```
+
+Result:
+
+```text
+REJECT
+```
+
+---
+
+# 42. DIRECTIONAL AGREEMENT MATRIX
+
+Use:
+
+| 1000T | 100T        | 50T         | 20T         | Result                 |
+| ----- | ----------- | ----------- | ----------- | ---------------------- |
+| Bull  | Up          | Up          | Up          | Excellent Rise         |
+| Bull  | Up          | Up          | Down        | Wait                   |
+| Bull  | Down        | Down        | Down        | Possible reversal/Fall |
+| Bear  | Down        | Down        | Down        | Excellent Fall         |
+| Bear  | Down        | Down        | Up          | Wait                   |
+| Bear  | Up          | Up          | Up          | Possible reversal/Rise |
+| Range | Up          | Up          | Up          | Moderate Rise          |
+| Range | Down        | Down        | Down        | Moderate Fall          |
+| Range | Mixed       | Mixed       | Mixed       | No trade               |
+| Any   | Alternating | Alternating | Alternating | No trade               |
+
+---
+
+# 43. FLOW PATTERN EXAMPLES
+
+### Strong Rise
+
+```text
+UP UP
+UP
+DOWN
+UP UP UP
+DOWN
+UP UP
+```
+
+Not every tick needs to be UP.
+
+The important property is:
+
+```text
+UP dominance
++
+longer UP runs
++
+positive momentum
++
+higher highs
++
+higher lows
+```
+
+### Strong Fall
+
+```text
+DOWN DOWN
+UP
+DOWN DOWN
+UP
+DOWN DOWN DOWN
+```
+
+Properties:
+
+```text
+DOWN dominance
++
+longer DOWN runs
++
+negative momentum
++
+lower lows
++
+lower highs
+```
+
+---
+
+# 44. BAD RISE SETUP
+
+```text
+UP DOWN UP DOWN UP DOWN
+```
+
+Even if:
+
+```text
+UP = 55%
+```
+
+reject because:
+
+```text
+high alternation
+low persistence
+high chop
+```
+
+---
+
+# 45. BAD FALL SETUP
+
+```text
+DOWN UP DOWN UP DOWN UP
+```
+
+Reject for the same reason.
+
+---
+
+# 46. FALSE BREAKOUT FILTER
+
+Suppose price suddenly rises:
+
+```text
+UP UP UP UP
+```
+
+but:
+
+```text
+100T = bearish
+50T = bearish
+1000T = bearish
+```
+
+Do not immediately call this a Rise signal.
+
+Classify it as:
+
+```text
+POSSIBLE COUNTER-TREND MOVE
+```
+
+Wait for additional confirmation.
+
+---
+
+# 47. CONTINUATION FILTER
+
+If:
+
+```text
+1000T bullish
+100T bullish
+50T bullish
+20T bullish
+```
+
+but the current price has just made an unusually large upward movement, do not blindly chase.
+
+Check:
+
+```text
+extension
+range expansion
+momentum acceleration
+reversal probability
+```
+
+If overextended:
+
+```text
+WAIT FOR RECONFIRMATION
+```
+
+---
+
+# 48. VOLATILITY QUALITY FILTER
+
+High volatility does not automatically mean good trading conditions.
+
+Classify:
+
+```text
+LOW
+NORMAL
+HIGH
+EXTREME
+```
+
+Prefer:
+
+```text
+NORMAL
+HIGH + directional
+```
+
+Avoid:
+
+```text
+EXTREME + choppy
+```
+
+---
+
+# 49. DATA QUALITY FILTER
+
+A market should be rejected if:
+
+```text
+insufficient ticks
+missing ticks
+duplicate timestamps
+invalid prices
+stale stream
+large unexplained gaps
+```
+
+The strategy engine should never generate a signal from incomplete data.
+
+---
+
+# 50. MARKET RANKING
+
+Every scan cycle produces:
+
+```text
+Market
+Family
+Regime
+Rise Score
+Fall Score
+Bias
+Bias Gap
+Flow
+Chop
+Momentum
+Structure
+Suitability
+```
+
+Example:
+
+```text
+Market A
+Rise = 91
+Fall = 49
+Bias = RISE
+Flow = Strong Bull
+Chop = Low
+Suitability = 94
+
+Market B
+Rise = 84
+Fall = 67
+Bias = RISE
+Flow = Moderate Bull
+Chop = Medium
+Suitability = 78
+
+Market C
+Rise = 63
+Fall = 61
+Bias = NONE
+Flow = Neutral
+Chop = High
+Suitability = 42
+```
+
+Select A.
+
+---
+
+# 51. UNIVERSAL SCANNER ALGORITHM
+
+```text
+FOR every active market:
+
+    discover market
+
+    verify data quality
+
+    load 1000 ticks
+
+    create rolling windows:
+        1000
+        100
+        50
+        20
+
+    calculate:
+        direction
+        momentum
+        acceleration
+        persistence
+        structure
+        volatility
+        chop
+        reversal
+
+    classify market regime
+
+    calculate Rise Score
+
+    calculate Fall Score
+
+    calculate Bias Gap
+
+    calculate Market Suitability
+
+    IF data quality fails:
+        reject
+
+    IF chop is extreme:
+        reject
+
+    IF reversal is unresolved:
+        reject
+
+    IF Rise score qualifies:
+        create Rise candidate
+
+    IF Fall score qualifies:
+        create Fall candidate
+
+    IF Bias score qualifies:
+        create Bias candidate
+
+RANK all candidates
+
+SELECT strongest qualified candidate
+
+RUN virtual validation
+
+IF validation passes:
+    perform final entry check
+
+IF risk check passes:
+    execute
+
+ELSE:
+    reject
+
+AFTER trade:
+    record result
+
+    update statistics
+
+    recalculate market
+
+    continue scanning
+```
+
+---
+
+# 52. CARD-SPECIFIC BEHAVIOR
+
+## CARD 1 — RISE
+
+```text
+Allowed:
+RISE only
+
+Preferred:
+Bull markets
+1s Volatility
+Plain Volatility
+Jump markets with confirmed bullish flow
+
+Reject:
+Strong bearish regime
+Strong chop
+Unconfirmed reversal
+Conflicting windows
+Weak momentum
+```
+
+---
+
+## CARD 2 — FALL
+
+```text
+Allowed:
+FALL only
+
+Preferred:
+Bear markets
+1s Volatility
+Plain Volatility
+Jump markets with confirmed bearish flow
+
+Reject:
+Strong bullish regime
+Strong chop
+Unconfirmed reversal
+Conflicting windows
+Weak momentum
+```
+
+---
+
+## CARD 3 — RISE/FALL BIAS
+
+```text
+Allowed:
+RISE
+FALL
+
+Calculate both.
+
+IF RiseScore - FallScore >= required_gap:
+    choose Rise
+
+ELSE IF FallScore - RiseScore >= required_gap:
+    choose Fall
+
+ELSE:
+    NO TRADE
+```
+
+This card should be the **adaptive strategy**.
+
+---
+
+# 53. IMPORTANT: MARKET NAME IS NOT SIGNAL
+
+The engine must never do:
+
+```text
+Bull market → automatically Rise
+Bear market → automatically Fall
+```
+
+Instead:
+
+```text
+Market identity
++
+historical regime
++
+current flow
++
+structure
++
+momentum
++
+multi-window agreement
+```
+
+must determine the trade.
+
+---
+
+# 54. LEARNING / ADAPTATION LAYER
+
+After every completed trade record:
+
+```text
+market
+market family
+strategy
+direction
+score
+bias gap
+20T statistics
+50T statistics
+100T statistics
+1000T regime
+flow
+chop
+volatility
+entry condition
+result
+```
+
+Then calculate empirical performance.
+
+For example:
+
+```text
+Rise
+1s Volatility
+score 85–90
+bullish alignment
+low chop
+```
+
+might eventually demonstrate better historical performance than:
+
+```text
+Rise
+score 70–75
+mixed alignment
+```
+
+The engine can then tighten thresholds based on observed out-of-sample performance.
+
+---
+
+# 55. THE MOST IMPORTANT DESIGN PRINCIPLE
+
+The system should optimize for:
+
+```text
+SIGNAL QUALITY
+```
+
+rather than:
+
+```text
+NUMBER OF TRADES
+```
+
+The desired behavior is:
+
+```text
+100 markets scanned
+        ↓
+70 rejected
+        ↓
+20 weak candidates rejected
+        ↓
+7 validated
+        ↓
+2 strong candidates
+        ↓
+1 best market
+        ↓
+1 carefully timed entry
+```
+
+rather than forcing a trade every few ticks.
+
+---
+
+# 56. FINAL LOGIC ARCHITECTURE
+
+The complete engine should therefore be:
+
+```text
+                    MARKET DISCOVERY
+                           │
+                           ▼
+                   DATA QUALITY CHECK
+                           │
+                           ▼
+                    1000-TICK ENGINE
+                           │
+          ┌────────────────┼────────────────┐
+          ▼                ▼                ▼
+        100T              50T              20T
+          │                │                │
+          └────────────────┼────────────────┘
+                           ▼
+                   MARKET REGIME
+                           │
+              ┌────────────┼─────────────┐
+              ▼            ▼             ▼
+            FLOW       STRUCTURE      MOMENTUM
+              │            │             │
+              └────────────┼─────────────┘
+                           ▼
+                     CHOP FILTER
+                           │
+                           ▼
+                   REVERSAL FILTER
+                           │
+                           ▼
+                  DIRECTION ENGINE
+                     /           \
+                    /             \
+                 RISE             FALL
+                   \               /
+                    \             /
+                     ▼           ▼
+                     BIAS ENGINE
+                          │
+                          ▼
+                  MARKET SUITABILITY
+                          │
+                          ▼
+                    MARKET RANKING
+                          │
+                          ▼
+                  VIRTUAL VALIDATION
+                          │
+                          ▼
+                    ENTRY CONFIRM
+                          │
+                          ▼
+                      RISK CHECK
+                          │
+                          ▼
+                       EXECUTE
+                          │
+                          ▼
+                     MONITOR
+                          │
+                    ┌─────┴─────┐
+                    ▼           ▼
+                   WIN         LOSS
+                    │           │
+                    ▼           ▼
+                 UPDATE     REVALIDATE
+                    │           │
+                    └─────┬─────┘
+                          ▼
+                       RESCAN
+```
+
+This gives the LLM a **deterministic architecture**: it knows what data to calculate, what each window means, how to classify markets, how Rise/Fall/Bias differ, when to reject a setup, how to rank markets, and how the system transitions from scanning to execution.

@@ -3,37 +3,51 @@ import debounce from 'lodash.debounce';
 import { getLocalizedErrorMessage } from '@/constants/backend-error-messages';
 import { localize } from '@deriv-com/translations';
 import { getLast } from '../../../utils/binary-utils';
+import { recordTick } from '@/utils/execution-speed';
 import { observer as globalObserver } from '../../../utils/observer';
 import { api_base } from '../../api/api-base';
 import { getDirection, getLastDigit } from '../utils/helpers';
 import { expectPositiveInteger } from '../utils/sanitize';
 import * as constants from './state/constants';
 
-let tickListenerKey;
-
 export default Engine =>
     class Ticks extends Engine {
         async watchTicks(symbol) {
             if (symbol && this.symbol !== symbol) {
-                this.symbol = symbol;
                 const { ticksService } = this.$scope;
+                const previousSymbol = this.symbol;
+                const previousKey = this.tickListenerKey;
+                const generation = (this.tickGeneration || 0) + 1;
+                this.tickGeneration = generation;
 
-                await ticksService.stopMonitor({
-                    symbol,
-                    key: tickListenerKey,
-                });
+                if (previousSymbol && previousKey) {
+                    await ticksService.stopMonitor({
+                        symbol: previousSymbol,
+                        key: previousKey,
+                    });
+                }
+                if (this.tickGeneration !== generation) return;
+
+                this.symbol = symbol;
+                this.tickListenerKey = null;
                 const callback = ticks => {
+                    if (this.tickGeneration !== generation || this.symbol !== symbol) return;
                     if (this.is_proposal_subscription_required) {
                         this.checkProposalReady();
                     }
                     const lastTick = ticks.slice(-1)[0];
                     if (!lastTick || !Number.isFinite(Number(lastTick.epoch))) return;
+                    recordTick();
                     const { epoch } = lastTick;
                     this.store.dispatch({ type: constants.NEW_TICK, payload: epoch });
                 };
 
                 const key = await ticksService.monitor({ symbol, callback });
-                tickListenerKey = key;
+                if (this.tickGeneration !== generation || this.symbol !== symbol) {
+                    await ticksService.stopMonitor({ symbol, key });
+                    return;
+                }
+                this.tickListenerKey = key;
             }
         }
 
@@ -57,21 +71,36 @@ export default Engine =>
         }
 
         getLastTick(raw, toString = false) {
+            const ticksService = this.$scope.ticksService;
+            const readLatest = ticks => {
+                try {
+                    const latest = getLast(ticks);
+                    if (!latest) {
+                        return undefined;
+                    }
+                    let last_tick = raw ? latest : latest.quote;
+                    if (!raw && toString) {
+                        last_tick = last_tick.toFixed(this.getPipSize());
+                    }
+                    return last_tick;
+                } catch (error) {
+                    throw error;
+                }
+            };
+
+            // Fast execution must consume the tick that woke the interpreter,
+            // not ask the server for another history snapshot. The stream cache
+            // is authoritative once watchTicks() has attached.
+            const cached = ticksService.getLastTick?.(this.symbol);
+            const source = cached
+                ? Promise.resolve([cached])
+                : ticksService.request({ symbol: this.symbol });
+
             return new Promise((resolve, reject) =>
-                this.$scope.ticksService
-                    .request({ symbol: this.symbol })
+                source
                     .then(ticks => {
                         try {
-                            const latest = getLast(ticks);
-                            if (!latest) {
-                                resolve(undefined);
-                                return;
-                            }
-                            let last_tick = raw ? latest : latest.quote;
-                            if (!raw && toString) {
-                                last_tick = last_tick.toFixed(this.getPipSize());
-                            }
-                            resolve(last_tick);
+                            resolve(readLatest(ticks));
                         } catch (error) {
                             reject(error);
                         }

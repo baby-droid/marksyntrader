@@ -22,6 +22,7 @@ window.Blockly.Blocks.math_arithmetic = {
                         ['-', 'MINUS'],
                         ['*', 'MULTIPLY'],
                         ['/', 'DIVIDE'],
+                        ['%', 'MODULO'],
                         ['^', 'POWER'],
                     ],
                 },
@@ -64,6 +65,11 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.math_arithmetic = block =
         MINUS: ['-', window.Blockly.JavaScript.javascriptGenerator.ORDER_SUBTRACTION],
         MULTIPLY: ['*', window.Blockly.JavaScript.javascriptGenerator.ORDER_MULTIPLICATION],
         DIVIDE: ['/', window.Blockly.JavaScript.javascriptGenerator.ORDER_DIVISION],
+        MODULO: [
+            '%',
+            window.Blockly.JavaScript.javascriptGenerator.ORDER_MODULUS ??
+                window.Blockly.JavaScript.javascriptGenerator.ORDER_MULTIPLICATION,
+        ],
         POWER: [null, window.Blockly.JavaScript.javascriptGenerator.ORDER_COMMA], // Handle power separately.
     };
 

@@ -3,19 +3,111 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useStore } from '@/hooks/useStore';
 import { DBOT_TABS } from '@/constants/bot-contents';
-import { api_base } from '@/external/bot-skeleton';
-import { isFastExecutionEnabled } from '@/utils/execution-speed';
+import { api_base, load, save_types } from '@/external/bot-skeleton';
+import { isFastExecutionEnabledForContext } from '@/utils/execution-speed';
 import { setTradeContext } from '@/utils/trade-metadata';
+import { createTradeKey, getMasterSource, publishMasterTrade } from '@/utils/trade-bus';
+import AiCycleGuide from '@/components/ai-cycle-guide/ai-cycle-guide';
+import { DiffersCycleBotId, GuidedCycleSettings, patchGuidedCycleXml } from '@/utils/differs-cycle';
 import './free-bots.scss';
 
 const FREE_BOTS = [
   {
+    id: 'ahmed-differ-over-under-cycle-v1',
+    name: 'AHMED DIFFER OVER/UNDER CYCLE V1',
+    description: '🔁 Scans the best market and cycles DIFFERS 9 → OVER 2 → OVER 3 → OVER 0 → OVER 1 → DIFFERS 9 → UNDER 6 → UNDER 7 → UNDER 8 → UNDER 9. A win advances the phase; a loss waits for Even/Odd parity recovery, then restarts the cycle.',
+    category: 'Cycle', market: 'V50 1s', type: 'Multi-Strategy', prediction: '10-PHASE',
+    xmlFile: '/bots/ahmed-differ-over-under-cycle-v1.xml',
+    badge: 'DIFFER CYCLE', badgeColor: '#38bdf8', icon: '🔁', winRate: '—',
+    theme: 'ahmed-differ-cycle', artwork: '/bot-art/ahmed-cycle.png', artworkPosition: 'banner',
+  },
+  {
+    id: 'ahmed-differ-recovery-cycle-v2',
+    name: 'AHMED DIFFER RECOVERY CYCLE V2',
+    description: '⚡ Cycles DIFFERS 9 → UNDER 6 → UNDER 9 → UNDER 7 → UNDER 8 → DIFFERS 9 → OVER 1 → OVER 2 → OVER 3. A win advances the phase; a loss waits for Even/Odd parity recovery, then restarts at DIFFERS.',
+    category: 'Cycle', market: 'V25 1s', type: 'Multi-Strategy', prediction: '9-PHASE',
+    xmlFile: '/bots/ahmed-differ-recovery-cycle-v2.xml',
+    badge: 'RECOVERY V2', badgeColor: '#fb7185', icon: '⚡', winRate: '—',
+    theme: 'ahmed-recovery-cycle', artwork: '/bot-art/ahmed-cycle.png', artworkPosition: 'banner',
+  },
+  {
+    id: 'ahmed-best-market-pair-cycle-v1',
+    name: 'AHMED BEST MARKET 10-PHASE CYCLE V1',
+    description: '🧠 Scans and selects the best market, then cycles Differs → Over 2 → Over 3 → Over 0 → Over 1 → Differs → Under 6 → Under 7 → Under 8 → Under 9. Losses scan Even vs Odd for recovery.',
+    category: 'Scanner', market: 'Best market', type: 'Multi-Strategy', prediction: 'PHASE SCAN',
+    xmlFile: '/bots/ahmed-best-market-pair-cycle-v1.xml',
+    badge: 'PAIR SCAN', badgeColor: '#34d399', icon: '🧠', winRate: '—',
+    theme: 'ahmed-pair-scan', artwork: '/bot-art/ahmed-pairs.png', artworkPosition: 'banner',
+  },
+  {
+    id: 'ahmed-best-market-pair-cycle-v2',
+    name: 'AHMED BEST MARKET PAIR CYCLE V2',
+    description: '🔎 Scans the best market. Over 2 + Over 3 execute together only after a 10-tick high-digit bias and a 2–3 digit entry streak above both barriers. Under 7 + Under 6 execute together after a low-digit bias and a qualifying streak. Losses wait for Even/Odd recovery.',
+    category: 'Scanner', market: 'Best market', type: 'Paired DIGIT', prediction: '20-TICK',
+    xmlFile: '/bots/ahmed-best-market-pair-cycle-v2.xml',
+    badge: 'PAIR CYCLE', badgeColor: '#a78bfa', icon: '🔎', winRate: '—',
+    theme: 'ahmed-pair-cycle', artwork: '/bot-art/ahmed-pairs.png', artworkPosition: 'banner',
+  },
+  {
+    id: 'ahmed-killer-bot-myth-v1',
+    name: 'AHMED KILLER BOT MYTH V1',
+    description: '👑 AHMED KILLER BOT MYTH V1 scans the best market, gates Over 1 + Over 2 on a 10/20-tick bias, recovers with parity, then trades Over 3 for 3 wins and Over 4 for 2 wins before returning to the main pair.',
+    category: 'Scanner', market: 'Best market', type: 'Paired DIGIT', prediction: '10/20-TICK',
+    xmlFile: '/bots/ahmed-killer-bot-myth-v1.xml',
+    badge: 'MYTH V1', badgeColor: '#f59e0b', icon: '👑', winRate: '—',
+    theme: 'ahmed-myth', artwork: '/bot-art/ahmed-pairs.png', artworkPosition: 'side',
+  },
+  {
+    id: 'acc-flipper',
+    name: 'ACC FLIPPER',
+    description: '🤖 Scans the best market and waits for a 10-tick high/low bias plus a 2–3 digit entry streak before each contract. Cycles OVER 1 → OVER 2 → UNDER 8 → UNDER 7. A loss waits for Even/Odd recovery; a recovery win unlocks two separate OVER 3 wins before the main cycle resumes.',
+    category: 'Scanner', market: 'Best market', type: 'Multi-Strategy', prediction: 'O1 → O2 → U8 → U7',
+    xmlFile: '/bots/acc-flipper.xml',
+    badge: 'ACC FLIPPER', badgeColor: '#a78bfa', icon: '🤖', winRate: '—',
+    theme: 'acc-flipper', artwork: '/bot-art/ahmed-cycle.png', artworkPosition: 'banner',
+  },
+  {
+    id: 'normal-killer-bot-v3',
+    name: 'Normal killer bot v3',
+    description: 'Rotates through Continuous Indices after each real contract. A zero-stake Virtual Hook waits for the selected Hook Loss/Hook Profit result before allowing one real Over 1 contract. Bulk copies are deferred; this bot currently purchases one real contract per signal.',
+    category: 'Scanner', market: 'Continuous Indices', type: 'DIGIT OVER', prediction: 'OVER 1',
+    xmlFile: '/bots/normal-killer-bot-v3.xml',
+    badge: 'NORMAL KILLER V3', badgeColor: '#38bdf8', icon: '🔄', winRate: '—',
+    theme: 'ahmed-myth', artwork: '/bot-art/ahmed-pairs.png', artworkPosition: 'side',
+  },
+  {
+    id: 'under-cycle-auto',
+    name: 'Under Cycle Auto',
+    description: '🔁 DIFFERS 9 → UNDER 9 → UNDER 8 → UNDER 7 → DIFFERS 0 → OVER 0 → OVER 1 → OVER 2. After a loss, waits for 2 consecutive evens or odds and buys the matching recovery contract.',
+    category: 'Cycle Recovery', market: 'V50 1s', type: 'Multi-Strategy', prediction: 'CYCLE',
+    xmlFile: '/bots/under-cycle-auto.xml',
+    badge: 'UNDER CYCLE', badgeColor: '#38bdf8', icon: '🔄', winRate: '—',
+    theme: 'under-cycle',
+  },
+  {
+    id: 'ahmed-over-cycle',
+    name: 'Ahmed Over Cycle',
+    description: '⚡ DIFFERS 0 → OVER 1 → OVER 2 → OVER 3 → directional reversal → DIFFERS 9 → UNDER 8 → UNDER 7 → UNDER 6. Three or more rises buy FALL; three or more falls buy RISE. Four-parity recovery follows losses.',
+    category: 'Cycle Recovery', market: 'V50 1s', type: 'Multi-Strategy', prediction: 'CYCLE',
+    xmlFile: '/bots/ahmed-over-cycle.xml',
+    badge: 'AHMED OVER', badgeColor: '#fb7185', icon: '⚡', winRate: '—',
+    theme: 'ahmed-over',
+  },
+  {
     id: 'differs-edge-scanner',
     name: 'Differs Edge Scanner — Recovery Matrix',
-    description: '🧠 Scans the latest digit, rotates Differs → Over 1 → Over 2 → Differs → Under 8 → Under 7, then uses Even/Odd recovery after a loss. Includes 2× stake recovery.',
+    description: '🧠 Scans the latest digit, rotates Differs → Over 2 → Over 3 → Differs → Under 7 → Under 6, then checks the loss digit for Even/Odd recovery. Includes 2× stake recovery.',
     category: 'Scanner', market: 'V50 1s', type: 'Multi-Strategy', prediction: 'SCAN',
     xmlFile: '/bots/differs-edge-scanner.xml',
     badge: 'SCAN 🧠', badgeColor: '#34d399', icon: '🔎', winRate: '—',
+  },
+  {
+    id: 'ahmed-differs-cycle',
+    name: 'AHMED DIFFERS CYCLE',
+    description: '🔁 Shared-block cycle: DIFFERS with three-parity recovery — 3 evens → ODD, 3 odds → EVEN. One-tick contracts with 2× stake recovery.',
+    category: 'Scanner', market: 'V10 1s', type: 'Multi-Strategy', prediction: 'CYCLE',
+    xmlFile: '/bots/ahmed-differs-cycle.xml',
+    badge: 'AHMED CYCLE', badgeColor: '#f59e0b', icon: '🔁', winRate: '—',
   },
   {
     id: 'ahmed-auto-even',
@@ -32,6 +124,24 @@ const FREE_BOTS = [
     category: 'Even/Odd', market: 'V25 1s', type: 'DIGITODD', prediction: 'ODD',
     xmlFile: '/bots/ahmed-auto-odd.xml',
     badge: 'AUTO ODD', badgeColor: '#60a5fa', icon: '🔢', winRate: '—',
+  },
+  {
+    id: 'odd-auto-cycle',
+    name: 'ODD AUTO CYCLE',
+    description: '🔴 Weak Even → DIGITODD, or selected Strong Even ×2 followed by an Odd digit → DIGITODD. Editable entry digits with martingale and TP/SL.',
+    category: 'Even/Odd', market: 'V10 1s', type: 'DIGITODD', prediction: 'ODD',
+    xmlFile: '/bots/odd-auto-cycle.xml',
+    badge: 'ODD CYCLE', badgeColor: '#f43f5e', icon: '🔴', winRate: '—',
+    theme: 'odd-auto-cycle',
+  },
+  {
+    id: 'even-auto-cycle',
+    name: 'EVEN AUTO CYCLE',
+    description: '🔵 Weak Odd → DIGITEVEN, or selected Strong Odd ×2 followed by an Even digit → DIGITEVEN. Editable entry digits with martingale and TP/SL.',
+    category: 'Even/Odd', market: 'V10 1s', type: 'DIGITEVEN', prediction: 'EVEN',
+    xmlFile: '/bots/even-auto-cycle.xml',
+    badge: 'EVEN CYCLE', badgeColor: '#3b82f6', icon: '🔵', winRate: '—',
+    theme: 'even-auto-cycle',
   },
   // ── Recovery barrier bots ────────────────────────────────────────────────
   {
@@ -81,6 +191,39 @@ const FREE_BOTS = [
     category: 'Over/Under', market: 'V100 1s', type: 'DIGITUNDER', prediction: '6 → 5',
     xmlFile: '/bots/under6.xml',
     badge: 'RECOVERY', badgeColor: '#60a5fa', icon: '↘', winRate: '—',
+  },
+  // ── King Fisher digit-streak bots ─────────────────────────────────────────
+  {
+    id: 'king-fisher-over-2',
+    name: 'King Fisher Over 2',
+    description: '🐟 Detects 2 or 3 consecutive digits below 3, then buys DIGIT OVER 2. Configurable stake, martingale, TP/SL and Virtual Hook confirmation.',
+    category: 'Over/Under', market: 'Best market · V50 1s', type: 'DIGITOVER', prediction: '2',
+    xmlFile: '/bots/king-fisher-over-2.xml',
+    badge: 'KING FISHER', badgeColor: '#f59e0b', icon: '🐟', winRate: '—',
+  },
+  {
+    id: 'king-fisher-over-3',
+    name: 'King Fisher Over 3',
+    description: '🐟 Detects 2 or 3 consecutive digits below 4, then buys DIGIT OVER 3. Configurable stake, martingale, TP/SL and Virtual Hook confirmation.',
+    category: 'Over/Under', market: 'Best market · V50 1s', type: 'DIGITOVER', prediction: '3',
+    xmlFile: '/bots/king-fisher-over-3.xml',
+    badge: 'KING FISHER', badgeColor: '#f59e0b', icon: '🐟', winRate: '—',
+  },
+  {
+    id: 'king-fisher-under-6',
+    name: 'King Fisher Under 6',
+    description: '🐟 Detects 2 or 3 consecutive digits above 5, then buys DIGIT UNDER 6. Configurable stake, martingale, TP/SL and Virtual Hook confirmation.',
+    category: 'Over/Under', market: 'Best market · V50 1s', type: 'DIGITUNDER', prediction: '6',
+    xmlFile: '/bots/king-fisher-under-6.xml',
+    badge: 'KING FISHER', badgeColor: '#7c3aed', icon: '🐟', winRate: '—',
+  },
+  {
+    id: 'king-fisher-under-7',
+    name: 'King Fisher Under 7',
+    description: '🐟 Detects 2 or 3 consecutive digits above 6, then buys DIGIT UNDER 7. Configurable stake, martingale, TP/SL and Virtual Hook confirmation.',
+    category: 'Over/Under', market: 'Best market · V50 1s', type: 'DIGITUNDER', prediction: '7',
+    xmlFile: '/bots/king-fisher-under-7.xml',
+    badge: 'KING FISHER', badgeColor: '#7c3aed', icon: '🐟', winRate: '—',
   },
   // ── NEW signature bots — Omni Cycle Trader Pro & Smart Entry Pattern Pro V2 ─
   {
@@ -387,7 +530,23 @@ const FreeBots = observer(() => {
 
   // ── Bot Builder load helpers ─────────────────────────────────────────────────
   const loadXmlIntoWorkspace = useCallback(async (bot: typeof FREE_BOTS[0], xml: string) => {
-    const workspace = (window as any).Blockly?.derivWorkspace;
+    let workspace = (window as any).Blockly?.derivWorkspace;
+    if (!workspace) {
+      await new Promise<void>((resolve, reject) => {
+        let attempts = 0;
+        const poll = setInterval(() => {
+          attempts += 1;
+          workspace = (window as any).Blockly?.derivWorkspace;
+          if (workspace) {
+            clearInterval(poll);
+            resolve();
+          } else if (attempts >= 100) {
+            clearInterval(poll);
+            reject(new Error('Bot Builder workspace unavailable after 10 seconds'));
+          }
+        }, 100);
+      });
+    }
     if (!workspace) return false;
     const lm: any = store?.load_modal;
     if (lm?.loadStrategyToBuilder) {
@@ -396,8 +555,28 @@ const FreeBots = observer(() => {
         return true;
       } catch {}
     }
+    // Keep the same official loader as the Bot Builder Free Bots panel when the
+    // load-modal store is not available on this page.
+    try {
+      await load({
+        block_string: xml,
+        drop_event: null,
+        file_name: bot.name,
+        strategy_id: bot.id,
+        from: save_types.LOCAL,
+        workspace,
+        showIncompatibleStrategyDialog: false,
+        show_snackbar: false,
+      });
+      workspace.strategy_to_load = xml;
+      return true;
+    } catch (err) {
+      console.warn('Official bot loader unavailable, using Blockly fallback', err);
+    }
     try {
       const B   = (window as any).Blockly;
+      workspace = B?.derivWorkspace;
+      if (!workspace) return false;
       const dom = B.Xml.textToDom(xml);
       B.derivWorkspace.asyncClear?.();
       B.Xml.domToWorkspace(dom, B.derivWorkspace);
@@ -411,6 +590,20 @@ const FreeBots = observer(() => {
     }
   }, [store]);
 
+  const validateSharedBlockAssets = useCallback(async (bot: typeof FREE_BOTS[0], blockString: string) => {
+    const assets = (bot as any).sharedBlockAssets || [];
+    return Promise.all(assets.map(async (asset: { id: string; file: string }) => {
+      // Uploaded Blockly SVG fragments are visual references, not loadable bot
+      // XML and are not served as application routes. The executable bot keeps
+      // each shared identifier in its <data> metadata, which is the source of
+      // truth used for validation before loading.
+      if (!blockString.includes(`>${asset.id}<`)) {
+        throw new Error(`Shared block ${asset.id} is not present in ${bot.xmlFile}`);
+      }
+      return { id: asset.id, file: asset.file, ok: true };
+    }));
+  }, []);
+
   const autoRun = useCallback(async () => {
     const run_panel: any = store?.run_panel;
     if (!run_panel?.onRunButtonClick || run_panel.is_running) return;
@@ -420,7 +613,7 @@ const FreeBots = observer(() => {
         await run_panel.onRunButtonClick();
         return;
       } catch {
-        if (attempt < 5) await new Promise(r => setTimeout(r, isFastExecutionEnabled() ? 0 : 500));
+        if (attempt < 5) await new Promise(r => setTimeout(r, isFastExecutionEnabledForContext() ? 0 : 500));
       }
     }
   }, [store]);
@@ -431,9 +624,10 @@ const FreeBots = observer(() => {
       const res = await fetch(bot.xmlFile);
       if (!res.ok) throw new Error(`Failed to fetch ${bot.xmlFile}`);
       const xml = await res.text();
+      await validateSharedBlockAssets(bot, xml);
       (window as any).__pendingBotXml  = xml;
       (window as any).__pendingBotName = bot.name;
-      store?.dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING);
+      store?.dashboard?.setActiveTab?.(DBOT_TABS.BOT_BUILDER);
       store?.run_panel?.toggleDrawer?.(true);
       let loaded = await loadXmlIntoWorkspace(bot, xml);
       if (!loaded) {
@@ -450,22 +644,39 @@ const FreeBots = observer(() => {
       setTimeout(() => setLoadedId(null), 3000);
     } catch (e) {
       console.error('Load bot error', e);
-      store?.dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING);
+      store?.dashboard?.setActiveTab?.(DBOT_TABS.BOT_BUILDER);
     } finally {
       setLoadingId(null);
     }
-  }, [store, loadXmlIntoWorkspace]);
+  }, [store, loadXmlIntoWorkspace, validateSharedBlockAssets]);
 
-  const handleLoadAndRun = useCallback(async (bot: typeof FREE_BOTS[0]) => {
+  const handleLoadAndRun = useCallback(async (
+    bot: typeof FREE_BOTS[0],
+    guidance?: { symbol: string; differDigit: number; settings?: GuidedCycleSettings },
+  ) => {
     setTradeContext({ page: 'Free Bots', bot: bot.name });
     setLoadingId(bot.id);
     try {
       const res = await fetch(bot.xmlFile);
       if (!res.ok) throw new Error(`Failed to fetch ${bot.xmlFile}`);
-      const xml = await res.text();
+      let xml = await res.text();
+      if (guidance) {
+        xml = patchGuidedCycleXml(xml, guidance.symbol, guidance.differDigit, guidance.settings);
+        (window as any).__aiCycleGuidance = {
+          botId: bot.id,
+          symbol: guidance.symbol,
+          differDigit: guidance.differDigit,
+          settings: guidance.settings,
+          updatedAt: Date.now(),
+        };
+        window.dispatchEvent(new CustomEvent('ai:cycle-guidance', {
+          detail: (window as any).__aiCycleGuidance,
+        }));
+      }
+      await validateSharedBlockAssets(bot, xml);
       (window as any).__pendingBotXml  = xml;
       (window as any).__pendingBotName = bot.name;
-      store?.dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING);
+      store?.dashboard?.setActiveTab?.(DBOT_TABS.BOT_BUILDER);
       store?.run_panel?.toggleDrawer?.(true);
       let loaded = await loadXmlIntoWorkspace(bot, xml);
       if (!loaded) {
@@ -480,14 +691,24 @@ const FreeBots = observer(() => {
       }
       setLoadedId(bot.id);
       setTimeout(() => setLoadedId(null), 4000);
-      if (loaded) setTimeout(() => autoRun(), isFastExecutionEnabled() ? 0 : 900);
+      if (loaded) setTimeout(() => autoRun(), isFastExecutionEnabledForContext() ? 0 : 900);
     } catch (e) {
       console.error('Load & Run error', e);
-      store?.dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING);
+      store?.dashboard?.setActiveTab?.(DBOT_TABS.BOT_BUILDER);
     } finally {
       setLoadingId(null);
     }
-  }, [store, loadXmlIntoWorkspace, autoRun]);
+  }, [store, loadXmlIntoWorkspace, autoRun, validateSharedBlockAssets]);
+
+  const handleLoadGuided = useCallback((
+    botId: DiffersCycleBotId,
+    symbol: string,
+    differDigit: number,
+    settings: GuidedCycleSettings,
+  ) => {
+    const bot = FREE_BOTS.find(item => item.id === botId);
+    if (bot) void handleLoadAndRun(bot, { symbol, differDigit, settings });
+  }, [handleLoadAndRun]);
 
   // ── Market Killer Prime V1 — Direct Purchase ────────────────────────────────
   const mkpPurchase = useCallback(async () => {
@@ -519,10 +740,39 @@ const FreeBots = observer(() => {
       const askPrice   = Number(pr?.proposal?.ask_price ?? stake);
       if (!proposalId) throw new Error('No proposal received');
 
+      const tradeKey = createTradeKey('market-killer-prime');
+      try {
+        publishMasterTrade({
+          symbol,
+          contract_type: 'DIGITOVER',
+          stake,
+          duration: ticks,
+          duration_unit: 't',
+          barrier: '2',
+          source: getMasterSource(),
+          time: Date.now(),
+          trade_key: tradeKey,
+        });
+      } catch { /* never block the direct purchase */ }
+
       // 2. Buy
       const buyRes = await api.send({ buy: proposalId, price: askPrice });
       if (buyRes?.error) throw new Error(buyRes.error.message);
       const contractId = buyRes?.buy?.contract_id;
+      try {
+        publishMasterTrade({
+          symbol,
+          contract_type: 'DIGITOVER',
+          stake,
+          duration: ticks,
+          duration_unit: 't',
+          barrier: '2',
+          source: getMasterSource(),
+          time: Date.now(),
+          contract_id: Number(contractId),
+          trade_key: tradeKey,
+        });
+      } catch { /* never block the direct purchase */ }
       setMkpResult({ ok: true, msg: `✅ Contract #${contractId} opened on ${MKP_MARKETS[mkpMarketIdxRef.current].label}` });
       setMkpContractOpen(true);
 
@@ -603,6 +853,8 @@ const FreeBots = observer(() => {
         </div>
       </div>
 
+      <AiCycleGuide onLoadGuided={handleLoadGuided} />
+
       <div className='free-bots__filters'>
         <div className='free-bots__search-box'>
           <span>🔍</span>
@@ -620,10 +872,16 @@ const FreeBots = observer(() => {
         {filtered.map(bot => (
           <div
             key={bot.id}
-            className={`free-bots__card ${loadedId === bot.id ? 'free-bots__card--loaded' : ''} ${bot.id === 'market-killer-prime-v1' && mkpOpen ? 'free-bots__card--prime-active' : ''}`}
+            className={`free-bots__card ${bot.theme ? `free-bots__card--${bot.theme}` : ''} ${loadedId === bot.id ? 'free-bots__card--loaded' : ''} ${bot.id === 'market-killer-prime-v1' && mkpOpen ? 'free-bots__card--prime-active' : ''}`}
             style={{ '--accent': bot.badgeColor } as React.CSSProperties}
           >
             <div className='free-bots__card-glow' />
+            {bot.artwork && (
+              <div className={`free-bots__artwork free-bots__artwork--${bot.artworkPosition || 'banner'}`}>
+                <img src={bot.artwork} alt={`${bot.name} strategy artwork`} loading='lazy' />
+                <span className='free-bots__artwork-label'>AHMED SYN</span>
+              </div>
+            )}
             <div className='free-bots__card-top'>
               <div className='free-bots__card-icon-ring'>
                 <div className='free-bots__card-icon'>{bot.icon}</div>

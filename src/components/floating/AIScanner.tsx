@@ -15,7 +15,9 @@ const SCAN_SYMBOLS = [
     { label: 'V100',   symbol: 'R_100'    },
     { label: 'V10 1s', symbol: '1HZ10V'   },
     { label: 'V25 1s', symbol: '1HZ25V'   },
+    { label: 'V30 1s', symbol: '1HZ30V'   },
     { label: 'V50 1s', symbol: '1HZ50V'   },
+    { label: 'V90 1s', symbol: '1HZ90V'   },
     { label: 'V100 1s',symbol: '1HZ100V'  },
 ];
 

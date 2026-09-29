@@ -34,8 +34,13 @@ export default defineConfig({
         // sibling templates use the same name.
         NEXT_PUBLIC_DERIV_APP_ID: JSON.stringify(process.env.NEXT_PUBLIC_DERIV_APP_ID ?? ''),
         // Redirect URI registered in the Deriv developer portal. Must match exactly.
-        // Production: https://marksyntrader.replit.app/callback
+        // Production: https://marksyntrader--marksyntrader.replit.app/callback
         NEXT_PUBLIC_DERIV_REDIRECT_URI: JSON.stringify(process.env.NEXT_PUBLIC_DERIV_REDIRECT_URI ?? ''),
+        NEXT_PUBLIC_DERIV_PREVIEW_REDIRECT_URI: JSON.stringify(process.env.NEXT_PUBLIC_DERIV_PREVIEW_REDIRECT_URI ?? ''),
+        // Space-separated OAuth scopes enabled for the Deriv application.
+        // Defaults to `trade`; add `payment` or `account_manage` only after
+        // enabling those scopes in the Deriv developer portal.
+        NEXT_PUBLIC_DERIV_OAUTH_SCOPES: JSON.stringify(process.env.NEXT_PUBLIC_DERIV_OAUTH_SCOPES ?? ''),
         // Authoritative environment signal. The bot's URL resolver (config.ts) and
         // the vendored deriv-core OAuth resolver both read this so endpoints stay consistent
         // on a deployed partner domain (where hostname detection can't match Deriv).
@@ -66,6 +71,12 @@ export default defineConfig({
       '@/constants': path.resolve(__dirname, './src/constants'),
       '@/stores': path.resolve(__dirname, './src/stores'),
     },
+  },
+  resolve: {
+    // The vendored bot runtime and shared UI still contain JSX modules.
+    // Explicit extensions prevent Rsbuild from treating those imports as
+    // missing modules during a hot rebuild.
+    extensions: ['.tsx', '.ts', '.jsx', '.js', '.json'],
   },
   output: {
     assetPrefix: isStaticBuild ? '/bot/preview/' : '/',
@@ -101,6 +112,10 @@ export default defineConfig({
     host: '0.0.0.0',
     headers: {
       'Access-Control-Allow-Origin': '*',
+      // A dev preview must always fetch the current HTML and async chunks.
+      // Cached chunk URLs from an earlier Rsbuild process cause ChunkLoadError
+      // after a restart even when the current asset exists and is healthy.
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
     },
   },
   dev: {

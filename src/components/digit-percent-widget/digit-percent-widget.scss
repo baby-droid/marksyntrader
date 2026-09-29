@@ -65,7 +65,7 @@
         &__ticks-label { min-width: 5.4rem; }
     }
 
-    /* Drag handle header with title + X close */
+    /* Drag handle header with title + theme and close actions */
     &__drag-header {
         display: flex;
         align-items: center;
@@ -94,21 +94,54 @@
         color: var(--text-general, #333);
     }
 
+    &__theme-btn,
     &__close-btn {
-        background: none;
+        appearance: none;
+        -webkit-appearance: none;
+        margin: 0;
+        padding: 0;
+        background: #fff;
         border: 1px solid var(--border-normal, #d6dadb);
-        border-radius: 6px;
-        width: 2.4rem;
-        height: 2.4rem;
-        font-size: 1.2rem;
-        color: #888;
+        border-radius: 7px;
+        width: 2.25rem;
+        height: 2.25rem;
+        font-size: 1.05rem;
+        line-height: 1;
+        color: #374151;
         cursor: pointer;
         display: flex;
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
+        touch-action: manipulation;
+        transition: background 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
 
-        &:hover { background: #fee2e2; color: #ef4444; border-color: #ef4444; }
+        &:focus-visible {
+            outline: 2px solid #7b3fe4;
+            outline-offset: 2px;
+        }
+    }
+
+    &__theme-btn {
+        border-color: #f59e0b;
+        background: #fffbeb;
+        color: #b45309;
+
+        &:hover {
+            background: #fef3c7;
+            border-color: #d97706;
+            color: #92400e;
+        }
+    }
+
+    &__close-btn {
+        font-size: 1.15rem;
+
+        &:hover {
+            background: #fee2e2;
+            color: #b91c1c;
+            border-color: #ef4444;
+        }
     }
 
     &__header {
@@ -407,13 +440,59 @@
         &.stats100-under--dark { background: #450a0a; color: #fca5a5; }
     }
 
+    /* Explicit light panel values keep the analyser independent of the app theme. */
+    &__panel--light {
+        background: #fff;
+        color: #1f2937;
+
+        .digit-percent-widget__drag-header {
+            background: #f4f6f8;
+            border-color: #d6dadb;
+        }
+
+        .digit-percent-widget__drag-title { color: #1f2937; }
+        .digit-percent-widget__select,
+        .digit-percent-widget__threshold-select,
+        .digit-percent-widget__ticks-input {
+            background: #fff;
+            border-color: #d6dadb;
+            color: #1f2937;
+        }
+    }
+
     /* Dark panel */
     &__panel--dark {
+        background: #0f172a;
+        color: #e2e8f0;
+
         .digit-percent-widget__drag-header  { background: #1e293b; border-color: #334155; }
         .digit-percent-widget__drag-title   { color: #e2e8f0; }
         .digit-percent-widget__pct          { color: #cbd5e1; }
         .digit-percent-widget__stream-label { color: #94a3b8; }
         .digit-percent-widget__footer       { color: #475569; }
+
+        .digit-percent-widget__theme-btn,
+        .digit-percent-widget__close-btn {
+            background: #1e293b;
+            border-color: #475569;
+            color: #e2e8f0;
+        }
+
+        .digit-percent-widget__theme-btn {
+            &:hover {
+                background: #334155;
+                border-color: #94a3b8;
+                color: #f8fafc;
+            }
+        }
+
+        .digit-percent-widget__close-btn {
+            &:hover {
+                background: #450a0a;
+                border-color: #f87171;
+                color: #fecaca;
+            }
+        }
     }
 
     /* Footer */

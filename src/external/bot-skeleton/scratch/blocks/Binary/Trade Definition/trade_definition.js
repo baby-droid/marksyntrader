@@ -1,5 +1,6 @@
 import { localize } from '@deriv-com/translations';
 import { config } from '../../../../constants/config';
+import { CONTINUOUS_INDEX_SYMBOLS } from '../../../../../../utils/continuous-index-rotation';
 import { initErrorHandlingListener, removeErrorHandlingEventListener } from '../../../../utils';
 import DBotStore from '../../../dbot-store';
 import {
@@ -136,12 +137,18 @@ window.Blockly.Blocks.trade_definition = {
             event.type === window.Blockly.Events.BLOCK_CHANGE ||
             (event.type === window.Blockly.Events.BLOCK_DRAG && !event.isStart)
         ) {
-            // Enforce only trade_definition_<type> blocks in TRADE_OPTIONS statement.
+            // Trade parameters normally contain only trade_definition_<type>
+            // blocks. King Fisher's Best Market selector is intentionally
+            // placed first in this stack so it is visible above Market in the
+            // builder, while the authenticated runner consumes it before the
+            // generated trade definition starts.
             const blocks_in_trade_options = this.getBlocksInStatement('TRADE_OPTIONS');
 
             if (blocks_in_trade_options.length > 0) {
                 blocks_in_trade_options.forEach(block => {
-                    if (!/^trade_definition_.+$/.test(block.type)) {
+                    const is_trade_definition_block = /^trade_definition_.+$/.test(block.type);
+                    const is_king_fisher_market_selector = block.type === 'king_fisher_best_market_scanner';
+                    if (!is_trade_definition_block && !is_king_fisher_market_selector) {
                         runIrreversibleEvents(() => {
                             block.unplug(true);
                         });
@@ -176,6 +183,25 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.trade_definition = block 
     const restart_on_buy_sell_block = block.getChildByType('trade_definition_restartbuysell');
 
     const symbol = market_block.getFieldValue('SYMBOL_LIST');
+    const shouldAlternateMarkets = market_block.getFieldValue('ALTERNATE_MARKETS') === 'TRUE';
+    const alternateMode = market_block.getFieldValue('ALTERNATE_MODE') || 'EVERY_X_RUNS';
+    const alternateEveryValue = Number(market_block.getFieldValue('ALTERNATE_EVERY'));
+    const alternateEvery =
+        Number.isInteger(alternateEveryValue) && alternateEveryValue > 0 ? alternateEveryValue : 1;
+    if (
+        shouldAlternateMarkets &&
+        (alternateMode !== 'EVERY_X_RUNS' ||
+            market_block.getFieldValue('MARKET_LIST') !== 'synthetic_index' ||
+            market_block.getFieldValue('SUBMARKET_LIST') !== 'random_index' ||
+            !CONTINUOUS_INDEX_SYMBOLS.includes(symbol))
+    ) {
+        throw new Error('Market alternation is only supported for the listed Continuous Indices.');
+    }
+    const marketRotation = {
+        enabled: shouldAlternateMarkets,
+        every: alternateEvery,
+        symbols: CONTINUOUS_INDEX_SYMBOLS,
+    };
     const trade_type = trade_type_block.getFieldValue('TRADETYPE_LIST');
     const contract_type = contract_type_block.getFieldValue('TYPE_LIST');
     const candle_interval = candle_interval_block.getFieldValue('CANDLEINTERVAL_LIST');
@@ -195,6 +221,7 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.trade_definition = block 
     BinaryBotPrivateInit = function BinaryBotPrivateInit() {
         Bot.init('${account}', {
           symbol              : '${symbol}',
+          marketRotation      : ${JSON.stringify(marketRotation)},
           contractTypes       : ${JSON.stringify(contract_type_list)},
           candleInterval      : '${candle_interval || 'FALSE'}',
           shouldRestartOnError: ${should_restart_on_error},

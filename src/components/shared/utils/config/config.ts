@@ -5,9 +5,11 @@ import {
     parseReferralLink,
     parseLandingParams,
     resolveReferralViaProxy,
+    getOAuthScopes,
 } from '@/external/deriv-core';
 import type { AuthConfig } from '@/external/deriv-core';
 import { DerivWSAccountsService } from '@/services/derivws-accounts.service';
+import { getOAuthRedirectUri, rememberOAuthRedirectUri } from '@/utils/oauth-redirect';
 import brandConfig from '../../../../../brand.config.json';
 
 // =============================================================================
@@ -109,11 +111,12 @@ export const generateOAuthURL = async (prompt?: string): Promise<string> => {
         const clientId = process.env.NEXT_PUBLIC_DERIV_APP_ID;
         if (!clientId) return '';
 
-        const redirectUri = process.env.NEXT_PUBLIC_DERIV_REDIRECT_URI || window.location.origin;
+        const redirectUri = getOAuthRedirectUri();
+        rememberOAuthRedirectUri(redirectUri);
         const config: AuthConfig = {
             clientId,
             redirectUri,
-            scopes: 'trade read',
+            scopes: getOAuthScopes(process.env.NEXT_PUBLIC_DERIV_OAUTH_SCOPES),
         };
 
         // Static referral link (fallback for direct visits without affiliate click)

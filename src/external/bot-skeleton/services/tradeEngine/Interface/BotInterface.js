@@ -1,5 +1,6 @@
 import { observer as globalObserver } from '../../../utils/observer';
 import { createDetails } from '../utils/helpers';
+import { dispatchBrowserEvent } from '../../../utils/browser-event';
 
 const getBotInterface = tradeEngine => {
     const getDetail = i => createDetails(tradeEngine.data.contract)[i];
@@ -7,6 +8,17 @@ const getBotInterface = tradeEngine => {
     return {
         init: (...args) => tradeEngine.init(...args),
         start: (...args) => tradeEngine.start(...args),
+        rotateContinuousMarket: async () => {
+            const nextSymbol = await tradeEngine.rotateContinuousMarket();
+            if (nextSymbol) {
+                dispatchBrowserEvent('journal:signal', {
+                    type: 'SCAN',
+                    label: 'MARKET ROTATED',
+                    detail: `Now trading ${nextSymbol}`,
+                });
+            }
+            return nextSymbol;
+        },
         stop: (...args) => tradeEngine.stop(...args),
         purchase: contract_type => tradeEngine.purchase(contract_type),
         purchaseMultiple: contract_types => tradeEngine.purchaseMultiple(contract_types),
@@ -18,6 +30,25 @@ const getBotInterface = tradeEngine => {
         getSellPrice: () => getSellPrice(tradeEngine),
         isResult: result => getDetail(10) === result,
         isTradeAgain: result => globalObserver.emit('bot.trade_again', result),
+        recordVirtualHook: data => {
+            globalObserver.emit('bot.virtual_hook', data);
+            const hookResult = data?.result === 'won' ? 'profit' : 'loss';
+            const market = data?.market || 'King Fisher';
+            const digitDetail = data?.exitDigit == null ? '' : ` · digit ${data.exitDigit}`;
+            dispatchBrowserEvent('journal:signal', {
+                type: hookResult === 'profit' ? 'WIN' : 'LOSS',
+                label: hookResult === 'profit' ? 'HOOK PROFIT' : 'HOOK LOSS',
+                detail: `${market} · virtual ${hookResult}${digitDetail}`,
+            });
+        },
+        emitJournalSignal: detail => dispatchBrowserEvent('journal:signal', detail),
+        emitKingFisherAnalysis: detail => dispatchBrowserEvent('bot:king-fisher-analysis', detail),
+        emitMarketDigit: detail => dispatchBrowserEvent('bot:market-digit', detail),
+        requestKingFisherRescan: detail => {
+            tradeEngine.kingFisherRescanRequested = detail || { reason: 'risk-limit' };
+        },
+        shouldRescanKingFisher: () => Boolean(tradeEngine.kingFisherRescanRequested),
+        getSymbol: () => tradeEngine.tradeOptions?.symbol || tradeEngine.options?.symbol || '',
         readDetails: i => getDetail(i - 1),
     };
 };

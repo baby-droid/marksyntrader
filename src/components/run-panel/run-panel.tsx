@@ -13,6 +13,7 @@ import Summary from '@/components/summary';
 import TradeAnimation from '@/components/trade-animation';
 import Transactions from '@/components/transactions';
 import DigitPercentWidget from '@/components/digit-percent-widget/digit-percent-widget';
+import CyclePatternDetector from '@/components/cycle-pattern-detector/cycle-pattern-detector';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { popover_zindex } from '@/constants/z-indexes';
 import { useStore } from '@/hooks/useStore';
@@ -263,22 +264,40 @@ const DrawerContent = ({ active_index, active_tab, is_drawer_open, active_tour, 
     }, [is_drawer_open, isDesktop]);
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+        <div
+            className='run-panel__drawer-content'
+            style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}
+        >
             <div style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
                 {active_tab === DBOT_TABS.BOT_BUILDER && <BotBuilderControls />}
                 <Tabs active_index={active_index} onTabItemClick={setActiveTabIndex} top>
                     <div id='db-run-panel-tab__summary' label={<Localize i18n_default_text='Summary' />}>
                         <Summary is_drawer_open={is_drawer_open} />
                     </div>
-                    <div id='db-run-panel-tab__transactions' label={<Localize i18n_default_text='Transactions' />}>
-                        <DigitPercentWidget />
-                        <Transactions is_drawer_open={is_drawer_open} />
+                    <div
+                        id='db-run-panel-tab__transactions'
+                        label={<Localize i18n_default_text='Transactions' />}
+                    >
+                        <div className='run-panel__transactions-tab'>
+                            <DigitPercentWidget showTrigger={false} />
+                            <Transactions is_drawer_open={is_drawer_open} />
+                        </div>
                     </div>
                     <div id='db-run-panel-tab__journal' label={<Localize i18n_default_text='Journal' />}>
                         <Journal />
                     </div>
                 </Tabs>
             </div>
+            <button
+                type='button'
+                className='run-panel__analyzer-trigger'
+                title='Open Digit Analyzer'
+                aria-label='Open Digit Analyzer'
+                onClick={() => window.dispatchEvent(new CustomEvent('digit-analyzer:open'))}
+            >
+                <span /><span /><span /><span />
+            </button>
+            <CyclePatternDetector />
             {(is_drawer_open || active_tour) && (
                 <div style={{ flexShrink: 0 }}>
                     <StatisticsSummary {...props} />

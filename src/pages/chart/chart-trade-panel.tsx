@@ -2,8 +2,9 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
-import { publishMasterTrade, getMasterSource } from '@/utils/trade-bus';
+import { publishMasterTrade, getMasterSource, createTradeKey } from '@/utils/trade-bus';
 import ChartAiControl from './chart-ai';
+import { getPocEntryEpoch, getPocStreamCount, getPocTickCount } from './chart-trade-ticks';
 
 /* ── Symbol display names ─────────────────────────────────────────────────── */
 const SYMBOL_NAMES: Record<string, string> = {
@@ -34,7 +35,7 @@ function symbolName(s: string) { return SYMBOL_NAMES[s] ?? s; }
  * 10) Everything else alphabetically
  */
 function marketGroupOrder(sym: string): number {
-    const s = sym.toUpperCase();
+    const s = String(sym ?? '').toUpperCase();
     if (/^1HZ/.test(s))   return 0;
     if (/^R_/.test(s))    return 1;
     if (/BEAR/.test(s))   return 2;
@@ -133,6 +134,8 @@ interface ChartTradePanelProps {
     pipSize: number;
     barrier: number;
     onBarrierChange: (d: number) => void;
+    onTradeGroupChange?: (groupId: string) => void;
+    onAccumulatorGrowthRateChange?: (rate: number) => void;
 }
 
 /* ════════════════════════════════════════════════════════════════════════════ */
@@ -146,6 +149,8 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
     pipSize,
     barrier,
     onBarrierChange,
+    onTradeGroupChange,
+    onAccumulatorGrowthRateChange,
 }) => {
     /* ── Active symbols list for market selector ──────────────────────────
        Load once on mount, then re-read whenever api_base populates the list
@@ -185,6 +190,10 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
     const [groupId, setGroupId]       = useState(TRADE_GROUPS[0].id);
     const group = TRADE_GROUPS.find(g => g.id === groupId) ?? TRADE_GROUPS[0];
 
+    useEffect(() => {
+        onTradeGroupChange?.(groupId);
+    }, [groupId, onTradeGroupChange]);
+
     const [ticks,        setTicks]       = useState(2);
     const [durationUnit, setDurationUnit] = useState<DurUnit>(TRADE_GROUPS[0].supportedUnits[0]);
     const [durTab,       setDurTab]      = useState<'quick' | 'custom'>('quick');
@@ -207,6 +216,34 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
     const [accumMaxPayout, setAccumMaxPayout] = useState<number | null>(null);
     const [accumMaxTicks,  setAccumMaxTicks]  = useState<number | null>(null);
     const accumProposalTimerRef = useRef<any>(null);
+    const accumPocRef = useRef<{ subscription: any; subscriptionId: string | null } | null>(null);
+    const [accumLive, setAccumLive] = useState<{
+        status: string;
+        tickPassed: number | null;
+        profit: number | null;
+        profitPercentage: number | null;
+        currentValue: number | null;
+        currentSpot: number | null;
+        entrySpot: number | null;
+    } | null>(null);
+
+    const stopAccumulatorPoc = useCallback(() => {
+        const current = accumPocRef.current;
+        if (!current) return;
+        try { current.subscription?.unsubscribe?.(); } catch { /* noop */ }
+        if (current.subscriptionId) {
+            try { (api_base as any).api?.send({ forget: current.subscriptionId }).catch(() => {}); } catch { /* noop */ }
+        }
+        accumPocRef.current = null;
+    }, []);
+
+    useEffect(() => () => stopAccumulatorPoc(), [stopAccumulatorPoc]);
+
+    useEffect(() => {
+        if (group.isAccumulator) {
+            onAccumulatorGrowthRateChange?.(growthRate);
+        }
+    }, [group.isAccumulator, growthRate, onAccumulatorGrowthRateChange]);
 
     const [overPayout,  setOverPayout]  = useState<number | null>(null);
     const [underPayout, setUnderPayout] = useState<number | null>(null);
@@ -228,6 +265,11 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
 
     useEffect(() => {
         // When group changes: reset to first supported unit, reset ticks to group min
+        if (!group.isAccumulator) {
+            stopAccumulatorPoc();
+            setAccumContractId(null);
+            setAccumLive(null);
+        }
         const firstUnit = group.supportedUnits[0];
         setDurationUnit(firstUnit);
         setDurTab('quick');
@@ -237,7 +279,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
         setTicks(range.min);
         setCustomDurRaw('');
         setAllowEquals(false);
-    }, [group.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [group.id, group.isAccumulator, stopAccumulatorPoc]); // eslint-disable-line react-hooks/exhaustive-deps
 
     /* ── Payout fetch (600ms debounce) — also warms the buy proposal cache ── */
     // Caching the proposal IDs lets buy() skip a full round-trip to Deriv and
@@ -316,6 +358,55 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
     }, [group.isAccumulator, symbol, growthRate, stake]);
 
     /* ── Accumulator buy ─────────────────────────────────────────────────── */
+    const watchAccumulator = useCallback((contractId: number) => {
+        const api = (api_base as any).api;
+        if (!api || !contractId) return;
+        stopAccumulatorPoc();
+        try {
+            const stream = api.subscribe({
+                proposal_open_contract: 1,
+                contract_id: contractId,
+                subscribe: 1,
+            });
+            const current = { subscription: stream, subscriptionId: null as string | null };
+            accumPocRef.current = current;
+            stream.subscribe({
+                next: (res: any) => {
+                    const poc = res?.proposal_open_contract;
+                    if (!poc) return;
+                    if (!current.subscriptionId && res.subscription?.id) {
+                        current.subscriptionId = res.subscription.id;
+                    }
+                    const profit = Number(poc.profit);
+                    const profitPercentage = Number(poc.profit_percentage);
+                    const currentValue = Number(poc.bid_price ?? poc.sell_price ?? poc.payout);
+                    const currentSpot = Number(poc.current_spot ?? poc.exit_spot);
+                    const entrySpot = Number(poc.entry_spot);
+                    setAccumLive({
+                        status: String(poc.status || 'open'),
+                        tickPassed: Number.isFinite(Number(poc.tick_passed)) ? Number(poc.tick_passed) : null,
+                        profit: Number.isFinite(profit) ? profit : null,
+                        profitPercentage: Number.isFinite(profitPercentage) ? profitPercentage : null,
+                        currentValue: Number.isFinite(currentValue) ? currentValue : null,
+                        currentSpot: Number.isFinite(currentSpot) ? currentSpot : null,
+                        entrySpot: Number.isFinite(entrySpot) ? entrySpot : null,
+                    });
+
+                    if (poc.status === 'sold' || poc.status === 'won' || poc.status === 'lost') {
+                        const settledProfit = Number.isFinite(profit) ? profit : 0;
+                        setAccumContractId(null);
+                        setResult({
+                            ok: poc.status === 'won' || (poc.status === 'sold' && settledProfit >= 0),
+                            msg: `${poc.status === 'lost' ? '⚠ Accumulator lost' : '✅ Accumulator closed'} · ${fromUsd(settledProfit).toFixed(2)} ${displayCur}`,
+                        });
+                        stopAccumulatorPoc();
+                    }
+                },
+                error: () => stopAccumulatorPoc(),
+            });
+        } catch { /* non-fatal: the buy itself already succeeded */ }
+    }, [displayCur, stopAccumulatorPoc]);
+
     const buyAccumulator = useCallback(async () => {
         if (loading) return;
         const api = (api_base as any).api;
@@ -338,10 +429,46 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             const proposalId = pr?.proposal?.id;
             const askPrice   = Number(pr?.proposal?.ask_price ?? stake);
             if (!proposalId) throw new Error('Proposal failed');
+            const tradeKey = createTradeKey('chart-accu');
+            try {
+                publishMasterTrade({
+                    symbol,
+                    contract_type: 'ACCU',
+                    stake,
+                    growth_rate: growthRate,
+                    limit_order: proposalReq.limit_order,
+                    source: getMasterSource(),
+                    time: Date.now(),
+                    trade_key: tradeKey,
+                });
+            } catch { /* never block the accumulator purchase */ }
             const buyRes = await api.send({ buy: proposalId, price: askPrice });
             if (buyRes?.error) throw new Error(buyRes.error.message);
             const contractId = Number(buyRes?.buy?.contract_id);
+            try {
+                publishMasterTrade({
+                    symbol,
+                    contract_type: 'ACCU',
+                    stake,
+                    growth_rate: growthRate,
+                    limit_order: proposalReq.limit_order,
+                    source: getMasterSource(),
+                    time: Date.now(),
+                    contract_id: contractId,
+                    trade_key: tradeKey,
+                });
+            } catch { /* never block the accumulator purchase */ }
             setAccumContractId(contractId);
+            setAccumLive({
+                status: 'open',
+                tickPassed: 0,
+                profit: 0,
+                profitPercentage: 0,
+                currentValue: stake,
+                currentSpot: null,
+                entrySpot: null,
+            });
+            watchAccumulator(contractId);
             setResult({ ok: true, msg: `✅ Accumulator #${contractId} running` });
         } catch (e: any) {
             setResult({ ok: false, msg: `❌ ${e.message}` });
@@ -349,7 +476,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             setLoading(null);
             setTimeout(() => setResult(null), 6000);
         }
-    }, [loading, growthRate, stake, symbol, accumTakeProfitEnabled, accumTakeProfit]);
+    }, [loading, growthRate, stake, symbol, accumTakeProfitEnabled, accumTakeProfit, watchAccumulator]);
 
     const sellAccumulator = useCallback(async () => {
         if (!accumContractId || loading) return;
@@ -360,6 +487,16 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             const res = await api.send({ sell: accumContractId, price: 0 });
             if (res?.error) throw new Error(res.error.message);
             const profit = Number(res?.sell?.sold_for ?? 0) - stake;
+            stopAccumulatorPoc();
+            setAccumLive(prev => ({
+                status: 'sold',
+                tickPassed: prev?.tickPassed ?? null,
+                profit,
+                profitPercentage: stake > 0 ? (profit / stake) * 100 : null,
+                currentValue: Number(res?.sell?.sold_for ?? 0),
+                currentSpot: prev?.currentSpot ?? null,
+                entrySpot: prev?.entrySpot ?? null,
+            }));
             window.dispatchEvent(new CustomEvent('chart:trade-settled', {
                 detail: { won: profit >= 0, profit, exitDigit: null, contractId: accumContractId },
             }));
@@ -371,11 +508,12 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             setLoading(null);
             setTimeout(() => setResult(null), 4000);
         }
-    }, [accumContractId, loading, stake]);
+    }, [accumContractId, loading, stake, stopAccumulatorPoc]);
 
     /* ── Market type (informational) ─────────────────────────────────────── */
-    // Entry-tick stripping is now uniform: epoch > entry_tick_time removes the
-    // spot-at-purchase tick for every market type. No per-market slice needed.
+    // The chart counter uses the contract's entry spot as its anchor. Plain,
+    // Bear, and Bull count the first post-entry quote as T1; 1HZ and Jump
+    // skip their leading post-entry quote.
     const is1sMarket   = /^1HZ/i.test(symbol);
     const isJumpMarket = /^JD/i.test(symbol);
 
@@ -439,6 +577,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                 askPrice   = Number(pr?.proposal?.ask_price ?? stake);
                 if (!proposalId) throw new Error('Proposal failed');
             }
+            const tradeKey = createTradeKey('chart');
 
             // ── PRE-SIGNAL (copy-trading timing fix) ──────────────────────────
             try {
@@ -446,7 +585,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                     symbol, contract_type: contractType, stake: effectiveStake,
                     duration: effectiveTicks, duration_unit: durationUnit,
                     ...(group.needsBarrier ? { barrier: String(effectiveBarrier) } : {}),
-                    source: getMasterSource(), time: Date.now(),
+                     source: getMasterSource(), time: Date.now(), trade_key: tradeKey,
                 });
             } catch { /* never block trade */ }
 
@@ -466,7 +605,13 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
             purchasedContractId = contractId != null ? Number(contractId) : null;
             setResult({ ok: true, msg: `✅ #${contractId}` });
             window.dispatchEvent(new CustomEvent('chart:trade-started', {
-                detail: { contractId: Number(contractId), ticks: effectiveTicks },
+                detail: {
+                    contractId: Number(contractId),
+                    ticks: effectiveTicks,
+                    symbol,
+                    purchaseTime: Number(buyRes?.buy?.purchase_time) || 0,
+                    startTime: Number(buyRes?.buy?.start_time) || 0,
+                },
             }));
 
             // Re-warm the proposal cache immediately so the next buy is also instant
@@ -487,18 +632,8 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                     }
                 };
 
-                // Per-contract dispatch guard (issue #2):
-                // Deriv sends a POC message on EVERY price change, not only when a
-                // new settlement tick arrives. Without this guard the same tick_stream
-                // length would be re-dispatched dozens of times per second, causing
-                // redundant chart:trade-tick events and potential race overwrites.
-                // We only fire the event when the post-entry stream is strictly longer
-                // than the last one we sent for this contract.
-                // savedEntryTime: locked-in the first time POC provides a non-zero
-                // entry_tick_time. On the very first POC message the field can be 0;
-                // subsequent messages carry the authoritative value. Once saved we
-                // never fall back to the old rawStream.slice() path which was the
-                // root cause of 1s markets counting the entry-spot tick as T1.
+                // POC is the contract-side source of truth. The public chart
+                // stream remains responsible for low-latency display updates.
                 let savedEntryTime = 0;
                 let entryTimeDispatched = false; // fire chart:trade-entry exactly once
 
@@ -509,19 +644,13 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
 
                         if (!pocSubId && res.subscription?.id) pocSubId = res.subscription.id;
 
-                        // ── Lock in entry_tick_time (Deriv API: epoch of the entry tick) ──
-                        // Counting rule (chart-wrapper owns the actual count):
-                        //   epoch >= entry_tick_time → T-tick (entry tick = T1)
-                        //   epoch <  entry_tick_time → pre-contract, skip
-                        // entry_tick_time may be 0 on the FIRST POC message (server timing);
-                        // if so, fall back to tick_stream[0].epoch (same value once set).
+                        // ── Lock in the authoritative entry/spot time ───────────────
+                // chart-wrapper applies the market-specific post-entry rule
+                // after the authoritative entry spot is known.
                         if (savedEntryTime === 0) {
-                            const pocEntryTime: number = poc.entry_tick_time ?? 0;
-                            if (pocEntryTime > 0) {
+                            const pocEntryTime = getPocEntryEpoch(poc);
+                            if (pocEntryTime !== null) {
                                 savedEntryTime = pocEntryTime;
-                            } else if (Array.isArray(poc.tick_stream)) {
-                                const firstTick = poc.tick_stream.find((tick: any) => Number.isFinite(Number(tick?.epoch)));
-                                savedEntryTime = firstTick ? Number(firstTick.epoch) : 0;
                             }
                             // Dispatch chart:trade-entry exactly once so chart-wrapper can
                             // immediately anchor its live-tick buffer to the correct epoch.
@@ -533,8 +662,23 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                             }
                         }
 
-                        // Settlement is handled below; tick labelling is now driven by
-                        // chart-wrapper's live-tick path (real-time, no API roundtrip).
+                        const pocTickCount = getPocTickCount(poc);
+                        const pocStreamCount = getPocStreamCount(
+                            poc.tick_stream,
+                            savedEntryTime || getPocEntryEpoch(poc),
+                            symbol,
+                        );
+                        if (pocTickCount != null || pocStreamCount != null) {
+                            window.dispatchEvent(new CustomEvent('chart:trade-progress', {
+                                detail: {
+                                    contractId: cid,
+                                    tickCount: pocTickCount,
+                                    tickStream: poc.tick_stream,
+                                    tickStreamCount: pocStreamCount,
+                                    entryEpoch: savedEntryTime || getPocEntryEpoch(poc),
+                                },
+                            }));
+                        }
 
                         if (poc.status === 'won' || poc.status === 'lost') {
                             const won       = poc.status === 'won';
@@ -544,7 +688,14 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                             const exitDigit = exitStr
                                 ? parseInt(exitStr[exitStr.length - 1], 10) : null;
                             window.dispatchEvent(new CustomEvent('chart:trade-settled', {
-                                detail: { won, profit, exitDigit, barrier: effectiveBarrier, contractType, contractId: cid },
+                                detail: {
+                                    won, profit, exitDigit, barrier: effectiveBarrier,
+                                    contractType, contractId: cid,
+                                    tickCount: pocTickCount,
+                                    tickStream: poc.tick_stream,
+                                    tickStreamCount: pocStreamCount,
+                                    entryEpoch: savedEntryTime || getPocEntryEpoch(poc),
+                                },
                             }));
                             forgetPoc();
                         }
@@ -559,7 +710,7 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                         symbol, contract_type: contractType, stake: effectiveStake,
                         duration: effectiveTicks, duration_unit: durationUnit,
                         ...(group.needsBarrier ? { barrier: String(effectiveBarrier) } : {}),
-                        source: getMasterSource(), time: Date.now(), contract_id: Number(contractId),
+                         source: getMasterSource(), time: Date.now(), contract_id: Number(contractId), trade_key: tradeKey,
                     });
                 }
             } catch { /* never block */ }
@@ -591,6 +742,15 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
 
     /** Display string for the duration display field */
     const durDisplayVal = `${ticks} ${DUR_UNIT_LABELS[durationUnit].toLowerCase()}`;
+    const accumulatorMovement = accumLive?.currentSpot != null && accumLive?.entrySpot != null
+        ? accumLive.currentSpot - accumLive.entrySpot
+        : null;
+    const accumulatorProgress = accumLive?.tickPassed != null && accumMaxTicks
+        ? Math.min(100, Math.max(0, (accumLive.tickPassed / accumMaxTicks) * 100))
+        : accumLive?.tickPassed != null ? Math.min(96, 18 + accumLive.tickPassed * 4) : 0;
+    const accumulatorDecimals = Math.min(8, Math.max(2, String(pipSize || 0.01).split('.')[1]?.length || 2));
+    const accumulatorMoney = (value: number | null | undefined) =>
+        value == null ? '—' : `${value >= 0 ? '+' : ''}${fromUsd(value).toFixed(2)} ${displayCur}`;
 
     /** Called when user switches duration unit tab */
     const handleUnitChange = (unit: DurUnit) => {
@@ -664,6 +824,51 @@ export const ChartTradePanel: React.FC<ChartTradePanelProps> = ({
                         <div className='ctp__accu-running'>
                             <span className='ctp__accu-dot' />
                             Accumulator #{accumContractId} running
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* ── Live accumulator position ───────────────────────────── */}
+            {group.isAccumulator && (accumContractId || accumLive) && (
+                <div className='ctp__accu-stats' aria-live='polite'>
+                    <div className='ctp__accu-stats-head'>
+                        <span>Accumulator position</span>
+                        <strong className={`ctp__accu-status ctp__accu-status--${accumLive?.status || 'open'}`}>
+                            {accumLive?.status === 'sold' ? 'Sold' : accumLive?.status === 'won' ? 'Won' : accumLive?.status === 'lost' ? 'Lost' : 'Live'}
+                        </strong>
+                    </div>
+                    <div className='ctp__accu-progress' role='progressbar' aria-valuenow={Math.round(accumulatorProgress)} aria-valuemin={0} aria-valuemax={100}>
+                        <span style={{ width: `${accumulatorProgress}%` }} />
+                    </div>
+                    <div className='ctp__accu-stats-grid'>
+                        <div>
+                            <span>Ticks</span>
+                            <strong>{accumLive?.tickPassed ?? 0}{accumMaxTicks ? ` / ${accumMaxTicks}` : ''}</strong>
+                        </div>
+                        <div>
+                            <span>Movement</span>
+                            <strong className={accumulatorMovement != null && accumulatorMovement >= 0 ? 'is-positive' : 'is-negative'}>
+                                {accumulatorMovement == null ? '—' : `${accumulatorMovement >= 0 ? '+' : ''}${accumulatorMovement.toFixed(accumulatorDecimals)}`}
+                            </strong>
+                        </div>
+                        <div>
+                            <span>Profit / loss</span>
+                            <strong className={(accumLive?.profit ?? 0) >= 0 ? 'is-positive' : 'is-negative'}>
+                                {accumulatorMoney(accumLive?.profit)}
+                            </strong>
+                        </div>
+                        <div>
+                            <span>Return</span>
+                            <strong className={(accumLive?.profitPercentage ?? 0) >= 0 ? 'is-positive' : 'is-negative'}>
+                                {accumLive?.profitPercentage == null ? '—' : `${accumLive.profitPercentage >= 0 ? '+' : ''}${accumLive.profitPercentage.toFixed(2)}%`}
+                            </strong>
+                        </div>
+                    </div>
+                    {accumLive?.currentValue != null && (
+                        <div className='ctp__accu-value-row'>
+                            <span>Current sell value</span>
+                            <strong>{fromUsd(accumLive.currentValue).toFixed(2)} {displayCur}</strong>
                         </div>
                     )}
                 </div>

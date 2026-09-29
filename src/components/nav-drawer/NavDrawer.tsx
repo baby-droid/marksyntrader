@@ -10,6 +10,7 @@ const NAV_ITEMS = [
     { tab: DBOT_TABS.FREE_BOTS,           icon: '🤖', label: 'Free Bots' },
     { tab: DBOT_TABS.AHMED_SCALPER_BOTS, icon: '⚡', label: 'Scalper Bots' },
     { tab: DBOT_TABS.AUTO_DIGITS,        icon: '◉',  label: 'Auto-Digits' },
+    { tab: DBOT_TABS.AUTO_LAB,           icon: '⌁',  label: 'Auto Lab' },
     { tab: DBOT_TABS.DCIRCLES,           icon: '⬤',  label: 'D-Circles' },
     { tab: DBOT_TABS.DTRADER,           icon: '📊', label: 'D-Trader' },
     { tab: DBOT_TABS.SPEEDLAB,       icon: '⚡',  label: 'Speed Lab' },

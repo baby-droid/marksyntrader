@@ -11,7 +11,9 @@ window.Blockly.Blocks.trade_definition_contracttype = {
                 {
                     type: 'field_dropdown',
                     name: 'TYPE_LIST',
-                    options: [['', '']],
+                    options: [
+                        [localize('Both'), 'both'],
+                    ],
                 },
             ],
             colour: window.Blockly.Colours.Special1.colour,

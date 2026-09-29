@@ -20,7 +20,7 @@
     font-style: normal;
     line-height: 1.43;
     letter-spacing: normal;
-    fill: $color-white;
+    fill: var(--accent, #89c4f4);
 }
 
 .blocklyMainWorkspaceScrollbar {

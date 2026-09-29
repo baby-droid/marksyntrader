@@ -2,7 +2,7 @@
  * Global bot execution speed.
  *
  * Two independent axes:
- *  1. `speed` (normal | crazy | turbo) — how many purchases fan out per tick
+ *  1. `speed` (normal | crazy | turbo) — how many purchases are allowed per tick
  *     and how the engine reacts to rate limits.
  *  2. `fastExecution` (on/off) — an independent "Fast Execution" toggle that
  *     forces zero delay for EVERY single trade regardless of which speed
@@ -13,15 +13,18 @@
  *
  * Both values are shared app-wide (speed toggle beside Run, the floating AI,
  * and the trade engine all read them) and persisted so they survive reloads.
+ * A-SPEED BOOST is a session-level preset that keeps the Normal tier's
+ * one-purchase-per-tick behavior while using its own zero-delay/direct-buy
+ * path. It deliberately turns the separate Fast toggle OFF while active.
  */
+import { getTradeContext } from './trade-metadata';
 export type ExecutionSpeed = 'normal' | 'crazy' | 'turbo';
 
 const STORAGE_KEY = 'execution_speed';
 const FAST_EXEC_STORAGE_KEY = 'fast_execution_enabled';
 
 // Inter-trade delay (ms) applied by the engine between purchases per speed,
-// BEFORE the independent Fast Execution toggle is taken into account (see
-// getExecutionSpeedDelay below, which forces 0 when Fast Execution is on).
+// BEFORE Fast or A-SPEED zero-delay overrides are taken into account.
 export const SPEED_DELAY_MS: Record<ExecutionSpeed, number> = {
     normal: 200,  // reduced from 1000ms — fast like dBot.deriv.com
     crazy: 0,     // no artificial delay — fires the instant the engine is ready
@@ -36,22 +39,29 @@ export const SPEED_MAX_INFLIGHT: Record<ExecutionSpeed, number> = {
     crazy: 100,   // high pipeline depth
     turbo: 500,   // unlimited practical cap — saturate the API
 };
-const FAST_EXEC_MAX_INFLIGHT = 10_000;
+// Keep Fast responsive without turning a reconnect or duplicate tick into an
+// unbounded burst of buy requests.
+const FAST_EXEC_MAX_INFLIGHT = 3;
 
-// Purchases fired per tick for each speed tier. Normal fires a single
-// purchase per tick (one contract at a time, as before). Crazy and Turbo
-// fire several purchases in parallel on the SAME tick, each an independent
-// contract. Fast Execution keeps purchases_per_tick = 1 (individual, not
-// bulk) — speed comes from 0ms delay + direct buy, not parallel firing.
+// Purchases fired per tick for each speed tier. Normal and Turbo fire a
+// single purchase per live tick. Crazy retains its legacy multi-contract
+// fan-out when explicitly selected. Fast Execution is deliberately different:
+// it is a latency preset, not a volume preset, so it always allows exactly
+// one purchase per tick.
 export const SPEED_PURCHASES_PER_TICK: Record<ExecutionSpeed, number> = {
     normal: 1,
     crazy: 5,
-    turbo: 10,
+    turbo: 1,
 };
 const FAST_EXEC_PURCHASES_PER_TICK = 1; // individual contracts — no bulk side-fires
 
 const listeners = new Set<(speed: ExecutionSpeed) => void>();
 const fastExecListeners = new Set<(enabled: boolean) => void>();
+const aSpeedBoostListeners = new Set<(enabled: boolean) => void>();
+
+let aSpeedBoostEnabled = false;
+let speedBeforeASpeed: ExecutionSpeed | null = null;
+let fastBeforeASpeed: boolean | null = null;
 
 const readSpeed = (): ExecutionSpeed => {
     try {
@@ -76,7 +86,26 @@ let fastExecutionEnabled: boolean = readFastExec();
 
 export const getExecutionSpeed = (): ExecutionSpeed => current;
 
+/** The raw toggle state is used by the Fast button itself. */
 export const isFastExecutionEnabled = (): boolean => fastExecutionEnabled;
+
+/**
+ * Fast is intentionally scoped to the two execution surfaces that share the
+ * tick-synchronised pipeline. Auto Trades, Speed Lab, Free Bots, and other
+ * cards keep their own speed behavior even when the header toggle is on.
+ */
+export const isFastExecutionEnabledForContext = (): boolean => {
+    if (!fastExecutionEnabled) return false;
+    const page = String(getTradeContext().page || '').trim().toLowerCase();
+    return page === 'bot builder' || page === 'scalper bots';
+};
+
+/** True while the header's app-wide A-SPEED BOOST preset is active. */
+export const isASpeedBoostEnabled = (): boolean => aSpeedBoostEnabled;
+
+/** True when an execution path must be driven by live ticks instead of settlement timing. */
+export const isTickWiseExecutionEnabled = (): boolean =>
+    isFastExecutionEnabledForContext() || aSpeedBoostEnabled;
 
 /**
  * Effective inter-trade delay (ms). Fast Execution always wins — 0ms,
@@ -84,40 +113,76 @@ export const isFastExecutionEnabled = (): boolean => fastExecutionEnabled;
  * wait — no matter which speed tier (Normal/Crazy/Turbo) is selected.
  */
 export const getExecutionSpeedDelay = (): number =>
-    fastExecutionEnabled ? 0 : SPEED_DELAY_MS[current];
+    isFastExecutionEnabledForContext() || aSpeedBoostEnabled ? 0 : SPEED_DELAY_MS[current];
 
 /** Effective max concurrent in-flight contracts — the higher of the active tier or Fast Execution's cap. */
 export const getMaxInflight = (): number =>
-    fastExecutionEnabled ? Math.max(SPEED_MAX_INFLIGHT[current], FAST_EXEC_MAX_INFLIGHT) : SPEED_MAX_INFLIGHT[current];
+    isFastExecutionEnabledForContext() || aSpeedBoostEnabled
+        ? Math.max(SPEED_MAX_INFLIGHT[current], FAST_EXEC_MAX_INFLIGHT)
+        : SPEED_MAX_INFLIGHT[current];
 
-/** Effective purchases fired per tick — the higher of the active tier or Fast Execution's throughput. */
+/** Effective purchases fired per tick. Fast mode never inherits Turbo fan-out. */
 export const getPurchasesPerTick = (): number =>
-    fastExecutionEnabled
-        ? Math.max(SPEED_PURCHASES_PER_TICK[current], FAST_EXEC_PURCHASES_PER_TICK)
+    isFastExecutionEnabledForContext()
+        ? FAST_EXEC_PURCHASES_PER_TICK
         : SPEED_PURCHASES_PER_TICK[current];
 
 /** True when the engine should skip the proposal round-trip and buy directly. */
 export const useDirectBuyForSpeed = (): boolean =>
-    fastExecutionEnabled || current === 'crazy' || current === 'turbo';
+    aSpeedBoostEnabled || isFastExecutionEnabledForContext() || current === 'crazy' || current === 'turbo';
 
 export const setExecutionSpeed = (speed: ExecutionSpeed): void => {
-    current = speed;
+    // While A-SPEED BOOST is active, the preset owns the Normal tier. This
+    // prevents another compact SpeedControl instance from switching it to
+    // Crazy/Turbo and creating multi-contract fan-out.
+    current = aSpeedBoostEnabled ? 'normal' : speed;
     try {
-        localStorage.setItem(STORAGE_KEY, speed);
+        localStorage.setItem(STORAGE_KEY, current);
     } catch {
         /* localStorage unavailable */
     }
-    listeners.forEach(fn => fn(speed));
+    listeners.forEach(fn => fn(current));
 };
 
 export const setFastExecutionEnabled = (enabled: boolean): void => {
-    fastExecutionEnabled = enabled;
+    fastExecutionEnabled = aSpeedBoostEnabled ? false : enabled;
     try {
-        localStorage.setItem(FAST_EXEC_STORAGE_KEY, enabled ? '1' : '0');
+        localStorage.setItem(FAST_EXEC_STORAGE_KEY, fastExecutionEnabled ? '1' : '0');
     } catch {
         /* localStorage unavailable */
     }
-    fastExecListeners.forEach(fn => fn(enabled));
+    fastExecListeners.forEach(fn => fn(fastExecutionEnabled));
+};
+
+/**
+ * App-wide single-per-tick speed preset.
+ *
+ * This deliberately keeps the Normal tier's one-contract-per-tick behavior
+ * and changes only client-side pacing: zero artificial delay and the direct
+ * buy path. Deriv remains the authority for tick delivery, rate limits, and
+ * accepted contracts, so this cannot create negative latency or bypass broker
+ * controls.
+ */
+export const setASpeedBoostEnabled = (enabled: boolean): void => {
+    if (enabled === aSpeedBoostEnabled) return;
+
+    if (enabled) {
+        speedBeforeASpeed = current;
+        fastBeforeASpeed = fastExecutionEnabled;
+        aSpeedBoostEnabled = true;
+        setExecutionSpeed('normal');
+        // A-SPEED has its own execution path. Keep the separate Fast toggle
+        // visibly off so the two presets cannot be active at once.
+        setFastExecutionEnabled(false);
+    } else {
+        aSpeedBoostEnabled = false;
+        setFastExecutionEnabled(fastBeforeASpeed ?? false);
+        setExecutionSpeed(speedBeforeASpeed ?? 'normal');
+        speedBeforeASpeed = null;
+        fastBeforeASpeed = null;
+    }
+
+    aSpeedBoostListeners.forEach(fn => fn(aSpeedBoostEnabled));
 };
 
 export const subscribeExecutionSpeed = (fn: (speed: ExecutionSpeed) => void): (() => void) => {
@@ -131,6 +196,13 @@ export const subscribeFastExecution = (fn: (enabled: boolean) => void): (() => v
     fastExecListeners.add(fn);
     return () => {
         fastExecListeners.delete(fn);
+    };
+};
+
+export const subscribeASpeedBoost = (fn: (enabled: boolean) => void): (() => void) => {
+    aSpeedBoostListeners.add(fn);
+    return () => {
+        aSpeedBoostListeners.delete(fn);
     };
 };
 

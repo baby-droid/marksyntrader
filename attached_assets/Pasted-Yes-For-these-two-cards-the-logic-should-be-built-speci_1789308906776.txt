@@ -1,0 +1,1636 @@
+Yes. For these two cards, the logic should be built specifically around **digit parity distribution + recent digit flow + multi-window confirmation**.
+
+The important distinction is:
+
+* **Card 1 = ODD bias → DIGITODD**
+* **Card 2 = EVEN bias → DIGITEVEN**
+* **1000 ticks = structural/statistical baseline**
+* **50 ticks = short-term confirmation**
+* **20 ticks = immediate pattern/flow confirmation**
+* **10 ticks = precise entry trigger**
+
+The 10-tick window should **not determine the overall bias**. It should only determine whether the current moment is suitable for entry.
+
+---
+
+# 1. CARD 1 — ODD BIAS
+
+## Objective
+
+Card 1 searches for markets where:
+
+```text
+ODD digits have statistical dominance
++
+EVEN digits show weakness
++
+recent flow supports ODD
++
+10-tick sequence provides an entry trigger
+```
+
+The final contract is:
+
+```text
+DIGITODD
+```
+
+The system must never buy Odd merely because Odd > Even in one small sample.
+
+---
+
+# 2. CARD 2 — EVEN BIAS
+
+Card 2 is the exact mirror.
+
+```text
+EVEN digits have statistical dominance
++
+ODD digits show weakness
++
+recent flow supports EVEN
++
+10-tick sequence provides an entry trigger
+```
+
+Final contract:
+
+```text
+DIGITEVEN
+```
+
+---
+
+# 3. DIGIT CLASSIFICATION
+
+Every tick's last digit must be extracted:
+
+```text
+0 1 2 3 4 5 6 7 8 9
+```
+
+Then classify:
+
+### Even
+
+```text
+0
+2
+4
+6
+8
+```
+
+### Odd
+
+```text
+1
+3
+5
+7
+9
+```
+
+For every window calculate:
+
+```text
+odd_count
+even_count
+odd_percentage
+even_percentage
+```
+
+The fundamental relationship is:
+
+```text
+odd_percentage + even_percentage = 100%
+```
+
+---
+
+# 4. 1000-TICK ENGINE
+
+The 1000-tick window is the **primary statistical baseline**.
+
+Calculate individual digit distribution:
+
+```text
+0 = x%
+1 = x%
+2 = x%
+...
+9 = x%
+```
+
+Then calculate:
+
+```text
+Odd total
+Even total
+```
+
+Example:
+
+```text
+Digit       %
+0           8.7
+1           11.2
+2           9.1
+3           10.8
+4           8.9
+5           11.4
+6           9.0
+7           10.9
+8           9.3
+9           10.7
+```
+
+Odd:
+
+```text
+1 + 3 + 5 + 7 + 9
+= 55.0%
+```
+
+Even:
+
+```text
+0 + 2 + 4 + 6 + 8
+= 45.0%
+```
+
+This establishes a **longer-window Odd bias**.
+
+---
+
+# 5. DO NOT USE ONLY TOTAL ODD/EVEN
+
+A strong implementation should examine both:
+
+### Parity aggregate
+
+```text
+Odd = 55%
+Even = 45%
+```
+
+and:
+
+### Individual digit distribution
+
+For Odd:
+
+```text
+1 = 11.2%
+3 = 10.8%
+5 = 11.4%
+7 = 10.9%
+9 = 10.7%
+```
+
+For Even:
+
+```text
+0 = 8.7%
+2 = 9.1%
+4 = 8.9%
+6 = 9.0%
+8 = 9.3%
+```
+
+This is stronger evidence than merely saying:
+
+```text
+Odd = 55%
+```
+
+because it shows that the Odd advantage is distributed across several digits rather than being caused by one abnormal digit.
+
+---
+
+# 6. 1000-TICK ODD BIAS SCORE
+
+Create a score from:
+
+```text
+Parity dominance
+Individual digit distribution
+Weakness of opposite parity
+Distribution stability
+Historical persistence
+```
+
+Example:
+
+```text
+Odd = 55.8%
+Even = 44.2%
+
+Odd digits:
+1 = 11.3
+3 = 11.0
+5 = 11.5
+7 = 10.8
+9 = 11.2
+
+Even digits:
+0 = 8.9
+2 = 9.1
+4 = 8.7
+6 = 9.0
+8 = 8.5
+```
+
+This is a much stronger Odd setup than:
+
+```text
+Odd = 51%
+Even = 49%
+```
+
+---
+
+# 7. 1000-TICK THRESHOLDS
+
+Use thresholds as **candidate filters**, not guarantees.
+
+Suggested framework:
+
+```text
+Odd/Even difference < 4%
+    → NO STRUCTURAL BIAS
+
+4–6%
+    → WEAK BIAS
+
+6–10%
+    → USABLE BIAS
+
+10%+
+    → STRONG BIAS
+```
+
+For example:
+
+```text
+Odd 56%
+Even 44%
+```
+
+has a:
+
+```text
+12 percentage-point edge
+```
+
+and is structurally stronger.
+
+But the engine should still require confirmation from 50/20/10 ticks.
+
+---
+
+# 8. INDIVIDUAL DIGIT WEAKNESS
+
+This is particularly important.
+
+For Odd strategy, calculate the weakest Even digits.
+
+Example:
+
+```text
+Even:
+
+0 = 8.8%
+2 = 9.2%
+4 = 9.0%
+6 = 8.7%
+8 = 9.1%
+```
+
+The weakest:
+
+```text
+6 = 8.7%
+0 = 8.8%
+```
+
+These can be tracked as **opposite-parity weakness markers**.
+
+For Even strategy, do the opposite.
+
+---
+
+# 9. 50-TICK CONFIRMATION
+
+The 50-tick window asks:
+
+> Has the 1000-tick bias continued recently?
+
+For Odd:
+
+```text
+Odd >= preferred threshold
+```
+
+and preferably:
+
+```text
+Odd_50 > Odd_1000
+```
+
+or at least:
+
+```text
+Odd_50 remains consistent with the 1000T bias
+```
+
+Example:
+
+```text
+1000T:
+Odd = 56%
+
+50T:
+Odd = 62%
+```
+
+This means recent behavior is reinforcing the longer baseline.
+
+For Even:
+
+```text
+1000T:
+Even = 56%
+
+50T:
+Even = 64%
+```
+
+Strong confirmation.
+
+---
+
+# 10. 50-TICK TREND OF PARITY
+
+Don't just calculate the current 50-tick percentage.
+
+Divide it into smaller segments.
+
+For example:
+
+```text
+50 ticks
+↓
+first 25
+last 25
+```
+
+Then:
+
+```text
+First 25:
+Odd = 52%
+
+Last 25:
+Odd = 68%
+```
+
+This shows **increasing Odd pressure**.
+
+That is better than:
+
+```text
+First 25:
+Odd = 64%
+
+Last 25:
+Odd = 52%
+```
+
+which indicates weakening Odd pressure.
+
+---
+
+# 11. PARITY ACCELERATION
+
+Calculate:
+
+```text
+recent parity percentage
+-
+older parity percentage
+```
+
+Example:
+
+```text
+First 25 = 52% Odd
+Last 25  = 68% Odd
+
+Acceleration = +16 percentage points
+```
+
+This strengthens the Odd score.
+
+For Even, mirror it.
+
+---
+
+# 12. 20-TICK ENGINE
+
+The 20-tick window is the **entry-flow confirmation layer**.
+
+It should determine whether the current sequence is actually favoring the selected parity.
+
+Example:
+
+```text
+20 ticks
+
+Odd = 13
+Even = 7
+
+Odd = 65%
+Even = 35%
+```
+
+This is strong immediate Odd flow.
+
+But:
+
+```text
+1000T Odd = 56%
+50T Odd = 62%
+20T Odd = 50%
+```
+
+should not trigger Odd.
+
+The recent flow is no longer confirming the baseline.
+
+---
+
+# 13. 20-TICK SEQUENCE PATTERN
+
+Track the actual parity sequence.
+
+Example:
+
+```text
+E E O O O E O O O
+```
+
+versus:
+
+```text
+O E O E O E O E O
+```
+
+The second is highly alternating.
+
+Therefore calculate:
+
+```text
+parity_runs
+alternation_rate
+longest_run
+average_run
+current_run
+```
+
+---
+
+# 14. ODD RUN PATTERN
+
+Potential Odd continuation:
+
+```text
+E
+E
+O
+O
+E
+O
+O
+O
+```
+
+This shows Odd clustering.
+
+The system should not require every recent tick to be Odd.
+
+It should evaluate:
+
+```text
+Odd dominance
++
+Odd clustering
++
+reduced Even pressure
+```
+
+---
+
+# 15. EVEN RUN PATTERN
+
+Mirror:
+
+```text
+O
+O
+E
+E
+O
+E
+E
+E
+```
+
+This supports an Even-flow interpretation.
+
+---
+
+# 16. 10-TICK ENGINE
+
+The 10-tick window is the **entry trigger**.
+
+This is the smallest window and therefore the most sensitive to noise.
+
+It should **never override the 1000T regime**.
+
+Its job is:
+
+```text
+"Is NOW a good moment to enter the already-established bias?"
+```
+
+---
+
+# 17. ODD ENTRY TRIGGER
+
+A possible Odd entry should require:
+
+```text
+1000T = Odd bias
+50T    = Odd confirmation
+20T    = Odd confirmation
+10T    = acceptable Odd entry pattern
+```
+
+Example:
+
+```text
+1000T:
+Odd = 56%
+
+50T:
+Odd = 62%
+
+20T:
+Odd = 65%
+
+10T:
+Odd = 60%
+```
+
+This is aligned.
+
+Potential:
+
+```text
+DIGITODD
+```
+
+candidate.
+
+---
+
+# 18. EVEN ENTRY TRIGGER
+
+Mirror:
+
+```text
+1000T:
+Even = 56%
+
+50T:
+Even = 62%
+
+20T:
+Even = 65%
+
+10T:
+Even = 60%
+```
+
+Potential:
+
+```text
+DIGITEVEN
+```
+
+candidate.
+
+---
+
+# 19. 10-TICK ENTRY PATTERN — ODD
+
+Use several possible entry patterns rather than one rigid sequence.
+
+### Pattern A — Even pressure followed by Odd release
+
+```text
+E E E O O
+```
+
+or:
+
+```text
+E E O O O
+```
+
+Interpretation:
+
+```text
+Even cluster
+→ weakening Even pressure
+→ Odd flow begins
+```
+
+If the larger windows already favor Odd, this can become an entry trigger.
+
+---
+
+# 20. PATTERN B — ODD CONTINUATION
+
+Example:
+
+```text
+O O E O O
+```
+
+or:
+
+```text
+O E O O O
+```
+
+The important property is:
+
+```text
+Odd remains dominant
+```
+
+rather than simply counting consecutive Odds.
+
+---
+
+# 21. PATTERN C — LOW ODD PRESSURE → ODD RETURN
+
+Example:
+
+```text
+E E O E E O O
+```
+
+If:
+
+```text
+1000T = Odd bias
+50T = Odd bias
+20T = Odd bias
+```
+
+then an Odd return after a short Even cluster can be considered.
+
+But the engine should wait for a defined confirmation rather than assume the next digit must be Odd.
+
+---
+
+# 22. EVEN ENTRY PATTERNS
+
+Mirror the same concepts.
+
+### Even release
+
+```text
+O O O E E
+```
+
+### Even continuation
+
+```text
+E O E E E
+```
+
+### Even return
+
+```text
+O O E O E E
+```
+
+Again, these are **candidate patterns**, not deterministic predictions.
+
+---
+
+# 23. IMPORTANT: A LOSING STREAK IS NOT AUTOMATIC REVERSAL
+
+Do not use:
+
+```text
+O O O O O
+```
+
+and conclude:
+
+```text
+"Next must be Even."
+```
+
+That is gambler's fallacy.
+
+Instead:
+
+```text
+Current parity
++
+1000T bias
++
+50T trend
++
+20T flow
++
+10T trigger
+```
+
+must determine the decision.
+
+---
+
+# 24. ODD CARD COMPLETE SCORE
+
+Suggested score:
+
+```text
+ODD SCORE
+
+25%  1000T parity structure
+20%  50T parity confirmation
+20%  20T parity flow
+15%  10T entry quality
+10%  digit-distribution structure
+5%   parity acceleration
+5%   sequence/persistence
+```
+
+Then subtract:
+
+```text
+chop penalty
+opposite-parity acceleration
+conflict penalty
+data-quality penalty
+```
+
+---
+
+# 25. EVEN CARD COMPLETE SCORE
+
+Mirror:
+
+```text
+EVEN SCORE
+
+25%  1000T parity structure
+20%  50T parity confirmation
+20%  20T parity flow
+15%  10T entry quality
+10%  digit-distribution structure
+5%   parity acceleration
+5%   sequence/persistence
+```
+
+Then subtract:
+
+```text
+chop
+Odd acceleration
+window conflict
+data problems
+```
+
+---
+
+# 26. FOUR-WINDOW AGREEMENT
+
+Create an explicit agreement score.
+
+Example:
+
+```text
+1000T = ODD
+50T   = ODD
+20T   = ODD
+10T   = ODD
+```
+
+Agreement:
+
+```text
+4 / 4
+```
+
+Excellent.
+
+Another:
+
+```text
+1000T = ODD
+50T   = ODD
+20T   = EVEN
+10T   = ODD
+```
+
+Agreement:
+
+```text
+3 / 4
+```
+
+Potentially wait.
+
+Another:
+
+```text
+1000T = ODD
+50T   = EVEN
+20T   = EVEN
+10T   = EVEN
+```
+
+Reject Odd.
+
+---
+
+# 27. DIFFERENT WEIGHTS FOR DIFFERENT WINDOWS
+
+The engine should understand:
+
+```text
+1000T = context
+50T   = confirmation
+20T   = flow
+10T   = trigger
+```
+
+Therefore:
+
+```text
+10T should never overpower 1000T.
+```
+
+Example:
+
+```text
+1000T Odd = 57%
+50T Odd   = 61%
+20T Odd   = 64%
+10T Even  = 70%
+```
+
+Do **not** immediately switch to Even.
+
+The 10T result is a counter-signal.
+
+Action:
+
+```text
+WAIT
+```
+
+and reassess.
+
+---
+
+# 28. OPPOSITE PARITY PRESSURE
+
+For Odd:
+
+```text
+Even_1000
+Even_50
+Even_20
+Even_10
+```
+
+must also be monitored.
+
+Example:
+
+```text
+1000T:
+Odd 56
+Even 44
+
+50T:
+Odd 63
+Even 37
+
+20T:
+Odd 67
+Even 33
+
+10T:
+Odd 40
+Even 60
+```
+
+The 10T reversal is significant.
+
+Instead of blindly buying Odd:
+
+```text
+WAIT / SIGNAL INVALIDATED
+```
+
+until the 10T condition normalizes or the larger windows change.
+
+---
+
+# 29. ODD WEAKNESS FILTER
+
+Your earlier idea can be incorporated as a **secondary condition**.
+
+For Odd:
+
+```text
+3–5 Odd digits
+```
+
+should ideally show relatively strong distribution.
+
+Example:
+
+```text
+1 = 11.2%
+3 = 10.9%
+5 = 11.4%
+7 = 10.8%
+9 = 11.1%
+```
+
+while several Even digits remain weak:
+
+```text
+0 = 8.7%
+2 = 9.1%
+4 = 8.9%
+6 = 9.0%
+8 = 9.0%
+```
+
+This is stronger than one Odd digit being extremely high while the rest are weak.
+
+---
+
+# 30. EVEN WEAKNESS FILTER
+
+Mirror:
+
+```text
+0
+2
+4
+6
+8
+```
+
+should collectively show stronger distribution while multiple Odd digits remain comparatively weak.
+
+---
+
+# 31. DISTRIBUTION CONCENTRATION
+
+Calculate:
+
+```text
+highest Odd digit
+lowest Odd digit
+highest Even digit
+lowest Even digit
+```
+
+Also:
+
+```text
+Odd mean
+Even mean
+Odd dispersion
+Even dispersion
+```
+
+The engine can distinguish:
+
+### Broad Odd strength
+
+```text
+11%
+11%
+11%
+10.8%
+11%
+```
+
+from:
+
+### One-digit anomaly
+
+```text
+18%
+9%
+9%
+9%
+10%
+```
+
+The first is a cleaner parity structure.
+
+---
+
+# 32. PARITY BALANCE FILTER
+
+If:
+
+```text
+Odd = 50–52%
+Even = 50–48%
+```
+
+the system should generally classify:
+
+```text
+BALANCED
+```
+
+rather than forcing a trade.
+
+Likewise:
+
+```text
+Even = 51%
+```
+
+is not automatically a meaningful Even setup.
+
+---
+
+# 33. SIGNAL STATES
+
+For both cards:
+
+```text
+NO BIAS
+WATCH
+BIAS DETECTED
+CONFIRMATION
+ENTRY WATCH
+SIGNAL READY
+EXECUTING
+COOLDOWN
+REVALIDATION
+```
+
+Example:
+
+```text
+1000T:
+Odd bias detected
+
+50T:
+confirmed
+
+20T:
+confirmed
+
+10T:
+entry pattern detected
+
+→ SIGNAL READY
+```
+
+---
+
+# 34. ENTRY GATE
+
+Before actual purchase:
+
+```text
+IF
+    1000T bias qualifies
+AND 50T confirms
+AND 20T confirms
+AND 10T trigger qualifies
+AND opposite parity is not accelerating dangerously
+AND sequence is not highly alternating
+AND data is valid
+AND signal has not expired
+AND risk limits pass
+
+THEN
+    EXECUTE
+ELSE
+    WAIT
+```
+
+---
+
+# 35. SIGNAL EXPIRATION
+
+Suppose:
+
+```text
+10T trigger = valid
+```
+
+but execution does not occur immediately.
+
+After new ticks arrive, the 10T window changes.
+
+The old signal should expire.
+
+```text
+OLD SIGNAL
+    ↓
+new ticks
+    ↓
+recalculate 10T
+    ↓
+if trigger lost
+    ↓
+CANCEL SIGNAL
+```
+
+This prevents stale entries.
+
+---
+
+# 36. POST-WIN LOGIC
+
+After a winning Odd contract:
+
+```text
+do not automatically enter another Odd
+```
+
+Instead:
+
+```text
+recalculate 1000T
+recalculate 50T
+recalculate 20T
+recalculate 10T
+```
+
+If the setup remains valid:
+
+```text
+new signal cycle
+```
+
+Otherwise:
+
+```text
+wait
+```
+
+---
+
+# 37. POST-LOSS LOGIC
+
+After an Odd loss:
+
+```text
+DO NOT automatically switch to Even.
+```
+
+Recalculate:
+
+```text
+Odd score
+Even score
+1000T
+50T
+20T
+10T
+```
+
+If:
+
+```text
+Odd remains strong
+```
+
+then revalidate Odd.
+
+If:
+
+```text
+Even becomes dominant
+```
+
+then Card 2 may become eligible.
+
+If:
+
+```text
+both become weak
+```
+
+then:
+
+```text
+NO TRADE
+```
+
+---
+
+# 38. TWO-LOSS RESET
+
+After two consecutive losses from the same setup:
+
+```text
+invalidate current signal pattern
+```
+
+Then:
+
+```text
+reload current windows
+recalculate distribution
+recalculate bias
+require fresh validation
+```
+
+Do not simply increase the stake.
+
+---
+
+# 39. THREE-LOSS MARKET RECHECK
+
+After three consecutive losses:
+
+```text
+STOP CURRENT STRATEGY CYCLE
+```
+
+Then:
+
+```text
+scan other markets
+```
+
+because the problem may be:
+
+```text
+wrong market
+wrong regime
+wrong parity bias
+high randomness/chop
+```
+
+rather than merely bad entry timing.
+
+---
+
+# 40. CARD 1 MASTER ALGORITHM
+
+```text
+LOAD 1000 TICKS
+
+CALCULATE:
+    digits 0–9
+    Odd distribution
+    Even distribution
+    Odd %
+    Even %
+    digit weakness
+    distribution concentration
+
+IF Odd structural bias is insufficient:
+    reject
+
+LOAD 50 TICKS
+
+CHECK:
+    Odd %
+    parity acceleration
+    Odd persistence
+    opposite parity pressure
+
+IF 50T does not confirm Odd:
+    WAIT
+
+LOAD 20 TICKS
+
+CHECK:
+    current Odd flow
+    Odd clustering
+    parity runs
+    alternation
+    recent momentum
+
+IF 20T does not confirm Odd:
+    WAIT
+
+LOAD 10 TICKS
+
+CHECK:
+    current entry pattern
+    Odd continuation/re-entry
+    opposite parity pressure
+    excessive alternation
+
+IF 10T entry condition passes:
+
+    calculate final ODD SCORE
+
+    IF score >= threshold:
+        SIGNAL READY
+
+    ELSE:
+        WAIT
+
+FINAL RISK CHECK
+
+IF passed:
+    BUY DIGITODD
+
+ELSE:
+    WAIT
+```
+
+---
+
+# 41. CARD 2 MASTER ALGORITHM
+
+```text
+LOAD 1000 TICKS
+
+CALCULATE:
+    digits 0–9
+    Even distribution
+    Odd distribution
+    Even %
+    Odd %
+    digit weakness
+    distribution concentration
+
+IF Even structural bias is insufficient:
+    reject
+
+LOAD 50 TICKS
+
+CHECK:
+    Even %
+    parity acceleration
+    Even persistence
+    opposite parity pressure
+
+IF 50T does not confirm Even:
+    WAIT
+
+LOAD 20 TICKS
+
+CHECK:
+    current Even flow
+    Even clustering
+    parity runs
+    alternation
+    recent momentum
+
+IF 20T does not confirm Even:
+    WAIT
+
+LOAD 10 TICKS
+
+CHECK:
+    current entry pattern
+    Even continuation/re-entry
+    opposite parity pressure
+    excessive alternation
+
+IF 10T entry condition passes:
+
+    calculate final EVEN SCORE
+
+    IF score >= threshold:
+        SIGNAL READY
+
+    ELSE:
+        WAIT
+
+FINAL RISK CHECK
+
+IF passed:
+    BUY DIGITEVEN
+
+ELSE:
+    WAIT
+```
+
+---
+
+# 42. THE KEY RELATIONSHIP
+
+The LLM implementing this should understand the hierarchy:
+
+```text
+             1000 TICKS
+        "What is the regime?"
+                 ↓
+              50 TICKS
+        "Is the regime active?"
+                 ↓
+              20 TICKS
+        "Is the current flow
+         supporting it?"
+                 ↓
+              10 TICKS
+        "Is there an entry
+             opportunity?"
+                 ↓
+             EXECUTE
+```
+
+So the system should **never** use:
+
+```text
+10 ticks alone
+```
+
+to decide Odd or Even.
+
+It should use:
+
+```text
+1000 → 50 → 20 → 10
+```
+
+as a hierarchical confirmation system.
+
+---
+
+# 43. IDEAL ODD EXAMPLE
+
+```text
+1000T
+Odd  = 56.4%
+Even = 43.6%
+
+50T
+Odd  = 62%
+Even = 38%
+
+20T
+Odd  = 65%
+Even = 35%
+
+10T
+Odd  = 60%
+Even = 40%
+```
+
+Additional conditions:
+
+```text
+Odd digit distribution = broad
+Even digits = comparatively weak
+Odd clustering = good
+Alternation = low
+```
+
+Result:
+
+```text
+ODD BIAS
++
+MULTI-WINDOW CONFIRMATION
++
+VALID ENTRY
+=
+ODD SIGNAL CANDIDATE
+```
+
+---
+
+# 44. IDEAL EVEN EXAMPLE
+
+```text
+1000T
+Even = 57%
+Odd  = 43%
+
+50T
+Even = 63%
+
+20T
+Even = 67%
+
+10T
+Even = 60%
+```
+
+With:
+
+```text
+Even distribution broad
+Odd distribution relatively weak
+Even clustering good
+Low alternation
+```
+
+Result:
+
+```text
+EVEN SIGNAL CANDIDATE
+```
+
+---
+
+# 45. NO-TRADE EXAMPLE
+
+```text
+1000T
+Odd = 53%
+
+50T
+Odd = 56%
+
+20T
+Odd = 48%
+
+10T
+Odd = 55%
+```
+
+This should be:
+
+```text
+NO TRADE
+```
+
+because the windows disagree.
+
+---
+
+# 46. THE LLM IMPLEMENTATION RULE
+
+The final implementation should treat each window as an independent evidence layer:
+
+```text
+1000T:
+structural bias
+
+50T:
+confirmation
+
+20T:
+flow
+
+10T:
+entry trigger
+```
+
+Then calculate:
+
+```text
+OddConfidence
+EvenConfidence
+WindowAgreement
+DistributionQuality
+OppositePressure
+SequenceQuality
+```
+
+and finally:
+
+```text
+FinalOddScore
+FinalEvenScore
+```
+
+The execution engine should only receive:
+
+```text
+SIGNAL_READY
+direction = ODD / EVEN
+confidence
+market
+entry_reason
+validation_state
+risk_state
+```
+
+It should **never** receive a raw "buy" command directly from the digit-distribution module.
+
+This separation makes the strategy much easier to backtest, debug, optimize, and eventually connect to live Deriv execution.

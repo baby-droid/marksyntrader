@@ -77,6 +77,25 @@
         overflow: visible !important; /* must be visible so title dropdown floats above canvas */
     }
 
+    /* SmartChart's canvas layer needs an explicit height when it is nested in
+       the flex chart column. Without this, the canvas can mount at zero height
+       and the quote line is technically present but invisible. */
+    .dashboard__chart-wrapper,
+    .dashboard__chart-wrapper > .smartcharts,
+    .dashboard__chart-wrapper > .smartcharts-desktop,
+    .dashboard__chart-wrapper .ciq-chart,
+    .dashboard__chart-wrapper .ciq-chart-area,
+    .dashboard__chart-wrapper canvas {
+        min-height: 0 !important;
+    }
+    .dashboard__chart-wrapper > .smartcharts,
+    .dashboard__chart-wrapper > .smartcharts > .smartcharts-desktop,
+    .dashboard__chart-wrapper .ciq-chart,
+    .dashboard__chart-wrapper .ciq-chart-area,
+    .dashboard__chart-wrapper .chartContainer {
+        height: 100% !important;
+    }
+
     /* SmartChart root canvas containers */
     > div, .sc-chart-layout, .chartWrapper, [class*="chart-"] {
         width: 100% !important;
@@ -157,7 +176,7 @@
     /* ── ① Triangle track — exactly the height of the triangle arrow ── */
     &__triangle-track {
         position: relative;
-        height: 7px;       /* matches border-top-width of the pointer */
+         height: 15px;      /* leaves a clear gap between pointer and circles */
         width: 100%;
         flex-shrink: 0;
         overflow: visible; /* let the pointer bleed down onto circles */
@@ -277,7 +296,7 @@
 
     /* Individual digit item */
     &__item {
-        position: relative;   /* containing block for the T-label badge */
+        position: relative;
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -286,33 +305,6 @@
         user-select: none;
         min-width: 0;
         flex: 1;
-    }
-
-    /* T-label badge — sits straddling the TOP edge of the digit circle.
-       The triangle pointer-tip is ~2px above the circle row, so the badge
-       appears right where the triangle is pointing. */
-    &__tlabel {
-        position: absolute;
-        top: 0;                                /* circle's top edge  */
-        left: 50%;
-        transform: translate(-50%, -50%);      /* center badge on the edge */
-        background: #1E88FF;
-        color: #fff;
-        font-size: 10px;
-        font-weight: 900;
-        white-space: nowrap;
-        padding: 2px 7px;
-        border-radius: 12px;
-        z-index: 25;                           /* above triangle (z-10) and circles */
-        pointer-events: none;
-        box-shadow: 0 2px 8px rgba(30,136,255,0.65);
-        animation: cdo-tlabel-in 0.2s ease-out;
-        &--final {
-            background: #f59e0b;
-            color: #000;
-            box-shadow: 0 2px 8px rgba(245,158,11,0.55);
-        }
-        &--hidden { display: none; }
     }
 
     /* Digit circle */
@@ -580,7 +572,7 @@
         &__price-val      { font-size: 10px; }
         &__triangle-pointer { border-left-width: 6px; border-right-width: 6px; border-top-width: 9px; }
         &__tlabel         { font-size: 8px; height: 13px; line-height: 13px; }
-        &__triangle-track { height: 9px; }
+        &__triangle-track { height: 15px; }
     }
 
     /* Trade flag: slightly shorter bar on tablets */
@@ -629,7 +621,7 @@
         &__price-val      { font-size: 8px; }
         &__triangle-pointer { border-left-width: 5px; border-right-width: 5px; border-top-width: 8px; }
         &__tlabel         { font-size: 6px; }
-        &__triangle-track { height: 8px; }
+        &__triangle-track { height: 13px; }
     }
 
     /* Win/loss flag — compact bar on mobile (desktop chart only, mobile uses MobileChartView) */

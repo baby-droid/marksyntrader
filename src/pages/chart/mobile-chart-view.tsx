@@ -7,7 +7,8 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
-import { publishMasterTrade, getMasterSource } from '@/utils/trade-bus';
+import { publishMasterTrade, getMasterSource, createTradeKey } from '@/utils/trade-bus';
+import { getPocEntryEpoch, getPocStreamCount, getPocTickCount } from './chart-trade-ticks';
 import ChartAiControl from './chart-ai';
 import './mobile-chart-view.scss';
 
@@ -58,13 +59,11 @@ interface DigitCircleProps {
     isCurrent: boolean;
     isWin: boolean;
     isLoss: boolean;
-    tickLabels: string[];
-    labelBelow?: boolean;
     onClick: () => void;
 }
 
 const DigitCircle: React.FC<DigitCircleProps> = ({
-    digit, pct, rank, isBarrier, isCurrent, isWin, isLoss, tickLabels, labelBelow, onClick,
+    digit, pct, rank, isBarrier, isCurrent, isWin, isLoss, onClick,
 }) => {
     const SIZE   = 76;
     const CX     = SIZE / 2;
@@ -82,23 +81,8 @@ const DigitCircle: React.FC<DigitCircleProps> = ({
     const ringStroke = isBarrier ? '#0e3348' : rankColors.ring;
     const textColor  = isBarrier ? '#fff' : '#000';
 
-    const hasT    = tickLabels.length > 0;
-    const isFinal = tickLabels.some(l => l.includes('★'));
-
-    const tLabelEl = hasT && (
-        <div className={[
-            'mcv-circle__tlabel',
-            labelBelow ? 'mcv-circle__tlabel--below' : '',
-            isFinal ? 'mcv-circle__tlabel--final' : '',
-        ].filter(Boolean).join(' ')}>
-            {tickLabels.map(l => l.replace('★', '')).join(' ')}
-        </div>
-    );
-
     return (
         <div className='mcv-circle' onClick={onClick}>
-            {/* Top row (0-4): label above; bottom row (5-9): label below */}
-            {!labelBelow && tLabelEl}
             <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
                 {/* Solid fill circle */}
                 <circle cx={CX} cy={CX} r={R} fill={fillColor} stroke={ringStroke} strokeWidth={SW} />
@@ -115,7 +99,6 @@ const DigitCircle: React.FC<DigitCircleProps> = ({
             <div className={`mcv-circle__pct${isBarrier ? ' mcv-circle__pct--barrier' : ''}`}>
                 {pct.toFixed(1)}%
             </div>
-            {labelBelow && tLabelEl}
         </div>
     );
 };
@@ -350,7 +333,6 @@ export interface MobileChartViewProps {
     barrier: number;
     onBarrierChange: (d: number) => void;
     pendingTrades: Array<{ id: string; totalTicks: number; countedTicks: number }>;
-    tickDigitSnapshot: Map<string, number[]>;
     lastTrade: { digit: number; won: boolean } | null;
     activeSymbols: Array<{ symbol: string; display_name: string }>;
 }
@@ -361,7 +343,7 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
     currentDigit, currentPrice, priceChange, pipSize,
     pcts, sorted,
     barrier, onBarrierChange,
-    pendingTrades, tickDigitSnapshot, lastTrade,
+    pendingTrades, lastTrade,
     activeSymbols,
 }) => {
     /* ── Trade state ──────────────────────────────────────────────────────── */
@@ -387,13 +369,6 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
         underAsk: number;
         expiry: number;
     } | null>(null);
-    // Tracks the last tick-count dispatched per contract so we never fire a
-    // chart:trade-tick event with the same or fewer ticks than before.
-    // Deriv POC fires on every state change, not just new ticks — this ref
-    // prevents redundant/stale dispatches that trigger race overwrites in the
-    // wrapper. Keyed by numeric contractId.
-    const pocLastTickCountRef = useRef<Map<number, number>>(new Map());
-
     /* ── Win/Loss toast notification ──────────────────────────────────────── */
     // Queue-based: every settled trade gets its own popup; rapid trades don't
     // cancel each other.  toastKey forces React to unmount+remount the element
@@ -495,11 +470,9 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
     }, [warmProposalCache]);
 
     /* ── Market type (informational) ─────────────────────────────────────── */
-    // Tick counting rule (driven by chart-wrapper.tsx, which owns pendingTrades):
-    //   epoch >= entry_tick_time → T-tick (entry tick itself = T1)
-    //   epoch <  entry_tick_time → pre-contract tick, skip
-    // Deriv returns different entry_tick_time values per market family so the
-    // same >= rule naturally produces the correct T1 for every market type.
+    // Tick counting is driven by chart-wrapper.tsx: the authoritative entry
+    // spot is T1, duplicate epochs are removed, and all market types share the
+    // same settlement semantics.
     const is1sMarket   = /^1HZ/i.test(symbol);
     const isJumpMarket = /^JD/i.test(symbol);
 
@@ -563,6 +536,7 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                 askPrice   = Number(pr?.proposal?.ask_price ?? stake);
                 if (!proposalId) throw new Error('Proposal failed');
             }
+            const tradeKey = createTradeKey('mobile-chart');
 
             // PRE-signal for copy trading (before buy so follower gets same tick)
             try {
@@ -570,7 +544,7 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                     symbol, contract_type: contractType, stake: effectiveStake,
                     duration: effectiveTicks, duration_unit: durationUnit,
                     ...(group.needsBarrier ? { barrier: String(effectiveBarrier) } : {}),
-                    source: getMasterSource(), time: Date.now(),
+                     source: getMasterSource(), time: Date.now(), trade_key: tradeKey,
                 });
             } catch { /* non-fatal */ }
 
@@ -590,7 +564,13 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
             purchasedContractId = contractId != null ? Number(contractId) : null;
             setResult({ ok: true, msg: `✅ #${contractId}` });
             window.dispatchEvent(new CustomEvent('chart:trade-started', {
-                detail: { contractId: Number(contractId), ticks: effectiveTicks },
+                detail: {
+                    contractId: Number(contractId),
+                    ticks: effectiveTicks,
+                    symbol,
+                    purchaseTime: Number(buyRes?.buy?.purchase_time) || 0,
+                    startTime: Number(buyRes?.buy?.start_time) || 0,
+                },
             }));
 
             // Re-warm the proposal cache immediately so the next buy is also instant
@@ -610,14 +590,8 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                         pocSubId = null;
                     }
                 };
-                // Per-contract dispatch guard (issue #2):
-                // Deriv sends a POC message on EVERY live price tick, not only when a
-                // new settlement tick lands. Without this, the same tick_stream fires
-                // dozens of chart:trade-tick events per real tick, causing redundant
-                // processing and potential race overwrites in chart-wrapper.
-                // savedEntryTime: locked in once POC provides a non-zero
-                // entry_tick_time. Prevents the old rawStream.slice() fallback
-                // from labelling the entry-spot tick as T1 on 1s markets.
+                // POC is the contract-side source of truth. The public chart
+                // stream remains responsible for low-latency display updates.
                 let savedEntryTime = 0;
                 let entryTimeDispatched = false; // fire chart:trade-entry exactly once
 
@@ -627,19 +601,13 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                         if (!poc) return;
                         if (!pocSubId && res.subscription?.id) pocSubId = res.subscription.id;
 
-                        // ── Lock in entry_tick_time once (same logic as PC panel) ──────
-                        // Counting rule (chart-wrapper owns the count):
-                        //   epoch >= entry_tick_time → T-tick (entry tick = T1)
-                        //   epoch <  entry_tick_time → pre-contract, skip
-                        // entry_tick_time may be 0 on the first POC message; fall back to
-                        // tick_stream[0].epoch (identical value once available).
+                        // ── Lock in the authoritative entry/spot time ───────────────
+                        // chart-wrapper applies the market-specific post-entry
+                        // rule after the authoritative entry spot is known.
                         if (savedEntryTime === 0) {
-                            const pocEntryTime: number = poc.entry_tick_time ?? 0;
-                            if (pocEntryTime > 0) {
+                            const pocEntryTime = getPocEntryEpoch(poc);
+                            if (pocEntryTime !== null) {
                                 savedEntryTime = pocEntryTime;
-                            } else if (Array.isArray(poc.tick_stream)) {
-                                const firstTick = poc.tick_stream.find((tick: any) => Number.isFinite(Number(tick?.epoch)));
-                                savedEntryTime = firstTick ? Number(firstTick.epoch) : 0;
                             }
                             if (savedEntryTime > 0 && !entryTimeDispatched) {
                                 entryTimeDispatched = true;
@@ -649,8 +617,24 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                             }
                         }
 
-                        // Settlement handled below; tick labelling driven by chart-wrapper
-                        // live-tick path (real-time, no API roundtrip).
+                        const pocTickCount = getPocTickCount(poc);
+                        const pocStreamCount = getPocStreamCount(
+                            poc.tick_stream,
+                            savedEntryTime || getPocEntryEpoch(poc),
+                            symbol,
+                        );
+                        if (pocTickCount != null || pocStreamCount != null) {
+                            window.dispatchEvent(new CustomEvent('chart:trade-progress', {
+                                detail: {
+                                    contractId: cid,
+                                    tickCount: pocTickCount,
+                                    tickStream: poc.tick_stream,
+                                    tickStreamCount: pocStreamCount,
+                                    entryEpoch: savedEntryTime || getPocEntryEpoch(poc),
+                                },
+                            }));
+                        }
+
                         if (poc.status === 'won' || poc.status === 'lost') {
                             const won    = poc.status === 'won';
                             const profit = Number(poc.profit ?? 0);
@@ -658,7 +642,14 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                                 ? String(poc.exit_tick_display_value).replace('.', '') : null;
                             const exitDigit = exitStr ? parseInt(exitStr[exitStr.length - 1], 10) : null;
                             window.dispatchEvent(new CustomEvent('chart:trade-settled', {
-                                detail: { won, profit, exitDigit, barrier: effectiveBarrier, contractType, contractId: cid },
+                                detail: {
+                                    won, profit, exitDigit, barrier: effectiveBarrier,
+                                    contractType, contractId: cid,
+                                    tickCount: pocTickCount,
+                                    tickStream: poc.tick_stream,
+                                    tickStreamCount: pocStreamCount,
+                                    entryEpoch: savedEntryTime || getPocEntryEpoch(poc),
+                                },
                             }));
                             forgetPoc();
                         }
@@ -673,7 +664,7 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                     symbol, contract_type: contractType, stake: effectiveStake,
                     duration: effectiveTicks, duration_unit: durationUnit,
                     ...(group.needsBarrier ? { barrier: String(effectiveBarrier) } : {}),
-                    source: getMasterSource(), time: Date.now(), contract_id: Number(contractId),
+                     source: getMasterSource(), time: Date.now(), contract_id: Number(contractId), trade_key: tradeKey,
                 });
             } catch { /* non-fatal */ }
         } catch (e: any) {
@@ -692,20 +683,6 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
     const overLabel  = OVER_LABELS[group.id]  ?? 'Rise';
     const underLabel = UNDER_LABELS[group.id] ?? 'Fall';
 
-    /* ── Tick-label map (from active trades) ──────────────────────────────── */
-    const digitTradeLabels = new Map<number, string[]>();
-    tickDigitSnapshot.forEach((digits, tradeId) => {
-        const pending = pendingTrades.find(t => t.id === tradeId);
-        digits.forEach((d, idx) => {
-            const tickNum = idx + 1;
-            const isLast  = pending ? tickNum === pending.totalTicks : true;
-            const label   = isLast ? `T${tickNum}★` : `T${tickNum}`;
-            const arr = digitTradeLabels.get(d) ?? [];
-            arr.push(label);
-            digitTradeLabels.set(d, arr);
-        });
-    });
-
     /* ── Triangle position ────────────────────────────────────────────────── */
     // triangleRow: 'top' (0-4) or 'bottom' (5-9)
     // trianglePos: 0-4 column index within the row
@@ -719,6 +696,21 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
     const activeTrade = pendingTrades[0] ?? null;
     const activeTickCount = activeTrade?.countedTicks ?? 0;
     const activeTotalTicks = activeTrade?.totalTicks ?? 0;
+    const showTickBadge = !!activeTrade && activeTickCount > 0;
+
+    const renderTriangle = (direction: 'down' | 'up') => (
+        <div
+            className={`mcv-digits__triangle mcv-digits__triangle--${direction}`}
+            style={{ left: triangleLeft }}
+        >
+            {showTickBadge && (
+                <span className='mcv-digits__tick-badge'>
+                    T{activeTickCount}
+                    {activeTickCount === activeTotalTicks && <span className='mcv-digits__tick-badge-star'>★</span>}
+                </span>
+            )}
+        </div>
+    );
 
     /* ── Price display ────────────────────────────────────────────────────── */
     const priceStr  = currentPrice != null ? currentPrice.toFixed(pipSize) : '——';
@@ -730,7 +722,7 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
     const ROW_TOP    = [0, 1, 2, 3, 4];
     const ROW_BOTTOM = [5, 6, 7, 8, 9];
 
-    const renderRow = (digits: number[], isBottom: boolean) => (
+    const renderRow = (digits: number[]) => (
         <div className='mcv-digits__row'>
             {digits.map(d => {
                 const pct   = pcts[d] ?? 0;
@@ -739,7 +731,6 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                 const isBarrier  = barrier === d;
                 const isWin  = lastTrade?.won === true  && lastTrade.digit === d;
                 const isLoss = lastTrade?.won === false && lastTrade.digit === d;
-                const tLabels = digitTradeLabels.get(d) ?? [];
                 return (
                     <DigitCircle
                         key={d}
@@ -750,8 +741,6 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
                         isCurrent={isCurrent}
                         isWin={isWin}
                         isLoss={isLoss}
-                        tickLabels={tLabels}
-                        labelBelow={isBottom}
                         onClick={() => onBarrierChange(d)}
                     />
                 );
@@ -814,29 +803,23 @@ const MobileChartView: React.FC<MobileChartViewProps> = ({
 
             {/* ── Digit circles ─────────────────────────────────────────── */}
             <div className='mcv-digits'>
-                {/* Triangle ABOVE top row — ▼ pointing DOWN at digit 0-4 */}
+                {/* 0–4: indicator and tick label above the top row */}
                 <div className='mcv-digits__pointer-row mcv-digits__pointer-row--top'>
                     {currentDigit !== null && triangleRow === 'top' && (
-                        <div
-                            className='mcv-digits__triangle mcv-digits__triangle--down'
-                            style={{ left: triangleLeft }}
-                        />
+                        renderTriangle('down')
                     )}
                 </div>
 
                 {/* Top row (0-4) */}
-                {renderRow(ROW_TOP, false)}
+                {renderRow(ROW_TOP)}
 
                 {/* Bottom row (5-9) */}
-                {renderRow(ROW_BOTTOM, true)}
+                {renderRow(ROW_BOTTOM)}
 
-                {/* Triangle BELOW bottom row — ▲ pointing UP at digit 5-9 */}
+                {/* 5–9: indicator and tick label below the bottom row */}
                 <div className='mcv-digits__pointer-row mcv-digits__pointer-row--bottom'>
                     {currentDigit !== null && triangleRow === 'bottom' && (
-                        <div
-                            className='mcv-digits__triangle mcv-digits__triangle--up'
-                            style={{ left: triangleLeft }}
-                        />
+                        renderTriangle('up')
                     )}
                 </div>
             </div>

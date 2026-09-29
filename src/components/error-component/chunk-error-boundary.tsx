@@ -17,32 +17,15 @@
 
 import React, { useEffect } from 'react';
 import { useRouteError } from 'react-router-dom';
-
-const RELOAD_FLAG = 'chunk_reload_attempted';
-
-function isChunkError(err: unknown): boolean {
-    if (!(err instanceof Error)) return false;
-    return (
-        err.name === 'ChunkLoadError' ||
-        /loading chunk/i.test(err.message) ||
-        /failed to fetch dynamically imported module/i.test(err.message) ||
-        /error loading dynamically imported module/i.test(err.message) ||
-        /loading css chunk/i.test(err.message)
-    );
-}
+import { CHUNK_RELOAD_FLAG, isChunkLoadFailure, reloadAfterChunkFailure } from '@/utils/chunk-recovery';
 
 const ChunkErrorPage: React.FC = () => {
     const error = useRouteError();
-    const chunk = isChunkError(error);
+    const chunk = isChunkLoadFailure(error);
 
     useEffect(() => {
         if (!chunk) return;
-        if (!sessionStorage.getItem(RELOAD_FLAG)) {
-            // First occurrence — reload once with a fresh URL cache-bust
-            sessionStorage.setItem(RELOAD_FLAG, '1');
-            window.location.reload();
-        }
-        // If flag already set, fall through to the manual button below
+        reloadAfterChunkFailure();
     }, [chunk]);
 
     // Clear the reload flag once the app loads correctly
@@ -75,7 +58,7 @@ const ChunkErrorPage: React.FC = () => {
     };
 
     if (chunk) {
-        const alreadyTried = sessionStorage.getItem(RELOAD_FLAG);
+        const alreadyTried = sessionStorage.getItem(CHUNK_RELOAD_FLAG);
         return (
             <div style={containerStyle}>
                 <div style={{ fontSize: '2.5rem' }}>🔄</div>
@@ -91,7 +74,7 @@ const ChunkErrorPage: React.FC = () => {
                     <button
                         style={btnStyle}
                         onClick={() => {
-                            sessionStorage.removeItem(RELOAD_FLAG);
+                            sessionStorage.removeItem(CHUNK_RELOAD_FLAG);
                             window.location.reload();
                         }}
                     >

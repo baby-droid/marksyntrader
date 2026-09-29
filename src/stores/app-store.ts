@@ -158,6 +158,13 @@ export default class AppStore {
                                         window.Blockly.Events.fire(fake_create_event);
                                     });
                                 });
+                        }).catch(error => {
+                            // A reconnect or second startup can be rate-limited by
+                            // Deriv. The active-symbols loader already records its
+                            // error state; do not turn a recoverable market-data
+                            // failure into an unhandled rejection that crashes the
+                            // preview artifact.
+                            console.warn('[AppStore] Active symbols refresh skipped:', error?.message ?? error);
                         });
                     }
                     DBot.initializeInterpreter();

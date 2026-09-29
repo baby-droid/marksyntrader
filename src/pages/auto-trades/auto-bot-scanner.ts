@@ -1,0 +1,473 @@
+import { useEffect, useRef, useState } from 'react';
+import { api_base } from '@/external/bot-skeleton';
+import {
+    CONNECTION_STATUS,
+    connectionStatus$,
+} from '@/external/bot-skeleton/services/api/observables/connection-status-stream';
+import { classifyAutoBotMarket } from './auto-bot-strategies';
+
+export const AUTO_BOT_MARKETS = [
+    { label: 'V10 (1s)', value: '1HZ10V' },
+    { label: 'V25 (1s)', value: '1HZ25V' },
+    { label: 'V50 (1s)', value: '1HZ50V' },
+    { label: 'V75 (1s)', value: '1HZ75V' },
+    { label: 'V100 (1s)', value: '1HZ100V' },
+    { label: 'V10', value: 'R_10' },
+    { label: 'V25', value: 'R_25' },
+    { label: 'V50', value: 'R_50' },
+    { label: 'V75', value: 'R_75' },
+    { label: 'V100', value: 'R_100' },
+    { label: 'Jump 10', value: 'JD10' },
+    { label: 'Jump 25', value: 'JD25' },
+    { label: 'Jump 50', value: 'JD50' },
+    { label: 'Jump 75', value: 'JD75' },
+    { label: 'Jump 100', value: 'JD100' },
+    { label: 'Bear Market', value: 'RDBEAR' },
+    { label: 'Bull Market', value: 'RDBULL' },
+] as const;
+
+type AutoBotMarket = { label: string; value: string };
+
+export interface AutoBotMarketSnapshot {
+    symbol: string;
+    label: string;
+    digits: number[];
+    prices: number[];
+    livePrice: number | null;
+    tickVersion: number;
+    ready: boolean;
+}
+
+export interface AutoBotTrade {
+    contract: string;
+    barrier: number | null;
+    shouldTrade?: boolean;
+    signal?: 'weak' | 'strong';
+    score?: number;
+    reason?: string;
+    direction?: 'rise' | 'fall' | 'odd' | 'even';
+    state?: string;
+    entryFrame?: 'matched' | 'waiting';
+}
+
+export interface AutoBotDefinition {
+    pickTrade: (
+        digits: number[],
+        prices?: number[],
+        recoveryMode?: boolean,
+        cycleConfig?: unknown,
+    ) => AutoBotTrade;
+}
+
+export interface AutoBotMarketCandidate {
+    symbol: string;
+    label: string;
+    digits: number[];
+    prices: number[];
+    trade: AutoBotTrade;
+    score: number;
+    qualifies: boolean;
+    tickVersion: number;
+    livePrice: number | null;
+    ticks: 1 | 2 | 3 | 4;
+    weakPct?: number;
+    strongPct?: number;
+    marketFamily: string;
+}
+
+export const AUTO_BOT_TICK_DURATION = 1 as const;
+
+const marketPriority = (symbol: string): number => {
+    const value = String(symbol).toUpperCase();
+    if (value.startsWith('1HZ')) return 5;
+    if (value.startsWith('JD')) return 4;
+    if (value.startsWith('R_')) return 3;
+    if (value === 'RDBEAR') return 2;
+    if (value === 'RDBULL') return 1;
+    return 0;
+};
+
+export const isSupportedAutoBotMarket = (symbol: string): boolean => {
+    const value = String(symbol).toUpperCase();
+    return /^1HZ\d+V$/.test(value)
+        || /^JD\d+$/.test(value)
+        || /^R_\d+$/.test(value)
+        || value === 'RDBEAR'
+        || value === 'RDBULL';
+};
+
+const compareAutoBotMarkets = (
+    left: AutoBotMarketCandidate,
+    right: AutoBotMarketCandidate,
+): number => {
+    const scoreDelta = right.score - left.score;
+    return scoreDelta || marketPriority(right.symbol) - marketPriority(left.symbol);
+};
+
+export function getFreshAutoBotMarkets(
+    candidates: AutoBotMarketCandidate[],
+    lastEvaluatedTickByMarket: Map<string, number>,
+): AutoBotMarketCandidate[] {
+    const fresh = candidates
+        .filter(candidate =>
+            candidate.qualifies
+            && candidate.tickVersion > (lastEvaluatedTickByMarket.get(candidate.symbol) ?? 0)
+        )
+        .sort(compareAutoBotMarkets);
+
+    // Mark every changed market as evaluated, not only the market selected
+    // for execution. This prevents a qualifying market from being replayed
+    // on every unrelated market tick.
+    candidates.forEach(candidate => {
+        if (candidate.tickVersion > (lastEvaluatedTickByMarket.get(candidate.symbol) ?? 0)) {
+            lastEvaluatedTickByMarket.set(candidate.symbol, candidate.tickVersion);
+        }
+    });
+
+    return fresh;
+}
+
+export function selectAutoBotMarketsForExecution(
+    freshMarkets: AutoBotMarketCandidate[],
+): AutoBotMarketCandidate[] {
+    // Every market with a fresh qualifying entry is independently tradable.
+    // Do not downgrade a ready market to "watch" just because another market
+    // has a weaker score; the user's enabled market set owns execution.
+    return freshMarkets
+        .slice()
+        .sort(compareAutoBotMarkets);
+}
+
+export function isValidatedAutoBotEntry(
+    candidate: AutoBotMarketCandidate,
+    _lossStreak = 0,
+): boolean {
+    // A live strategy signal is already the entry decision. Do not add a
+    // second confirmation/score gate here: it made bots display NO TRADE
+    // while one of their valid entry rules was already true.
+    return candidate.qualifies
+        && candidate.trade.shouldTrade === true
+        && candidate.trade.entryFrame === 'matched';
+}
+
+export function isAutoBotMarketStopped(
+    profit: number,
+    risk: { takeProfit: number; stopLoss: number },
+): boolean {
+    return profit >= risk.takeProfit || profit <= -risk.stopLoss;
+}
+
+const digitFromQuote = (quote: number, pipSize: number) =>
+    Number(Number(quote).toFixed(pipSize).slice(-1));
+
+const isDigitMarket = (item: any): boolean => {
+    const symbol = String(item?.symbol ?? '').trim();
+    if (!symbol) return false;
+    const market = String(item?.market ?? '').toLowerCase();
+    const symbolType = String(item?.symbol_type ?? '').toLowerCase();
+    const supportedFamily = isSupportedAutoBotMarket(symbol);
+    return supportedFamily && (market === 'synthetic_index'
+        || symbolType === 'synthetic_index'
+        || supportedFamily);
+};
+
+const mergeMarkets = (discovered: AutoBotMarket[]): AutoBotMarket[] => {
+    const bySymbol = new Map<string, AutoBotMarket>();
+    [...AUTO_BOT_MARKETS, ...discovered].forEach(market => {
+        if (market.value) bySymbol.set(market.value, market);
+    });
+    return [...bySymbol.values()];
+};
+
+const scoreTrade = (trade: AutoBotTrade, digits: number[]): number => {
+    if (!digits.length) return 0;
+    const n = digits.length;
+    const barrier = Number(trade.barrier ?? 0);
+    if (trade.contract === 'DIGITOVER') return digits.filter(digit => digit > barrier).length / n * 100;
+    if (trade.contract === 'DIGITUNDER') return digits.filter(digit => digit < barrier).length / n * 100;
+    if (trade.contract === 'DIGITMATCH') return digits.filter(digit => digit === barrier).length / n * 100;
+    if (trade.contract === 'DIGITDIFF') return digits.filter(digit => digit !== barrier).length / n * 100;
+    if (trade.contract === 'DIGITEVEN') return digits.filter(digit => digit % 2 === 0).length / n * 100;
+    if (trade.contract === 'DIGITODD') return digits.filter(digit => digit % 2 !== 0).length / n * 100;
+    return 50;
+};
+
+const chooseBestTicks = (
+    bot: AutoBotDefinition,
+    digits: number[],
+    recoveryMode = false,
+    cycleConfig?: unknown,
+    prices: number[] = [],
+) => {
+    // Auto Bots are tick-wise. The previous implementation selected a
+    // duration from 1–4 ticks while scanning, which made the displayed
+    // probability and the actual contract duration disagree.
+    const sample = (Array.isArray(digits) ? digits : [])
+        .filter(Number.isFinite)
+        .slice(-1000);
+    const priceSample = (Array.isArray(prices) ? prices : [])
+        .filter(Number.isFinite)
+        .slice(-1000);
+    let trade: AutoBotTrade;
+    try {
+        trade = bot.pickTrade(sample, priceSample, recoveryMode, cycleConfig);
+    } catch (error) {
+        // A malformed/stale market payload must disable this market only. One
+        // directional card must never take down the Auto Trades page.
+        trade = {
+            contract: 'CALL',
+            barrier: null,
+            shouldTrade: false,
+            score: 0,
+            reason: `strategy unavailable: ${error instanceof Error ? error.message : 'invalid market data'}`,
+            state: 'NO TRADE',
+        };
+    }
+    // The latest tick is the entry frame. Requiring the preceding tick to
+    // repeat the same signal caused valid one-tick opportunities to be shown
+    // as NO TRADE.
+    const hasEntry = trade.shouldTrade === true;
+    const confirmedTrade = {
+        ...trade,
+        shouldTrade: hasEntry,
+        entryFrame: hasEntry ? 'matched' as const : 'waiting' as const,
+        reason: `${trade.reason ? `${trade.reason} · ` : ''}${hasEntry ? 'live tick entry' : 'no valid entry'}`,
+    };
+    return {
+        ticks: 1 as const,
+        score: Number.isFinite(Number(confirmedTrade.score))
+            ? Number(confirmedTrade.score)
+            : scoreTrade(confirmedTrade, sample),
+        trade: confirmedTrade,
+    };
+};
+
+export function scanAutoBotMarkets(
+    bot: AutoBotDefinition,
+    snapshots: Record<string, AutoBotMarketSnapshot>,
+    recoveryMode = false,
+    cycleConfig?: unknown,
+): AutoBotMarketCandidate[] {
+    return Object.values(snapshots)
+        .filter(snapshot =>
+            isSupportedAutoBotMarket(snapshot.symbol)
+            && snapshot.ready
+            && Array.isArray(snapshot.digits)
+            && Array.isArray(snapshot.prices)
+            && snapshot.digits.length >= 20
+        )
+        .map(snapshot => {
+            const selected = chooseBestTicks(bot, snapshot.digits, recoveryMode, cycleConfig, snapshot.prices);
+            const last1000 = snapshot.digits.slice(-1000);
+            const weakDigit = Number((cycleConfig as any)?.weakEntry);
+            const strongDigit = Number((cycleConfig as any)?.strongEntry);
+            const rawScore = Math.max(0, Math.min(100, selected.score));
+            return {
+                symbol: snapshot.symbol,
+                label: snapshot.label,
+                digits: snapshot.digits,
+                prices: snapshot.prices,
+                trade: selected.trade,
+                score: rawScore,
+                qualifies: selected.trade.shouldTrade === true,
+                tickVersion: snapshot.tickVersion,
+                livePrice: snapshot.livePrice,
+                ticks: selected.ticks,
+                marketFamily: classifyAutoBotMarket(snapshot.symbol),
+                ...(Number.isInteger(weakDigit) ? {
+                    weakPct: last1000.filter(digit => digit === weakDigit).length / Math.max(1, last1000.length) * 100,
+                } : {}),
+                ...(Number.isInteger(strongDigit) ? {
+                    strongPct: last1000.filter(digit => digit === strongDigit).length / Math.max(1, last1000.length) * 100,
+                } : {}),
+            };
+        })
+        .sort((left, right) => {
+            if (left.qualifies !== right.qualifies) return left.qualifies ? -1 : 1;
+            return right.score - left.score;
+        });
+}
+
+export function useAuthenticatedAutoBotScanner(): {
+    snapshots: Record<string, AutoBotMarketSnapshot>;
+    tickVersion: number;
+    connected: boolean;
+} {
+    const [snapshots, setSnapshots] = useState<Record<string, AutoBotMarketSnapshot>>({});
+    const [tickVersion, setTickVersion] = useState(0);
+    const [connected, setConnected] = useState(false);
+
+    useEffect(() => {
+        let alive = true;
+        let retryTimer: ReturnType<typeof setTimeout> | null = null;
+        let startInFlight = false;
+        let feedGeneration = 0;
+        const subscriptions: Array<{ unsubscribe?: () => void }> = [];
+        const generations = new Map<string, number>();
+        const marketState = new Map<string, {
+            prices: number[];
+            epochs: Set<number>;
+            live: Array<{ epoch: number; price: number }>;
+            pipSize: number | null;
+        }>();
+        const marketLabels = new Map<string, string>(
+            AUTO_BOT_MARKETS.map(market => [market.value, market.label]),
+        );
+
+        const resetFeeds = () => {
+            feedGeneration += 1;
+            subscriptions.splice(0).forEach(subscription => {
+                try { subscription.unsubscribe?.(); } catch {}
+            });
+            marketState.clear();
+            generations.clear();
+        };
+
+        const scheduleRestart = (delay = 1000) => {
+            if (!alive || retryTimer) return;
+            setConnected(false);
+            resetFeeds();
+            retryTimer = setTimeout(() => {
+                retryTimer = null;
+                void start();
+            }, delay);
+        };
+
+        const publish = (symbol: string, ready = true) => {
+            const market = marketState.get(symbol);
+            if (!market || !alive) return;
+            const hasPipSize = Number.isFinite(market.pipSize);
+            const history = hasPipSize
+                ? market.prices.map(price => digitFromQuote(price, market.pipSize as number))
+                : [];
+            const live = hasPipSize
+                ? market.live.map(item => digitFromQuote(item.price, market.pipSize as number))
+                : [];
+            setSnapshots(previous => ({
+                ...previous,
+                [symbol]: {
+                    symbol,
+                    label: marketLabels.get(symbol) ?? symbol,
+                    digits: [...history, ...live].slice(-1000),
+                    prices: [...market.prices, ...market.live.map(item => item.price)].slice(-1000),
+                    livePrice: market.live[market.live.length - 1]?.price ?? null,
+                    tickVersion: (previous[symbol]?.tickVersion ?? 0) + (ready ? 1 : 0),
+                    ready: ready && hasPipSize,
+                },
+            }));
+            setTickVersion(version => version + (ready && hasPipSize ? 1 : 0));
+        };
+
+        const start = async () => {
+            if (!alive || startInFlight) return;
+            if (retryTimer) {
+                clearTimeout(retryTimer);
+                retryTimer = null;
+            }
+            const api = (api_base as any).api;
+            if (!api) {
+                retryTimer = setTimeout(() => void start(), 600);
+                return;
+            }
+
+            startInFlight = true;
+            const generation = ++feedGeneration;
+            setConnected(true);
+            try {
+                let markets = [...AUTO_BOT_MARKETS] as AutoBotMarket[];
+                try {
+                    // Do not include product_type here. Deriv rejects that field
+                    // for active_symbols on some authenticated sessions.
+                    const response = await api.send({ active_symbols: 'full' });
+                    const discovered = (response?.active_symbols ?? [])
+                        .filter(isDigitMarket)
+                        .map((item: any) => ({
+                            value: String(item.symbol),
+                            label: String(item.display_name || item.name || item.symbol),
+                        }));
+                    markets = mergeMarkets(discovered);
+                    markets.forEach(market => marketLabels.set(market.value, market.label));
+                } catch {
+                    // Keep the known synthetic catalog when discovery is delayed
+                    // or unavailable. The authenticated streams still work.
+                }
+
+                if (!alive || generation !== feedGeneration) return;
+
+                await Promise.all(markets.map(async ({ value: symbol }) => {
+                    const marketGeneration = (generations.get(symbol) ?? 0) + 1;
+                    generations.set(symbol, marketGeneration);
+                    const market = {
+                        prices: [],
+                        epochs: new Set<number>(),
+                        live: [],
+                        pipSize: null as number | null,
+                    };
+                    marketState.set(symbol, market);
+
+                    try {
+                        const historyResponse = await api.send({
+                            ticks_history: symbol,
+                            count: 1000,
+                            end: 'latest',
+                            style: 'ticks',
+                        });
+                        if (!alive || generation !== feedGeneration || generations.get(symbol) !== marketGeneration) return;
+                        market.prices = (historyResponse?.history?.prices ?? []).map(Number).filter(Number.isFinite);
+                        publish(symbol, false);
+                    } catch {
+                        // The live stream can still populate this market if history is delayed.
+                    }
+
+                    try {
+                        if (!alive || generation !== feedGeneration || generations.get(symbol) !== marketGeneration) return;
+                        const stream = api.subscribe({ ticks: symbol, subscribe: 1 });
+                        const subscription = stream?.subscribe?.({
+                            next: (message: any) => {
+                                if (!alive || generation !== feedGeneration || generations.get(symbol) !== marketGeneration) return;
+                                const tick = message?.tick;
+                                const price = Number(tick?.quote);
+                                const epoch = Number(tick?.epoch ?? 0);
+                                if (!Number.isFinite(price) || (epoch && market.epochs.has(epoch))) return;
+                                if (Number.isFinite(Number(tick?.pip_size))) {
+                                    market.pipSize = Number(tick.pip_size);
+                                }
+                                if (epoch) market.epochs.add(epoch);
+                                market.live.push({ epoch, price });
+                                market.live = market.live.slice(-1000);
+                                publish(symbol);
+                            },
+                            error: () => {
+                                scheduleRestart();
+                            },
+                        });
+                        if (subscription) subscriptions.push(subscription);
+                    } catch {
+                        // Keep the remaining markets alive if one subscription is rejected.
+                    }
+                }));
+            } finally {
+                startInFlight = false;
+            }
+        };
+
+        const connectionSub = connectionStatus$.subscribe(status => {
+            if (!alive) return;
+            const isOpen = status === CONNECTION_STATUS.OPENED;
+            setConnected(isOpen);
+            if (isOpen && !marketState.size) void start();
+            if (!isOpen) resetFeeds();
+        });
+        void start();
+
+        return () => {
+            alive = false;
+            if (retryTimer) clearTimeout(retryTimer);
+            retryTimer = null;
+            connectionSub.unsubscribe();
+            resetFeeds();
+        };
+    }, []);
+
+    return { snapshots, tickVersion, connected };
+}

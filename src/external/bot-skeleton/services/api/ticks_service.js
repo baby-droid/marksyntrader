@@ -191,6 +191,16 @@ export default class TicksService {
         }
     }
 
+    /**
+     * Return the newest tick already received by the authenticated stream.
+     * Trade-engine reads happen several times during one interpreter pass;
+     * sending a fresh ticks_history request for each read adds a websocket
+     * round trip and can move the after-purchase path onto a later tick.
+     */
+    getLastTick(symbol) {
+        return getLast(this.ticks.get(symbol));
+    }
+
     updateCandlesAndCallListeners(address, candles) {
         if (this.ticks.getIn(address) === candles) {
             return;

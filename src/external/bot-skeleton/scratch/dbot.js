@@ -7,10 +7,14 @@ import Interpreter from '../services/tradeEngine/utils/interpreter';
 import { compareXml, observer as globalObserver } from '../utils';
 import { getSavedWorkspaces, saveWorkspaceToRecent } from '../utils/local-storage';
 import { isDbotRTL } from '../utils/workspace';
-import main_xml from './xml/main.xml';
+// Vite must inline the default workspace XML as text. Without ?raw it serves
+// the file URL, which Blockly then tries to parse as XML and rejects at boot.
+import main_xml from './xml/main.xml?raw';
 import { forgetAccumulatorsProposalRequest } from './accumulators-proposal-handler';
 import { loadBlockly } from './blockly';
 import DBotStore from './dbot-store';
+import { scanKingFisherMarket } from '@/utils/king-fisher-market-scanner';
+import { dispatchBrowserEvent } from '../utils/browser-event';
 import { isAllRequiredBlocksEnabled, updateDisabledBlocks, validateErrorOnBlockDelete } from './utils';
 
 class DBot {
@@ -283,18 +287,102 @@ class DBot {
      * Runs the bot. Does a sanity check before attempting to generate the
      * JavaScript code that's fed to the interpreter.
      */
-    runBot() {
+    async runBot() {
         if (api_base.is_stopping) return;
 
         try {
             api_base.is_stopping = false;
+            const bestMarketBlock = this.workspace?.getAllBlocks?.(false)
+                ?.find(block => block.type === 'king_fisher_best_market_scanner');
+            if (bestMarketBlock && bestMarketBlock.getFieldValue?.('ENABLED') !== 'FALSE') {
+                const marketBlock = this.workspace?.getAllBlocks?.(false)
+                    ?.find(block => block.type === 'trade_definition_market');
+                const contractBlock = this.workspace?.getAllBlocks?.(false)
+                    ?.find(block => block.type === 'trade_definition_contracttype');
+                if (marketBlock && contractBlock) {
+                    const contractType = contractBlock.getFieldValue('TYPE_LIST');
+                    const direction = contractType === 'DIGITUNDER' ? 'ABOVE' : 'BELOW';
+                    const tradeOptionsBlock = this.workspace?.getAllBlocks?.(false)
+                        ?.find(block => block.type === 'trade_definition_tradeoptions');
+                    const predictionBlock = tradeOptionsBlock?.getInputTargetBlock?.('PREDICTION');
+                    const barrier = Number(predictionBlock?.getFieldValue?.('NUM'));
+                    const hasValidBarrier = Number.isInteger(barrier) && barrier >= 0 && barrier <= 9;
+                    let result = null;
+                    if (!hasValidBarrier) {
+                        dispatchBrowserEvent('journal:signal', {
+                            type: 'SCAN',
+                            label: 'BEST MARKET SCAN FAILED',
+                            detail: 'The King Fisher contract must have a fixed digit barrier from 0 to 9. Using the manually selected market.',
+                        });
+                    } else {
+                        try {
+                            result = await scanKingFisherMarket(direction, barrier);
+                        } catch (scanError) {
+                            dispatchBrowserEvent('journal:signal', {
+                                type: 'SCAN',
+                                label: 'BEST MARKET SCAN FAILED',
+                                detail: scanError?.message || 'Using the manually selected King Fisher market.',
+                            });
+                        }
+                    }
+                    if (result) {
+                        marketBlock.setFieldValue(result.market, 'MARKET_LIST');
+                        marketBlock.setFieldValue(result.submarket, 'SUBMARKET_LIST');
+                        marketBlock.setFieldValue(result.symbol, 'SYMBOL_LIST');
+                        const detail = {
+                            symbol: result.symbol,
+                            label: result.label,
+                            group: result.group,
+                            lastDigit: result.lastDigit,
+                            score: result.score,
+                            direction,
+                            barrier,
+                        };
+                        dispatchBrowserEvent('king-fisher:best-market', detail);
+                        dispatchBrowserEvent('journal:signal', {
+                            type: 'SCAN',
+                            label: 'BEST MARKET SELECTED',
+                            detail: `${result.label} · ${result.group} · last digit ${result.lastDigit ?? '—'} · score ${result.score}`,
+                        });
+                    } else {
+                        dispatchBrowserEvent('journal:signal', {
+                            type: 'SCAN',
+                            label: 'BEST MARKET UNAVAILABLE',
+                            detail: 'Using the manually selected King Fisher market.',
+                        });
+                    }
+                }
+            }
             const code = this.generateCode();
             if (!this.interpreter.bot.tradeEngine.checkTicksPromiseExists()) this.interpreter = Interpreter();
 
             this.is_bot_running = true;
 
             api_base.setIsRunning(true);
-            this.interpreter.run(code).catch(error => {
+            const activeInterpreter = this.interpreter;
+            activeInterpreter.run(code).then(async () => {
+                // A King Fisher TP/SL ends the current market cycle, not the
+                // user's run request. Cleanly tear down the completed
+                // interpreter, re-scan, update the market fields, and start
+                // the next cycle on the same Run action.
+                const rescanRequested = Boolean(
+                    activeInterpreter.bot?.tradeEngine?.kingFisherRescanRequested
+                );
+                if (
+                    !rescanRequested ||
+                    this.interpreter !== activeInterpreter ||
+                    api_base.is_stopping ||
+                    !this.is_bot_running
+                ) {
+                    return;
+                }
+
+                activeInterpreter.bot.tradeEngine.kingFisherRescanRequested = null;
+                this.is_bot_running = false;
+                api_base.setIsRunning(false);
+                await this.stopBot();
+                if (!api_base.is_stopping) await this.runBot();
+            }).catch(error => {
                 globalObserver.emit('Error', error);
                 this.stopBot();
             });
@@ -355,6 +443,16 @@ class DBot {
                     currentTickTime = Bot.getLastTick(true);
                 }
                 currentTickTime = currentTickTime.epoch;
+                try {
+                    var BinaryBotPrivateLastTick = Bot.getLastTick(true);
+                    if (BinaryBotPrivateLastTick && typeof Bot.emitMarketDigit === 'function') {
+                        Bot.emitMarketDigit({
+                            symbol: Bot.getSymbol(),
+                            digit: Number(Bot.getLastDigit()),
+                            epoch: BinaryBotPrivateLastTick.epoch,
+                        });
+                    }
+                } catch (e) {}
                 if (currentTickTime === BinaryBotPrivateLastTickTime) {
                     return;
                 }

@@ -2,6 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api_base } from '@/external/bot-skeleton';
 import { useApiBase } from '@/hooks/useApiBase';
+import { useDerivTrade } from '@/hooks/useDerivTrade';
 import './trading-software.scss';
 
 /* ─── Market list ───────────────────────────────────────────────────────────── */
@@ -224,6 +225,7 @@ function MarketScanner({ onSelect }: { onSelect: (sym: string) => void }) {
 /* ─── Panel: Quick Trade ────────────────────────────────────────────────────── */
 function QuickTrade({ symbol }: { symbol: string }) {
     const { connectionStatus } = useApiBase();
+    const { buyContract } = useDerivTrade();
     const [ctType, setCtType] = useState<'CALL' | 'PUT' | 'DIGITOVER' | 'DIGITUNDER' | 'DIGITEVEN' | 'DIGITODD'>('CALL');
     const [stake, setStake] = useState('1.00');
     const [duration, setDuration] = useState(5);
@@ -233,7 +235,6 @@ function QuickTrade({ symbol }: { symbol: string }) {
     const isBuying = useRef(false);
 
     const needsDigit = ['DIGITOVER','DIGITUNDER','DIGITMATCH','DIGITDIFF'].includes(ctType);
-    const needsBarrier = ['CALL','PUT'].includes(ctType);
 
     const handleTrade = async () => {
         if (isBuying.current) return;
@@ -241,42 +242,24 @@ function QuickTrade({ symbol }: { symbol: string }) {
         setStatus('⏳ Placing order…');
         try {
             const stakeNum = parseFloat(stake) || 1;
-            const propReq: any = {
-                proposal: 1,
-                amount: stakeNum,
-                basis: 'stake',
+            const result = await buyContract({
+                symbol,
                 contract_type: ctType,
-                currency: 'USD',
+                stake: stakeNum,
                 duration,
                 duration_unit: 't',
-                symbol,
-            };
-            if (needsDigit) propReq.barrier = String(barrier);
-            const propRes = await api_base.api.send(propReq);
-            if (propRes?.error) throw new Error(propRes.error.message);
-            const propId = propRes?.proposal?.id;
-            const askPrice = Number(propRes?.proposal?.ask_price ?? stakeNum);
-            if (!propId) throw new Error('No proposal ID');
-
-            const buyRes = await api_base.api.send({ buy: propId, price: askPrice });
-            if (buyRes?.error) throw new Error(buyRes.error.message);
-            const cId = buyRes?.buy?.contract_id;
+                barrier: needsDigit ? barrier : undefined,
+                currency: 'USD',
+            }, settled => {
+                const profit = Number(settled.profit ?? 0);
+                const won = settled.status === 'won' || profit > 0;
+                setStatus(won ? `✅ Win! +$${profit.toFixed(2)}` : `❌ Loss $${profit.toFixed(2)}`);
+                setTrades(prev => [{ type: ctType, stake: stakeNum, profit, won }, ...prev.slice(0, 19)]);
+                isBuying.current = false;
+            });
+            const cId = result?.contract_id;
             if (!cId) throw new Error('No contract ID');
             setStatus(`✅ In flight #${cId}`);
-
-            // Poll for settlement
-            const sub = api_base.api.subscribe({ proposal_open_contract: 1, contract_id: parseInt(cId, 10) });
-            sub.subscribe((res: any) => {
-                const poc = res?.proposal_open_contract;
-                if (poc?.is_expired || poc?.is_settleable || poc?.status === 'sold') {
-                    const profit = Number(poc.profit ?? 0);
-                    const won = profit > 0;
-                    setStatus(won ? `✅ Win! +$${profit.toFixed(2)}` : `❌ Loss $${profit.toFixed(2)}`);
-                    setTrades(prev => [{ type: ctType, stake: stakeNum, profit, won }, ...prev.slice(0, 19)]);
-                    try { sub.unsubscribe(); } catch {}
-                    isBuying.current = false;
-                }
-            });
         } catch (e: any) {
             setStatus(`❌ ${e?.message || 'Error'}`);
             isBuying.current = false;

@@ -12,9 +12,12 @@ const MARKETS: { value: string; label: string; pipSize: number }[] = [
     { value: 'R_75',      label: 'Volatility 75 Index',       pipSize: 4 },
     { value: 'R_100',     label: 'Volatility 100 Index',      pipSize: 2 },
     { value: '1HZ10V',    label: 'Volatility 10 (1s) Index',  pipSize: 3 },
+    { value: '1HZ15V',    label: 'Volatility 15 (1s) Index',  pipSize: 3 },
     { value: '1HZ25V',    label: 'Volatility 25 (1s) Index',  pipSize: 2 },
+    { value: '1HZ30V',    label: 'Volatility 30 (1s) Index',  pipSize: 3 },
     { value: '1HZ50V',    label: 'Volatility 50 (1s) Index',  pipSize: 4 },
     { value: '1HZ75V',    label: 'Volatility 75 (1s) Index',  pipSize: 4 },
+    { value: '1HZ90V',    label: 'Volatility 90 (1s) Index',  pipSize: 3 },
     { value: '1HZ100V',   label: 'Volatility 100 (1s) Index', pipSize: 2 },
     { value: 'JD10',      label: 'Jump 10 Index',             pipSize: 3 },
     { value: 'JD25',      label: 'Jump 25 Index',             pipSize: 2 },
@@ -47,7 +50,12 @@ type TDigitStat = { digit: number; count: number; pct: number };
  *   and the last character is correctly "0".
  */
 function getLastDigit(quoteRaw: string | number, pipSize: number): number {
-    const s = Number(quoteRaw).toFixed(pipSize);
+    const quote = Number(quoteRaw);
+    const safePipSize = Number.isFinite(pipSize) && pipSize >= 0 && pipSize <= 20
+        ? Math.round(pipSize)
+        : 2;
+    if (!Number.isFinite(quote)) return NaN;
+    const s = quote.toFixed(safePipSize);
     return parseInt(s[s.length - 1], 10);
 }
 
@@ -102,7 +110,7 @@ function computeStreamStats(ticks: number[], threshold: number) {
     };
 }
 
-const DigitPercentWidget: React.FC = () => {
+const DigitPercentWidget: React.FC<{ showTrigger?: boolean }> = ({ showTrigger = true }) => {
     const { connectionStatus } = useApiBase();
     const [open, setOpen] = useState(false);
     const [symbol, setSymbol] = useState(() => {
@@ -125,8 +133,6 @@ const DigitPercentWidget: React.FC = () => {
     const [aiTickInput, setAiTickInput] = useState(() => {
         try { return localStorage.getItem('digit_widget_ai_ticks') || '50'; } catch { return '50'; }
     });
-    const tickSubscriptionRef = useRef<any>(null);
-    const tickSubscriptionIdRef = useRef<string | null>(null);
     // Resolve current market first so pipSizeRef can use it for its initial value
     const currentMarket = MARKETS.find(m => m.value === symbol) ?? MARKETS[0];
     // pip_size starts from our static table; the live stream overrides it authoritatively
@@ -143,6 +149,31 @@ const DigitPercentWidget: React.FC = () => {
     });
     const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number; dragging: boolean } | null>(null);
     const panelRef = useRef<HTMLDivElement | null>(null);
+
+    const syncMarketToBot = useCallback((nextSymbol: string) => {
+        try {
+            const workspace = (window as any).Blockly?.derivWorkspace;
+            const marketBlock = workspace?.getAllBlocks?.()?.find(
+                (block: any) => block.type === 'trade_definition_market',
+            );
+            const field = marketBlock?.getField?.('SYMBOL_LIST');
+            if (!field) return;
+
+            // The market block owns its change event and updates the bot's
+            // dashboard symbol when setValue fires. Keep this guarded because
+            // the analyzer can outlive the workspace during stop/restart.
+            field.setValue(nextSymbol);
+        } catch {
+            // A stopped/reloading Blockly workspace must not take down the
+            // transaction tab or the live analyzer.
+        }
+    }, []);
+
+    useEffect(() => {
+        const openAnalyzer = () => setOpen(true);
+        window.addEventListener('digit-analyzer:open', openAnalyzer);
+        return () => window.removeEventListener('digit-analyzer:open', openAnalyzer);
+    }, []);
 
     useEffect(() => {
         if (panelPos) try { localStorage.setItem('digit_widget_pos', JSON.stringify(panelPos)); } catch {}
@@ -162,7 +193,10 @@ const DigitPercentWidget: React.FC = () => {
             origY: panelPos?.y ?? rect.top,
             dragging: false,
         };
-        (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+        // Capture on the header, not the child icon/title that received the
+        // event. Child capture can throw when the analyzer is closing or the
+        // bot workspace is being torn down.
+        e.currentTarget.setPointerCapture?.(e.pointerId);
     }, [panelPos]);
 
     const onDragMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
@@ -180,16 +214,19 @@ const DigitPercentWidget: React.FC = () => {
         setPanelPos({ x, y });
     }, []);
 
-    const onDragUp = useCallback(() => { dragRef.current = null; }, []);
+    const onDragUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+        try {
+            if (e.currentTarget.hasPointerCapture?.(e.pointerId)) {
+                e.currentTarget.releasePointerCapture?.(e.pointerId);
+            }
+        } catch {}
+        dragRef.current = null;
+    }, []);
 
     useEffect(() => {
         if (!open) return;
-        tickSubscriptionRef.current?.unsubscribe?.();
-        tickSubscriptionRef.current = null;
-        if (tickSubscriptionIdRef.current && api_base.api) {
-            (api_base.api as any).send({ forget: tickSubscriptionIdRef.current }).catch(() => {});
-            tickSubscriptionIdRef.current = null;
-        }
+        let stream: any = null;
+        let cancelled = false;
         setTicks([]);
         setCurrentDigit(null);
         setCurrentPrice(null);
@@ -200,34 +237,39 @@ const DigitPercentWidget: React.FC = () => {
         rawHistoryRef.current = [];
         pipSizeConfirmedRef.current = false;
 
-        let cancelled = false;
         let retryTimer: ReturnType<typeof setTimeout> | null = null;
-    let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
-    let messageSubscription: any = null;
-    const clearWatchdog = () => {
-        if (watchdogTimer) {
-            clearTimeout(watchdogTimer);
-            watchdogTimer = null;
-        }
-    };
-    const armWatchdog = () => {
-        clearWatchdog();
-        watchdogTimer = setTimeout(() => {
-            if (cancelled) return;
-            messageSubscription?.unsubscribe?.();
-            messageSubscription = null;
-            if (tickSubscriptionIdRef.current && api_base.api) {
-                (api_base.api as any).send({ forget: tickSubscriptionIdRef.current }).catch(() => {});
-                tickSubscriptionIdRef.current = null;
+        let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
+        const clearWatchdog = () => {
+            if (watchdogTimer) {
+                clearTimeout(watchdogTimer);
+                watchdogTimer = null;
             }
-            retryTimer = setTimeout(start, 100);
-        }, 20_000);
-    };
+        };
+        const stopStream = () => {
+            try { stream?.unsubscribe?.(); } catch {}
+            stream = null;
+        };
+        const scheduleRetry = (delay: number) => {
+            if (cancelled || retryTimer) return;
+            retryTimer = setTimeout(() => {
+                retryTimer = null;
+                start();
+            }, delay);
+        };
+        const armWatchdog = () => {
+            clearWatchdog();
+            watchdogTimer = setTimeout(() => {
+                if (cancelled) return;
+                stopStream();
+                setLastLiveTickAt(0);
+                scheduleRetry(100);
+            }, 20_000);
+        };
         const start = async () => {
             if (cancelled) return;
             const api = api_base.api as any;
             if (!api) {
-                retryTimer = setTimeout(start, 350);
+                scheduleRetry(350);
                 return;
             }
 
@@ -269,14 +311,12 @@ const DigitPercentWidget: React.FC = () => {
                 // Subscribe via RxJS observable — same robust pattern as chart-wrapper.tsx.
                 // This is more reliable than api.onMessage which can miss messages on
                 // some API versions.
+                stopStream();
                 const tickObservable = api.subscribe({ ticks: symbol, subscribe: 1 });
-                messageSubscription = tickObservable.subscribe({
+                if (!tickObservable?.subscribe) throw new Error('Market stream is unavailable');
+                stream = tickObservable?.subscribe?.({
                     next: (res: any) => {
                         if (cancelled) return;
-                        // Capture server-side subscription id for explicit forget on cleanup
-                        if (!tickSubscriptionIdRef.current && res?.subscription?.id) {
-                            tickSubscriptionIdRef.current = String(res.subscription.id);
-                        }
                         const tick = res?.tick;
                         if (!tick) return;
 
@@ -286,26 +326,31 @@ const DigitPercentWidget: React.FC = () => {
                             if (!pipSizeConfirmedRef.current) {
                                 // First live tick: confirm pip_size and retroactively
                                 // recompute history stored with the wrong static default.
-                                pipSizeRef.current = confirmedPs;
-                                pipSizeConfirmedRef.current = true;
-                                const stored = rawHistoryRef.current;
-                                if (stored.length > 0) {
-                                    const digits = stored.map((p: number) => getLastDigit(p, confirmedPs));
-                                    setTicks(digits);
-                                    if (digits.length > 0) setCurrentDigit(digits[digits.length - 1]);
-                                    const last = stored[stored.length - 1];
-                                    if (last != null) setCurrentPrice(last.toFixed(confirmedPs));
-                                    // Keep the authoritative price history alive for the
-                                    // AI's Rise/Fall, High/Low and streak analysis.
-                                    rawHistoryRef.current = stored.slice(-tickCount);
+                                if (Number.isFinite(confirmedPs) && confirmedPs >= 0 && confirmedPs <= 20) {
+                                    pipSizeRef.current = Math.round(confirmedPs);
+                                    pipSizeConfirmedRef.current = true;
+                                    const stored = rawHistoryRef.current;
+                                    if (stored.length > 0) {
+                                        const digits = stored.map((p: number) => getLastDigit(p, pipSizeRef.current));
+                                        setTicks(digits);
+                                        if (digits.length > 0) setCurrentDigit(digits[digits.length - 1]);
+                                        const last = stored[stored.length - 1];
+                                        if (last != null) setCurrentPrice(last.toFixed(pipSizeRef.current));
+                                        // Keep the authoritative price history alive for the
+                                        // AI's Rise/Fall, High/Low and streak analysis.
+                                        rawHistoryRef.current = stored.slice(-tickCount);
+                                    }
                                 }
                             } else {
-                                pipSizeRef.current = confirmedPs;
+                                if (Number.isFinite(confirmedPs) && confirmedPs >= 0 && confirmedPs <= 20) {
+                                    pipSizeRef.current = Math.round(confirmedPs);
+                                }
                             }
                         }
 
                         const ps    = pipSizeRef.current;
                         const quote = Number(tick.quote);
+                        if (!Number.isFinite(quote)) return;
                         const digit = getLastDigit(quote, ps);
                         setCurrentDigit(digit);
                         setCurrentPrice(quote.toFixed(ps));
@@ -315,13 +360,18 @@ const DigitPercentWidget: React.FC = () => {
                         armWatchdog();
                     },
                     error: () => {
-                        if (!cancelled) retryTimer = setTimeout(start, 500);
+                        if (!cancelled) {
+                            stopStream();
+                            setLastLiveTickAt(0);
+                            scheduleRetry(500);
+                        }
                     },
                 });
             } catch (err) {
                 if (!cancelled) {
                     console.warn('[DigitWidget] authenticated market data error:', err);
-                    retryTimer = setTimeout(start, 700);
+                    stopStream();
+                    scheduleRetry(700);
                 }
             }
         };
@@ -331,16 +381,9 @@ const DigitPercentWidget: React.FC = () => {
             cancelled = true;
             if (retryTimer) clearTimeout(retryTimer);
             clearWatchdog();
-            tickSubscriptionRef.current?.unsubscribe?.();
-            tickSubscriptionRef.current = null;
-            messageSubscription?.unsubscribe?.();
-            messageSubscription = null;
-            if (tickSubscriptionIdRef.current && api_base.api) {
-                (api_base.api as any).send({ forget: tickSubscriptionIdRef.current }).catch(() => {});
-                tickSubscriptionIdRef.current = null;
-            }
+            stopStream();
         };
-    }, [open, symbol, tickCount]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [open, symbol, tickCount, connectionStatus]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const stats: TDigitStat[] = Array.from({ length: 10 }, (_, d) => {
         const count = ticks.filter(t => t === d).length;
@@ -372,20 +415,22 @@ const DigitPercentWidget: React.FC = () => {
 
     return (
         <div className='digit-percent-widget'>
-            <button
-                className='digit-percent-widget__trigger'
-                title='Digit % Analyzer'
-                onClick={() => setOpen(o => !o)}
-            >
-                <span className='digit-percent-widget__dot' />
-                <span className='digit-percent-widget__dot' />
-                <span className='digit-percent-widget__dot' />
-                <span className='digit-percent-widget__dot' />
-            </button>
+            {showTrigger && (
+                <button
+                    className='digit-percent-widget__trigger'
+                    title='Digit % Analyzer'
+                    onClick={() => setOpen(o => !o)}
+                >
+                    <span className='digit-percent-widget__dot' />
+                    <span className='digit-percent-widget__dot' />
+                    <span className='digit-percent-widget__dot' />
+                    <span className='digit-percent-widget__dot' />
+                </button>
+            )}
 
             {open && createPortal(
                 <div
-                    className={`digit-percent-widget__panel ${darkMode ? 'digit-percent-widget__panel--dark' : ''}`}
+                    className={`digit-percent-widget__panel ${darkMode ? 'digit-percent-widget__panel--dark' : 'digit-percent-widget__panel--light'}`}
                     ref={panelRef}
                     style={{ ...panelStyle, background: dmBg, borderColor: dmBd, color: dmText }}
                 >
@@ -404,18 +449,22 @@ const DigitPercentWidget: React.FC = () => {
                         </span>
                         {/* Dark / Light toggle */}
                         <button
-                            className='digit-percent-widget__close-btn'
-                            style={darkMode ? { borderColor: dmBd, color: '#94a3b8', background: dmSec } : undefined}
+                            type='button'
+                            className='digit-percent-widget__theme-btn'
+                            onPointerDown={e => e.stopPropagation()}
                             onClick={e => { e.stopPropagation(); setDarkMode(d => !d); }}
                             title={darkMode ? 'Switch to Light mode' : 'Switch to Dark mode'}
+                            aria-label={darkMode ? 'Switch to Light mode' : 'Switch to Dark mode'}
                         >
                             {darkMode ? '☀' : '🌙'}
                         </button>
                         <button
+                            type='button'
                             className='digit-percent-widget__close-btn'
-                            style={darkMode ? { borderColor: dmBd, color: '#94a3b8', background: dmSec } : undefined}
-                            onClick={() => setOpen(false)}
+                            onPointerDown={e => e.stopPropagation()}
+                            onClick={e => { e.stopPropagation(); setOpen(false); }}
                             title='Close'
+                            aria-label='Close Digit % Analyzer'
                         >✕</button>
                     </div>
 
@@ -426,8 +475,10 @@ const DigitPercentWidget: React.FC = () => {
                             style={darkMode ? { background: dmSec, borderColor: dmBd, color: dmText } : undefined}
                             value={symbol}
                             onChange={e => {
-                                setSymbol(e.target.value);
-                                try { localStorage.setItem('digit_widget_market', e.target.value); } catch {}
+                                const nextSymbol = e.target.value;
+                                setSymbol(nextSymbol);
+                                try { localStorage.setItem('digit_widget_market', nextSymbol); } catch {}
+                                syncMarketToBot(nextSymbol);
                             }}
                         >
                             {MARKETS.map(m => (

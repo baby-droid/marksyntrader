@@ -73,7 +73,7 @@ export interface SmartchartsChampionFunctions {
     }>;
 }
 
-// Transport layer interface (wraps existing chart_api.api)
+// Transport layer interface (wraps the authenticated api_base.api connection)
 export interface TTransport {
     send: (request: any) => Promise<any>;
     subscribe: (request: any, callback: (response: any) => void) => string; // returns subscription_id

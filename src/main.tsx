@@ -10,10 +10,21 @@ import {
     applyPrimaryColorFromConfig,
 } from './utils/document-branding';
 import { performVersionCheck } from './utils/version-check';
+import { installChunkRecovery } from './utils/chunk-recovery';
+import { setupServiceWorker } from './utils/service-worker';
 import './styles/index.scss';
+// Load SmartChart's stylesheet with the app entry rather than the lazy chart
+// route. This prevents a stale async CSS chunk from blanking the chart page
+// after a dev-server restart.
+import '@deriv-com/smartcharts-champion/dist/smartcharts.css';
 
 // Configure MobX to handle multiple instances in production builds
 configure({ isolateGlobalState: true });
+
+// Recover from stale/missing async chunks before they can leave the preview
+// white after a dev-server restart.
+installChunkRecovery();
+setupServiceWorker();
 
 // Perform version check FIRST - before any other operations
 performVersionCheck();
@@ -29,4 +40,12 @@ applyPrimaryColorFromConfig();
 // App Builder preview branding (incl. PREVIEW_READY handshake) is handled by the
 // src/preview/ listener, mounted from app-content only in the preview deployment
 // (NEXT_PUBLIC_APP_BUILD === 'true') and stripped from standalone partner deploys.
-ReactDOM.createRoot(document.getElementById('root')!).render(<AuthWrapper />);
+const appRoot = document.getElementById('root');
+
+if (!appRoot) {
+    throw new Error('Marksyntrader root element is missing.');
+}
+
+const bootWindow = window as Window & { __markMarksyntraderAppStarted?: () => void };
+bootWindow.__markMarksyntraderAppStarted?.();
+ReactDOM.createRoot(appRoot).render(<AuthWrapper />);

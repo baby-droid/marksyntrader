@@ -31,11 +31,6 @@ const InstallPrompt: React.FC = () => {
     const timerRef = useRef<any>(null);
 
     useEffect(() => {
-        // Register service worker
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/sw.js').catch(() => {});
-        }
-
         // Already running as installed PWA — never show
         if (isInStandaloneMode()) {
             setInstalled(true);

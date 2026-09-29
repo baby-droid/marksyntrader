@@ -1226,8 +1226,8 @@ drag a block and selected text moves instead.
     .blocklyTextRootBlockHeader,
     .blocklyTextRootBlockHeaderCollapsed {
         width: 17rem !important;
-        color: #fff;
-        fill: #fff;
+        color: var(--accent, #89c4f4);
+        fill: var(--accent, #89c4f4);
         font-size: 1.9rem;
     }
 

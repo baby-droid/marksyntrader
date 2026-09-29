@@ -1,0 +1,138 @@
+<g xmlns="http://www.w3.org/2000/svg" data-id="kf2_before" class="blocklyDraggable blocklySelected" transform="translate(0, 886)" data-testid="before_purchase">
+  <path class="blocklyPath" stroke="#053b56" fill="#064e72" d=" m 0,0  m 0,4 a 4 4 0 0,1 4,-4  h 388 a 4 4 0 0,1 4,4  v 4  V 8  V 40  V 44 a 4 4 0 0,1 -4,4  H 64  c -2,0  -3,1  -4,2  l -4,4  c -1,1  -2,2  -4,2  h -12  c -2,0  -3,-1  -4,-2  l -4,-4  c -1,-1  -2,-2  -4,-2  h -8 a 4 4 0 0,0 -4,4  v 142 a 4 4 0 0,0 4,4  h 8  c 2,0  3,1  4,2  l 4,4  c 1,1  2,2  4,2  h 12  c 2,0  3,-1  4,-2  l 4,-4  c 1,-1  2,-2  4,-2  H 392 a 4 4 0 0,1 4,4  V 202  V 226  V 226 a 4 4 0 0,1 -4,4  h -388 a 4 4 0 0,1 -4,-4 z&#10;"></path>
+  <g data-id="kf2_gate" class="blocklyDraggable" style="display: block;" transform="translate(16, 48)">
+    <path class="blocklyPath" stroke="#acacac" fill="#e5e5e5" d=" m 0,0  m 0,4 a 4 4 0 0,1 4,-4  h 8  c 2,0  3,1  4,2  l 4,4  c 1,1  2,2  4,2  h 12  c 2,0  3,-1  4,-2  l 4,-4  c 1,-1  2,-2  4,-2  h 1967.796875 a 4 4 0 0,1 4,4  v 8  V 63 a 4 4 0 0,1 -4,4  H 64  c -2,0  -3,1  -4,2  l -4,4  c -1,1  -2,2  -4,2  h -12  c -2,0  -3,-1  -4,-2  l -4,-4  c -1,-1  -2,-2  -4,-2  h -8 a 4 4 0 0,0 -4,4  v 43 a 4 4 0 0,0 4,4  h 8  H 2015.796875 a 4 4 0 0,1 4,4  V 122  V 146  V 146 a 4 4 0 0,1 -4,4  h -1967.796875  c -2,0  -3,1  -4,2  l -4,4  c -1,1  -2,2  -4,2  h -12  c -2,0  -3,-1  -4,-2  l -4,-4  c -1,-1  -2,-2  -4,-2  h -8 a 4 4 0 0,1 -4,-4 z&#10;"></path>
+    <g transform="translate(8,22.5)">
+      <text class="blocklyText" dominant-baseline="central" x="0" y="11">if</text>
+    </g>
+    <g transform="translate(1819.6015625,22.5)">
+      <text class="blocklyText" dominant-baseline="central" x="0" y="11">then</text>
+    </g>
+    <g transform="translate(1861.796875,32.5)">
+      <image height="1px" width="150px" alt="" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href=" "></image>
+    </g>
+    <g transform="translate(8,121.5)">
+      <image height="24px" width="24px" alt="+" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAQAAABIkb+zAAAC+0lEQVR4Ae2bA4xeURCFp7bdoGvjv3OC2m1Q24xW0cZJ3caqzdhJ3Vi1bdu2po1T3v95Nvu+E/N+z5hDMf4RExMTE4N0HmkqsZS34RAu4iG+8kd+hEs4xNuw1FTySKSTRvIbYyLW4xbEHr7JG8z47CakBVOMlXgHcRZ+w6tRSNGCOmY874e4D+83E1CHoqCwBWbzI4gPuY85hS0oVGrwDDyD+JgnZibVoHDgXByCBJBDnBvG8kfiPSSgvOfBFCg1sRASbHhRYIdSSn3eDgk+vD2lPvlPfks+AgknfCS/pd8XzTRchYSYq4Vp5B/ogNuQkHPbdPTv4LkMiSCXclr5curiOCSinMivS17hZZAIs5S8YfpDIs5Ack9OKzyJWoAfozW5BVsgCrKF3GG6QHQk0ZVcUBsXIe5Dv+FJ4aKLlx6UQtQICEodb3++qUmAb1BtcgJPh2gSgGAaOQEX1QlcouQxPSHqBMT0dH791yDg/H5Q1Ig/qhT4UNSIksGMgqgUEDPK+fOnKgFeRsmAM1oFcCap9y+IWgFJ4mXf9NMsYPqRDZRpFkCZXWCJaoElZIP3aBbgPWQDp50v0D2OBU+TDb6pWYBv2gWeqxZ4bhf4rlrgm13gk2qBT2QDTzUL4CnZ4BuaBfhGNbiM6r6R7SYbWFrVHyUqNAtwOdnAQM0CiQFkI7uJZoH8xmSHT2kV4FOUDFiqVQBLq8dnlaJG+KBRgD8WNaLkwGaVApsoWbiHSoEe1eDzuuIfHDzd6S+me6oE7lNtcgZXaBLgchczoZp+s1Jtck6iK0RHTJdqOWrwE7Tmx5CI8wStyT0YGLWA6V+lB554mR8jZ8ciEzjmywRpTitcUj30Z8d0VD52aSeREvbgayIlHj3+83TmbaEsf1tK/eCaG4uUj9/bSQzDO9UFCDucy/sC2fb7ODe8EtB0/0tA4dew5uivYdlfeibyAW9FOJ6EOpFXEXk1v1VeRbR/0zYTHJdBNZLI/KOO+4kf4RIfDqKOGxMTExMT8wNOZdb6YlKT2wAAAABJRU5ErkJggg==" style="cursor: pointer;"></image>
+    </g>
+    <g data-id="kf2_and" class="blocklyDraggable" style="display: block;" transform="translate(48, 4)">
+      <path class="blocklyPath" stroke="#acacac" fill="#e5e5e5" d=" m 29.5,0  h 1704.6015625 a 29.5 29.5 0 0,1 29.5,29.5  v 0 a 29.5 29.5 0 0,1 -29.5,29.5  V 59  h -1704.6015625 a 29.5 29.5 0 0,1 -29.5,-29.5  v 0 a 29.5 29.5 0 0,1 29.5,-29.5 z&#10;"></path>
+      <g data-id="kf2_entry" class="blocklyDraggable" style="display: block;" transform="translate(4, 8)">
+        <path class="blocklyPath" stroke="#b87708" fill="#f59e0b" d=" m 21.5,0  h 547.828125 a 21.5 21.5 0 0,1 21.5,21.5  v 0 a 21.5 21.5 0 0,1 -21.5,21.5  V 43  h -547.828125 a 21.5 21.5 0 0,1 -21.5,-21.5  v 0 a 21.5 21.5 0 0,1 21.5,-21.5 z&#10;"></path>
+        <g transform="translate(12,10.5)">
+          <text class="blocklyText" dominant-baseline="central" x="0" y="11">King Fisher entry:</text>
+        </g>
+        <g transform="translate(152.421875,10.5)">
+          <text class="blocklyText" dominant-baseline="central" x="0" y="11">digits</text>
+        </g>
+        <g class="blocklyEditableText" style="cursor: default;" transform="translate(202.59375,4)">
+          <rect rx="4" ry="4" x="0" y="0" height="35" width="81.6640625" class="blocklyFieldRect blocklyDropdownRect" stroke="#b87708" fill="transparent"></rect>
+          <text class="blocklyText blocklyDropdownText" dominant-baseline="central" text-anchor="start" x="8" y="17.5">below</text>
+          <image style="display: none;"></image>
+          <image height="12px" width="12px" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="data:image/svg+xml;base64,PHN2ZyBpZD0iTGF5ZXJfMSIgZGF0YS1uYW1lPSJMYXllciAxIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMi43MSIgaGVpZ2h0PSI4Ljc5IiB2aWV3Qm94PSIwIDAgMTIuNzEgOC43OSI+PHRpdGxlPmRyb3Bkb3duLWFycm93PC90aXRsZT48ZyBvcGFjaXR5PSIwLjEiPjxwYXRoIGQ9Ik0xMi43MSwyLjQ0QTIuNDEsMi40MSwwLDAsMSwxMiw0LjE2TDguMDgsOC4wOGEyLjQ1LDIuNDUsMCwwLDEtMy40NSwwTDAuNzIsNC4xNkEyLjQyLDIuNDIsMCwwLDEsMCwyLjQ0LDIuNDgsMi40OCwwLDAsMSwuNzEuNzFDMSwwLjQ3LDEuNDMsMCw2LjM2LDBTMTEuNzUsMC40NiwxMiwuNzFBMi40NCwyLjQ0LDAsMCwxLDEyLjcxLDIuNDRaIiBmaWxsPSIjMjMxZjIwIi8+PC9nPjxwYXRoIGQ9Ik02LjM2LDcuNzlhMS40MywxLjQzLDAsMCwxLTEtLjQyTDEuNDIsMy40NWExLjQ0LDEuNDQsMCwwLDEsMC0yYzAuNTYtLjU2LDkuMzEtMC41Niw5Ljg3LDBhMS40NCwxLjQ0LDAsMCwxLDAsMkw3LjM3LDcuMzdBMS40MywxLjQzLDAsMCwxLDYuMzYsNy43OVoiIGZpbGw9IiNmZmYiLz48L3N2Zz4=" transform="translate(61.6640625,11.5)"></image>
+        </g>
+        <g class="blocklyEditableText" style="cursor: default;" transform="translate(292.2578125,4)">
+          <rect rx="4" ry="4" x="0" y="0" height="35" width="45.203125" class="blocklyFieldRect blocklyDropdownRect" stroke="#b87708" fill="transparent"></rect>
+          <text class="blocklyText blocklyDropdownText" dominant-baseline="central" text-anchor="start" x="8" y="17.5">3</text>
+          <image style="display: none;"></image>
+          <image height="12px" width="12px" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="data:image/svg+xml;base64,PHN2ZyBpZD0iTGF5ZXJfMSIgZGF0YS1uYW1lPSJMYXllciAxIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMi43MSIgaGVpZ2h0PSI4Ljc5IiB2aWV3Qm94PSIwIDAgMTIuNzEgOC43OSI+PHRpdGxlPmRyb3Bkb3duLWFycm93PC90aXRsZT48ZyBvcGFjaXR5PSIwLjEiPjxwYXRoIGQ9Ik0xMi43MSwyLjQ0QTIuNDEsMi40MSwwLDAsMSwxMiw0LjE2TDguMDgsOC4wOGEyLjQ1LDIuNDUsMCwwLDEtMy40NSwwTDAuNzIsNC4xNkEyLjQyLDIuNDIsMCwwLDEsMCwyLjQ0LDIuNDgsMi40OCwwLDAsMSwuNzEuNzFDMSwwLjQ3LDEuNDMsMCw2LjM2LDBTMTEuNzUsMC40NiwxMiwuNzFBMi40NCwyLjQ0LDAsMCwxLDEyLjcxLDIuNDRaIiBmaWxsPSIjMjMxZjIwIi8+PC9nPjxwYXRoIGQ9Ik02LjM2LDcuNzlhMS40MywxLjQzLDAsMCwxLTEtLjQyTDEuNDIsMy40NWExLjQ0LDEuNDQsMCwwLDEsMC0yYzAuNTYtLjU2LDkuMzEtMC41Niw5Ljg3LDBhMS40NCwxLjQ0LDAsMCwxLDAsMkw3LjM3LDcuMzdBMS40MywxLjQzLDAsMCwxLDYuMzYsNy43OVoiIGZpbGw9IiNmZmYiLz48L3N2Zz4=" transform="translate(25.203125,11.5)"></image>
+        </g>
+        <g transform="translate(345.4609375,10.5)">
+          <text class="blocklyText" dominant-baseline="central" x="0" y="11">with a</text>
+        </g>
+        <g class="blocklyEditableText" style="cursor: default;" transform="translate(399.6484375,4)">
+          <rect rx="4" ry="4" x="0" y="0" height="35" width="79.3828125" class="blocklyFieldRect blocklyDropdownRect" stroke="#b87708" fill="transparent"></rect>
+          <text class="blocklyText blocklyDropdownText" dominant-baseline="central" text-anchor="start" x="8" y="17.5">2 or 3</text>
+          <image style="display: none;"></image>
+          <image height="12px" width="12px" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="data:image/svg+xml;base64,PHN2ZyBpZD0iTGF5ZXJfMSIgZGF0YS1uYW1lPSJMYXllciAxIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMi43MSIgaGVpZ2h0PSI4Ljc5IiB2aWV3Qm94PSIwIDAgMTIuNzEgOC43OSI+PHRpdGxlPmRyb3Bkb3duLWFycm93PC90aXRsZT48ZyBvcGFjaXR5PSIwLjEiPjxwYXRoIGQ9Ik0xMi43MSwyLjQ0QTIuNDEsMi40MSwwLDAsMSwxMiw0LjE2TDguMDgsOC4wOGEyLjQ1LDIuNDUsMCwwLDEtMy40NSwwTDAuNzIsNC4xNkEyLjQyLDIuNDIsMCwwLDEsMCwyLjQ0LDIuNDgsMi40OCwwLDAsMSwuNzEuNzFDMSwwLjQ3LDEuNDMsMCw2LjM2LDBTMTEuNzUsMC40NiwxMiwuNzFBMi40NCwyLjQ0LDAsMCwxLDEyLjcxLDIuNDRaIiBmaWxsPSIjMjMxZjIwIi8+PC9nPjxwYXRoIGQ9Ik02LjM2LDcuNzlhMS40MywxLjQzLDAsMCwxLTEtLjQyTDEuNDIsMy40NWExLjQ0LDEuNDQsMCwwLDEsMC0yYzAuNTYtLjU2LDkuMzEtMC41Niw5Ljg3LDBhMS40NCwxLjQ0LDAsMCwxLDAsMkw3LjM3LDcuMzdBMS40MywxLjQzLDAsMCwxLDYuMzYsNy43OVoiIGZpbGw9IiNmZmYiLz48L3N2Zz4=" transform="translate(59.3828125,11.5)"></image>
+        </g>
+        <g transform="translate(487.03125,10.5)">
+          <text class="blocklyText" dominant-baseline="central" x="0" y="11">-digit streak</text>
+        </g>
+      </g>
+      <g data-id="kf2_hook" class="blocklyDraggable" style="display: block;" transform="translate(675.0234375, 4)">
+        <path class="blocklyPath" stroke="#5d2cb2" fill="#7c3aed" d=" m 25.5,0  h 1033.578125 a 25.5 25.5 0 0,1 25.5,25.5  v 0 a 25.5 25.5 0 0,1 -25.5,25.5  V 51  h -1033.578125 a 25.5 25.5 0 0,1 -25.5,-25.5  v 0 a 25.5 25.5 0 0,1 25.5,-25.5 z&#10;"></path>
+        <g data-id="kf2_hook_entry" class="blocklyDraggable" style="display: block;" transform="translate(489.75, 4)">
+          <path class="blocklyPath" stroke="#b87708" fill="#f59e0b" d=" m 21.5,0  h 547.828125 a 21.5 21.5 0 0,1 21.5,21.5  v 0 a 21.5 21.5 0 0,1 -21.5,21.5  V 43  h -547.828125 a 21.5 21.5 0 0,1 -21.5,-21.5  v 0 a 21.5 21.5 0 0,1 21.5,-21.5 z&#10;"></path>
+          <g transform="translate(12,10.5)">
+            <text class="blocklyText" dominant-baseline="central" x="0" y="11">King Fisher entry:</text>
+          </g>
+          <g transform="translate(152.421875,10.5)">
+            <text class="blocklyText" dominant-baseline="central" x="0" y="11">digits</text>
+          </g>
+          <g class="blocklyEditableText" style="cursor: default;" transform="translate(202.59375,4)">
+            <rect rx="4" ry="4" x="0" y="0" height="35" width="81.6640625" class="blocklyFieldRect blocklyDropdownRect" stroke="#b87708" fill="transparent"></rect>
+            <text class="blocklyText blocklyDropdownText" dominant-baseline="central" text-anchor="start" x="8" y="17.5">below</text>
+            <image style="display: none;"></image>
+            <image height="12px" width="12px" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="data:image/svg+xml;base64,PHN2ZyBpZD0iTGF5ZXJfMSIgZGF0YS1uYW1lPSJMYXllciAxIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMi43MSIgaGVpZ2h0PSI4Ljc5IiB2aWV3Qm94PSIwIDAgMTIuNzEgOC43OSI+PHRpdGxlPmRyb3Bkb3duLWFycm93PC90aXRsZT48ZyBvcGFjaXR5PSIwLjEiPjxwYXRoIGQ9Ik0xMi43MSwyLjQ0QTIuNDEsMi40MSwwLDAsMSwxMiw0LjE2TDguMDgsOC4wOGEyLjQ1LDIuNDUsMCwwLDEtMy40NSwwTDAuNzIsNC4xNkEyLjQyLDIuNDIsMCwwLDEsMCwyLjQ0LDIuNDgsMi40OCwwLDAsMSwuNzEuNzFDMSwwLjQ3LDEuNDMsMCw2LjM2LDBTMTEuNzUsMC40NiwxMiwuNzFBMi40NCwyLjQ0LDAsMCwxLDEyLjcxLDIuNDRaIiBmaWxsPSIjMjMxZjIwIi8+PC9nPjxwYXRoIGQ9Ik02LjM2LDcuNzlhMS40MywxLjQzLDAsMCwxLTEtLjQyTDEuNDIsMy40NWExLjQ0LDEuNDQsMCwwLDEsMC0yYzAuNTYtLjU2LDkuMzEtMC41Niw5Ljg3LDBhMS40NCwxLjQ0LDAsMCwxLDAsMkw3LjM3LDcuMzdBMS40MywxLjQzLDAsMCwxLDYuMzYsNy43OVoiIGZpbGw9IiNmZmYiLz48L3N2Zz4=" transform="translate(61.6640625,11.5)"></image>
+          </g>
+          <g class="blocklyEditableText" style="cursor: default;" transform="translate(292.2578125,4)">
+            <rect rx="4" ry="4" x="0" y="0" height="35" width="45.203125" class="blocklyFieldRect blocklyDropdownRect" stroke="#b87708" fill="transparent"></rect>
+            <text class="blocklyText blocklyDropdownText" dominant-baseline="central" text-anchor="start" x="8" y="17.5">3</text>
+            <image style="display: none;"></image>
+            <image height="12px" width="12px" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="data:image/svg+xml;base64,PHN2ZyBpZD0iTGF5ZXJfMSIgZGF0YS1uYW1lPSJMYXllciAxIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMi43MSIgaGVpZ2h0PSI4Ljc5IiB2aWV3Qm94PSIwIDAgMTIuNzEgOC43OSI+PHRpdGxlPmRyb3Bkb3duLWFycm93PC90aXRsZT48ZyBvcGFjaXR5PSIwLjEiPjxwYXRoIGQ9Ik0xMi43MSwyLjQ0QTIuNDEsMi40MSwwLDAsMSwxMiw0LjE2TDguMDgsOC4wOGEyLjQ1LDIuNDUsMCwwLDEtMy40NSwwTDAuNzIsNC4xNkEyLjQyLDIuNDIsMCwwLDEsMCwyLjQ0LDIuNDgsMi40OCwwLDAsMSwuNzEuNzFDMSwwLjQ3LDEuNDMsMCw2LjM2LDBTMTEuNzUsMC40NiwxMiwuNzFBMi40NCwyLjQ0LDAsMCwxLDEyLjcxLDIuNDRaIiBmaWxsPSIjMjMxZjIwIi8+PC9nPjxwYXRoIGQ9Ik02LjM2LDcuNzlhMS40MywxLjQzLDAsMCwxLTEtLjQyTDEuNDIsMy40NWExLjQ0LDEuNDQsMCwwLDEsMC0yYzAuNTYtLjU2LDkuMzEtMC41Niw5Ljg3LDBhMS40NCwxLjQ0LDAsMCwxLDAsMkw3LjM3LDcuMzdBMS40MywxLjQzLDAsMCwxLDYuMzYsNy43OVoiIGZpbGw9IiNmZmYiLz48L3N2Zz4=" transform="translate(25.203125,11.5)"></image>
+          </g>
+          <g transform="translate(345.4609375,10.5)">
+            <text class="blocklyText" dominant-baseline="central" x="0" y="11">with a</text>
+          </g>
+          <g class="blocklyEditableText" style="cursor: default;" transform="translate(399.6484375,4)">
+            <rect rx="4" ry="4" x="0" y="0" height="35" width="79.3828125" class="blocklyFieldRect blocklyDropdownRect" stroke="#b87708" fill="transparent"></rect>
+            <text class="blocklyText blocklyDropdownText" dominant-baseline="central" text-anchor="start" x="8" y="17.5">2 or 3</text>
+            <image style="display: none;"></image>
+            <image height="12px" width="12px" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="data:image/svg+xml;base64,PHN2ZyBpZD0iTGF5ZXJfMSIgZGF0YS1uYW1lPSJMYXllciAxIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMi43MSIgaGVpZ2h0PSI4Ljc5IiB2aWV3Qm94PSIwIDAgMTIuNzEgOC43OSI+PHRpdGxlPmRyb3Bkb3duLWFycm93PC90aXRsZT48ZyBvcGFjaXR5PSIwLjEiPjxwYXRoIGQ9Ik0xMi43MSwyLjQ0QTIuNDEsMi40MSwwLDAsMSwxMiw0LjE2TDguMDgsOC4wOGEyLjQ1LDIuNDUsMCwwLDEtMy40NSwwTDAuNzIsNC4xNkEyLjQyLDIuNDIsMCwwLDEsMCwyLjQ0LDIuNDgsMi40OCwwLDAsMSwuNzEuNzFDMSwwLjQ3LDEuNDMsMCw2LjM2LDBTMTEuNzUsMC40NiwxMiwuNzFBMi40NCwyLjQ0LDAsMCwxLDEyLjcxLDIuNDRaIiBmaWxsPSIjMjMxZjIwIi8+PC9nPjxwYXRoIGQ9Ik02LjM2LDcuNzlhMS40MywxLjQzLDAsMCwxLTEtLjQyTDEuNDIsMy40NWExLjQ0LDEuNDQsMCwwLDEsMC0yYzAuNTYtLjU2LDkuMzEtMC41Niw5Ljg3LDBhMS40NCwxLjQ0LDAsMCwxLDAsMkw3LjM3LDcuMzdBMS40MywxLjQzLDAsMCwxLDYuMzYsNy43OVoiIGZpbGw9IiNmZmYiLz48L3N2Zz4=" transform="translate(59.3828125,11.5)"></image>
+          </g>
+          <g transform="translate(487.03125,10.5)">
+            <text class="blocklyText" dominant-baseline="central" x="0" y="11">-digit streak</text>
+          </g>
+        </g>
+        <g transform="translate(12,14.5)">
+          <text class="blocklyText" dominant-baseline="central" x="0" y="11">King Fisher Virtual Hook</text>
+        </g>
+        <g class="blocklyEditableText" style="cursor: default;" transform="translate(204.1953125,8)">
+          <rect rx="4" ry="4" x="0" y="0" height="35" width="95.9765625" class="blocklyFieldRect blocklyDropdownRect" stroke="#5d2cb2" fill="transparent"></rect>
+          <text class="blocklyText blocklyDropdownText" dominant-baseline="central" text-anchor="start" x="8" y="17.5">enabled</text>
+          <image style="display: none;"></image>
+          <image height="12px" width="12px" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="data:image/svg+xml;base64,PHN2ZyBpZD0iTGF5ZXJfMSIgZGF0YS1uYW1lPSJMYXllciAxIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMi43MSIgaGVpZ2h0PSI4Ljc5IiB2aWV3Qm94PSIwIDAgMTIuNzEgOC43OSI+PHRpdGxlPmRyb3Bkb3duLWFycm93PC90aXRsZT48ZyBvcGFjaXR5PSIwLjEiPjxwYXRoIGQ9Ik0xMi43MSwyLjQ0QTIuNDEsMi40MSwwLDAsMSwxMiw0LjE2TDguMDgsOC4wOGEyLjQ1LDIuNDUsMCwwLDEtMy40NSwwTDAuNzIsNC4xNkEyLjQyLDIuNDIsMCwwLDEsMCwyLjQ0LDIuNDgsMi40OCwwLDAsMSwuNzEuNzFDMSwwLjQ3LDEuNDMsMCw2LjM2LDBTMTEuNzUsMC40NiwxMiwuNzFBMi40NCwyLjQ0LDAsMCwxLDEyLjcxLDIuNDRaIiBmaWxsPSIjMjMxZjIwIi8+PC9nPjxwYXRoIGQ9Ik02LjM2LDcuNzlhMS40MywxLjQzLDAsMCwxLTEtLjQyTDEuNDIsMy40NWExLjQ0LDEuNDQsMCwwLDEsMC0yYzAuNTYtLjU2LDkuMzEtMC41Niw5Ljg3LDBhMS40NCwxLjQ0LDAsMCwxLDAsMkw3LjM3LDcuMzdBMS40MywxLjQzLDAsMCwxLDYuMzYsNy43OVoiIGZpbGw9IiNmZmYiLz48L3N2Zz4=" transform="translate(75.9765625,11.5)"></image>
+        </g>
+        <g transform="translate(308.171875,14.5)">
+          <text class="blocklyText" dominant-baseline="central" x="0" y="11">after</text>
+        </g>
+        <g class="blocklyEditableText" style="cursor: default;" transform="translate(352.40625,8)">
+          <rect rx="4" ry="4" x="0" y="0" height="35" width="77.015625" class="blocklyFieldRect blocklyDropdownRect" stroke="#5d2cb2" fill="transparent"></rect>
+          <text class="blocklyText blocklyDropdownText" dominant-baseline="central" text-anchor="start" x="8" y="17.5">1 tick</text>
+          <image style="display: none;"></image>
+          <image height="12px" width="12px" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="data:image/svg+xml;base64,PHN2ZyBpZD0iTGF5ZXJfMSIgZGF0YS1uYW1lPSJMYXllciAxIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMi43MSIgaGVpZ2h0PSI4Ljc5IiB2aWV3Qm94PSIwIDAgMTIuNzEgOC43OSI+PHRpdGxlPmRyb3Bkb3duLWFycm93PC90aXRsZT48ZyBvcGFjaXR5PSIwLjEiPjxwYXRoIGQ9Ik0xMi43MSwyLjQ0QTIuNDEsMi40MSwwLDAsMSwxMiw0LjE2TDguMDgsOC4wOGEyLjQ1LDIuNDUsMCwwLDEtMy40NSwwTDAuNzIsNC4xNkEyLjQyLDIuNDIsMCwwLDEsMCwyLjQ0LDIuNDgsMi40OCwwLDAsMSwuNzEuNzFDMSwwLjQ3LDEuNDMsMCw2LjM2LDBTMTEuNzUsMC40NiwxMiwuNzFBMi40NCwyLjQ0LDAsMCwxLDEyLjcxLDIuNDRaIiBmaWxsPSIjMjMxZjIwIi8+PC9nPjxwYXRoIGQ9Ik02LjM2LDcuNzlhMS40MywxLjQzLDAsMCwxLTEtLjQyTDEuNDIsMy40NWExLjQ0LDEuNDQsMCwwLDEsMC0yYzAuNTYtLjU2LDkuMzEtMC41Niw5Ljg3LDBhMS40NCwxLjQ0LDAsMCwxLDAsMkw3LjM3LDcuMzdBMS40MywxLjQzLDAsMCwxLDYuMzYsNy43OVoiIGZpbGw9IiNmZmYiLz48L3N2Zz4=" transform="translate(57.015625,11.5)"></image>
+        </g>
+        <g transform="translate(437.421875,14.5)">
+          <text class="blocklyText" dominant-baseline="central" x="0" y="11">signal</text>
+        </g>
+      </g>
+      <g class="blocklyEditableText" style="cursor: default;" transform="translate(602.828125,12)">
+        <rect rx="4" ry="4" x="0" y="0" height="35" width="64.1953125" class="blocklyFieldRect blocklyDropdownRect" stroke="#acacac" fill="transparent"></rect>
+        <text class="blocklyText blocklyDropdownText" dominant-baseline="central" text-anchor="start" x="8" y="17.5">and</text>
+        <image style="display: none;"></image>
+        <image height="12px" width="12px" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="data:image/svg+xml;base64,PHN2ZyBpZD0iTGF5ZXJfMSIgZGF0YS1uYW1lPSJMYXllciAxIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMi43MSIgaGVpZ2h0PSI4Ljc5IiB2aWV3Qm94PSIwIDAgMTIuNzEgOC43OSI+PHRpdGxlPmRyb3Bkb3duLWFycm93PC90aXRsZT48ZyBvcGFjaXR5PSIwLjEiPjxwYXRoIGQ9Ik0xMi43MSwyLjQ0QTIuNDEsMi40MSwwLDAsMSwxMiw0LjE2TDguMDgsOC4wOGEyLjQ1LDIuNDUsMCwwLDEtMy40NSwwTDAuNzIsNC4xNkEyLjQyLDIuNDIsMCwwLDEsMCwyLjQ0LDIuNDgsMi40OCwwLDAsMSwuNzEuNzFDMSwwLjQ3LDEuNDMsMCw2LjM2LDBTMTEuNzUsMC40NiwxMiwuNzFBMi40NCwyLjQ0LDAsMCwxLDEyLjcxLDIuNDRaIiBmaWxsPSIjMjMxZjIwIi8+PC9nPjxwYXRoIGQ9Ik02LjM2LDcuNzlhMS40MywxLjQzLDAsMCwxLTEtLjQyTDEuNDIsMy40NWExLjQ0LDEuNDQsMCwwLDEsMC0yYzAuNTYtLjU2LDkuMzEtMC41Niw5Ljg3LDBhMS40NCwxLjQ0LDAsMCwxLDAsMkw3LjM3LDcuMzdBMS40MywxLjQzLDAsMCwxLDYuMzYsNy43OVoiIGZpbGw9IiNmZmYiLz48L3N2Zz4=" transform="translate(44.1953125,11.5)"></image>
+      </g>
+    </g>
+    <g data-id="kf2_buy" class="blocklyDraggable" style="display: block;" transform="translate(16, 67)">
+      <path class="blocklyPath" stroke="#acacac" fill="#e5e5e5" d=" m 0,0  m 0,4 a 4 4 0 0,1 4,-4  h 8  c 2,0  3,1  4,2  l 4,4  c 1,1  2,2  4,2  h 12  c 2,0  3,-1  4,-2  l 4,-4  c 1,-1  2,-2  4,-2  h 111.1015625 a 4 4 0 0,1 4,4  v 8  V 43  V 47  V 47 a 4 4 0 0,1 -4,4  h -155.1015625 a 4 4 0 0,1 -4,-4 z&#10;"></path>
+      <g transform="translate(8,14.5)">
+        <text class="blocklyText" dominant-baseline="central" x="0" y="11">Purchase</text>
+      </g>
+      <g class="blocklyEditableText" style="cursor: default;" transform="translate(83.4296875,8)">
+        <rect rx="4" ry="4" x="0" y="0" height="35" width="71.671875" class="blocklyFieldRect blocklyDropdownRect" stroke="#acacac" fill="transparent"></rect>
+        <text class="blocklyText blocklyDropdownText" dominant-baseline="central" text-anchor="start" x="8" y="17.5">Over</text>
+        <image style="display: none;"></image>
+        <image height="12px" width="12px" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="data:image/svg+xml;base64,PHN2ZyBpZD0iTGF5ZXJfMSIgZGF0YS1uYW1lPSJMYXllciAxIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMi43MSIgaGVpZ2h0PSI4Ljc5IiB2aWV3Qm94PSIwIDAgMTIuNzEgOC43OSI+PHRpdGxlPmRyb3Bkb3duLWFycm93PC90aXRsZT48ZyBvcGFjaXR5PSIwLjEiPjxwYXRoIGQ9Ik0xMi43MSwyLjQ0QTIuNDEsMi40MSwwLDAsMSwxMiw0LjE2TDguMDgsOC4wOGEyLjQ1LDIuNDUsMCwwLDEtMy40NSwwTDAuNzIsNC4xNkEyLjQyLDIuNDIsMCwwLDEsMCwyLjQ0LDIuNDgsMi40OCwwLDAsMSwuNzEuNzFDMSwwLjQ3LDEuNDMsMCw2LjM2LDBTMTEuNzUsMC40NiwxMiwuNzFBMi40NCwyLjQ0LDAsMCwxLDEyLjcxLDIuNDRaIiBmaWxsPSIjMjMxZjIwIi8+PC9nPjxwYXRoIGQ9Ik02LjM2LDcuNzlhMS40MywxLjQzLDAsMCwxLTEtLjQyTDEuNDIsMy40NWExLjQ0LDEuNDQsMCwwLDEsMC0yYzAuNTYtLjU2LDkuMzEtMC41Niw5Ljg3LDBhMS40NCwxLjQ0LDAsMCwxLDAsMkw3LjM3LDcuMzdBMS40MywxLjQzLDAsMCwxLDYuMzYsNy43OVoiIGZpbGw9IiNmZmYiLz48L3N2Zz4=" transform="translate(51.671875,11.5)"></image>
+      </g>
+    </g>
+  </g>
+  <g transform="translate(8,11)">
+    <image height="25px" width="25px" alt="P" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAAEgBckRAAAAAXNSR0IArs4c6QAAAvlJREFUaAXtmU1u00AUxxPEGoluKMcgJ8gCARsW9CZ0ReEU5BwFiYpWqtgYiQuQFSygJ2CRLV2E39+ZZ42dGc84XxIwT3p9X//34VfbsZPRaGNaQkpGPNu4yGESGfHUOtnYte0b6G8NdABJu7NoG4KXmi1GwUTACwtYomzp5r9ripP3/KB8zj7q4P4t0z9o9PfJowM0NhD6D9NN+sFm1xb05Rjybe171nKkDBLqfw6yt1Oqjjo3F4XArbli1dfmT7YpgOQGWPanLgjfFXyn6x9sU+QMfhdKxL/1OfSAGreh4vIR643H8pQ4hydRQCAAPv9owJ7AF1YH/bKr+z7FsPMbdBP8ZNNNOuwE+6v0bPILpJLAXsAvUrgSLxsoG4hsgAtoDDe3CoPhW7uFW8yXOffzcxK++ElOfxzwDXcxafAmhvscfjO8opdBgSfwjedqVPxaXbB5A0op5P+GH8ZwqXgwj6RtaO1kiDYJBiJOJop+HuScRZGyLfcUq2p5nJHVgAnrQzepXF/HnMIVnEckt84Os02qSkdfYN/Pq75KnpPQPFVYMZOBBq2B/EaxFVWApga0x2WT8vu64UIyq0EoMdfXeuC3JFZxhP7L7ByZe0Q5tQqmbKBsoGygbOCv2wAfHU/1SQp9Sw0P5nuNJCeFPUicYY7hW8fHqaYOr4dR5UQfSFN1dhJnAD1a/4RF2RsFq8d10Q0ce+LYyYy9RWiulw/R615gIEiOvuASpb/IDeRv7aLxq7r9FgOQbwvY7g2s72ho0vurgjuIfYmPfbMNijGhvsoSnQxKHABW7brDcvkhN23IBVS5otPc4hvgrHa1QW5/CpvR26loHkKuQuuvc/L7+BDO4sT0tiZ6ZL6dSgrr/VGkd54WrdzpYUM4FVJNF1u0CieM7g90CfjoM4Dn8BTu3v6u8LW2jZ3rA1rXlKz0Zy/Ehk7dlma7bkDdmav9cte1m3o0mLgmweugAW6gUHfuau/n/LeZaHLtGu1DXFufIssGygb+kw38ARimnBqQbBHiAAAAAElFTkSuQmCC"></image>
+  </g>
+  <g transform="translate(41,13)">
+    <text class="blocklyText blocklyTextRootBlockHeader" dominant-baseline="central" x="0" y="11">2. Purchase conditions</text>
+  </g>
+  <g transform="translate(8,208.5)">
+    <image height="10px" width="380px" alt="" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href=" "></image>
+  </g>
+</g>

@@ -51,12 +51,13 @@ function textColor(bg: string): string {
 }
 
 const DigitCircles: React.FC<DigitCirclesProps> = ({
-  digits,
+  digits: rawDigits,
   lastDigit,
   showPercentage = true,
   size = 'md',
   nowrap = false,
 }) => {
+  const digits = Array.isArray(rawDigits) ? rawDigits : [];
   const colorMap = computeColors(digits);
 
   // For legend/stats — use percentage-group approach (all digits sharing the max %)
@@ -76,23 +77,42 @@ const DigitCircles: React.FC<DigitCirclesProps> = ({
   const rowRef    = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (lastDigit === null || lastDigit === undefined) return;
-    if (!cursorRef.current || !rowRef.current) return;
-    const activeEl = rowRef.current.querySelector(`[data-digit="${lastDigit}"]`) as HTMLElement | null;
-    if (!activeEl) return;
-    const rowRect  = rowRef.current.getBoundingClientRect();
-    const circleEl = activeEl.querySelector('.digit-circles__circle') as HTMLElement | null;
-    if (!circleEl) return;
-    const circRect = circleEl.getBoundingClientRect();
-    const cx = circRect.left - rowRect.left + circRect.width / 2;
-    const cy = circRect.top  - rowRect.top  + circRect.height / 2;
-    const r  = circRect.width / 2 + 6;
-    cursorRef.current.style.transform = `translate(${cx}px, ${cy}px)`;
-    cursorRef.current.style.width  = `${r * 2}px`;
-    cursorRef.current.style.height = `${r * 2}px`;
-    cursorRef.current.style.marginLeft = `${-r}px`;
-    cursorRef.current.style.marginTop  = `${-r}px`;
-    cursorRef.current.style.opacity = '1';
+    let frame = 0;
+    const updateCursor = () => {
+      const cursor = cursorRef.current;
+      const row = rowRef.current;
+      const digit = Number(lastDigit);
+      if (!cursor || !row || !Number.isInteger(digit) || digit < 0 || digit > 9) return;
+      const activeEl = Array.from(row.querySelectorAll<HTMLElement>('[data-digit]'))
+        .find(el => Number(el.dataset.digit) === digit);
+      const circleEl = activeEl?.querySelector<HTMLElement>('.digit-circles__circle');
+      if (!activeEl || !circleEl || !row.isConnected || !circleEl.isConnected) return;
+      const rowRect = row.getBoundingClientRect();
+      const circRect = circleEl.getBoundingClientRect();
+      if (!rowRect.width || !circRect.width || !Number.isFinite(circRect.left)) return;
+      const cx = circRect.left - rowRect.left + circRect.width / 2;
+      const cy = circRect.top - rowRect.top + circRect.height / 2;
+      const r = circRect.width / 2 + 6;
+      cursor.style.transform = `translate(${cx}px, ${cy}px)`;
+      cursor.style.width = `${r * 2}px`;
+      cursor.style.height = `${r * 2}px`;
+      cursor.style.marginLeft = `${-r}px`;
+      cursor.style.marginTop = `${-r}px`;
+      cursor.style.opacity = '1';
+    };
+    if (lastDigit !== null && lastDigit !== undefined) {
+      if (typeof window.requestAnimationFrame === 'function') {
+        frame = window.requestAnimationFrame(updateCursor);
+      } else {
+        frame = window.setTimeout(updateCursor, 0) as unknown as number;
+      }
+    } else if (cursorRef.current) {
+      cursorRef.current.style.opacity = '0';
+    }
+    return () => {
+      if (typeof window.cancelAnimationFrame === 'function') window.cancelAnimationFrame(frame);
+      else window.clearTimeout(frame);
+    };
   }, [lastDigit, digits, size]);
 
   return (

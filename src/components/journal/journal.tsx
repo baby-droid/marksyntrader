@@ -17,7 +17,7 @@ import { JournalItem, JournalLoader, JournalTools } from './journal-components';
 // the bot publishes a 'journal:signal' CustomEvent.
 interface JournalSignal {
     id: number;
-    type: 'BUY_EVEN' | 'BUY_ODD' | 'BUY_OVER' | 'BUY_UNDER' | 'BUY_CALL' | 'BUY_PUT' | 'BUY_DIFF' | 'CYCLE' | 'SCAN' | 'WIN' | 'LOSS' | 'RECOVERY';
+    type: 'BUY_EVEN' | 'BUY_ODD' | 'BUY_OVER' | 'BUY_UNDER' | 'BUY_CALL' | 'BUY_PUT' | 'BUY_DIFF' | 'CYCLE' | 'SCAN' | 'WIN' | 'LOSS' | 'RECOVERY' | string;
     label: string;
     detail?: string;
     ts: number;
@@ -43,8 +43,8 @@ const JournalNotificationBlock = () => {
     const nextId = useRef(0);
 
     useEffect(() => {
-        const handler = (e: CustomEvent) => {
-            const { type, label, detail } = e.detail ?? {};
+        const handler = (event: Event) => {
+            const { type, label, detail } = (event as CustomEvent).detail ?? {};
             if (!type) return;
             const sig: JournalSignal = { id: nextId.current++, type, label: label ?? type, detail, ts: Date.now() };
             setSignals(prev => [sig, ...prev].slice(0, 8)); // keep last 8
@@ -90,6 +90,66 @@ const JournalNotificationBlock = () => {
     );
 };
 
+const MarketDigitLog = () => {
+    const [digits, setDigits] = useState<Record<string, { digit: number; epoch?: number }>>({});
+    const [analysis, setAnalysis] = useState<any[]>([]);
+    const [bestMarket, setBestMarket] = useState<any>(null);
+    const [visible, setVisible] = useState(false);
+
+    useEffect(() => {
+        const onDigit = (event: Event) => {
+            const { symbol, digit, epoch } = (event as CustomEvent).detail ?? {};
+            if (!symbol || !Number.isFinite(Number(digit))) return;
+            setDigits(previous => ({ ...previous, [symbol]: { digit: Number(digit), epoch } }));
+        };
+        const onAnalysis = (event: Event) => {
+            const item = (event as CustomEvent).detail ?? {};
+            if (!item.symbol) return;
+            setAnalysis(previous => [{ ...item, time: Date.now() }, ...previous].slice(0, 24));
+        };
+        const onBestMarket = (event: Event) => setBestMarket((event as CustomEvent).detail ?? null);
+        const onLog = () => setVisible(true);
+        window.addEventListener('bot:market-digit' as any, onDigit);
+        window.addEventListener('bot:king-fisher-analysis' as any, onAnalysis);
+        window.addEventListener('king-fisher:best-market' as any, onBestMarket);
+        window.addEventListener('journal:log-market-digits' as any, onLog);
+        return () => {
+            window.removeEventListener('bot:market-digit' as any, onDigit);
+            window.removeEventListener('bot:king-fisher-analysis' as any, onAnalysis);
+            window.removeEventListener('king-fisher:best-market' as any, onBestMarket);
+            window.removeEventListener('journal:log-market-digits' as any, onLog);
+        };
+    }, []);
+
+    if (!visible && !Object.keys(digits).length && !analysis.length && !bestMarket) return null;
+    return (
+        <div className='journal__market-digit-log'>
+            <div className='journal__market-digit-log-title'>📊 LIVE MARKET DIGIT LOG</div>
+            {bestMarket && (
+                <div className='journal__market-digit-log-best'>
+                    ✅ Best market found: {bestMarket.label} · {bestMarket.group} · score {bestMarket.score}
+                </div>
+            )}
+            {visible && (
+                <div className='journal__market-digit-log-grid'>
+                    {Object.entries(digits).map(([symbol, value]) => (
+                        <span key={symbol}>{symbol}: <strong>{value.digit}</strong></span>
+                    ))}
+                </div>
+            )}
+            {analysis.length > 0 && (
+                <div className='journal__market-digit-log-analysis'>
+                        {analysis.slice(0, 8).map((item, index) => (
+                        <div key={`${item.time}-${index}`} className={item.met ? 'is-met' : 'is-not-met'}>
+                            {item.symbol} · {item.sequence || item.digit} {item.met ? '✓ logic met' : '✗ logic not met'} · streak {item.streak}
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
+
 const Journal = observer(() => {
     const { journal, run_panel } = useStore();
     const {
@@ -123,6 +183,7 @@ const Journal = observer(() => {
             />
             {/* Signal notification blocks — pinned above messages */}
             <JournalNotificationBlock />
+            <MarketDigitLog />
             <div className='journal__item-list'>
                 {filtered_messages_length ? (
                     <DataList

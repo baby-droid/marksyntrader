@@ -1,7 +1,7 @@
 export interface AuthConfig {
   clientId: string;
   redirectUri: string;
-  /** OAuth scopes as a space-separated string. Defaults to 'trade account_manage' */
+  /** OAuth scopes as a space-separated string. Defaults to 'trade' */
   scopes?: string;
   /** Affiliate token extracted from the partner referral link */
   affiliateToken?: string;

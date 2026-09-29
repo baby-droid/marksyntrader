@@ -2,7 +2,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import classNames from 'classnames';
 import { observer } from 'mobx-react-lite';
-import { load, save_types } from '@/external/bot-skeleton';
+import { load, registerXmlBlockFallbacks, save_types } from '@/external/bot-skeleton';
 import { botNotification } from '@/components/bot-notification/bot-notification';
 import { notification_message } from '@/components/bot-notification/bot-notification-utils';
 import { useStore } from '@/hooks/useStore';
@@ -15,6 +15,7 @@ import SaveModal from '../dashboard/bot-list/save-modal';
 import BotBuilderTourHandler from '../tutorials/dbot-tours/bot-builder-tour';
 import QuickStrategy1 from './quick-strategy';
 import WorkspaceWrapper from './workspace-wrapper';
+import StrategyEngineChecker, { StrategyCheck } from './strategy-engine-checker';
 
 const PALE_BLUE = '#7ec8e3';
 const PALE_BLUE2 = '#89c4f4';
@@ -24,7 +25,39 @@ const PALE_BLUE5 = '#6cb4e4';
 
 const FREE_BOTS_LIST = [
     // ── Signature bots (top of panel) ─────────────────────────────────────────
-    { id: 'differs-edge-scanner', name: 'Differs Edge Scanner', market: 'V50 1s', badge: 'SCAN 🧠', badgeColor: '#34d399', xmlFile: '/bots/differs-edge-scanner.xml', icon: '🔎' },
+    { id: 'ahmed-differ-over-under-cycle-v1', name: 'AHMED DIFFER OVER/UNDER CYCLE V1', market: 'V50 1s', badge: 'DIFFER CYCLE', badgeColor: '#38bdf8', xmlFile: '/bots/ahmed-differ-over-under-cycle-v1.xml', icon: '🔁' },
+    { id: 'ahmed-differ-recovery-cycle-v2', name: 'AHMED DIFFER RECOVERY CYCLE V2', market: 'V25 1s', badge: 'RECOVERY V2', badgeColor: '#fb7185', xmlFile: '/bots/ahmed-differ-recovery-cycle-v2.xml', icon: '⚡' },
+    { id: 'ahmed-best-market-pair-cycle-v1', name: 'AHMED BEST MARKET 10-PHASE CYCLE V1', market: 'Best market', badge: 'CYCLE SCAN', badgeColor: '#34d399', xmlFile: '/bots/ahmed-best-market-pair-cycle-v1.xml', icon: '🧠' },
+    { id: 'ahmed-best-market-pair-cycle-v2', name: 'AHMED BEST MARKET PAIR CYCLE V2', market: 'Best market', badge: 'PAIR CYCLE', badgeColor: '#a78bfa', xmlFile: '/bots/ahmed-best-market-pair-cycle-v2.xml', icon: '🔎' },
+    { id: 'acc-flipper', name: 'ACC FLIPPER', market: 'Best market', badge: 'ACC FLIPPER', badgeColor: '#a78bfa', xmlFile: '/bots/acc-flipper.xml', icon: '🤖' },
+    { id: 'ahmed-killer-bot-myth-v1', name: 'AHMED KILLER BOT MYTH V1', market: 'Best market', badge: 'MYTH V1', badgeColor: '#f59e0b', xmlFile: '/bots/ahmed-killer-bot-myth-v1.xml', icon: '👑' },
+    { id: 'under-cycle-auto', name: 'Under Cycle Auto', market: 'V50 1s', badge: 'UNDER CYCLE', badgeColor: '#38bdf8', xmlFile: '/bots/under-cycle-auto.xml', icon: '🔄' },
+    { id: 'ahmed-over-cycle', name: 'Ahmed Over Cycle', market: 'V50 1s', badge: 'AHMED OVER', badgeColor: '#fb7185', xmlFile: '/bots/ahmed-over-cycle.xml', icon: '⚡' },
+    { id: 'differs-edge-scanner', name: 'Differs Edge Scanner — Recovery Matrix', market: 'V50 1s', badge: 'SCAN 🧠', badgeColor: '#34d399', xmlFile: '/bots/differs-edge-scanner.xml', icon: '🔎' },
+    { id: 'odd-auto-cycle', name: 'ODD AUTO CYCLE', market: 'V10 1s', badge: 'ODD CYCLE', badgeColor: '#f43f5e', xmlFile: '/bots/odd-auto-cycle.xml', icon: '🔴' },
+    { id: 'even-auto-cycle', name: 'EVEN AUTO CYCLE', market: 'V10 1s', badge: 'EVEN CYCLE', badgeColor: '#3b82f6', xmlFile: '/bots/even-auto-cycle.xml', icon: '🔵' },
+    {
+        id: 'ahmed-differs-cycle',
+        name: 'AHMED DIFFERS CYCLE',
+        market: 'V10 1s',
+        badge: 'SHARED BLOCKS',
+        badgeColor: '#f59e0b',
+        // The complete executable cycle is maintained in the canonical
+        // Differs XML: Differs with three-parity recovery — three evens
+        // select Odd and three odds select Even.
+        xmlFile: '/bots/ahmed-differs-cycle.xml',
+        icon: '🔁',
+        sharedBlockAssets: [
+            { id: 'gt.seq.applySequence', file: '/attached_assets/block_(1)_1788162838185.xml' },
+            { id: 'gt.seq.beforePurchase', file: '/attached_assets/block_(2)_1788162844415.xml' },
+            { id: 'gt.seq.tradeDef', file: '/attached_assets/block_(3)_1788162852532.xml' },
+            { id: 'gt.seq.afterPurchase', file: '/attached_assets/block_(4)_1788162858212.xml' },
+        ],
+    },
+    { id: 'king-fisher-over-2', name: 'King Fisher Over 2', market: 'Best market · V50 1s', badge: 'KING FISHER', badgeColor: '#f59e0b', xmlFile: '/bots/king-fisher-over-2.xml', icon: '🐟' },
+    { id: 'king-fisher-over-3', name: 'King Fisher Over 3', market: 'Best market · V50 1s', badge: 'KING FISHER', badgeColor: '#f59e0b', xmlFile: '/bots/king-fisher-over-3.xml', icon: '🐟' },
+    { id: 'king-fisher-under-6', name: 'King Fisher Under 6', market: 'Best market · V50 1s', badge: 'KING FISHER', badgeColor: '#7c3aed', xmlFile: '/bots/king-fisher-under-6.xml', icon: '🐟' },
+    { id: 'king-fisher-under-7', name: 'King Fisher Under 7', market: 'Best market · V50 1s', badge: 'KING FISHER', badgeColor: '#7c3aed', xmlFile: '/bots/king-fisher-under-7.xml', icon: '🐟' },
     { id: 'omni-cycle-trader-pro', name: 'Omni Cycle Trader Pro', market: 'V75 1s', badge: 'CYCLE 🔄', badgeColor: '#a78bfa', xmlFile: '/bots/omni-cycle-trader-pro.xml', icon: '🔄' },
     { id: 'smart-entry-pattern-pro-v2', name: 'Smart Entry Pattern Pro V2', market: 'V25 1s', badge: 'SMART 🧠', badgeColor: '#34d399', xmlFile: '/bots/smart-entry-pattern-pro-v2.xml', icon: '🧠' },
     { id: 'ahmed-cycle-master', name: 'Ahmed Cycle Master', market: 'V50 1s', badge: 'CYCLE 🔄', badgeColor: '#a78bfa', xmlFile: '/bots/ahmed-cycle-master.xml', icon: '🔄' },
@@ -45,7 +78,7 @@ const FREE_BOTS_LIST = [
 type TFreeBotsPanelProps = {
     onClose: () => void;
     /** Called after XML is loaded into the workspace. shouldRun=true triggers auto-trade. */
-    onLoadDone: (shouldRun: boolean) => void;
+    onLoadDone: (shouldRun: boolean, bot?: any, check?: any) => void;
 };
 
 const FreeBotsSidePanel: React.FC<TFreeBotsPanelProps> = ({ onClose, onLoadDone }) => {
@@ -58,10 +91,19 @@ const FreeBotsSidePanel: React.FC<TFreeBotsPanelProps> = ({ onClose, onLoadDone 
      *  DBot `load()` pipeline — same path the Load Modal uses — so BlockConversion,
      *  removeLimitedBlocks, asyncClear, and clearWorkspaceAndLoadFromXml all run
      *  in the correct order and the trade engine receives properly initialised blocks. */
-    const fetchAndLoad = useCallback(async (bot: typeof FREE_BOTS_LIST[0]): Promise<void> => {
+    const fetchAndLoad = useCallback(async (bot: typeof FREE_BOTS_LIST[0]): Promise<any> => {
         const response = await fetch(bot.xmlFile);
         if (!response.ok) throw new Error(`Failed to fetch bot XML: ${response.status}`);
         const block_string = await response.text();
+        const sharedChecks = await Promise.all((bot.sharedBlockAssets || []).map(async asset => {
+            // The uploaded files are rendered Blockly SVG fragments. Validate
+            // their preserved IDs against the executable bot metadata instead
+            // of fetching them as if they were runnable XML routes.
+            if (!block_string.includes(`>${asset.id}<`)) {
+                throw new Error(`Shared block ${asset.id} is not present in ${bot.xmlFile}`);
+            }
+            return { id: asset.id, ok: true, file: asset.file };
+        }));
 
         const workspace = (window as any).Blockly?.derivWorkspace;
         if (!workspace) {
@@ -77,42 +119,16 @@ const FreeBotsSidePanel: React.FC<TFreeBotsPanelProps> = ({ onClose, onLoadDone 
         }
 
         // ── Unsupported-block guard ──────────────────────────────────────────
-        // Pre-scan the XML for block types not registered in the current Blockly
-        // instance. Register a coloured "Unsupported" dummy for each missing type
-        // so Blockly renders a placeholder instead of silently deleting the block.
+        // Use the same connection-aware fallback as the core loader. A Blockly
+        // block cannot expose output and statement connections simultaneously.
         try {
             const Blockly = (window as any).Blockly;
             if (Blockly?.Blocks && block_string) {
                 const parser = new DOMParser();
                 const xmlDoc = parser.parseFromString(block_string, 'text/xml');
-                const blockEls = xmlDoc.querySelectorAll('block');
-                const missingTypes = new Set<string>();
-                blockEls.forEach(el => {
-                    const type = el.getAttribute('type');
-                    if (type && !Blockly.Blocks[type]) missingTypes.add(type);
-                });
-                missingTypes.forEach(type => {
-                    Blockly.Blocks[type] = {
-                        init(this: any) {
-                            this.jsonInit({
-                                message0: `⚠ Unsupported: ${type}`,
-                                colour: '#555',
-                                tooltip: `Block type "${type}" is not available in this workspace. It was loaded from an external bot file.`,
-                                helpUrl: '',
-                            });
-                            this.setOutput(true);
-                            this.setPreviousStatement(true);
-                            this.setNextStatement(true);
-                        },
-                    };
-                    const generator = Blockly.JavaScript?.javascriptGenerator;
-                    if (generator && !generator.forBlock[type]) {
-                        generator.forBlock[type] = (block: any) =>
-                            block.outputConnection ? ['0', generator.ORDER_ATOMIC] : '';
-                    }
-                });
-                if (missingTypes.size > 0) {
-                    console.info(`[Bot Loader] Registered ${missingTypes.size} unsupported-block placeholder(s):`, [...missingTypes]);
+                const missingTypes = registerXmlBlockFallbacks(xmlDoc, Blockly);
+                if (missingTypes.length > 0) {
+                    console.info(`[Bot Loader] Registered ${missingTypes.length} unsupported-block placeholder(s):`, missingTypes);
                 }
             }
         } catch (e) {
@@ -130,6 +146,10 @@ const FreeBotsSidePanel: React.FC<TFreeBotsPanelProps> = ({ onClose, onLoadDone 
             showIncompatibleStrategyDialog: false,
             show_snackbar: false,
         });
+        return {
+            xmlBlocks: (block_string.match(/<block\b/g) || []).length,
+            sharedChecks,
+        };
     }, []);
 
     /** Load only — puts the bot into the builder then closes the panel. */
@@ -138,12 +158,12 @@ const FreeBotsSidePanel: React.FC<TFreeBotsPanelProps> = ({ onClose, onLoadDone 
         setActiveBotId(bot.id);
         setActionType('load');
         try {
-            await fetchAndLoad(bot);
+            const check = await fetchAndLoad(bot);
             setLoadedId(bot.id);
             // Show success briefly, then hand control back to parent
             setTimeout(() => {
                 setLoadedId(null);
-                onLoadDone(false); // false = load only, don't auto-run
+                 onLoadDone(false, bot, check); // false = load only, don't auto-run
             }, 1500);
         } catch (e) {
             console.error('Load bot error', e);
@@ -159,10 +179,10 @@ const FreeBotsSidePanel: React.FC<TFreeBotsPanelProps> = ({ onClose, onLoadDone 
         setActiveBotId(bot.id);
         setActionType('run');
         try {
-            await fetchAndLoad(bot);
+            const check = await fetchAndLoad(bot);
             // Signal parent immediately — parent is responsible for closing
             // panel and triggering the run in the correct order/lifecycle.
-            onLoadDone(true); // true = auto-run after panel closes
+            onLoadDone(true, bot, check); // true = auto-run after panel closes
         } catch (e) {
             console.error('Load & Run bot error', e);
             setActiveBotId(null);
@@ -355,6 +375,7 @@ const BotBuilder = observer(() => {
 
     const [showFreeBots, setShowFreeBots] = useState(false);
     const [showScanner, setShowScanner] = useState(false);
+    const [strategyCheck, setStrategyCheck] = useState<StrategyCheck | null>(null);
     // When true, fire onRunButtonClick as soon as the panel finishes unmounting
     const pendingAutoRun = React.useRef(false);
 
@@ -434,7 +455,15 @@ const BotBuilder = observer(() => {
     }, [showFreeBots]);
 
     /** Called by FreeBotsSidePanel once XML is loaded. */
-    const handleBotLoadDone = useCallback((shouldRun: boolean) => {
+    const handleBotLoadDone = useCallback((shouldRun: boolean, bot?: any, check?: any) => {
+        if (bot && check) {
+            setStrategyCheck({
+                botName: bot.name,
+                xmlBlocks: check.xmlBlocks || 0,
+                sharedChecks: check.sharedChecks || [],
+                updatedAt: new Date().toLocaleTimeString('en', { hour12: false }),
+            });
+        }
         if (shouldRun) {
             pendingAutoRun.current = true;
         }
@@ -522,6 +551,7 @@ const BotBuilder = observer(() => {
             </div>
             {/* AI Scanner floating panel — shown when scanner button is active */}
             {active_tab === 1 && showScanner && <AIScanner />}
+            {active_tab === 1 && <StrategyEngineChecker check={strategyCheck} />}
             {active_tab === 1 && <BotBuilderTourHandler is_mobile={!isDesktop} />}
             {/* removed this outside from toolbar becuase it needs to loaded seperately without dependency */}
             <LoadModal />

@@ -5,10 +5,11 @@ import {
     connectionStatus$,
     isAuthorized$,
 } from '@/external/bot-skeleton/services/api/observables/connection-status-stream';
-import { publishMasterTrade, getMasterSource } from '@/utils/trade-bus';
+import { publishMasterTrade, getMasterSource, createTradeKey } from '@/utils/trade-bus';
 import { observer } from '@/external/bot-skeleton/utils/observer';
 import {
     isFastExecutionEnabled,
+    isFastExecutionEnabledForContext,
     recordPhase,
     recordTick,
     startPingMonitor,
@@ -57,17 +58,51 @@ export type ContractType =
 export interface BuyParams {
     symbol: string;
     contract_type: ContractType | string;
-    duration: number;
+    duration?: number;
     duration_unit?: 't' | 's' | 'm' | 'h';
     stake: number;
     barrier?: number | string;
     currency?: string;
+    growth_rate?: number;
+    limit_order?: { take_profit?: number; stop_loss?: number };
     // Extra app metadata is copied onto the native contract event so
     // Bot Builder's transaction store can group Auto Trades positions.
     metadata?: Record<string, unknown>;
 }
 
 const NEEDS_BARRIER = new Set(['DIGITOVER','DIGITUNDER','DIGITMATCH','DIGITDIFF']);
+
+export function buildProposalRequest(params: BuyParams, fallbackCurrency = 'USD'): Record<string, unknown> {
+    const {
+        symbol,
+        contract_type,
+        duration,
+        duration_unit = 't',
+        stake,
+        barrier,
+        currency,
+        growth_rate,
+        limit_order,
+    } = params;
+    const contractName = String(contract_type).toUpperCase();
+    const isAccumulator = contractName === 'ACCU';
+    const request: Record<string, unknown> = {
+        proposal: 1,
+        amount: stake,
+        basis: 'stake',
+        contract_type,
+        currency: currency || fallbackCurrency,
+        ...(duration != null && !isAccumulator ? { duration } : {}),
+        ...(duration_unit && !isAccumulator ? { duration_unit } : {}),
+        underlying_symbol: symbol,
+    };
+    if (NEEDS_BARRIER.has(contractName) && barrier !== undefined && barrier !== null) {
+        request.barrier = String(barrier);
+    }
+    if (growth_rate != null) request.growth_rate = growth_rate;
+    if (limit_order) request.limit_order = limit_order;
+    return request;
+}
 
 function getLastDigit(quote: number, pipSize = 2): number {
     const s = quote.toFixed(pipSize).replace('.', '');
@@ -76,13 +111,17 @@ function getLastDigit(quote: number, pipSize = 2): number {
 
 export function useDerivTrade() {
     const tickCallbacksRef = useRef<Map<string, (t: TickData) => void>>(new Map());
+    const tickSubscriptionsRef = useRef<Map<string, { token: number; id?: number }>>(new Map());
+    const nextTickSubscriptionTokenRef = useRef(0);
     const pocCallbacksRef = useRef<Map<number, (c: SettledContract) => void>>(new Map());
+    const settledContractsRef = useRef<Map<number, SettledContract>>(new Map());
     const contractMetaRef = useRef<Map<number, any>>(new Map());
+    const settlementRetryTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
     const [connected, setConnected] = useState(connectionStatus$.value === CONNECTION_STATUS.OPENED);
     const [balance, setBalance] = useState<number | null>(null);
     const [currency, setCurrency] = useState('USD');
     const [authorized, setAuthorized] = useState(isAuthorized$.value);
-    const balanceSubscribedRef = useRef(false);
+    const balanceRequestedRef = useRef(false);
     const mountedRef = useRef(true);
 
     useEffect(() => {
@@ -94,9 +133,11 @@ export function useDerivTrade() {
         const authSub = isAuthorized$.subscribe(isAuth => {
             if (!mountedRef.current) return;
             setAuthorized(isAuth);
-            if (isAuth && !balanceSubscribedRef.current) {
-                balanceSubscribedRef.current = true;
-                (api_base.api?.send as unknown as ((data: unknown) => Promise<any>) | undefined)?.({ balance: 1, subscribe: 1 })?.catch(() => {});
+            if (isAuth && !balanceRequestedRef.current) {
+                balanceRequestedRef.current = true;
+                // APIBase owns the live balance stream. Request a snapshot here
+                // instead of opening another subscription for every hook instance.
+                (api_base.api?.send as unknown as ((data: unknown) => Promise<any>) | undefined)?.({ balance: 1 })?.catch(() => {});
                 // Start ping monitor once authenticated so Fast mode diagnostics are live
                 try {
                     const sendFn = (msg: object) =>
@@ -116,7 +157,18 @@ export function useDerivTrade() {
     }, []);
 
     useEffect(() => {
-        const sub = api_base.api?.onMessage()?.subscribe(({ data: d }: { data: any }) => {
+        // api_base.api may be created just after this hook mounts. Re-run when
+        // the connection opens so lazy-loaded pages still receive live ticks.
+        let sub: { unsubscribe: () => void } | undefined;
+        let attachedApi: typeof api_base.api = null;
+        let attachTimer: ReturnType<typeof setInterval> | undefined;
+
+        const attachMessageListener = () => {
+            if (!connected || !api_base.api) return;
+            if (attachedApi === api_base.api && sub) return;
+            sub?.unsubscribe?.();
+            attachedApi = api_base.api;
+            sub = attachedApi.onMessage()?.subscribe(({ data: d }: { data: any }) => {
             if (!d || typeof d !== 'object') return;
 
             if (d.balance && d.balance.balance != null && mountedRef.current) {
@@ -151,23 +203,36 @@ export function useDerivTrade() {
                 if (poc.is_sold || poc.status === 'won' || poc.status === 'lost') {
                     const cb = pocCallbacksRef.current.get(cid);
                     const meta = contractMetaRef.current.get(cid);
+                    const retryTimer = settlementRetryTimersRef.current.get(cid);
+                    if (retryTimer) {
+                        clearTimeout(retryTimer);
+                        settlementRetryTimersRef.current.delete(cid);
+                    }
                     const profit = parseFloat(poc.profit ?? '0');
                     // Use the definitive status from the API; fall back to profit sign.
                     const status: 'won' | 'lost' =
                         poc.status === 'won' ? 'won'
                         : poc.status === 'lost' ? 'lost'
                         : profit > 0 ? 'won' : 'lost';
-                    if (cb) {
-                        cb({
-                            contract_id: cid,
-                            profit,
-                            status,
-                            entry_spot: poc.entry_spot,
-                            exit_spot: poc.exit_spot,
-                            buy_price: poc.buy_price,
-                            pip_size: poc.pip_size != null ? Number(poc.pip_size) : undefined,
-                        });
+                    const settledContract: SettledContract = {
+                        contract_id: cid,
+                        profit,
+                        status,
+                        entry_spot: poc.entry_spot,
+                        exit_spot: poc.exit_spot,
+                        buy_price: poc.buy_price,
+                        pip_size: poc.pip_size != null ? Number(poc.pip_size) : undefined,
+                    };
+                    // Keep a short-lived replay cache. Very short contracts can
+                    // settle between the buy response and registration of the
+                    // local callback; without this, native rows settle while
+                    // Auto Trades waits until its timeout.
+                    settledContractsRef.current.set(cid, settledContract);
+                    if (settledContractsRef.current.size > 300) {
+                        const oldest = settledContractsRef.current.keys().next().value;
+                        if (oldest != null) settledContractsRef.current.delete(oldest);
                     }
+                    if (cb) cb(settledContract);
                     // Keep the native transaction page authoritative even if
                     // the local waiting promise timed out or was interrupted.
                     if (meta) {
@@ -207,9 +272,25 @@ export function useDerivTrade() {
                     pocCallbacksRef.current.delete(cid);
                 }
             }
-        });
-        return () => sub?.unsubscribe?.();
-    }, []);
+            });
+        };
+
+        attachMessageListener();
+        // connectionStatus$ can become OPENED just before api_base.api is
+        // assigned, or a reconnect can replace the API instance without
+        // changing the boolean connection state. Keep polling only until the
+        // current API listener is attached so no tick stream is missed.
+        if (connected) {
+            attachTimer = setInterval(attachMessageListener, 250);
+        }
+
+        return () => {
+            if (attachTimer) clearInterval(attachTimer);
+            sub?.unsubscribe?.();
+            sub = undefined;
+            attachedApi = null;
+        };
+    }, [connected]);
 
     const send = useCallback((msg: object): Promise<any> => {
         if (!api_base.api) return Promise.reject(new Error('Not connected'));
@@ -217,11 +298,29 @@ export function useDerivTrade() {
     }, []);
 
     const subscribeTicks = useCallback((symbol: string, cb: (t: TickData) => void) => {
+        const token = ++nextTickSubscriptionTokenRef.current;
+        const previous = tickSubscriptionsRef.current.get(symbol);
+        if (previous?.id != null) send({ forget: previous.id }).catch(() => {});
         tickCallbacksRef.current.set(symbol, cb);
-        send({ ticks: symbol, subscribe: 1 }).catch(() => {});
+        tickSubscriptionsRef.current.set(symbol, { token });
+        send({ ticks: symbol, subscribe: 1 }).then(response => {
+            const id = Number(response?.subscription?.id);
+            if (!Number.isFinite(id) || id <= 0) return;
+            const current = tickSubscriptionsRef.current.get(symbol);
+            if (current?.token === token) {
+                current.id = id;
+            } else {
+                // The subscription was replaced or cleaned up before Deriv
+                // returned its ID. Forget only this stream.
+                send({ forget: id }).catch(() => {});
+            }
+        }).catch(() => {});
         return () => {
+            const current = tickSubscriptionsRef.current.get(symbol);
+            if (current?.token !== token) return;
+            tickSubscriptionsRef.current.delete(symbol);
             tickCallbacksRef.current.delete(symbol);
-            send({ forget_all: 'ticks' }).catch(() => {});
+            if (current.id != null) send({ forget: current.id }).catch(() => {});
         };
     }, [send]);
 
@@ -233,35 +332,22 @@ export function useDerivTrade() {
      */
     const buyContract = useCallback(
         async (params: BuyParams, onSettled?: (c: SettledContract) => void): Promise<ContractResult> => {
-            const {
-                symbol,
-                contract_type,
-                duration,
-                duration_unit = 't',
-                stake,
-                barrier,
-                currency: cur,
-                metadata,
-            } = params;
+            const { symbol, contract_type, stake, currency: cur, metadata } = params;
 
             const cur_ = cur || currency || 'USD';
-            const needsBarrier = NEEDS_BARRIER.has(String(contract_type).toUpperCase());
+            const isAccumulator = String(contract_type).toUpperCase() === 'ACCU';
+            const proposalReq = buildProposalRequest(params, currency || 'USD');
+            const {
+                duration,
+                duration_unit = 't',
+                barrier,
+                growth_rate,
+                limit_order,
+            } = params;
 
             // Step 1 — proposal (get an ask_price and a proposal ID)
             const t0 = performance.now();
-            const proposalReq: any = {
-                proposal: 1,
-                amount: stake,
-                basis: 'stake',
-                contract_type,
-                currency: cur_,
-                duration,
-                duration_unit,
-                underlying_symbol: symbol,
-            };
-            if (needsBarrier && barrier !== undefined && barrier !== null) {
-                proposalReq.barrier = String(barrier);
-            }
+            const tradeKey = createTradeKey('ui');
 
             let proposalRes: any;
             try {
@@ -278,7 +364,7 @@ export function useDerivTrade() {
                 throw new Error('Proposal failed — no proposal ID returned');
             }
             // Record proposal round-trip time as evalToBuy phase
-            if (isFastExecutionEnabled()) {
+            if (isFastExecutionEnabledForContext()) {
                 recordPhase('evalToBuy', Math.round(performance.now() - t0));
             }
 
@@ -293,11 +379,14 @@ export function useDerivTrade() {
                     symbol,
                     contract_type,
                     stake,
-                    duration,
-                    duration_unit,
+                    ...(duration != null && !isAccumulator ? { duration } : {}),
+                    ...(duration_unit && !isAccumulator ? { duration_unit } : {}),
                     barrier,
+                    growth_rate,
+                    limit_order,
                     source: getMasterSource(),
                     time:   Date.now(),
+                    trade_key: tradeKey,
                     // no contract_id yet — engine deduplicates by fingerprint
                 });
             } catch { /* never let copy-trade errors affect the master trade */ }
@@ -313,7 +402,7 @@ export function useDerivTrade() {
             if (buyRes?.error) {
                 throw buyRes.error;
             }
-            if (isFastExecutionEnabled()) {
+            if (isFastExecutionEnabledForContext()) {
                 recordPhase('buyToResponse', Math.round(performance.now() - t1));
             }
 
@@ -321,6 +410,25 @@ export function useDerivTrade() {
             if (!contract_id) {
                 throw new Error('Buy failed — no contract ID returned');
             }
+
+            // Confirm the identity after the buy so the transaction-stream
+            // fallback cannot duplicate this already pre-signaled trade.
+            try {
+                publishMasterTrade({
+                    symbol,
+                    contract_type,
+                    stake,
+                    ...(duration != null && !isAccumulator ? { duration } : {}),
+                    ...(duration_unit && !isAccumulator ? { duration_unit } : {}),
+                    barrier,
+                    growth_rate,
+                    limit_order,
+                    source: getMasterSource(),
+                    time: Date.now(),
+                    contract_id,
+                    trade_key: tradeKey,
+                });
+            } catch { /* never let copy-trade errors affect the master trade */ }
 
             const contractMeta = {
                 id: contract_id,
@@ -340,6 +448,8 @@ export function useDerivTrade() {
                 barrier,
                 duration,
                 duration_unit,
+                growth_rate,
+                limit_order,
                 ...(metadata || {}),
             };
             contractMetaRef.current.set(contract_id, contractMeta);
@@ -353,21 +463,57 @@ export function useDerivTrade() {
                     ticks: duration,
                     symbol,
                     contractType: contract_type,
+                    purchaseTime: Number(buyRes?.buy?.purchase_time) || 0,
+                    startTime: Number(buyRes?.buy?.start_time) || 0,
                 },
             }));
 
             // Step 3 — subscribe to settlement notifications
-            // In Fast mode: subscribe is fire-and-forget (never blocks the caller)
             if (onSettled) {
                 pocCallbacksRef.current.set(contract_id, onSettled);
-                if (isFastExecutionEnabled()) {
-                    // Defer subscription message to rAF so the trade engine stays unblocked
-                    requestAnimationFrame(() => {
-                        send({ proposal_open_contract: 1, contract_id, subscribe: 1 }).catch(() => {});
+                const alreadySettled = settledContractsRef.current.get(contract_id);
+                if (alreadySettled) {
+                    queueMicrotask(() => {
+                        if (pocCallbacksRef.current.get(contract_id) !== onSettled) return;
+                        pocCallbacksRef.current.delete(contract_id);
+                        onSettled(alreadySettled);
                     });
-                } else {
-                    send({ proposal_open_contract: 1, contract_id, subscribe: 1 }).catch(() => {});
                 }
+                const requestSettlementSubscription = (attempt = 0) => {
+                    const retryDelays = [250, 500, 1000, 2000];
+                    const request = () => {
+                        send({ proposal_open_contract: 1, contract_id, subscribe: 1 })
+                            .then(response => {
+                                if (!response?.error) {
+                                    settlementRetryTimersRef.current.delete(contract_id);
+                                    return;
+                                }
+                                if (attempt >= retryDelays.length) return;
+                                const timer = setTimeout(() => {
+                                    settlementRetryTimersRef.current.delete(contract_id);
+                                    requestSettlementSubscription(attempt + 1);
+                                }, retryDelays[attempt]);
+                                settlementRetryTimersRef.current.set(contract_id, timer);
+                            })
+                            .catch(() => {
+                                if (attempt >= retryDelays.length) return;
+                                const timer = setTimeout(() => {
+                                    settlementRetryTimersRef.current.delete(contract_id);
+                                    requestSettlementSubscription(attempt + 1);
+                                }, retryDelays[attempt]);
+                                settlementRetryTimersRef.current.set(contract_id, timer);
+                            });
+                    };
+
+                    // Fast mode is already non-blocking because the
+                    // subscription request is not awaited. Starting it
+                    // immediately matters on one-tick contracts: an
+                    // animation-frame defer can miss the next settlement
+                    // tick and makes the after-purchase path look slower
+                    // than the buy path.
+                    request();
+                };
+                requestSettlementSubscription();
             }
 
             return {

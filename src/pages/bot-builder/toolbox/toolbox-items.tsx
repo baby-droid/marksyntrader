@@ -56,6 +56,10 @@ export const ToolboxItems = () =>
             <Category id='trade_parameters' name={localize('Trade parameters')}>
                 <Block type='trade_definition'>
                     <Statement name='TRADE_OPTIONS'>
+                        <Block type='king_fisher_best_market_scanner'>
+                            <Field name='ENABLED'>FALSE</Field>
+                        </Block>
+                        <Next>
                         <Block type='trade_definition_market' deletable='false' movable='false'>
                             <Field name='MARKET_LIST' />
                             <Field name='SUBMARKET_LIST' />
@@ -99,6 +103,7 @@ export const ToolboxItems = () =>
                                 </Block>
                             </Next>
                         </Block>
+                        </Next>
                     </Statement>
                 </Block>
                 <Block type='trade_definition_tradeoptions'>
@@ -169,6 +174,26 @@ export const ToolboxItems = () =>
             <Category id='trade_results' name={localize('Restart trading conditions')}>
                 <Block type='after_purchase' />
                 <Block type='trade_again' />
+            </Category>
+            <Category id='king_fisher' name={localize('King Fisher')}>
+                <Block type='king_fisher_entry'>
+                    <Field name='DIRECTION'>BELOW</Field>
+                    <Field name='THRESHOLD'>3</Field>
+                    <Field name='STREAK'>2_3</Field>
+                </Block>
+                <Block type='king_fisher_virtual_hook'>
+                    <Field name='ENABLED'>TRUE</Field>
+                    <Field name='CONFIRMATIONS'>1</Field>
+                    <Value name='SIGNAL'>
+                        <Block type='king_fisher_entry'>
+                            <Field name='DIRECTION'>BELOW</Field>
+                            <Field name='THRESHOLD'>3</Field>
+                            <Field name='STREAK'>2_3</Field>
+                        </Block>
+                    </Value>
+                </Block>
+                <Block type='king_fisher_parity_purchase' />
+                <Block type='king_fisher_parity_sequence_purchase' />
             </Category>
 
             <Category id='analysis' name={localize('Analysis')}>

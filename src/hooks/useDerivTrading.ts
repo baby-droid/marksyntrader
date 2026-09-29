@@ -2,7 +2,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { api_base } from '@/external/bot-skeleton';
 import { applyCommission } from '@/utils/commission';
-import { publishMasterTrade, getMasterSource } from '@/utils/trade-bus';
+import { publishMasterTrade, getMasterSource, createTradeKey } from '@/utils/trade-bus';
 
 export interface TradeResult {
   id: string;
@@ -24,10 +24,12 @@ export interface BatchParams {
   symbol: string;
   contract_type: string;
   stake: number;
-  duration: number;
+  duration?: number;
   duration_unit?: string;
   barrier?: string | number;
   currency?: string;
+  growth_rate?: number;
+  limit_order?: { take_profit?: number; stop_loss?: number };
   count: number;
 }
 
@@ -60,10 +62,12 @@ export interface BuyParams {
   symbol: string;
   contract_type: string;
   stake: number;
-  duration: number;
+  duration?: number;
   duration_unit?: string;
   barrier?: string | number;
   currency?: string;
+  growth_rate?: number;
+  limit_order?: { take_profit?: number; stop_loss?: number };
 }
 
 export function useDerivTrading(): UseDerivTradingReturn {
@@ -79,19 +83,14 @@ export function useDerivTrading(): UseDerivTradingReturn {
 
   const subscribeBalance = useCallback(async () => {
     try {
-      if (balanceSubRef.current) {
-        try { balanceSubRef.current.unsubscribe(); } catch (_) {}
+      // APIBase owns the authenticated balance stream. This hook only asks
+      // for a snapshot, preventing AlreadySubscribed when multiple pages use
+      // useDerivTrading at the same time.
+      const res = await api_base.api.send({ balance: 1 });
+      if (res?.balance?.balance != null) {
+        setBalance(parseFloat(res.balance.balance));
+        setCurrency(res.balance.currency || 'USD');
       }
-      const obs = api_base.api.subscribe({ balance: 1, account: 'current' });
-      balanceSubRef.current = obs.subscribe({
-        next: (res: any) => {
-          if (res?.balance?.balance != null) {
-            setBalance(parseFloat(res.balance.balance));
-            setCurrency(res.balance.currency || 'USD');
-          }
-        },
-        error: () => {},
-      });
     } catch (e) {
       // Try one-shot balance call
       try {
@@ -105,6 +104,13 @@ export function useDerivTrading(): UseDerivTradingReturn {
   }, []);
 
   useEffect(() => {
+    const messageSub = api_base.api?.onMessage()?.subscribe(({ data }: any) => {
+      if (data?.balance?.balance != null) {
+        setBalance(parseFloat(data.balance.balance));
+        setCurrency(data.balance.currency || 'USD');
+      }
+    });
+    balanceSubRef.current = messageSub;
     subscribeBalance();
     return () => {
       if (balanceSubRef.current) {
@@ -114,7 +120,11 @@ export function useDerivTrading(): UseDerivTradingReturn {
   }, [subscribeBalance]);
 
   const buyContract = useCallback(async (params: BuyParams): Promise<TradeResult | null> => {
-    const { symbol, contract_type, stake, duration, duration_unit = 't', barrier, currency: cur = currency } = params;
+    const {
+      symbol, contract_type, stake, duration, duration_unit = 't', barrier,
+      currency: cur = currency, growth_rate, limit_order,
+    } = params;
+    const isAccumulator = String(contract_type).toUpperCase() === 'ACCU';
     try {
       setIsTrading(true);
       // Step 1: proposal → get ask_price and proposal ID
@@ -126,16 +136,19 @@ export function useDerivTrading(): UseDerivTradingReturn {
         basis: 'stake',
         contract_type,
         currency: cur,
-        duration,
-        duration_unit,
+        ...(duration != null && !isAccumulator ? { duration } : {}),
+        ...(duration_unit && !isAccumulator ? { duration_unit } : {}),
         underlying_symbol: symbol,
       };
       if (barrier !== undefined) proposalReq.barrier = String(barrier);
+      if (growth_rate != null) proposalReq.growth_rate = growth_rate;
+      if (limit_order) proposalReq.limit_order = limit_order;
       const proposalRes = await api_base.api.send(proposalReq);
       if (proposalRes?.error) throw proposalRes.error;
       const proposalId = proposalRes?.proposal?.id;
       const askPrice = Number(proposalRes?.proposal?.ask_price ?? stake);
       if (!proposalId) throw new Error('Proposal failed — no ID returned');
+      const tradeKey = createTradeKey('ui');
 
       // ── Publish copy-trade signal IN PARALLEL with master's buy ──────
       // Signal fires here (after proposal accepted, before buy confirmed) so
@@ -146,11 +159,14 @@ export function useDerivTrading(): UseDerivTradingReturn {
           symbol,
           contract_type,
           stake,
-          duration,
-          duration_unit,
+           ...(duration != null && !isAccumulator ? { duration } : {}),
+           ...(duration_unit && !isAccumulator ? { duration_unit } : {}),
           barrier,
+           growth_rate,
+           limit_order,
           source: getMasterSource(),
           time:   Date.now(),
+           trade_key: tradeKey,
         });
       } catch { /* never let copy-trade errors affect the master trade */ }
 
@@ -162,6 +178,22 @@ export function useDerivTrading(): UseDerivTradingReturn {
       }
 
       const contractId = String(buyRes.buy.contract_id);
+      try {
+        publishMasterTrade({
+          symbol,
+          contract_type,
+          stake,
+           ...(duration != null && !isAccumulator ? { duration } : {}),
+           ...(duration_unit && !isAccumulator ? { duration_unit } : {}),
+          barrier,
+           growth_rate,
+           limit_order,
+          source: getMasterSource(),
+          time: Date.now(),
+          contract_id: Number(contractId),
+          trade_key: tradeKey,
+        });
+      } catch { /* never let copy-trade errors affect the master trade */ }
       activeContracts.current.add(contractId);
 
       // Monitor contract to get result (non-blocking)
@@ -270,10 +302,11 @@ export function useDerivTrading(): UseDerivTradingReturn {
    */
   const buyBatch = useCallback(async (params: BatchParams, onEvent?: (event: BatchEvent) => void) => {
     const {
-      symbol, contract_type, stake, duration, duration_unit = 't',
-      barrier, currency: cur = currency, count,
+       symbol, contract_type, stake, duration, duration_unit = 't',
+       barrier, currency: cur = currency, growth_rate, limit_order, count,
     } = params;
     const total = Math.max(1, Math.min(100, Math.floor(count)));
+    const isAccumulator = String(contract_type).toUpperCase() === 'ACCU';
     const batchId = `BATCH-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
     const events: BatchEvent[] = [];
     const emit = (event: BatchEvent) => {
@@ -290,11 +323,13 @@ export function useDerivTrading(): UseDerivTradingReturn {
         basis: 'stake',
         contract_type,
         currency: cur,
-        duration,
-        duration_unit,
+         ...(duration != null && !isAccumulator ? { duration } : {}),
+         ...(duration_unit && !isAccumulator ? { duration_unit } : {}),
         underlying_symbol: symbol,
       };
       if (barrier !== undefined) proposalReq.barrier = String(barrier);
+       if (growth_rate != null) proposalReq.growth_rate = growth_rate;
+       if (limit_order) proposalReq.limit_order = limit_order;
 
       const proposalResults = await Promise.all(
         Array.from({ length: total }, (_, index) =>
@@ -321,6 +356,29 @@ export function useDerivTrading(): UseDerivTradingReturn {
       });
 
       if (!proposals.length) return events;
+
+      // Give every batch contract its own identity. A fingerprint-only
+      // dedupe would incorrectly collapse identical same-tick contracts.
+      const tradeKeys = new Map<number, string>();
+      proposals.forEach(({ index }) => {
+        const tradeKey = createTradeKey(`batch-${batchId}-${index}`);
+        tradeKeys.set(index, tradeKey);
+        try {
+          publishMasterTrade({
+            symbol,
+            contract_type,
+            stake,
+             ...(duration != null && !isAccumulator ? { duration } : {}),
+             ...(duration_unit && !isAccumulator ? { duration_unit } : {}),
+            barrier,
+             growth_rate,
+             limit_order,
+            source: getMasterSource(),
+            time: Date.now(),
+            trade_key: tradeKey,
+          });
+        } catch { /* never let copy-trade errors affect the master batch */ }
+      });
 
       // No buyContract calls here: these are the only buy requests in the batch.
       const buyResults = await Promise.all(
@@ -349,6 +407,23 @@ export function useDerivTrading(): UseDerivTradingReturn {
         }
 
         const contractId = String(buy.contract_id);
+        const tradeKey = tradeKeys.get(index);
+        try {
+          publishMasterTrade({
+            symbol,
+            contract_type,
+            stake: Number(buy.buy_price ?? stake),
+             ...(duration != null && !isAccumulator ? { duration } : {}),
+             ...(duration_unit && !isAccumulator ? { duration_unit } : {}),
+            barrier,
+             growth_rate,
+             limit_order,
+            source: getMasterSource(),
+            time: Date.now(),
+            contract_id: Number(contractId),
+            trade_key: tradeKey,
+          });
+        } catch { /* never let copy-trade errors affect the master batch */ }
         activeContracts.current.add(contractId);
         const boughtResult: TradeResult = {
           id: contractId,

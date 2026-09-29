@@ -17,7 +17,7 @@
 - [Digit widget pip_size bug](digit-widget-pipsize.md) — history batch arrives before live tick; must store raw prices and wait for authoritative pip_size from first live tick before computing digits, or wrong static defaults cause digit-0 at 99%+.
 - [Dashboard STRATEGY.INIT navigation](marksyntrader-dashboard-init.md) — INIT now triggers handleOpen (load + Bot Builder nav); auto-select timer sets is_div_triggered_once before click so it also navigates — intentional "auto-open first bot" behavior, not a regression.
 - [Draggable button pattern](marksyntrader-draggable-buttons.md) — use e.currentTarget (not e.target) for pointer capture/release; persist position with localStorage; suppress post-drag click via addEventListener once+capture; default bottom-left for risk disclaimer, middle-left for Free Bots.
-- [ChunkLoadError recovery](marksyntrader-chunk-error.md) — quill-icons Illustration chunk fails after server restart; fixed by: (1) lazyCompilation:false in rsbuild dev+rspack experiments, (2) ChunkErrorPage errorElement on all React Router routes with sessionStorage one-shot reload guard.
+- [Boot error recovery](boot-error-recovery.md) — boot fallback must react only to script/chunk failures; API and WebSocket errors must not replace the app with a false preview-reload screen.
 - [Header demo/real buttons](marksyntrader-header-buttons.md) — demo account: left-side "Reset Demo" button (useResetDemoBalance shared hook); real account: right-side green "Deposit" button (useDepositReal hook → cashier API → fallback to app.deriv.com/cashier/deposit).
 - [Scalper Bots architecture](marksyntrader-scalper-bots.md) — built-in scalper strategies are Blockly XML files loaded into the real Bot Builder (like Free Bots), not a custom trading engine.
 - [BOT_BUILDER tab constant bug](marksyntrader-bot-builder-tab-bug.md) — DBOT_TABS.BOT_BUILDER must equal AHMED_LEARNING's index or every caller (dashboard cards, tours, announcements) blanks the screen.
@@ -39,8 +39,10 @@
 - [Scalper TP/SL, deactivate limit, markets](scalper-tpsl-deactivate-markets.md) — tpGuard always true; loss_limit breaks outer loop (VPS stops); deactivate checks wins OR losses; symbolToSubmarket() helper; ALL_MARKETS includes Bear/Bull/Boom/Crash/Step/Range.
 - [Hedge independent martingale per leg](hedge-martingale-per-leg.md) — runningStakeA/BRef track per-leg current stake; win resets to base, loss multiplies only that leg's stake independently.
 - [Chart digit accuracy](chart-digit-accuracy.md) — use tick.pip_size from first live tick (not string-length); deduplicate history vs live by epoch Set; send `forget: subscriptionId` on cleanup (RxJS unsubscribe alone does not stop server stream).
+- [Chart settlement tick semantics](chart-settlement-ticks.md) — count the entry tick (`epoch >= entryEpoch`) and deduplicate each contract epoch; fast markets otherwise appear to skip two ticks.
 - [Copy-trading timing](copy-trading-timing.md) — publish pre-signal (no contract_id) BEFORE the buy so follower enters on the same tick; post-signal with contract_id registers mirroredContracts to block the backup path.
-- [SmartChart adapter init](smartchart-adapter-init.md) — adapter init effect must poll/retry until chart_api.api is ready; `chart_api.api` not in dep array so effect never re-runs if null on mount.
+- [Copy-trading parameter preservation](copy-trading-parameter-preservation.md) — POC accumulator limit orders are nested; normalize them before replay and never bulk-copy across currencies or custom ratios.
+- [SmartChart adapter init](smartchart-adapter-init.md) — poll until authenticated api_base.api is ready; keep all SmartChart traffic on that connection, with no legacy public chart socket.
 - [Authenticated market data panels](authenticated-market-data-panels.md) — AI scanner and digit widgets must use api_base's authenticated session with retry/cleanup after token login, not hard-coded public WebSockets.
 - [DCircles page import path](marksyntrader-dcircles-path.md) — main.tsx imports `'../dcircles'` (not `'../d-circles'`); both directories exist but only dcircles/ has the live rewrite; d-circles/ is the old version; do not delete d-circles/ or the old import re-conflicts.
 - [Digit widget AI analyser](digit-widget-ai-analyser.md) — AI analyser uses aiTickCount state (5-100, default 50, persisted to localStorage digit_widget_ai_ticks); rawHistoryRef holds raw float prices for Rise/Fall/HighTick/LowTick/OnlyUps/OnlyDowns scoring; 12 contract types total.
@@ -48,6 +50,33 @@
 - [Virtual Hook + Stealth Mode](scalper-virtual-hook.md) — VirtualHookConfig in BotConfig; gate in startBot after ENTRY_SIGNAL log; vPhase/vLossCount/vWinCount local vars; virtual TxRecord rows (virtual: true); stealthMode masks tick prices in terminal.
 - [Scalper cool-off stability](scalper-cooloff-crash.md) — bound cool-off virtual telemetry, clear resolved tick wait timers, normalize units, and avoid redundant countdown renders.
 - [Auto Trades Even/Odd condition](auto-trades-evenodd.md) — the card gates entries on the latest N digits sharing the selected parity; UI dropdowns drive both the condition and buy contract.
-- [Auto Trades batch manager](auto-trades-batch-manager.md) — same-account batches use concurrent authenticated WebSocket buys; track each contract under a batch ID because REST bulk purchase targets multiple accounts.
+- [Auto Trades batch manager](auto-trades-batch-manager.md) — same-account batches use concurrent authenticated buys; pending settlements are not losses and Bulk Trade owns execution exclusively.
 - [Differs Edge Scanner bot](differs-edge-scanner.md) — XML bot scans latest digit, rotates Differs/Over/Under phases, and uses Even/Odd parity recovery after losses.
-- [Auto-Digits scanner](auto-digits-scanner.md) — authenticated live tick distribution dashboard; two real-tick virtual validations precede buyContract trades, which emit native Bot Builder transaction events.
+- [Differs cycle XML validation](differs-cycle-xml-validation.md) — Edge Scanner is phase-only with explicit parity recovery states; parse and synchronize public/dist copies after edits.
+- [AI cycle pattern detector](cycle-pattern-detector.md) — shared four-route one-tick cycle detector uses two setup touches, a barrier cross, and a return trigger.
+- [AI cycle guide runner](ai-cycle-guide-runner.md) — every guide mount intended to run bots needs a guided loader; lock market/digit recommendations for each three-run cycle.
+- [Auto-Digits scanner](auto-digits-scanner.md) — authenticated scanner with two-tick validation, deterministic contract rotation, and balance-aware recovery guardrails.
+- [Native transaction event lifecycle](native-transaction-event-lifecycle.md) — shared transaction events from self-contained traders must outlive the Run Panel mount lifecycle.
+- [Blockly SVG fragment imports](blockly-svg-fragments.md) — rendered Blockly SVG exports are not loadable bot XML; convert them to executable Blockly roots and preserve source IDs as data metadata.
+- [Ahmed Differs Cycle recovery](ahmed-differs-cycle-recovery.md) — every loss resets parity history and waits for three same-parity digits before the contrarian recovery buy.
+- [Blockly XML validation](blockly-xml-validation.md) — close child value/statement wrappers before parent blocks; parse XML and verify explicit block IDs after edits and builds.
+- [Auto-Digits active symbols API](auto-digits-active-symbols.md) — current Deriv options WebSocket rejects product_type on active_symbols; request full symbols without that field.
+- [Deriv tick observable teardown](auto-trades-feed-lifecycle.md) — unsubscribing a DerivAPIBasic stream owns the matching forget; manual forgets can duplicate requests and trigger rate limits.
+- [Auto-Digits feed lifecycle](auto-digits-feed-lifecycle.md) — attach authenticated live feeds before baseline history, cancel stale loaders, watchdog silent streams, and calculate digits with live pip_size plus epoch deduplication.
+- [Auto-Digits recovery order](auto-digits-recovery-order.md) — after a loss, evaluate one shared plan step across markets, and advance Over 1–3 then Under 8–6 only after a real buy.
+- [Auto Bots market execution](auto-bots-market-execution.md) — scan authenticated markets continuously, evaluate each on its own tick, select the best unless all selected signals are strong, and stop risk per market.
+- [Smart Trading card runner](smart-trading-card-runner.md) — tokenized card runs prevent stale async loops from restarting or buying after a stop/start; normalize exclusive digit barriers before proposal.
+- [Parity auto cycles](parity-auto-cycles.md) — ODD AUTO CYCLE uses weak even or strong-even×2→odd signals to buy DIGITODD; EVEN mirrors it with odd→DIGITEVEN.
+- [SmartChart proxy rail scoping](smartchart-proxy-rail.md) — scope native control lookups to the nearest chart wrapper when normal and modal charts can coexist.
+- [Development preview routing](preview-routing.md) — local `/bot/preview` can omit the build flag, so preview mode must also detect the pathname.
+- [Deriv OAuth endpoint](deriv-oauth.md) — production authorization uses `/oauth2/auth`; the Deriv app must be live before an interactive callback test can succeed.
+- [Dependency repair](dependency-repair.md) — restore an empty node_modules tree without unintentionally upgrading the checked-in manifest.
+- [Blockly fallback execution](unsupported-block-execution.md) — unknown imported blocks need both a visible definition and a JavaScript generator fallback to remain runnable.
+- [Vite merge guardrails](vite-merge-guardrails.md) — resolve the active toolchain before regenerating the lockfile; Vite 8 may need CSS minification disabled for malformed vendor CSS.
+- [King Fisher continuation](king-fisher-continuation.md) — King Fisher after-purchase generation must force trade_again after settlement; TP/SL branches otherwise can end the interpreter after one run.
+- [King Fisher runtime reporting](marksyntrader-kingfisher.md) — best-market selection runs before Bot Builder starts; live digits, Fisher sequences, hooks, and settled P/L feed the shared Journal/Transactions surface.
+- [King Fisher hook purchase gate](king-fisher-hook-gate.md) — Virtual Hook must be the direct before-purchase gate; an outer AND rechecks a stale entry streak and can drop confirmed real trades.
+- [Interpreter-safe generated code](interpreter-safe-generated-code.md) — Blockly interpreter code cannot assume browser globals or Number static helpers; use primitive checks and host bridge methods.
+- [Fast execution scope](fast-execution-scope.md) — shared Fast behavior is limited to Bot Builder and Scalper Bots; other surfaces keep their own speed modes.
+- [King Fisher XML fallback](king-fisher-loader-fallback.md) — unknown Blockly blocks must match their XML connection shape; mixed output and statement connections make imports fail.
+- [Featured parity isolation](featured-bot-recovery-isolation.md) — keep sequence recovery separate from the generic dominant-parity block used elsewhere.

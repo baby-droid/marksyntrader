@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { buildSmartchartsChampionAdapter } from '@/adapters/smartcharts-champion';
 import { createServices } from '@/adapters/smartcharts-champion/services';
 import { createTransport } from '@/adapters/smartcharts-champion/transport';
-import chart_api from '@/external/bot-skeleton/services/api/chart-api';
+import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import type { SmartchartsChampionAdapter } from '@/types/smartchart.types';
 import type {
     ActiveSymbols,
@@ -101,9 +101,9 @@ export const useSmartChartAdaptor = (): UseSmartChartAdaptorReturn => {
         };
     }, []);
 
-    // Initialize adapter — polls until chart_api.api is ready, then builds once.
-    // The original guard (!adapterInitialized && chart_api.api) only ran when the
-    // effect first fired. If chart_api.api was null at mount time the effect never
+    // Initialize adapter — polls until the authenticated main API is ready, then
+    // builds once. The original guard only ran when the effect first fired. If
+    // the API was null at mount time the effect never
     // retried, leaving SmartChart in a permanent "Retrieving Chart Data" state.
     useEffect(() => {
         if (adapterInitialized) return;
@@ -111,7 +111,7 @@ export const useSmartChartAdaptor = (): UseSmartChartAdaptorReturn => {
 
         const tryInit = () => {
             if (cancelled) return;
-            if (!chart_api.api) {
+            if (!api_base.api) {
                 // API not ready yet — retry in 500 ms
                 retryTimeoutRef.current = setTimeout(tryInit, 500);
                 return;
@@ -129,6 +129,10 @@ export const useSmartChartAdaptor = (): UseSmartChartAdaptorReturn => {
                     setError(null);
                 }
             } catch (err) {
+                if (!cancelled && isMountedRef.current) {
+                    setError(err instanceof Error ? err : new Error('Failed to initialize chart adapter'));
+                    setIsLoading(false);
+                }
                 if (isMountedRef.current && !cancelled) {
                     // Build failed — retry in 1 s
                     retryTimeoutRef.current = setTimeout(tryInit, 1000);
@@ -344,7 +348,7 @@ export const useSmartChartAdaptor = (): UseSmartChartAdaptorReturn => {
 
             // Unsubscribe from all ticks
             try {
-                chart_api.api?.forgetAll('ticks');
+                (api_base.api as any)?.forgetAll?.('ticks');
             } catch (err) {
                 logger.error('Error forgetting ticks:', err);
             }
