@@ -67,6 +67,15 @@ const FREE_BOTS = [
     theme: 'acc-flipper', artwork: '/bot-art/ahmed-cycle.png', artworkPosition: 'banner',
   },
   {
+    id: 'normal-killer-bot-v3',
+    name: 'Normal killer bot v3',
+    description: 'Rotates through Continuous Indices after each real contract. A zero-stake Virtual Hook waits for the selected Hook Loss/Hook Profit result before allowing one real Over 1 contract. Bulk copies are deferred; this bot currently purchases one real contract per signal.',
+    category: 'Scanner', market: 'Continuous Indices', type: 'DIGIT OVER', prediction: 'OVER 1',
+    xmlFile: '/bots/normal-killer-bot-v3.xml',
+    badge: 'NORMAL KILLER V3', badgeColor: '#38bdf8', icon: '🔄', winRate: '—',
+    theme: 'ahmed-myth', artwork: '/bot-art/ahmed-pairs.png', artworkPosition: 'side',
+  },
+  {
     id: 'under-cycle-auto',
     name: 'Under Cycle Auto',
     description: '🔁 DIFFERS 9 → UNDER 9 → UNDER 8 → UNDER 7 → DIFFERS 0 → OVER 0 → OVER 1 → OVER 2. After a loss, waits for 2 consecutive evens or odds and buys the matching recovery contract.',

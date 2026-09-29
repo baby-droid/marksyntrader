@@ -11,6 +11,8 @@ window.Blockly.Blocks.trade_definition_market = {
                 input_submarket: '%2',
                 input_symbol: '%3',
             }),
+            message1: localize('Alternate markets (Continuous Indices only): %1'),
+            message2: localize('Alternate mode: %1 every %2'),
             args0: [
                 {
                     type: 'field_dropdown',
@@ -39,6 +41,7 @@ window.Blockly.Blocks.trade_definition_market = {
                     name: 'SYMBOL_LIST',
                     options: [
                         ['Volatility 10 (1s) Index', '1HZ10V'],
+                        ['Volatility 15 (1s) Index', '1HZ15V'],
                         ['Volatility 25 (1s) Index', '1HZ25V'],
                         ['Volatility 30 (1s) Index', '1HZ30V'],
                         ['Volatility 50 (1s) Index', '1HZ50V'],
@@ -46,6 +49,28 @@ window.Blockly.Blocks.trade_definition_market = {
                         ['Volatility 90 (1s) Index', '1HZ90V'],
                         ['Volatility 100 (1s) Index', '1HZ100V'],
                     ],
+                },
+            ],
+            args1: [
+                {
+                    type: 'field_checkbox',
+                    name: 'ALTERNATE_MARKETS',
+                    checked: false,
+                },
+            ],
+            args2: [
+                {
+                    type: 'field_dropdown',
+                    name: 'ALTERNATE_MODE',
+                    options: [[localize('Every X runs'), 'EVERY_X_RUNS']],
+                },
+                {
+                    type: 'field_number',
+                    name: 'ALTERNATE_EVERY',
+                    value: 1,
+                    min: 1,
+                    max: 100,
+                    precision: 1,
                 },
             ],
             colour: window.Blockly.Colours.Special1.colour,

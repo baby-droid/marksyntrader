@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
+  <block type="trade_definition" id="nkv3_definition" deletable="false" x="0" y="0">
+    <statement name="TRADE_OPTIONS">
+      <block type="trade_definition_market" id="nkv3_market" deletable="false" movable="false">
+        <field name="MARKET_LIST">synthetic_index</field>
+        <field name="SUBMARKET_LIST">random_index</field>
+        <field name="SYMBOL_LIST">1HZ15V</field>
+        <field name="ALTERNATE_MARKETS">TRUE</field>
+        <field name="ALTERNATE_MODE">EVERY_X_RUNS</field>
+        <field name="ALTERNATE_EVERY">1</field>
+        <next>
+          <block type="trade_definition_tradetype" id="nkv3_trade_type" deletable="false" movable="false">
+            <field name="TRADETYPECAT_LIST">digits</field>
+            <field name="TRADETYPE_LIST">overunder</field>
+            <next>
+              <block type="trade_definition_contracttype" id="nkv3_contract_type" deletable="false" movable="false">
+                <field name="TYPE_LIST">both</field>
+                <next>
+                  <block type="trade_definition_candleinterval" id="nkv3_candle_interval" deletable="false" movable="false">
+                    <field name="CANDLEINTERVAL_LIST">60</field>
+                    <next>
+                      <block type="trade_definition_restartbuysell" id="nkv3_restart_buy_sell" deletable="false" movable="false">
+                        <field name="TIME_MACHINE_ENABLED">FALSE</field>
+                        <next>
+                          <block type="trade_definition_restartonerror" id="nkv3_restart_on_error" deletable="false" movable="false">
+                            <field name="RESTARTONERROR">TRUE</field>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="SUBMARKET">
+      <block type="trade_definition_tradeoptions" id="nkv3_trade_options">
+        <mutation has_first_barrier="false" has_second_barrier="false" has_prediction="true"/>
+        <field name="DURATIONTYPE_LIST">t</field>
+        <value name="DURATION">
+          <shadow type="math_number_positive"><field name="NUM">1</field></shadow>
+        </value>
+        <value name="AMOUNT">
+          <shadow type="math_number_positive"><field name="NUM">0.35</field></shadow>
+        </value>
+        <value name="PREDICTION">
+          <shadow type="math_number_positive"><field name="NUM">1</field></shadow>
+        </value>
+      </block>
+    </statement>
+  </block>
+  <block type="before_purchase" id="nkv3_before" deletable="false" x="0" y="760">
+    <statement name="BEFOREPURCHASE_STACK">
+      <block type="controls_if" id="nkv3_virtual_hook_gate">
+        <value name="IF0">
+          <block type="king_fisher_virtual_hook" id="nkv3_virtual_hook">
+            <field name="ENABLED">TRUE</field>
+            <field name="CONFIRMATIONS">1</field>
+            <field name="RESULT">LOSS</field>
+            <value name="SIGNAL">
+              <block type="king_fisher_entry" id="nkv3_entry_signal">
+                <field name="DIRECTION">ABOVE</field>
+                <field name="THRESHOLD">1</field>
+                <field name="STREAK">2_3</field>
+              </block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="purchase" id="nkv3_purchase">
+            <field name="PURCHASE_LIST">DIGITOVER</field>
+          </block>
+        </statement>
+      </block>
+    </statement>
+  </block>
+  <block type="after_purchase" id="nkv3_after" deletable="false" x="850" y="0">
+    <statement name="AFTERPURCHASE_STACK">
+      <block type="trade_again" id="nkv3_trade_again"/>
+    </statement>
+  </block>
+</xml>

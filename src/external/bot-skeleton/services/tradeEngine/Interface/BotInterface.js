@@ -8,6 +8,17 @@ const getBotInterface = tradeEngine => {
     return {
         init: (...args) => tradeEngine.init(...args),
         start: (...args) => tradeEngine.start(...args),
+        rotateContinuousMarket: async () => {
+            const nextSymbol = await tradeEngine.rotateContinuousMarket();
+            if (nextSymbol) {
+                dispatchBrowserEvent('journal:signal', {
+                    type: 'SCAN',
+                    label: 'MARKET ROTATED',
+                    detail: `Now trading ${nextSymbol}`,
+                });
+            }
+            return nextSymbol;
+        },
         stop: (...args) => tradeEngine.stop(...args),
         purchase: contract_type => tradeEngine.purchase(contract_type),
         purchaseMultiple: contract_types => tradeEngine.purchaseMultiple(contract_types),

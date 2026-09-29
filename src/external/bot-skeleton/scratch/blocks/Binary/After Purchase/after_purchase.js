@@ -82,6 +82,10 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
     const isKingFisher = workspaceBlocks.some(candidate =>
         String(candidate.type || '').startsWith('king_fisher_')
     );
+    const shouldRotateContinuousMarkets = workspaceBlocks.some(candidate =>
+        candidate.type === 'trade_definition_market' &&
+        candidate.getFieldValue?.('ALTERNATE_MARKETS') === 'TRUE'
+    );
     const hasKingFisherRestartGuard = workspaceBlocks.some(candidate =>
         candidate.type === 'king_fisher_restart_trade'
     );
@@ -205,6 +209,7 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
         ${riskGuard}
         ${kingFisherStakeHandoff}
         ${recoveryStakeCode}
+        ${shouldRotateContinuousMarkets ? 'Bot.rotateContinuousMarket();' : ''}
         ${continuation}
     };`;
     return code;

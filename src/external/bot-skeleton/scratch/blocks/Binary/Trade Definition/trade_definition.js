@@ -1,5 +1,6 @@
 import { localize } from '@deriv-com/translations';
 import { config } from '../../../../constants/config';
+import { CONTINUOUS_INDEX_SYMBOLS } from '../../../../../../utils/continuous-index-rotation';
 import { initErrorHandlingListener, removeErrorHandlingEventListener } from '../../../../utils';
 import DBotStore from '../../../dbot-store';
 import {
@@ -182,6 +183,25 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.trade_definition = block 
     const restart_on_buy_sell_block = block.getChildByType('trade_definition_restartbuysell');
 
     const symbol = market_block.getFieldValue('SYMBOL_LIST');
+    const shouldAlternateMarkets = market_block.getFieldValue('ALTERNATE_MARKETS') === 'TRUE';
+    const alternateMode = market_block.getFieldValue('ALTERNATE_MODE') || 'EVERY_X_RUNS';
+    const alternateEveryValue = Number(market_block.getFieldValue('ALTERNATE_EVERY'));
+    const alternateEvery =
+        Number.isInteger(alternateEveryValue) && alternateEveryValue > 0 ? alternateEveryValue : 1;
+    if (
+        shouldAlternateMarkets &&
+        (alternateMode !== 'EVERY_X_RUNS' ||
+            market_block.getFieldValue('MARKET_LIST') !== 'synthetic_index' ||
+            market_block.getFieldValue('SUBMARKET_LIST') !== 'random_index' ||
+            !CONTINUOUS_INDEX_SYMBOLS.includes(symbol))
+    ) {
+        throw new Error('Market alternation is only supported for the listed Continuous Indices.');
+    }
+    const marketRotation = {
+        enabled: shouldAlternateMarkets,
+        every: alternateEvery,
+        symbols: CONTINUOUS_INDEX_SYMBOLS,
+    };
     const trade_type = trade_type_block.getFieldValue('TRADETYPE_LIST');
     const contract_type = contract_type_block.getFieldValue('TYPE_LIST');
     const candle_interval = candle_interval_block.getFieldValue('CANDLEINTERVAL_LIST');
@@ -201,6 +221,7 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.trade_definition = block 
     BinaryBotPrivateInit = function BinaryBotPrivateInit() {
         Bot.init('${account}', {
           symbol              : '${symbol}',
+          marketRotation      : ${JSON.stringify(marketRotation)},
           contractTypes       : ${JSON.stringify(contract_type_list)},
           candleInterval      : '${candle_interval || 'FALSE'}',
           shouldRestartOnError: ${should_restart_on_error},

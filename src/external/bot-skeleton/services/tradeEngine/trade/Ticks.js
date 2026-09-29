@@ -10,20 +10,28 @@ import { getDirection, getLastDigit } from '../utils/helpers';
 import { expectPositiveInteger } from '../utils/sanitize';
 import * as constants from './state/constants';
 
-let tickListenerKey;
-
 export default Engine =>
     class Ticks extends Engine {
         async watchTicks(symbol) {
             if (symbol && this.symbol !== symbol) {
-                this.symbol = symbol;
                 const { ticksService } = this.$scope;
+                const previousSymbol = this.symbol;
+                const previousKey = this.tickListenerKey;
+                const generation = (this.tickGeneration || 0) + 1;
+                this.tickGeneration = generation;
 
-                await ticksService.stopMonitor({
-                    symbol,
-                    key: tickListenerKey,
-                });
+                if (previousSymbol && previousKey) {
+                    await ticksService.stopMonitor({
+                        symbol: previousSymbol,
+                        key: previousKey,
+                    });
+                }
+                if (this.tickGeneration !== generation) return;
+
+                this.symbol = symbol;
+                this.tickListenerKey = null;
                 const callback = ticks => {
+                    if (this.tickGeneration !== generation || this.symbol !== symbol) return;
                     if (this.is_proposal_subscription_required) {
                         this.checkProposalReady();
                     }
@@ -35,7 +43,11 @@ export default Engine =>
                 };
 
                 const key = await ticksService.monitor({ symbol, callback });
-                tickListenerKey = key;
+                if (this.tickGeneration !== generation || this.symbol !== symbol) {
+                    await ticksService.stopMonitor({ symbol, key });
+                    return;
+                }
+                this.tickListenerKey = key;
             }
         }
 

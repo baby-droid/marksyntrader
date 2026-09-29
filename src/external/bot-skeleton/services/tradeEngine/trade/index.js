@@ -4,6 +4,7 @@ import { getLocalizedErrorMessage } from '@/constants/backend-error-messages';
 import { createError } from '../../../utils/error';
 import { observer as globalObserver } from '../../../utils/observer';
 import { api_base } from '../../api/api-base';
+import { getNextContinuousIndex } from '../../../../../utils/continuous-index-rotation';
 import { checkBlocksForProposalRequest, doUntilDone } from '../utils/helpers';
 import { expectInitArg } from '../utils/sanitize';
 import { proposalsReady, start } from './state/actions';
@@ -74,6 +75,8 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         };
         this.subscription_id_for_accumulators = null;
         this.is_proposal_requested_for_accumulators = false;
+        this.marketRotationRuns = 0;
+        this.marketRotationInFlight = false;
         this.store = createStore(rootReducer, applyMiddleware(thunk));
     }
 
@@ -83,9 +86,62 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
 
         this.initArgs = args;
         this.options = options;
+        this.marketRotationRuns = 0;
+        this.marketRotationInFlight = false;
         this.startPromise = this.loginAndGetBalance(token);
 
         if (!this.checkTicksPromiseExists()) this.watchTicks(symbol);
+    }
+
+    async rotateContinuousMarket() {
+        const rotation = this.options?.marketRotation;
+        if (!rotation?.enabled) return null;
+        if (this.marketRotationInFlight) {
+            throw new Error('A Continuous Index market switch is already in progress.');
+        }
+        if (this.data?.contract?.status === 'open') {
+            throw new Error('Cannot change markets until the current contract has settled.');
+        }
+
+        const symbols = Array.isArray(rotation.symbols) ? rotation.symbols : [];
+        const interval = Number(rotation.every);
+        const every = Number.isInteger(interval) && interval > 0 ? interval : 1;
+        const previousSymbol = this.options.symbol;
+        if (!symbols.includes(previousSymbol)) {
+            throw new Error(`Current market ${previousSymbol} is not in the Continuous Index rotation list.`);
+        }
+
+        this.marketRotationRuns += 1;
+        if (this.marketRotationRuns < every) return null;
+
+        const nextSymbol = getNextContinuousIndex(previousSymbol, symbols);
+        this.marketRotationRuns = 0;
+        if (nextSymbol === previousSymbol) return null;
+
+        const previousOptions = this.options;
+        const previousTradeOptions = this.tradeOptions;
+        this.marketRotationInFlight = true;
+        this.options = { ...this.options, symbol: nextSymbol };
+        if (this.tradeOptions) {
+            this.tradeOptions = { ...this.tradeOptions, symbol: nextSymbol };
+        }
+
+        try {
+            await this.watchTicks(nextSymbol);
+            return nextSymbol;
+        } catch (error) {
+            this.options = previousOptions;
+            this.tradeOptions = previousTradeOptions;
+            this.marketRotationRuns = every - 1;
+            try {
+                await this.watchTicks(previousSymbol);
+            } catch (restoreError) {
+                if (error && typeof error === 'object') error.restoreError = restoreError;
+            }
+            throw error;
+        } finally {
+            this.marketRotationInFlight = false;
+        }
     }
 
     start(tradeOptions) {

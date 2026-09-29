@@ -33,6 +33,25 @@ describe('King Fisher bundled templates', () => {
     });
 });
 
+describe('Normal Killer Bot V3 template', () => {
+    it('rotates Continuous Indices and gates one Over 1 purchase behind Virtual Hook', () => {
+        const xml = fs.readFileSync(
+            path.resolve(__dirname, '../../public/bots/normal-killer-bot-v3.xml'),
+            'utf8',
+        );
+
+        expect(xml).toContain('<field name="SYMBOL_LIST">1HZ15V</field>');
+        expect(xml).toContain('<field name="ALTERNATE_MARKETS">TRUE</field>');
+        expect(xml).toContain('<field name="ALTERNATE_MODE">EVERY_X_RUNS</field>');
+        expect(xml).toContain('<field name="ALTERNATE_EVERY">1</field>');
+        expect(xml).toContain('<block type="king_fisher_virtual_hook"');
+        expect(xml).toContain('<field name="RESULT">LOSS</field>');
+        expect(xml).toContain('<field name="PURCHASE_LIST">DIGITOVER</field>');
+        expect(xml).toContain('<block type="trade_again"');
+        expect(xml).not.toContain('<block type="multiple_purchase"');
+    });
+});
+
 describe('King Fisher market scoring', () => {
     it('scores low-digit streaks for BELOW entries', () => {
         const result = scoreKingFisherDigits([1, 2, 0, 8], 'BELOW', 3);
