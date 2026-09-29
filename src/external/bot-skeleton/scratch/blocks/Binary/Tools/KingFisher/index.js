@@ -288,6 +288,83 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_parity_purcha
     return `${helperName}();\n`;
 };
 
+window.Blockly.Blocks.king_fisher_parity_sequence_purchase = {
+    init() {
+        this.jsonInit({
+            message0: localize('King Fisher parity sequence recovery: O-E-E → Even; E-E-O / E-O-O-E → Odd'),
+            args0: [],
+            previousStatement: 'Purchase',
+            colour: '#22c55e',
+            tooltip: localize(
+                'During recovery, buys Even after Odd-Even-Even, or Odd after Even-Even-Odd or Even-Odd-Odd-Even.'
+            ),
+            helpUrl: '',
+        });
+        this.setNextStatement(false);
+    },
+    meta() {
+        return {
+            display_name: localize('King Fisher parity sequence recovery'),
+            description: localize(
+                'Buys Even after Odd-Even-Even; buys Odd after Even-Even-Odd or Even-Odd-Odd-Even.'
+            ),
+        };
+    },
+    customContextMenu(menu) {
+        modifyContextMenu(menu);
+    },
+};
+
+window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_parity_sequence_purchase = block => {
+    const helperName = ensureHelper('kingFisherParitySequencePurchase', [
+        'var kingFisherParitySequenceStates = {};',
+        'function PLACEHOLDER(key) {',
+        '  var state = kingFisherParitySequenceStates[key] || (kingFisherParitySequenceStates[key] = { lastEpoch: null, triggerEpoch: null, digits: [], triggered: false });',
+        '  if (state.triggered) {',
+        '    state.digits = [];',
+        '    state.lastEpoch = state.triggerEpoch;',
+        '    state.triggered = false;',
+        '  }',
+        '  var tick = Bot.getLastTick(true);',
+        '  if (!tick || tick.epoch == null) return false;',
+        '  if (tick.epoch !== state.lastEpoch) {',
+        '    state.lastEpoch = tick.epoch;',
+        '    var digit = Number(Bot.getLastDigit());',
+        '    if (digit !== digit || digit < 0 || digit > 9) return false;',
+        '    state.digits.push(digit);',
+        '    while (state.digits.length > 4) state.digits.shift();',
+        '    var digits = state.digits;',
+        '    var length = digits.length;',
+        '    var contract = null;',
+        '    if (length >= 3) {',
+        '      var a = digits[length - 3] % 2;',
+        '      var b = digits[length - 2] % 2;',
+        '      var c = digits[length - 1] % 2;',
+        '      if (a === 1 && b === 0 && c === 0) contract = "DIGITEVEN";',
+        '      else if (a === 0 && b === 0 && c === 1) contract = "DIGITODD";',
+        '    }',
+        '    if (!contract && length >= 4) {',
+        '      var d0 = digits[length - 4] % 2;',
+        '      var d1 = digits[length - 3] % 2;',
+        '      var d2 = digits[length - 2] % 2;',
+        '      var d3 = digits[length - 1] % 2;',
+        '      if (d0 === 0 && d1 === 1 && d2 === 1 && d3 === 0) contract = "DIGITODD";',
+        '    }',
+        '    if (contract) {',
+        '      state.triggered = true;',
+        '      state.triggerEpoch = tick.epoch;',
+        '      var selectedParity = contract === "DIGITEVEN" ? "EVEN" : "ODD";',
+        '      if (typeof Bot.emitJournalSignal === "function") Bot.emitJournalSignal({ type: "SCAN", label: "PARITY RECOVERY TRIGGERED", detail: selectedParity + " selected from sequence " + digits.join("-") });',
+        '      Bot.purchaseMultiple([{ contract_type: contract, amount: stake, dynamic: true }]);',
+        '      return true;',
+        '    }',
+        '  }',
+        '  return false;',
+        '}',
+    ]);
+    return `${helperName}('${block.id}');\n`;
+};
+
 window.Blockly.Blocks.king_fisher_best_market_scanner = {
     init() {
         this.jsonInit({
