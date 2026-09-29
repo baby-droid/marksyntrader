@@ -300,6 +300,8 @@ export function useAuthenticatedAutoBotScanner(): {
     useEffect(() => {
         let alive = true;
         let retryTimer: ReturnType<typeof setTimeout> | null = null;
+        let startInFlight = false;
+        let feedGeneration = 0;
         const subscriptions: Array<{ unsubscribe?: () => void }> = [];
         const generations = new Map<string, number>();
         const marketState = new Map<string, {
@@ -311,6 +313,25 @@ export function useAuthenticatedAutoBotScanner(): {
         const marketLabels = new Map<string, string>(
             AUTO_BOT_MARKETS.map(market => [market.value, market.label]),
         );
+
+        const resetFeeds = () => {
+            feedGeneration += 1;
+            subscriptions.splice(0).forEach(subscription => {
+                try { subscription.unsubscribe?.(); } catch {}
+            });
+            marketState.clear();
+            generations.clear();
+        };
+
+        const scheduleRestart = (delay = 1000) => {
+            if (!alive || retryTimer) return;
+            setConnected(false);
+            resetFeeds();
+            retryTimer = setTimeout(() => {
+                retryTimer = null;
+                void start();
+            }, delay);
+        };
 
         const publish = (symbol: string, ready = true) => {
             const market = marketState.get(symbol);
@@ -338,82 +359,96 @@ export function useAuthenticatedAutoBotScanner(): {
         };
 
         const start = async () => {
+            if (!alive || startInFlight) return;
+            if (retryTimer) {
+                clearTimeout(retryTimer);
+                retryTimer = null;
+            }
             const api = (api_base as any).api;
-            if (!alive || !api) {
+            if (!api) {
                 retryTimer = setTimeout(() => void start(), 600);
                 return;
             }
 
+            startInFlight = true;
+            const generation = ++feedGeneration;
             setConnected(true);
-            let markets = [...AUTO_BOT_MARKETS] as AutoBotMarket[];
             try {
-                // Do not include product_type here. Deriv rejects that field
-                // for active_symbols on some authenticated sessions.
-                const response = await api.send({ active_symbols: 'full' });
-                const discovered = (response?.active_symbols ?? [])
-                    .filter(isDigitMarket)
-                    .map((item: any) => ({
-                        value: String(item.symbol),
-                        label: String(item.display_name || item.name || item.symbol),
-                    }));
-                markets = mergeMarkets(discovered);
-                markets.forEach(market => marketLabels.set(market.value, market.label));
-            } catch {
-                // Keep the known synthetic catalog when discovery is delayed
-                // or unavailable. The authenticated streams still work.
+                let markets = [...AUTO_BOT_MARKETS] as AutoBotMarket[];
+                try {
+                    // Do not include product_type here. Deriv rejects that field
+                    // for active_symbols on some authenticated sessions.
+                    const response = await api.send({ active_symbols: 'full' });
+                    const discovered = (response?.active_symbols ?? [])
+                        .filter(isDigitMarket)
+                        .map((item: any) => ({
+                            value: String(item.symbol),
+                            label: String(item.display_name || item.name || item.symbol),
+                        }));
+                    markets = mergeMarkets(discovered);
+                    markets.forEach(market => marketLabels.set(market.value, market.label));
+                } catch {
+                    // Keep the known synthetic catalog when discovery is delayed
+                    // or unavailable. The authenticated streams still work.
+                }
+
+                if (!alive || generation !== feedGeneration) return;
+
+                await Promise.all(markets.map(async ({ value: symbol }) => {
+                    const marketGeneration = (generations.get(symbol) ?? 0) + 1;
+                    generations.set(symbol, marketGeneration);
+                    const market = {
+                        prices: [],
+                        epochs: new Set<number>(),
+                        live: [],
+                        pipSize: null as number | null,
+                    };
+                    marketState.set(symbol, market);
+
+                    try {
+                        const historyResponse = await api.send({
+                            ticks_history: symbol,
+                            count: 1000,
+                            end: 'latest',
+                            style: 'ticks',
+                        });
+                        if (!alive || generation !== feedGeneration || generations.get(symbol) !== marketGeneration) return;
+                        market.prices = (historyResponse?.history?.prices ?? []).map(Number).filter(Number.isFinite);
+                        publish(symbol, false);
+                    } catch {
+                        // The live stream can still populate this market if history is delayed.
+                    }
+
+                    try {
+                        if (!alive || generation !== feedGeneration || generations.get(symbol) !== marketGeneration) return;
+                        const stream = api.subscribe({ ticks: symbol, subscribe: 1 });
+                        const subscription = stream?.subscribe?.({
+                            next: (message: any) => {
+                                if (!alive || generation !== feedGeneration || generations.get(symbol) !== marketGeneration) return;
+                                const tick = message?.tick;
+                                const price = Number(tick?.quote);
+                                const epoch = Number(tick?.epoch ?? 0);
+                                if (!Number.isFinite(price) || (epoch && market.epochs.has(epoch))) return;
+                                if (Number.isFinite(Number(tick?.pip_size))) {
+                                    market.pipSize = Number(tick.pip_size);
+                                }
+                                if (epoch) market.epochs.add(epoch);
+                                market.live.push({ epoch, price });
+                                market.live = market.live.slice(-1000);
+                                publish(symbol);
+                            },
+                            error: () => {
+                                scheduleRestart();
+                            },
+                        });
+                        if (subscription) subscriptions.push(subscription);
+                    } catch {
+                        // Keep the remaining markets alive if one subscription is rejected.
+                    }
+                }));
+            } finally {
+                startInFlight = false;
             }
-
-            await Promise.all(markets.map(async ({ value: symbol }) => {
-                const generation = (generations.get(symbol) ?? 0) + 1;
-                generations.set(symbol, generation);
-                const market = {
-                    prices: [],
-                    epochs: new Set<number>(),
-                    live: [],
-                    pipSize: null as number | null,
-                };
-                marketState.set(symbol, market);
-
-                try {
-                    const historyResponse = await api.send({
-                        ticks_history: symbol,
-                        count: 1000,
-                        end: 'latest',
-                        style: 'ticks',
-                    });
-                    if (!alive || generations.get(symbol) !== generation) return;
-                    market.prices = (historyResponse?.history?.prices ?? []).map(Number).filter(Number.isFinite);
-                    publish(symbol, false);
-                } catch {
-                    // The live stream can still populate this market if history is delayed.
-                }
-
-                try {
-                    const stream = api.subscribe({ ticks: symbol, subscribe: 1 });
-                    const subscription = stream?.subscribe?.({
-                        next: (message: any) => {
-                            if (!alive || generations.get(symbol) !== generation) return;
-                            const tick = message?.tick;
-                            const price = Number(tick?.quote);
-                            const epoch = Number(tick?.epoch ?? 0);
-                            if (!Number.isFinite(price) || (epoch && market.epochs.has(epoch))) return;
-                            if (Number.isFinite(Number(tick?.pip_size))) {
-                                market.pipSize = Number(tick.pip_size);
-                            }
-                            if (epoch) market.epochs.add(epoch);
-                            market.live.push({ epoch, price });
-                            market.live = market.live.slice(-1000);
-                            publish(symbol);
-                        },
-                        error: () => {
-                            if (alive) setConnected(false);
-                        },
-                    });
-                    if (subscription) subscriptions.push(subscription);
-                } catch {
-                    // Keep the remaining markets alive if one subscription is rejected.
-                }
-            }));
         };
 
         const connectionSub = connectionStatus$.subscribe(status => {
@@ -421,18 +456,16 @@ export function useAuthenticatedAutoBotScanner(): {
             const isOpen = status === CONNECTION_STATUS.OPENED;
             setConnected(isOpen);
             if (isOpen && !marketState.size) void start();
+            if (!isOpen) resetFeeds();
         });
         void start();
 
         return () => {
             alive = false;
             if (retryTimer) clearTimeout(retryTimer);
+            retryTimer = null;
             connectionSub.unsubscribe();
-            subscriptions.forEach(subscription => {
-                try { subscription.unsubscribe?.(); } catch {}
-            });
-            marketState.clear();
-            generations.clear();
+            resetFeeds();
         };
     }, []);
 
