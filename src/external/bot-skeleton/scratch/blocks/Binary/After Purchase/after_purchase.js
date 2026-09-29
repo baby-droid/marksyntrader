@@ -85,10 +85,15 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
     const hasKingFisherRestartGuard = workspaceBlocks.some(candidate =>
         candidate.type === 'king_fisher_restart_trade'
     );
+    const normalizeVariableName = value => String(value ?? '')
+        .trim()
+        .toLowerCase()
+        .replace(/[\s_-]+/g, ' ');
+    const workspaceVariables = block.workspace?.getVariableMap?.()?.getVariables?.() ?? [];
     const variableName = variableNameText => {
-        const variable = block.workspace?.getVariableMap?.()
-            ?.getVariables?.()
-            ?.find(candidate => candidate.name === variableNameText);
+        const targetName = normalizeVariableName(variableNameText);
+        const variable = workspaceVariables.find(candidate => candidate.name === variableNameText)
+            || workspaceVariables.find(candidate => normalizeVariableName(candidate.name) === targetName);
         return variable
             ? window.Blockly.JavaScript.variableDB_.getName(
                 variable.getId(),
@@ -156,10 +161,20 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
     let riskGuard = '';
     if (isKingFisher && !hasKingFisherRestartGuard) {
         const takeProfitBlock = workspaceBlocks.find(
-            candidate => candidate.type === 'variables_get' && candidate.getFieldValue?.('VAR') === 'take profit'
+            candidate => candidate.type === 'variables_get'
+                && normalizeVariableName(
+                    candidate.getField?.('VAR')?.getText?.()
+                    || workspaceVariables.find(variable => variable.getId() === candidate.getFieldValue?.('VAR'))?.name
+                    || candidate.getFieldValue?.('VAR')
+                ) === 'take profit'
         );
         const stopLossBlock = workspaceBlocks.find(
-            candidate => candidate.type === 'variables_get' && candidate.getFieldValue?.('VAR') === 'stop loss'
+            candidate => candidate.type === 'variables_get'
+                && normalizeVariableName(
+                    candidate.getField?.('VAR')?.getText?.()
+                    || workspaceVariables.find(variable => variable.getId() === candidate.getFieldValue?.('VAR'))?.name
+                    || candidate.getFieldValue?.('VAR')
+                ) === 'stop loss'
         );
         const takeProfit = takeProfitBlock
             ? window.Blockly.JavaScript.javascriptGenerator.forBlock.variables_get(takeProfitBlock)[0]

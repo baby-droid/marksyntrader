@@ -105,7 +105,7 @@
     }
 `},window.Blockly.Blocks.controls_flow_statements={init(){this.jsonInit(this.definition())},definition:()=>({message0:(0,i.kg)("{{ break_or_continue }} of loop",{break_or_continue:"%1"}),args0:[{type:"field_dropdown",name:"FLOW",options:[["break out","BREAK"],["continue with next iteration","CONTINUE"]]}],inputsInline:!0,colour:window.Blockly.Colours.Base.colour,colourSecondary:window.Blockly.Colours.Base.colourSecondary,colourTertiary:window.Blockly.Colours.Base.colourTertiary,previousStatement:null,nextStatement:null,tooltip:(0,i.kg)("This block is used to either terminate or continue a loop, and can be placed anywhere within a loop block."),category:window.Blockly.Categories.Loop}),meta:()=>({display_name:(0,i.kg)("Break out/continue"),description:(0,i.kg)("This block is used to either terminate or continue a loop, and can be placed anywhere within a loop block.")}),customContextMenu(e){(0,a.xy)(e)}},window.Blockly.JavaScript.javascriptGenerator.forBlock.controls_flow_statements=e=>{let t="BREAK"===e.getFieldValue("FLOW")?"break":"continue";return`${t};
 `},window.Blockly.Blocks.variables_get={init(){this.jsonInit(this.definition())},definition:()=>({type:"variables_get",message0:"%1",args0:[{type:"field_variable",name:"VAR",variable:(0,i.kg)("item")}],output:null,outputShape:window.Blockly.OUTPUT_SHAPE_ROUND,colour:window.Blockly.Colours.Special4.colour,colourSecondary:window.Blockly.Colours.Special4.colourSecondary,colourTertiary:window.Blockly.Colours.Special4.colourTertiary,tooltip:(0,i.kg)("Gets variable value"),category:window.Blockly.Categories.Variables}),meta:()=>({display_name:(0,i.kg)("User-defined variable"),description:""}),onchange(e){if(e.type===window.Blockly.Events.VAR_RENAME){let t=this.workspace.getAllBlocks().filter(e=>"custom_functions"===e.category_),o=e.oldName,a=e.newName;t.forEach(e=>{var t;if(null==(t=e.arguments)?void 0:t.length){let t=e.arguments.findIndex(e=>e===o);-1!==t&&(e.arguments[t]=a,e.getField("PARAMS")&&e.setFieldValue(`${(0,i.kg)("with: ")} ${e.arguments.join(", ")}`,"PARAMS"),e.getField("WITH")&&e.updateShape())}})}},customContextMenu(e){(0,a.xy)(e)}},window.Blockly.JavaScript.javascriptGenerator.forBlock.variables_get=e=>[window.Blockly.JavaScript.variableDB_.getName(e.getFieldValue("VAR"),window.Blockly.Variables.CATEGORY_NAME),window.Blockly.JavaScript.javascriptGenerator.ORDER_ATOMIC],window.Blockly.Blocks.variables_set={init(){this.jsonInit(this.definition())},definition:()=>({type:"field_variable",message0:(0,i.kg)("set {{ variable }} to {{ value }}",{variable:"%1",value:"%2"}),args0:[{type:"field_variable",name:"VAR",variable:(0,i.kg)("item")},{type:"input_value",name:"VALUE"}],colour:window.Blockly.Colours.Special2.colour,colourSecondary:window.Blockly.Colours.Special2.colourSecondary,colourTertiary:window.Blockly.Colours.Special2.colourTertiary,previousStatement:null,nextStatement:null,tooltip:(0,i.kg)("Sets variable value"),category:window.Blockly.Categories.Variables}),meta:()=>({display_name:(0,i.kg)("Set variable"),description:(0,i.kg)("Assigns a given value to a variable")}),customContextMenu(e){(0,a.xy)(e)}},window.Blockly.JavaScript.javascriptGenerator.forBlock.variables_set=e=>{let t=window.Blockly.JavaScript.javascriptGenerator.valueToCode(e,"VALUE",window.Blockly.JavaScript.javascriptGenerator.ORDER_ASSIGNMENT)||"0",o=window.Blockly.JavaScript.variableDB_.getName(e.getFieldValue("VAR"),window.Blockly.Variables.CATEGORY_NAME);return`${o} = ${t};
-`},window.Blockly.Blocks.after_purchase={init(){this.jsonInit(this.definition())},definition:()=>({message0:"%1 %2 %3",message1:"%1",message2:"%1",args0:[{type:"field_image",src:l.JN,width:25,height:25,alt:"F"},{type:"field_label",text:(0,i.kg)("4. Restart trading conditions"),class:"blocklyTextRootBlockHeader"},{type:"input_dummy"}],args1:[{type:"input_statement",name:"AFTERPURCHASE_STACK",check:"TradeAgain"}],args2:[{type:"field_image",src:" ",width:380,height:10}],colour:window.Blockly.Colours.RootBlock.colour,colourSecondary:window.Blockly.Colours.RootBlock.colourSecondary,colourTertiary:window.Blockly.Colours.RootBlock.colourTertiary,tooltip:(0,i.kg)("Get the last trade information and result, then trade again."),category:window.Blockly.Categories.After_Purchase}),meta:()=>({display_name:(0,i.kg)("Restart trading conditions"),description:(0,i.kg)("Here is where you can decide if your bot should continue trading.")}),onchange(e){(e.type===window.Blockly.Events.BLOCK_CHANGE||e.type===window.Blockly.Events.BLOCK_DRAG&&!e.isStart)&&this.isCollapsed()&&(0,a.At)(this)},customContextMenu(e){(0,a.xy)(e)}},window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase=e=>{var t,o,i,a,l,n;let r=window.Blockly.JavaScript.javascriptGenerator.statementToCode(e,"AFTERPURCHASE_STACK"),s=(null==(o=e.workspace)||null==(t=o.getAllBlocks)?void 0:t.call(o))??(null==(a=window.Blockly.derivWorkspace)||null==(i=a.getAllBlocks)?void 0:i.call(a))??[],c=s.some(e=>String(e.type||"").startsWith("king_fisher_")),u=s.some(e=>"king_fisher_restart_trade"===e.type),d=t=>{var o,i,a,l,n;let r=null==(n=e.workspace)||null==(l=n.getVariableMap)||null==(a=l.call(n))||null==(i=a.getVariables)||null==(o=i.call(a))?void 0:o.find(e=>e.name===t);return r?window.Blockly.JavaScript.variableDB_.getName(r.getId(),window.Blockly.Variables.CATEGORY_NAME):null},p=s.find(e=>"trade_definition_tradeoptions"===e.type),y=null==p||null==(l=p.getInputTargetBlock)?void 0:l.call(p,"PREDICTION"),w=Number(null==y||null==(n=y.getFieldValue)?void 0:n.call(y,"NUM")),k=c&&(2===w||7===w),g=d("stake"),B=d("base stake"),h=d("martingale"),m=k&&g&&B?`
+`},window.Blockly.Blocks.after_purchase={init(){this.jsonInit(this.definition())},definition:()=>({message0:"%1 %2 %3",message1:"%1",message2:"%1",args0:[{type:"field_image",src:l.JN,width:25,height:25,alt:"F"},{type:"field_label",text:(0,i.kg)("4. Restart trading conditions"),class:"blocklyTextRootBlockHeader"},{type:"input_dummy"}],args1:[{type:"input_statement",name:"AFTERPURCHASE_STACK",check:"TradeAgain"}],args2:[{type:"field_image",src:" ",width:380,height:10}],colour:window.Blockly.Colours.RootBlock.colour,colourSecondary:window.Blockly.Colours.RootBlock.colourSecondary,colourTertiary:window.Blockly.Colours.RootBlock.colourTertiary,tooltip:(0,i.kg)("Get the last trade information and result, then trade again."),category:window.Blockly.Categories.After_Purchase}),meta:()=>({display_name:(0,i.kg)("Restart trading conditions"),description:(0,i.kg)("Here is where you can decide if your bot should continue trading.")}),onchange(e){(e.type===window.Blockly.Events.BLOCK_CHANGE||e.type===window.Blockly.Events.BLOCK_DRAG&&!e.isStart)&&this.isCollapsed()&&(0,a.At)(this)},customContextMenu(e){(0,a.xy)(e)}},window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase=e=>{var t,o,i,a,l,n,r,s,c,u;let d=window.Blockly.JavaScript.javascriptGenerator.statementToCode(e,"AFTERPURCHASE_STACK"),p=(null==(o=e.workspace)||null==(t=o.getAllBlocks)?void 0:t.call(o))??(null==(a=window.Blockly.derivWorkspace)||null==(i=a.getAllBlocks)?void 0:i.call(a))??[],y=p.some(e=>String(e.type||"").startsWith("king_fisher_")),w=p.some(e=>"king_fisher_restart_trade"===e.type),k=e=>String(e??"").trim().toLowerCase().replace(/[\s_-]+/g," "),g=(null==(s=e.workspace)||null==(r=s.getVariableMap)||null==(n=r.call(s))||null==(l=n.getVariables)?void 0:l.call(n))??[],B=e=>{let t=k(e),o=g.find(t=>t.name===e)||g.find(e=>k(e.name)===t);return o?window.Blockly.JavaScript.variableDB_.getName(o.getId(),window.Blockly.Variables.CATEGORY_NAME):null},h=p.find(e=>"trade_definition_tradeoptions"===e.type),m=null==h||null==(c=h.getInputTargetBlock)?void 0:c.call(h,"PREDICTION"),_=Number(null==m||null==(u=m.getFieldValue)?void 0:u.call(m,"NUM")),v=y&&(2===_||7===_),T=B("stake"),S=B("base stake"),f=B("martingale"),E=v&&T&&S?`
         // Over 2 and Under 7 keep the recovered martingale stake for three
         // additional trades after the recovery trade wins. A new loss starts
         // a new recovery and replaces the carried stake.
@@ -116,19 +116,19 @@
                 } else {
                     kingFisherRecoveryCarryWins -= 1;
                 }
-                ${g} = kingFisherRecoveryCarryWins > 0
+                ${T} = kingFisherRecoveryCarryWins > 0
                     ? kingFisherRecoveryStake
-                    : ${B};
+                    : ${S};
                 if (kingFisherRecoveryCarryWins === 0) kingFisherRecoveryStake = 0;
             } else {
-                ${g} = ${B};
+                ${T} = ${S};
             }
         } else {
-            kingFisherRecoveryStake = Number(${g}) > 0
-                ? Number(${g})
-                : Number(${B});
+            kingFisherRecoveryStake = Number(${T}) > 0
+                ? Number(${T})
+                : Number(${S});
             kingFisherRecoveryCarryWins = 0;
-        }`:"",_=c&&g?`var kingFisherSettledStake = Number(${g});`:"",v=c&&g&&B&&h?`
+        }`:"",A=y&&T?`var kingFisherSettledStake = Number(${T});`:"",C=y&&T&&S&&f?`
         /*
          * King Fisher owns the next purchase stake at settlement time. The
          * XML result blocks remain visible/editable in the workspace, while
@@ -136,12 +136,12 @@
          * the configured multiplier into the following real contract.
          * Over 2 and Under 7 retain their recovery-win carry logic below.
          */
-        if (!Bot.isResult("win") && !(${k?"true":"false"}) &&
-            (!(Number(${g}) > Number(kingFisherSettledStake) && Number(kingFisherSettledStake) > 0))) {
-            ${g} = Number(kingFisherSettledStake) > 0
-                ? Number(kingFisherSettledStake) * Number(${h})
-                : Number(${B}) * Number(${h});
-        }`:"",T="";if(c&&!u){let e=s.find(e=>{var t;return"variables_get"===e.type&&(null==(t=e.getFieldValue)?void 0:t.call(e,"VAR"))==="take profit"}),t=s.find(e=>{var t;return"variables_get"===e.type&&(null==(t=e.getFieldValue)?void 0:t.call(e,"VAR"))==="stop loss"}),o=e?window.Blockly.JavaScript.javascriptGenerator.forBlock.variables_get(e)[0]:"0",i=t?window.Blockly.JavaScript.javascriptGenerator.forBlock.variables_get(t)[0]:"0";T=`
+        if (!Bot.isResult("win") && !(${v?"true":"false"}) &&
+            (!(Number(${T}) > Number(kingFisherSettledStake) && Number(kingFisherSettledStake) > 0))) {
+            ${T} = Number(kingFisherSettledStake) > 0
+                ? Number(kingFisherSettledStake) * Number(${f})
+                : Number(${S}) * Number(${f});
+        }`:"",I="";if(y&&!w){let e=p.find(e=>{var t,o,i,a,l;return"variables_get"===e.type&&"take profit"===k((null==(i=e.getField)||null==(o=i.call(e,"VAR"))||null==(t=o.getText)?void 0:t.call(o))||(null==(a=g.find(t=>{var o;return t.getId()===(null==(o=e.getFieldValue)?void 0:o.call(e,"VAR"))}))?void 0:a.name)||(null==(l=e.getFieldValue)?void 0:l.call(e,"VAR")))}),t=p.find(e=>{var t,o,i,a,l;return"variables_get"===e.type&&"stop loss"===k((null==(i=e.getField)||null==(o=i.call(e,"VAR"))||null==(t=o.getText)?void 0:t.call(o))||(null==(a=g.find(t=>{var o;return t.getId()===(null==(o=e.getFieldValue)?void 0:o.call(e,"VAR"))}))?void 0:a.name)||(null==(l=e.getFieldValue)?void 0:l.call(e,"VAR")))}),o=e?window.Blockly.JavaScript.javascriptGenerator.forBlock.variables_get(e)[0]:"0",i=t?window.Blockly.JavaScript.javascriptGenerator.forBlock.variables_get(t)[0]:"0";I=`
         if (Number(${o}) > 0 && Bot.getTotalProfit(false) >= Number(${o})) {
             if (typeof Bot.emitJournalSignal === "function") Bot.emitJournalSignal({ type: "WIN", label: "TAKE PROFIT HIT", detail: "Keep trading with the best — TP reached" });
             if (typeof Bot.requestKingFisherRescan === "function") Bot.requestKingFisherRescan({ reason: "take-profit", profit: Bot.getTotalProfit(false) });
@@ -151,15 +151,15 @@
             if (typeof Bot.emitJournalSignal === "function") Bot.emitJournalSignal({ type: "LOSS", label: "STOP LOSS HIT", detail: "Trading stopped at the configured limit" });
             if (typeof Bot.requestKingFisherRescan === "function") Bot.requestKingFisherRescan({ reason: "stop-loss", profit: Bot.getTotalProfit(false) });
             return false;
-        }`}return`${k&&g&&B?"var kingFisherRecoveryStake = 0; var kingFisherRecoveryCarryWins = 0;":""}
+        }`}return`${v&&T&&S?"var kingFisherRecoveryStake = 0; var kingFisherRecoveryCarryWins = 0;":""}
     BinaryBotPrivateAfterPurchase = function BinaryBotPrivateAfterPurchase() {
         Bot.highlightBlock('${e.id}');
-        ${_}
-        ${r}
-        ${T}
-        ${v}
-        ${m}
-        ${c?'if (typeof Bot.shouldRescanKingFisher === "function" && Bot.shouldRescanKingFisher()) return false; Bot.isTradeAgain(true); return true;':"Bot.isTradeAgain(false); return false;"}
+        ${A}
+        ${d}
+        ${I}
+        ${C}
+        ${E}
+        ${y?'if (typeof Bot.shouldRescanKingFisher === "function" && Bot.shouldRescanKingFisher()) return false; Bot.isTradeAgain(true); return true;':"Bot.isTradeAgain(false); return false;"}
     };`},window.Blockly.Blocks.after_purchase_profit={init(){this.jsonInit(this.definition())},definition:()=>({message0:"%1 %2 %3",message1:"%1",message2:"%1",args0:[{type:"field_image",src:l.JN,width:25,height:25,alt:"F"},{type:"field_label",text:(0,i.kg)("4. Restart trading conditions (with profit tracking)"),class:"blocklyTextRootBlockHeader"},{type:"input_dummy"}],args1:[{type:"input_statement",name:"PROFIT_ACTIONS"}],args2:[{type:"field_image",src:" ",width:380,height:10}],colour:window.Blockly.Colours.RootBlock.colour,colourSecondary:window.Blockly.Colours.RootBlock.colourSecondary,colourTertiary:window.Blockly.Colours.RootBlock.colourTertiary,tooltip:(0,i.kg)("Get the last trade information and result, track profit, then trade again."),category:window.Blockly.Categories.After_Purchase}),meta:()=>({display_name:(0,i.kg)("Restart trading conditions (with profit tracking)"),description:(0,i.kg)("Here you can run profit-tracking actions and decide if your bot should continue trading.")}),onchange(e){(e.type===window.Blockly.Events.BLOCK_CHANGE||e.type===window.Blockly.Events.BLOCK_DRAG&&!e.isStart)&&this.isCollapsed()&&(0,a.At)(this)},customContextMenu(e){(0,a.xy)(e)}},window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase_profit=e=>{let t=window.Blockly.JavaScript.javascriptGenerator.statementToCode(e,"PROFIT_ACTIONS");return`
     BinaryBotPrivateAfterPurchase = function BinaryBotPrivateAfterPurchase() {
         Bot.highlightBlock('${e.id}');

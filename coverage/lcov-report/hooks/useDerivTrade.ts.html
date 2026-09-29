@@ -23,9 +23,9 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">19.77% </span>
+                <span class="strong">19.92% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>106/536</span>
+                <span class='fraction'>107/537</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">19.77% </span>
+                <span class="strong">19.92% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>106/536</span>
+                <span class='fraction'>107/537</span>
             </div>
         
             
@@ -599,7 +599,9 @@
 <a name='L534'></a><a href='#L534'>534</a>
 <a name='L535'></a><a href='#L535'>535</a>
 <a name='L536'></a><a href='#L536'>536</a>
-<a name='L537'></a><a href='#L537'>537</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
+<a name='L537'></a><a href='#L537'>537</a>
+<a name='L538'></a><a href='#L538'>538</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -1146,6 +1148,7 @@ import { publishMasterTrade, getMasterSource, createTradeKey } from '@/utils/tra
 import { observer } from '@/external/bot-skeleton/utils/observer';
 import {
     isFastExecutionEnabled,
+    isFastExecutionEnabledForContext,
     recordPhase,
     recordTick,
     startPingMonitor,
@@ -1500,7 +1503,7 @@ export function buildProposalRequest(params: BuyParams, fallbackCurrency = 'USD'
 <span class="cstat-no" title="statement not covered" >                throw new Error('Proposal failed — no proposal ID returned');</span>
 <span class="cstat-no" title="statement not covered" >            }</span>
 <span class="cstat-no" title="statement not covered" >            // Record proposal round-trip time as evalToBuy phase</span>
-<span class="cstat-no" title="statement not covered" >            if (isFastExecutionEnabled()) {</span>
+<span class="cstat-no" title="statement not covered" >            if (isFastExecutionEnabledForContext()) {</span>
 <span class="cstat-no" title="statement not covered" >                recordPhase('evalToBuy', Math.round(performance.now() - t0));</span>
 <span class="cstat-no" title="statement not covered" >            }</span>
 <span class="cstat-no" title="statement not covered" ></span>
@@ -1538,7 +1541,7 @@ export function buildProposalRequest(params: BuyParams, fallbackCurrency = 'USD'
 <span class="cstat-no" title="statement not covered" >            if (buyRes?.error) {</span>
 <span class="cstat-no" title="statement not covered" >                throw buyRes.error;</span>
 <span class="cstat-no" title="statement not covered" >            }</span>
-<span class="cstat-no" title="statement not covered" >            if (isFastExecutionEnabled()) {</span>
+<span class="cstat-no" title="statement not covered" >            if (isFastExecutionEnabledForContext()) {</span>
 <span class="cstat-no" title="statement not covered" >                recordPhase('buyToResponse', Math.round(performance.now() - t1));</span>
 <span class="cstat-no" title="statement not covered" >            }</span>
 <span class="cstat-no" title="statement not covered" ></span>
@@ -1641,13 +1644,13 @@ export function buildProposalRequest(params: BuyParams, fallbackCurrency = 'USD'
 <span class="cstat-no" title="statement not covered" >                            });</span>
 <span class="cstat-no" title="statement not covered" >                    };</span>
 <span class="cstat-no" title="statement not covered" ></span>
-<span class="cstat-no" title="statement not covered" >                    if (attempt === 0 &amp;&amp; isFastExecutionEnabled()) {</span>
-<span class="cstat-no" title="statement not covered" >                        // Keep Fast mode non-blocking, but still use the same</span>
-<span class="cstat-no" title="statement not covered" >                        // retrying subscription path as normal execution.</span>
-<span class="cstat-no" title="statement not covered" >                        requestAnimationFrame(request);</span>
-<span class="cstat-no" title="statement not covered" >                    } else {</span>
-<span class="cstat-no" title="statement not covered" >                        request();</span>
-<span class="cstat-no" title="statement not covered" >                    }</span>
+<span class="cstat-no" title="statement not covered" >                    // Fast mode is already non-blocking because the</span>
+<span class="cstat-no" title="statement not covered" >                    // subscription request is not awaited. Starting it</span>
+<span class="cstat-no" title="statement not covered" >                    // immediately matters on one-tick contracts: an</span>
+<span class="cstat-no" title="statement not covered" >                    // animation-frame defer can miss the next settlement</span>
+<span class="cstat-no" title="statement not covered" >                    // tick and makes the after-purchase path look slower</span>
+<span class="cstat-no" title="statement not covered" >                    // than the buy path.</span>
+<span class="cstat-no" title="statement not covered" >                    request();</span>
 <span class="cstat-no" title="statement not covered" >                };</span>
 <span class="cstat-no" title="statement not covered" >                requestSettlementSubscription();</span>
 <span class="cstat-no" title="statement not covered" >            }</span>
@@ -1678,7 +1681,7 @@ export function buildProposalRequest(params: BuyParams, fallbackCurrency = 'USD'
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-09-17T15:05:41.805Z
+                at 2026-09-29T22:38:49.572Z
             </div>
         <script src="../prettify.js"></script>
         <script>

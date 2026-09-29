@@ -23,16 +23,16 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">54.41% </span>
+                <span class="strong">53.4% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>234/430</span>
+                <span class='fraction'>235/440</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">78.84% </span>
+                <span class="strong">73.91% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>41/52</span>
+                <span class='fraction'>34/46</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">54.41% </span>
+                <span class="strong">53.4% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>234/430</span>
+                <span class='fraction'>235/440</span>
             </div>
         
             
@@ -493,7 +493,17 @@
 <a name='L428'></a><a href='#L428'>428</a>
 <a name='L429'></a><a href='#L429'>429</a>
 <a name='L430'></a><a href='#L430'>430</a>
-<a name='L431'></a><a href='#L431'>431</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
+<a name='L431'></a><a href='#L431'>431</a>
+<a name='L432'></a><a href='#L432'>432</a>
+<a name='L433'></a><a href='#L433'>433</a>
+<a name='L434'></a><a href='#L434'>434</a>
+<a name='L435'></a><a href='#L435'>435</a>
+<a name='L436'></a><a href='#L436'>436</a>
+<a name='L437'></a><a href='#L437'>437</a>
+<a name='L438'></a><a href='#L438'>438</a>
+<a name='L439'></a><a href='#L439'>439</a>
+<a name='L440'></a><a href='#L440'>440</a>
+<a name='L441'></a><a href='#L441'>441</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -644,8 +654,6 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-yes">3x</span>
@@ -709,7 +717,17 @@
 <span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-yes">3x</span>
-<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-yes">3x</span>
@@ -737,6 +755,8 @@
 <span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">4x</span>
+<span class="cline-any cline-yes">4x</span>
 <span class="cline-any cline-yes">4x</span>
 <span class="cline-any cline-yes">4x</span>
 <span class="cline-any cline-yes">4x</span>
@@ -1065,16 +1085,14 @@ export function selectAutoBotMarketsForExecution(
 &nbsp;
 <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >export function isValidatedAutoBotEntry(</span></span>
 <span class="cstat-no" title="statement not covered" >    candidate: AutoBotMarketCandidate,</span>
-<span class="cstat-no" title="statement not covered" >    lossStreak = 0,</span>
+<span class="cstat-no" title="statement not covered" >    _lossStreak = 0,</span>
 <span class="cstat-no" title="statement not covered" >): boolean {</span>
-<span class="cstat-no" title="statement not covered" >    if (!candidate.qualifies || candidate.trade.entryFrame !== 'matched') return false;</span>
-<span class="cstat-no" title="statement not covered" ></span>
-<span class="cstat-no" title="statement not covered" >    // A loss must buy a stronger setup, not simply repeat the last signal with</span>
-<span class="cstat-no" title="statement not covered" >    // a larger stake. Two consecutive losses require a strong signal as well</span>
-<span class="cstat-no" title="statement not covered" >    // as the higher score threshold.</span>
-<span class="cstat-no" title="statement not covered" >    const minimumScore = lossStreak &gt;= 2 ? 72 : lossStreak === 1 ? 62 : 50;</span>
-<span class="cstat-no" title="statement not covered" >    return candidate.score &gt;= minimumScore</span>
-<span class="cstat-no" title="statement not covered" >        &amp;&amp; (lossStreak &lt; 2 || candidate.trade.signal === 'strong');</span>
+<span class="cstat-no" title="statement not covered" >    // A live strategy signal is already the entry decision. Do not add a</span>
+<span class="cstat-no" title="statement not covered" >    // second confirmation/score gate here: it made bots display NO TRADE</span>
+<span class="cstat-no" title="statement not covered" >    // while one of their valid entry rules was already true.</span>
+<span class="cstat-no" title="statement not covered" >    return candidate.qualifies</span>
+<span class="cstat-no" title="statement not covered" >        &amp;&amp; candidate.trade.shouldTrade === true</span>
+<span class="cstat-no" title="statement not covered" >        &amp;&amp; candidate.trade.entryFrame === 'matched';</span>
 <span class="cstat-no" title="statement not covered" >}</span>
 &nbsp;
 export function isAutoBotMarketStopped(
@@ -1129,32 +1147,42 @@ const chooseBestTicks = (
     // Auto Bots are tick-wise. The previous implementation selected a
     // duration from 1–4 ticks while scanning, which made the displayed
     // probability and the actual contract duration disagree.
-    const sample = digits.slice(-Math.max(20, Math.min(1000, 1000)));
-    const priceSample = prices.slice(-Math.max(20, Math.min(1000, 1000)));
-    const trade = bot.pickTrade(sample, priceSample, recoveryMode, cycleConfig);
-    const previousSample = sample.slice(0, -1);
-    const previousPriceSample = priceSample.slice(0, -1);
-    const previousTrade = previousSample.length &gt;= 20
-        ? bot.pickTrade(previousSample, previousPriceSample, recoveryMode, cycleConfig)
-        : null;
-    const sameEntryFrame = Boolean(
-        previousTrade
-        &amp;&amp; previousTrade.contract === trade.contract
-        &amp;&amp; Number(previousTrade.barrier<span class="branch-0 cbranch-no" title="branch not covered" > ?? null)</span> === Number(trade.barrier<span class="branch-0 cbranch-no" title="branch not covered" > ?? null)</span>
-        &amp;&amp; previousTrade.shouldTrade !== false
-        &amp;&amp; trade.shouldTrade !== false,
-    );
+    const sample = (Array.isArray(digits) ? digits <span class="branch-0 cbranch-no" title="branch not covered" >: [])</span>
+        .filter(Number.isFinite)
+        .slice(-1000);
+    const priceSample = (Array.isArray(prices) ? prices <span class="branch-0 cbranch-no" title="branch not covered" >: [])</span>
+        .filter(Number.isFinite)
+        .slice(-1000);
+    let trade: AutoBotTrade;
+    try {
+        trade = bot.pickTrade(sample, priceSample, recoveryMode, cycleConfig);
+    } <span class="branch-0 cbranch-no" title="branch not covered" >catch (error) {</span>
+<span class="cstat-no" title="statement not covered" >        // A malformed/stale market payload must disable this market only. One</span>
+<span class="cstat-no" title="statement not covered" >        // directional card must never take down the Auto Trades page.</span>
+<span class="cstat-no" title="statement not covered" >        trade = {</span>
+<span class="cstat-no" title="statement not covered" >            contract: 'CALL',</span>
+<span class="cstat-no" title="statement not covered" >            barrier: null,</span>
+<span class="cstat-no" title="statement not covered" >            shouldTrade: false,</span>
+<span class="cstat-no" title="statement not covered" >            score: 0,</span>
+<span class="cstat-no" title="statement not covered" >            reason: `strategy unavailable: ${error instanceof Error ? error.message : 'invalid market data'}`,</span>
+<span class="cstat-no" title="statement not covered" >            state: 'NO TRADE',</span>
+<span class="cstat-no" title="statement not covered" >        };</span>
+<span class="cstat-no" title="statement not covered" >    }</span>
+    // The latest tick is the entry frame. Requiring the preceding tick to
+    // repeat the same signal caused valid one-tick opportunities to be shown
+    // as NO TRADE.
+    const hasEntry = trade.shouldTrade === true;
     const confirmedTrade = {
         ...trade,
-        shouldTrade: sameEntryFrame,
-        entryFrame: sameEntryFrame ? 'matched' as const : 'waiting' as const,
-        reason: `${trade.reason <span class="branch-0 cbranch-no" title="branch not covered" >? `${trade.reason} · ` </span>: ''}${sameEntryFrame ? '2-tick match' : 'waiting for 2-tick match'}`,
+        shouldTrade: hasEntry,
+        entryFrame: hasEntry ? 'matched' as const : 'waiting' as const,
+        reason: `${trade.reason <span class="branch-0 cbranch-no" title="branch not covered" >? `${trade.reason} · ` </span>: ''}${hasEntry ? 'live tick entry' : 'no valid entry'}`,
     };
     return {
         ticks: 1 as const,
         score: Number.isFinite(Number(confirmedTrade.score))
             ? Number(confirmedTrade.score)
-            : scoreTrade(confirmedTrade, sample) + (confirmedTrade.shouldTrade === false ? -100 : 0),
+            : scoreTrade(confirmedTrade, sample),
         trade: confirmedTrade,
     };
 };
@@ -1169,6 +1197,8 @@ export function scanAutoBotMarkets(
         .filter(snapshot =&gt;
             isSupportedAutoBotMarket(snapshot.symbol)
             &amp;&amp; snapshot.ready
+            &amp;&amp; Array.isArray(snapshot.digits)
+            &amp;&amp; Array.isArray(snapshot.prices)
             &amp;&amp; snapshot.digits.length &gt;= 20
         )
         .map(snapshot =&gt; {
@@ -1184,7 +1214,7 @@ export function scanAutoBotMarkets(
                 prices: snapshot.prices,
                 trade: selected.trade,
                 score: rawScore,
-                qualifies: selected.trade.shouldTrade !== false &amp;&amp; rawScore &gt;= 50,
+                qualifies: selected.trade.shouldTrade === true,
                 tickVersion: snapshot.tickVersion,
                 livePrice: snapshot.livePrice,
                 ticks: selected.ticks,
@@ -1360,7 +1390,7 @@ export function scanAutoBotMarkets(
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-09-17T15:06:20.827Z
+                at 2026-09-29T22:38:49.572Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

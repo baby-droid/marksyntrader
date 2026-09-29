@@ -15,7 +15,7 @@ const FREE_BOTS = [
   {
     id: 'ahmed-differ-over-under-cycle-v1',
     name: 'AHMED DIFFER OVER/UNDER CYCLE V1',
-    description: '🔁 DIFFERS → OVER 3 → OVER 2 → OVER 0 → OVER 1 → DIFFERS → UNDER 6 → UNDER 9 → UNDER 7 → UNDER 8, then repeats. Losses scan Even vs Odd and trade the stronger parity.',
+    description: '🔁 Scans the best market and cycles DIFFERS 9 → OVER 2 → OVER 3 → OVER 0 → OVER 1 → DIFFERS 9 → UNDER 6 → UNDER 7 → UNDER 8 → UNDER 9. A win advances the phase; a loss waits for Even/Odd parity recovery, then restarts the cycle.',
     category: 'Cycle', market: 'V50 1s', type: 'Multi-Strategy', prediction: '10-PHASE',
     xmlFile: '/bots/ahmed-differ-over-under-cycle-v1.xml',
     badge: 'DIFFER CYCLE', badgeColor: '#38bdf8', icon: '🔁', winRate: '—',
@@ -24,7 +24,7 @@ const FREE_BOTS = [
   {
     id: 'ahmed-differ-recovery-cycle-v2',
     name: 'AHMED DIFFER RECOVERY CYCLE V2',
-    description: '⚡ DIFFERS → UNDER 6 → UNDER 9 → UNDER 7 → UNDER 8 → DIFFERS → OVER 1 → OVER 2 → OVER 3, then repeats. Losses scan Even vs Odd and trade the stronger parity.',
+    description: '⚡ Cycles DIFFERS 9 → UNDER 6 → UNDER 9 → UNDER 7 → UNDER 8 → DIFFERS 9 → OVER 1 → OVER 2 → OVER 3. A win advances the phase; a loss waits for Even/Odd parity recovery, then restarts at DIFFERS.',
     category: 'Cycle', market: 'V25 1s', type: 'Multi-Strategy', prediction: '9-PHASE',
     xmlFile: '/bots/ahmed-differ-recovery-cycle-v2.xml',
     badge: 'RECOVERY V2', badgeColor: '#fb7185', icon: '⚡', winRate: '—',
@@ -42,7 +42,7 @@ const FREE_BOTS = [
   {
     id: 'ahmed-best-market-pair-cycle-v2',
     name: 'AHMED BEST MARKET PAIR CYCLE V2',
-    description: '🔎 Scans the best market, trades Over 2 + Over 3, then Under 6 + Under 7 in sequence. Losses scan Even vs Odd for recovery, with stake, martingale, TP and SL.',
+    description: '🔎 Scans the best market. Over 2 + Over 3 execute together only after a 10-tick high-digit bias and a 2–3 digit entry streak above both barriers. Under 7 + Under 6 execute together after a low-digit bias and a qualifying streak. Losses wait for Even/Odd recovery.',
     category: 'Scanner', market: 'Best market', type: 'Paired DIGIT', prediction: '20-TICK',
     xmlFile: '/bots/ahmed-best-market-pair-cycle-v2.xml',
     badge: 'PAIR CYCLE', badgeColor: '#a78bfa', icon: '🔎', winRate: '—',
@@ -56,6 +56,15 @@ const FREE_BOTS = [
     xmlFile: '/bots/ahmed-killer-bot-myth-v1.xml',
     badge: 'MYTH V1', badgeColor: '#f59e0b', icon: '👑', winRate: '—',
     theme: 'ahmed-myth', artwork: '/bot-art/ahmed-pairs.png', artworkPosition: 'side',
+  },
+  {
+    id: 'acc-flipper',
+    name: 'ACC FLIPPER',
+    description: '🤖 Scans the best market and waits for a 10-tick high/low bias plus a 2–3 digit entry streak before each contract. Cycles OVER 1 → OVER 2 → UNDER 8 → UNDER 7. A loss waits for Even/Odd recovery; a recovery win unlocks two separate OVER 3 wins before the main cycle resumes.',
+    category: 'Scanner', market: 'Best market', type: 'Multi-Strategy', prediction: 'O1 → O2 → U8 → U7',
+    xmlFile: '/bots/acc-flipper.xml',
+    badge: 'ACC FLIPPER', badgeColor: '#a78bfa', icon: '🤖', winRate: '—',
+    theme: 'acc-flipper', artwork: '/bot-art/ahmed-cycle.png', artworkPosition: 'banner',
   },
   {
     id: 'under-cycle-auto',
