@@ -193,7 +193,6 @@ export const ToolboxItems = () =>
                     </Value>
                 </Block>
                 <Block type='king_fisher_parity_purchase' />
-                <Block type='king_fisher_parity_sequence_purchase' />
             </Category>
 
             <Category id='analysis' name={localize('Analysis')}>

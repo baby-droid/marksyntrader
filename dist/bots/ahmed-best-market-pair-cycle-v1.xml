@@ -73,7 +73,7 @@
           <statement name="DO8"><block type="multiple_purchase"><field name="PURCHASE_1">DIGITUNDER</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/><field name="PREDICTION">8</field></block></statement>
           <value name="IF9"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get"><field name="VAR" id="abmp1_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">9</field></block></value></block></value>
           <statement name="DO9"><block type="multiple_purchase"><field name="PURCHASE_1">DIGITUNDER</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/><field name="PREDICTION">9</field></block></statement>
-           <statement name="ELSE"><block type="king_fisher_parity_sequence_purchase" id="abmp1_parity_recovery"/></statement>
+          <statement name="ELSE"><block type="king_fisher_parity_purchase" id="abmp1_parity_recovery"/></statement>
         </block></next>
       </block>
     </statement>

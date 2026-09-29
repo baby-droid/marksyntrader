@@ -57,7 +57,7 @@
           <statement name="DO0"><block type="king_fisher_pair_purchase" id="abmp2_over_pair"><field name="CONTRACT_1">DIGITOVER</field><field name="PREDICTION_1">2</field><field name="CONTRACT_2">DIGITOVER</field><field name="PREDICTION_2">3</field></block></statement>
           <value name="IF1"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="abmp2_phase_get1"><field name="VAR" id="abmp2_phase">recovery_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">1</field></block></value></block></value>
           <statement name="DO1"><block type="king_fisher_pair_purchase" id="abmp2_under_pair"><field name="CONTRACT_1">DIGITUNDER</field><field name="PREDICTION_1">6</field><field name="CONTRACT_2">DIGITUNDER</field><field name="PREDICTION_2">7</field></block></statement>
-          <statement name="ELSE"><block type="king_fisher_parity_sequence_purchase" id="abmp2_parity_recovery"/></statement>
+          <statement name="ELSE"><block type="king_fisher_parity_purchase" id="abmp2_parity_recovery"/></statement>
         </block></next>
       </block>
     </statement>

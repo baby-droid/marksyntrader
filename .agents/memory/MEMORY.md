@@ -79,4 +79,3 @@
 - [Interpreter-safe generated code](interpreter-safe-generated-code.md) — Blockly interpreter code cannot assume browser globals or Number static helpers; use primitive checks and host bridge methods.
 - [Fast execution scope](fast-execution-scope.md) — shared Fast behavior is limited to Bot Builder and Scalper Bots; other surfaces keep their own speed modes.
 - [King Fisher XML fallback](king-fisher-loader-fallback.md) — unknown Blockly blocks must match their XML connection shape; mixed output and statement connections make imports fail.
-- [Featured parity isolation](featured-bot-recovery-isolation.md) — keep sequence recovery separate from the generic dominant-parity block used elsewhere.
