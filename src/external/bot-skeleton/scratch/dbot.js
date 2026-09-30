@@ -301,55 +301,63 @@ class DBot {
                     ?.find(block => block.type === 'trade_definition_contracttype');
                 if (marketBlock && contractBlock) {
                     const contractType = contractBlock.getFieldValue('TYPE_LIST');
-                    const direction = contractType === 'DIGITUNDER' ? 'ABOVE' : 'BELOW';
-                    const tradeOptionsBlock = this.workspace?.getAllBlocks?.(false)
-                        ?.find(block => block.type === 'trade_definition_tradeoptions');
-                    const predictionBlock = tradeOptionsBlock?.getInputTargetBlock?.('PREDICTION');
-                    const barrier = Number(predictionBlock?.getFieldValue?.('NUM'));
-                    const hasValidBarrier = Number.isInteger(barrier) && barrier >= 0 && barrier <= 9;
-                    let result = null;
-                    if (!hasValidBarrier) {
+                    if (contractType !== 'DIGITOVER' && contractType !== 'DIGITUNDER') {
                         dispatchBrowserEvent('journal:signal', {
                             type: 'SCAN',
-                            label: 'BEST MARKET SCAN FAILED',
-                            detail: 'The King Fisher contract must have a fixed digit barrier from 0 to 9. Using the manually selected market.',
+                            label: 'BEST MARKET SCAN SKIPPED',
+                            detail: 'This bot uses a mixed or unsupported contract type. The single-barrier scanner cannot score its phases accurately, so the manually selected market is kept.',
                         });
                     } else {
-                        try {
-                            result = await scanKingFisherMarket(direction, barrier);
-                        } catch (scanError) {
+                        const direction = contractType === 'DIGITUNDER' ? 'ABOVE' : 'BELOW';
+                        const tradeOptionsBlock = this.workspace?.getAllBlocks?.(false)
+                            ?.find(block => block.type === 'trade_definition_tradeoptions');
+                        const predictionBlock = tradeOptionsBlock?.getInputTargetBlock?.('PREDICTION');
+                        const barrier = Number(predictionBlock?.getFieldValue?.('NUM'));
+                        const hasValidBarrier = Number.isInteger(barrier) && barrier >= 0 && barrier <= 9;
+                        let result = null;
+                        if (!hasValidBarrier) {
                             dispatchBrowserEvent('journal:signal', {
                                 type: 'SCAN',
                                 label: 'BEST MARKET SCAN FAILED',
-                                detail: scanError?.message || 'Using the manually selected King Fisher market.',
+                                detail: 'The King Fisher contract must have a fixed digit barrier from 0 to 9. Using the manually selected market.',
+                            });
+                        } else {
+                            try {
+                                result = await scanKingFisherMarket(direction, barrier);
+                            } catch (scanError) {
+                                dispatchBrowserEvent('journal:signal', {
+                                    type: 'SCAN',
+                                    label: 'BEST MARKET SCAN FAILED',
+                                    detail: scanError?.message || 'Using the manually selected King Fisher market.',
+                                });
+                            }
+                        }
+                        if (result) {
+                            marketBlock.setFieldValue(result.market, 'MARKET_LIST');
+                            marketBlock.setFieldValue(result.submarket, 'SUBMARKET_LIST');
+                            marketBlock.setFieldValue(result.symbol, 'SYMBOL_LIST');
+                            const detail = {
+                                symbol: result.symbol,
+                                label: result.label,
+                                group: result.group,
+                                lastDigit: result.lastDigit,
+                                score: result.score,
+                                direction,
+                                barrier,
+                            };
+                            dispatchBrowserEvent('king-fisher:best-market', detail);
+                            dispatchBrowserEvent('journal:signal', {
+                                type: 'SCAN',
+                                label: 'BEST MARKET SELECTED',
+                                detail: `${result.label} · ${result.group} · last digit ${result.lastDigit ?? '—'} · score ${result.score}`,
+                            });
+                        } else {
+                            dispatchBrowserEvent('journal:signal', {
+                                type: 'SCAN',
+                                label: 'BEST MARKET UNAVAILABLE',
+                                detail: 'Using the manually selected King Fisher market.',
                             });
                         }
-                    }
-                    if (result) {
-                        marketBlock.setFieldValue(result.market, 'MARKET_LIST');
-                        marketBlock.setFieldValue(result.submarket, 'SUBMARKET_LIST');
-                        marketBlock.setFieldValue(result.symbol, 'SYMBOL_LIST');
-                        const detail = {
-                            symbol: result.symbol,
-                            label: result.label,
-                            group: result.group,
-                            lastDigit: result.lastDigit,
-                            score: result.score,
-                            direction,
-                            barrier,
-                        };
-                        dispatchBrowserEvent('king-fisher:best-market', detail);
-                        dispatchBrowserEvent('journal:signal', {
-                            type: 'SCAN',
-                            label: 'BEST MARKET SELECTED',
-                            detail: `${result.label} · ${result.group} · last digit ${result.lastDigit ?? '—'} · score ${result.score}`,
-                        });
-                    } else {
-                        dispatchBrowserEvent('journal:signal', {
-                            type: 'SCAN',
-                            label: 'BEST MARKET UNAVAILABLE',
-                            detail: 'Using the manually selected King Fisher market.',
-                        });
                     }
                 }
             }

@@ -1,11 +1,15 @@
+import { useEffect, useState } from 'react';
 import { Activity, AlertTriangle, ArrowUpRight, BarChart3, CircleHelp, Pause, Play, Radio, ShieldCheck, Square, Waves } from 'lucide-react';
+import { formatMoney, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
+import { AUTO_LAB_CONTRACT_TYPES, AUTO_LAB_MODES, type AutoLabContractChoice, type AutoLabMode } from './auto-lab-engine';
 import './auto-lab-view.scss';
 
-export type AutoLabMode = 'Multimarket' | 'RC Even/Odd' | 'RC Over4/Under5' | '%Even/Odd' | 'Matches/Differs';
+export type { AutoLabMode } from './auto-lab-engine';
 export type AutoLabStatus = 'idle' | 'connecting' | 'scanning' | 'running' | 'paused' | 'stopped' | 'risk-stopped';
 
 export type AutoLabSettings = {
   marketSelection: string;
+  contractType: AutoLabContractChoice;
   stake: number;
   martingaleMode: 'normal' | 'split';
   multiplier: number;
@@ -16,6 +20,8 @@ export type AutoLabSettings = {
   thresholdPercent: number;
   barrier: number;
   requiredStreak: number;
+  virtualLossesRequired: number;
+  virtualWinsRequired: number;
 };
 
 export type AutoLabAccount = {
@@ -41,6 +47,9 @@ export type AutoLabSession = {
   pnl: number;
   currentStake: number;
   lossLevel: number;
+  virtualWins: number;
+  virtualLosses: number;
+  virtualGatePhase: 'losses' | 'wins' | 'armed';
 };
 
 export type AutoLabMarket = {
@@ -79,13 +88,14 @@ export type AutoLabViewProps = {
   liveAcknowledged: boolean;
   onLiveAcknowledgedChange: (acknowledged: boolean) => void;
   canStart: boolean;
+  inputsDisabled: boolean;
   onStart: () => void;
   onPause: () => void;
   onStop: () => void;
   message: string;
 };
 
-const MODES: AutoLabMode[] = ['Multimarket', 'RC Even/Odd', 'RC Over4/Under5', '%Even/Odd', 'Matches/Differs'];
+const MODES = AUTO_LAB_MODES;
 
 const MODE_NOTES: Record<AutoLabMode, string> = {
   Multimarket: 'Scan authorized synthetic markets for the strongest available setup.',
@@ -93,6 +103,7 @@ const MODE_NOTES: Record<AutoLabMode, string> = {
   'RC Over4/Under5': 'Compare digit pressure around the 4 / 5 boundary.',
   '%Even/Odd': 'Evaluate the observed even-to-odd distribution.',
   'Matches/Differs': 'Track digit concentration and repetition conditions.',
+  'Rise/Fall': 'Use consecutive quote movement for CALL and PUT entries.',
 };
 
 const statusLabel: Record<AutoLabStatus, string> = {
@@ -115,15 +126,26 @@ const statusTone: Record<AutoLabStatus, string> = {
   'risk-stopped': 'bad',
 };
 
-const money = (value: number | null | undefined, currency: string) => {
+const money = (value: number | null | undefined) => {
   if (value == null || !Number.isFinite(value)) return '—';
-  const formatted = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
-  return `${currency ? `${currency} ` : ''}${formatted}`;
+  return formatMoney(value);
 };
+
+const displayAmount = (value: number | null | undefined, currency: string) => (
+  value == null || !Number.isFinite(value)
+    ? '—'
+    : `${new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)} ${currency}`
+);
 
 const display = (value: number | null | undefined, digits = 2) => (
   value == null || !Number.isFinite(value) ? '—' : value.toFixed(digits)
 );
+
+const useDisplayCurrency = () => {
+  const [, setRevision] = useState(0);
+  useEffect(() => subscribeCurrency(() => setRevision(value => value + 1)), []);
+  return getDisplayCurrency();
+};
 
 const NumericField = ({
   label,
@@ -134,6 +156,7 @@ const NumericField = ({
   min = 0,
   max,
   wide = false,
+  disabled = false,
 }: {
   label: string;
   name: keyof AutoLabSettings;
@@ -143,6 +166,7 @@ const NumericField = ({
   min?: number;
   max?: number;
   wide?: boolean;
+  disabled?: boolean;
 }) => (
   <label className={`lab-field${wide ? ' lab-field--wide' : ''}`}>
     {label}
@@ -154,6 +178,7 @@ const NumericField = ({
       min={min}
       max={max}
       step={step}
+      disabled={disabled}
       onChange={event => {
         if (event.target.value === '') return;
         const next = Number(event.target.value);
@@ -178,14 +203,17 @@ const AutoLabView = ({
   liveAcknowledged,
   onLiveAcknowledgedChange,
   canStart,
+  inputsDisabled,
   onStart,
   onPause,
   onStop,
   message,
 }: AutoLabViewProps) => {
+  const displayCurrency = useDisplayCurrency();
   const isRealAccount = account.isVirtual === false;
   const readyToRun = canStart && (!isRealAccount || liveAcknowledged);
   const isActive = status === 'running' || status === 'scanning' || status === 'connecting';
+  const settingsLocked = inputsDisabled || status === 'paused';
   const hasSession = session.trades > 0;
   const winRate = hasSession ? (session.wins / session.trades) * 100 : null;
   const accountMode = account.isVirtual == null ? 'Account type unavailable' : account.isVirtual ? 'Demo account' : 'Real account';
@@ -225,6 +253,7 @@ const AutoLabView = ({
                     key={item}
                     aria-pressed={mode === item}
                     data-testid={`button-mode-${index}`}
+                    disabled={settingsLocked}
                     onClick={() => onModeChange(item)}
                   >
                     <span>{item}</span><span className="lab-mode__index">0{index + 1}</span>
@@ -246,6 +275,7 @@ const AutoLabView = ({
                     aria-label="Market universe"
                     data-testid="select-market-selection"
                     value={settings.marketSelection}
+                    disabled={settingsLocked}
                     onChange={event => onSettingChange('marketSelection', event.target.value)}
                   >
                     <option value="ALL">All supplied markets</option>
@@ -254,10 +284,22 @@ const AutoLabView = ({
                     ))}
                   </select>
                 </label>
-                <NumericField label="Tick window" name="ticksWindow" value={settings.ticksWindow} onChange={onSettingChange} min={1} />
-                <NumericField label="Threshold %" name="thresholdPercent" value={settings.thresholdPercent} onChange={onSettingChange} min={0} max={100} step={0.1} />
-                <NumericField label="Barrier digit" name="barrier" value={settings.barrier} onChange={onSettingChange} min={0} max={9} />
-                <NumericField label="Required streak" name="requiredStreak" value={settings.requiredStreak} onChange={onSettingChange} min={1} />
+                <label className="lab-field lab-field--wide">Contract type
+                  <select
+                    aria-label="Contract type"
+                    data-testid="select-contract-type"
+                    value={settings.contractType}
+                    disabled={settingsLocked}
+                    onChange={event => onSettingChange('contractType', event.target.value)}
+                  >
+                    <option value="AUTO">Automatic for selected strategy</option>
+                    {AUTO_LAB_CONTRACT_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
+                  </select>
+                </label>
+                <NumericField label="Tick window" name="ticksWindow" value={settings.ticksWindow} onChange={onSettingChange} min={1} max={1500} disabled={settingsLocked} />
+                <NumericField label="Threshold %" name="thresholdPercent" value={settings.thresholdPercent} onChange={onSettingChange} min={50} max={100} step={0.1} disabled={settingsLocked} />
+                <NumericField label="Barrier digit" name="barrier" value={settings.barrier} onChange={onSettingChange} min={0} max={9} disabled={settingsLocked} />
+                <NumericField label="Required streak" name="requiredStreak" value={settings.requiredStreak} onChange={onSettingChange} min={1} max={100} disabled={settingsLocked} />
               </div>
             </section>
 
@@ -267,8 +309,8 @@ const AutoLabView = ({
                 <ShieldCheck size={17} color="var(--lab-mint)" aria-hidden="true" />
               </div>
               <div className="lab-field-grid">
-                <NumericField label="Base stake" name="stake" value={settings.stake} onChange={onSettingChange} step={0.01} />
-                <NumericField label="Multiplier" name="multiplier" value={settings.multiplier} onChange={onSettingChange} step={0.01} min={1} />
+                <NumericField label={`Base stake (${displayCurrency})`} name="stake" value={settings.stake} onChange={onSettingChange} step={0.01} min={0.01} disabled={settingsLocked} />
+                <NumericField label="Multiplier" name="multiplier" value={settings.multiplier} onChange={onSettingChange} step={0.01} min={1} max={10} disabled={settingsLocked} />
                 <label className="lab-field lab-field--wide">Martingale mode
                   <div className="lab-segment" role="group" aria-label="Martingale mode">
                     {(['normal', 'split'] as const).map(option => (
@@ -278,16 +320,19 @@ const AutoLabView = ({
                         className={settings.martingaleMode === option ? 'is-active' : ''}
                         aria-pressed={settings.martingaleMode === option}
                         data-testid={`button-martingale-${option}`}
+                        disabled={settingsLocked}
                         onClick={() => onSettingChange('martingaleMode', option)}
                       >{option}</button>
                     ))}
                   </div>
                 </label>
-                <NumericField label="Max recovery level" name="maxMartingaleLevel" value={settings.maxMartingaleLevel} onChange={onSettingChange} min={0} />
-                <NumericField label="Take profit" name="takeProfit" value={settings.takeProfit} onChange={onSettingChange} step={0.01} />
-                <NumericField label="Stop loss" name="stopLoss" value={settings.stopLoss} onChange={onSettingChange} step={0.01} />
+                <NumericField label="Max recovery level" name="maxMartingaleLevel" value={settings.maxMartingaleLevel} onChange={onSettingChange} min={0} max={20} disabled={settingsLocked} />
+                <NumericField label={`Take profit (${displayCurrency})`} name="takeProfit" value={settings.takeProfit} onChange={onSettingChange} step={0.01} disabled={settingsLocked} />
+                <NumericField label={`Stop loss (${displayCurrency})`} name="stopLoss" value={settings.stopLoss} onChange={onSettingChange} step={0.01} disabled={settingsLocked} />
+                <NumericField label="Virtual losses before run" name="virtualLossesRequired" value={settings.virtualLossesRequired} onChange={onSettingChange} min={0} max={20} disabled={settingsLocked} />
+                <NumericField label="Virtual wins before run" name="virtualWinsRequired" value={settings.virtualWinsRequired} onChange={onSettingChange} min={0} max={20} disabled={settingsLocked} />
               </div>
-              <p className="lab-help">Limits are evaluated by the connected strategy service.</p>
+              <p className="lab-help">Take profit and stop loss use actual settled P/L. Set either limit to 0 to disable it. The virtual gate does not place or report Deriv contracts.</p>
             </section>
           </section>
 
@@ -304,7 +349,7 @@ const AutoLabView = ({
                   </div>
                 </div>
                 <div className="lab-signal__confidence">
-                  <span>Confidence</span>
+                  <span>Setup score</span>
                   <strong data-testid="value-signal-confidence">{currentSignal.confidence == null ? '—' : `${display(currentSignal.confidence, 1)}%`}</strong>
                 </div>
               </div>
@@ -342,7 +387,7 @@ const AutoLabView = ({
             </section>
 
             <div className="lab-metrics" aria-label="Session performance">
-              <div className="lab-metric"><span className="lab-metric__label">Net P/L</span><strong className={`lab-metric__value ${session.pnl > 0 ? 'is-positive' : session.pnl < 0 ? 'is-negative' : ''}`} data-testid="value-session-pnl">{money(session.pnl, account.currency)}</strong></div>
+              <div className="lab-metric"><span className="lab-metric__label">Net P/L</span><strong className={`lab-metric__value ${session.pnl > 0 ? 'is-positive' : session.pnl < 0 ? 'is-negative' : ''}`} data-testid="value-session-pnl">{money(session.pnl)}</strong></div>
               <div className="lab-metric"><span className="lab-metric__label">Win rate</span><strong className="lab-metric__value" data-testid="value-win-rate">{winRate == null ? '—' : `${display(winRate, 1)}%`}</strong></div>
               <div className="lab-metric"><span className="lab-metric__label">Trades</span><strong className="lab-metric__value" data-testid="value-trade-count">{session.trades}</strong></div>
               <div className="lab-metric"><span className="lab-metric__label">W / L</span><strong className="lab-metric__value" data-testid="value-win-loss">{session.wins} / {session.losses}</strong></div>
@@ -404,7 +449,7 @@ const AutoLabView = ({
                 <span className={`lab-chip lab-chip--${connectionTone}`}>{accountMode}</span>
               </div>
               <dl className="lab-account">
-                <div className="lab-account__balance"><dt>Available balance</dt><dd data-testid="value-account-balance">{money(account.balance, account.currency)}</dd></div>
+                <div className="lab-account__balance"><dt>Available balance</dt><dd data-testid="value-account-balance">{money(account.balance)}</dd></div>
                 <dt>Login ID</dt><dd data-testid="value-account-login">{account.loginId || '—'}</dd>
                 <dt>Currency</dt><dd data-testid="value-account-currency">{account.currency || '—'}</dd>
                 <dt>Authorization</dt><dd>{account.authorized ? 'Authorized' : 'Not authorized'}</dd>
@@ -432,10 +477,11 @@ const AutoLabView = ({
                 <ShieldCheck size={16} color="var(--lab-amber)" aria-hidden="true" />
               </div>
               <dl className="lab-session-lines">
-                <div className="lab-session-line"><dt>Current stake</dt><dd data-testid="value-current-stake">{money(session.currentStake, account.currency)}</dd></div>
+                <div className="lab-session-line"><dt>Current stake</dt><dd data-testid="value-current-stake">{money(session.currentStake)}</dd></div>
                 <div className="lab-session-line"><dt>Recovery level</dt><dd data-testid="value-loss-level">{session.lossLevel}</dd></div>
-                <div className="lab-session-line"><dt>Take profit</dt><dd>{money(settings.takeProfit, account.currency)}</dd></div>
-                <div className="lab-session-line"><dt>Stop loss</dt><dd>{money(settings.stopLoss, account.currency)}</dd></div>
+                <div className="lab-session-line"><dt>Virtual gate</dt><dd>{session.virtualGatePhase === 'armed' ? 'Armed' : session.virtualGatePhase === 'losses' ? `${session.virtualLosses} / ${settings.virtualLossesRequired} losses` : `${session.virtualWins} / ${settings.virtualWinsRequired} wins`}</dd></div>
+                <div className="lab-session-line"><dt>Take profit</dt><dd>{displayAmount(settings.takeProfit, displayCurrency)}</dd></div>
+                <div className="lab-session-line"><dt>Stop loss</dt><dd>{displayAmount(settings.stopLoss, displayCurrency)}</dd></div>
                 <div className="lab-session-line"><dt>Max recovery</dt><dd>{settings.maxMartingaleLevel}</dd></div>
                 <div className="lab-session-line"><dt>Martingale</dt><dd>{settings.martingaleMode} · ×{display(settings.multiplier, 2)}</dd></div>
               </dl>
@@ -451,8 +497,8 @@ const AutoLabView = ({
                   {trades.map(trade => (
                     <div className={`lab-trade is-${trade.status.toLowerCase()}`} key={trade.id} data-testid={`row-trade-${trade.id}`}>
                       <span className="lab-trade__time">{trade.time || '—'}</span>
-                      <span className="lab-trade__contract"><strong>{trade.contract}</strong><small>{trade.market} · {money(trade.stake, account.currency)}</small></span>
-                      <span className="lab-trade__result"><strong>{trade.status === 'OPEN' ? 'OPEN' : money(trade.profit, account.currency)}</strong><small>{trade.status}</small></span>
+                      <span className="lab-trade__contract"><strong>{trade.contract}</strong><small>{trade.market} · {money(trade.stake)}</small></span>
+                      <span className="lab-trade__result"><strong>{trade.status === 'OPEN' ? 'OPEN' : money(trade.profit)}</strong><small>{trade.status}</small></span>
                     </div>
                   ))}
                 </div>

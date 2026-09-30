@@ -1,12 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { useDerivTrade } from '@/hooks/useDerivTrade';
-import { useStore } from '@/hooks/useStore';
-import { getMasterSource } from '@/utils/trade-bus';
-import AutoLabView, { type AutoLabMode, type AutoLabSettings } from './AutoLabView';
+import { fromUsd, subscribeCurrency, toUsd } from '@/utils/currency-display';
+import AutoLabView, { type AutoLabSettings } from './AutoLabView';
+import type { AutoLabMode } from './auto-lab-engine';
+import { useAutoLabEngine } from './useAutoLabEngine';
 
 const INITIAL_SETTINGS: AutoLabSettings = {
     marketSelection: 'ALL',
+    contractType: 'AUTO',
     stake: 1,
     martingaleMode: 'normal',
     multiplier: 2,
@@ -17,58 +18,96 @@ const INITIAL_SETTINGS: AutoLabSettings = {
     thresholdPercent: 70,
     barrier: 4,
     requiredStreak: 3,
+    virtualLossesRequired: 2,
+    virtualWinsRequired: 1,
 };
 
 const AutoLab = observer(() => {
-    const { connected, authorized, balance, currency } = useDerivTrade();
-    const { client } = useStore();
     const [mode, setMode] = useState<AutoLabMode>('Multimarket');
     const [settings, setSettings] = useState(INITIAL_SETTINGS);
     const [liveAcknowledged, setLiveAcknowledged] = useState(false);
+    const [currencyRevision, setCurrencyRevision] = useState(0);
+    const engine = useAutoLabEngine(mode, settings, liveAcknowledged);
+    const accountIdentity = `${engine.account.loginId}|${engine.account.isVirtual}`;
+    const previousAccountIdentity = useRef(accountIdentity);
 
-    const account = {
-        connected,
-        authorized,
-        isVirtual: authorized ? getMasterSource() === 'demo' : null,
-        balance,
-        currency,
-        loginId: client.loginid || '',
+    useEffect(() => subscribeCurrency(() => setCurrencyRevision(value => value + 1)), []);
+    useEffect(() => {
+        if (previousAccountIdentity.current !== accountIdentity) {
+            previousAccountIdentity.current = accountIdentity;
+            setLiveAcknowledged(false);
+        }
+    }, [accountIdentity]);
+
+    const viewSettings = useMemo(() => ({
+        ...settings,
+        stake: fromUsd(settings.stake),
+        takeProfit: fromUsd(settings.takeProfit),
+        stopLoss: fromUsd(settings.stopLoss),
+    }), [settings, currencyRevision]);
+
+    const onSettingChange = (key: keyof AutoLabSettings, value: string | number) => {
+        if (key === 'marketSelection') {
+            setSettings(previous => ({ ...previous, marketSelection: String(value) }));
+            return;
+        }
+        if (key === 'contractType') {
+            setSettings(previous => ({ ...previous, contractType: String(value) as AutoLabSettings['contractType'] }));
+            return;
+        }
+        if (key === 'martingaleMode') {
+            if (value === 'normal' || value === 'split') {
+                setSettings(previous => ({ ...previous, martingaleMode: value }));
+            }
+            return;
+        }
+        const raw = Number(value);
+        if (!Number.isFinite(raw)) return;
+        const ranges: Partial<Record<keyof AutoLabSettings, [number, number, boolean]>> = {
+            stake: [0.01, 100000, false],
+            multiplier: [1, 10, false],
+            maxMartingaleLevel: [0, 20, true],
+            takeProfit: [0, 1000000, false],
+            stopLoss: [0, 1000000, false],
+            ticksWindow: [1, 1500, true],
+            thresholdPercent: [50, 100, false],
+            barrier: [0, 9, true],
+            requiredStreak: [1, 100, true],
+            virtualLossesRequired: [0, 20, true],
+            virtualWinsRequired: [0, 20, true],
+        };
+        const range = ranges[key];
+        if (!range) return;
+        const [minimum, maximum, integer] = range;
+        const bounded = Math.max(minimum, Math.min(maximum, raw));
+        const normalized = integer ? Math.round(bounded) : bounded;
+        const usdValue = key === 'stake' || key === 'takeProfit' || key === 'stopLoss'
+            ? toUsd(normalized)
+            : normalized;
+        setSettings(previous => ({ ...previous, [key]: usdValue }) as AutoLabSettings);
     };
 
     return (
         <AutoLabView
             mode={mode}
             onModeChange={setMode}
-            settings={settings}
-            onSettingChange={(key, value) => {
-                setSettings(previous => ({ ...previous, [key]: value }) as AutoLabSettings);
-            }}
-            account={account}
-            status='idle'
-            currentSignal={{
-                label: 'Scanner unavailable',
-                detail: 'The synced Auto Lab view has no live scanner or trade executor connected.',
-                market: '',
-                confidence: null,
-            }}
-            session={{
-                wins: 0,
-                losses: 0,
-                trades: 0,
-                pnl: 0,
-                currentStake: settings.stake,
-                lossLevel: 0,
-            }}
-            markets={[]}
-            digitStats={[]}
-            trades={[]}
+            settings={viewSettings}
+            onSettingChange={onSettingChange}
+            account={engine.account}
+            status={engine.status}
+            currentSignal={engine.currentSignal}
+            session={engine.session}
+            markets={engine.markets}
+            digitStats={engine.digitStats}
+            trades={engine.trades}
             liveAcknowledged={liveAcknowledged}
             onLiveAcknowledgedChange={setLiveAcknowledged}
-            canStart={false}
-            onStart={() => {}}
-            onPause={() => {}}
-            onStop={() => {}}
-            message='Auto Lab is read-only until its strategy engine is connected. No trades can be placed from this page.'
+            canStart={engine.canStart}
+            inputsDisabled={engine.inputsDisabled}
+            onStart={engine.onStart}
+            onPause={engine.onPause}
+            onStop={engine.onStop}
+            message={engine.message}
         />
     );
 });

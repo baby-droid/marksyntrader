@@ -68,6 +68,9 @@ export interface BuyParams {
     // Extra app metadata is copied onto the native contract event so
     // Bot Builder's transaction store can group Auto Trades positions.
     metadata?: Record<string, unknown>;
+    // Optional final guard for long-running traders. It is checked after the
+    // proposal response and immediately before the irreversible buy request.
+    shouldBuy?: () => boolean;
 }
 
 const NEEDS_BARRIER = new Set(['DIGITOVER','DIGITUNDER','DIGITMATCH','DIGITDIFF']);
@@ -362,6 +365,9 @@ export function useDerivTrade() {
             const askPrice   = Number(proposalRes?.proposal?.ask_price ?? stake);
             if (!proposalId) {
                 throw new Error('Proposal failed — no proposal ID returned');
+            }
+            if (params.shouldBuy && !params.shouldBuy()) {
+                throw new Error('Trade cancelled before purchase because the run or account changed.');
             }
             // Record proposal round-trip time as evalToBuy phase
             if (isFastExecutionEnabledForContext()) {
