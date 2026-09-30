@@ -105,6 +105,44 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
             )
             : null;
     };
+    const variableCodeForId = variableId => {
+        const variable = workspaceVariables.find(candidate => candidate.getId() === variableId);
+        return variable
+            ? window.Blockly.JavaScript.variableDB_.getName(
+                variable.getId(),
+                window.Blockly.Variables.CATEGORY_NAME
+            )
+            : null;
+    };
+    const recoveryEscalationBlock = workspaceBlocks.find(
+        candidate => candidate.type === 'king_fisher_recovery_escalation'
+    );
+    let recoveryPhaseSnapshot = '';
+    let recoveryEscalationCode = '';
+    if (recoveryEscalationBlock) {
+        const phaseVariable = variableCodeForId(recoveryEscalationBlock.getFieldValue('PHASE'));
+        const lossCountVariable = variableCodeForId(recoveryEscalationBlock.getFieldValue('LOSS_COUNT'));
+        if (!phaseVariable || !lossCountVariable) {
+            throw new Error('Parity Recovery Escalation needs its phase and loss-count variables.');
+        }
+        const recoveryPhase = Number(recoveryEscalationBlock.getFieldValue('RECOVERY_PHASE'));
+        const firstOver3Phase = Number(recoveryEscalationBlock.getFieldValue('FIRST_OVER3_PHASE'));
+        const secondOver3Phase = Number(recoveryEscalationBlock.getFieldValue('SECOND_OVER3_PHASE'));
+        recoveryPhaseSnapshot = `var kingFisherRecoveryPhaseAtSettlement = Number(${phaseVariable});`;
+        recoveryEscalationCode = `
+        var kingFisherRecoveryStep = Bot.advanceKingFisherRecoveryEscalation(
+            kingFisherRecoveryPhaseAtSettlement,
+            Number(${lossCountVariable}),
+            Bot.isResult("win"),
+            ${recoveryPhase},
+            ${firstOver3Phase},
+            ${secondOver3Phase}
+        );
+        if (kingFisherRecoveryStep.phase !== null) {
+            ${phaseVariable} = kingFisherRecoveryStep.phase;
+        }
+        ${lossCountVariable} = kingFisherRecoveryStep.lossCount;`;
+    }
     const tradeOptionsBlock = workspaceBlocks.find(
         candidate => candidate.type === 'trade_definition_tradeoptions'
     );
@@ -204,8 +242,10 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
     const code = `${recoveryStateDeclaration}
     BinaryBotPrivateAfterPurchase = function BinaryBotPrivateAfterPurchase() {
         Bot.highlightBlock('${block.id}');
+        ${recoveryPhaseSnapshot}
         ${kingFisherStakeSnapshot}
         ${stack}
+        ${recoveryEscalationCode}
         ${riskGuard}
         ${kingFisherStakeHandoff}
         ${recoveryStakeCode}

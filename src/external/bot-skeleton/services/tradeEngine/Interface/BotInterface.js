@@ -1,12 +1,21 @@
 import { observer as globalObserver } from '../../../utils/observer';
 import { createDetails } from '../utils/helpers';
 import { dispatchBrowserEvent } from '../../../utils/browser-event';
+import {
+    createChartAiPhaseState,
+    evaluateChartAiPhaseGate,
+} from '@/utils/chart-ai-phase-gate';
+import { advanceKingFisherRecoveryEscalation } from '@/utils/king-fisher-recovery-escalation';
 
 const getBotInterface = tradeEngine => {
     const getDetail = i => createDetails(tradeEngine.data.contract)[i];
+    const kingFisherAiStates = new Map();
 
     return {
-        init: (...args) => tradeEngine.init(...args),
+        init: (...args) => {
+            kingFisherAiStates.clear();
+            return tradeEngine.init(...args);
+        },
         start: (...args) => tradeEngine.start(...args),
         rotateContinuousMarket: async () => {
             const nextSymbol = await tradeEngine.rotateContinuousMarket();
@@ -44,6 +53,33 @@ const getBotInterface = tradeEngine => {
         emitJournalSignal: detail => dispatchBrowserEvent('journal:signal', detail),
         emitKingFisherAnalysis: detail => dispatchBrowserEvent('bot:king-fisher-analysis', detail),
         emitMarketDigit: detail => dispatchBrowserEvent('bot:market-digit', detail),
+        evaluateKingFisherChartAiPhaseGate: (key, direction, barrier, epoch, digit) => {
+            const symbol = tradeEngine.tradeOptions?.symbol || tradeEngine.options?.symbol || '';
+            const state = kingFisherAiStates.get(key) || createChartAiPhaseState();
+            kingFisherAiStates.set(key, state);
+            const result = evaluateChartAiPhaseGate(
+                state,
+                direction === 'LOW' ? 'LOW' : 'HIGH',
+                Number(barrier),
+                Number(epoch),
+                Number(digit),
+                symbol,
+            );
+            if (result.updated) {
+                dispatchBrowserEvent('bot:king-fisher-analysis', {
+                    symbol,
+                    direction,
+                    barrier: Number(barrier),
+                    windows: result.windows,
+                    strategyVotes: result.strategyVotes,
+                    votes: result.votes,
+                    passed: result.passed,
+                });
+            }
+            return result.passed;
+        },
+        advanceKingFisherRecoveryEscalation: (...args) =>
+            advanceKingFisherRecoveryEscalation(...args),
         requestKingFisherRescan: detail => {
             tradeEngine.kingFisherRescanRequested = detail || { reason: 'risk-limit' };
         },

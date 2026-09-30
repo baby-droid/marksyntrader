@@ -34,7 +34,17 @@ window.Blockly.Blocks.trade_again = {
     restricted_parents: ['after_purchase'],
 };
 
-window.Blockly.JavaScript.javascriptGenerator.forBlock.trade_again = () => {
+window.Blockly.JavaScript.javascriptGenerator.forBlock.trade_again = block => {
+    const workspace = block?.workspace ?? window.Blockly.derivWorkspace;
+    const isKingFisher = workspace?.getAllBlocks?.().some(candidate =>
+        String(candidate.type || '').startsWith('king_fisher_')
+    );
+
+    // King Fisher's after-purchase wrapper performs the final restart after
+    // phase/stake updates and market rotation. Returning here would skip those
+    // blocks and leave cycle bots stuck on their first phase.
+    if (isKingFisher) return '';
+
     const code = `
         Bot.isTradeAgain(true);\n
         return true;\n

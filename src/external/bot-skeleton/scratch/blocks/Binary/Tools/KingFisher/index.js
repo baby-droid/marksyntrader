@@ -122,20 +122,20 @@ window.Blockly.Blocks.king_fisher_bias_scan = {
                 {
                     type: 'field_dropdown',
                     name: 'WINDOW',
-                    options: [['10', '10'], ['20', '20']],
+                    options: [['5', '5'], ['10', '10'], ['12', '12'], ['15', '15'], ['20', '20']],
                 },
             ],
             output: 'Boolean',
             outputShape: window.Blockly.OUTPUT_SHAPE_ROUND,
             colour: '#22c55e',
-            tooltip: localize('Uses the latest 10 or 20 live digits and requires a 60% directional bias before entry.'),
+            tooltip: localize('Uses a 5, 10, 12, 15, or 20 live-digit window and requires a 60% directional bias before entry.'),
             helpUrl: '',
         });
     },
     meta() {
         return {
-            display_name: localize('10/20-Tick Bias Scan'),
-            description: localize('Gates an entry when the latest 10 or 20 ticks show a 60% high- or low-digit bias.'),
+            display_name: localize('Digit Bias Scan'),
+            description: localize('Gates an entry when the selected 5, 10, 12, 15, or 20-tick window shows a 60% high- or low-digit bias.'),
         };
     },
     customContextMenu(menu) {
@@ -145,7 +145,8 @@ window.Blockly.Blocks.king_fisher_bias_scan = {
 
 window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_bias_scan = block => {
     const direction = block.getFieldValue('DIRECTION') === 'LOW' ? 'LOW' : 'HIGH';
-    const windowSize = block.getFieldValue('WINDOW') === '20' ? 20 : 10;
+    const requestedWindow = Number(block.getFieldValue('WINDOW'));
+    const windowSize = [5, 10, 12, 15, 20].includes(requestedWindow) ? requestedWindow : 10;
     const helperName = ensureHelper('kingFisherBiasScan', [
         'var kingFisherBiasStates = {};',
         `function ${generator().FUNCTION_NAME_PLACEHOLDER_}(key, direction, windowSize) {`,
@@ -170,6 +171,60 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_bias_scan = b
         '}',
     ]);
     return [`${helperName}('${block.id}', '${direction}', ${windowSize})`, generator().ORDER_FUNCTION_CALL];
+};
+
+window.Blockly.Blocks.king_fisher_chart_ai_phase_gate = {
+    init() {
+        this.jsonInit({
+            message0: localize('Chart AI phase gate: %1 side at barrier %2'),
+            args0: [
+                {
+                    type: 'field_dropdown',
+                    name: 'DIRECTION',
+                    options: [
+                        [localize('high / Over'), 'HIGH'],
+                        [localize('low / Under'), 'LOW'],
+                    ],
+                },
+                {
+                    type: 'field_dropdown',
+                    name: 'BARRIER',
+                    options: Array.from({ length: 10 }, (_, digit) => [String(digit), String(digit)]),
+                },
+            ],
+            output: 'Boolean',
+            outputShape: window.Blockly.OUTPUT_SHAPE_ROUND,
+            colour: '#0ea5e9',
+            tooltip: localize(
+                'Uses 5, 12, and 15-tick digit distributions, then applies Chart AI’s seven strategy checks with its 50% majority rule.'
+            ),
+            helpUrl: '',
+        });
+    },
+    meta() {
+        return {
+            display_name: localize('Chart AI Phase Gate'),
+            description: localize(
+                'Requires 60% directional bias in the 15-tick window and at least two of the 5/12/15-tick windows, plus a majority of Chart AI’s seven entry strategies.'
+            ),
+        };
+    },
+    customContextMenu(menu) {
+        modifyContextMenu(menu);
+    },
+};
+
+window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_chart_ai_phase_gate = block => {
+    const direction = block.getFieldValue('DIRECTION') === 'LOW' ? 'LOW' : 'HIGH';
+    const barrier = Number(block.getFieldValue('BARRIER') || 0);
+    const helperName = ensureHelper('kingFisherChartAiPhaseGate', [
+        `function ${generator().FUNCTION_NAME_PLACEHOLDER_}(key, direction, barrier) {`,
+        '  var tick = Bot.getLastTick(true);',
+        '  if (!tick || tick.epoch == null) return false;',
+        '  return Bot.evaluateKingFisherChartAiPhaseGate(key, direction, barrier, tick.epoch, Number(Bot.getLastDigit()));',
+        '}',
+    ]);
+    return [`${helperName}('shared', '${direction}', ${barrier})`, generator().ORDER_FUNCTION_CALL];
 };
 
 window.Blockly.Blocks.king_fisher_pair_purchase = {
@@ -435,6 +490,43 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_restart_trade
         `/* The following King Fisher result blocks own the stake variable. The ${multiplier}× setting is retained here for the journal and XML-visible risk control. */`,
     ].join('\n');
 };
+
+window.Blockly.Blocks.king_fisher_recovery_escalation = {
+    init() {
+        this.jsonInit({
+            message0: localize('After 2 parity losses, use Over 3 twice: phase %1, counter %2; recovery %3 → %4 → %5'),
+            args0: [
+                { type: 'field_variable', name: 'PHASE', variable: null },
+                { type: 'field_variable', name: 'LOSS_COUNT', variable: null },
+                { type: 'field_number', name: 'RECOVERY_PHASE', value: 1, min: 0, max: 99, precision: 1 },
+                { type: 'field_number', name: 'FIRST_OVER3_PHASE', value: 7, min: 0, max: 99, precision: 1 },
+                { type: 'field_number', name: 'SECOND_OVER3_PHASE', value: 8, min: 0, max: 99, precision: 1 },
+            ],
+            previousStatement: null,
+            nextStatement: null,
+            colour: '#e879f9',
+            tooltip: localize(
+                'Counts consecutive losses in the configured parity phase. On the second loss it runs Over 3 twice, then returns to parity recovery. A parity win clears the loss count.'
+            ),
+            helpUrl: '',
+        });
+    },
+    meta() {
+        return {
+            display_name: localize('Parity Recovery Escalation'),
+            description: localize(
+                'After two parity-recovery losses, routes two Over 3 contracts before returning to parity recovery.'
+            ),
+        };
+    },
+    customContextMenu(menu) {
+        modifyContextMenu(menu);
+    },
+};
+
+// The after-purchase generator applies this block around its result handling so
+// the original phase is available even after the visible Blockly phase logic runs.
+window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_recovery_escalation = () => '';
 
 window.Blockly.Blocks.king_fisher_virtual_hook = {
     init() {
