@@ -75,6 +75,100 @@ export const scoreKingFisherDigits = (
     };
 };
 
+const PAIR_CYCLE_PHASES = [
+    { contract: 'DIGITDIFF', barrier: 9 },
+    { contract: 'DIGITOVER', barrier: 2 },
+    { contract: 'DIGITOVER', barrier: 3 },
+    { contract: 'DIGITOVER', barrier: 0 },
+    { contract: 'DIGITOVER', barrier: 1 },
+    { contract: 'DIGITDIFF', barrier: 9 },
+    { contract: 'DIGITUNDER', barrier: 6 },
+    { contract: 'DIGITUNDER', barrier: 7 },
+    { contract: 'DIGITUNDER', barrier: 8 },
+] as const;
+
+export const scoreKingFisherPairCycle = (
+    digits: number[],
+): Omit<KingFisherMarket, 'symbol' | 'label' | 'market' | 'submarket' | 'group'> => {
+    let phase = 0;
+    let trades = 0;
+    let wins = 0;
+    let currentWinStreak = 0;
+    let longestWinStreak = 0;
+    const recoveryDigits: number[] = [];
+    let lastRecoveryDigitIndex = -1;
+
+    for (let entryIndex = 0; entryIndex < digits.length - 1; entryIndex += 1) {
+        const entryDigit = digits[entryIndex];
+        const exitDigit = digits[entryIndex + 1];
+        if (![entryDigit, exitDigit].every(digit => Number.isInteger(digit) && digit >= 0 && digit <= 9)) continue;
+
+        if (phase < PAIR_CYCLE_PHASES.length) {
+            const contract = PAIR_CYCLE_PHASES[phase];
+            const won = contract.contract === 'DIGITDIFF'
+                ? exitDigit !== contract.barrier
+                : contract.contract === 'DIGITOVER'
+                    ? exitDigit > contract.barrier
+                    : exitDigit < contract.barrier;
+            trades += 1;
+            if (won) {
+                wins += 1;
+                currentWinStreak += 1;
+                longestWinStreak = Math.max(longestWinStreak, currentWinStreak);
+                phase = phase === PAIR_CYCLE_PHASES.length - 1 ? 0 : phase + 1;
+                recoveryDigits.length = 0;
+                lastRecoveryDigitIndex = -1;
+            } else {
+                currentWinStreak = 0;
+                phase = PAIR_CYCLE_PHASES.length;
+                recoveryDigits.length = 0;
+                lastRecoveryDigitIndex = -1;
+            }
+            continue;
+        }
+
+        if (lastRecoveryDigitIndex !== entryIndex) {
+            recoveryDigits.push(entryDigit);
+            while (recoveryDigits.length > 4) recoveryDigits.shift();
+            lastRecoveryDigitIndex = entryIndex;
+        }
+        const length = recoveryDigits.length;
+        let recoveryContract: 'DIGITEVEN' | 'DIGITODD' | null = null;
+        if (length >= 3) {
+            const [first, second, third] = recoveryDigits.slice(-3).map(digit => digit % 2);
+            if (first === 1 && second === 0 && third === 0) recoveryContract = 'DIGITEVEN';
+            else if (first === 0 && second === 0 && third === 1) recoveryContract = 'DIGITODD';
+        }
+        if (!recoveryContract && length >= 4) {
+            const [first, second, third, fourth] = recoveryDigits.slice(-4).map(digit => digit % 2);
+            if (first === 0 && second === 1 && third === 1 && fourth === 0) recoveryContract = 'DIGITODD';
+        }
+        if (!recoveryContract) continue;
+
+        const won = recoveryContract === 'DIGITEVEN' ? exitDigit % 2 === 0 : exitDigit % 2 === 1;
+        trades += 1;
+        if (won) {
+            wins += 1;
+            currentWinStreak += 1;
+            longestWinStreak = Math.max(longestWinStreak, currentWinStreak);
+            phase = 0;
+        } else {
+            currentWinStreak = 0;
+        }
+        // The runtime recovery block resets its sequence after a completed
+        // recovery contract, then starts its next scan with the exit tick.
+        recoveryDigits.splice(0, recoveryDigits.length, exitDigit);
+        lastRecoveryDigitIndex = entryIndex + 1;
+    }
+
+    return {
+        score: trades ? (wins / trades) * 1000 + Math.min(trades, 120) : 0,
+        longestStreak: longestWinStreak,
+        qualifyingTicks: trades,
+        lastDigit: digits.length ? digits[digits.length - 1] : null,
+    };
+};
+
 const scoreMarket = (
     prices: unknown[],
     direction: KingFisherDirection,
@@ -122,4 +216,40 @@ export const scanKingFisherMarket = async (
     )).flatMap(result => result.status === 'fulfilled' ? [result.value] : []);
 
     return results.sort((a, b) => b.score - a.score)[0] ?? null;
+};
+
+export const scanKingFisherPairCycleMarket = async (
+    allowedSymbols?: readonly string[],
+): Promise<KingFisherMarket | null> => {
+    const api = api_base.api as any;
+    if (!api) throw new Error('The authenticated market connection is not ready yet.');
+
+    const allowed = allowedSymbols ? new Set(allowedSymbols) : null;
+    const candidates = allowed
+        ? KING_FISHER_MARKETS.filter(market => allowed.has(market.symbol))
+        : KING_FISHER_MARKETS;
+    if (!candidates.length) return null;
+
+    const results = (await Promise.allSettled(
+        candidates.map(async market => {
+            const response = await api.send({
+                ticks_history: market.symbol,
+                count: 120,
+                end: 'latest',
+                style: 'ticks',
+            });
+            const prices = response?.history?.prices;
+            if (!Array.isArray(prices) || prices.length < 20) {
+                throw new Error(`No tick history was returned for ${market.label}.`);
+            }
+            const digits = prices
+                .map(price => getLastDigit(price, market.pipSize))
+                .filter((digit): digit is number => digit !== null);
+            return { ...market, ...scoreKingFisherPairCycle(digits) };
+        }),
+    )).flatMap(result => result.status === 'fulfilled' ? [result.value] : []);
+
+    return results
+        .filter(result => result.qualifyingTicks > 0)
+        .sort((left, right) => right.score - left.score)[0] ?? null;
 };

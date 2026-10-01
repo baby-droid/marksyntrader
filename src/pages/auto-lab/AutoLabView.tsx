@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Activity, AlertTriangle, ArrowUpRight, BarChart3, CircleHelp, Pause, Play, Radio, ShieldCheck, Square, Waves } from 'lucide-react';
 import { formatMoney, fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
-import { AUTO_LAB_CONTRACT_TYPES, AUTO_LAB_MODES, type AutoLabContractChoice, type AutoLabMode } from './auto-lab-engine';
+import { AUTO_LAB_MODES, getAutoLabSupportedContracts, type AutoLabContractChoice, type AutoLabMode } from './auto-lab-engine';
 import './auto-lab-view.scss';
 
 export type { AutoLabMode } from './auto-lab-engine';
@@ -19,6 +19,7 @@ export type AutoLabSettings = {
   ticksWindow: number;
   thresholdPercent: number;
   barrier: number;
+  autoBarrier: boolean;
   contractBarrier: number;
   secondaryBarrier: number;
   requiredStreak: number;
@@ -85,7 +86,7 @@ export type AutoLabViewProps = {
   mode: AutoLabMode;
   onModeChange: (mode: AutoLabMode) => void;
   settings: AutoLabSettings;
-  onSettingChange: (key: keyof AutoLabSettings, value: string | number) => void;
+  onSettingChange: (key: keyof AutoLabSettings, value: string | number | boolean) => void;
   account: AutoLabAccount;
   status: AutoLabStatus;
   currentSignal: AutoLabSignal;
@@ -116,38 +117,14 @@ const MODE_LABELS: Record<AutoLabMode, string> = {
 
 const CONTRACT_LABELS: Record<AutoLabContractChoice, string> = {
   AUTO: 'Automatic for selected strategy',
-  ACCU: 'Accumulator',
-  ASIANU: 'Asian Up',
-  ASIAND: 'Asian Down',
   CALL: 'Rise',
   PUT: 'Fall',
-  CALLE: 'European Rise',
-  PUTE: 'European Fall',
-  CALLSPREAD: 'Rise Spread',
-  PUTSPREAD: 'Fall Spread',
   DIGITEVEN: 'Even',
   DIGITODD: 'Odd',
   DIGITOVER: 'Over',
   DIGITUNDER: 'Under',
   DIGITMATCH: 'Matches',
   DIGITDIFF: 'Differs',
-  EXPIRYMISS: 'Expiry Outside Range',
-  EXPIRYRANGE: 'Expiry Inside Range',
-  LBFLOATCALL: 'Floating Rise',
-  LBFLOATPUT: 'Floating Fall',
-  LBHIGHLOW: 'High / Low',
-  MULTUP: 'Multiplier Up',
-  MULTDOWN: 'Multiplier Down',
-  ONETOUCH: 'One Touch',
-  NOTOUCH: 'No Touch',
-  RANGE: 'Stay Between',
-  UPORDOWN: 'Outside Range',
-  RESETCALL: 'Reset Rise',
-  RESETPUT: 'Reset Fall',
-  RUNHIGH: 'Run High',
-  RUNLOW: 'Run Low',
-  TICKHIGH: 'Tick High',
-  TICKLOW: 'Tick Low',
 };
 
 const MODE_NOTES: Record<AutoLabMode, string> = {
@@ -317,15 +294,9 @@ const AutoLabView = ({
   message,
 }: AutoLabViewProps) => {
   const displayCurrency = useDisplayCurrency();
-  const [autoSelectBarrier, setAutoSelectBarrier] = useState(true);
   const isRealAccount = account.isVirtual === false;
   const contract = settings.contractType;
   const isDigitContract = contract.startsWith('DIGIT');
-  const isDurationlessContract = contract === 'AUTO' || contract === 'ACCU' || contract === 'MULTUP' || contract === 'MULTDOWN';
-  const needsPriceBarrier = ['ONETOUCH', 'NOTOUCH', 'RANGE', 'UPORDOWN', 'EXPIRYMISS', 'EXPIRYRANGE', 'RESETCALL', 'RESETPUT'].includes(contract);
-  const needsSecondBarrier = ['RANGE', 'UPORDOWN', 'EXPIRYMISS', 'EXPIRYRANGE'].includes(contract);
-  const needsMultiplier = ['MULTUP', 'MULTDOWN', 'LBFLOATCALL', 'LBFLOATPUT', 'LBHIGHLOW'].includes(contract);
-  const isTickContract = isDigitContract || contract === 'TICKHIGH' || contract === 'TICKLOW';
   const readyToRun = canStart && (!isRealAccount || liveAcknowledged);
   const isActive = status === 'running' || status === 'scanning' || status === 'connecting';
   const settingsLocked = inputsDisabled || status === 'paused';
@@ -336,7 +307,7 @@ const AutoLabView = ({
   const connectionTone = account.connected && account.authorized ? 'good' : account.connected ? 'warn' : 'bad';
 
   useEffect(() => {
-    if (mode !== 'Matches/Differs' || !autoSelectBarrier || settingsLocked || !digitStats.length) return;
+    if (mode !== 'Matches/Differs' || !settings.autoBarrier || settingsLocked || !digitStats.length) return;
     const mostObserved = digitStats
       .filter(item => Number.isInteger(item.digit) && item.digit >= 0 && item.digit <= 9 && Number.isFinite(item.count))
       .slice()
@@ -344,7 +315,7 @@ const AutoLabView = ({
     if (mostObserved && settings.barrier !== mostObserved.digit) {
       onSettingChange('barrier', mostObserved.digit);
     }
-  }, [autoSelectBarrier, digitStats, mode, onSettingChange, settings.barrier, settingsLocked]);
+  }, [digitStats, mode, onSettingChange, settings.autoBarrier, settings.barrier, settingsLocked]);
 
   return (
     <main className="auto-lab" data-testid="page-auto-lab">
@@ -419,18 +390,27 @@ const AutoLabView = ({
                     onChange={event => onSettingChange('contractType', event.target.value)}
                   >
                     <option value="AUTO">{CONTRACT_LABELS.AUTO}</option>
-                    {(mode === 'Rise/Fall' ? (['CALL', 'PUT'] as const) : AUTO_LAB_CONTRACT_TYPES)
+                    {getAutoLabSupportedContracts(mode)
                       .map(type => <option key={type} value={type}>{CONTRACT_LABELS[type]}</option>)}
                   </select>
                 </label>
                 <NumericField label="Tick window" name="ticksWindow" value={settings.ticksWindow} onChange={onSettingChange} min={1} max={1500} disabled={settingsLocked} />
                 <NumericField label="Threshold %" name="thresholdPercent" value={settings.thresholdPercent} onChange={onSettingChange} min={50} max={100} step={0.1} disabled={settingsLocked} />
-                <NumericField label="Barrier digit" name="barrier" value={settings.barrier} onChange={onSettingChange} min={0} max={9} disabled={settingsLocked} />
+                <NumericField
+                  label="Barrier digit"
+                  name="barrier"
+                  value={settings.barrier}
+                  onChange={onSettingChange}
+                  min={0}
+                  max={9}
+                  disabled={settingsLocked || ((mode === 'RC Over4/Under5' || mode === 'Matches/Differs') && settings.autoBarrier)}
+                />
                 {mode === 'RC Over4/Under5' && (
                   <div className="lab-field lab-field--wide">
                     Over / Under direction
-                    <div className="lab-segment" role="group" aria-label="Over or Under contract">
+                    <div className="lab-segment lab-segment--three" role="group" aria-label="Over or Under contract">
                       {([
+                        ['AUTO', 'Auto'],
                         ['DIGITOVER', 'Over'],
                         ['DIGITUNDER', 'Under'],
                       ] as const).map(([contractType, label]) => (
@@ -445,7 +425,21 @@ const AutoLabView = ({
                         >{label}</button>
                       ))}
                     </div>
-                    <span className="lab-field__help">Barrier digit is the boundary: Over wins above it; Under wins below it.</span>
+                    <label className="lab-auto-toggle">
+                      <input
+                        type="checkbox"
+                        checked={settings.autoBarrier}
+                        disabled={settingsLocked}
+                        data-testid="checkbox-auto-over-under-barrier"
+                        onChange={event => onSettingChange('autoBarrier', event.target.checked)}
+                      />
+                      <span>Auto-select best supported barrier</span>
+                    </label>
+                    <span className="lab-field__help">
+                      {settings.autoBarrier
+                        ? 'Checks barriers 0–9 and chooses the highest observed win rate that meets your threshold.'
+                        : 'Uses the barrier digit above. Over wins on a digit above it; Under wins below it. A matching digit is a loss.'}
+                    </span>
                   </div>
                 )}
                 {mode === 'Matches/Differs' && (
@@ -454,10 +448,10 @@ const AutoLabView = ({
                     <label className="lab-auto-toggle">
                       <input
                         type="checkbox"
-                        checked={autoSelectBarrier}
+                        checked={settings.autoBarrier}
                         disabled={settingsLocked}
                         data-testid="checkbox-auto-barrier"
-                        onChange={event => setAutoSelectBarrier(event.target.checked)}
+                        onChange={event => onSettingChange('autoBarrier', event.target.checked)}
                       />
                       <span>Auto-select most-observed digit</span>
                     </label>
@@ -469,56 +463,22 @@ const AutoLabView = ({
                   </div>
                 )}
                 <NumericField label="Required streak" name="requiredStreak" value={settings.requiredStreak} onChange={onSettingChange} min={1} max={100} disabled={settingsLocked} />
-                {needsPriceBarrier && (
-                  <NumericField label="Contract price barrier" name="contractBarrier" value={settings.contractBarrier} onChange={onSettingChange} step={0.01} disabled={settingsLocked} />
-                )}
-                {needsSecondBarrier && (
-                  <NumericField label="Second price barrier" name="secondaryBarrier" value={settings.secondaryBarrier} onChange={onSettingChange} step={0.01} disabled={settingsLocked} />
-                )}
-                {!isDurationlessContract && (
-                  <>
-                    <NumericField label="Contract duration" name="duration" value={settings.duration} onChange={onSettingChange} min={1} max={100000} disabled={settingsLocked} />
-                    <label className="lab-field">Duration unit
-                      <select
-                        aria-label="Duration unit"
-                        data-testid="select-duration-unit"
-                        value={isTickContract ? 't' : settings.durationUnit}
-                        disabled={settingsLocked || isTickContract}
-                        onChange={event => onSettingChange('durationUnit', event.target.value)}
-                      >
-                        <option value="t">Ticks</option>
-                        <option value="s">Seconds</option>
-                        <option value="m">Minutes</option>
-                        <option value="h">Hours</option>
-                        <option value="d">Days</option>
-                      </select>
-                    </label>
-                  </>
-                )}
-                {needsMultiplier && (
-                  <NumericField label="Contract multiplier" name="contractMultiplier" value={settings.contractMultiplier} onChange={onSettingChange} step={0.1} min={1} max={1000} disabled={settingsLocked} />
-                )}
-                {contract === 'ACCU' && (
-                  <NumericField label="Accumulator growth rate" name="growthRate" value={settings.growthRate} onChange={onSettingChange} step={0.01} min={0.01} max={0.1} disabled={settingsLocked} />
-                )}
-                {(contract === 'CALLSPREAD' || contract === 'PUTSPREAD') && (
-                  <label className="lab-field">Spread width
-                    <select
-                      aria-label="Spread width"
-                      data-testid="select-barrier-range"
-                      value={settings.barrierRange}
-                      disabled={settingsLocked}
-                      onChange={event => onSettingChange('barrierRange', event.target.value)}
-                    >
-                      <option value="tight">Tight</option>
-                      <option value="middle">Middle</option>
-                      <option value="wide">Wide</option>
-                    </select>
-                  </label>
-                )}
-                {(contract === 'TICKHIGH' || contract === 'TICKLOW') && (
-                  <NumericField label="Selected tick" name="selectedTick" value={settings.selectedTick} onChange={onSettingChange} min={1} max={1000} disabled={settingsLocked} />
-                )}
+                <NumericField label="Contract duration" name="duration" value={settings.duration} onChange={onSettingChange} min={1} max={100000} disabled={settingsLocked} />
+                <label className="lab-field">Duration unit
+                  <select
+                    aria-label="Duration unit"
+                    data-testid="select-duration-unit"
+                    value={isDigitContract ? 't' : settings.durationUnit}
+                    disabled={settingsLocked || isDigitContract}
+                    onChange={event => onSettingChange('durationUnit', event.target.value)}
+                  >
+                    <option value="t">Ticks</option>
+                    <option value="s">Seconds</option>
+                    <option value="m">Minutes</option>
+                    <option value="h">Hours</option>
+                    <option value="d">Days</option>
+                  </select>
+                </label>
               </div>
             </section>
 

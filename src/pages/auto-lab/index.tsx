@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { fromUsd, subscribeCurrency, toUsd } from '@/utils/currency-display';
 import AutoLabView, { type AutoLabSettings } from './AutoLabView';
-import type { AutoLabMode } from './auto-lab-engine';
+import { getAutoLabSupportedContracts, type AutoLabMode } from './auto-lab-engine';
 import { useAutoLabEngine } from './useAutoLabEngine';
 
 const INITIAL_SETTINGS: AutoLabSettings = {
@@ -17,6 +17,7 @@ const INITIAL_SETTINGS: AutoLabSettings = {
     ticksWindow: 100,
     thresholdPercent: 70,
     barrier: 4,
+    autoBarrier: true,
     contractBarrier: 100,
     secondaryBarrier: 101,
     requiredStreak: 3,
@@ -55,13 +56,21 @@ const AutoLab = observer(() => {
         stopLoss: displayAmount(settings.stopLoss),
     }), [settings, currencyRevision]);
 
-    const onSettingChange = (key: keyof AutoLabSettings, value: string | number) => {
+    const onSettingChange = (key: keyof AutoLabSettings, value: string | number | boolean) => {
         if (key === 'marketSelection') {
             setSettings(previous => ({ ...previous, marketSelection: String(value) }));
             return;
         }
+        if (key === 'autoBarrier') {
+            setSettings(previous => ({ ...previous, autoBarrier: Boolean(value) }));
+            return;
+        }
         if (key === 'contractType') {
             const contractType = String(value) as AutoLabSettings['contractType'];
+            if (
+                contractType !== 'AUTO'
+                && !getAutoLabSupportedContracts(mode).includes(contractType as Exclude<AutoLabSettings['contractType'], 'AUTO'>)
+            ) return;
             const tickOnly = contractType.startsWith('DIGIT')
                 || contractType === 'TICKHIGH'
                 || contractType === 'TICKLOW';
@@ -128,12 +137,10 @@ const AutoLab = observer(() => {
     };
 
     const onModeChange = (nextMode: AutoLabMode) => {
-        if (
-            nextMode === 'Rise/Fall'
-            && settings.contractType !== 'AUTO'
-            && settings.contractType !== 'CALL'
-            && settings.contractType !== 'PUT'
-        ) {
+        if (settings.contractType !== 'AUTO'
+            && !getAutoLabSupportedContracts(nextMode).includes(
+                settings.contractType as Exclude<AutoLabSettings['contractType'], 'AUTO'>,
+            )) {
             setSettings(previous => ({ ...previous, contractType: 'AUTO' }));
         }
         setMode(nextMode);

@@ -7,13 +7,8 @@ export type AutoLabMode =
     | 'Rise/Fall';
 
 export type AutoLabContractType =
-    | 'ACCU' | 'ASIANU' | 'ASIAND' | 'CALL' | 'PUT' | 'CALLE' | 'PUTE'
-    | 'CALLSPREAD' | 'PUTSPREAD' | 'DIGITMATCH' | 'DIGITDIFF'
-    | 'DIGITEVEN' | 'DIGITODD' | 'DIGITOVER' | 'DIGITUNDER'
-    | 'EXPIRYMISS' | 'EXPIRYRANGE' | 'LBFLOATCALL' | 'LBFLOATPUT'
-    | 'LBHIGHLOW' | 'MULTUP' | 'MULTDOWN' | 'ONETOUCH' | 'NOTOUCH'
-    | 'RANGE' | 'UPORDOWN' | 'RESETCALL' | 'RESETPUT' | 'RUNHIGH'
-    | 'RUNLOW' | 'TICKHIGH' | 'TICKLOW';
+    | 'CALL' | 'PUT' | 'DIGITEVEN' | 'DIGITODD'
+    | 'DIGITMATCH' | 'DIGITDIFF' | 'DIGITOVER' | 'DIGITUNDER';
 
 export type AutoLabContractChoice = 'AUTO' | AutoLabContractType;
 
@@ -27,39 +22,27 @@ export const AUTO_LAB_MODES: AutoLabMode[] = [
 ];
 
 export const AUTO_LAB_CONTRACT_TYPES: AutoLabContractType[] = [
-    'ACCU',
-    'ASIANU',
-    'ASIAND',
     'CALL',
     'PUT',
-    'CALLE',
-    'PUTE',
-    'CALLSPREAD',
-    'PUTSPREAD',
     'DIGITEVEN',
     'DIGITODD',
     'DIGITOVER',
     'DIGITUNDER',
     'DIGITMATCH',
     'DIGITDIFF',
-    'EXPIRYMISS',
-    'EXPIRYRANGE',
-    'LBFLOATCALL',
-    'LBFLOATPUT',
-    'LBHIGHLOW',
-    'MULTUP',
-    'MULTDOWN',
-    'ONETOUCH',
-    'NOTOUCH',
-    'RANGE',
-    'UPORDOWN',
-    'RESETCALL',
-    'RESETPUT',
-    'RUNHIGH',
-    'RUNLOW',
-    'TICKHIGH',
-    'TICKLOW',
 ];
+
+const MODE_CONTRACT_TYPES: Record<AutoLabMode, AutoLabContractType[]> = {
+    Multimarket: AUTO_LAB_CONTRACT_TYPES,
+    'RC Even/Odd': ['DIGITEVEN', 'DIGITODD'],
+    'RC Over4/Under5': ['DIGITOVER', 'DIGITUNDER'],
+    '%Even/Odd': ['DIGITEVEN', 'DIGITODD'],
+    'Matches/Differs': ['DIGITMATCH', 'DIGITDIFF'],
+    'Rise/Fall': ['CALL', 'PUT'],
+};
+
+export const getAutoLabSupportedContracts = (mode: AutoLabMode): AutoLabContractType[] =>
+    [...MODE_CONTRACT_TYPES[mode]];
 
 export type AutoLabTick = {
     symbol: string;
@@ -79,6 +62,7 @@ export type AutoLabStrategySettings = {
     ticksWindow: number;
     thresholdPercent: number;
     barrier: number;
+    autoBarrier?: boolean;
     contractBarrier?: number;
     secondaryBarrier?: number;
     requiredStreak: number;
@@ -102,22 +86,6 @@ export type AutoLabDigitStat = { digit: number; count: number; percent: number }
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 const minimumSampleSize = (window: number) => Math.min(20, Math.max(1, Math.floor(window) || 1));
-const barrierContracts = new Set<AutoLabContractType>([
-    'DIGITMATCH', 'DIGITDIFF', 'DIGITOVER', 'DIGITUNDER',
-    'ONETOUCH', 'NOTOUCH', 'RANGE', 'UPORDOWN', 'EXPIRYMISS',
-    'EXPIRYRANGE', 'RESETCALL', 'RESETPUT',
-]);
-const digitBarrierContracts = new Set<AutoLabContractType>([
-    'DIGITMATCH', 'DIGITDIFF', 'DIGITOVER', 'DIGITUNDER',
-]);
-const twoBarrierContracts = new Set<AutoLabContractType>([
-    'RANGE', 'UPORDOWN', 'EXPIRYMISS', 'EXPIRYRANGE',
-]);
-
-const normalizePriceBarrier = (value: number | undefined): number | undefined => {
-    if (value == null || !Number.isFinite(value)) return undefined;
-    return Math.round((value + Number.EPSILON) * 100) / 100;
-};
 
 const candidate = (
     market: AutoLabMarketWindow,
@@ -170,49 +138,53 @@ const evaluateOverUnder = (
     digits: number[],
     barrier: number,
     threshold: number,
-): AutoLabCandidate | null => {
+    contractChoice: AutoLabContractChoice,
+): AutoLabCandidate[] => {
     const above = digits.filter(digit => digit > barrier).length;
     const below = digits.filter(digit => digit < barrier).length;
-    const eligible = above + below;
-    if (!eligible) return null;
-    const abovePercent = (above / eligible) * 100;
-    const belowPercent = (below / eligible) * 100;
-    if (abovePercent >= threshold) {
-        return candidate(
+    if (digits.length < minimumSampleSize(digits.length)) return [];
+    const abovePercent = (above / digits.length) * 100;
+    const belowPercent = (below / digits.length) * 100;
+    const output: AutoLabCandidate[] = [];
+    if ((contractChoice === 'AUTO' || contractChoice === 'DIGITOVER') && abovePercent >= threshold) {
+        const result = candidate(
             market,
             'RC Over4/Under5',
             'DIGITOVER',
             abovePercent,
-            `${abovePercent.toFixed(1)}% of non-barrier digits are above ${barrier}.`,
+            `${above}/${digits.length} observed ticks (${abovePercent.toFixed(1)}%) were above barrier ${barrier}; a tie is a loss.`,
             barrier,
         );
+        if (result) output.push(result);
     }
-    if (belowPercent >= threshold) {
-        return candidate(
+    if ((contractChoice === 'AUTO' || contractChoice === 'DIGITUNDER') && belowPercent >= threshold) {
+        const result = candidate(
             market,
             'RC Over4/Under5',
             'DIGITUNDER',
             belowPercent,
-            `${belowPercent.toFixed(1)}% of non-barrier digits are below ${barrier}.`,
+            `${below}/${digits.length} observed ticks (${belowPercent.toFixed(1)}%) were below barrier ${barrier}; a tie is a loss.`,
             barrier,
         );
+        if (result) output.push(result);
     }
-    return null;
+    return output;
 };
 
 const evaluateParityPercentage = (
     market: AutoLabMarketWindow,
     digits: number[],
     threshold: number,
+    contractChoice: AutoLabContractChoice,
 ): AutoLabCandidate | null => {
     if (!digits.length) return null;
     const even = digits.filter(digit => digit % 2 === 0).length;
     const evenPercent = (even / digits.length) * 100;
     const oddPercent = 100 - evenPercent;
-    if (evenPercent >= threshold) {
+    if ((contractChoice === 'AUTO' || contractChoice === 'DIGITEVEN') && evenPercent >= threshold) {
         return candidate(market, '%Even/Odd', 'DIGITEVEN', evenPercent, `${evenPercent.toFixed(1)}% even in the selected window.`);
     }
-    if (oddPercent >= threshold) {
+    if ((contractChoice === 'AUTO' || contractChoice === 'DIGITODD') && oddPercent >= threshold) {
         return candidate(market, '%Even/Odd', 'DIGITODD', oddPercent, `${oddPercent.toFixed(1)}% odd in the selected window.`);
     }
     return null;
@@ -223,12 +195,13 @@ const evaluateMatchesDiffers = (
     digits: number[],
     barrier: number,
     threshold: number,
+    contractChoice: AutoLabContractChoice,
 ): AutoLabCandidate | null => {
     if (!digits.length) return null;
     const matches = digits.filter(digit => digit === barrier).length;
     const matchPercent = (matches / digits.length) * 100;
     const differsPercent = 100 - matchPercent;
-    if (matchPercent >= threshold) {
+    if ((contractChoice === 'AUTO' || contractChoice === 'DIGITMATCH') && matchPercent >= threshold) {
         return candidate(
             market,
             'Matches/Differs',
@@ -238,7 +211,7 @@ const evaluateMatchesDiffers = (
             barrier,
         );
     }
-    if (differsPercent >= threshold) {
+    if ((contractChoice === 'AUTO' || contractChoice === 'DIGITDIFF') && differsPercent >= threshold) {
         return candidate(
             market,
             'Matches/Differs',
@@ -292,12 +265,24 @@ const evaluateOneMode = (
     switch (mode) {
         case 'RC Even/Odd':
             return evaluateParityCycle({ ...market, ticks }, requiredStreak);
-        case 'RC Over4/Under5':
-            return evaluateOverUnder({ ...market, ticks }, digits, barrier, threshold);
+        case 'RC Over4/Under5': {
+            const barriers = settings.autoBarrier
+                ? Array.from({ length: 10 }, (_, digit) => digit)
+                : [barrier];
+            return barriers
+                .flatMap(selectedBarrier => evaluateOverUnder(
+                    { ...market, ticks },
+                    digits,
+                    selectedBarrier,
+                    threshold,
+                    settings.contractType,
+                ))
+                .sort((left, right) => right.score - left.score || (left.barrier ?? 0) - (right.barrier ?? 0))[0] ?? null;
+        }
         case '%Even/Odd':
-            return evaluateParityPercentage({ ...market, ticks }, digits, threshold);
+            return evaluateParityPercentage({ ...market, ticks }, digits, threshold, settings.contractType);
         case 'Matches/Differs':
-            return evaluateMatchesDiffers({ ...market, ticks }, digits, barrier, threshold);
+            return evaluateMatchesDiffers({ ...market, ticks }, digits, barrier, threshold, settings.contractType);
         case 'Rise/Fall':
             return evaluateRiseFall({ ...market, ticks }, requiredStreak);
     }
@@ -327,6 +312,7 @@ export const evaluateAutoLabCandidates = (
                 continue;
             }
             const selectedContract = settings.contractType;
+            if (!MODE_CONTRACT_TYPES[result.strategy].includes(selectedContract)) continue;
             if (result.strategy === 'Rise/Fall') {
                 // A fixed directional contract must agree with the quote-momentum
                 // signal. Other fixed contracts have no meaningful Rise/Fall
@@ -336,24 +322,9 @@ export const evaluateAutoLabCandidates = (
                     || selectedContract !== result.contract_type
                 ) continue;
             }
-            const usesDigitBarrier = digitBarrierContracts.has(selectedContract);
-            const usesPriceBarrier = barrierContracts.has(selectedContract) && !usesDigitBarrier;
-            const selectedBarrier = usesDigitBarrier
-                ? settings.barrier
-                : usesPriceBarrier
-                    ? normalizePriceBarrier(settings.contractBarrier ?? settings.barrier)
-                    : undefined;
-            const selectedBarrier2 = twoBarrierContracts.has(selectedContract)
-                ? normalizePriceBarrier(settings.secondaryBarrier)
-                : undefined;
-            if (usesPriceBarrier && selectedBarrier == null) continue;
-            if (twoBarrierContracts.has(selectedContract) && selectedBarrier2 == null) continue;
-            if (twoBarrierContracts.has(selectedContract) && selectedBarrier === selectedBarrier2) continue;
+            if (result.contract_type !== selectedContract) continue;
             output.push({
                 ...result,
-                contract_type: selectedContract,
-                ...(selectedBarrier == null ? { barrier: undefined } : { barrier: selectedBarrier }),
-                ...(selectedBarrier2 == null ? { barrier2: undefined } : { barrier2: selectedBarrier2 }),
             });
         }
     }
@@ -378,22 +349,8 @@ export const isAutoLabContractWin = (
 ): boolean => {
     switch (contractType) {
         case 'CALL':
-        case 'CALLE':
-        case 'ASIANU':
-        case 'MULTUP':
-        case 'CALLSPREAD':
-        case 'RESETCALL':
-        case 'RUNHIGH':
-        case 'LBFLOATCALL':
             return exitTick.quote > entryQuote;
         case 'PUT':
-        case 'PUTE':
-        case 'ASIAND':
-        case 'MULTDOWN':
-        case 'PUTSPREAD':
-        case 'RESETPUT':
-        case 'RUNLOW':
-        case 'LBFLOATPUT':
             return exitTick.quote < entryQuote;
         case 'DIGITEVEN':
             return exitTick.digit % 2 === 0;
@@ -407,33 +364,6 @@ export const isAutoLabContractWin = (
             return barrier != null && exitTick.digit === barrier;
         case 'DIGITDIFF':
             return barrier != null && exitTick.digit !== barrier;
-        case 'ONETOUCH':
-            return barrier != null && (
-                exitTick.quote === barrier
-                || (entryQuote < barrier && exitTick.quote > barrier)
-                || (entryQuote > barrier && exitTick.quote < barrier)
-            );
-        case 'NOTOUCH':
-            return barrier != null && !(
-                exitTick.quote === barrier
-                || (entryQuote < barrier && exitTick.quote > barrier)
-                || (entryQuote > barrier && exitTick.quote < barrier)
-            );
-        case 'RANGE':
-        case 'EXPIRYRANGE':
-            return barrier != null && barrier2 != null
-                && exitTick.quote > Math.min(barrier, barrier2)
-                && exitTick.quote < Math.max(barrier, barrier2);
-        case 'UPORDOWN':
-        case 'EXPIRYMISS':
-            return barrier != null && barrier2 != null
-                && (exitTick.quote < Math.min(barrier, barrier2) || exitTick.quote > Math.max(barrier, barrier2));
-        case 'ACCU':
-        case 'LBHIGHLOW':
-        case 'TICKHIGH':
-            return exitTick.quote >= entryQuote;
-        case 'TICKLOW':
-            return exitTick.quote <= entryQuote;
     }
 };
 
