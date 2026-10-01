@@ -41,7 +41,7 @@ type RuntimeMarket = {
     rawHistory: RawHistoryPoint[];
     ticks: AutoLabTick[];
 };
-type PendingVirtualTrade = AutoLabCandidate;
+type PendingVirtualTrade = AutoLabCandidate & { settleAtEpoch: number };
 
 const initialSession = (stake: number): AutoLabSession => ({
     wins: 0,
@@ -106,9 +106,22 @@ const displaySignal = (value: AutoLabCandidate | null, detailFallback: string): 
         confidence: null,
     };
 
+const roundStake = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+
 const getNextStake = (baseStake: number, lossLevel: number, multiplier: number, mode: 'normal' | 'split') => {
     const exponent = mode === 'normal' ? lossLevel : Math.ceil(lossLevel / 2);
-    return baseStake * Math.pow(multiplier, Math.max(0, exponent));
+    return roundStake(baseStake * Math.pow(multiplier, Math.max(0, exponent)));
+};
+
+const durationSeconds = (duration: number, unit: AutoLabSettings['durationUnit']) => {
+    const unitSeconds: Record<AutoLabSettings['durationUnit'], number> = {
+        t: 1,
+        s: 1,
+        m: 60,
+        h: 3600,
+        d: 86400,
+    };
+    return Math.max(1, Math.floor(duration)) * unitSeconds[unit];
 };
 
 const gatePhaseLabel = (phase: AutoLabGateState['phase']) => {
@@ -406,12 +419,13 @@ export const useAutoLabEngine = (
         const best = candidates[0];
         const gate = gateRef.current;
         const pendingVirtual = pendingVirtualRef.current;
-        if (pendingVirtual && pendingVirtual.symbol === tick.symbol && tick.epoch > pendingVirtual.epoch) {
+        if (pendingVirtual && pendingVirtual.symbol === tick.symbol && tick.epoch >= pendingVirtual.settleAtEpoch) {
             const won = isAutoLabContractWin(
                 pendingVirtual.contract_type,
                 pendingVirtual.barrier,
                 tick,
                 pendingVirtual.entryQuote,
+                pendingVirtual.barrier2,
             );
             pendingVirtualRef.current = null;
             const nextGate = advanceAutoLabGate(
@@ -435,7 +449,16 @@ export const useAutoLabEngine = (
         if (!best || best.symbol !== tick.symbol || best.epoch !== tick.epoch) return;
         const activeGate = gateRef.current;
         if (activeGate.phase !== 'armed') {
-            if (!pendingVirtualRef.current) pendingVirtualRef.current = best;
+            if (!pendingVirtualRef.current) {
+                const contract = best.contract_type;
+                const durationless = contract === 'ACCU' || contract === 'MULTUP' || contract === 'MULTDOWN';
+                const duration = durationless ? 1 : settingsRef.current.duration;
+                const unit = durationless ? 't' : settingsRef.current.durationUnit;
+                pendingVirtualRef.current = {
+                    ...best,
+                    settleAtEpoch: best.epoch + durationSeconds(duration, unit),
+                };
+            }
             return;
         }
         if (activeGate.armedEpoch != null && activeGate.armedEpoch > 0 && tick.epoch <= activeGate.armedEpoch) return;
@@ -462,7 +485,7 @@ export const useAutoLabEngine = (
         }
 
         const currentSettings = settingsRef.current;
-        const baseStake = toUsd(currentSettings.stake);
+        const baseStake = roundStake(currentSettings.stake);
         const previousSession = sessionRef.current;
         const stake = getNextStake(
             baseStake,
@@ -496,10 +519,25 @@ export const useAutoLabEngine = (
             const result = await buyContract({
                 symbol: signal.symbol,
                 contract_type: signal.contract_type,
-                duration: 1,
-                duration_unit: 't',
+                ...(['ACCU', 'MULTUP', 'MULTDOWN'].includes(signal.contract_type)
+                    ? {}
+                    : {
+                        duration: currentSettings.contractType === 'AUTO' ? 1 : currentSettings.duration,
+                        duration_unit: currentSettings.contractType === 'AUTO' ? 't' : currentSettings.durationUnit,
+                    }),
                 stake,
                 ...(signal.barrier == null ? {} : { barrier: signal.barrier }),
+                ...(signal.barrier2 == null ? {} : { barrier2: signal.barrier2 }),
+                ...(['CALLSPREAD', 'PUTSPREAD'].includes(signal.contract_type)
+                    ? { barrier_range: currentSettings.barrierRange }
+                    : {}),
+                ...(['MULTUP', 'MULTDOWN', 'LBFLOATCALL', 'LBFLOATPUT', 'LBHIGHLOW'].includes(signal.contract_type)
+                    ? { multiplier: currentSettings.contractMultiplier }
+                    : {}),
+                ...(signal.contract_type === 'ACCU' ? { growth_rate: currentSettings.growthRate } : {}),
+                ...(['TICKHIGH', 'TICKLOW'].includes(signal.contract_type)
+                    ? { selected_tick: currentSettings.selectedTick }
+                    : {}),
                 currency: currency || undefined,
                 metadata: {
                     origin: 'auto-lab',
@@ -550,7 +588,7 @@ export const useAutoLabEngine = (
         const nextPnl = previous.pnl + (Number.isFinite(profit) ? profit : 0);
         const won = settled.status === 'won';
         const nextLossLevel = won ? 0 : previous.lossLevel + 1;
-        const baseStake = toUsd(currentSettings.stake);
+        const baseStake = roundStake(currentSettings.stake);
         const nextStake = getNextStake(baseStake, nextLossLevel, currentSettings.multiplier, currentSettings.martingaleMode);
         const nextSession: AutoLabSession = {
             ...previous,
@@ -570,8 +608,8 @@ export const useAutoLabEngine = (
         );
         pendingVirtualRef.current = null;
 
-        const reachedProfit = currentSettings.takeProfit > 0 && nextPnl >= toUsd(currentSettings.takeProfit);
-        const reachedLoss = currentSettings.stopLoss > 0 && nextPnl <= -toUsd(currentSettings.stopLoss);
+        const reachedProfit = currentSettings.takeProfit > 0 && nextPnl >= currentSettings.takeProfit;
+        const reachedLoss = currentSettings.stopLoss > 0 && nextPnl <= -currentSettings.stopLoss;
         const exceededRecovery = nextLossLevel > currentSettings.maxMartingaleLevel;
         if (reachedProfit || reachedLoss || exceededRecovery) {
             runRef.current = false;
@@ -616,8 +654,8 @@ export const useAutoLabEngine = (
             && authorized
             && account.isVirtual != null
             && selectedReady
-            && Number.isFinite(toUsd(settings.stake))
-            && toUsd(settings.stake) > 0;
+            && Number.isFinite(settings.stake)
+            && settings.stake >= 0.35;
     }, [connected, authorized, account.isVirtual, activeMarkets, markets, settings.stake]);
 
     const onStart = useCallback(() => {
@@ -641,8 +679,8 @@ export const useAutoLabEngine = (
             setMessage(`Wait for at least ${MIN_READY_TICKS} valid ticks from a selected market.`);
             return;
         }
-        if (!Number.isFinite(toUsd(settingsRef.current.stake)) || toUsd(settingsRef.current.stake) <= 0) {
-            setMessage('Enter a valid positive base stake before starting.');
+        if (!Number.isFinite(settingsRef.current.stake) || settingsRef.current.stake < 0.35) {
+            setMessage('Enter a base stake of at least 0.35 USD before starting.');
             return;
         }
 

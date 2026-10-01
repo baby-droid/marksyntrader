@@ -90,6 +90,7 @@ const scoreMarket = (
 export const scanKingFisherMarket = async (
     direction: KingFisherDirection,
     barrier: number,
+    allowedSymbols?: readonly string[],
 ): Promise<KingFisherMarket | null> => {
     if (!Number.isInteger(barrier) || barrier < 0 || barrier > 9) {
         throw new Error(`King Fisher requires a digit barrier from 0 to 9; received "${barrier}".`);
@@ -98,8 +99,14 @@ export const scanKingFisherMarket = async (
     const api = api_base.api as any;
     if (!api) throw new Error('The authenticated market connection is not ready yet.');
 
+    const allowed = allowedSymbols ? new Set(allowedSymbols) : null;
+    const candidates = allowed
+        ? KING_FISHER_MARKETS.filter(market => allowed.has(market.symbol))
+        : KING_FISHER_MARKETS;
+    if (!candidates.length) return null;
+
     const results = (await Promise.allSettled(
-        KING_FISHER_MARKETS.map(async market => {
+        candidates.map(async market => {
             const response = await api.send({
                 ticks_history: market.symbol,
                 count: 120,

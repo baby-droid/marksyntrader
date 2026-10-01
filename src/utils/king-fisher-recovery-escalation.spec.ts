@@ -25,7 +25,23 @@ describe('King Fisher parity recovery escalation', () => {
         expect(secondLoss).toEqual({ phase: config.firstOver3, lossCount: 0 });
     });
 
-    it('runs two Over 3 phases after losses, then returns to parity recovery', () => {
+    it('runs both Over 3 phases regardless of outcome, then returns to parity recovery', () => {
+        expect(advanceKingFisherRecoveryEscalation(
+            config.firstOver3,
+            0,
+            true,
+            config.recovery,
+            config.firstOver3,
+            config.secondOver3,
+        )).toEqual({ phase: config.secondOver3, lossCount: 0 });
+        expect(advanceKingFisherRecoveryEscalation(
+            config.secondOver3,
+            0,
+            true,
+            config.recovery,
+            config.firstOver3,
+            config.secondOver3,
+        )).toEqual({ phase: config.recovery, lossCount: 0 });
         expect(advanceKingFisherRecoveryEscalation(
             config.firstOver3,
             0,

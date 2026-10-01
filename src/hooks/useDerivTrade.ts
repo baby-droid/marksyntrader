@@ -59,9 +59,13 @@ export interface BuyParams {
     symbol: string;
     contract_type: ContractType | string;
     duration?: number;
-    duration_unit?: 't' | 's' | 'm' | 'h';
+    duration_unit?: 't' | 's' | 'm' | 'h' | 'd';
     stake: number;
     barrier?: number | string;
+    barrier2?: number | string;
+    barrier_range?: 'tight' | 'middle' | 'wide';
+    multiplier?: number;
+    selected_tick?: number;
     currency?: string;
     growth_rate?: number;
     limit_order?: { take_profit?: number; stop_loss?: number };
@@ -73,7 +77,13 @@ export interface BuyParams {
     shouldBuy?: () => boolean;
 }
 
-const NEEDS_BARRIER = new Set(['DIGITOVER','DIGITUNDER','DIGITMATCH','DIGITDIFF']);
+const NEEDS_BARRIER = new Set([
+    'DIGITOVER', 'DIGITUNDER', 'DIGITMATCH', 'DIGITDIFF',
+    'ONETOUCH', 'NOTOUCH', 'RANGE', 'UPORDOWN', 'EXPIRYMISS', 'EXPIRYRANGE',
+    'RESETCALL', 'RESETPUT',
+]);
+const NEEDS_SECOND_BARRIER = new Set(['RANGE', 'UPORDOWN', 'EXPIRYMISS', 'EXPIRYRANGE']);
+const DURATIONLESS_CONTRACTS = new Set(['ACCU', 'MULTUP', 'MULTDOWN']);
 
 export function buildProposalRequest(params: BuyParams, fallbackCurrency = 'USD'): Record<string, unknown> {
     const {
@@ -83,24 +93,38 @@ export function buildProposalRequest(params: BuyParams, fallbackCurrency = 'USD'
         duration_unit = 't',
         stake,
         barrier,
+        barrier2,
+        barrier_range,
+        multiplier,
+        selected_tick,
         currency,
         growth_rate,
         limit_order,
     } = params;
     const contractName = String(contract_type).toUpperCase();
-    const isAccumulator = contractName === 'ACCU';
+    const isDurationless = DURATIONLESS_CONTRACTS.has(contractName);
     const request: Record<string, unknown> = {
         proposal: 1,
         amount: stake,
         basis: 'stake',
         contract_type,
         currency: currency || fallbackCurrency,
-        ...(duration != null && !isAccumulator ? { duration } : {}),
-        ...(duration_unit && !isAccumulator ? { duration_unit } : {}),
+        ...(duration != null && !isDurationless ? { duration } : {}),
+        ...(duration != null && duration_unit && !isDurationless ? { duration_unit } : {}),
         underlying_symbol: symbol,
     };
     if (NEEDS_BARRIER.has(contractName) && barrier !== undefined && barrier !== null) {
         request.barrier = String(barrier);
+    }
+    if (NEEDS_SECOND_BARRIER.has(contractName) && barrier2 !== undefined && barrier2 !== null) {
+        request.barrier2 = String(barrier2);
+    }
+    if ((contractName === 'CALLSPREAD' || contractName === 'PUTSPREAD') && barrier_range) {
+        request.barrier_range = barrier_range;
+    }
+    if (multiplier != null) request.multiplier = multiplier;
+    if ((contractName === 'TICKHIGH' || contractName === 'TICKLOW') && selected_tick != null) {
+        request.selected_tick = selected_tick;
     }
     if (growth_rate != null) request.growth_rate = growth_rate;
     if (limit_order) request.limit_order = limit_order;
@@ -344,6 +368,10 @@ export function useDerivTrade() {
                 duration,
                 duration_unit = 't',
                 barrier,
+                barrier2,
+                barrier_range,
+                multiplier,
+                selected_tick,
                 growth_rate,
                 limit_order,
             } = params;
@@ -388,6 +416,10 @@ export function useDerivTrade() {
                     ...(duration != null && !isAccumulator ? { duration } : {}),
                     ...(duration_unit && !isAccumulator ? { duration_unit } : {}),
                     barrier,
+                    barrier2,
+                    barrier_range,
+                    multiplier,
+                    selected_tick,
                     growth_rate,
                     limit_order,
                     source: getMasterSource(),
@@ -427,6 +459,10 @@ export function useDerivTrade() {
                     ...(duration != null && !isAccumulator ? { duration } : {}),
                     ...(duration_unit && !isAccumulator ? { duration_unit } : {}),
                     barrier,
+                    barrier2,
+                    barrier_range,
+                    multiplier,
+                    selected_tick,
                     growth_rate,
                     limit_order,
                     source: getMasterSource(),

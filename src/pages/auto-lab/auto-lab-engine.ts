@@ -7,14 +7,13 @@ export type AutoLabMode =
     | 'Rise/Fall';
 
 export type AutoLabContractType =
-    | 'CALL'
-    | 'PUT'
-    | 'DIGITEVEN'
-    | 'DIGITODD'
-    | 'DIGITMATCH'
-    | 'DIGITDIFF'
-    | 'DIGITOVER'
-    | 'DIGITUNDER';
+    | 'ACCU' | 'ASIANU' | 'ASIAND' | 'CALL' | 'PUT' | 'CALLE' | 'PUTE'
+    | 'CALLSPREAD' | 'PUTSPREAD' | 'DIGITMATCH' | 'DIGITDIFF'
+    | 'DIGITEVEN' | 'DIGITODD' | 'DIGITOVER' | 'DIGITUNDER'
+    | 'EXPIRYMISS' | 'EXPIRYRANGE' | 'LBFLOATCALL' | 'LBFLOATPUT'
+    | 'LBHIGHLOW' | 'MULTUP' | 'MULTDOWN' | 'ONETOUCH' | 'NOTOUCH'
+    | 'RANGE' | 'UPORDOWN' | 'RESETCALL' | 'RESETPUT' | 'RUNHIGH'
+    | 'RUNLOW' | 'TICKHIGH' | 'TICKLOW';
 
 export type AutoLabContractChoice = 'AUTO' | AutoLabContractType;
 
@@ -28,14 +27,38 @@ export const AUTO_LAB_MODES: AutoLabMode[] = [
 ];
 
 export const AUTO_LAB_CONTRACT_TYPES: AutoLabContractType[] = [
+    'ACCU',
+    'ASIANU',
+    'ASIAND',
     'CALL',
     'PUT',
+    'CALLE',
+    'PUTE',
+    'CALLSPREAD',
+    'PUTSPREAD',
     'DIGITEVEN',
     'DIGITODD',
     'DIGITOVER',
     'DIGITUNDER',
     'DIGITMATCH',
     'DIGITDIFF',
+    'EXPIRYMISS',
+    'EXPIRYRANGE',
+    'LBFLOATCALL',
+    'LBFLOATPUT',
+    'LBHIGHLOW',
+    'MULTUP',
+    'MULTDOWN',
+    'ONETOUCH',
+    'NOTOUCH',
+    'RANGE',
+    'UPORDOWN',
+    'RESETCALL',
+    'RESETPUT',
+    'RUNHIGH',
+    'RUNLOW',
+    'TICKHIGH',
+    'TICKLOW',
 ];
 
 export type AutoLabTick = {
@@ -56,6 +79,8 @@ export type AutoLabStrategySettings = {
     ticksWindow: number;
     thresholdPercent: number;
     barrier: number;
+    contractBarrier?: number;
+    secondaryBarrier?: number;
     requiredStreak: number;
     contractType: AutoLabContractChoice;
 };
@@ -65,6 +90,7 @@ export type AutoLabCandidate = {
     label: string;
     contract_type: AutoLabContractType;
     barrier?: number;
+    barrier2?: number;
     strategy: Exclude<AutoLabMode, 'Multimarket'>;
     score: number;
     detail: string;
@@ -76,6 +102,17 @@ export type AutoLabDigitStat = { digit: number; count: number; percent: number }
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 const minimumSampleSize = (window: number) => Math.min(20, Math.max(1, Math.floor(window) || 1));
+const barrierContracts = new Set<AutoLabContractType>([
+    'DIGITMATCH', 'DIGITDIFF', 'DIGITOVER', 'DIGITUNDER',
+    'ONETOUCH', 'NOTOUCH', 'RANGE', 'UPORDOWN', 'EXPIRYMISS',
+    'EXPIRYRANGE', 'RESETCALL', 'RESETPUT',
+]);
+const digitBarrierContracts = new Set<AutoLabContractType>([
+    'DIGITMATCH', 'DIGITDIFF', 'DIGITOVER', 'DIGITUNDER',
+]);
+const twoBarrierContracts = new Set<AutoLabContractType>([
+    'RANGE', 'UPORDOWN', 'EXPIRYMISS', 'EXPIRYRANGE',
+]);
 
 const candidate = (
     market: AutoLabMarketWindow,
@@ -279,9 +316,24 @@ export const evaluateAutoLabCandidates = (
     for (const market of markets) {
         for (const strategy of modes) {
             const result = evaluateOneMode(strategy, market, settings);
-            if (result && (settings.contractType === 'AUTO' || settings.contractType === result.contract_type)) {
+            if (!result) continue;
+            if (settings.contractType === 'AUTO') {
                 output.push(result);
+                continue;
             }
+            const selectedContract = settings.contractType;
+            output.push({
+                ...result,
+                contract_type: selectedContract,
+                ...(digitBarrierContracts.has(selectedContract)
+                    ? { barrier: settings.barrier }
+                    : barrierContracts.has(selectedContract)
+                        ? { barrier: settings.contractBarrier ?? settings.barrier }
+                        : { barrier: undefined }),
+                ...(twoBarrierContracts.has(selectedContract) && settings.secondaryBarrier != null
+                    ? { barrier2: settings.secondaryBarrier }
+                    : { barrier2: undefined }),
+            });
         }
     }
     return output.sort((left, right) => right.score - left.score || right.epoch - left.epoch);
@@ -301,11 +353,26 @@ export const isAutoLabContractWin = (
     barrier: number | undefined,
     exitTick: AutoLabTick,
     entryQuote: number,
+    barrier2?: number,
 ): boolean => {
     switch (contractType) {
         case 'CALL':
+        case 'CALLE':
+        case 'ASIANU':
+        case 'MULTUP':
+        case 'CALLSPREAD':
+        case 'RESETCALL':
+        case 'RUNHIGH':
+        case 'LBFLOATCALL':
             return exitTick.quote > entryQuote;
         case 'PUT':
+        case 'PUTE':
+        case 'ASIAND':
+        case 'MULTDOWN':
+        case 'PUTSPREAD':
+        case 'RESETPUT':
+        case 'RUNLOW':
+        case 'LBFLOATPUT':
             return exitTick.quote < entryQuote;
         case 'DIGITEVEN':
             return exitTick.digit % 2 === 0;
@@ -319,6 +386,33 @@ export const isAutoLabContractWin = (
             return barrier != null && exitTick.digit === barrier;
         case 'DIGITDIFF':
             return barrier != null && exitTick.digit !== barrier;
+        case 'ONETOUCH':
+            return barrier != null && (
+                exitTick.quote === barrier
+                || (entryQuote < barrier && exitTick.quote > barrier)
+                || (entryQuote > barrier && exitTick.quote < barrier)
+            );
+        case 'NOTOUCH':
+            return barrier != null && !(
+                exitTick.quote === barrier
+                || (entryQuote < barrier && exitTick.quote > barrier)
+                || (entryQuote > barrier && exitTick.quote < barrier)
+            );
+        case 'RANGE':
+        case 'EXPIRYRANGE':
+            return barrier != null && barrier2 != null
+                && exitTick.quote > Math.min(barrier, barrier2)
+                && exitTick.quote < Math.max(barrier, barrier2);
+        case 'UPORDOWN':
+        case 'EXPIRYMISS':
+            return barrier != null && barrier2 != null
+                && (exitTick.quote < Math.min(barrier, barrier2) || exitTick.quote > Math.max(barrier, barrier2));
+        case 'ACCU':
+        case 'LBHIGHLOW':
+        case 'TICKHIGH':
+            return exitTick.quote >= entryQuote;
+        case 'TICKLOW':
+            return exitTick.quote <= entryQuote;
     }
 };
 

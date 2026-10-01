@@ -8,7 +8,7 @@ import { useAutoLabEngine } from './useAutoLabEngine';
 const INITIAL_SETTINGS: AutoLabSettings = {
     marketSelection: 'ALL',
     contractType: 'AUTO',
-    stake: 1,
+    stake: 0.35,
     martingaleMode: 'normal',
     multiplier: 2,
     maxMartingaleLevel: 4,
@@ -17,7 +17,15 @@ const INITIAL_SETTINGS: AutoLabSettings = {
     ticksWindow: 100,
     thresholdPercent: 70,
     barrier: 4,
+    contractBarrier: 100,
+    secondaryBarrier: 101,
     requiredStreak: 3,
+    duration: 1,
+    durationUnit: 't' as const,
+    contractMultiplier: 2,
+    growthRate: 0.01,
+    barrierRange: 'middle' as const,
+    selectedTick: 1,
     virtualLossesRequired: 2,
     virtualWinsRequired: 1,
 };
@@ -55,6 +63,18 @@ const AutoLab = observer(() => {
             setSettings(previous => ({ ...previous, contractType: String(value) as AutoLabSettings['contractType'] }));
             return;
         }
+        if (key === 'durationUnit') {
+            if (['t', 's', 'm', 'h', 'd'].includes(String(value))) {
+                setSettings(previous => ({ ...previous, durationUnit: String(value) as AutoLabSettings['durationUnit'] }));
+            }
+            return;
+        }
+        if (key === 'barrierRange') {
+            if (['tight', 'middle', 'wide'].includes(String(value))) {
+                setSettings(previous => ({ ...previous, barrierRange: value as AutoLabSettings['barrierRange'] }));
+            }
+            return;
+        }
         if (key === 'martingaleMode') {
             if (value === 'normal' || value === 'split') {
                 setSettings(previous => ({ ...previous, martingaleMode: value }));
@@ -64,7 +84,7 @@ const AutoLab = observer(() => {
         const raw = Number(value);
         if (!Number.isFinite(raw)) return;
         const ranges: Partial<Record<keyof AutoLabSettings, [number, number, boolean]>> = {
-            stake: [0.01, 100000, false],
+            stake: [0, 100000, false],
             multiplier: [1, 10, false],
             maxMartingaleLevel: [0, 20, true],
             takeProfit: [0, 1000000, false],
@@ -72,7 +92,13 @@ const AutoLab = observer(() => {
             ticksWindow: [1, 1500, true],
             thresholdPercent: [50, 100, false],
             barrier: [0, 9, true],
+            contractBarrier: [0, 1000000000, false],
+            secondaryBarrier: [0, 1000000000, false],
+            duration: [1, 100000, true],
             requiredStreak: [1, 100, true],
+            contractMultiplier: [1, 1000, false],
+            growthRate: [0.01, 0.1, false],
+            selectedTick: [1, 1000, true],
             virtualLossesRequired: [0, 20, true],
             virtualWinsRequired: [0, 20, true],
         };
@@ -80,11 +106,16 @@ const AutoLab = observer(() => {
         if (!range) return;
         const [minimum, maximum, integer] = range;
         const bounded = Math.max(minimum, Math.min(maximum, raw));
-        const normalized = integer ? Math.round(bounded) : bounded;
+        const normalized = integer
+            ? Math.round(bounded)
+            : Math.round((bounded + Number.EPSILON) * 100) / 100;
         const usdValue = key === 'stake' || key === 'takeProfit' || key === 'stopLoss'
             ? toUsd(normalized)
             : normalized;
-        setSettings(previous => ({ ...previous, [key]: usdValue }) as AutoLabSettings);
+        const safeUsdValue = key === 'stake'
+            ? Math.max(0.35, Math.round((usdValue + Number.EPSILON) * 100) / 100)
+            : usdValue;
+        setSettings(previous => ({ ...previous, [key]: safeUsdValue }) as AutoLabSettings);
     };
 
     return (

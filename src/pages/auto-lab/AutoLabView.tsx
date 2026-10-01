@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Activity, AlertTriangle, ArrowUpRight, BarChart3, CircleHelp, Pause, Play, Radio, ShieldCheck, Square, Waves } from 'lucide-react';
-import { formatMoney, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
+import { formatMoney, fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
 import { AUTO_LAB_CONTRACT_TYPES, AUTO_LAB_MODES, type AutoLabContractChoice, type AutoLabMode } from './auto-lab-engine';
 import './auto-lab-view.scss';
 
@@ -19,7 +19,15 @@ export type AutoLabSettings = {
   ticksWindow: number;
   thresholdPercent: number;
   barrier: number;
+  contractBarrier: number;
+  secondaryBarrier: number;
   requiredStreak: number;
+  duration: number;
+  durationUnit: 't' | 's' | 'm' | 'h' | 'd';
+  contractMultiplier: number;
+  growthRate: number;
+  barrierRange: 'tight' | 'middle' | 'wide';
+  selectedTick: number;
   virtualLossesRequired: number;
   virtualWinsRequired: number;
 };
@@ -168,25 +176,79 @@ const NumericField = ({
   wide?: boolean;
   disabled?: boolean;
 }) => (
-  <label className={`lab-field${wide ? ' lab-field--wide' : ''}`}>
-    {label}
-    <input
-      aria-label={label}
-      data-testid={`input-${name}`}
-      type="number"
-      value={value}
-      min={min}
-      max={max}
-      step={step}
-      disabled={disabled}
-      onChange={event => {
-        if (event.target.value === '') return;
-        const next = Number(event.target.value);
-        if (Number.isFinite(next)) onChange(name, next);
-      }}
-    />
-  </label>
+  <NumericFieldInput
+    label={label}
+    name={name}
+    value={value}
+    onChange={onChange}
+    step={step}
+    min={min}
+    max={max}
+    wide={wide}
+    disabled={disabled}
+  />
 );
+
+const NumericFieldInput = ({
+  label,
+  name,
+  value,
+  onChange,
+  step,
+  min,
+  max,
+  wide,
+  disabled,
+}: {
+  label: string;
+  name: keyof AutoLabSettings;
+  value: number;
+  onChange: AutoLabViewProps['onSettingChange'];
+  step: number;
+  min: number;
+  max?: number;
+  wide: boolean;
+  disabled: boolean;
+}) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [draft, setDraft] = useState(String(value));
+
+  useEffect(() => {
+    if (document.activeElement !== inputRef.current) setDraft(String(value));
+  }, [value]);
+
+  return (
+    <label className={`lab-field${wide ? ' lab-field--wide' : ''}`}>
+      {label}
+      <input
+        ref={inputRef}
+        aria-label={label}
+        data-testid={`input-${name}`}
+        type="number"
+        value={draft}
+        min={min}
+        max={max}
+        step={step}
+        disabled={disabled}
+        onChange={event => {
+          const raw = event.target.value;
+          setDraft(raw);
+          if (raw === '') return;
+          const next = Number(raw);
+          if (Number.isFinite(next)) onChange(name, next);
+        }}
+        onBlur={() => {
+          const parsed = Number(draft);
+          const next = draft.trim() && Number.isFinite(parsed)
+            ? Math.max(min, max == null ? parsed : Math.min(max, parsed))
+            : min;
+          onChange(name, next);
+          setDraft(String(next));
+        }}
+      />
+    </label>
+  );
+};
 
 const AutoLabView = ({
   mode,
@@ -211,6 +273,13 @@ const AutoLabView = ({
 }: AutoLabViewProps) => {
   const displayCurrency = useDisplayCurrency();
   const isRealAccount = account.isVirtual === false;
+  const contract = settings.contractType;
+  const isDigitContract = contract.startsWith('DIGIT');
+  const isDurationlessContract = contract === 'AUTO' || contract === 'ACCU' || contract === 'MULTUP' || contract === 'MULTDOWN';
+  const needsPriceBarrier = ['ONETOUCH', 'NOTOUCH', 'RANGE', 'UPORDOWN', 'EXPIRYMISS', 'EXPIRYRANGE', 'RESETCALL', 'RESETPUT'].includes(contract);
+  const needsSecondBarrier = ['RANGE', 'UPORDOWN', 'EXPIRYMISS', 'EXPIRYRANGE'].includes(contract);
+  const needsMultiplier = ['MULTUP', 'MULTDOWN', 'LBFLOATCALL', 'LBFLOATPUT', 'LBHIGHLOW'].includes(contract);
+  const isTickContract = isDigitContract || contract === 'TICKHIGH' || contract === 'TICKLOW';
   const readyToRun = canStart && (!isRealAccount || liveAcknowledged);
   const isActive = status === 'running' || status === 'scanning' || status === 'connecting';
   const settingsLocked = inputsDisabled || status === 'paused';
@@ -300,6 +369,56 @@ const AutoLabView = ({
                 <NumericField label="Threshold %" name="thresholdPercent" value={settings.thresholdPercent} onChange={onSettingChange} min={50} max={100} step={0.1} disabled={settingsLocked} />
                 <NumericField label="Barrier digit" name="barrier" value={settings.barrier} onChange={onSettingChange} min={0} max={9} disabled={settingsLocked} />
                 <NumericField label="Required streak" name="requiredStreak" value={settings.requiredStreak} onChange={onSettingChange} min={1} max={100} disabled={settingsLocked} />
+                {needsPriceBarrier && (
+                  <NumericField label="Contract price barrier" name="contractBarrier" value={settings.contractBarrier} onChange={onSettingChange} step={0.01} disabled={settingsLocked} />
+                )}
+                {needsSecondBarrier && (
+                  <NumericField label="Second price barrier" name="secondaryBarrier" value={settings.secondaryBarrier} onChange={onSettingChange} step={0.01} disabled={settingsLocked} />
+                )}
+                {!isDurationlessContract && (
+                  <>
+                    <NumericField label="Contract duration" name="duration" value={settings.duration} onChange={onSettingChange} min={1} max={100000} disabled={settingsLocked} />
+                    <label className="lab-field">Duration unit
+                      <select
+                        aria-label="Duration unit"
+                        data-testid="select-duration-unit"
+                        value={isTickContract ? 't' : settings.durationUnit}
+                        disabled={settingsLocked || isTickContract}
+                        onChange={event => onSettingChange('durationUnit', event.target.value)}
+                      >
+                        <option value="t">Ticks</option>
+                        <option value="s">Seconds</option>
+                        <option value="m">Minutes</option>
+                        <option value="h">Hours</option>
+                        <option value="d">Days</option>
+                      </select>
+                    </label>
+                  </>
+                )}
+                {needsMultiplier && (
+                  <NumericField label="Contract multiplier" name="contractMultiplier" value={settings.contractMultiplier} onChange={onSettingChange} step={0.1} min={1} max={1000} disabled={settingsLocked} />
+                )}
+                {contract === 'ACCU' && (
+                  <NumericField label="Accumulator growth rate" name="growthRate" value={settings.growthRate} onChange={onSettingChange} step={0.01} min={0.01} max={0.1} disabled={settingsLocked} />
+                )}
+                {(contract === 'CALLSPREAD' || contract === 'PUTSPREAD') && (
+                  <label className="lab-field">Spread width
+                    <select
+                      aria-label="Spread width"
+                      data-testid="select-barrier-range"
+                      value={settings.barrierRange}
+                      disabled={settingsLocked}
+                      onChange={event => onSettingChange('barrierRange', event.target.value)}
+                    >
+                      <option value="tight">Tight</option>
+                      <option value="middle">Middle</option>
+                      <option value="wide">Wide</option>
+                    </select>
+                  </label>
+                )}
+                {(contract === 'TICKHIGH' || contract === 'TICKLOW') && (
+                  <NumericField label="Selected tick" name="selectedTick" value={settings.selectedTick} onChange={onSettingChange} min={1} max={1000} disabled={settingsLocked} />
+                )}
               </div>
             </section>
 
@@ -309,7 +428,7 @@ const AutoLabView = ({
                 <ShieldCheck size={17} color="var(--lab-mint)" aria-hidden="true" />
               </div>
               <div className="lab-field-grid">
-                <NumericField label={`Base stake (${displayCurrency})`} name="stake" value={settings.stake} onChange={onSettingChange} step={0.01} min={0.01} disabled={settingsLocked} />
+                <NumericField label={`Base stake (${displayCurrency})`} name="stake" value={settings.stake} onChange={onSettingChange} step={0.01} min={fromUsd(0.35)} disabled={settingsLocked} />
                 <NumericField label="Multiplier" name="multiplier" value={settings.multiplier} onChange={onSettingChange} step={0.01} min={1} max={10} disabled={settingsLocked} />
                 <label className="lab-field lab-field--wide">Martingale mode
                   <div className="lab-segment" role="group" aria-label="Martingale mode">

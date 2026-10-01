@@ -11,6 +11,10 @@ export interface MasterTradeSignal {
     duration?: number;
     duration_unit?: string;
     barrier?: string | number;
+    barrier2?: string | number;
+    barrier_range?: 'tight' | 'middle' | 'wide';
+    multiplier?: number;
+    selected_tick?: number;
     growth_rate?: number;
     limit_order?: { take_profit?: number; stop_loss?: number };
     /** 'real' or 'demo' — the master account the trade originated from. */

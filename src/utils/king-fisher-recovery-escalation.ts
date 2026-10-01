@@ -11,7 +11,15 @@ export function advanceKingFisherRecoveryEscalation(
     firstOver3Phase: number,
     secondOver3Phase: number,
 ): KingFisherRecoveryStep {
-    if (won) return { phase: null, lossCount: 0 };
+    if (won) {
+        if (phaseAtSettlement === firstOver3Phase) {
+            return { phase: secondOver3Phase, lossCount: 0 };
+        }
+        if (phaseAtSettlement === secondOver3Phase) {
+            return { phase: recoveryPhase, lossCount: 0 };
+        }
+        return { phase: null, lossCount: 0 };
+    }
 
     if (phaseAtSettlement === recoveryPhase) {
         const nextLossCount = Math.max(0, Math.floor(Number(lossCount) || 0)) + 1;

@@ -7,6 +7,7 @@
     <variable id="accf_phase">cycle_phase</variable>
     <variable id="accf_tp">take_profit</variable>
     <variable id="accf_sl">stop_loss</variable>
+    <variable id="accf_loss_count">parity_recovery_losses</variable>
   </variables>
 
   <block type="trade_definition" id="accf_definition" deletable="false" x="0" y="0">
@@ -16,7 +17,7 @@
         <next><block type="trade_definition_market" id="accf_market" deletable="false" movable="false">
           <field name="MARKET_LIST">synthetic_index</field>
           <field name="SUBMARKET_LIST">random_index</field>
-          <field name="SYMBOL_LIST">R_50</field>
+          <field name="SYMBOL_LIST">R_50</field><field name="ALTERNATE_MARKETS">TRUE</field>
           <next><block type="trade_definition_tradetype" id="accf_trade_type" deletable="false" movable="false">
             <field name="TRADETYPECAT_LIST">digits</field>
             <field name="TRADETYPE_LIST">overunder</field>
@@ -86,7 +87,7 @@
           <value name="IF0"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get"><field name="VAR" id="accf_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">0</field></block></value></block></value>
           <statement name="DO0"><block type="controls_if" id="accf_over1_gate">
             <value name="IF0"><block type="logic_operation"><field name="OP">AND</field>
-              <value name="A"><block type="king_fisher_bias_scan" id="accf_over1_bias"><field name="DIRECTION">HIGH</field><field name="WINDOW">10</field></block></value>
+              <value name="A"><block type="king_fisher_chart_ai_phase_gate" id="accf_over1_bias"><field name="DIRECTION">HIGH</field><field name="BARRIER">1</field></block></value>
               <value name="B"><block type="king_fisher_entry" id="accf_over1_entry"><field name="DIRECTION">ABOVE</field><field name="THRESHOLD">1</field><field name="STREAK">2_3</field></block></value>
             </block></value>
             <statement name="DO0"><block type="multiple_purchase" id="accf_over1_purchase">
@@ -97,7 +98,7 @@
           <value name="IF1"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get"><field name="VAR" id="accf_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">1</field></block></value></block></value>
           <statement name="DO1"><block type="controls_if" id="accf_over2_gate">
             <value name="IF0"><block type="logic_operation"><field name="OP">AND</field>
-              <value name="A"><block type="king_fisher_bias_scan" id="accf_over2_bias"><field name="DIRECTION">HIGH</field><field name="WINDOW">10</field></block></value>
+              <value name="A"><block type="king_fisher_chart_ai_phase_gate" id="accf_over2_bias"><field name="DIRECTION">HIGH</field><field name="BARRIER">2</field></block></value>
               <value name="B"><block type="king_fisher_entry" id="accf_over2_entry"><field name="DIRECTION">ABOVE</field><field name="THRESHOLD">2</field><field name="STREAK">2_3</field></block></value>
             </block></value>
             <statement name="DO0"><block type="multiple_purchase" id="accf_over2_purchase">
@@ -108,7 +109,7 @@
           <value name="IF2"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get"><field name="VAR" id="accf_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">2</field></block></value></block></value>
           <statement name="DO2"><block type="controls_if" id="accf_under8_gate">
             <value name="IF0"><block type="logic_operation"><field name="OP">AND</field>
-              <value name="A"><block type="king_fisher_bias_scan" id="accf_under8_bias"><field name="DIRECTION">LOW</field><field name="WINDOW">10</field></block></value>
+              <value name="A"><block type="king_fisher_chart_ai_phase_gate" id="accf_under8_bias"><field name="DIRECTION">LOW</field><field name="BARRIER">8</field></block></value>
               <value name="B"><block type="king_fisher_entry" id="accf_under8_entry"><field name="DIRECTION">BELOW</field><field name="THRESHOLD">8</field><field name="STREAK">2_3</field></block></value>
             </block></value>
             <statement name="DO0"><block type="multiple_purchase" id="accf_under8_purchase">
@@ -119,7 +120,7 @@
           <value name="IF3"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get"><field name="VAR" id="accf_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">3</field></block></value></block></value>
           <statement name="DO3"><block type="controls_if" id="accf_under7_gate">
             <value name="IF0"><block type="logic_operation"><field name="OP">AND</field>
-              <value name="A"><block type="king_fisher_bias_scan" id="accf_under7_bias"><field name="DIRECTION">LOW</field><field name="WINDOW">10</field></block></value>
+              <value name="A"><block type="king_fisher_chart_ai_phase_gate" id="accf_under7_bias"><field name="DIRECTION">LOW</field><field name="BARRIER">7</field></block></value>
               <value name="B"><block type="king_fisher_entry" id="accf_under7_entry"><field name="DIRECTION">BELOW</field><field name="THRESHOLD">7</field><field name="STREAK">2_3</field></block></value>
             </block></value>
             <statement name="DO0"><block type="multiple_purchase" id="accf_under7_purchase">
@@ -130,7 +131,7 @@
           <value name="IF4"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get"><field name="VAR" id="accf_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">5</field></block></value></block></value>
           <statement name="DO4"><block type="controls_if" id="accf_recovery_over3_first_gate">
             <value name="IF0"><block type="logic_operation"><field name="OP">AND</field>
-              <value name="A"><block type="king_fisher_bias_scan" id="accf_recovery_over3_first_bias"><field name="DIRECTION">HIGH</field><field name="WINDOW">10</field></block></value>
+              <value name="A"><block type="king_fisher_chart_ai_phase_gate" id="accf_recovery_over3_first_bias"><field name="DIRECTION">HIGH</field><field name="BARRIER">3</field></block></value>
               <value name="B"><block type="king_fisher_entry" id="accf_recovery_over3_first_entry"><field name="DIRECTION">ABOVE</field><field name="THRESHOLD">3</field><field name="STREAK">2_3</field></block></value>
             </block></value>
             <statement name="DO0"><block type="multiple_purchase" id="accf_recovery_over3_first">
@@ -141,7 +142,7 @@
           <value name="IF5"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get"><field name="VAR" id="accf_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">6</field></block></value></block></value>
           <statement name="DO5"><block type="controls_if" id="accf_recovery_over3_second_gate">
             <value name="IF0"><block type="logic_operation"><field name="OP">AND</field>
-              <value name="A"><block type="king_fisher_bias_scan" id="accf_recovery_over3_second_bias"><field name="DIRECTION">HIGH</field><field name="WINDOW">10</field></block></value>
+              <value name="A"><block type="king_fisher_chart_ai_phase_gate" id="accf_recovery_over3_second_bias"><field name="DIRECTION">HIGH</field><field name="BARRIER">3</field></block></value>
               <value name="B"><block type="king_fisher_entry" id="accf_recovery_over3_second_entry"><field name="DIRECTION">ABOVE</field><field name="THRESHOLD">3</field><field name="STREAK">2_3</field></block></value>
             </block></value>
             <statement name="DO0"><block type="multiple_purchase" id="accf_recovery_over3_second">
@@ -161,7 +162,11 @@
         <field name="MULTIPLIER">2</field>
         <value name="TAKE_PROFIT"><block type="variables_get"><field name="VAR" id="accf_tp">take_profit</field></block></value>
         <value name="STOP_LOSS"><block type="variables_get"><field name="VAR" id="accf_sl">stop_loss</field></block></value>
-        <next><block type="controls_if" id="accf_result"><mutation else="1"/>
+        <next><block type="king_fisher_recovery_escalation" id="accf_recovery_escalation">
+          <field name="PHASE" id="accf_phase">cycle_phase</field>
+          <field name="LOSS_COUNT" id="accf_loss_count">parity_recovery_losses</field>
+          <field name="RECOVERY_PHASE">6</field><field name="FIRST_OVER3_PHASE">4</field><field name="SECOND_OVER3_PHASE">5</field>
+          <next><block type="controls_if" id="accf_result"><mutation else="1"/>
           <value name="IF0"><block type="contract_check_result"><field name="CHECK_RESULT">win</field></block></value>
           <statement name="DO0"><block type="variables_set" id="accf_reset_stake_on_win">
             <field name="VAR" id="accf_stake">stake</field>
@@ -186,9 +191,10 @@
             <value name="IF0"><block type="logic_compare"><field name="OP">GTE</field><value name="A"><block type="variables_get"><field name="VAR" id="accf_stake">stake</field></block></value><value name="B"><block type="math_number"><field name="NUM">5</field></block></value></block></value>
             <statement name="DO0"><block type="variables_set" id="accf_cap_stake"><field name="VAR" id="accf_stake">stake</field><value name="VALUE"><block type="math_number"><field name="NUM">10</field></block></value></block></statement>
             <statement name="ELSE"><block type="variables_set" id="accf_multiply_stake"><field name="VAR" id="accf_stake">stake</field><value name="VALUE"><block type="math_arithmetic"><field name="OP">MULTIPLY</field><value name="A"><block type="variables_get"><field name="VAR" id="accf_stake">stake</field></block></value><value name="B"><block type="variables_get"><field name="VAR" id="accf_martingale">martingale</field></block></value></block></value></block></statement>
-            <next><block type="variables_set" id="accf_loss_to_recovery"><field name="VAR" id="accf_phase">cycle_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">4</field></block></value></block></next>
+            <next><block type="variables_set" id="accf_loss_to_recovery"><field name="VAR" id="accf_phase">cycle_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">6</field></block></value></block></next>
           </block></statement>
           <next><block type="trade_again"/></next>
+        </block></next>
         </block></next>
       </block>
     </statement>

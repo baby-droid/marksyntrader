@@ -14,6 +14,7 @@ import { forgetAccumulatorsProposalRequest } from './accumulators-proposal-handl
 import { loadBlockly } from './blockly';
 import DBotStore from './dbot-store';
 import { scanKingFisherMarket } from '@/utils/king-fisher-market-scanner';
+import { CONTINUOUS_INDEX_SYMBOLS } from '@/utils/continuous-index-rotation';
 import { dispatchBrowserEvent } from '../utils/browser-event';
 import { isAllRequiredBlocksEnabled, updateDisabledBlocks, validateErrorOnBlockDelete } from './utils';
 
@@ -323,7 +324,13 @@ class DBot {
                             });
                         } else {
                             try {
-                                result = await scanKingFisherMarket(direction, barrier);
+                                const onlyRotatableMarkets =
+                                    marketBlock.getFieldValue?.('ALTERNATE_MARKETS') === 'TRUE';
+                                result = await scanKingFisherMarket(
+                                    direction,
+                                    barrier,
+                                    onlyRotatableMarkets ? CONTINUOUS_INDEX_SYMBOLS : undefined,
+                                );
                             } catch (scanError) {
                                 dispatchBrowserEvent('journal:signal', {
                                     type: 'SCAN',
