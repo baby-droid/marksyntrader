@@ -105,13 +105,58 @@ export type AutoLabViewProps = {
 
 const MODES = AUTO_LAB_MODES;
 
+const MODE_LABELS: Record<AutoLabMode, string> = {
+  Multimarket: 'Multimarket scan',
+  'RC Even/Odd': 'Even / Odd cycle',
+  'RC Over4/Under5': 'Over / Under',
+  '%Even/Odd': 'Even / Odd distribution',
+  'Matches/Differs': 'Matches / Differs',
+  'Rise/Fall': 'Rise / Fall',
+};
+
+const CONTRACT_LABELS: Record<AutoLabContractChoice, string> = {
+  AUTO: 'Automatic for selected strategy',
+  ACCU: 'Accumulator',
+  ASIANU: 'Asian Up',
+  ASIAND: 'Asian Down',
+  CALL: 'Rise',
+  PUT: 'Fall',
+  CALLE: 'European Rise',
+  PUTE: 'European Fall',
+  CALLSPREAD: 'Rise Spread',
+  PUTSPREAD: 'Fall Spread',
+  DIGITEVEN: 'Even',
+  DIGITODD: 'Odd',
+  DIGITOVER: 'Over',
+  DIGITUNDER: 'Under',
+  DIGITMATCH: 'Matches',
+  DIGITDIFF: 'Differs',
+  EXPIRYMISS: 'Expiry Outside Range',
+  EXPIRYRANGE: 'Expiry Inside Range',
+  LBFLOATCALL: 'Floating Rise',
+  LBFLOATPUT: 'Floating Fall',
+  LBHIGHLOW: 'High / Low',
+  MULTUP: 'Multiplier Up',
+  MULTDOWN: 'Multiplier Down',
+  ONETOUCH: 'One Touch',
+  NOTOUCH: 'No Touch',
+  RANGE: 'Stay Between',
+  UPORDOWN: 'Outside Range',
+  RESETCALL: 'Reset Rise',
+  RESETPUT: 'Reset Fall',
+  RUNHIGH: 'Run High',
+  RUNLOW: 'Run Low',
+  TICKHIGH: 'Tick High',
+  TICKLOW: 'Tick Low',
+};
+
 const MODE_NOTES: Record<AutoLabMode, string> = {
   Multimarket: 'Scan authorized synthetic markets for the strongest available setup.',
   'RC Even/Odd': 'Read recent parity cycles across the selected tick window.',
-  'RC Over4/Under5': 'Compare digit pressure around the 4 / 5 boundary.',
+  'RC Over4/Under5': 'Compare digits against the selected barrier. Choose Over or Under below.',
   '%Even/Odd': 'Evaluate the observed even-to-odd distribution.',
-  'Matches/Differs': 'Track digit concentration and repetition conditions.',
-  'Rise/Fall': 'Use consecutive quote movement for CALL and PUT entries.',
+  'Matches/Differs': 'Track digit concentration. The automatic barrier uses the most-observed digit in the supplied tick window.',
+  'Rise/Fall': 'Use consecutive quote movement to select Rise or Fall contracts.',
 };
 
 const statusLabel: Record<AutoLabStatus, string> = {
@@ -272,6 +317,7 @@ const AutoLabView = ({
   message,
 }: AutoLabViewProps) => {
   const displayCurrency = useDisplayCurrency();
+  const [autoSelectBarrier, setAutoSelectBarrier] = useState(true);
   const isRealAccount = account.isVirtual === false;
   const contract = settings.contractType;
   const isDigitContract = contract.startsWith('DIGIT');
@@ -288,6 +334,17 @@ const AutoLabView = ({
   const accountMode = account.isVirtual == null ? 'Account type unavailable' : account.isVirtual ? 'Demo account' : 'Real account';
   const connectedLabel = account.connected ? (account.authorized ? 'Authorized' : 'Connected · authorize') : 'Disconnected';
   const connectionTone = account.connected && account.authorized ? 'good' : account.connected ? 'warn' : 'bad';
+
+  useEffect(() => {
+    if (mode !== 'Matches/Differs' || !autoSelectBarrier || settingsLocked || !digitStats.length) return;
+    const mostObserved = digitStats
+      .filter(item => Number.isInteger(item.digit) && item.digit >= 0 && item.digit <= 9 && Number.isFinite(item.count))
+      .slice()
+      .sort((left, right) => right.count - left.count || left.digit - right.digit)[0];
+    if (mostObserved && settings.barrier !== mostObserved.digit) {
+      onSettingChange('barrier', mostObserved.digit);
+    }
+  }, [autoSelectBarrier, digitStats, mode, onSettingChange, settings.barrier, settingsLocked]);
 
   return (
     <main className="auto-lab" data-testid="page-auto-lab">
@@ -311,7 +368,7 @@ const AutoLabView = ({
           <section className="auto-lab__rail" aria-label="Strategy and execution settings">
             <section className="lab-panel">
               <div className="auto-lab__section-head">
-                <div><span className="auto-lab__section-kicker">01 / Strategy</span><h2 className="auto-lab__section-title">Signal mode</h2></div>
+                <div><span className="auto-lab__section-kicker">01 / Strategy</span><h2 className="auto-lab__section-title">Auto Menu</h2></div>
                 <Radio size={17} color="var(--lab-cyan)" aria-hidden="true" />
               </div>
               <div className="lab-mode-list" role="group" aria-label="Signal mode">
@@ -325,7 +382,7 @@ const AutoLabView = ({
                     disabled={settingsLocked}
                     onClick={() => onModeChange(item)}
                   >
-                    <span>{item}</span><span className="lab-mode__index">0{index + 1}</span>
+                    <span>{MODE_LABELS[item]}</span><span className="lab-mode__index">0{index + 1}</span>
                   </button>
                 ))}
               </div>
@@ -361,13 +418,55 @@ const AutoLabView = ({
                     disabled={settingsLocked}
                     onChange={event => onSettingChange('contractType', event.target.value)}
                   >
-                    <option value="AUTO">Automatic for selected strategy</option>
-                    {AUTO_LAB_CONTRACT_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
+                    <option value="AUTO">{CONTRACT_LABELS.AUTO}</option>
+                    {AUTO_LAB_CONTRACT_TYPES.map(type => <option key={type} value={type}>{CONTRACT_LABELS[type]}</option>)}
                   </select>
                 </label>
                 <NumericField label="Tick window" name="ticksWindow" value={settings.ticksWindow} onChange={onSettingChange} min={1} max={1500} disabled={settingsLocked} />
                 <NumericField label="Threshold %" name="thresholdPercent" value={settings.thresholdPercent} onChange={onSettingChange} min={50} max={100} step={0.1} disabled={settingsLocked} />
                 <NumericField label="Barrier digit" name="barrier" value={settings.barrier} onChange={onSettingChange} min={0} max={9} disabled={settingsLocked} />
+                {mode === 'RC Over4/Under5' && (
+                  <div className="lab-field lab-field--wide">
+                    Over / Under direction
+                    <div className="lab-segment" role="group" aria-label="Over or Under contract">
+                      {([
+                        ['DIGITOVER', 'Over'],
+                        ['DIGITUNDER', 'Under'],
+                      ] as const).map(([contractType, label]) => (
+                        <button
+                          type="button"
+                          key={contractType}
+                          className={settings.contractType === contractType ? 'is-active' : ''}
+                          aria-pressed={settings.contractType === contractType}
+                          data-testid={`button-contract-${contractType.toLowerCase()}`}
+                          disabled={settingsLocked}
+                          onClick={() => onSettingChange('contractType', contractType)}
+                        >{label}</button>
+                      ))}
+                    </div>
+                    <span className="lab-field__help">Barrier digit is the boundary: Over wins above it; Under wins below it.</span>
+                  </div>
+                )}
+                {mode === 'Matches/Differs' && (
+                  <div className="lab-field lab-field--wide">
+                    Barrier selection
+                    <label className="lab-auto-toggle">
+                      <input
+                        type="checkbox"
+                        checked={autoSelectBarrier}
+                        disabled={settingsLocked}
+                        data-testid="checkbox-auto-barrier"
+                        onChange={event => setAutoSelectBarrier(event.target.checked)}
+                      />
+                      <span>Auto-select most-observed digit</span>
+                    </label>
+                    <span className="lab-field__help">
+                      {digitStats.length
+                        ? `Uses the most frequent digit from the observed ${settings.ticksWindow}-tick window as the barrier.`
+                        : 'Waiting for observed digit statistics. Automatic selection applies when the feed is available; turn it off to set the barrier manually.'}
+                    </span>
+                  </div>
+                )}
                 <NumericField label="Required streak" name="requiredStreak" value={settings.requiredStreak} onChange={onSettingChange} min={1} max={100} disabled={settingsLocked} />
                 {needsPriceBarrier && (
                   <NumericField label="Contract price barrier" name="contractBarrier" value={settings.contractBarrier} onChange={onSettingChange} step={0.01} disabled={settingsLocked} />
@@ -464,7 +563,7 @@ const AutoLabView = ({
                   <p className="lab-signal__detail" data-testid="text-signal-detail">{currentSignal.detail || 'Signal detail will appear when supplied by the strategy.'}</p>
                   <div className="lab-signal__meta">
                     <span className={`lab-chip lab-chip--${statusTone[status]}`}>{statusLabel[status]}</span>
-                    <span className="lab-chip lab-chip--neutral">{mode}</span>
+                    <span className="lab-chip lab-chip--neutral">{MODE_LABELS[mode]}</span>
                   </div>
                 </div>
                 <div className="lab-signal__confidence">

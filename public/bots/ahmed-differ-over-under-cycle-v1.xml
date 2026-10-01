@@ -5,6 +5,7 @@
     <variable id="adoc1_base">base_stake</variable>
     <variable id="adoc1_mg">martingale</variable>
     <variable id="adoc1_phase">cycle_phase</variable>
+    <variable id="adoc1_loss_count">parity_recovery_losses</variable>
     <variable id="adoc1_digit">last_digit</variable>
     <variable id="adoc1_tp">take_profit</variable>
     <variable id="adoc1_sl">stop_loss</variable>
@@ -30,7 +31,9 @@
           <next><block type="variables_set" id="adoc1_i_mg"><field name="VAR" id="adoc1_mg">martingale</field><value name="VALUE"><block type="math_number"><field name="NUM">2</field></block></value>
             <next><block type="variables_set" id="adoc1_i_phase"><field name="VAR" id="adoc1_phase">cycle_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">0</field></block></value>
               <next><block type="variables_set" id="adoc1_i_tp"><field name="VAR" id="adoc1_tp">take_profit</field><value name="VALUE"><block type="math_number"><field name="NUM">5</field></block></value>
-                <next><block type="variables_set" id="adoc1_i_sl"><field name="VAR" id="adoc1_sl">stop_loss</field><value name="VALUE"><block type="math_number"><field name="NUM">20</field></block></value></block></next></block></next></block></next></block></next></block></next></block>
+                <next><block type="variables_set" id="adoc1_i_sl"><field name="VAR" id="adoc1_sl">stop_loss</field><value name="VALUE"><block type="math_number"><field name="NUM">20</field></block></value>
+                  <next><block type="variables_set" id="adoc1_i_loss_count"><field name="VAR" id="adoc1_loss_count">parity_recovery_losses</field><value name="VALUE"><block type="math_number"><field name="NUM">0</field></block></value></block></next>
+                </block></next></block></next></block></next></block></next></block></next></block>
     </statement>
     <statement name="SUBMARKET"><block type="trade_definition_tradeoptions" id="adoc1_options"><mutation has_first_barrier="false" has_second_barrier="false" has_prediction="true"/><field name="DURATIONTYPE_LIST">t</field><value name="DURATION"><shadow type="math_number_positive"><field name="NUM">1</field></shadow></value><value name="AMOUNT"><shadow type="math_number_positive"><field name="NUM">1</field></shadow><block type="variables_get"><field name="VAR" id="adoc1_stake">stake</field></block></value><value name="PREDICTION"><shadow type="math_number_positive"><field name="NUM">9</field></shadow></value></block></statement>
   </block>

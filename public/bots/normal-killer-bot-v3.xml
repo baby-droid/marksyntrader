@@ -101,10 +101,8 @@
             <field name="CONFIRMATIONS">1</field>
             <field name="RESULT">LOSS</field>
             <value name="SIGNAL">
-              <block type="king_fisher_entry" id="nkv3_entry_signal">
-                <field name="DIRECTION">ABOVE</field>
-                <field name="THRESHOLD">1</field>
-                <field name="STREAK">2_3</field>
+              <block type="logic_boolean" id="nkv3_hook_signal">
+                <field name="BOOL">TRUE</field>
               </block>
             </value>
           </block>

@@ -38,6 +38,38 @@ describe('Smart Trading decisions', () => {
         expect(decision).toMatchObject({ contract, barrier: null, meetsCondition: true });
     });
 
+    it.each([
+        ['rise', [9, 1, 2], [100, 101, 102], 'CALL', 'rise'],
+        ['fall', [0, 8, 7], [102, 101, 100], 'PUT', 'fall'],
+    ] as const)('uses quote direction for the %s card', (id, digits, prices, contract, bias) => {
+        const decision = pickSmartTradeDecision(
+            id,
+            [...digits],
+            config({ lookback: 2, barrier: 5 }),
+            100,
+            [...prices],
+        );
+
+        expect(decision).toMatchObject({
+            contract,
+            barrier: null,
+            meetsCondition: true,
+            bias,
+        });
+    });
+
+    it('fails closed for a Rise/Fall card with an invalid selected action', () => {
+        const decision = pickSmartTradeDecision(
+            'risefall',
+            [1, 2, 3],
+            config({ ifValue: 'Rise', thenAction: 'Unknown action' }),
+            100,
+            [100, 101, 102],
+        );
+
+        expect(decision).toMatchObject({ contract: 'CALL', barrier: null, meetsCondition: false });
+    });
+
     it('requires the complete selected parity streak before entering', () => {
         const even = pickSmartTradeDecision(
             'evenodd',
@@ -127,8 +159,8 @@ describe('Smart Trading proposal execution guards', () => {
     };
 
     it.each([
-        ['CALL', undefined],
-        ['PUT', undefined],
+        ['CALL', 5],
+        ['PUT', 5],
         ['DIGITEVEN', undefined],
         ['DIGITODD', undefined],
     ])('does not send a barrier for %s', (contract_type, barrier) => {

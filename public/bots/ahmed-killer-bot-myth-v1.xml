@@ -32,7 +32,9 @@
           <next><block type="variables_set" id="akbm_i_mg"><field name="VAR" id="akbm_mg">martingale</field><value name="VALUE"><block type="math_number"><field name="NUM">1.5</field></block></value>
             <next><block type="variables_set" id="akbm_i_phase"><field name="VAR" id="akbm_phase">recovery_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">0</field></block></value>
               <next><block type="variables_set" id="akbm_i_tp"><field name="VAR" id="akbm_tp">take_profit</field><value name="VALUE"><block type="math_number"><field name="NUM">10</field></block></value>
-                <next><block type="variables_set" id="akbm_i_sl"><field name="VAR" id="akbm_sl">stop_loss</field><value name="VALUE"><block type="math_number"><field name="NUM">20</field></block></value></block></next>
+                <next><block type="variables_set" id="akbm_i_sl"><field name="VAR" id="akbm_sl">stop_loss</field><value name="VALUE"><block type="math_number"><field name="NUM">20</field></block></value>
+                  <next><block type="variables_set" id="akbm_i_loss_count"><field name="VAR" id="akbm_loss_count">parity_recovery_losses</field><value name="VALUE"><block type="math_number"><field name="NUM">0</field></block></value></block></next>
+                </block></next>
               </block></next>
             </block></next>
           </block></next>

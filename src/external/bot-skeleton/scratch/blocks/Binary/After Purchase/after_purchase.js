@@ -117,19 +117,24 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
     const recoveryEscalationBlock = workspaceBlocks.find(
         candidate => candidate.type === 'king_fisher_recovery_escalation'
     );
+    const variableCodeForField = (block, fieldName) => {
+        const field = block.getField?.(fieldName);
+        const byId = variableCodeForId(block.getFieldValue(fieldName));
+        return byId || variableName(field?.getText?.());
+    };
     let recoveryPhaseSnapshot = '';
     let recoveryEscalationCode = '';
     if (recoveryEscalationBlock) {
-        const phaseVariable = variableCodeForId(recoveryEscalationBlock.getFieldValue('PHASE'));
-        const lossCountVariable = variableCodeForId(recoveryEscalationBlock.getFieldValue('LOSS_COUNT'));
+        const phaseVariable = variableCodeForField(recoveryEscalationBlock, 'PHASE');
+        const lossCountVariable = variableCodeForField(recoveryEscalationBlock, 'LOSS_COUNT');
         if (!phaseVariable || !lossCountVariable) {
-            throw new Error('Parity Recovery Escalation needs its phase and loss-count variables.');
-        }
-        const recoveryPhase = Number(recoveryEscalationBlock.getFieldValue('RECOVERY_PHASE'));
-        const firstOver3Phase = Number(recoveryEscalationBlock.getFieldValue('FIRST_OVER3_PHASE'));
-        const secondOver3Phase = Number(recoveryEscalationBlock.getFieldValue('SECOND_OVER3_PHASE'));
-        recoveryPhaseSnapshot = `var kingFisherRecoveryPhaseAtSettlement = Number(${phaseVariable});`;
-        recoveryEscalationCode = `
+            recoveryEscalationCode = 'if (typeof Bot.emitJournalSignal === "function") Bot.emitJournalSignal({ type: "LOSS", label: "RECOVERY CONFIGURATION ERROR", detail: "Parity Recovery Escalation is missing a phase or loss-count variable; no escalation was applied." });';
+        } else {
+            const recoveryPhase = Number(recoveryEscalationBlock.getFieldValue('RECOVERY_PHASE'));
+            const firstOver3Phase = Number(recoveryEscalationBlock.getFieldValue('FIRST_OVER3_PHASE'));
+            const secondOver3Phase = Number(recoveryEscalationBlock.getFieldValue('SECOND_OVER3_PHASE'));
+            recoveryPhaseSnapshot = `var kingFisherRecoveryPhaseAtSettlement = Number(${phaseVariable});`;
+            recoveryEscalationCode = `
         var kingFisherRecoveryStep = Bot.advanceKingFisherRecoveryEscalation(
             kingFisherRecoveryPhaseAtSettlement,
             Number(${lossCountVariable}),
@@ -142,6 +147,7 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
             ${phaseVariable} = kingFisherRecoveryStep.phase;
         }
         ${lossCountVariable} = kingFisherRecoveryStep.lossCount;`;
+        }
     }
     const tradeOptionsBlock = workspaceBlocks.find(
         candidate => candidate.type === 'trade_definition_tradeoptions'

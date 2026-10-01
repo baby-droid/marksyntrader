@@ -646,6 +646,29 @@ function evaluateSingleCondition(
     if (digits.length < n) return false;
     const recent = digits.slice(0, n);
     const matchFn = buildMatchFn(cond);
+    const directionalPredicate = ['RISE', 'FALL', 'RISE EQUAL', 'FALL EQUAL', 'ONLY UPS', 'ONLY DOWNS', 'HIGHER', 'LOWER']
+        .includes(cond.digitsIs);
+    const matchAt = (index: number, digit: number, previous: number | null) => {
+        if (directionalPredicate && ctx?.prices?.length && ['CALL', 'PUT'].includes(ctx.contractType)) {
+            const currentPrice = ctx.prices[index];
+            const previousPrice = ctx.prices[index + 1];
+            if (!Number.isFinite(currentPrice) || !Number.isFinite(previousPrice)) return false;
+            const rising = currentPrice > previousPrice;
+            const falling = currentPrice < previousPrice;
+            switch (cond.digitsIs) {
+                case 'RISE':
+                case 'ONLY UPS':
+                case 'HIGHER': return rising;
+                case 'RISE EQUAL': return currentPrice >= previousPrice;
+                case 'FALL':
+                case 'ONLY DOWNS':
+                case 'LOWER': return falling;
+                case 'FALL EQUAL': return currentPrice <= previousPrice;
+                default: return false;
+            }
+        }
+        return matchFn(digit, previous);
+    };
 
     switch (cond.algorithm) {
         /* ── LDP (Last Digit Pattern) / NDP (Next Digit Prediction) ──────────────
@@ -662,8 +685,8 @@ function evaluateSingleCondition(
             const touches = Math.max(1, Math.floor(Number(cond.touches) || 1));
             let touched = 0;
             let prev: number | null = null;
-            for (const d of recent) {
-                if (matchFn(d, prev)) touched++;
+            for (const [index, d] of recent.entries()) {
+                if (matchAt(index, d, prev)) touched++;
                 prev = d;
             }
             return touched >= Math.min(touches, n);
@@ -680,14 +703,20 @@ function evaluateSingleCondition(
                 let prev: number | null = cond.algorithm === 'NDP'
                     ? (digits[n] ?? null)
                     : null;
-                for (const d of recent) { if (!matchFn(d, prev)) return false; prev = d; }
+                for (const [index, d] of recent.entries()) {
+                    if (!matchAt(index, d, prev)) return false;
+                    prev = d;
+                }
                 return true;
             } else {
                 let count = 0;
                 let prev: number | null = cond.algorithm === 'NDP'
                     ? (digits[n] ?? null)
                     : null;
-                for (const d of recent) { if (matchFn(d, prev)) count++; prev = d; }
+                for (const [index, d] of recent.entries()) {
+                    if (matchAt(index, d, prev)) count++;
+                    prev = d;
+                }
                 return count > recent.length / 2;
             }
         }
@@ -699,7 +728,10 @@ function evaluateSingleCondition(
             if (recent.length < 2) return false;
             let matchCount = 0;
             let prev: number | null = null;
-            for (const d of recent) { if (matchFn(d, prev)) matchCount++; prev = d; }
+            for (const [index, d] of recent.entries()) {
+                if (matchAt(index, d, prev)) matchCount++;
+                prev = d;
+            }
             const pct = (matchCount / recent.length) * 100;
             return pct >= (cond.percentageThreshold ?? 60);
         }

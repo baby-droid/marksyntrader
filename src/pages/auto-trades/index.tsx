@@ -70,6 +70,7 @@ function normalizeAutoTradeContract(contractType: unknown): string {
 }
 
 function normalizeAutoTradeBarrier(contractType: string, barrier: number | null): number | null {
+    if (!['DIGITOVER', 'DIGITUNDER', 'DIGITMATCH', 'DIGITDIFF'].includes(contractType)) return null;
     if (barrier == null || !Number.isFinite(Number(barrier))) return null;
     const value = Math.floor(Number(barrier));
     if (contractType === 'DIGITOVER') return Math.max(0, Math.min(8, value));
@@ -83,9 +84,11 @@ function normalizeAutoTradeBarrier(contractType: string, barrier: number | null)
 // on the account the user selected.
 function useAuthenticatedLiveDigits(symbol: string) {
     const [digits, setDigits] = useState<number[]>([]);
+    const [prices, setPrices] = useState<number[]>([]);
     const [livePrice, setLivePrice] = useState<number | null>(null);
     const [tickVersion, setTickVersion] = useState(0);
     const digitsRef = useRef<number[]>([]);
+    const pricesRef = useRef<number[]>([]);
     const priceRef = useRef<number | null>(null);
 
     useEffect(() => {
@@ -108,6 +111,12 @@ function useAuthenticatedLiveDigits(symbol: string) {
             const bounded = next.slice(-1000);
             digitsRef.current = bounded;
             if (alive) setDigits(bounded);
+        };
+
+        const publishPrices = (next: number[]) => {
+            const bounded = next.slice(-1000);
+            pricesRef.current = bounded;
+            if (alive) setPrices(bounded);
         };
 
         const clearWatchdog = () => {
@@ -137,12 +146,18 @@ function useAuthenticatedLiveDigits(symbol: string) {
         const rebuildDigits = () => {
             if (!historyLoaded) {
                 publish(liveBuffer.map(item => extractDigit(item.price, pipSize)));
+                publishPrices(liveBuffer.map(item => item.price));
                 return;
             }
 
-            const historyDigits = historyPrices
-                .filter((_, index) => !seenEpochs.has(Number(historyEpochs[index])))
-                .map(price => extractDigit(price, pipSize));
+            const freshHistoryPrices = historyPrices.filter((_, index) =>
+                !seenEpochs.has(Number(historyEpochs[index])),
+            );
+            const historyDigits = freshHistoryPrices.map(price => extractDigit(price, pipSize));
+            publishPrices([
+                ...freshHistoryPrices,
+                ...liveBuffer.map(item => item.price),
+            ]);
             publish([
                 ...historyDigits,
                 ...liveBuffer.map(item => extractDigit(item.price, pipSize)),
@@ -315,7 +330,7 @@ function useAuthenticatedLiveDigits(symbol: string) {
         };
     }, [symbol]);
 
-    return { digits, digitsRef, livePrice, priceRef, tickVersion };
+    return { digits, digitsRef, prices, pricesRef, livePrice, priceRef, tickVersion };
 }
 
 // ── Shared buy-and-wait via app's API connection ──────────────────────────────
@@ -1361,13 +1376,18 @@ const AutoTrades: React.FC = () => {
     // Keep a snapshot for each live tick so a slow proposal/buy request does
     // not collapse several incoming ticks into one latest-state evaluation.
     const smartDigitSnapshotsRef = useRef<Map<number, number[]>>(new Map());
+    const smartPriceSnapshotsRef = useRef<Map<number, number[]>>(new Map());
     useEffect(() => {
         smartDigitSnapshotsRef.current.set(smartFeed.tickVersion, [...smartDigits]);
+        smartPriceSnapshotsRef.current.set(smartFeed.tickVersion, [...smartFeed.prices]);
         const oldest = smartFeed.tickVersion - 150;
         smartDigitSnapshotsRef.current.forEach((_digits, version) => {
             if (version < oldest) smartDigitSnapshotsRef.current.delete(version);
         });
-    }, [smartFeed.tickVersion, smartDigits]);
+        smartPriceSnapshotsRef.current.forEach((_prices, version) => {
+            if (version < oldest) smartPriceSnapshotsRef.current.delete(version);
+        });
+    }, [smartFeed.tickVersion, smartDigits, smartFeed.prices]);
 
     // The header price is from the same authorized stream as the digit history.
     const smartLivePrice = smartFeed.livePrice;
@@ -1541,6 +1561,8 @@ const AutoTrades: React.FC = () => {
                     evaluatedTick = nextTick;
                     const digitsForTick = smartDigitSnapshotsRef.current.get(nextTick)
                         ?? smartDigitsRef.current;
+                    const pricesForTick = smartPriceSnapshotsRef.current.get(nextTick)
+                        ?? smartFeed.pricesRef.current;
 
                     const currentCfg = smartCardCfgRef.current[id] || cfg;
                     if (sessionProfit >= Number(currentCfg.takeProfit ?? 5)
@@ -1558,6 +1580,7 @@ const AutoTrades: React.FC = () => {
                         digitsForTick,
                         currentCfg,
                         smartSharedDepthRef.current,
+                        pricesForTick,
                     );
                     if (!trade || !trade.meetsCondition) {
                         // Conditions are tick-gated. Do not repeatedly buy while

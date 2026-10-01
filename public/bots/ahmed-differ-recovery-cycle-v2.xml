@@ -5,6 +5,7 @@
     <variable id="adoc2_base">base_stake</variable>
     <variable id="adoc2_mg">martingale</variable>
     <variable id="adoc2_phase">cycle_phase</variable>
+    <variable id="adoc2_loss_count">parity_recovery_losses</variable>
     <variable id="adoc2_tp">take_profit</variable>
     <variable id="adoc2_sl">stop_loss</variable>
   </variables>
@@ -38,7 +39,9 @@
           <next><block type="variables_set" id="adoc2_i_mg"><field name="VAR" id="adoc2_mg">martingale</field><value name="VALUE"><block type="math_number"><field name="NUM">2.2</field></block></value>
             <next><block type="variables_set" id="adoc2_i_phase"><field name="VAR" id="adoc2_phase">cycle_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">0</field></block></value>
               <next><block type="variables_set" id="adoc2_i_tp"><field name="VAR" id="adoc2_tp">take_profit</field><value name="VALUE"><block type="math_number"><field name="NUM">5</field></block></value>
-                <next><block type="variables_set" id="adoc2_i_sl"><field name="VAR" id="adoc2_sl">stop_loss</field><value name="VALUE"><block type="math_number"><field name="NUM">20</field></block></value></block></next>
+                <next><block type="variables_set" id="adoc2_i_sl"><field name="VAR" id="adoc2_sl">stop_loss</field><value name="VALUE"><block type="math_number"><field name="NUM">20</field></block></value>
+                  <next><block type="variables_set" id="adoc2_i_loss_count"><field name="VAR" id="adoc2_loss_count">parity_recovery_losses</field><value name="VALUE"><block type="math_number"><field name="NUM">0</field></block></value></block></next>
+                </block></next>
               </block></next>
             </block></next>
           </block></next>

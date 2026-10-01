@@ -195,6 +195,7 @@
   font-weight: 600;
   letter-spacing: 0.03em;
   &--wide { grid-column: 1 / -1; }
+  &__help { color: #718096; font-size: 0.67rem; font-weight: 400; letter-spacing: 0; line-height: 1.4; }
   input, select {
     width: 100%;
     min-width: 0;
@@ -213,6 +214,25 @@
   }
   input[type='number'] { appearance: textfield; }
   input[type='number']::-webkit-inner-spin-button, input[type='number']::-webkit-outer-spin-button { margin: 0; appearance: none; }
+}
+
+.lab-auto-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.1rem;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--lab-line);
+  border-radius: 0.42rem;
+  color: var(--lab-ink);
+  background: var(--lab-raised);
+  font-size: 0.73rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  cursor: pointer;
+  input { flex: 0 0 auto; width: 0.95rem; height: 0.95rem; margin: 0; accent-color: var(--lab-mint); }
+  &:focus-within { outline: 2px solid var(--lab-cyan); outline-offset: 2px; }
+  input:disabled { cursor: not-allowed; }
 }
 
 .lab-segment {
@@ -520,6 +540,13 @@
 .auto-lab .lab-mode:disabled { cursor: not-allowed; opacity: 0.65; }
 
 .auto-lab .lab-field { color: #526176; }
+.auto-lab .lab-field__help { color: #718096; }
+.auto-lab .lab-auto-toggle {
+  color: #334155;
+  border-color: #dbe3ed;
+  background: #f8fafc;
+}
+.auto-lab .lab-auto-toggle:focus-within { outline-color: #16805e; }
 .auto-lab .lab-field input,
 .auto-lab .lab-field select {
   color: #152238;

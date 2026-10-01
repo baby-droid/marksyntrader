@@ -52,6 +52,7 @@ export function pickSmartTradeDecision(
     digits: number[],
     cfg: SmartCardConfig | undefined,
     sharedDepth = 100,
+    prices: number[] = [],
 ): SmartTradeDecision {
     if (!cfg) return { contract: 'DIGITEVEN', barrier: null, meetsCondition: false };
 
@@ -61,19 +62,27 @@ export function pickSmartTradeDecision(
     const sample = digits.slice(-requiredDigits);
     const matchesAction = (name: string) => cfg.thenAction === name;
     const movementSample = digits.slice(-Math.max(2, requiredDigits + 1));
-    const riseCount = movementSample.slice(1).filter((digit, index) => digit > movementSample[index]).length;
-    const fallCount = movementSample.slice(1).filter((digit, index) => digit < movementSample[index]).length;
-    const movementCount = Math.max(1, movementSample.length - 1);
-    const riseProb = riseCount / movementCount * 100;
-    const fallProb = fallCount / movementCount * 100;
+    // Directional contracts follow quote movement, not the final digit: digits
+    // wrap at 9/0 and otherwise can move independently of the market price.
+    const priceSample = (Array.isArray(prices) ? prices : [])
+        .filter(Number.isFinite)
+        .slice(-Math.max(2, requiredDigits + 1));
+    const directionalSample = priceSample.length >= 2 ? priceSample : movementSample;
+    const directionalRiseCount = directionalSample.slice(1)
+        .filter((value, index) => value > directionalSample[index]).length;
+    const directionalFallCount = directionalSample.slice(1)
+        .filter((value, index) => value < directionalSample[index]).length;
+    const directionalMoveCount = Math.max(1, directionalSample.length - 1);
+    const riseProb = directionalRiseCount / directionalMoveCount * 100;
+    const fallProb = directionalFallCount / directionalMoveCount * 100;
     const evenProb = sample.length
         ? sample.filter(digit => digit % 2 === 0).length / sample.length * 100
         : 50;
     const oddProb = 100 - evenProb;
 
     if (id === 'rise' || id === 'fall') {
-        const rising = movementSample.length >= 2 && riseCount === movementCount;
-        const falling = movementSample.length >= 2 && fallCount === movementCount;
+        const rising = directionalSample.length >= 2 && directionalRiseCount === directionalMoveCount;
+        const falling = directionalSample.length >= 2 && directionalFallCount === directionalMoveCount;
         const wantsRise = id === 'rise';
         return {
             contract: wantsRise ? 'CALL' : 'PUT',
@@ -111,14 +120,17 @@ export function pickSmartTradeDecision(
     }
 
     if (id === 'risefall') {
-        const rising = movementSample.length >= 2
-            && movementSample.slice(1).every((digit, index) => digit > movementSample[index]);
-        const falling = movementSample.length >= 2
-            && movementSample.slice(1).every((digit, index) => digit < movementSample[index]);
+        const rising = directionalSample.length >= 2
+            && directionalSample.slice(1).every((value, index) => value > directionalSample[index]);
+        const falling = directionalSample.length >= 2
+            && directionalSample.slice(1).every((value, index) => value < directionalSample[index]);
+        const wantsRise = cfg.thenAction === 'Buy Rise';
+        const wantsFall = cfg.thenAction === 'Buy Fall';
         return {
-            contract: matchesAction('Buy Rise') ? 'CALL' : 'PUT',
+            contract: wantsFall ? 'PUT' : 'CALL',
             barrier: null,
-            meetsCondition: cfg.ifValue === 'Rise' ? rising : falling,
+            meetsCondition: (wantsRise && cfg.ifValue === 'Rise' && rising)
+                || (wantsFall && cfg.ifValue === 'Fall' && falling),
             riseProb: rising ? 100 : 0,
             score: cfg.ifValue === 'Rise' ? riseProb : fallProb,
         };
