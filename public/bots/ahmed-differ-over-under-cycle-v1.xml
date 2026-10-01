@@ -12,8 +12,9 @@
   </variables>
   <block type="trade_definition" id="adoc1_definition" deletable="false" x="0" y="0">
     <statement name="TRADE_OPTIONS">
-      <block type="trade_definition_market" id="adoc1_market" deletable="false" movable="false">
-        <field name="MARKET_LIST">synthetic_index</field><field name="SUBMARKET_LIST">random_index</field><field name="SYMBOL_LIST">1HZ50V</field>
+      <block type="king_fisher_best_market_scanner" id="adoc1_scan"><field name="ENABLED">TRUE</field>
+       <next><block type="trade_definition_market" id="adoc1_market" deletable="false" movable="false">
+        <field name="MARKET_LIST">synthetic_index</field><field name="SUBMARKET_LIST">random_index</field><field name="SYMBOL_LIST">1HZ50V</field><field name="ALTERNATE_MARKETS">TRUE</field>
         <next><block type="trade_definition_tradetype" id="adoc1_type" deletable="false" movable="false"><field name="TRADETYPECAT_LIST">digits</field><field name="TRADETYPE_LIST">overunder</field>
           <next><block type="trade_definition_contracttype" id="adoc1_contract" deletable="false" movable="false"><field name="TYPE_LIST">both</field>
             <next><block type="trade_definition_candleinterval" id="adoc1_interval" deletable="false" movable="false"><field name="CANDLEINTERVAL_LIST">60</field>
@@ -23,6 +24,7 @@
             </block></next>
           </block></next>
         </block></next>
+      </block></next>
       </block>
     </statement>
     <statement name="INITIALIZATION">
@@ -62,7 +64,7 @@
     <statement name="AFTERPURCHASE_STACK">
       <block type="controls_if" id="adoc1_result"><mutation else="1"/><value name="IF0"><block type="contract_check_result"><field name="CHECK_RESULT">win</field></block></value>
         <statement name="DO0"><block type="variables_set"><field name="VAR" id="adoc1_stake">stake</field><value name="VALUE"><block type="variables_get"><field name="VAR" id="adoc1_base">base_stake</field></block></value><next><block type="math_change"><field name="VAR" id="adoc1_phase">cycle_phase</field><value name="DELTA"><shadow type="math_number"><field name="NUM">1</field></shadow></value></block></next></block></statement>
-        <statement name="ELSE"><block type="variables_set"><field name="VAR" id="adoc1_stake">stake</field><value name="VALUE"><block type="math_arithmetic"><field name="OP">MULTIPLY</field><value name="A"><block type="variables_get"><field name="VAR" id="adoc1_stake">stake</field></block></value><value name="B"><block type="variables_get" id="adoc1_mg_get"><field name="VAR" id="adoc1_mg">martingale</field></block></value></block></value><next><block type="variables_set" id="adoc1_loss_recovery"><field name="VAR" id="adoc1_phase">cycle_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">10</field></block></value></block></next></block></statement>
+        <statement name="ELSE"><block type="variables_set"><field name="VAR" id="adoc1_stake">stake</field><value name="VALUE"><block type="math_arithmetic"><field name="OP">MULTIPLY</field><value name="A"><block type="variables_get"><field name="VAR" id="adoc1_stake">stake</field></block></value><value name="B"><block type="variables_get" id="adoc1_mg_get"><field name="VAR" id="adoc1_mg">martingale</field></block></value></block></value><next><block type="variables_set" id="adoc1_loss_recovery"><field name="VAR" id="adoc1_phase">cycle_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">-1</field></block></value></block></next></block></statement>
         <next><block type="controls_if" id="adoc1_wrap"><value name="IF0"><block type="logic_compare"><field name="OP">GTE</field><value name="A"><block type="variables_get"><field name="VAR" id="adoc1_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">10</field></block></value></block></value><statement name="DO0"><block type="variables_set"><field name="VAR" id="adoc1_phase">cycle_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">0</field></block></value></block></statement><next><block type="trade_again"/></next></block></next>
       </block>
     </statement>

@@ -166,7 +166,7 @@
         <next><block type="king_fisher_recovery_escalation" id="accf_recovery_escalation">
           <field name="PHASE" id="accf_phase">cycle_phase</field>
           <field name="LOSS_COUNT" id="accf_loss_count">parity_recovery_losses</field>
-          <field name="RECOVERY_PHASE">6</field><field name="FIRST_OVER3_PHASE">4</field><field name="SECOND_OVER3_PHASE">5</field>
+          <field name="RECOVERY_PHASE">6</field><field name="FIRST_OVER3_PHASE">4</field><field name="SECOND_OVER3_PHASE">5</field><field name="RETURN_PHASE">6</field>
           <next><block type="controls_if" id="accf_result"><mutation else="1"/>
           <value name="IF0"><block type="contract_check_result"><field name="CHECK_RESULT">win</field></block></value>
           <statement name="DO0"><block type="variables_set" id="accf_reset_stake_on_win">

@@ -97,7 +97,7 @@
             </block></next>
           </block></statement>
           <statement name="ELSE"><block type="variables_set" id="adoc2_loss_stake"><field name="VAR" id="adoc2_stake">stake</field><value name="VALUE"><block type="math_arithmetic"><field name="OP">MULTIPLY</field><value name="A"><block type="variables_get"><field name="VAR" id="adoc2_stake">stake</field></block></value><value name="B"><block type="variables_get" id="adoc2_mg_get"><field name="VAR" id="adoc2_mg">martingale</field></block></value></block></value>
-            <next><block type="variables_set" id="adoc2_loss_phase"><field name="VAR" id="adoc2_phase">cycle_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">9</field></block></value></block></next>
+            <next><block type="variables_set" id="adoc2_loss_phase"><field name="VAR" id="adoc2_phase">cycle_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">-1</field></block></value></block></next>
           </block></statement>
           <next><block type="trade_again"/></next>
         </block></next>

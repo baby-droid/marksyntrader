@@ -158,7 +158,7 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_price_entry =
         '  var tick = Bot.getLastTick(true);',
         '  if (!tick || tick.epoch == null) return false;',
         '  var quote = Number(tick.quote);',
-        '  if (quote !== quote || quote === Infinity || quote === -Infinity) return false;',
+        '  if (quote !== quote || quote - quote !== 0) return false;',
         '  if (tick.epoch !== state.lastEpoch) {',
         '    var delta = state.lastQuote == null ? 0 : quote - state.lastQuote;',
         '    var currentDirection = delta > 0 ? "RISE" : delta < 0 ? "FALL" : "";',
@@ -171,7 +171,7 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_price_entry =
         '}',
     ]);
     return [
-        `${helperName}('${block.id}', '${direction}', '${streak}')`,
+        `${helperName}(${JSON.stringify(block.id)}, '${direction}', '${streak}')`,
         generator().ORDER_FUNCTION_CALL,
     ];
 };

@@ -32,9 +32,9 @@ const FREE_BOTS = [
   },
   {
     id: 'ahmed-best-market-pair-cycle-v1',
-    name: 'AHMED BEST MARKET 10-PHASE CYCLE V1',
-    description: '🧠 Scans and selects the best market, then cycles Differs → Over 2 → Over 3 → Over 0 → Over 1 → Differs → Under 6 → Under 7 → Under 8 → Under 9. Losses scan Even vs Odd for recovery.',
-    category: 'Scanner', market: 'Best market', type: 'Multi-Strategy', prediction: 'PHASE SCAN',
+    name: 'AHMED BEST MARKET PAIR CYCLE V1',
+    description: '🧠 Scans the best market, then cycles Differs 9 → Over 2 → Over 3 → Over 0 → Over 1 → Differs 9 → Under 6 → Under 7 → Under 8. Losses route to Even/Odd parity recovery.',
+    category: 'Scanner', market: 'Best market', type: 'Multi-Strategy', prediction: '9-PHASE',
     xmlFile: '/bots/ahmed-best-market-pair-cycle-v1.xml',
     badge: 'PAIR SCAN', badgeColor: '#34d399', icon: '🧠', winRate: '—',
     theme: 'ahmed-pair-scan', artwork: '/bot-art/ahmed-pairs.png', artworkPosition: 'banner',
@@ -42,8 +42,8 @@ const FREE_BOTS = [
   {
     id: 'ahmed-best-market-pair-cycle-v2',
     name: 'AHMED BEST MARKET PAIR CYCLE V2',
-    description: '🔎 Scans the best market. Over 2 + Over 3 execute together only after a 10-tick high-digit bias and a 2–3 digit entry streak above both barriers. Under 7 + Under 6 execute together after a low-digit bias and a qualifying streak. Losses wait for Even/Odd recovery.',
-    category: 'Scanner', market: 'Best market', type: 'Paired DIGIT', prediction: '20-TICK',
+    description: '🔎 Scans the best market. Over 2 + Over 3 execute together only after a 10-tick high-digit bias and a 2–3 digit entry streak above both barriers. After losses, Even/Odd recovery escalates to Fall after 4 consecutive rises, then Rise after 2–3 consecutive falls.',
+    category: 'Scanner', market: 'Best market', type: 'Paired DIGIT', prediction: '10-TICK + STREAK',
     xmlFile: '/bots/ahmed-best-market-pair-cycle-v2.xml',
     badge: 'PAIR CYCLE', badgeColor: '#a78bfa', icon: '🔎', winRate: '—',
     theme: 'ahmed-pair-cycle', artwork: '/bot-art/ahmed-pairs.png', artworkPosition: 'banner',
