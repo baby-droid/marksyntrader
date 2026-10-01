@@ -14,6 +14,7 @@
         <field name="MARKET_LIST">synthetic_index</field>
         <field name="SUBMARKET_LIST">random_index</field>
         <field name="SYMBOL_LIST">1HZ25V</field>
+        <field name="ALTERNATE_MARKETS">TRUE</field>
         <next><block type="trade_definition_tradetype" id="adoc2_type" deletable="false" movable="false">
           <field name="TRADETYPECAT_LIST">digits</field><field name="TRADETYPE_LIST">overunder</field>
           <next><block type="trade_definition_contracttype" id="adoc2_contract" deletable="false" movable="false">

@@ -47,11 +47,12 @@ const AutoLab = observer(() => {
         }
     }, [accountIdentity]);
 
+    const displayAmount = (value: number) => Math.round((fromUsd(value) + Number.EPSILON) * 100) / 100;
     const viewSettings = useMemo(() => ({
         ...settings,
-        stake: fromUsd(settings.stake),
-        takeProfit: fromUsd(settings.takeProfit),
-        stopLoss: fromUsd(settings.stopLoss),
+        stake: displayAmount(settings.stake),
+        takeProfit: displayAmount(settings.takeProfit),
+        stopLoss: displayAmount(settings.stopLoss),
     }), [settings, currencyRevision]);
 
     const onSettingChange = (key: keyof AutoLabSettings, value: string | number) => {
@@ -60,7 +61,15 @@ const AutoLab = observer(() => {
             return;
         }
         if (key === 'contractType') {
-            setSettings(previous => ({ ...previous, contractType: String(value) as AutoLabSettings['contractType'] }));
+            const contractType = String(value) as AutoLabSettings['contractType'];
+            const tickOnly = contractType.startsWith('DIGIT')
+                || contractType === 'TICKHIGH'
+                || contractType === 'TICKLOW';
+            setSettings(previous => ({
+                ...previous,
+                contractType,
+                ...(tickOnly ? { durationUnit: 't' as const } : {}),
+            }));
             return;
         }
         if (key === 'durationUnit') {

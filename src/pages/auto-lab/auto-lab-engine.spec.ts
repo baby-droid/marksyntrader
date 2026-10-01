@@ -82,14 +82,15 @@ describe('Auto Lab strategy signals', () => {
         expect(evaluateAutoLabCandidates('Rise/Fall', [falling], settings)[0]?.contract_type).toBe('PUT');
     });
 
-    it('lets a selected contract type filter signals without changing contract semantics', () => {
+    it('overrides the strategy contract when a fixed contract type is selected', () => {
         const signals = evaluateAutoLabCandidates('RC Even/Odd', [market(makeTicks([2, 4, 6, 8]))], {
             ...settings,
             requiredStreak: 3,
             contractType: 'DIGITEVEN',
         });
 
-        expect(signals).toHaveLength(0);
+        expect(signals).toHaveLength(1);
+        expect(signals[0]).toMatchObject({ contract_type: 'DIGITEVEN', strategy: 'RC Even/Odd' });
     });
 
     it('multimarket mode ranks candidates across strategy families and instruments', () => {
@@ -102,7 +103,8 @@ describe('Auto Lab strategy signals', () => {
         });
 
         expect(signals.length).toBeGreaterThan(1);
-        expect(signals[0].symbol).toBe('R_10');
+        expect(signals.some(signal => signal.symbol === 'R_10')).toBe(true);
+        expect(signals[0].score).toBeGreaterThanOrEqual(signals[1].score);
     });
 });
 

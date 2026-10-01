@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDerivTrade, type SettledContract, type TickData } from '@/hooks/useDerivTrade';
 import { useStore } from '@/hooks/useStore';
 import { getMasterSource } from '@/utils/trade-bus';
-import { toUsd } from '@/utils/currency-display';
 import { KING_FISHER_MARKETS } from '@/utils/king-fisher-market-scanner';
 import {
     advanceAutoLabGate,
@@ -279,7 +278,7 @@ export const useAutoLabEngine = (
         if (runRef.current && best && gate.phase !== 'armed') {
             setCurrentSignal({
                 label: `${gatePhaseLabel(gate.phase)} · ${gate.phase === 'losses' ? gate.consecutiveLosses : gate.consecutiveWins}`,
-                detail: `Virtual one-tick checks are required before a real order. Current setup: ${best.strategy} · ${best.detail}`,
+                detail: `Virtual checks are required before a real order. Current setup: ${best.strategy} · ${best.detail}`,
                 market: best.label,
                 confidence: best.score,
             });
@@ -694,8 +693,8 @@ export const useAutoLabEngine = (
         runRef.current = true;
         setStatus(gate.phase === 'armed' ? 'running' : 'scanning');
         setMessage(gate.phase === 'armed'
-            ? 'Strategy is active. A real one-tick trade will be placed only after a qualified signal.'
-            : 'Virtual gate is active. Only simulated one-tick checks run until its loss/win conditions are met.');
+            ? 'Strategy is active. The configured contract will be placed only after a qualified signal.'
+            : 'Virtual gate is active. Only simulated checks run until its loss/win conditions are met.');
         updateSession({
             ...sessionRef.current,
             virtualWins: 0,
