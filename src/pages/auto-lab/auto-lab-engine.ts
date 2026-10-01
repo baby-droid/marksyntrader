@@ -114,6 +114,11 @@ const twoBarrierContracts = new Set<AutoLabContractType>([
     'RANGE', 'UPORDOWN', 'EXPIRYMISS', 'EXPIRYRANGE',
 ]);
 
+const normalizePriceBarrier = (value: number | undefined): number | undefined => {
+    if (value == null || !Number.isFinite(value)) return undefined;
+    return Math.round((value + Number.EPSILON) * 100) / 100;
+};
+
 const candidate = (
     market: AutoLabMarketWindow,
     strategy: AutoLabCandidate['strategy'],
@@ -322,17 +327,33 @@ export const evaluateAutoLabCandidates = (
                 continue;
             }
             const selectedContract = settings.contractType;
+            if (result.strategy === 'Rise/Fall') {
+                // A fixed directional contract must agree with the quote-momentum
+                // signal. Other fixed contracts have no meaningful Rise/Fall
+                // relationship, so do not emit a contradictory candidate.
+                if (
+                    (selectedContract !== 'CALL' && selectedContract !== 'PUT')
+                    || selectedContract !== result.contract_type
+                ) continue;
+            }
+            const usesDigitBarrier = digitBarrierContracts.has(selectedContract);
+            const usesPriceBarrier = barrierContracts.has(selectedContract) && !usesDigitBarrier;
+            const selectedBarrier = usesDigitBarrier
+                ? settings.barrier
+                : usesPriceBarrier
+                    ? normalizePriceBarrier(settings.contractBarrier ?? settings.barrier)
+                    : undefined;
+            const selectedBarrier2 = twoBarrierContracts.has(selectedContract)
+                ? normalizePriceBarrier(settings.secondaryBarrier)
+                : undefined;
+            if (usesPriceBarrier && selectedBarrier == null) continue;
+            if (twoBarrierContracts.has(selectedContract) && selectedBarrier2 == null) continue;
+            if (twoBarrierContracts.has(selectedContract) && selectedBarrier === selectedBarrier2) continue;
             output.push({
                 ...result,
                 contract_type: selectedContract,
-                ...(digitBarrierContracts.has(selectedContract)
-                    ? { barrier: settings.barrier }
-                    : barrierContracts.has(selectedContract)
-                        ? { barrier: settings.contractBarrier ?? settings.barrier }
-                        : { barrier: undefined }),
-                ...(twoBarrierContracts.has(selectedContract) && settings.secondaryBarrier != null
-                    ? { barrier2: settings.secondaryBarrier }
-                    : { barrier2: undefined }),
+                ...(selectedBarrier == null ? { barrier: undefined } : { barrier: selectedBarrier }),
+                ...(selectedBarrier2 == null ? { barrier2: undefined } : { barrier2: selectedBarrier2 }),
             });
         }
     }

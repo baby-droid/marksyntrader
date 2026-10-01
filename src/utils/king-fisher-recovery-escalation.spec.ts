@@ -70,4 +70,16 @@ describe('King Fisher parity recovery escalation', () => {
             config.secondOver3,
         )).toEqual({ phase: null, lossCount: 0 });
     });
+
+    it('can return to the main phase after the second configured escalation phase wins', () => {
+        expect(advanceKingFisherRecoveryEscalation(
+            3,
+            0,
+            true,
+            1,
+            2,
+            3,
+            0,
+        )).toEqual({ phase: 0, lossCount: 0 });
+    });
 });

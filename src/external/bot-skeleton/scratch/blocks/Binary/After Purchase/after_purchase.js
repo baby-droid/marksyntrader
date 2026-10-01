@@ -76,9 +76,8 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
     // King Fisher templates deliberately keep scanning after every settlement.
     // Their risk variables are still updated by the workspace blocks, but a
     // TP/SL branch must not end the interpreter after the first contract.
-    const workspaceBlocks = block.workspace?.getAllBlocks?.()
-        ?? window.Blockly.derivWorkspace?.getAllBlocks?.()
-        ?? [];
+    const workspace = block.workspace ?? window.Blockly.derivWorkspace;
+    const workspaceBlocks = workspace?.getAllBlocks?.() ?? [];
     const isKingFisher = workspaceBlocks.some(candidate =>
         String(candidate.type || '').startsWith('king_fisher_')
     );
@@ -93,7 +92,7 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
         .trim()
         .toLowerCase()
         .replace(/[\s_-]+/g, ' ');
-    const workspaceVariables = block.workspace?.getVariableMap?.()?.getVariables?.() ?? [];
+    const workspaceVariables = workspace?.getVariableMap?.()?.getVariables?.() ?? [];
     const variableName = variableNameText => {
         const targetName = normalizeVariableName(variableNameText);
         const variable = workspaceVariables.find(candidate => candidate.name === variableNameText)
@@ -128,11 +127,17 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
         const phaseVariable = variableCodeForField(recoveryEscalationBlock, 'PHASE');
         const lossCountVariable = variableCodeForField(recoveryEscalationBlock, 'LOSS_COUNT');
         if (!phaseVariable || !lossCountVariable) {
-            recoveryEscalationCode = 'if (typeof Bot.emitJournalSignal === "function") Bot.emitJournalSignal({ type: "LOSS", label: "RECOVERY CONFIGURATION ERROR", detail: "Parity Recovery Escalation is missing a phase or loss-count variable; no escalation was applied." });';
+            const missingFields = [
+                ...(!phaseVariable ? [`PHASE (${recoveryEscalationBlock.getFieldValue('PHASE') || recoveryEscalationBlock.getField?.('PHASE')?.getText?.() || 'unset'})`] : []),
+                ...(!lossCountVariable ? [`LOSS_COUNT (${recoveryEscalationBlock.getFieldValue('LOSS_COUNT') || recoveryEscalationBlock.getField?.('LOSS_COUNT')?.getText?.() || 'unset'})`] : []),
+            ].join(', ');
+            recoveryEscalationCode = `if (typeof Bot.emitJournalSignal === "function") Bot.emitJournalSignal({ type: "LOSS", label: "RECOVERY CONFIGURATION ERROR", detail: "Recovery Escalation could not resolve ${missingFields}; no escalation was applied." });`;
         } else {
             const recoveryPhase = Number(recoveryEscalationBlock.getFieldValue('RECOVERY_PHASE'));
             const firstOver3Phase = Number(recoveryEscalationBlock.getFieldValue('FIRST_OVER3_PHASE'));
             const secondOver3Phase = Number(recoveryEscalationBlock.getFieldValue('SECOND_OVER3_PHASE'));
+            const configuredReturnPhase = Number(recoveryEscalationBlock.getFieldValue('RETURN_PHASE'));
+            const returnPhase = Number.isFinite(configuredReturnPhase) ? configuredReturnPhase : recoveryPhase;
             recoveryPhaseSnapshot = `var kingFisherRecoveryPhaseAtSettlement = Number(${phaseVariable});`;
             recoveryEscalationCode = `
         var kingFisherRecoveryStep = Bot.advanceKingFisherRecoveryEscalation(
@@ -141,7 +146,8 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
             Bot.isResult("win"),
             ${recoveryPhase},
             ${firstOver3Phase},
-            ${secondOver3Phase}
+            ${secondOver3Phase},
+            ${returnPhase}
         );
         if (kingFisherRecoveryStep.phase !== null) {
             ${phaseVariable} = kingFisherRecoveryStep.phase;

@@ -55,7 +55,7 @@
   <block type="before_purchase" id="abmp1_before" deletable="false" x="0" y="760">
     <statement name="BEFOREPURCHASE_STACK">
       <block type="notify" id="abmp1_note"><field name="NOTIFICATION_TYPE">info</field><field name="NOTIFICATION_SOUND">silent</field><value name="MESSAGE"><block type="text"><field name="TEXT">AHMED BEST MARKET CYCLE V1 · scanning selected market · phase entry</field></block></value>
-        <next><block type="controls_if" id="abmp1_router"><mutation elseif="9"/>
+        <next><block type="controls_if" id="abmp1_router"><mutation elseif="8"/>
           <value name="IF0"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get"><field name="VAR" id="abmp1_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">0</field></block></value></block></value>
           <statement name="DO0"><block type="multiple_purchase"><field name="PURCHASE_1">DIGITDIFF</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/><field name="PREDICTION">9</field></block></statement>
           <value name="IF1"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get"><field name="VAR" id="abmp1_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">1</field></block></value></block></value>
@@ -74,8 +74,6 @@
           <statement name="DO7"><block type="multiple_purchase"><field name="PURCHASE_1">DIGITUNDER</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/><field name="PREDICTION">7</field></block></statement>
           <value name="IF8"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get"><field name="VAR" id="abmp1_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">8</field></block></value></block></value>
           <statement name="DO8"><block type="multiple_purchase"><field name="PURCHASE_1">DIGITUNDER</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/><field name="PREDICTION">8</field></block></statement>
-          <value name="IF9"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get"><field name="VAR" id="abmp1_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">9</field></block></value></block></value>
-          <statement name="DO9"><block type="multiple_purchase"><field name="PURCHASE_1">DIGITUNDER</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/><field name="PREDICTION">9</field></block></statement>
            <statement name="ELSE"><block type="king_fisher_parity_sequence_purchase" id="abmp1_parity_recovery"/></statement>
         </block></next>
       </block>
@@ -87,7 +85,7 @@
         <next><block type="controls_if" id="abmp1_result"><mutation else="1"/>
           <value name="IF0"><block type="contract_check_result"><field name="CHECK_RESULT">win</field></block></value>
           <statement name="DO0"><block type="variables_set" id="abmp1_win_stake"><field name="VAR" id="abmp1_stake">stake</field><value name="VALUE"><block type="variables_get"><field name="VAR" id="abmp1_base">base_stake</field></block></value>
-            <next><block type="controls_if" id="abmp1_wrap"><value name="IF0"><block type="logic_compare"><field name="OP">GTE</field><value name="A"><block type="variables_get"><field name="VAR" id="abmp1_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">9</field></block></value></block></value>
+              <next><block type="controls_if" id="abmp1_wrap"><value name="IF0"><block type="logic_compare"><field name="OP">GTE</field><value name="A"><block type="variables_get"><field name="VAR" id="abmp1_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">8</field></block></value></block></value>
               <statement name="DO0"><block type="variables_set" id="abmp1_reset"><field name="VAR" id="abmp1_phase">cycle_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">0</field></block></value></block></statement>
               <statement name="ELSE"><block type="math_change" id="abmp1_advance"><field name="VAR" id="abmp1_phase">cycle_phase</field><value name="DELTA"><shadow type="math_number"><field name="NUM">1</field></shadow></value></block></statement>
             </block></next>

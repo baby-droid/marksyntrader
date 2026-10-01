@@ -10,13 +10,14 @@ export function advanceKingFisherRecoveryEscalation(
     recoveryPhase: number,
     firstOver3Phase: number,
     secondOver3Phase: number,
+    returnPhase = recoveryPhase,
 ): KingFisherRecoveryStep {
     if (won) {
         if (phaseAtSettlement === firstOver3Phase) {
             return { phase: secondOver3Phase, lossCount: 0 };
         }
         if (phaseAtSettlement === secondOver3Phase) {
-            return { phase: recoveryPhase, lossCount: 0 };
+            return { phase: returnPhase, lossCount: 0 };
         }
         return { phase: null, lossCount: 0 };
     }

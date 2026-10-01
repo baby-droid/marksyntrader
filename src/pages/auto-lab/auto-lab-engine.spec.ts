@@ -93,6 +93,50 @@ describe('Auto Lab strategy signals', () => {
         expect(signals[0]).toMatchObject({ contract_type: 'DIGITEVEN', strategy: 'RC Even/Odd' });
     });
 
+    it('keeps fixed Rise/Fall contracts aligned with quote momentum', () => {
+        const rising = market(makeTicks([1, 2, 3, 4], [100, 101, 102, 103]));
+        const falling = market(makeTicks([1, 2, 3, 4], [103, 102, 101, 100]));
+
+        expect(evaluateAutoLabCandidates('Rise/Fall', [rising], {
+            ...settings,
+            contractType: 'CALL',
+        })[0]?.contract_type).toBe('CALL');
+        expect(evaluateAutoLabCandidates('Rise/Fall', [falling], {
+            ...settings,
+            contractType: 'PUT',
+        })[0]?.contract_type).toBe('PUT');
+        expect(evaluateAutoLabCandidates('Rise/Fall', [rising], {
+            ...settings,
+            contractType: 'PUT',
+        })).toHaveLength(0);
+        expect(evaluateAutoLabCandidates('Rise/Fall', [falling], {
+            ...settings,
+            contractType: 'CALL',
+        })).toHaveLength(0);
+        expect(evaluateAutoLabCandidates('Rise/Fall', [rising], {
+            ...settings,
+            contractType: 'DIGITEVEN',
+        })).toHaveLength(0);
+    });
+
+    it('normalizes price barriers to two decimals and rejects collapsed ranges', () => {
+        const sample = market(makeTicks([2, 4, 6, 8]));
+        const oneTouch = evaluateAutoLabCandidates('RC Even/Odd', [sample], {
+            ...settings,
+            contractType: 'ONETOUCH',
+            contractBarrier: 100.126,
+        });
+        const range = evaluateAutoLabCandidates('RC Even/Odd', [sample], {
+            ...settings,
+            contractType: 'RANGE',
+            contractBarrier: 100.123,
+            secondaryBarrier: 100.124,
+        });
+
+        expect(oneTouch[0]?.barrier).toBe(100.13);
+        expect(range).toHaveLength(0);
+    });
+
     it('multimarket mode ranks candidates across strategy families and instruments', () => {
         const weak = { ...market(makeTicks([2, 4, 1, 6, 3, 8])), symbol: 'R_25', label: 'Volatility 25' };
         const strong = { ...market(makeTicks([2, 4, 6, 8])), symbol: 'R_10', label: 'Volatility 10' };

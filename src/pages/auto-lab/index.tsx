@@ -127,10 +127,22 @@ const AutoLab = observer(() => {
         setSettings(previous => ({ ...previous, [key]: safeUsdValue }) as AutoLabSettings);
     };
 
+    const onModeChange = (nextMode: AutoLabMode) => {
+        if (
+            nextMode === 'Rise/Fall'
+            && settings.contractType !== 'AUTO'
+            && settings.contractType !== 'CALL'
+            && settings.contractType !== 'PUT'
+        ) {
+            setSettings(previous => ({ ...previous, contractType: 'AUTO' }));
+        }
+        setMode(nextMode);
+    };
+
     return (
         <AutoLabView
             mode={mode}
-            onModeChange={setMode}
+            onModeChange={onModeChange}
             settings={viewSettings}
             onSettingChange={onSettingChange}
             account={engine.account}

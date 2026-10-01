@@ -106,6 +106,76 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_entry = block
     ];
 };
 
+window.Blockly.Blocks.king_fisher_price_entry = {
+    init() {
+        this.jsonInit({
+            message0: localize('Price direction entry: %1 for %2 consecutive moves'),
+            args0: [
+                {
+                    type: 'field_dropdown',
+                    name: 'DIRECTION',
+                    options: [
+                        [localize('fall after rises'), 'FALL_AFTER_RISES'],
+                        [localize('rise after falls'), 'RISE_AFTER_FALLS'],
+                    ],
+                },
+                {
+                    type: 'field_dropdown',
+                    name: 'STREAK',
+                    options: [
+                        [localize('4'), '4'],
+                        [localize('2 or 3'), '2_3'],
+                    ],
+                },
+            ],
+            output: 'Boolean',
+            outputShape: window.Blockly.OUTPUT_SHAPE_ROUND,
+            colour: '#38bdf8',
+            tooltip: localize('Tracks consecutive live quote moves and signals a contrarian Rise/Fall entry after the selected price-direction streak.'),
+            helpUrl: '',
+        });
+    },
+    meta() {
+        return {
+            display_name: localize('Price Direction Entry'),
+            description: localize('Tracks consecutive live price moves for a contrarian Rise/Fall signal.'),
+        };
+    },
+    customContextMenu(menu) {
+        modifyContextMenu(menu);
+    },
+};
+
+window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_price_entry = block => {
+    const direction = block.getFieldValue('DIRECTION') === 'RISE_AFTER_FALLS'
+        ? 'RISE_AFTER_FALLS'
+        : 'FALL_AFTER_RISES';
+    const streak = block.getFieldValue('STREAK') === '4' ? '4' : '2_3';
+    const helperName = ensureHelper('kingFisherPriceEntry', [
+        'var kingFisherPriceEntryStates = {};',
+        `function ${generator().FUNCTION_NAME_PLACEHOLDER_}(key, direction, streakMode) {`,
+        '  var state = kingFisherPriceEntryStates[key] || (kingFisherPriceEntryStates[key] = { lastEpoch: null, lastQuote: null, streak: 0 });',
+        '  var tick = Bot.getLastTick(true);',
+        '  if (!tick || tick.epoch == null) return false;',
+        '  var quote = Number(tick.quote);',
+        '  if (quote !== quote || quote === Infinity || quote === -Infinity) return false;',
+        '  if (tick.epoch !== state.lastEpoch) {',
+        '    var delta = state.lastQuote == null ? 0 : quote - state.lastQuote;',
+        '    var currentDirection = delta > 0 ? "RISE" : delta < 0 ? "FALL" : "";',
+        '    var expectedDirection = direction === "FALL_AFTER_RISES" ? "RISE" : "FALL";',
+        '    state.streak = currentDirection === expectedDirection ? state.streak + 1 : 0;',
+        '    state.lastQuote = quote;',
+        '    state.lastEpoch = tick.epoch;',
+        '  }',
+        '  return streakMode === "4" ? state.streak >= 4 : state.streak === 2 || state.streak === 3;',
+        '}',
+    ]);
+    return [
+        `${helperName}('${block.id}', '${direction}', '${streak}')`,
+        generator().ORDER_FUNCTION_CALL,
+    ];
+};
+
 window.Blockly.Blocks.king_fisher_bias_scan = {
     init() {
         this.jsonInit({
@@ -494,19 +564,20 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_restart_trade
 window.Blockly.Blocks.king_fisher_recovery_escalation = {
     init() {
         this.jsonInit({
-            message0: localize('After 2 parity losses, use Over 3 twice: phase %1, counter %2; recovery %3 → %4 → %5'),
+            message0: localize('After 2 recovery losses, route phases %1 → %2 → %3, then phase %4; state %5, counter %6'),
             args0: [
                 { type: 'field_variable', name: 'PHASE', variable: null },
                 { type: 'field_variable', name: 'LOSS_COUNT', variable: null },
                 { type: 'field_number', name: 'RECOVERY_PHASE', value: 1, min: 0, max: 99, precision: 1 },
                 { type: 'field_number', name: 'FIRST_OVER3_PHASE', value: 7, min: 0, max: 99, precision: 1 },
                 { type: 'field_number', name: 'SECOND_OVER3_PHASE', value: 8, min: 0, max: 99, precision: 1 },
+                { type: 'field_number', name: 'RETURN_PHASE', value: 1, min: 0, max: 99, precision: 1 },
             ],
             previousStatement: null,
             nextStatement: null,
             colour: '#e879f9',
             tooltip: localize(
-                'Counts consecutive losses in the configured parity phase. On the second loss it runs Over 3 twice, then returns to parity recovery. A parity win clears the loss count.'
+                'Counts consecutive losses in the configured recovery phase. On the second loss it routes through two escalation phases. Losses in those phases move forward; success in the second phase returns to the configured final phase.'
             ),
             helpUrl: '',
         });
@@ -515,7 +586,7 @@ window.Blockly.Blocks.king_fisher_recovery_escalation = {
         return {
             display_name: localize('Parity Recovery Escalation'),
             description: localize(
-                'After two parity-recovery losses, routes two Over 3 contracts before returning to parity recovery.'
+                'After two losses in a recovery phase, routes through two configured escalation phases.'
             ),
         };
     },

@@ -419,7 +419,8 @@ const AutoLabView = ({
                     onChange={event => onSettingChange('contractType', event.target.value)}
                   >
                     <option value="AUTO">{CONTRACT_LABELS.AUTO}</option>
-                    {AUTO_LAB_CONTRACT_TYPES.map(type => <option key={type} value={type}>{CONTRACT_LABELS[type]}</option>)}
+                    {(mode === 'Rise/Fall' ? (['CALL', 'PUT'] as const) : AUTO_LAB_CONTRACT_TYPES)
+                      .map(type => <option key={type} value={type}>{CONTRACT_LABELS[type]}</option>)}
                   </select>
                 </label>
                 <NumericField label="Tick window" name="ticksWindow" value={settings.ticksWindow} onChange={onSettingChange} min={1} max={1500} disabled={settingsLocked} />
