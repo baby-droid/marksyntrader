@@ -38,6 +38,7 @@ const getBotInterface = tradeEngine => {
         sellAtMarket: () => tradeEngine.sellAtMarket(),
         getSellPrice: () => getSellPrice(tradeEngine),
         isResult: result => getDetail(10) === result,
+        isKingFisherPairWin: () => tradeEngine.isKingFisherPairWin?.(),
         isTradeAgain: result => globalObserver.emit('bot.trade_again', result),
         recordVirtualHook: data => {
             globalObserver.emit('bot.virtual_hook', data);

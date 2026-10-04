@@ -25,6 +25,13 @@ export default Engine =>
                         this.contractId = '';
                         clearTimeout(this.transaction_recovery_timeout);
                         this.updateTotals(contract);
+                        const pairExecution = this._kingFisherCurrentPair;
+                        if (
+                            pairExecution
+                            && Number(pairExecution.mainContractId) === Number(contract.contract_id)
+                        ) {
+                            this.recordKingFisherPairSettlement(pairExecution, contract, 'main');
+                        }
                         contractStatus({
                             id: 'contract.sold',
                             data: contract.transaction_ids.sell,
@@ -32,7 +39,18 @@ export default Engine =>
                         });
 
                         if (this.afterPromise) {
-                            this.afterPromise();
+                            const resolveAfter = this.afterPromise;
+                            this.afterPromise = null;
+                            const sideSettlements = this._kingFisherSideSettlementPromises || [];
+                            const resumeAfterPair = () => {
+                                this.finishKingFisherPair?.(pairExecution);
+                                resolveAfter();
+                            };
+                            if (sideSettlements.length) {
+                                Promise.all(sideSettlements).then(resumeAfterPair, resumeAfterPair);
+                            } else {
+                                resumeAfterPair();
+                            }
                         }
 
                         this.store.dispatch(sell());

@@ -130,12 +130,25 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
             if (fieldName === 'PHASE') return name.includes('phase');
             return name.includes('loss') && (name.includes('count') || name.endsWith('losses'));
         });
-        return semanticVariable
-            ? window.Blockly.JavaScript.variableDB_.getName(
+        if (semanticVariable) {
+            return window.Blockly.JavaScript.variableDB_.getName(
                 semanticVariable.getId(),
                 window.Blockly.Variables.CATEGORY_NAME
-            )
-            : null;
+            );
+        }
+
+        // Templates should declare these variables, but older or edited bots
+        // can lose them. Create and bind a usable state variable instead of
+        // silently turning off recovery.
+        const variableMap = workspace?.getVariableMap?.();
+        if (!variableMap?.createVariable) return null;
+        const variableName = fieldName === 'PHASE' ? 'recovery phase' : 'recovery loss count';
+        const createdVariable = variableMap.createVariable(variableName, '');
+        field?.setValue?.(createdVariable.getId());
+        return window.Blockly.JavaScript.variableDB_.getName(
+            createdVariable.getId(),
+            window.Blockly.Variables.CATEGORY_NAME
+        );
     };
     let recoveryPhaseSnapshot = '';
     let recoveryEscalationCode = '';
@@ -156,24 +169,30 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
                 const parsed = Number(value);
                 return Number.isInteger(parsed) ? parsed : -1;
             };
+            const recoveryPhase2 = readOptionalPhase('RECOVERY_PHASE_2');
             const intermediatePhase1 = readOptionalPhase('INTERMEDIATE_PHASE_1');
             const intermediatePhase2 = readOptionalPhase('INTERMEDIATE_PHASE_2');
             const firstOver3Phase = Number(recoveryEscalationBlock.getFieldValue('FIRST_OVER3_PHASE'));
             const secondOver3Phase = Number(recoveryEscalationBlock.getFieldValue('SECOND_OVER3_PHASE'));
             const configuredReturnPhase = Number(recoveryEscalationBlock.getFieldValue('RETURN_PHASE'));
             const returnPhase = Number.isFinite(configuredReturnPhase) ? configuredReturnPhase : recoveryPhase;
+            const usePairResult = recoveryEscalationBlock.getFieldValue('USE_PAIR_RESULT') === 'TRUE';
+            const recoveryWinCheck = usePairResult && typeof Bot !== 'undefined'
+                ? 'Bot.isKingFisherPairWin() === true'
+                : 'Bot.isResult("win")';
             recoveryPhaseSnapshot = `var kingFisherRecoveryPhaseAtSettlement = Number(${phaseVariable});`;
             recoveryEscalationCode = `
         var kingFisherRecoveryStep = Bot.advanceKingFisherRecoveryEscalation(
             kingFisherRecoveryPhaseAtSettlement,
             Number(${lossCountVariable}),
-            Bot.isResult("win"),
+            ${recoveryWinCheck},
             ${recoveryPhase},
             ${firstOver3Phase},
             ${secondOver3Phase},
             ${returnPhase},
             ${intermediatePhase1},
-            ${intermediatePhase2}
+            ${intermediatePhase2},
+            ${recoveryPhase2}
         );
         if (kingFisherRecoveryStep.phase !== null) {
             ${phaseVariable} = kingFisherRecoveryStep.phase;

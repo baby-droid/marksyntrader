@@ -1,6 +1,17 @@
 import { api_base } from '@/external/bot-skeleton';
 
 export type KingFisherDirection = 'BELOW' | 'ABOVE';
+export type KingFisherDigitSetup = {
+    contract: 'DIGITOVER' | 'DIGITUNDER';
+    direction: KingFisherDirection;
+    barrier: number;
+};
+
+type KingFisherWorkspaceBlock = {
+    type: string;
+    getFieldValue?: (name: string) => string | null | undefined;
+    getInputTargetBlock?: (name: string) => KingFisherWorkspaceBlock | null;
+};
 
 export type KingFisherMarket = {
     symbol: string;
@@ -73,6 +84,78 @@ export const scoreKingFisherDigits = (
         score: longestStreak * 100 + qualifyingTicks,
         lastDigit: digits.length ? digits[digits.length - 1] : null,
     };
+};
+
+const digitBarrier = (value: unknown): number | null => {
+    if (value === null || value === undefined || value === '' || value === 'NONE' || value === 'LAST_DIGIT') {
+        return null;
+    }
+    const barrier = Number(value);
+    return Number.isInteger(barrier) && barrier >= 0 && barrier <= 9 ? barrier : null;
+};
+
+const fixedTradePrediction = (blocks: readonly KingFisherWorkspaceBlock[]): number | null => {
+    const tradeOptions = blocks.find(block => block.type === 'trade_definition_tradeoptions');
+    return digitBarrier(tradeOptions?.getInputTargetBlock?.('PREDICTION')?.getFieldValue?.('NUM'));
+};
+
+const phasePrediction = (value: unknown, defaultPrediction: number | null): number | null => {
+    if (value === 'LAST_DIGIT') return null;
+    if (value === 'NONE' || value === null || value === undefined || value === '') {
+        return defaultPrediction;
+    }
+    return digitBarrier(value);
+};
+
+const setupForContract = (contract: unknown, prediction: unknown): KingFisherDigitSetup | null => {
+    if (contract !== 'DIGITOVER' && contract !== 'DIGITUNDER') return null;
+    const barrier = digitBarrier(prediction);
+    if (barrier === null) return null;
+    return {
+        contract,
+        direction: contract === 'DIGITOVER' ? 'BELOW' : 'ABOVE',
+        barrier,
+    };
+};
+
+/**
+ * Read an actual phase purchase rather than the generic contract-category
+ * dropdown. Strategy bots often advertise "both" there while selecting their
+ * digit contract and barrier in a purchase block.
+ */
+export const getKingFisherDigitSetup = (
+    blocks: readonly KingFisherWorkspaceBlock[],
+): KingFisherDigitSetup | null => {
+    const defaultPrediction = fixedTradePrediction(blocks);
+    for (const block of blocks) {
+        if (
+            block.type === 'king_fisher_pair_purchase'
+            || block.type === 'king_fisher_pair_purchase_with_stakes'
+        ) {
+            for (const index of [1, 2]) {
+                const setup = setupForContract(
+                    block.getFieldValue?.(`CONTRACT_${index}`),
+                    phasePrediction(block.getFieldValue?.(`PREDICTION_${index}`), defaultPrediction),
+                );
+                if (setup) return setup;
+            }
+        }
+
+        if (block.type === 'multiple_purchase') {
+            const prediction = phasePrediction(block.getFieldValue?.('PREDICTION'), defaultPrediction);
+            for (const index of [1, 2, 3, 4, 5, 6]) {
+                const setup = setupForContract(block.getFieldValue?.(`PURCHASE_${index}`), prediction);
+                if (setup) return setup;
+            }
+        }
+
+        if (block.type === 'purchase') {
+            const prediction = phasePrediction(block.getFieldValue?.('PREDICTION'), defaultPrediction);
+            const setup = setupForContract(block.getFieldValue?.('PURCHASE_LIST'), prediction);
+            if (setup) return setup;
+        }
+    }
+    return null;
 };
 
 const PAIR_CYCLE_PHASES = [
@@ -215,7 +298,9 @@ export const scanKingFisherMarket = async (
         })
     )).flatMap(result => result.status === 'fulfilled' ? [result.value] : []);
 
-    return results.sort((a, b) => b.score - a.score)[0] ?? null;
+    return results
+        .filter(result => result.qualifyingTicks > 0)
+        .sort((a, b) => b.score - a.score)[0] ?? null;
 };
 
 export const scanKingFisherPairCycleMarket = async (

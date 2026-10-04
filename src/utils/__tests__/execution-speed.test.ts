@@ -50,4 +50,26 @@ describe('execution speed controls', () => {
         speed.setFastExecutionEnabled(false);
         setTradeContext({ page: 'Bot Builder', bot: '' });
     });
+
+    it('allows the bot-specific Fast profile for Normal Killer Bot V3 without fan-out', async () => {
+        const speed = await import('../execution-speed');
+        const { setTradeContext } = await import('../trade-metadata');
+
+        speed.setExecutionSpeed('normal');
+        speed.setFastExecutionEnabled(false);
+        setTradeContext({ page: 'Free Bots', bot: 'Normal Killer Bot V3' });
+        expect(speed.getExecutionSpeedDelay()).toBe(1);
+        expect(speed.getPurchasesPerTick()).toBe(1);
+
+        speed.setFastExecutionEnabled(true);
+        expect(speed.isFastExecutionEnabledForContext()).toBe(true);
+        expect(speed.getExecutionSpeedDelay()).toBe(0);
+        expect(speed.getPurchasesPerTick()).toBe(1);
+
+        speed.setFastExecutionEnabled(false);
+        speed.setExecutionSpeed('crazy');
+        expect(speed.getPurchasesPerTick()).toBe(1);
+        setTradeContext({ page: 'Bot Builder', bot: '' });
+        speed.setExecutionSpeed('normal');
+    });
 });

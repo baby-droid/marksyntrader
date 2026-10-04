@@ -347,10 +347,67 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_pair_purchase
         .map(({ contract, prediction }) => {
             const predictionPart =
                 prediction && prediction !== 'NONE' ? `, prediction: ${Number(prediction)}` : '';
-            return `{ contract_type: ${JSON.stringify(contract)}, amount: stake${predictionPart}, dynamic: true }`;
+            return `{ contract_type: ${JSON.stringify(contract)}, amount: stake${predictionPart}, dynamic: true, same_tick_pair: true }`;
         });
 
     return specs.length ? `Bot.purchaseMultiple([${specs.join(', ')}]);\n` : '';
+};
+
+window.Blockly.Blocks.king_fisher_pair_purchase_with_stakes = {
+    init() {
+        const contractOptions = [
+            [localize('Over'), 'DIGITOVER'],
+            [localize('Under'), 'DIGITUNDER'],
+            [localize('Even'), 'DIGITEVEN'],
+            [localize('Odd'), 'DIGITODD'],
+            [localize('Differs'), 'DIGITDIFF'],
+        ];
+        const predictionOptions = Array.from({ length: 10 }, (_, digit) => [
+            String(digit),
+            String(digit),
+        ]);
+        this.jsonInit({
+            message0: localize('King Fisher pair: %1 %2 stake %3 + %4 %5 stake %6'),
+            args0: [
+                { type: 'field_dropdown', name: 'CONTRACT_1', options: contractOptions },
+                { type: 'field_dropdown', name: 'PREDICTION_1', options: predictionOptions },
+                { type: 'input_value', name: 'STAKE_1', check: 'Number' },
+                { type: 'field_dropdown', name: 'CONTRACT_2', options: contractOptions },
+                { type: 'field_dropdown', name: 'PREDICTION_2', options: predictionOptions },
+                { type: 'input_value', name: 'STAKE_2', check: 'Number' },
+            ],
+            previousStatement: 'Purchase',
+            colour: '#f97316',
+            tooltip: localize('Buys two independent contracts together, with separate stakes and digit barriers.'),
+            helpUrl: '',
+        });
+        this.setNextStatement(false);
+    },
+    meta() {
+        return {
+            display_name: localize('King Fisher pair with separate stakes'),
+            description: localize('Places two contracts with independent stakes and prediction barriers.'),
+        };
+    },
+    customContextMenu(menu) {
+        modifyContextMenu(menu);
+    },
+};
+
+window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_pair_purchase_with_stakes = block => {
+    const generator = window.Blockly.JavaScript.javascriptGenerator;
+    const specs = [1, 2]
+        .map(index => {
+            const contract = block.getFieldValue(`CONTRACT_${index}`);
+            const prediction = block.getFieldValue(`PREDICTION_${index}`);
+            const amount = generator.valueToCode(block, `STAKE_${index}`, generator.ORDER_ATOMIC) || 'stake';
+            return { contract, prediction, amount };
+        })
+        .filter(({ contract }) => contract);
+    const code = specs.map(({ contract, prediction, amount }) =>
+        `{ contract_type: ${JSON.stringify(contract)}, amount: (${amount}), prediction: ${Number(prediction)}, dynamic: true, same_tick_pair: true }`
+    );
+    return code.length ? `Bot.purchaseMultiple([${code.join(', ')}]);\n` : '';
 };
 
 window.Blockly.Blocks.king_fisher_parity_purchase = {
@@ -564,9 +621,10 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_restart_trade
 window.Blockly.Blocks.king_fisher_recovery_escalation = {
     init() {
         this.jsonInit({
-            message0: localize('After 2 losses in phase %1 route %2 → %3 → %4 → %5, then return to %6; state %7, counter %8'),
+            message0: localize('After 2 losses in phases %1 / %2 route %3 → %4 → %5 → %6, then return to %7; state %8, counter %9; paired result %10'),
             args0: [
                 { type: 'field_number', name: 'RECOVERY_PHASE', value: 1, min: -1, max: 99, precision: 1 },
+                { type: 'field_number', name: 'RECOVERY_PHASE_2', value: -1, min: -1, max: 99, precision: 1 },
                 { type: 'field_number', name: 'INTERMEDIATE_PHASE_1', value: -1, min: -1, max: 99, precision: 1 },
                 { type: 'field_number', name: 'INTERMEDIATE_PHASE_2', value: -1, min: -1, max: 99, precision: 1 },
                 { type: 'field_number', name: 'FIRST_OVER3_PHASE', value: 7, min: -1, max: 99, precision: 1 },
@@ -574,21 +632,22 @@ window.Blockly.Blocks.king_fisher_recovery_escalation = {
                 { type: 'field_number', name: 'RETURN_PHASE', value: 1, min: 0, max: 99, precision: 1 },
                 { type: 'field_variable', name: 'PHASE', variable: null },
                 { type: 'field_variable', name: 'LOSS_COUNT', variable: null },
+                { type: 'field_checkbox', name: 'USE_PAIR_RESULT', checked: false },
             ],
             previousStatement: null,
             nextStatement: null,
             colour: '#e879f9',
             tooltip: localize(
-                'Counts consecutive losses in the configured recovery phase. On the second loss it routes through the configured phases in order. Set any optional or Over 3 phase to -1 to skip it. Each completed phase advances on either outcome.'
+                'Counts losses across the configured recovery phases. After two losses it routes through the configured stages in order. Set unused phases to -1. Each completed stage advances on either outcome. Enable paired result when this bot needs the net result of both contracts.'
             ),
             helpUrl: '',
         });
     },
     meta() {
         return {
-            display_name: localize('Parity Recovery Escalation'),
+            display_name: localize('Recovery Escalation'),
             description: localize(
-                'After two losses in a recovery phase, routes through optional intermediary phases and two configured Over 3 phases.'
+                'After two losses in the configured phases, routes through up to four recovery stages and returns to the selected phase. Can count a paired net result.'
             ),
         };
     },

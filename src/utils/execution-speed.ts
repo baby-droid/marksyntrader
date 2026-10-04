@@ -86,6 +86,13 @@ let fastExecutionEnabled: boolean = readFastExec();
 
 export const getExecutionSpeed = (): ExecutionSpeed => current;
 
+const isNormalKillerBotV3Context = (): boolean => {
+    const context = getTradeContext();
+    const page = String(context.page || '').trim().toLowerCase();
+    const bot = String(context.bot || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    return page === 'free bots' && bot === 'normalkillerbotv3';
+};
+
 /** The raw toggle state is used by the Fast button itself. */
 export const isFastExecutionEnabled = (): boolean => fastExecutionEnabled;
 
@@ -96,8 +103,11 @@ export const isFastExecutionEnabled = (): boolean => fastExecutionEnabled;
  */
 export const isFastExecutionEnabledForContext = (): boolean => {
     if (!fastExecutionEnabled) return false;
-    const page = String(getTradeContext().page || '').trim().toLowerCase();
-    return page === 'bot builder' || page === 'scalper bots';
+    const context = getTradeContext();
+    const page = String(context.page || '').trim().toLowerCase();
+    return page === 'bot builder'
+        || page === 'scalper bots'
+        || isNormalKillerBotV3Context();
 };
 
 /** True while the header's app-wide A-SPEED BOOST preset is active. */
@@ -112,8 +122,11 @@ export const isTickWiseExecutionEnabled = (): boolean =>
  * seamless, no cooldown, no contract-switch pause, no next-execution reload
  * wait — no matter which speed tier (Normal/Crazy/Turbo) is selected.
  */
-export const getExecutionSpeedDelay = (): number =>
-    isFastExecutionEnabledForContext() || aSpeedBoostEnabled ? 0 : SPEED_DELAY_MS[current];
+export const getExecutionSpeedDelay = (): number => {
+    if (isFastExecutionEnabledForContext() || aSpeedBoostEnabled) return 0;
+    if (isNormalKillerBotV3Context() && current === 'normal') return 1;
+    return SPEED_DELAY_MS[current];
+};
 
 /** Effective max concurrent in-flight contracts — the higher of the active tier or Fast Execution's cap. */
 export const getMaxInflight = (): number =>
@@ -123,7 +136,7 @@ export const getMaxInflight = (): number =>
 
 /** Effective purchases fired per tick. Fast mode never inherits Turbo fan-out. */
 export const getPurchasesPerTick = (): number =>
-    isFastExecutionEnabledForContext()
+    isFastExecutionEnabledForContext() || aSpeedBoostEnabled || isNormalKillerBotV3Context()
         ? FAST_EXEC_PURCHASES_PER_TICK
         : SPEED_PURCHASES_PER_TICK[current];
 

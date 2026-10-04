@@ -129,6 +129,29 @@ describe('King Fisher parity recovery escalation', () => {
         )).toEqual({ phase: sequence.returnPhase, lossCount: 0 });
     });
 
+    it('counts losses across two alternating paired-entry phases before recovery', () => {
+        const firstLoss = advanceKingFisherRecoveryEscalation(
+            0, 0, false, 0, 2, 3, 0, -1, -1, 1,
+        );
+        expect(firstLoss).toEqual({ phase: null, lossCount: 1 });
+
+        const secondLoss = advanceKingFisherRecoveryEscalation(
+            1, firstLoss.lossCount, false, 0, 2, 3, 0, -1, -1, 1,
+        );
+        expect(secondLoss).toEqual({ phase: 2, lossCount: 0 });
+    });
+
+    it('advances a four-stage recovery route in order regardless of outcome', () => {
+        const phases = [2, 3, 4, 5];
+        const next = phases.map((phase, index) =>
+            advanceKingFisherRecoveryEscalation(
+                phase, 0, index % 2 === 0, 0, phases[2], phases[3], 0,
+                phases[0], phases[1], 1,
+            )
+        );
+        expect(next.map(step => step.phase)).toEqual([3, 4, 5, 0]);
+    });
+
     it('skips the Over 3 phases when disabled for a Rise/Fall-only recovery', () => {
         expect(advanceKingFisherRecoveryEscalation(
             -1, 1, false, -1, -1, -1, 0, 10, 11,

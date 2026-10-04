@@ -315,7 +315,12 @@ export const evaluateAutoLabCandidates = (
                 continue;
             }
             const selectedContract = settings.contractType;
-            if (!MODE_CONTRACT_TYPES[result.strategy].includes(selectedContract)) continue;
+            const isPriceBarrierContract =
+                selectedContract === 'ONETOUCH' || selectedContract === 'RANGE';
+            if (
+                !isPriceBarrierContract
+                && !MODE_CONTRACT_TYPES[result.strategy].includes(selectedContract)
+            ) continue;
             if (result.strategy === 'Rise/Fall') {
                 // A fixed directional contract must agree with the quote-momentum
                 // signal. Other fixed contracts have no meaningful Rise/Fall
@@ -325,9 +330,38 @@ export const evaluateAutoLabCandidates = (
                     || selectedContract !== result.contract_type
                 ) continue;
             }
-            if (result.contract_type !== selectedContract) continue;
+            if (
+                !isPriceBarrierContract
+                && result.strategy !== 'RC Even/Odd'
+                && result.contract_type !== selectedContract
+            ) continue;
+            if (isPriceBarrierContract) {
+                const barrier = Number(settings.contractBarrier);
+                if (!Number.isFinite(barrier)) continue;
+                const normalizedBarrier = Number(barrier.toFixed(2));
+                if (selectedContract === 'RANGE') {
+                    const secondaryBarrier = Number(settings.secondaryBarrier);
+                    if (!Number.isFinite(secondaryBarrier)) continue;
+                    const normalizedSecondaryBarrier = Number(secondaryBarrier.toFixed(2));
+                    if (normalizedSecondaryBarrier <= normalizedBarrier) continue;
+                    output.push({
+                        ...result,
+                        contract_type: selectedContract,
+                        barrier: normalizedBarrier,
+                        barrier2: normalizedSecondaryBarrier,
+                    });
+                    continue;
+                }
+                output.push({
+                    ...result,
+                    contract_type: selectedContract,
+                    barrier: normalizedBarrier,
+                });
+                continue;
+            }
             output.push({
                 ...result,
+                ...(result.strategy === 'RC Even/Odd' ? { contract_type: selectedContract } : {}),
             });
         }
     }

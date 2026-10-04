@@ -7,6 +7,7 @@ import { contractStatus, info, log } from '../utils/broadcast';
 import { doUntilDone, getUUID, recoverFromError, tradeOptionToBuy } from '../utils/helpers';
 import { purchaseSuccessful } from './state/actions';
 import { BEFORE_PURCHASE } from './state/constants';
+import { applyCommission } from '@/utils/commission';
 import {
     createTradeKey,
     getMasterSource,
@@ -118,31 +119,99 @@ function _acquireBuySlot() {
 // at a time, and is not safe to share across concurrent contracts. Side
 // purchases still go through the real API, settle independently, and show up
 // normally in transactions/reports/balance.
-function fireSidePurchase(tradeOptions, contract_type, tradeOptionsOverride = tradeOptions) {
+function fireSidePurchase(
+    tradeOptions,
+    contract_type,
+    tradeOptionsOverride = tradeOptions,
+    { bypassRateLimit = false, trackSettlement = false, onSettled } = {},
+) {
     // Do NOT fire side purchases while the bot is paused.
-    if (isBotPaused()) return;
+    if (isBotPaused()) return trackSettlement ? Promise.resolve() : undefined;
+    let resolveSettlement;
+    const settlementPromise = trackSettlement
+        ? new Promise(resolve => {
+            resolveSettlement = resolve;
+        })
+        : null;
+    const finishSettlement = () => {
+        if (resolveSettlement) {
+            resolveSettlement();
+            resolveSettlement = null;
+        }
+    };
     try {
         const trade_option = tradeOptionToBuy(contract_type, tradeOptionsOverride);
         // Publish before the direct buy so followers enter on the same tick.
         // The confirmation below registers the contract ID for deduplication.
         const tradeKey = createTradeKey('bot-side');
         publishBotCopySignal(tradeOptionsOverride, contract_type, undefined, tradeKey);
-        _acquireBuySlot()
+        (bypassRateLimit ? Promise.resolve() : _acquireBuySlot())
             .then(() => api_base.api.send(trade_option))
             .then(response => {
                 const { buy } = response;
-                if (!buy) return;
+                if (!buy) {
+                    finishSettlement();
+                    return;
+                }
                 if (buy.contract_id) _sideContractIds.add(buy.contract_id);
                 publishBotCopySignal(tradeOptionsOverride, contract_type, buy.contract_id, tradeKey);
                 contractStatus({ id: 'contract.purchase_received', data: buy.transaction_id, buy });
                 log(LogTypes.PURCHASE, { transaction_id: buy.transaction_id });
+                if (!trackSettlement || !buy.contract_id) {
+                    finishSettlement();
+                    return;
+                }
+
+                let settled = false;
+                let settlementSubscription;
+                const settlementTimeout = setTimeout(() => {
+                    finishSettlement();
+                    settlementSubscription?.unsubscribe?.();
+                }, 10000);
+                const complete = () => {
+                    if (settled) return;
+                    settled = true;
+                    clearTimeout(settlementTimeout);
+                    settlementSubscription?.unsubscribe?.();
+                    finishSettlement();
+                };
+                try {
+                    settlementSubscription = api_base.api
+                        .subscribe({
+                            proposal_open_contract: 1,
+                            contract_id: Number(buy.contract_id),
+                        })
+                        .subscribe(
+                            ({ data }) => {
+                                const contract = data?.proposal_open_contract;
+                                if (
+                                    !contract
+                                    || Number(contract.contract_id) !== Number(buy.contract_id)
+                                    || !contract.is_sold
+                                ) return;
+                                _sideContractIds.delete(buy.contract_id);
+                                try {
+                                    onSettled?.(contract);
+                                } finally {
+                                    complete();
+                                }
+                            },
+                            complete,
+                        );
+                    if (settled) settlementSubscription?.unsubscribe?.();
+                } catch {
+                    complete();
+                }
             })
             .catch(() => {
                 /* side purchase failures are non-fatal — main contract is unaffected */
+                finishSettlement();
             });
     } catch (e) {
         /* ignore — never let a side purchase break the main strategy flow */
+        finishSettlement();
     }
+    return settlementPromise;
 }
 
 export default Engine =>
@@ -199,11 +268,14 @@ export default Engine =>
             );
             if (!unique_specs.length) return Promise.resolve();
 
+            const isSameTickPair = unique_specs.length === 2
+                && unique_specs.every(spec => spec.same_tick_pair === true);
             // Multiple Purchase is also used by strategy blocks that provide
             // several same-tick contracts. A-SPEED BOOST explicitly means
             // one contract for one tick, so keep only the first selected
-            // contract and do not create untracked side orders.
-            const effective_specs = isASpeedBoostEnabled()
+            // contract and do not create untracked side orders. An explicit
+            // paired-entry block is one strategy action, not a bulk fan-out.
+            const effective_specs = isASpeedBoostEnabled() && !isSameTickPair
                 ? unique_specs.slice(0, 1)
                 : unique_specs;
 
@@ -215,12 +287,37 @@ export default Engine =>
                 spec.dynamic === true || spec.prediction !== undefined
             );
             if (hasDynamicOptions) {
+                const pairExecution = isSameTickPair
+                    ? { mainContractId: null, mainProfit: null, sideProfit: null }
+                    : null;
+                if (pairExecution) {
+                    this._kingFisherCurrentPair = pairExecution;
+                    this._kingFisherLastPairWin = null;
+                    this._kingFisherSideSettlementPromises = [];
+                }
                 effective_specs.slice(1).forEach(spec => {
-                    fireSidePurchase(this.tradeOptions, spec.contract_type, {
-                        ...this.tradeOptions,
-                        amount: spec.amount ?? this.tradeOptions.amount,
-                        prediction: spec.prediction,
-                    });
+                    const sideSettlement = fireSidePurchase(
+                        this.tradeOptions,
+                        spec.contract_type,
+                        {
+                            ...this.tradeOptions,
+                            amount: spec.amount ?? this.tradeOptions.amount,
+                            prediction: spec.prediction,
+                        },
+                        pairExecution
+                            ? {
+                                bypassRateLimit: true,
+                                trackSettlement: true,
+                                onSettled: contract => {
+                                    this.updateTotals(contract);
+                                    this.recordKingFisherPairSettlement(pairExecution, contract, 'side');
+                                },
+                            }
+                            : undefined,
+                    );
+                    if (pairExecution && sideSettlement) {
+                        this._kingFisherSideSettlementPromises.push(sideSettlement);
+                    }
                 });
                 return this._executePurchase(
                     effective_specs[0].contract_type,
@@ -229,7 +326,9 @@ export default Engine =>
                         amount: effective_specs[0].amount ?? this.tradeOptions.amount,
                         prediction: effective_specs[0].prediction,
                     },
-                    true
+                    true,
+                    Boolean(pairExecution),
+                    pairExecution,
                 );
             }
 
@@ -242,8 +341,15 @@ export default Engine =>
             return this.purchase(effective_specs[0].contract_type);
         }
 
-        _executePurchase(contract_type, tradeOptions = this.tradeOptions, forceDirect = false) {
+        _executePurchase(
+            contract_type,
+            tradeOptions = this.tradeOptions,
+            forceDirect = false,
+            bypassRateLimit = false,
+            pairExecution = null,
+        ) {
             let tradeKey = null;
+            const acquireBuySlot = () => bypassRateLimit ? Promise.resolve() : _acquireBuySlot();
             const onSuccess = response => {
                 const { buy } = response;
 
@@ -262,6 +368,9 @@ export default Engine =>
                 } catch { /* non-fatal */ }
 
                 this.contractId = buy.contract_id;
+                if (pairExecution) {
+                    pairExecution.mainContractId = Number(buy.contract_id);
+                }
                 this.store.dispatch(purchaseSuccessful());
                 // Confirm the pre-signal with the master contract ID. This lets
                 // copy-trading register the ID and block the later bot.contract
@@ -309,7 +418,7 @@ export default Engine =>
                 tradeKey = createTradeKey('bot');
                 publishBotCopySignal(tradeOptions, contract_type, undefined, tradeKey);
 
-                const action = () => _acquireBuySlot().then(() =>
+                const action = () => acquireBuySlot().then(() =>
                     api_base.api.send({ buy: id, price: askPrice })
                 );
 
@@ -352,7 +461,7 @@ export default Engine =>
             const trade_option = tradeOptionToBuy(contract_type, tradeOptions);
             tradeKey = createTradeKey('bot');
             publishBotCopySignal(tradeOptions, contract_type, undefined, tradeKey);
-            const action = () => _acquireBuySlot().then(() =>
+            const action = () => acquireBuySlot().then(() =>
                 api_base.api.send(trade_option)
             );
 
@@ -384,6 +493,30 @@ export default Engine =>
                 ['PriceMoved', 'InvalidContractProposal'],
                 delayIndex++
             ).then(onSuccess);
+        }
+
+        recordKingFisherPairSettlement(pairExecution, contract, leg) {
+            if (!pairExecution || !contract) return;
+            const rawProfit = Number(contract.sell_price) - Number(contract.buy_price);
+            const profit = applyCommission(Number.isFinite(rawProfit) ? rawProfit : 0);
+            pairExecution[leg === 'side' ? 'sideProfit' : 'mainProfit'] = profit;
+            if (pairExecution.mainProfit !== null && pairExecution.sideProfit !== null) {
+                this._kingFisherLastPairWin = pairExecution.mainProfit + pairExecution.sideProfit > 0;
+            }
+        }
+
+        finishKingFisherPair(pairExecution) {
+            if (!pairExecution || pairExecution.mainProfit === null) return;
+            const sideProfit = Number(pairExecution.sideProfit) || 0;
+            this._kingFisherLastPairWin = pairExecution.mainProfit + sideProfit > 0;
+            if (this._kingFisherCurrentPair === pairExecution) this._kingFisherCurrentPair = null;
+            this._kingFisherSideSettlementPromises = [];
+        }
+
+        isKingFisherPairWin() {
+            return typeof this._kingFisherLastPairWin === 'boolean'
+                ? this._kingFisherLastPairWin
+                : null;
         }
         getPurchaseReference = () => purchase_reference;
         regeneratePurchaseReference = () => {
