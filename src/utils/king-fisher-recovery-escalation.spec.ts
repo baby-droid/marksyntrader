@@ -128,4 +128,16 @@ describe('King Fisher parity recovery escalation', () => {
             sequence.fallAfterRises, sequence.riseAfterFalls,
         )).toEqual({ phase: sequence.returnPhase, lossCount: 0 });
     });
+
+    it('skips the Over 3 phases when disabled for a Rise/Fall-only recovery', () => {
+        expect(advanceKingFisherRecoveryEscalation(
+            -1, 1, false, -1, -1, -1, 0, 10, 11,
+        )).toEqual({ phase: 10, lossCount: 0 });
+        expect(advanceKingFisherRecoveryEscalation(
+            10, 0, true, -1, -1, -1, 0, 10, 11,
+        )).toEqual({ phase: 11, lossCount: 0 });
+        expect(advanceKingFisherRecoveryEscalation(
+            11, 0, false, -1, -1, -1, 0, 10, 11,
+        )).toEqual({ phase: 0, lossCount: 0 });
+    });
 });

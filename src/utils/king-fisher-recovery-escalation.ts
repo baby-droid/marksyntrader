@@ -17,8 +17,8 @@ export function advanceKingFisherRecoveryEscalation(
     const escalationPhases = [
         ...(Number.isInteger(intermediatePhase1) && intermediatePhase1 >= 0 ? [intermediatePhase1] : []),
         ...(Number.isInteger(intermediatePhase2) && intermediatePhase2 >= 0 ? [intermediatePhase2] : []),
-        firstOver3Phase,
-        secondOver3Phase,
+        ...(Number.isInteger(firstOver3Phase) && firstOver3Phase >= 0 ? [firstOver3Phase] : []),
+        ...(Number.isInteger(secondOver3Phase) && secondOver3Phase >= 0 ? [secondOver3Phase] : []),
     ];
 
     if (phaseAtSettlement === recoveryPhase) {
@@ -26,7 +26,7 @@ export function advanceKingFisherRecoveryEscalation(
 
         const nextLossCount = Math.max(0, Math.floor(Number(lossCount) || 0)) + 1;
         return nextLossCount >= 2
-            ? { phase: escalationPhases[0], lossCount: 0 }
+            ? { phase: escalationPhases[0] ?? returnPhase, lossCount: 0 }
             : { phase: recoveryPhase, lossCount: nextLossCount };
     }
 

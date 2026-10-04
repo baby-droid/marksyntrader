@@ -566,11 +566,11 @@ window.Blockly.Blocks.king_fisher_recovery_escalation = {
         this.jsonInit({
             message0: localize('After 2 losses in phase %1 route %2 → %3 → %4 → %5, then return to %6; state %7, counter %8'),
             args0: [
-                { type: 'field_number', name: 'RECOVERY_PHASE', value: 1, min: 0, max: 99, precision: 1 },
+                { type: 'field_number', name: 'RECOVERY_PHASE', value: 1, min: -1, max: 99, precision: 1 },
                 { type: 'field_number', name: 'INTERMEDIATE_PHASE_1', value: -1, min: -1, max: 99, precision: 1 },
                 { type: 'field_number', name: 'INTERMEDIATE_PHASE_2', value: -1, min: -1, max: 99, precision: 1 },
-                { type: 'field_number', name: 'FIRST_OVER3_PHASE', value: 7, min: 0, max: 99, precision: 1 },
-                { type: 'field_number', name: 'SECOND_OVER3_PHASE', value: 8, min: 0, max: 99, precision: 1 },
+                { type: 'field_number', name: 'FIRST_OVER3_PHASE', value: 7, min: -1, max: 99, precision: 1 },
+                { type: 'field_number', name: 'SECOND_OVER3_PHASE', value: 8, min: -1, max: 99, precision: 1 },
                 { type: 'field_number', name: 'RETURN_PHASE', value: 1, min: 0, max: 99, precision: 1 },
                 { type: 'field_variable', name: 'PHASE', variable: null },
                 { type: 'field_variable', name: 'LOSS_COUNT', variable: null },
@@ -579,7 +579,7 @@ window.Blockly.Blocks.king_fisher_recovery_escalation = {
             nextStatement: null,
             colour: '#e879f9',
             tooltip: localize(
-                'Counts consecutive losses in the configured recovery phase. On the second loss it routes through up to two optional phases, then the two Over 3 phases. Set an optional phase to -1 to skip it. Each completed phase advances on either outcome.'
+                'Counts consecutive losses in the configured recovery phase. On the second loss it routes through the configured phases in order. Set any optional or Over 3 phase to -1 to skip it. Each completed phase advances on either outcome.'
             ),
             helpUrl: '',
         });

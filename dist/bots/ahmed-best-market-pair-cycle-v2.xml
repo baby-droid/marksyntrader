@@ -53,8 +53,8 @@
   </block>
   <block type="before_purchase" id="abmp2_before" deletable="false" x="0" y="760">
     <statement name="BEFOREPURCHASE_STACK">
-      <block type="notify" id="abmp2_note"><field name="NOTIFICATION_TYPE">info</field><field name="NOTIFICATION_SOUND">silent</field><value name="MESSAGE"><block type="text"><field name="TEXT">AHMED BEST MARKET PAIR V2 · high-bias Over 2 + Over 3; recovery: parity → Fall after 4 rises → Rise after 2–3 falls</field></block></value>
-        <next><block type="controls_if" id="abmp2_router"><mutation elseif="3"/>
+      <block type="notify" id="abmp2_note"><field name="NOTIFICATION_TYPE">info</field><field name="NOTIFICATION_SOUND">silent</field><value name="MESSAGE"><block type="text"><field name="TEXT">AHMED BEST MARKET PAIR V2 · high-bias Over 2 + Over 3; recovery: parity → Fall after 4 rises → Rise after 2–3 falls → two Over 3 trades</field></block></value>
+        <next><block type="controls_if" id="abmp2_router"><mutation elseif="5"/>
           <value name="IF0"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get"><field name="VAR" id="abmp2_phase">recovery_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">0</field></block></value></block></value>
           <statement name="DO0"><block type="controls_if" id="abmp2_over_entry_gate">
             <value name="IF0"><block type="logic_operation" id="abmp2_over_gate"><field name="OP">AND</field>
@@ -78,6 +78,10 @@
             <value name="IF0"><block type="king_fisher_price_entry" id="abmp2_rise_after_falls"><field name="DIRECTION">RISE_AFTER_FALLS</field><field name="STREAK">2_3</field></block></value>
             <statement name="DO0"><block type="purchase" id="abmp2_rise_purchase"><field name="PURCHASE_LIST">CALL</field></block></statement>
           </block></statement>
+          <value name="IF4"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="abmp2_phase_get4"><field name="VAR" id="abmp2_phase">recovery_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">4</field></block></value></block></value>
+          <statement name="DO4"><block type="king_fisher_pair_purchase" id="abmp2_first_over3"><field name="CONTRACT_1">DIGITOVER</field><field name="PREDICTION_1">3</field><field name="CONTRACT_2">NONE</field><field name="PREDICTION_2">NONE</field></block></statement>
+          <value name="IF5"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="abmp2_phase_get5"><field name="VAR" id="abmp2_phase">recovery_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">5</field></block></value></block></value>
+          <statement name="DO5"><block type="king_fisher_pair_purchase" id="abmp2_second_over3"><field name="CONTRACT_1">DIGITOVER</field><field name="PREDICTION_1">3</field><field name="CONTRACT_2">NONE</field><field name="PREDICTION_2">NONE</field></block></statement>
           <statement name="ELSE"><block type="king_fisher_parity_sequence_purchase" id="abmp2_fallback_parity"/></statement>
         </block></next>
       </block>
@@ -89,19 +93,23 @@
         <next><block type="king_fisher_recovery_escalation" id="abmp2_escalation">
           <field name="PHASE" id="abmp2_phase">recovery_phase</field>
           <field name="LOSS_COUNT" id="abmp2_loss_count">parity_recovery_losses</field>
-          <field name="RECOVERY_PHASE">1</field><field name="FIRST_OVER3_PHASE">2</field><field name="SECOND_OVER3_PHASE">3</field><field name="RETURN_PHASE">0</field>
+          <field name="RECOVERY_PHASE">1</field><field name="INTERMEDIATE_PHASE_1">2</field><field name="INTERMEDIATE_PHASE_2">3</field><field name="FIRST_OVER3_PHASE">4</field><field name="SECOND_OVER3_PHASE">5</field><field name="RETURN_PHASE">0</field>
           <next><block type="controls_if" id="abmp2_result"><mutation else="1"/>
           <value name="IF0"><block type="contract_check_result"><field name="CHECK_RESULT">win</field></block></value>
           <statement name="DO0"><block type="variables_set" id="abmp2_win_stake"><field name="VAR" id="abmp2_stake">stake</field><value name="VALUE"><block type="variables_get"><field name="VAR" id="abmp2_base">base_stake</field></block></value>
-            <next><block type="controls_if" id="abmp2_phase_advance"><mutation elseif="3"/>
+            <next><block type="controls_if" id="abmp2_phase_advance"><mutation elseif="5"/>
               <value name="IF0"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="abmp2_phase_read0"><field name="VAR" id="abmp2_phase">recovery_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">0</field></block></value></block></value>
               <statement name="DO0"><block type="variables_set" id="abmp2_main_pair_win"><field name="VAR" id="abmp2_phase">recovery_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">0</field></block></value></block></statement>
               <value name="IF1"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="abmp2_phase_read1"><field name="VAR" id="abmp2_phase">recovery_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">1</field></block></value></block></value>
-              <statement name="DO1"><block type="variables_set" id="abmp2_parity_win"><field name="VAR" id="abmp2_phase">recovery_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">2</field></block></value></block></statement>
+              <statement name="DO1"><block type="variables_set" id="abmp2_parity_win"><field name="VAR" id="abmp2_phase">recovery_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">0</field></block></value></block></statement>
               <value name="IF2"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get"><field name="VAR" id="abmp2_phase">recovery_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">2</field></block></value></block></value>
               <statement name="DO2"><block type="variables_set" id="abmp2_fall_win"><field name="VAR" id="abmp2_phase">recovery_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">3</field></block></value></block></statement>
               <value name="IF3"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get"><field name="VAR" id="abmp2_phase">recovery_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">3</field></block></value></block></value>
-              <statement name="DO3"><block type="variables_set" id="abmp2_rise_win"><field name="VAR" id="abmp2_phase">recovery_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">0</field></block></value></block></statement>
+              <statement name="DO3"><block type="variables_set" id="abmp2_rise_win"><field name="VAR" id="abmp2_phase">recovery_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">4</field></block></value></block></statement>
+              <value name="IF4"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get"><field name="VAR" id="abmp2_phase">recovery_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">4</field></block></value></block></value>
+              <statement name="DO4"><block type="variables_set"><field name="VAR" id="abmp2_phase">recovery_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">5</field></block></value></block></statement>
+              <value name="IF5"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get"><field name="VAR" id="abmp2_phase">recovery_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">5</field></block></value></block></value>
+              <statement name="DO5"><block type="variables_set"><field name="VAR" id="abmp2_phase">recovery_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">0</field></block></value></block></statement>
               <statement name="ELSE"><block type="variables_set" id="abmp2_recovery_win"><field name="VAR" id="abmp2_phase">recovery_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">0</field></block></value></block></statement>
             </block></next>
           </block></statement>
