@@ -177,7 +177,7 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
             const configuredReturnPhase = Number(recoveryEscalationBlock.getFieldValue('RETURN_PHASE'));
             const returnPhase = Number.isFinite(configuredReturnPhase) ? configuredReturnPhase : recoveryPhase;
             const usePairResult = recoveryEscalationBlock.getFieldValue('USE_PAIR_RESULT') === 'TRUE';
-            const recoveryWinCheck = usePairResult && typeof Bot !== 'undefined'
+            const recoveryWinCheck = usePairResult
                 ? 'Bot.isKingFisherPairWin() === true'
                 : 'Bot.isResult("win")';
             recoveryPhaseSnapshot = `var kingFisherRecoveryPhaseAtSettlement = Number(${phaseVariable});`;

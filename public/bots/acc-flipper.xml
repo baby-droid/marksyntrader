@@ -84,7 +84,7 @@
         <field name="NOTIFICATION_TYPE">info</field>
         <field name="NOTIFICATION_SOUND">silent</field>
         <value name="MESSAGE"><block type="text"><field name="TEXT">ACC FLIPPER · 10-tick bias + 2–3 tick barrier confirmation · parity recovery unlocks two Over 3 wins</field></block></value>
-        <next><block type="controls_if" id="accf_phase_router"><mutation elseif="5"/>
+        <next><block type="controls_if" id="accf_phase_router"><mutation elseif="8"/>
           <value name="IF0"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get"><field name="VAR" id="accf_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">0</field></block></value></block></value>
           <statement name="DO0"><block type="controls_if" id="accf_over1_gate">
             <value name="IF0"><block type="logic_operation"><field name="OP">AND</field>
@@ -129,7 +129,7 @@
               <field name="PREDICTION">7</field>
             </block></statement>
           </block></statement>
-          <value name="IF4"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get"><field name="VAR" id="accf_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">5</field></block></value></block></value>
+          <value name="IF4"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get"><field name="VAR" id="accf_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">4</field></block></value></block></value>
           <statement name="DO4"><block type="controls_if" id="accf_recovery_over3_first_gate">
             <value name="IF0"><block type="logic_operation"><field name="OP">AND</field>
               <value name="A"><block type="king_fisher_chart_ai_phase_gate" id="accf_recovery_over3_first_bias"><field name="DIRECTION">HIGH</field><field name="BARRIER">3</field></block></value>
@@ -140,7 +140,7 @@
               <field name="PREDICTION">3</field>
             </block></statement>
           </block></statement>
-          <value name="IF5"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get"><field name="VAR" id="accf_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">6</field></block></value></block></value>
+          <value name="IF5"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get"><field name="VAR" id="accf_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">5</field></block></value></block></value>
           <statement name="DO5"><block type="controls_if" id="accf_recovery_over3_second_gate">
             <value name="IF0"><block type="logic_operation"><field name="OP">AND</field>
               <value name="A"><block type="king_fisher_chart_ai_phase_gate" id="accf_recovery_over3_second_bias"><field name="DIRECTION">HIGH</field><field name="BARRIER">3</field></block></value>
@@ -150,6 +150,18 @@
               <field name="PURCHASE_1">DIGITOVER</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/>
               <field name="PREDICTION">3</field>
             </block></statement>
+          </block></statement>
+          <value name="IF6"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get"><field name="VAR" id="accf_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">6</field></block></value></block></value>
+          <statement name="DO6"><block type="king_fisher_parity_sequence_purchase" id="accf_parity_recovery"/></statement>
+          <value name="IF7"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get"><field name="VAR" id="accf_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">7</field></block></value></block></value>
+          <statement name="DO7"><block type="controls_if" id="accf_fall_after_rises_gate">
+            <value name="IF0"><block type="king_fisher_price_entry" id="accf_fall_after_rises"><field name="DIRECTION">FALL_AFTER_RISES</field><field name="STREAK">4</field></block></value>
+            <statement name="DO0"><block type="purchase" id="accf_fall_after_rises_purchase"><field name="PURCHASE_LIST">PUT</field></block></statement>
+          </block></statement>
+          <value name="IF8"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get"><field name="VAR" id="accf_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">8</field></block></value></block></value>
+          <statement name="DO8"><block type="controls_if" id="accf_rise_after_falls_gate">
+            <value name="IF0"><block type="king_fisher_price_entry" id="accf_rise_after_falls"><field name="DIRECTION">RISE_AFTER_FALLS</field><field name="STREAK">2_3</field></block></value>
+            <statement name="DO0"><block type="purchase" id="accf_rise_after_falls_purchase"><field name="PURCHASE_LIST">CALL</field></block></statement>
           </block></statement>
           <statement name="ELSE"><block type="king_fisher_parity_sequence_purchase" id="accf_parity_recovery"/></statement>
         </block></next>
@@ -166,7 +178,7 @@
         <next><block type="king_fisher_recovery_escalation" id="accf_recovery_escalation">
           <field name="PHASE" id="accf_phase">cycle_phase</field>
           <field name="LOSS_COUNT" id="accf_loss_count">parity_recovery_losses</field>
-          <field name="RECOVERY_PHASE">6</field><field name="FIRST_OVER3_PHASE">4</field><field name="SECOND_OVER3_PHASE">5</field><field name="RETURN_PHASE">6</field>
+          <field name="RECOVERY_PHASE">6</field><field name="INTERMEDIATE_PHASE_1">7</field><field name="INTERMEDIATE_PHASE_2">8</field><field name="FIRST_OVER3_PHASE">4</field><field name="SECOND_OVER3_PHASE">5</field><field name="RETURN_PHASE">0</field>
           <next><block type="controls_if" id="accf_result"><mutation else="1"/>
           <value name="IF0"><block type="contract_check_result"><field name="CHECK_RESULT">win</field></block></value>
           <statement name="DO0"><block type="variables_set" id="accf_reset_stake_on_win">

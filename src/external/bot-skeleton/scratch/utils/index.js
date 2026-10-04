@@ -524,7 +524,8 @@ const getMissingBlocks = (workspace, required_block_types) => {
             return !workspace.getAllBlocks().some(block =>
                 block.type === 'purchase' ||
                 block.type === 'multiple_purchase' ||
-                block.type === 'king_fisher_pair_purchase'
+                block.type === 'king_fisher_pair_purchase' ||
+                block.type === 'king_fisher_pair_purchase_with_stakes'
             );
         }
         return !workspace.getAllBlocks().some(block => block.type === blockType);
