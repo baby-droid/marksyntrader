@@ -64,6 +64,7 @@ class APIBase {
     current_auth_subscriptions: SubscriptionPromise[] = [];
     is_authorized = false;
     active_symbols_promise: Promise<any[] | undefined> | null = null;
+    private active_symbols_fetch_promise: Promise<any[]> | null = null;
     common_store: CommonStore | undefined;
     reconnection_attempts: number = 0;
     // Separate handle for the live-balance message listener so it is always
@@ -202,7 +203,9 @@ class APIBase {
         const hasAccountID = V2GetActiveAccountId();
 
         if (!this.has_active_symbols && !hasAccountID) {
-            this.active_symbols_promise = this.getActiveSymbols().then(() => undefined);
+            this.active_symbols_promise = this.getActiveSymbols()
+                .then(() => undefined)
+                .catch(() => undefined);
         }
 
         this.initEventListeners();
@@ -366,7 +369,8 @@ class APIBase {
             if (this.has_active_symbols) {
                 this.toggleRunButton(false);
             } else {
-                this.active_symbols_promise = this.getActiveSymbols();
+                this.active_symbols_promise = this.getActiveSymbols()
+                    .catch(() => this.active_symbols);
             }
             this.subscribe();
         } catch (e) {
@@ -465,6 +469,20 @@ class APIBase {
     }
 
     getActiveSymbols = async () => {
+        if (this.active_symbols_fetch_promise) return this.active_symbols_fetch_promise;
+
+        const request = this.fetchAndProcessActiveSymbols();
+        this.active_symbols_fetch_promise = request;
+        try {
+            return await request;
+        } finally {
+            if (this.active_symbols_fetch_promise === request) {
+                this.active_symbols_fetch_promise = null;
+            }
+        }
+    };
+
+    private fetchAndProcessActiveSymbols = async () => {
         if (!this.api) {
             throw new Error('API connection not available for fetching active symbols');
         }

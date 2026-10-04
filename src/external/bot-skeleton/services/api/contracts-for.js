@@ -9,6 +9,7 @@ export default class ContractsFor {
         this.contracts_for = {};
         this.ws = ws;
         this.server_time = server_time;
+        this.contracts_for_retry_after = {};
         // Below you can disable specific trade types and trade type categories, you may specify
         // market, submarket, symbol, trade_type, and trade_type_category. If one of
         // the props is left omitted, the rule applies to each of the values of the omitted prop.
@@ -200,6 +201,9 @@ export default class ContractsFor {
         if (!api_base.api) {
             return [];
         }
+        if (Date.now() < (this.contracts_for_retry_after[symbol] || 0)) {
+            return [];
+        }
 
         const getContractsForFromApi = async () => {
             if (this.retrieving_contracts_for[symbol]) {
@@ -208,12 +212,17 @@ export default class ContractsFor {
             }
 
             this.retrieving_contracts_for[symbol] = new PendingPromise();
+            const deferRetry = errorCode => {
+                const rateLimited = errorCode === 'RateLimit' || errorCode === 'RateLimitExceeded';
+                this.contracts_for_retry_after[symbol] = Date.now() + (rateLimited ? 5000 : 1500);
+            };
 
             try {
                 const response = await api_base.api.send({ contracts_for: symbol });
 
                 if (!response || response.error) {
                     console.warn('contracts_for API error for symbol:', symbol, response?.error);
+                    deferRetry(response?.error?.code);
                     if (this.retrieving_contracts_for[symbol]) {
                         this.retrieving_contracts_for[symbol].resolve();
                         delete this.retrieving_contracts_for[symbol];
@@ -227,6 +236,7 @@ export default class ContractsFor {
                     !Array.isArray(response.contracts_for.available)
                 ) {
                     console.warn('No contracts_for data available for symbol:', symbol);
+                    deferRetry('NoContractsData');
                     if (this.retrieving_contracts_for[symbol]) {
                         this.retrieving_contracts_for[symbol].resolve();
                         delete this.retrieving_contracts_for[symbol];
@@ -246,6 +256,7 @@ export default class ContractsFor {
                     contracts: filtered_contracts,
                     timestamp: this.server_time.unix(),
                 };
+                delete this.contracts_for_retry_after[symbol];
 
                 if (this.retrieving_contracts_for[symbol]) {
                     this.retrieving_contracts_for[symbol].resolve();
@@ -255,6 +266,7 @@ export default class ContractsFor {
                 return filtered_contracts;
             } catch (error) {
                 console.error('Error in contracts_for API call:', error);
+                deferRetry(error?.error?.code || error?.code);
                 if (this.retrieving_contracts_for[symbol]) {
                     this.retrieving_contracts_for[symbol].resolve();
                     delete this.retrieving_contracts_for[symbol];

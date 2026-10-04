@@ -56,7 +56,8 @@ export default class ActiveSymbols {
         } else {
             // If promise doesn't exist, trigger the fetch
             if (!api_base.active_symbols_promise) {
-                api_base.active_symbols_promise = api_base.getActiveSymbols();
+                api_base.active_symbols_promise = api_base.getActiveSymbols()
+                    .catch(() => api_base.active_symbols ?? []);
             }
             // Wait for the promise and use its resolved value
             const symbols = await api_base.active_symbols_promise;

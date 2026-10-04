@@ -8,7 +8,10 @@ export type AutoLabMode =
 
 export type AutoLabContractType =
     | 'CALL' | 'PUT' | 'DIGITEVEN' | 'DIGITODD'
-    | 'DIGITMATCH' | 'DIGITDIFF' | 'DIGITOVER' | 'DIGITUNDER';
+    | 'DIGITMATCH' | 'DIGITDIFF' | 'DIGITOVER' | 'DIGITUNDER'
+    | 'CALLSPREAD' | 'PUTSPREAD' | 'ONETOUCH' | 'RANGE'
+    | 'TICKHIGH' | 'TICKLOW' | 'ACCU' | 'MULTUP' | 'MULTDOWN'
+    | 'LBFLOATCALL' | 'LBFLOATPUT' | 'LBHIGHLOW';
 
 export type AutoLabContractChoice = 'AUTO' | AutoLabContractType;
 
@@ -364,6 +367,10 @@ export const isAutoLabContractWin = (
             return barrier != null && exitTick.digit === barrier;
         case 'DIGITDIFF':
             return barrier != null && exitTick.digit !== barrier;
+        default:
+            // Fail closed for execution-only contract types that do not have a
+            // matching local win predicate in the digit/momentum evaluator.
+            return false;
     }
 };
 

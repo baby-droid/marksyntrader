@@ -82,4 +82,50 @@ describe('King Fisher parity recovery escalation', () => {
             0,
         )).toEqual({ phase: 0, lossCount: 0 });
     });
+
+    it('runs both Rise/Fall stages before the two Over 3 stages after two parity losses', () => {
+        const sequence = {
+            recovery: 1,
+            fallAfterRises: 2,
+            riseAfterFalls: 3,
+            firstOver3: 4,
+            secondOver3: 5,
+            returnPhase: 0,
+        };
+
+        const firstParityLoss = advanceKingFisherRecoveryEscalation(
+            sequence.recovery, 0, false, sequence.recovery,
+            sequence.firstOver3, sequence.secondOver3, sequence.returnPhase,
+            sequence.fallAfterRises, sequence.riseAfterFalls,
+        );
+        expect(firstParityLoss).toEqual({ phase: sequence.recovery, lossCount: 1 });
+
+        const secondParityLoss = advanceKingFisherRecoveryEscalation(
+            sequence.recovery, firstParityLoss.lossCount, false, sequence.recovery,
+            sequence.firstOver3, sequence.secondOver3, sequence.returnPhase,
+            sequence.fallAfterRises, sequence.riseAfterFalls,
+        );
+        expect(secondParityLoss).toEqual({ phase: sequence.fallAfterRises, lossCount: 0 });
+
+        expect(advanceKingFisherRecoveryEscalation(
+            sequence.fallAfterRises, 0, false, sequence.recovery,
+            sequence.firstOver3, sequence.secondOver3, sequence.returnPhase,
+            sequence.fallAfterRises, sequence.riseAfterFalls,
+        )).toEqual({ phase: sequence.riseAfterFalls, lossCount: 0 });
+        expect(advanceKingFisherRecoveryEscalation(
+            sequence.riseAfterFalls, 0, true, sequence.recovery,
+            sequence.firstOver3, sequence.secondOver3, sequence.returnPhase,
+            sequence.fallAfterRises, sequence.riseAfterFalls,
+        )).toEqual({ phase: sequence.firstOver3, lossCount: 0 });
+        expect(advanceKingFisherRecoveryEscalation(
+            sequence.firstOver3, 0, false, sequence.recovery,
+            sequence.firstOver3, sequence.secondOver3, sequence.returnPhase,
+            sequence.fallAfterRises, sequence.riseAfterFalls,
+        )).toEqual({ phase: sequence.secondOver3, lossCount: 0 });
+        expect(advanceKingFisherRecoveryEscalation(
+            sequence.secondOver3, 0, true, sequence.recovery,
+            sequence.firstOver3, sequence.secondOver3, sequence.returnPhase,
+            sequence.fallAfterRises, sequence.riseAfterFalls,
+        )).toEqual({ phase: sequence.returnPhase, lossCount: 0 });
+    });
 });

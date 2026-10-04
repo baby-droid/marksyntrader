@@ -119,7 +119,23 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
     const variableCodeForField = (block, fieldName) => {
         const field = block.getField?.(fieldName);
         const byId = variableCodeForId(block.getFieldValue(fieldName));
-        return byId || variableName(field?.getText?.());
+        const byText = variableName(field?.getText?.());
+        if (byId || byText) return byId || byText;
+
+        // Older saved bots can retain the escalation block but lose the
+        // field-to-variable ID link. Recover the uniquely named state variable
+        // from the workspace rather than disabling recovery at runtime.
+        const semanticVariable = workspaceVariables.find(candidate => {
+            const name = normalizeVariableName(candidate.name);
+            if (fieldName === 'PHASE') return name.includes('phase');
+            return name.includes('loss') && (name.includes('count') || name.endsWith('losses'));
+        });
+        return semanticVariable
+            ? window.Blockly.JavaScript.variableDB_.getName(
+                semanticVariable.getId(),
+                window.Blockly.Variables.CATEGORY_NAME
+            )
+            : null;
     };
     let recoveryPhaseSnapshot = '';
     let recoveryEscalationCode = '';
@@ -134,6 +150,14 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
             recoveryEscalationCode = `if (typeof Bot.emitJournalSignal === "function") Bot.emitJournalSignal({ type: "LOSS", label: "RECOVERY CONFIGURATION ERROR", detail: "Recovery Escalation could not resolve ${missingFields}; no escalation was applied." });`;
         } else {
             const recoveryPhase = Number(recoveryEscalationBlock.getFieldValue('RECOVERY_PHASE'));
+            const readOptionalPhase = fieldName => {
+                const value = recoveryEscalationBlock.getFieldValue(fieldName);
+                if (value == null || value === '') return -1;
+                const parsed = Number(value);
+                return Number.isInteger(parsed) ? parsed : -1;
+            };
+            const intermediatePhase1 = readOptionalPhase('INTERMEDIATE_PHASE_1');
+            const intermediatePhase2 = readOptionalPhase('INTERMEDIATE_PHASE_2');
             const firstOver3Phase = Number(recoveryEscalationBlock.getFieldValue('FIRST_OVER3_PHASE'));
             const secondOver3Phase = Number(recoveryEscalationBlock.getFieldValue('SECOND_OVER3_PHASE'));
             const configuredReturnPhase = Number(recoveryEscalationBlock.getFieldValue('RETURN_PHASE'));
@@ -147,7 +171,9 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
             ${recoveryPhase},
             ${firstOver3Phase},
             ${secondOver3Phase},
-            ${returnPhase}
+            ${returnPhase},
+            ${intermediatePhase1},
+            ${intermediatePhase2}
         );
         if (kingFisherRecoveryStep.phase !== null) {
             ${phaseVariable} = kingFisherRecoveryStep.phase;

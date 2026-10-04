@@ -125,6 +125,18 @@ const CONTRACT_LABELS: Record<AutoLabContractChoice, string> = {
   DIGITUNDER: 'Under',
   DIGITMATCH: 'Matches',
   DIGITDIFF: 'Differs',
+  CALLSPREAD: 'Call spread',
+  PUTSPREAD: 'Put spread',
+  ONETOUCH: 'One touch',
+  RANGE: 'Range',
+  TICKHIGH: 'High tick',
+  TICKLOW: 'Low tick',
+  ACCU: 'Accumulator',
+  MULTUP: 'Multiplier up',
+  MULTDOWN: 'Multiplier down',
+  LBFLOATCALL: 'Floating call',
+  LBFLOATPUT: 'Floating put',
+  LBHIGHLOW: 'Lookback high/low',
 };
 
 const MODE_NOTES: Record<AutoLabMode, string> = {
