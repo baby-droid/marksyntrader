@@ -76,6 +76,15 @@ const FREE_BOTS = [
     theme: 'ahmed-myth', artwork: '/bot-art/ahmed-pairs.png', artworkPosition: 'side',
   },
   {
+    id: 'two-prediction-cycle',
+    name: '2 PREDICTION CYCLE',
+    description: 'Runs Over 1 + Over 2 and Under 8 + Under 7 pairs with separate stakes for every leg. After two losing pairs, it recovers with Over 4 once, then Under 5 three times. Take profit and stop loss are shared across the bot session.',
+    category: 'Cycle Recovery', market: 'Best market', type: 'Paired DIGIT', prediction: 'O1+O2 / U8+U7',
+    xmlFile: '/bots/two-prediction-cycle.xml',
+    badge: '2 PREDICTION', badgeColor: '#38bdf8', icon: '🎯', winRate: '—',
+    theme: 'ahmed-pair-scan', artwork: '/bot-art/ahmed-pairs.png', artworkPosition: 'side',
+  },
+  {
     id: 'under-cycle-auto',
     name: 'Under Cycle Auto',
     description: '🔁 DIFFERS 9 → UNDER 9 → UNDER 8 → UNDER 7 → DIFFERS 0 → OVER 0 → OVER 1 → OVER 2. After a loss, waits for 2 consecutive evens or odds and buys the matching recovery contract.',
