@@ -67,6 +67,7 @@
 - [Auto Bots market execution](auto-bots-market-execution.md) — scan authenticated markets continuously, evaluate each on its own tick, select the best unless all selected signals are strong, and stop risk per market.
 - [Smart Trading card runner](smart-trading-card-runner.md) — tokenized card runs prevent stale async loops from restarting or buying after a stop/start; normalize exclusive digit barriers before proposal.
 - [Parity auto cycles](parity-auto-cycles.md) — ODD AUTO CYCLE uses weak even or strong-even×2→odd signals to buy DIGITODD; EVEN mirrors it with odd→DIGITEVEN.
+- [Two Prediction Cycle phase binding](two-prediction-cycle-phase-binding.md) — recovery block and phase router must use the same canonical state variables; stale IDs can leave recovery_phase2 undefined.
 - [SmartChart proxy rail scoping](smartchart-proxy-rail.md) — scope native control lookups to the nearest chart wrapper when normal and modal charts can coexist.
 - [Development preview routing](preview-routing.md) — local `/bot/preview` can omit the build flag, so preview mode must also detect the pathname.
 - [Deriv OAuth endpoint](deriv-oauth.md) — production authorization uses `/oauth2/auth`; the Deriv app must be live before an interactive callback test can succeed.
