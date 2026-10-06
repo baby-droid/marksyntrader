@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { scoreKingFisherDigits } from './king-fisher-market-scanner';
+import { buildKingFisherRestartTradeCode } from './king-fisher-restart-trade-code';
 
 jest.mock('@/external/bot-skeleton', () => ({
     api_base: { api: null },
@@ -47,8 +48,28 @@ describe('Normal Killer Bot V3 template', () => {
         expect(xml).toContain('<block type="king_fisher_virtual_hook"');
         expect(xml).toContain('<field name="RESULT">LOSS</field>');
         expect(xml).toContain('<field name="PURCHASE_LIST">DIGITOVER</field>');
+        const beforePurchaseStart = xml.indexOf('<block type="before_purchase"');
+        const afterPurchaseStart = xml.indexOf('<block type="after_purchase"');
+        const beforePurchase = xml.slice(beforePurchaseStart, afterPurchaseStart);
+        expect(beforePurchase).toMatch(/<value name="IF0">\s*<block type="king_fisher_virtual_hook"/);
+        expect(beforePurchase).toMatch(
+            /<statement name="DO0">\s*<block type="purchase" id="nkv3_purchase">\s*<field name="PURCHASE_LIST">DIGITOVER<\/field>/,
+        );
+        expect(beforePurchase.match(/<block type="purchase"/g) ?? []).toHaveLength(1);
         expect(xml).toContain('<block type="trade_again"');
         expect(xml).not.toContain('<block type="multiple_purchase"');
+    });
+});
+
+describe('King Fisher restart trade code', () => {
+    it('keeps the take-profit and stop-loss guards in one Blockly statement', () => {
+        const code = buildKingFisherRestartTradeCode('takeProfit', 'stopLoss', 2);
+
+        expect(typeof code).toBe('string');
+        expect(code).toContain('Bot.getTotalProfit(false) >= Number(takeProfit)');
+        expect(code).toContain('Bot.getTotalProfit(false) <= -Number(stopLoss)');
+        expect(code).toContain('STOP LOSS HIT');
+        expect(code).toContain('Next stake uses 2× martingale');
     });
 });
 

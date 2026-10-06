@@ -1,4 +1,5 @@
 import { localize } from '@deriv-com/translations';
+import { buildKingFisherRestartTradeCode } from '@/utils/king-fisher-restart-trade-code';
 import { modifyContextMenu } from '../../../../utils';
 
 const generator = () => window.Blockly.JavaScript.javascriptGenerator;
@@ -610,12 +611,7 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_restart_trade
     const tp = generator().valueToCode(block, 'TAKE_PROFIT', generator().ORDER_ATOMIC) || '0';
     const sl = generator().valueToCode(block, 'STOP_LOSS', generator().ORDER_ATOMIC) || '0';
     const multiplier = Number(block.getFieldValue('MULTIPLIER') || 2);
-    return [
-        `if (Number(${tp}) > 0 && Bot.getTotalProfit(false) >= Number(${tp})) { if (typeof Bot.emitJournalSignal === "function") Bot.emitJournalSignal({ type: "WIN", label: "TAKE PROFIT HIT", detail: "Keep trading with the best — TP reached" }); if (typeof Bot.requestKingFisherRescan === "function") Bot.requestKingFisherRescan({ reason: "take-profit", profit: Bot.getTotalProfit(false) }); return false; }`,
-        `if (Number(${sl}) > 0 && Bot.getTotalProfit(false) <= -Number(${sl})) { if (typeof Bot.emitJournalSignal === "function") Bot.emitJournalSignal({ type: "LOSS", label: "STOP LOSS HIT", detail: "Trading stopped at the configured limit" }); if (typeof Bot.requestKingFisherRescan === "function") Bot.requestKingFisherRescan({ reason: "stop-loss", profit: Bot.getTotalProfit(false) }); return false; }`,
-        `if (typeof Bot.emitJournalSignal === "function") Bot.emitJournalSignal({ type: Bot.isResult("win") ? "WIN" : "LOSS", label: Bot.isResult("win") ? "TRADE WON" : "TRADE LOST", detail: Bot.isResult("win") ? "Stake reset to base" : "Next stake uses ${multiplier}× martingale" });`,
-        `/* The following King Fisher result blocks own the stake variable. The ${multiplier}× setting is retained here for the journal and XML-visible risk control. */`,
-    ].join('\n');
+    return buildKingFisherRestartTradeCode(tp, sl, multiplier);
 };
 
 window.Blockly.Blocks.king_fisher_recovery_escalation = {
