@@ -137,9 +137,13 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
                 : fieldName === 'LOSS_COUNT'
                     ? 'paired loss count'
                     : null;
-            const canonicalVariable = canonicalName
+            let canonicalVariable = canonicalName
                 ? workspaceVariables.find(candidate => normalizeVariableName(candidate.name) === canonicalName)
                 : null;
+            if (canonicalName && !canonicalVariable) {
+                const variableMap = workspace?.getVariableMap?.();
+                canonicalVariable = variableMap?.createVariable?.(canonicalName.replace(/ /g, '_'), '') ?? null;
+            }
             if (canonicalVariable) {
                 // Keep runtime recovery state bound to the same variables as
                 // the visible phase router. Older workspaces can leave this
@@ -153,6 +157,12 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
                     window.Blockly.Variables.CATEGORY_NAME
                 );
             }
+            // A paired-cycle workspace must never fall through to a stale
+            // phase/loss variable when its canonical state variable is absent.
+            // The branch above creates and binds the canonical variable; if a
+            // workspace cannot create one, stop code generation for that field
+            // rather than emitting a reference to an orphaned JS identifier.
+            if (canonicalName) return null;
         }
         const byId = variableCodeForId(block.getFieldValue(fieldName));
         const byText = variableName(field?.getText?.());

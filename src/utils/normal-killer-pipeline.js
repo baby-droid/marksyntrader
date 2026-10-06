@@ -33,6 +33,31 @@ export const configureNormalKillerPipeline = (pipeline, config = {}) => {
 export const getNormalKillerOpenCount = pipeline =>
     pipeline.entries.filter(entry => entry.status === 'pending' || entry.status === 'open').length;
 
+export const isNormalKillerContractSettled = contract => {
+    if (contract?.is_sold === true) return true;
+    const status = String(contract?.status ?? '').toLowerCase();
+    return status === 'won' || status === 'lost' || status === 'sold' || status === 'expired';
+};
+
+export const getNormalKillerContractWinResult = contract => {
+    const status = String(contract?.status ?? '').toLowerCase();
+    if (status === 'won') return true;
+    if (status === 'lost') return false;
+
+    if (contract?.profit != null) {
+        const profit = Number(contract.profit);
+        if (Number.isFinite(profit)) return profit > 0;
+    }
+
+    const buyPrice = Number(contract?.buy_price);
+    const sellPrice = Number(contract?.sell_price);
+    if (Number.isFinite(buyPrice) && Number.isFinite(sellPrice)) {
+        return sellPrice - buyPrice > 0;
+    }
+    if (isNormalKillerContractSettled(contract)) return false;
+    return null;
+};
+
 /**
  * @param {any} pipeline
  * @param {{ epoch?: number, kind?: string, stake?: number, maxOpen?: number }} options
@@ -51,7 +76,6 @@ export const reserveNormalKillerEntry = (pipeline, options = {}) => {
         || !Number.isFinite(numericStake)
         || numericStake <= 0
         || pipeline.riskTripped
-        || pipeline.entries.length >= maxOpen
         || getNormalKillerOpenCount(pipeline) >= maxOpen
         || pipeline.lastPurchaseEpoch === numericEpoch
     ) {

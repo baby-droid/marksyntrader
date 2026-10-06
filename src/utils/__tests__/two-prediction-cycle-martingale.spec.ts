@@ -39,6 +39,17 @@ const runStakeProgression = (
 };
 
 describe('2 Prediction Cycle martingale', () => {
+    it('keeps the bundled recovery block bound to the canonical cycle phase', () => {
+        const xml = readFileSync(
+            resolve(__dirname, '../../../public/bots/two-prediction-cycle.xml'),
+            'utf8',
+        );
+
+        expect(xml).toContain('<variable id="tp2_phase">recovery_phase</variable>');
+        expect(xml).toContain('<field name="PHASE" id="tp2_phase">recovery_phase</field>');
+        expect(xml).not.toContain('recovery_phase2');
+    });
+
     it('multiplies every leg after a net pair loss', () => {
         expect(runStakeProgression(false, [1, 2, 3, 4], [0.5, 0.75, 1, 1.25], 2))
             .toEqual([2, 4, 6, 8]);
@@ -75,9 +86,7 @@ describe('2 Prediction Cycle martingale', () => {
 
         const generatorSource = source.slice(start, end + endMarker.length);
         const variableDefinitions = [
-            ['phase', 'recovery_phase'],
             ['phase2', 'recovery_phase2'],
-            ['loss', 'paired_loss_count'],
             ['stake', 'stake'],
             ['martingale', 'martingale'],
             ['over1', 'over_1_stake'],
@@ -140,7 +149,16 @@ describe('2 Prediction Cycle martingale', () => {
         };
         const workspace = {
             getAllBlocks: () => blocks,
-            getVariableMap: () => ({ getVariables: () => variables }),
+            getVariableMap: () => ({
+                getVariables: () => variables,
+                createVariable: (name: string) => {
+                    const id = `created_${name}`;
+                    const variable = { name, getId: () => id };
+                    variables.push(variable);
+                    namesById[id] = name;
+                    return variable;
+                },
+            }),
         };
         const createGenerator = new Function(
             'window',
@@ -156,8 +174,9 @@ describe('2 Prediction Cycle martingale', () => {
 
         expect(generatedCode).toContain('Bot.isKingFisherPairWin()');
         expect(generatedCode).toContain('v_over1 = v_over1 * twoPredictionMartingaleFactor');
-        expect(generatedCode).toContain('Number(v_phase)');
+        expect(generatedCode).toContain('Number(v_created_recovery_phase)');
         expect(generatedCode).not.toContain('recovery_phase2');
-        expect(recoveryFieldValues.PHASE).toBe('phase');
+        expect(recoveryFieldValues.PHASE).toBe('created_recovery_phase');
+        expect(recoveryFieldValues.LOSS_COUNT).toBe('created_paired_loss_count');
     });
 });

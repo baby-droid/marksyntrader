@@ -16,6 +16,8 @@ import {
     createNormalKillerPipeline,
     getNormalKillerOpenCount,
     hasNormalKillerRiskLimitReached,
+    getNormalKillerContractWinResult,
+    isNormalKillerContractSettled,
     reserveNormalKillerEntry,
     settleNormalKillerEntry,
     voidNormalKillerEntry,
@@ -145,6 +147,7 @@ function fireSidePurchase(
         onSettled,
         onFailed,
         onTrackingError,
+        isSettled = contract => Boolean(contract?.is_sold),
     } = {},
 ) {
     // Do NOT fire side purchases while the bot is paused.
@@ -226,7 +229,7 @@ function fireSidePurchase(
                                     accountID: api_base.account_info?.loginid,
                                     ...contract,
                                 });
-                                if (!contract.is_sold) return;
+                                if (!isSettled(contract)) return;
                                 _sideContractIds.delete(buy.contract_id);
                                 try {
                                     onSettled?.(contract);
@@ -298,9 +301,21 @@ export default Engine =>
 
         settleNormalKillerContract(entry, contract) {
             if (!entry || !contract) return;
-            const rawProfit = Number(contract.sell_price) - Number(contract.buy_price);
-            const netProfit = applyCommission(Number.isFinite(rawProfit) ? rawProfit : 0);
-            settleNormalKillerEntry(this.normalKillerPipeline, entry, netProfit > 0);
+            const won = getNormalKillerContractWinResult(contract);
+            if (won == null) return;
+            if (contract.profit == null) {
+                const rawProfit = Number(contract.sell_price) - Number(contract.buy_price);
+                if (Number.isFinite(rawProfit)) {
+                    settleNormalKillerEntry(
+                        this.normalKillerPipeline,
+                        entry,
+                        applyCommission(rawProfit) > 0,
+                    );
+                    this.normalKillerRiskReached();
+                    return;
+                }
+            }
+            settleNormalKillerEntry(this.normalKillerPipeline, entry, won);
             this.normalKillerRiskReached();
         }
 
@@ -345,6 +360,7 @@ export default Engine =>
                     this.updateTotals(contract);
                     this.settleNormalKillerContract(entry, contract);
                 },
+                isSettled: isNormalKillerContractSettled,
                 onFailed: () => {
                     this.voidNormalKillerContract(entry);
                 },
