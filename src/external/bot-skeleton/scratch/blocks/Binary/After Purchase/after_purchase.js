@@ -94,6 +94,14 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
         .toLowerCase()
         .replace(/[\s_-]+/g, ' ');
     const workspaceVariables = workspace?.getVariableMap?.()?.getVariables?.() ?? [];
+    const isTwoPredictionCycle = [
+        'over 1 stake',
+        'over 2 stake',
+        'under 8 stake',
+        'under 7 stake',
+    ].every(expectedName =>
+        workspaceVariables.some(candidate => normalizeVariableName(candidate.name) === expectedName)
+    );
     const variableName = variableNameText => {
         const targetName = normalizeVariableName(variableNameText);
         const variable = workspaceVariables.find(candidate => candidate.name === variableNameText)
@@ -119,6 +127,29 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
     );
     const variableCodeForField = (block, fieldName) => {
         const field = block.getField?.(fieldName);
+        if (isTwoPredictionCycle) {
+            const canonicalName = fieldName === 'PHASE'
+                ? 'recovery phase'
+                : fieldName === 'LOSS_COUNT'
+                    ? 'paired loss count'
+                    : null;
+            const canonicalVariable = canonicalName
+                ? workspaceVariables.find(candidate => normalizeVariableName(candidate.name) === canonicalName)
+                : null;
+            if (canonicalVariable) {
+                // Keep runtime recovery state bound to the same variables as
+                // the visible phase router. Older workspaces can leave this
+                // field on an orphaned recovery_phase2 variable and throw
+                // after the first contract settles.
+                if (block.getFieldValue(fieldName) !== canonicalVariable.getId()) {
+                    field?.setValue?.(canonicalVariable.getId());
+                }
+                return window.Blockly.JavaScript.variableDB_.getName(
+                    canonicalVariable.getId(),
+                    window.Blockly.Variables.CATEGORY_NAME
+                );
+            }
+        }
         const byId = variableCodeForId(block.getFieldValue(fieldName));
         const byText = variableName(field?.getText?.());
         if (byId || byText) return byId || byText;

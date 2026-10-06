@@ -76,6 +76,7 @@ describe('2 Prediction Cycle martingale', () => {
         const generatorSource = source.slice(start, end + endMarker.length);
         const variableDefinitions = [
             ['phase', 'recovery_phase'],
+            ['phase2', 'recovery_phase2'],
             ['loss', 'paired_loss_count'],
             ['stake', 'stake'],
             ['martingale', 'martingale'],
@@ -94,7 +95,7 @@ describe('2 Prediction Cycle martingale', () => {
         }));
         const namesById = Object.fromEntries(variableDefinitions);
         const recoveryFieldValues: Record<string, string> = {
-            PHASE: 'phase',
+            PHASE: 'phase2',
             LOSS_COUNT: 'loss',
             RECOVERY_PHASE: '0',
             RECOVERY_PHASE_2: '1',
@@ -110,6 +111,9 @@ describe('2 Prediction Cycle martingale', () => {
             getFieldValue: (name: string) => recoveryFieldValues[name],
             getField: (name: string) => ({
                 getText: () => namesById[recoveryFieldValues[name]],
+                setValue: (id: string) => {
+                    recoveryFieldValues[name] = id;
+                },
             }),
         };
         const blocks = [
@@ -152,5 +156,8 @@ describe('2 Prediction Cycle martingale', () => {
 
         expect(generatedCode).toContain('Bot.isKingFisherPairWin()');
         expect(generatedCode).toContain('v_over1 = v_over1 * twoPredictionMartingaleFactor');
+        expect(generatedCode).toContain('Number(v_phase)');
+        expect(generatedCode).not.toContain('recovery_phase2');
+        expect(recoveryFieldValues.PHASE).toBe('phase');
     });
 });
