@@ -346,13 +346,6 @@ export const useSmartChartAdaptor = (): UseSmartChartAdaptorReturn => {
             });
             cleanupFunctionsRef.current = [];
 
-            // Unsubscribe from all ticks
-            try {
-                (api_base.api as any)?.forgetAll?.('ticks');
-            } catch (err) {
-                logger.error('Error forgetting ticks:', err);
-            }
-
             // Clean up adapter subscriptions
             if (adapter?.transport) {
                 try {

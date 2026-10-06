@@ -216,10 +216,17 @@ export default Engine =>
                 globalObserver.emit('Error in subscription promise:', error);
                 throw error;
             } finally {
-                // forget all proposal subscriptions so we can fetch new stats data on new call
-                await api_base?.api?.send({ forget_all: 'proposal' });
-                this.is_proposal_requested_for_accumulators = false;
-                this.subscription_id_for_accumulators = null;
+                // Forget only this request's subscription; a global forget_all can
+                // cancel unrelated proposals and is easy to rate-limit.
+                const subscriptionId = this.subscription_id_for_accumulators;
+                try {
+                    if (subscriptionId) await api_base?.api?.forget?.(subscriptionId);
+                } catch (error) {
+                    globalObserver.emit('Error forgetting accumulator proposal subscription:', error);
+                } finally {
+                    this.is_proposal_requested_for_accumulators = false;
+                    this.subscription_id_for_accumulators = null;
+                }
             }
         }
 

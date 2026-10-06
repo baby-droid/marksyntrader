@@ -500,8 +500,9 @@ describe('useSmartChartAdaptor', () => {
             // so they removed themselves from the cleanup array. Only the last two subscriptions
             // should be cleaned up automatically.
             // Since we already used mockReturnValueOnce twice, subsequent calls will return undefined
-            // Let's just verify the global cleanup methods were called
-            expect((api_base.api as any)?.forgetAll).toHaveBeenCalledWith('ticks');
+            // The adapter owns this cleanup; the hook must not also send a
+            // duplicate global forget request.
+            expect((api_base.api as any)?.forgetAll).not.toHaveBeenCalled();
             expect(mockAdapter.transport.unsubscribeAll).toHaveBeenCalledWith('ticks');
         });
 

@@ -88,9 +88,6 @@ const Chart = observer(({
 
         setIsSafari(isSafariBrowser());
 
-        return () => {
-            (api_base.api as any)?.forgetAll?.('ticks');
-        };
     }, []);
 
     useEffect(() => {

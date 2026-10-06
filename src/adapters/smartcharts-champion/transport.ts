@@ -124,7 +124,16 @@ export function createTransport(): TTransport {
 
                 // Send forget request to server using the real subscription ID
                 if (api_base.api && subscription.realSubscriptionId) {
-                    (api_base.api as any).forget(subscription.realSubscriptionId);
+                    try {
+                        const request = (api_base.api as any).forget(subscription.realSubscriptionId);
+                        if (request && typeof request.catch === 'function') {
+                            void request.catch((error: any) => {
+                                logger.warn('Forget request failed during cleanup:', error);
+                            });
+                        }
+                    } catch (error) {
+                        logger.warn('Forget request failed during cleanup:', error);
+                    }
                 }
 
                 // Clean up local storage
@@ -140,11 +149,15 @@ export function createTransport(): TTransport {
          */
         unsubscribeAll(msgType?: string): void {
             if (api_base.api) {
-                if (msgType) {
-                    (api_base.api as any).forgetAll(msgType);
-                } else {
-                    // Forget all ticks by default
-                    (api_base.api as any).forgetAll('ticks');
+                try {
+                    const request = (api_base.api as any).forgetAll(msgType || 'ticks');
+                    if (request && typeof request.catch === 'function') {
+                        void request.catch((error: any) => {
+                            logger.warn('Forget-all request failed during cleanup:', error);
+                        });
+                    }
+                } catch (error) {
+                    logger.warn('Forget-all request failed during cleanup:', error);
                 }
             }
 

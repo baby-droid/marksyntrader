@@ -14,11 +14,26 @@ export const DEFAULT_PROPOSAL_REQUEST = {
 };
 
 export const forgetAccumulatorsProposalRequest = async instance => {
-    if (instance && !instance.is_bot_running) {
-        await api_base?.api?.send({ forget_all: 'proposal' });
+    if (!instance || instance.is_bot_running) return;
+
+    const subscriptionId = instance.subscription_id_for_accumulators;
+    const proposalIsPending = instance.is_proposal_requested_for_accumulators;
+    if (!subscriptionId && !proposalIsPending) return;
+
+    try {
+        if (subscriptionId && api_base?.api?.forget) {
+            await api_base.api.forget(subscriptionId);
+        } else if (proposalIsPending) {
+            await api_base?.api?.send({ forget_all: 'proposal' });
+        }
+    } catch (error) {
+        // Proposal cleanup is best-effort; a rejected forget must not escape a
+        // Blockly change event as an unhandled promise rejection.
+        console.warn('Unable to clear accumulator proposal subscription:', error);
+    } finally {
         instance.subscription_id_for_accumulators = null;
         instance.is_proposal_requested_for_accumulators = false;
-        window.Blockly.accumulators_request = {};
+        if (window.Blockly) window.Blockly.accumulators_request = {};
     }
 };
 
