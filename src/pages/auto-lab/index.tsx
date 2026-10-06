@@ -73,7 +73,8 @@ const AutoLab = observer(() => {
             ) return;
             const tickOnly = contractType.startsWith('DIGIT')
                 || contractType === 'TICKHIGH'
-                || contractType === 'TICKLOW';
+                || contractType === 'TICKLOW'
+                || (contractType === 'AUTO' && mode !== 'Rise/Fall');
             setSettings(previous => ({
                 ...previous,
                 contractType,
@@ -82,6 +83,15 @@ const AutoLab = observer(() => {
             return;
         }
         if (key === 'durationUnit') {
+            if (
+                (settings.contractType === 'AUTO' && mode !== 'Rise/Fall')
+                || settings.contractType.startsWith('DIGIT')
+                || settings.contractType === 'TICKHIGH'
+                || settings.contractType === 'TICKLOW'
+            ) {
+                setSettings(previous => ({ ...previous, durationUnit: 't' }));
+                return;
+            }
             if (['t', 's', 'm', 'h', 'd'].includes(String(value))) {
                 setSettings(previous => ({ ...previous, durationUnit: String(value) as AutoLabSettings['durationUnit'] }));
             }
@@ -137,11 +147,21 @@ const AutoLab = observer(() => {
     };
 
     const onModeChange = (nextMode: AutoLabMode) => {
-        if (settings.contractType !== 'AUTO'
+        const unsupportedContract = settings.contractType !== 'AUTO'
             && !getAutoLabSupportedContracts(nextMode).includes(
                 settings.contractType as Exclude<AutoLabSettings['contractType'], 'AUTO'>,
-            )) {
-            setSettings(previous => ({ ...previous, contractType: 'AUTO' }));
+            );
+        const nextContract = unsupportedContract ? 'AUTO' : settings.contractType;
+        const tickOnly = nextContract.startsWith('DIGIT')
+            || nextContract === 'TICKHIGH'
+            || nextContract === 'TICKLOW'
+            || (nextContract === 'AUTO' && nextMode !== 'Rise/Fall');
+        if (unsupportedContract || tickOnly) {
+            setSettings(previous => ({
+                ...previous,
+                ...(unsupportedContract ? { contractType: 'AUTO' as const } : {}),
+                ...(tickOnly ? { durationUnit: 't' as const } : {}),
+            }));
         }
         setMode(nextMode);
     };

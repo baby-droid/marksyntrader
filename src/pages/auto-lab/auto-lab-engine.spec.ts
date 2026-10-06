@@ -2,6 +2,7 @@ import {
     advanceAutoLabGate,
     createAutoLabGate,
     evaluateAutoLabCandidates,
+    getAutoLabDurationParams,
     getAutoLabDigitStats,
     isAutoLabContractWin,
     type AutoLabMarketWindow,
@@ -150,6 +151,35 @@ describe('Auto Lab strategy signals', () => {
         expect(evaluateAutoLabCandidates('Rise/Fall', [rising], {
             ...settings,
             contractType: 'DIGITEVEN',
+        })).toHaveLength(0);
+    });
+
+    it('uses the configured duration for Rise/Fall and ticks for digit contracts', () => {
+        expect(getAutoLabDurationParams('CALL', 3, 'm')).toEqual({
+            duration: 3,
+            duration_unit: 'm',
+        });
+        expect(getAutoLabDurationParams('PUT', 2, 's')).toEqual({
+            duration: 2,
+            duration_unit: 's',
+        });
+        expect(getAutoLabDurationParams('DIGITOVER', 4, 'm')).toEqual({
+            duration: 4,
+            duration_unit: 't',
+        });
+    });
+
+    it('breaks Rise/Fall streaks at a flat or reversing quote', () => {
+        const flatThenRising = market(makeTicks([1, 2, 3, 4, 5], [100, 101, 101, 102, 103]));
+        const reversed = market(makeTicks([1, 2, 3, 4, 5], [100, 101, 102, 101, 100]));
+
+        expect(evaluateAutoLabCandidates('Rise/Fall', [flatThenRising], {
+            ...settings,
+            requiredStreak: 3,
+        })).toHaveLength(0);
+        expect(evaluateAutoLabCandidates('Rise/Fall', [reversed], {
+            ...settings,
+            requiredStreak: 3,
         })).toHaveLength(0);
     });
 

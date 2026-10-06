@@ -309,6 +309,7 @@ const AutoLabView = ({
   const isRealAccount = account.isVirtual === false;
   const contract = settings.contractType;
   const isDigitContract = contract.startsWith('DIGIT');
+  const isTickDurationOnly = isDigitContract || (contract === 'AUTO' && mode !== 'Rise/Fall');
   const readyToRun = canStart && (!isRealAccount || liveAcknowledged);
   const isActive = status === 'running' || status === 'scanning' || status === 'connecting';
   const settingsLocked = inputsDisabled || status === 'paused';
@@ -480,8 +481,8 @@ const AutoLabView = ({
                   <select
                     aria-label="Duration unit"
                     data-testid="select-duration-unit"
-                    value={isDigitContract ? 't' : settings.durationUnit}
-                    disabled={settingsLocked || isDigitContract}
+                    value={isTickDurationOnly ? 't' : settings.durationUnit}
+                    disabled={settingsLocked || isTickDurationOnly}
                     onChange={event => onSettingChange('durationUnit', event.target.value)}
                   >
                     <option value="t">Ticks</option>

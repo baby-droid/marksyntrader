@@ -7,6 +7,7 @@ import {
     advanceAutoLabGate,
     createAutoLabGate,
     evaluateAutoLabCandidates,
+    getAutoLabDurationParams,
     getAutoLabDigitStats,
     isAutoLabContractWin,
     resetAutoLabGateAfterTrade,
@@ -39,8 +40,13 @@ type RuntimeMarket = {
     pipSize: number | null;
     rawHistory: RawHistoryPoint[];
     ticks: AutoLabTick[];
+    tickSequence: number;
+    lastLiveEpoch: number | null;
 };
-type PendingVirtualTrade = AutoLabCandidate & { settleAtEpoch: number };
+type PendingVirtualTrade = AutoLabCandidate & {
+    settleAtEpoch: number | null;
+    settleAtTickCount: number | null;
+};
 
 const initialSession = (stake: number): AutoLabSession => ({
     wins: 0,
@@ -302,7 +308,7 @@ export const useAutoLabEngine = (
         const now = () => Date.now();
         tickDataRef.current = new Map(activeMarkets.map(market => [
             market.symbol,
-            { pipSize: null, rawHistory: [], ticks: [] },
+            { pipSize: null, rawHistory: [], ticks: [], tickSequence: 0, lastLiveEpoch: null },
         ]));
         lastTickAtRef.current = new Map(activeMarkets.map(market => [market.symbol, now()]));
         historyErrorsRef.current = new Set();
@@ -312,6 +318,10 @@ export const useAutoLabEngine = (
             const liveTick = toAutoLabTick(tick);
             if (!runtime || !liveTick || liveTick.symbol !== symbol) return;
             lastTickAtRef.current.set(symbol, now());
+            if (runtime.lastLiveEpoch == null || liveTick.epoch > runtime.lastLiveEpoch) {
+                runtime.tickSequence += 1;
+                runtime.lastLiveEpoch = liveTick.epoch;
+            }
             if (runtime.pipSize == null) {
                 runtime.pipSize = liveTick.pip_size;
                 const historyTicks = runtime.rawHistory
@@ -327,7 +337,7 @@ export const useAutoLabEngine = (
             runtime.ticks = mergeTicks(runtime.ticks, [liveTick]);
             const result = refreshMarketView();
             if (runRef.current && result) {
-                processStrategyTick(liveTick, result.candidates);
+                processStrategyTick(liveTick, result.candidates, runtime.tickSequence);
             }
         };
 
@@ -414,11 +424,16 @@ export const useAutoLabEngine = (
         };
     }, [connected, authorized, activeMarkets, send, subscribeTicks, refreshMarketView]);
 
-    function processStrategyTick(tick: AutoLabTick, candidates: AutoLabCandidate[]) {
+    function processStrategyTick(tick: AutoLabTick, candidates: AutoLabCandidate[], marketTickCount: number) {
         const best = candidates[0];
         const gate = gateRef.current;
         const pendingVirtual = pendingVirtualRef.current;
-        if (pendingVirtual && pendingVirtual.symbol === tick.symbol && tick.epoch >= pendingVirtual.settleAtEpoch) {
+        const virtualTradeSettled = pendingVirtual?.symbol === tick.symbol && (
+            pendingVirtual.settleAtTickCount != null
+                ? marketTickCount >= pendingVirtual.settleAtTickCount
+                : pendingVirtual.settleAtEpoch != null && tick.epoch >= pendingVirtual.settleAtEpoch
+        );
+        if (pendingVirtual && virtualTradeSettled) {
             const won = isAutoLabContractWin(
                 pendingVirtual.contract_type,
                 pendingVirtual.barrier,
@@ -451,11 +466,17 @@ export const useAutoLabEngine = (
             if (!pendingVirtualRef.current) {
                 const contract = best.contract_type;
                 const durationless = contract === 'ACCU' || contract === 'MULTUP' || contract === 'MULTDOWN';
-                const duration = durationless ? 1 : settingsRef.current.duration;
-                const unit = durationless ? 't' : settingsRef.current.durationUnit;
+                const timing = getAutoLabDurationParams(
+                    contract,
+                    settingsRef.current.duration,
+                    settingsRef.current.durationUnit,
+                );
+                const duration = durationless ? 1 : timing.duration;
+                const unit = durationless ? 't' : timing.duration_unit;
                 pendingVirtualRef.current = {
                     ...best,
-                    settleAtEpoch: best.epoch + durationSeconds(duration, unit),
+                    settleAtEpoch: unit === 't' ? null : best.epoch + durationSeconds(duration, unit),
+                    settleAtTickCount: unit === 't' ? marketTickCount + duration : null,
                 };
             }
             return;
@@ -515,15 +536,16 @@ export const useAutoLabEngine = (
         };
 
         try {
+            const durationless = ['ACCU', 'MULTUP', 'MULTDOWN'].includes(signal.contract_type);
+            const timing = getAutoLabDurationParams(
+                signal.contract_type,
+                currentSettings.duration,
+                currentSettings.durationUnit,
+            );
             const result = await buyContract({
                 symbol: signal.symbol,
                 contract_type: signal.contract_type,
-                ...(['ACCU', 'MULTUP', 'MULTDOWN'].includes(signal.contract_type)
-                    ? {}
-                    : {
-                        duration: currentSettings.contractType === 'AUTO' ? 1 : currentSettings.duration,
-                        duration_unit: currentSettings.contractType === 'AUTO' ? 't' : currentSettings.durationUnit,
-                    }),
+                ...(durationless ? {} : timing),
                 stake,
                 ...(signal.barrier == null ? {} : { barrier: signal.barrier }),
                 ...(signal.barrier2 == null ? {} : { barrier2: signal.barrier2 }),

@@ -14,6 +14,25 @@ export type AutoLabContractType =
     | 'LBFLOATCALL' | 'LBFLOATPUT' | 'LBHIGHLOW';
 
 export type AutoLabContractChoice = 'AUTO' | AutoLabContractType;
+export type AutoLabDurationUnit = 't' | 's' | 'm' | 'h' | 'd';
+
+export const getAutoLabDurationParams = (
+    contractType: AutoLabContractType,
+    duration: number,
+    durationUnit: AutoLabDurationUnit,
+): { duration: number; duration_unit: AutoLabDurationUnit } => {
+    const normalizedDuration = Number.isFinite(duration)
+        ? Math.max(1, Math.floor(duration))
+        : 1;
+    const tickOnly = contractType.startsWith('DIGIT')
+        || contractType === 'TICKHIGH'
+        || contractType === 'TICKLOW';
+
+    return {
+        duration: normalizedDuration,
+        duration_unit: tickOnly ? 't' : durationUnit,
+    };
+};
 
 export const AUTO_LAB_MODES: AutoLabMode[] = [
     'Multimarket',

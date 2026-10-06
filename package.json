@@ -6,8 +6,8 @@
     "node": "20.x"
   },
   "scripts": {
-    "dev": "./node_modules/.bin/rsbuild dev --port 5000",
-    "build": "rsbuild build",
+    "dev": "node scripts/ensure-node-modules.js && ./node_modules/.bin/rsbuild dev --port 5000",
+    "build": "node scripts/ensure-node-modules.js && ./node_modules/.bin/rsbuild build",
     "test": "jest",
     "type-check": "tsc --noEmit",
     "generate:brand-css": "node scripts/generate-brand-css.js",
