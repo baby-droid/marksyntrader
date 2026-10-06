@@ -24,7 +24,7 @@ const FREE_BOTS = [
   {
     id: 'ahmed-differ-recovery-cycle-v2',
     name: 'AHMED DIFFER RECOVERY CYCLE V2',
-    description: '⚡ Cycles DIFFERS 9 → UNDER 6 → UNDER 9 → UNDER 7 → UNDER 8 → DIFFERS 9 → OVER 1 → OVER 2 → OVER 3. A win advances the phase; a loss waits for Even/Odd parity recovery, then restarts at DIFFERS.',
+    description: '⚡ Cycles DIFFERS 9 → UNDER 6 → UNDER 9 → UNDER 7 → UNDER 8 → DIFFERS 9 → OVER 1 → OVER 2 → OVER 3. After two parity-recovery losses: PUT after four rises, CALL after two or three falls, then two sequential OVER 3 entries before returning to DIFFERS.',
     category: 'Cycle', market: 'V25 1s', type: 'Multi-Strategy', prediction: '9-PHASE',
     xmlFile: '/bots/ahmed-differ-recovery-cycle-v2.xml',
     badge: 'RECOVERY V2', badgeColor: '#fb7185', icon: '⚡', winRate: '—',

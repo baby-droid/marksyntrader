@@ -13,6 +13,7 @@ const settings: AutoLabStrategySettings = {
     ticksWindow: 4,
     thresholdPercent: 70,
     barrier: 4,
+    autoBarrier: false,
     requiredStreak: 3,
     contractType: 'AUTO',
 };
@@ -45,6 +46,39 @@ describe('Auto Lab strategy signals', () => {
     it('selects a threshold-qualified over/under setup', () => {
         const signals = evaluateAutoLabCandidates('RC Over4/Under5', [market(makeTicks([6, 7, 8, 9, 5]))], settings);
         expect(signals[0]).toMatchObject({ contract_type: 'DIGITOVER', barrier: 4 });
+    });
+
+    it('uses the selected barrier manually and searches all barriers only in auto mode', () => {
+        const sample = market(makeTicks([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]));
+        const auto = evaluateAutoLabCandidates('RC Over4/Under5', [sample], {
+            ...settings,
+            ticksWindow: 10,
+            thresholdPercent: 50,
+            autoBarrier: true,
+            contractType: 'DIGITOVER',
+        });
+        const manual = evaluateAutoLabCandidates('RC Over4/Under5', [sample], {
+            ...settings,
+            ticksWindow: 10,
+            thresholdPercent: 50,
+            autoBarrier: false,
+            barrier: 4,
+            contractType: 'DIGITOVER',
+        });
+
+        expect(auto[0]).toMatchObject({ contract_type: 'DIGITOVER', barrier: 0, score: 90 });
+        expect(manual[0]).toMatchObject({ contract_type: 'DIGITOVER', barrier: 4, score: 50 });
+    });
+
+    it('does not emit an over/under signal for an invalid manual barrier', () => {
+        const signals = evaluateAutoLabCandidates('RC Over4/Under5', [market(makeTicks([6, 7, 8, 9]))], {
+            ...settings,
+            barrier: Number.NaN,
+            autoBarrier: false,
+            contractType: 'DIGITOVER',
+        });
+
+        expect(signals).toHaveLength(0);
     });
 
     it('selects the dominant parity when the percentage threshold is reached', () => {

@@ -60,8 +60,8 @@
   </block>
   <block type="before_purchase" id="adoc2_before" deletable="false" x="0" y="760">
     <statement name="BEFOREPURCHASE_STACK">
-      <block type="notify" id="adoc2_note"><field name="NOTIFICATION_TYPE">info</field><field name="NOTIFICATION_SOUND">silent</field><value name="MESSAGE"><block type="text"><field name="TEXT">AHMED DIFFER RECOVERY V2 · DIFFERS → UNDER CYCLE → DIFFERS → OVER CYCLE → PARITY RECOVERY</field></block></value>
-        <next><block type="controls_if" id="adoc2_router"><mutation elseif="8"/>
+      <block type="notify" id="adoc2_note"><field name="NOTIFICATION_TYPE">info</field><field name="NOTIFICATION_SOUND">silent</field><value name="MESSAGE"><block type="text"><field name="TEXT">AHMED DIFFER RECOVERY V2 · DIFFERS → UNDER CYCLE → DIFFERS → OVER CYCLE → TWO-LOSS PARITY → FALL → RISE → TWO OVER 3 ENTRIES</field></block></value>
+        <next><block type="controls_if" id="adoc2_router"><mutation elseif="13"/>
           <value name="IF0"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get"><field name="VAR" id="adoc2_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">0</field></block></value></block></value>
           <statement name="DO0"><block type="multiple_purchase"><field name="PURCHASE_1">DIGITDIFF</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/><field name="PREDICTION">9</field></block></statement>
           <value name="IF1"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get"><field name="VAR" id="adoc2_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">1</field></block></value></block></value>
@@ -80,6 +80,22 @@
           <statement name="DO7"><block type="multiple_purchase"><field name="PURCHASE_1">DIGITOVER</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/><field name="PREDICTION">2</field></block></statement>
           <value name="IF8"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get"><field name="VAR" id="adoc2_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">8</field></block></value></block></value>
           <statement name="DO8"><block type="multiple_purchase"><field name="PURCHASE_1">DIGITOVER</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/><field name="PREDICTION">3</field></block></statement>
+          <value name="IF9"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get"><field name="VAR" id="adoc2_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">9</field></block></value></block></value>
+          <statement name="DO9"><block type="king_fisher_parity_sequence_purchase" id="adoc2_parity_recovery_phase9"/></statement>
+          <value name="IF10"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get"><field name="VAR" id="adoc2_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">10</field></block></value></block></value>
+          <statement name="DO10"><block type="controls_if" id="adoc2_fall_entry_gate">
+            <value name="IF0"><block type="king_fisher_price_entry" id="adoc2_fall_after_rises"><field name="DIRECTION">FALL_AFTER_RISES</field><field name="STREAK">4</field></block></value>
+            <statement name="DO0"><block type="purchase" id="adoc2_fall_purchase"><field name="PURCHASE_LIST">PUT</field></block></statement>
+          </block></statement>
+          <value name="IF11"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get"><field name="VAR" id="adoc2_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">11</field></block></value></block></value>
+          <statement name="DO11"><block type="controls_if" id="adoc2_rise_entry_gate">
+            <value name="IF0"><block type="king_fisher_price_entry" id="adoc2_rise_after_falls"><field name="DIRECTION">RISE_AFTER_FALLS</field><field name="STREAK">2_3</field></block></value>
+            <statement name="DO0"><block type="purchase" id="adoc2_rise_purchase"><field name="PURCHASE_LIST">CALL</field></block></statement>
+          </block></statement>
+          <value name="IF12"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get"><field name="VAR" id="adoc2_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">12</field></block></value></block></value>
+          <statement name="DO12"><block type="multiple_purchase"><field name="PURCHASE_1">DIGITOVER</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/><field name="PREDICTION">3</field></block></statement>
+          <value name="IF13"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get"><field name="VAR" id="adoc2_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">13</field></block></value></block></value>
+          <statement name="DO13"><block type="multiple_purchase"><field name="PURCHASE_1">DIGITOVER</field><field name="PURCHASE_2"/><field name="PURCHASE_3"/><field name="PURCHASE_4"/><field name="PURCHASE_5"/><field name="PURCHASE_6"/><field name="PREDICTION">3</field></block></statement>
           <statement name="ELSE"><block type="king_fisher_parity_sequence_purchase" id="adoc2_parity_recovery"/></statement>
         </block></next>
       </block>
@@ -88,7 +104,11 @@
   <block type="after_purchase" id="adoc2_after" deletable="false" x="850" y="0">
     <statement name="AFTERPURCHASE_STACK">
       <block type="king_fisher_restart_trade" id="adoc2_guard"><field name="MULTIPLIER">2</field><value name="TAKE_PROFIT"><block type="variables_get"><field name="VAR" id="adoc2_tp">take_profit</field></block></value><value name="STOP_LOSS"><block type="variables_get"><field name="VAR" id="adoc2_sl">stop_loss</field></block></value>
-        <next><block type="controls_if" id="adoc2_result"><mutation else="1"/>
+        <next><block type="king_fisher_recovery_escalation" id="adoc2_escalation">
+          <field name="PHASE" id="adoc2_phase">cycle_phase</field>
+          <field name="LOSS_COUNT" id="adoc2_loss_count">parity_recovery_losses</field>
+          <field name="RECOVERY_PHASE">9</field><field name="INTERMEDIATE_PHASE_1">10</field><field name="INTERMEDIATE_PHASE_2">11</field><field name="FIRST_OVER3_PHASE">12</field><field name="SECOND_OVER3_PHASE">13</field><field name="RETURN_PHASE">0</field>
+          <next><block type="controls_if" id="adoc2_result"><mutation else="1"/>
           <value name="IF0"><block type="contract_check_result"><field name="CHECK_RESULT">win</field></block></value>
           <statement name="DO0"><block type="variables_set" id="adoc2_win_stake"><field name="VAR" id="adoc2_stake">stake</field><value name="VALUE"><block type="variables_get"><field name="VAR" id="adoc2_base">base_stake</field></block></value>
             <next><block type="controls_if" id="adoc2_wrap"><value name="IF0"><block type="logic_compare"><field name="OP">GTE</field><value name="A"><block type="variables_get"><field name="VAR" id="adoc2_phase">cycle_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">8</field></block></value></block></value>
@@ -97,9 +117,10 @@
             </block></next>
           </block></statement>
           <statement name="ELSE"><block type="variables_set" id="adoc2_loss_stake"><field name="VAR" id="adoc2_stake">stake</field><value name="VALUE"><block type="math_arithmetic"><field name="OP">MULTIPLY</field><value name="A"><block type="variables_get"><field name="VAR" id="adoc2_stake">stake</field></block></value><value name="B"><block type="variables_get" id="adoc2_mg_get"><field name="VAR" id="adoc2_mg">martingale</field></block></value></block></value>
-            <next><block type="variables_set" id="adoc2_loss_phase"><field name="VAR" id="adoc2_phase">cycle_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">-1</field></block></value></block></next>
+            <next><block type="variables_set" id="adoc2_loss_phase"><field name="VAR" id="adoc2_phase">cycle_phase</field><value name="VALUE"><block type="math_number"><field name="NUM">9</field></block></value></block></next>
           </block></statement>
           <next><block type="trade_again"/></next>
+        </block></next>
         </block></next>
       </block>
     </statement>

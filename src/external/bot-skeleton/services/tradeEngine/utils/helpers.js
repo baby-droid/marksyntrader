@@ -5,6 +5,7 @@ import { getExecutionSpeed, isFastExecutionEnabledForContext } from '../../../..
 import { localize } from '@deriv-com/translations';
 import { observer as globalObserver } from '../../../utils/observer';
 import { error as logError } from './broadcast';
+import { getTicksHistoryRetryDelayMs, isTicksHistoryRequest } from '@/utils/ticks-history-backoff';
 
 export const tradeOptionToProposal = (trade_option, purchase_reference) =>
     trade_option.contractTypes.map(type => {
@@ -139,6 +140,15 @@ const getBackoffDelayInMs = (error_obj, delay_index) => {
     const { code = '', message = '' } = error;
 
     const isRateLimit = code === 'RateLimit' || code === 'RateLimitExceeded';
+    // Keep this scoped to history reads: doUntilDone also wraps purchases.
+    if (!isRateLimit && isTicksHistoryRequest(error_obj)) {
+        const retry_delay_ms = getTicksHistoryRetryDelayMs(delay_index - 1);
+        logError(getLocalizedErrorMessage('RequestFailed', {
+            message_type: 'ticks_history',
+            delay: retry_delay_ms / 1000,
+        }));
+        return retry_delay_ms;
+    }
 
     // Fast Execution: retry rate-limit errors with near-zero delay (5 ms).
     const speed = getExecutionSpeed();

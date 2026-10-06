@@ -252,6 +252,12 @@ const evaluateRiseFall = (
     );
 };
 
+const getOverUnderBarriers = (settings: AutoLabStrategySettings): number[] => {
+    if (settings.autoBarrier) return Array.from({ length: 10 }, (_, digit) => digit);
+    if (!Number.isFinite(settings.barrier)) return [];
+    return [clamp(Math.floor(settings.barrier), 0, 9)];
+};
+
 const evaluateOneMode = (
     mode: Exclude<AutoLabMode, 'Multimarket'>,
     market: AutoLabMarketWindow,
@@ -269,9 +275,7 @@ const evaluateOneMode = (
         case 'RC Even/Odd':
             return evaluateParityCycle({ ...market, ticks }, requiredStreak);
         case 'RC Over4/Under5': {
-            const barriers = settings.autoBarrier
-                ? Array.from({ length: 10 }, (_, digit) => digit)
-                : [barrier];
+            const barriers = getOverUnderBarriers(settings);
             return barriers
                 .flatMap(selectedBarrier => evaluateOverUnder(
                     { ...market, ticks },
