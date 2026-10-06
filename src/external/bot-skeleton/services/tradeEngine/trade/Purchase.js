@@ -1,4 +1,4 @@
-import { getExecutionSpeed, getExecutionSpeedDelay, isFastExecutionEnabledForContext, isASpeedBoostEnabled, getPurchasesPerTick } from '../../../../../utils/execution-speed';
+import { getExecutionSpeed, getExecutionSpeedDelay, isInstantExecutionForContext, isASpeedBoostEnabled, getPurchasesPerTick } from '../../../../../utils/execution-speed';
 import { recordTradeMeta } from '../../../../../utils/trade-metadata';
 import { isBotPaused } from '../../../../../utils/bot-pause-flag';
 import { LogTypes } from '../../../constants/messages';
@@ -98,7 +98,7 @@ function _acquireBuySlot() {
     const speed = getExecutionSpeed();
     const limit  = _buyRateLimit[speed] ?? 1;
     // In crazy / turbo / Fast mode skip the throttle entirely — resolve immediately.
-    if (limit === 0 || isFastExecutionEnabledForContext() || isASpeedBoostEnabled()) return Promise.resolve();
+    if (limit === 0 || isInstantExecutionForContext()) return Promise.resolve();
     const now    = Date.now();
     // Remove timestamps older than 1 second
     _buyTimestamps = _buyTimestamps.filter(t => now - t < 1000);
@@ -363,7 +363,7 @@ export default Engine =>
                 try {
                     recordTradeMeta(buy.contract_id, {
                         speed: getExecutionSpeed(),
-                         fast:  isFastExecutionEnabledForContext() || isASpeedBoostEnabled(),
+                         fast:  isInstantExecutionForContext(),
                     });
                 } catch { /* non-fatal */ }
 
@@ -402,14 +402,11 @@ export default Engine =>
             };
 
             const speed = getExecutionSpeed();
-            // In Crazy/Turbo mode bypass the proposal-wait round-trip: use direct
-            // buy parameters instead of a pre-fetched proposal ID. This eliminates
-            // the proposal→wait→buy latency that was the main throughput bottleneck.
-            // Fast Execution and A-SPEED bypass the proposal round-trip just like
-            // Crazy/Turbo — the biggest single source of purchase latency.
+            // Instant/Crazy/Turbo modes bypass the proposal-wait round-trip:
+            // use direct buy parameters instead of a pre-fetched proposal ID.
             const useDirectBuy =
                 forceDirect ||
-                (isFastExecutionEnabledForContext() || isASpeedBoostEnabled() || speed === 'crazy' || speed === 'turbo' || speed === 'supersonic') &&
+                (isInstantExecutionForContext() || speed === 'crazy' || speed === 'turbo' || speed === 'supersonic') &&
                 !this.options.timeMachineEnabled;
 
             if (this.is_proposal_subscription_required && !useDirectBuy) {

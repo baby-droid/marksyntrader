@@ -659,7 +659,7 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_recovery_esca
 window.Blockly.Blocks.king_fisher_virtual_hook = {
     init() {
         this.jsonInit({
-            message0: localize('King Fisher Virtual Hook %1 after %2 %3 signal %4'),
+            message0: localize('King Fisher Virtual Hook %1 after %2 %3 signal %4, purchase %5'),
             args0: [
                 {
                     type: 'field_dropdown',
@@ -690,6 +690,14 @@ window.Blockly.Blocks.king_fisher_virtual_hook = {
                     name: 'SIGNAL',
                     check: 'Boolean',
                 },
+                {
+                    type: 'field_dropdown',
+                    name: 'PURCHASE_TIMING',
+                    options: [
+                        [localize('next tick'), 'NEXT_TICK'],
+                        [localize('immediately'), 'IMMEDIATE'],
+                    ],
+                },
             ],
             output: 'Boolean',
             outputShape: window.Blockly.OUTPUT_SHAPE_ROUND,
@@ -716,6 +724,9 @@ window.Blockly.Blocks.king_fisher_virtual_hook = {
 window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_virtual_hook = block => {
     const enabled = block.getFieldValue('ENABLED') !== 'FALSE';
     const confirmations = Math.max(1, Number(block.getFieldValue('CONFIRMATIONS') || 1));
+    const purchaseTiming = block.getFieldValue('PURCHASE_TIMING') === 'IMMEDIATE'
+        ? 'IMMEDIATE'
+        : 'NEXT_TICK';
     const targetResult = block.getFieldValue('RESULT') === 'PROFIT' ? 'profit' : 'loss';
     const signal =
         generator().valueToCode(block, 'SIGNAL', generator().ORDER_ATOMIC) || 'false';
@@ -727,7 +738,7 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_virtual_hook 
     const barrier = Number(predictionBlock?.getFieldValue?.('NUM') || 0);
     const helperName = ensureHelper('kingFisherVirtualHook', [
         'var kingFisherHookStates = {};',
-        `function ${generator().FUNCTION_NAME_PLACEHOLDER_}(key, signal, enabled, required, targetResult, contractType, barrier) {`,
+        `function ${generator().FUNCTION_NAME_PLACEHOLDER_}(key, signal, enabled, required, targetResult, contractType, barrier, purchaseTiming) {`,
         '  if (!enabled) return Boolean(signal);',
         '  var state = kingFisherHookStates[key] || (kingFisherHookStates[key] = { lastEpoch: null, pendingEpoch: null, pendingDigit: null, confirmations: 0, purchaseAuthorized: false, purchaseAuthorizationEpoch: null });',
         '  var tick = Bot.getLastTick(true);',
@@ -753,6 +764,7 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_virtual_hook 
         '    state.confirmations = result === targetResult ? state.confirmations + 1 : 0;',
         '    if (state.confirmations >= required) {',
         '      state.confirmations = 0;',
+        '      if (purchaseTiming === "IMMEDIATE") return true;',
         '      state.purchaseAuthorized = true;',
         '      state.purchaseAuthorizationEpoch = tick.epoch;',
         '    }',
@@ -767,7 +779,7 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_virtual_hook 
         '}',
     ]);
     return [
-        `${helperName}('${block.id}', ${signal}, ${enabled}, ${confirmations}, '${targetResult}', '${contractType}', ${barrier})`,
+        `${helperName}('${block.id}', ${signal}, ${enabled}, ${confirmations}, '${targetResult}', '${contractType}', ${barrier}, '${purchaseTiming}')`,
         generator().ORDER_FUNCTION_CALL,
     ];
 };

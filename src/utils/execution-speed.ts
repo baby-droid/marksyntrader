@@ -86,7 +86,7 @@ let fastExecutionEnabled: boolean = readFastExec();
 
 export const getExecutionSpeed = (): ExecutionSpeed => current;
 
-const isNormalKillerBotV3Context = (): boolean => {
+export const isNormalKillerBotV3Context = (): boolean => {
     const context = getTradeContext();
     const page = String(context.page || '').trim().toLowerCase();
     const bot = String(context.bot || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -120,6 +120,13 @@ export const isFastExecutionEnabledForContext = (): boolean => {
 /** True while the header's app-wide A-SPEED BOOST preset is active. */
 export const isASpeedBoostEnabled = (): boolean => aSpeedBoostEnabled;
 
+/**
+ * Zero-pacing profile for supported contexts. Normal Killer Bot V3 always
+ * uses this profile; other surfaces still require Fast or A-SPEED explicitly.
+ */
+export const isInstantExecutionForContext = (): boolean =>
+    isNormalKillerBotV3Context() || isFastExecutionEnabledForContext() || aSpeedBoostEnabled;
+
 /** True when an execution path must be driven by live ticks instead of settlement timing. */
 export const isTickWiseExecutionEnabled = (): boolean =>
     isFastExecutionEnabledForContext() || aSpeedBoostEnabled;
@@ -130,8 +137,7 @@ export const isTickWiseExecutionEnabled = (): boolean =>
  * wait — no matter which speed tier (Normal/Crazy/Turbo) is selected.
  */
 export const getExecutionSpeedDelay = (): number => {
-    if (isFastExecutionEnabledForContext() || aSpeedBoostEnabled) return 0;
-    if (isNormalKillerBotV3Context() && current === 'normal') return 1;
+    if (isInstantExecutionForContext()) return 0;
     return SPEED_DELAY_MS[current];
 };
 
@@ -152,7 +158,7 @@ export const getPurchasesPerTick = (): number =>
 
 /** True when the engine should skip the proposal round-trip and buy directly. */
 export const useDirectBuyForSpeed = (): boolean =>
-    aSpeedBoostEnabled || isFastExecutionEnabledForContext() || current === 'crazy' || current === 'turbo';
+    isInstantExecutionForContext() || current === 'crazy' || current === 'turbo';
 
 export const setExecutionSpeed = (speed: ExecutionSpeed): void => {
     // While A-SPEED BOOST is active, the preset owns the Normal tier. This

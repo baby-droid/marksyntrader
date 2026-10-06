@@ -51,15 +51,17 @@ describe('execution speed controls', () => {
         setTradeContext({ page: 'Bot Builder', bot: '' });
     });
 
-    it('allows the bot-specific Fast profile for Normal Killer Bot V3 without fan-out', async () => {
+    it('uses zero-delay direct buys for Normal Killer Bot V3 without fan-out', async () => {
         const speed = await import('../execution-speed');
         const { setTradeContext } = await import('../trade-metadata');
 
         speed.setExecutionSpeed('normal');
         speed.setFastExecutionEnabled(false);
         setTradeContext({ page: 'Free Bots', bot: 'Normal Killer Bot V3' });
-        expect(speed.getExecutionSpeedDelay()).toBe(1);
+        expect(speed.getExecutionSpeedDelay()).toBe(0);
         expect(speed.getPurchasesPerTick()).toBe(1);
+        expect(speed.useDirectBuyForSpeed()).toBe(true);
+        expect(speed.isInstantExecutionForContext()).toBe(true);
 
         speed.setFastExecutionEnabled(true);
         expect(speed.isFastExecutionEnabledForContext()).toBe(true);
@@ -68,8 +70,13 @@ describe('execution speed controls', () => {
         expect(speed.useDirectBuyForSpeed()).toBe(true);
 
         speed.setFastExecutionEnabled(false);
-        speed.setExecutionSpeed('crazy');
-        expect(speed.getPurchasesPerTick()).toBe(1);
+        for (const tier of ['crazy', 'turbo'] as const) {
+            speed.setExecutionSpeed(tier);
+            expect(speed.getPurchasesPerTick()).toBe(1);
+            expect(speed.getExecutionSpeedDelay()).toBe(0);
+            expect(speed.useDirectBuyForSpeed()).toBe(true);
+        }
+        speed.setExecutionSpeed('normal');
         setTradeContext({ page: 'Bot Builder', bot: '' });
         speed.setExecutionSpeed('normal');
     });

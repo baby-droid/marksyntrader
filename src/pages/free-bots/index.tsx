@@ -4,7 +4,7 @@ import { observer } from 'mobx-react-lite';
 import { useStore } from '@/hooks/useStore';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { api_base, load, save_types } from '@/external/bot-skeleton';
-import { isFastExecutionEnabledForContext } from '@/utils/execution-speed';
+import { isInstantExecutionForContext } from '@/utils/execution-speed';
 import { setTradeContext } from '@/utils/trade-metadata';
 import { createTradeKey, getMasterSource, publishMasterTrade } from '@/utils/trade-bus';
 import AiCycleGuide from '@/components/ai-cycle-guide/ai-cycle-guide';
@@ -622,12 +622,15 @@ const FreeBots = observer(() => {
         await run_panel.onRunButtonClick();
         return;
       } catch {
-        if (attempt < 5) await new Promise(r => setTimeout(r, isFastExecutionEnabledForContext() ? 0 : 500));
+        if (attempt < 5) await new Promise(r => setTimeout(r, isInstantExecutionForContext() ? 0 : 500));
       }
     }
   }, [store]);
 
   const handleLoadOnly = useCallback(async (bot: typeof FREE_BOTS[0]) => {
+    if (bot.id === 'normal-killer-bot-v3') {
+      setTradeContext({ page: 'Free Bots', bot: bot.name });
+    }
     setLoadingId(bot.id);
     try {
       const res = await fetch(bot.xmlFile);
@@ -700,7 +703,7 @@ const FreeBots = observer(() => {
       }
       setLoadedId(bot.id);
       setTimeout(() => setLoadedId(null), 4000);
-      if (loaded) setTimeout(() => autoRun(), isFastExecutionEnabledForContext() ? 0 : 900);
+      if (loaded) setTimeout(() => autoRun(), isInstantExecutionForContext() ? 0 : 900);
     } catch (e) {
       console.error('Load & Run error', e);
       store?.dashboard?.setActiveTab?.(DBOT_TABS.BOT_BUILDER);

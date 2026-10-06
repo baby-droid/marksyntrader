@@ -5,6 +5,7 @@ import { createError } from '../../../utils/error';
 import { observer as globalObserver } from '../../../utils/observer';
 import { api_base } from '../../api/api-base';
 import { getNextContinuousIndex } from '../../../../../utils/continuous-index-rotation';
+import { isNormalKillerBotV3Context } from '../../../../../utils/execution-speed';
 import { checkBlocksForProposalRequest, doUntilDone } from '../utils/helpers';
 import { expectInitArg } from '../utils/sanitize';
 import { proposalsReady, start } from './state/actions';
@@ -208,6 +209,15 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
     }
 
     makeDirectPurchaseDecision() {
+        // Normal Killer V3 uses a live digit barrier and sends direct buys.
+        // Proposal subscriptions are unused for this strategy, but waiting
+        // for them before every run/re-entry adds a full network round-trip.
+        if (isNormalKillerBotV3Context()) {
+            this.is_proposal_subscription_required = false;
+            this.store.dispatch(proposalsReady());
+            return;
+        }
+
         const { has_payout_block, is_basis_payout } = checkBlocksForProposalRequest();
         this.is_proposal_subscription_required = has_payout_block || is_basis_payout;
 

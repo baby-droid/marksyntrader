@@ -47,6 +47,7 @@ describe('Normal Killer Bot V3 template', () => {
         expect(xml).toContain('<field name="ALTERNATE_EVERY">1</field>');
         expect(xml).toContain('<block type="king_fisher_virtual_hook"');
         expect(xml).toContain('<field name="RESULT">LOSS</field>');
+        expect(xml).toContain('<field name="PURCHASE_TIMING">IMMEDIATE</field>');
         expect(xml).toContain('<field name="PURCHASE_LIST">DIGITOVER</field>');
         const beforePurchaseStart = xml.indexOf('<block type="before_purchase"');
         const afterPurchaseStart = xml.indexOf('<block type="after_purchase"');
@@ -105,6 +106,7 @@ describe('King Fisher virtual-hook purchase gate', () => {
         expect(source).toContain('if (state.purchaseAuthorized)');
         expect(source).toContain('state.purchaseAuthorized = true;');
         expect(source).toContain('state.purchaseAuthorizationEpoch = tick.epoch;');
+        expect(source).toContain('if (purchaseTiming === "IMMEDIATE") return true;');
         expect(source).toContain('hookType: result === "won" ? "HOOK PROFIT" : "HOOK LOSS"');
         expect(source).toContain('state.confirmations = 0;');
         expect(source).toMatch(

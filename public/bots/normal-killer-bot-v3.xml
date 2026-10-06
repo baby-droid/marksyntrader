@@ -100,6 +100,7 @@
             <field name="ENABLED">TRUE</field>
             <field name="CONFIRMATIONS">1</field>
             <field name="RESULT">LOSS</field>
+            <field name="PURCHASE_TIMING">IMMEDIATE</field>
             <value name="SIGNAL">
               <block type="logic_boolean" id="nkv3_hook_signal">
                 <field name="BOOL">TRUE</field>

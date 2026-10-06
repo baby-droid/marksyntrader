@@ -1,7 +1,7 @@
 import { findValueByKeyRecursively, formatTime, getRoundedNumber, isEmptyObject } from '@/components/shared';
 import { getLocalizedErrorMessage } from '@/constants/backend-error-messages';
 import { config } from '@/external/bot-skeleton/constants';
-import { getExecutionSpeed, isFastExecutionEnabledForContext } from '../../../../../utils/execution-speed';
+import { getExecutionSpeed, isInstantExecutionForContext } from '../../../../../utils/execution-speed';
 import { localize } from '@deriv-com/translations';
 import { observer as globalObserver } from '../../../utils/observer';
 import { error as logError } from './broadcast';
@@ -150,9 +150,9 @@ const getBackoffDelayInMs = (error_obj, delay_index) => {
         return retry_delay_ms;
     }
 
-    // Fast Execution: retry rate-limit errors with near-zero delay (5 ms).
+    // Instant execution profiles retry rate-limit errors with a short 5 ms delay.
     const speed = getExecutionSpeed();
-    if (isRateLimit && isFastExecutionEnabledForContext()) {
+    if (isRateLimit && isInstantExecutionForContext()) {
         const resolved_msg_type_fe = msg_type || echo_req?.msg_type || 'buy';
         logError(getLocalizedErrorMessage('RateLimit', {
             message_type: resolved_msg_type_fe, delay: 0.005,
