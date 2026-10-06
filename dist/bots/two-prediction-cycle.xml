@@ -2,10 +2,15 @@
 <xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
   <variables>
     <variable id="tp2_stake">stake</variable>
+    <variable id="tp2_over1_base_stake">over_1_base_stake</variable>
     <variable id="tp2_over1_stake">over_1_stake</variable>
+    <variable id="tp2_over2_base_stake">over_2_base_stake</variable>
     <variable id="tp2_over2_stake">over_2_stake</variable>
+    <variable id="tp2_under8_base_stake">under_8_base_stake</variable>
     <variable id="tp2_under8_stake">under_8_stake</variable>
+    <variable id="tp2_under7_base_stake">under_7_base_stake</variable>
     <variable id="tp2_under7_stake">under_7_stake</variable>
+    <variable id="tp2_martingale">martingale</variable>
     <variable id="tp2_phase">recovery_phase</variable>
     <variable id="tp2_loss_count">paired_loss_count</variable>
     <variable id="tp2_tp">take_profit</variable>
@@ -44,30 +49,50 @@
       <block type="variables_set" id="tp2_init_stake">
         <field name="VAR" id="tp2_stake">stake</field>
         <value name="VALUE"><block type="math_number"><field name="NUM">0.5</field></block></value>
-        <next><block type="variables_set" id="tp2_init_over1_stake">
-          <field name="VAR" id="tp2_over1_stake">over_1_stake</field>
+        <next><block type="variables_set" id="tp2_init_over1_base_stake">
+          <field name="VAR" id="tp2_over1_base_stake">over_1_base_stake</field>
           <value name="VALUE"><block type="math_number"><field name="NUM">0.5</field></block></value>
-          <next><block type="variables_set" id="tp2_init_over2_stake">
-            <field name="VAR" id="tp2_over2_stake">over_2_stake</field>
-            <value name="VALUE"><block type="math_number"><field name="NUM">0.5</field></block></value>
-            <next><block type="variables_set" id="tp2_init_under8_stake">
-              <field name="VAR" id="tp2_under8_stake">under_8_stake</field>
+          <next><block type="variables_set" id="tp2_init_over1_stake">
+            <field name="VAR" id="tp2_over1_stake">over_1_stake</field>
+            <value name="VALUE"><block type="variables_get"><field name="VAR" id="tp2_over1_base_stake">over_1_base_stake</field></block></value>
+            <next><block type="variables_set" id="tp2_init_over2_base_stake">
+              <field name="VAR" id="tp2_over2_base_stake">over_2_base_stake</field>
               <value name="VALUE"><block type="math_number"><field name="NUM">0.5</field></block></value>
-              <next><block type="variables_set" id="tp2_init_under7_stake">
-                <field name="VAR" id="tp2_under7_stake">under_7_stake</field>
-                <value name="VALUE"><block type="math_number"><field name="NUM">0.5</field></block></value>
-                <next><block type="variables_set" id="tp2_init_phase">
-                  <field name="VAR" id="tp2_phase">recovery_phase</field>
-                  <value name="VALUE"><block type="math_number"><field name="NUM">0</field></block></value>
-                  <next><block type="variables_set" id="tp2_init_loss_count">
-                    <field name="VAR" id="tp2_loss_count">paired_loss_count</field>
-                    <value name="VALUE"><block type="math_number"><field name="NUM">0</field></block></value>
-                    <next><block type="variables_set" id="tp2_init_tp">
-                      <field name="VAR" id="tp2_tp">take_profit</field>
-                      <value name="VALUE"><block type="math_number"><field name="NUM">5</field></block></value>
-                      <next><block type="variables_set" id="tp2_init_sl">
-                        <field name="VAR" id="tp2_sl">stop_loss</field>
-                        <value name="VALUE"><block type="math_number"><field name="NUM">20</field></block></value>
+              <next><block type="variables_set" id="tp2_init_over2_stake">
+                <field name="VAR" id="tp2_over2_stake">over_2_stake</field>
+                <value name="VALUE"><block type="variables_get"><field name="VAR" id="tp2_over2_base_stake">over_2_base_stake</field></block></value>
+                <next><block type="variables_set" id="tp2_init_under8_base_stake">
+                  <field name="VAR" id="tp2_under8_base_stake">under_8_base_stake</field>
+                  <value name="VALUE"><block type="math_number"><field name="NUM">0.5</field></block></value>
+                  <next><block type="variables_set" id="tp2_init_under8_stake">
+                    <field name="VAR" id="tp2_under8_stake">under_8_stake</field>
+                    <value name="VALUE"><block type="variables_get"><field name="VAR" id="tp2_under8_base_stake">under_8_base_stake</field></block></value>
+                    <next><block type="variables_set" id="tp2_init_under7_base_stake">
+                      <field name="VAR" id="tp2_under7_base_stake">under_7_base_stake</field>
+                      <value name="VALUE"><block type="math_number"><field name="NUM">0.5</field></block></value>
+                      <next><block type="variables_set" id="tp2_init_under7_stake">
+                        <field name="VAR" id="tp2_under7_stake">under_7_stake</field>
+                        <value name="VALUE"><block type="variables_get"><field name="VAR" id="tp2_under7_base_stake">under_7_base_stake</field></block></value>
+                        <next><block type="variables_set" id="tp2_init_martingale">
+                          <field name="VAR" id="tp2_martingale">martingale</field>
+                          <value name="VALUE"><block type="math_number"><field name="NUM">2</field></block></value>
+                          <next><block type="variables_set" id="tp2_init_phase">
+                            <field name="VAR" id="tp2_phase">recovery_phase</field>
+                            <value name="VALUE"><block type="math_number"><field name="NUM">0</field></block></value>
+                            <next><block type="variables_set" id="tp2_init_loss_count">
+                              <field name="VAR" id="tp2_loss_count">paired_loss_count</field>
+                              <value name="VALUE"><block type="math_number"><field name="NUM">0</field></block></value>
+                              <next><block type="variables_set" id="tp2_init_tp">
+                                <field name="VAR" id="tp2_tp">take_profit</field>
+                                <value name="VALUE"><block type="math_number"><field name="NUM">5</field></block></value>
+                                <next><block type="variables_set" id="tp2_init_sl">
+                                  <field name="VAR" id="tp2_sl">stop_loss</field>
+                                  <value name="VALUE"><block type="math_number"><field name="NUM">20</field></block></value>
+                                </block></next>
+                              </block></next>
+                            </block></next>
+                          </block></next>
+                        </block></next>
                       </block></next>
                     </block></next>
                   </block></next>
@@ -97,7 +122,7 @@
       <block type="notify" id="tp2_note">
         <field name="NOTIFICATION_TYPE">info</field>
         <field name="NOTIFICATION_SOUND">silent</field>
-        <value name="MESSAGE"><block type="text"><field name="TEXT">2 PREDICTION · Over 1 + Over 2 / Under 8 + Under 7 · paired net-result recovery</field></block></value>
+        <value name="MESSAGE"><block type="text"><field name="TEXT">2 PREDICTION · Over 1 + Over 2 / Under 8 + Under 7 · paired net-result recovery · editable martingale</field></block></value>
         <next><block type="controls_if" id="tp2_phase_router"><mutation elseif="5"/>
           <value name="IF0"><block type="logic_compare"><field name="OP">EQ</field><value name="A"><block type="variables_get"><field name="VAR" id="tp2_phase">recovery_phase</field></block></value><value name="B"><block type="math_number"><field name="NUM">0</field></block></value></block></value>
           <statement name="DO0"><block type="king_fisher_pair_purchase_with_stakes" id="tp2_over_pair">

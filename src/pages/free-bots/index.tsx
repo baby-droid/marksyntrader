@@ -78,7 +78,7 @@ const FREE_BOTS = [
   {
     id: 'two-prediction-cycle',
     name: '2 PREDICTION CYCLE',
-    description: 'Runs Over 1 + Over 2 and Under 8 + Under 7 pairs with separate stakes for every leg. After two losing pairs, it recovers with Over 4 once, then Under 5 three times. Take profit and stop loss are shared across the bot session.',
+    description: 'Runs Over 1 + Over 2 and Under 8 + Under 7 pairs with editable stakes and a user-set martingale multiplier (default 2×). After two losing pairs, it recovers with Over 4 once, then Under 5 three times.',
     category: 'Cycle Recovery', market: 'Best market', type: 'Paired DIGIT', prediction: 'O1+O2 / U8+U7',
     xmlFile: '/bots/two-prediction-cycle.xml',
     badge: '2 PREDICTION', badgeColor: '#38bdf8', icon: '🎯', winRate: '—',

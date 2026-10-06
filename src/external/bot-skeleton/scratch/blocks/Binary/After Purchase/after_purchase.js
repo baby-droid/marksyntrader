@@ -1,4 +1,5 @@
 import { localize } from '@deriv-com/translations';
+import { buildTwoPredictionPairMartingaleCode } from '@/utils/two-prediction-cycle-martingale';
 import { appendCollapsedMainBlocksFields, modifyContextMenu } from '../../../utils';
 import { finishSign } from '../../images';
 
@@ -142,8 +143,8 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
         // silently turning off recovery.
         const variableMap = workspace?.getVariableMap?.();
         if (!variableMap?.createVariable) return null;
-        const variableName = fieldName === 'PHASE' ? 'recovery phase' : 'recovery loss count';
-        const createdVariable = variableMap.createVariable(variableName, '');
+        const createdVariableName = fieldName === 'PHASE' ? 'recovery phase' : 'recovery loss count';
+        const createdVariable = variableMap.createVariable(createdVariableName, '');
         field?.setValue?.(createdVariable.getId());
         return window.Blockly.JavaScript.variableDB_.getName(
             createdVariable.getId(),
@@ -238,6 +239,18 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
             kingFisherRecoveryCarryWins = 0;
         }`
         : '';
+    const pairStakeBindings = [
+        { current: variableName('over 1 stake'), base: variableName('over 1 base stake') },
+        { current: variableName('over 2 stake'), base: variableName('over 2 base stake') },
+        { current: variableName('under 8 stake'), base: variableName('under 8 base stake') },
+        { current: variableName('under 7 stake'), base: variableName('under 7 base stake') },
+    ];
+    const hasPairStakeMartingale = workspaceBlocks.some(
+        candidate => candidate.type === 'king_fisher_pair_purchase_with_stakes'
+    ) && martingaleVariable && pairStakeBindings.every(binding => binding.current && binding.base);
+    const pairStakeMartingaleCode = hasPairStakeMartingale
+        ? buildTwoPredictionPairMartingaleCode(pairStakeBindings, martingaleVariable)
+        : '';
     const kingFisherStakeSnapshot = isKingFisher && stakeVariable
         ? `var kingFisherSettledStake = Number(${stakeVariable});`
         : '';
@@ -304,6 +317,7 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
         ${stack}
         ${recoveryEscalationCode}
         ${riskGuard}
+        ${pairStakeMartingaleCode}
         ${kingFisherStakeHandoff}
         ${recoveryStakeCode}
         ${shouldRotateContinuousMarkets ? 'Bot.rotateContinuousMarket();' : ''}

@@ -32,7 +32,7 @@ describe('execution speed controls', () => {
         speed.setASpeedBoostEnabled(false);
     });
 
-    it('keeps Fast scoped to Bot Builder and Scalper execution contexts', async () => {
+    it('keeps Fast scoped to Bot Builder, Scalper, and designated Free Bot contexts', async () => {
         const speed = await import('../execution-speed');
         const { setTradeContext } = await import('../trade-metadata');
 
@@ -65,11 +65,38 @@ describe('execution speed controls', () => {
         expect(speed.isFastExecutionEnabledForContext()).toBe(true);
         expect(speed.getExecutionSpeedDelay()).toBe(0);
         expect(speed.getPurchasesPerTick()).toBe(1);
+        expect(speed.useDirectBuyForSpeed()).toBe(true);
 
         speed.setFastExecutionEnabled(false);
         speed.setExecutionSpeed('crazy');
         expect(speed.getPurchasesPerTick()).toBe(1);
         setTradeContext({ page: 'Bot Builder', bot: '' });
         speed.setExecutionSpeed('normal');
+    });
+
+    it('enables zero-delay Fast for 2 Prediction Cycle but not other Free Bots', async () => {
+        const speed = await import('../execution-speed');
+        const { setTradeContext } = await import('../trade-metadata');
+
+        speed.setExecutionSpeed('normal');
+        speed.setFastExecutionEnabled(false);
+        speed.setExecutionSpeed('turbo');
+        expect(speed.getPurchasesPerTick()).toBe(1);
+
+        speed.setFastExecutionEnabled(true);
+        speed.setExecutionSpeed('normal');
+        setTradeContext({ page: 'Free Bots', bot: '2 PREDICTION CYCLE' });
+
+        expect(speed.isFastExecutionEnabledForContext()).toBe(true);
+        expect(speed.getExecutionSpeedDelay()).toBe(0);
+        expect(speed.getPurchasesPerTick()).toBe(1);
+        expect(speed.useDirectBuyForSpeed()).toBe(true);
+
+        setTradeContext({ page: 'Free Bots', bot: 'ACC FLIPPER' });
+        expect(speed.isFastExecutionEnabledForContext()).toBe(false);
+        expect(speed.getExecutionSpeedDelay()).toBe(200);
+
+        speed.setFastExecutionEnabled(false);
+        setTradeContext({ page: 'Bot Builder', bot: '' });
     });
 });

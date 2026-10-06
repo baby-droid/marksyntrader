@@ -93,13 +93,19 @@ const isNormalKillerBotV3Context = (): boolean => {
     return page === 'free bots' && bot === 'normalkillerbotv3';
 };
 
+const isTwoPredictionCycleContext = (): boolean => {
+    const context = getTradeContext();
+    const page = String(context.page || '').trim().toLowerCase();
+    const bot = String(context.bot || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    return page === 'free bots' && bot === '2predictioncycle';
+};
+
 /** The raw toggle state is used by the Fast button itself. */
 export const isFastExecutionEnabled = (): boolean => fastExecutionEnabled;
 
 /**
- * Fast is intentionally scoped to the two execution surfaces that share the
- * tick-synchronised pipeline. Auto Trades, Speed Lab, Free Bots, and other
- * cards keep their own speed behavior even when the header toggle is on.
+ * Fast is scoped to Bot Builder, Scalper Bots, and the two Free Bots with
+ * explicit same-tick execution support. Other Free Bots keep their own pacing.
  */
 export const isFastExecutionEnabledForContext = (): boolean => {
     if (!fastExecutionEnabled) return false;
@@ -107,7 +113,8 @@ export const isFastExecutionEnabledForContext = (): boolean => {
     const page = String(context.page || '').trim().toLowerCase();
     return page === 'bot builder'
         || page === 'scalper bots'
-        || isNormalKillerBotV3Context();
+        || isNormalKillerBotV3Context()
+        || isTwoPredictionCycleContext();
 };
 
 /** True while the header's app-wide A-SPEED BOOST preset is active. */
@@ -134,9 +141,12 @@ export const getMaxInflight = (): number =>
         ? Math.max(SPEED_MAX_INFLIGHT[current], FAST_EXEC_MAX_INFLIGHT)
         : SPEED_MAX_INFLIGHT[current];
 
-/** Effective purchases fired per tick. Fast mode never inherits Turbo fan-out. */
+/** Effective purchases fired per tick. Fast and the paired Free Bots never inherit Turbo fan-out. */
 export const getPurchasesPerTick = (): number =>
-    isFastExecutionEnabledForContext() || aSpeedBoostEnabled || isNormalKillerBotV3Context()
+    isFastExecutionEnabledForContext()
+        || aSpeedBoostEnabled
+        || isNormalKillerBotV3Context()
+        || isTwoPredictionCycleContext()
         ? FAST_EXEC_PURCHASES_PER_TICK
         : SPEED_PURCHASES_PER_TICK[current];
 

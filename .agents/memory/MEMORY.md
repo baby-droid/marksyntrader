@@ -79,6 +79,6 @@
 - [King Fisher hook purchase gate](king-fisher-hook-gate.md) — Virtual Hook must be the direct before-purchase gate; an outer AND rechecks a stale entry streak and can drop confirmed real trades.
 - [King Fisher cycle recovery sequences](king-fisher-cycle-recovery-sequences.md) — Pair V2 and Differ Over/Under V1 recovery triggers and stage order are user-confirmed.
 - [Interpreter-safe generated code](interpreter-safe-generated-code.md) — Blockly interpreter code cannot assume browser globals or Number static helpers; use primitive checks and host bridge methods.
-- [Fast execution scope](fast-execution-scope.md) — shared Fast behavior is limited to Bot Builder and Scalper Bots; other surfaces keep their own speed modes.
+- [Fast execution scope](fast-execution-scope.md) — Fast is for Bot Builder, Scalper Bots, Normal Killer V3, and 2 Prediction Cycle; other Free Bots keep their own pacing.
 - [King Fisher XML fallback](king-fisher-loader-fallback.md) — unknown Blockly blocks must match their XML connection shape; mixed output and statement connections make imports fail.
 - [Featured parity isolation](featured-bot-recovery-isolation.md) — keep sequence recovery separate from the generic dominant-parity block used elsewhere.
