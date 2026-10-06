@@ -3,11 +3,24 @@ import { recordTradeMeta } from '../../../../../utils/trade-metadata';
 import { isBotPaused } from '../../../../../utils/bot-pause-flag';
 import { LogTypes } from '../../../constants/messages';
 import { api_base } from '../../api/api-base';
-import { contractStatus, info, log } from '../utils/broadcast';
+import { contract as broadcastContract, contractStatus, info, log } from '../utils/broadcast';
 import { doUntilDone, getUUID, recoverFromError, tradeOptionToBuy } from '../utils/helpers';
 import { purchaseSuccessful } from './state/actions';
-import { BEFORE_PURCHASE } from './state/constants';
+import { BEFORE_PURCHASE, DURING_PURCHASE } from './state/constants';
 import { applyCommission } from '@/utils/commission';
+import { observer as globalObserver } from '../../../utils/observer';
+import { isNormalKillerBotV3Context } from '../../../../../utils/execution-speed';
+import {
+    configureNormalKillerPipeline,
+    confirmNormalKillerEntry,
+    createNormalKillerPipeline,
+    getNormalKillerOpenCount,
+    hasNormalKillerRiskLimitReached,
+    reserveNormalKillerEntry,
+    settleNormalKillerEntry,
+    voidNormalKillerEntry,
+    NORMAL_KILLER_MAX_OPEN_CONTRACTS,
+} from '../../../../../utils/normal-killer-pipeline';
 import {
     createTradeKey,
     getMasterSource,
@@ -123,7 +136,16 @@ function fireSidePurchase(
     tradeOptions,
     contract_type,
     tradeOptionsOverride = tradeOptions,
-    { bypassRateLimit = false, trackSettlement = false, onSettled } = {},
+    {
+        bypassRateLimit = false,
+        trackSettlement = false,
+        settlementTimeoutMs = 10000,
+        onPurchased,
+        onUpdated,
+        onSettled,
+        onFailed,
+        onTrackingError,
+    } = {},
 ) {
     // Do NOT fire side purchases while the bot is paused.
     if (isBotPaused()) return trackSettlement ? Promise.resolve() : undefined;
@@ -150,28 +172,37 @@ function fireSidePurchase(
             .then(response => {
                 const { buy } = response;
                 if (!buy) {
+                    onFailed?.(new Error('The side purchase response did not include a contract.'));
                     finishSettlement();
                     return;
                 }
                 if (buy.contract_id) _sideContractIds.add(buy.contract_id);
+                onPurchased?.(buy);
                 publishBotCopySignal(tradeOptionsOverride, contract_type, buy.contract_id, tradeKey);
                 contractStatus({ id: 'contract.purchase_received', data: buy.transaction_id, buy });
                 log(LogTypes.PURCHASE, { transaction_id: buy.transaction_id });
-                if (!trackSettlement || !buy.contract_id) {
+                if (!trackSettlement) {
+                    finishSettlement();
+                    return;
+                }
+                if (!buy.contract_id) {
+                    onFailed?.(new Error('The side purchase was accepted without a contract ID.'));
                     finishSettlement();
                     return;
                 }
 
                 let settled = false;
                 let settlementSubscription;
-                const settlementTimeout = setTimeout(() => {
-                    finishSettlement();
-                    settlementSubscription?.unsubscribe?.();
-                }, 10000);
+                const settlementTimeout = settlementTimeoutMs > 0
+                    ? setTimeout(() => {
+                        finishSettlement();
+                        settlementSubscription?.unsubscribe?.();
+                    }, settlementTimeoutMs)
+                    : null;
                 const complete = () => {
                     if (settled) return;
                     settled = true;
-                    clearTimeout(settlementTimeout);
+                    if (settlementTimeout) clearTimeout(settlementTimeout);
                     settlementSubscription?.unsubscribe?.();
                     finishSettlement();
                 };
@@ -187,8 +218,15 @@ function fireSidePurchase(
                                 if (
                                     !contract
                                     || Number(contract.contract_id) !== Number(buy.contract_id)
-                                    || !contract.is_sold
                                 ) return;
+                                try {
+                                    onUpdated?.(contract);
+                                } catch { /* UI updates cannot interrupt settlement tracking */ }
+                                broadcastContract({
+                                    accountID: api_base.account_info?.loginid,
+                                    ...contract,
+                                });
+                                if (!contract.is_sold) return;
                                 _sideContractIds.delete(buy.contract_id);
                                 try {
                                     onSettled?.(contract);
@@ -196,19 +234,25 @@ function fireSidePurchase(
                                     complete();
                                 }
                             },
-                            complete,
+                            error => {
+                                onTrackingError?.(error);
+                                complete();
+                            },
                         );
                     if (settled) settlementSubscription?.unsubscribe?.();
-                } catch {
+                } catch (error) {
+                    onTrackingError?.(error);
                     complete();
                 }
             })
-            .catch(() => {
+            .catch(error => {
                 /* side purchase failures are non-fatal — main contract is unaffected */
+                onFailed?.(error);
                 finishSettlement();
             });
     } catch (e) {
         /* ignore — never let a side purchase break the main strategy flow */
+        onFailed?.(e);
         finishSettlement();
     }
     return settlementPromise;
@@ -216,6 +260,98 @@ function fireSidePurchase(
 
 export default Engine =>
     class Purchase extends Engine {
+        resetNormalKillerPipeline() {
+            this.normalKillerPipeline = createNormalKillerPipeline();
+            this.normalKillerMainEntry = null;
+            this.normalKillerNextPurchaseEpoch = null;
+        }
+
+        configureNormalKillerPipeline(currentStake, baseStake, multiplier, takeProfit, stopLoss) {
+            if (!this.normalKillerPipeline) {
+                this.normalKillerPipeline = createNormalKillerPipeline();
+            }
+            configureNormalKillerPipeline(this.normalKillerPipeline, {
+                currentStake,
+                baseStake,
+                multiplier,
+                takeProfit,
+                stopLoss,
+            });
+        }
+
+        setNormalKillerPurchaseEpoch(epoch) {
+            this.normalKillerNextPurchaseEpoch = Number(epoch);
+        }
+
+        normalKillerRiskReached() {
+            const pipeline = this.normalKillerPipeline;
+            if (!pipeline || pipeline.currentStake == null) return false;
+            if (hasNormalKillerRiskLimitReached(pipeline, this.getTotalProfit(false))) {
+                pipeline.riskTripped = true;
+                if (this.isSold !== false) {
+                    globalObserver.emit('bot.stop_button_click');
+                }
+                return true;
+            }
+            return pipeline.riskTripped;
+        }
+
+        settleNormalKillerContract(entry, contract) {
+            if (!entry || !contract) return;
+            const rawProfit = Number(contract.sell_price) - Number(contract.buy_price);
+            const netProfit = applyCommission(Number.isFinite(rawProfit) ? rawProfit : 0);
+            settleNormalKillerEntry(this.normalKillerPipeline, entry, netProfit > 0);
+            this.normalKillerRiskReached();
+        }
+
+        voidNormalKillerContract(entry) {
+            if (!entry) return;
+            voidNormalKillerEntry(this.normalKillerPipeline, entry);
+        }
+
+        purchaseNormalKillerTick(contract_type, epoch) {
+            const pipeline = this.normalKillerPipeline;
+            if (
+                !isNormalKillerBotV3Context()
+                || !pipeline
+                || pipeline.currentStake == null
+                || this.store.getState().scope !== DURING_PURCHASE
+                || this.isSold !== false
+                || isBotPaused()
+                || this.normalKillerRiskReached()
+            ) {
+                return Promise.resolve(false);
+            }
+
+            const entry = reserveNormalKillerEntry(pipeline, {
+                epoch,
+                kind: 'side',
+                stake: pipeline.currentStake,
+                maxOpen: NORMAL_KILLER_MAX_OPEN_CONTRACTS,
+            });
+            if (!entry) return Promise.resolve(false);
+
+            const tradeOptions = {
+                ...this.tradeOptions,
+                amount: entry.stake,
+            };
+            fireSidePurchase(this.tradeOptions, contract_type, tradeOptions, {
+                trackSettlement: true,
+                settlementTimeoutMs: 0,
+                onPurchased: buy => {
+                    confirmNormalKillerEntry(pipeline, entry, buy.contract_id);
+                },
+                onSettled: contract => {
+                    this.updateTotals(contract);
+                    this.settleNormalKillerContract(entry, contract);
+                },
+                onFailed: () => {
+                    this.voidNormalKillerContract(entry);
+                },
+            });
+            return Promise.resolve(true);
+        }
+
         purchase(contract_type) {
             // Prevent calling purchase twice
             if (this.store.getState().scope !== BEFORE_PURCHASE) {
@@ -226,6 +362,34 @@ export default Engine =>
             // skips loop() when paused_, but purchase() is called synchronously
             // before that check, so we guard here as well.
             if (isBotPaused()) return Promise.resolve();
+
+            if (
+                isNormalKillerBotV3Context()
+                && this.normalKillerPipeline
+                && this.normalKillerPipeline.currentStake != null
+            ) {
+                const epoch = this.normalKillerNextPurchaseEpoch;
+                this.normalKillerNextPurchaseEpoch = null;
+                if (this.normalKillerRiskReached()) return Promise.resolve();
+
+                const entry = reserveNormalKillerEntry(this.normalKillerPipeline, {
+                    epoch,
+                    kind: 'main',
+                    stake: this.normalKillerPipeline.currentStake,
+                    maxOpen: NORMAL_KILLER_MAX_OPEN_CONTRACTS,
+                });
+                if (!entry) return Promise.resolve();
+
+                const tradeOptions = {
+                    ...this.tradeOptions,
+                    amount: entry.stake,
+                };
+                return this._executePurchase(contract_type, tradeOptions, true, false, null, entry)
+                    .catch(error => {
+                        this.voidNormalKillerContract(entry);
+                        throw error;
+                    });
+            }
 
             // Speed-tier fan-out: Normal fires 1 purchase per tick. Explicit
             // Crazy/Turbo can still use their legacy side-contract throughput,
@@ -347,6 +511,7 @@ export default Engine =>
             forceDirect = false,
             bypassRateLimit = false,
             pairExecution = null,
+            normalKillerEntry = null,
         ) {
             let tradeKey = null;
             const acquireBuySlot = () => bypassRateLimit ? Promise.resolve() : _acquireBuySlot();
@@ -368,6 +533,18 @@ export default Engine =>
                 } catch { /* non-fatal */ }
 
                 this.contractId = buy.contract_id;
+                if (normalKillerEntry) {
+                    if (buy.contract_id) {
+                        confirmNormalKillerEntry(
+                            this.normalKillerPipeline,
+                            normalKillerEntry,
+                            buy.contract_id,
+                        );
+                        this.normalKillerMainEntry = normalKillerEntry;
+                    } else {
+                        this.voidNormalKillerContract(normalKillerEntry);
+                    }
+                }
                 if (pairExecution) {
                     pairExecution.mainContractId = Number(buy.contract_id);
                 }

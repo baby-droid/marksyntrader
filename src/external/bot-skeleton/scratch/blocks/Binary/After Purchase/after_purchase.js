@@ -89,6 +89,10 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
     const hasKingFisherRestartGuard = workspaceBlocks.some(candidate =>
         candidate.type === 'king_fisher_restart_trade'
     );
+    const hasNormalKillerPipeline = workspaceBlocks.some(candidate =>
+        candidate.type === 'king_fisher_virtual_hook'
+        && candidate.data === 'nkv3-shared-hook'
+    );
     const normalizeVariableName = value => String(value ?? '')
         .trim()
         .toLowerCase()
@@ -282,10 +286,10 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
     const pairStakeMartingaleCode = hasPairStakeMartingale
         ? buildTwoPredictionPairMartingaleCode(pairStakeBindings, martingaleVariable)
         : '';
-    const kingFisherStakeSnapshot = isKingFisher && stakeVariable
+    const kingFisherStakeSnapshot = isKingFisher && !hasNormalKillerPipeline && stakeVariable
         ? `var kingFisherSettledStake = Number(${stakeVariable});`
         : '';
-    const kingFisherStakeHandoff = isKingFisher && stakeVariable && baseStakeVariable && martingaleVariable
+    const kingFisherStakeHandoff = isKingFisher && !hasNormalKillerPipeline && stakeVariable && baseStakeVariable && martingaleVariable
         ? `
         /*
          * King Fisher owns the next purchase stake at settlement time. The

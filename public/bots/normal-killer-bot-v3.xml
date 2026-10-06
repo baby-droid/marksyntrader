@@ -97,6 +97,7 @@
       <block type="controls_if" id="nkv3_virtual_hook_gate">
         <value name="IF0">
           <block type="king_fisher_virtual_hook" id="nkv3_virtual_hook">
+            <data>nkv3-shared-hook</data>
             <field name="ENABLED">TRUE</field>
             <field name="CONFIRMATIONS">1</field>
             <field name="RESULT">LOSS</field>
@@ -116,6 +117,26 @@
       </block>
     </statement>
   </block>
+  <block type="during_purchase" id="nkv3_during" deletable="false" x="430" y="760">
+    <statement name="DURING_PURCHASE_STACK">
+      <block type="controls_if" id="nkv3_during_hook_gate">
+        <value name="IF0">
+          <block type="king_fisher_virtual_hook" id="nkv3_during_virtual_hook">
+            <data>nkv3-shared-hook</data>
+            <field name="ENABLED">TRUE</field>
+            <field name="CONFIRMATIONS">1</field>
+            <field name="RESULT">LOSS</field>
+            <field name="PURCHASE_TIMING">IMMEDIATE</field>
+            <value name="SIGNAL">
+              <block type="logic_boolean" id="nkv3_during_hook_signal">
+                <field name="BOOL">TRUE</field>
+              </block>
+            </value>
+          </block>
+        </value>
+      </block>
+    </statement>
+  </block>
   <block type="after_purchase" id="nkv3_after" deletable="false" x="850" y="0">
     <statement name="AFTERPURCHASE_STACK">
       <block type="king_fisher_restart_trade" id="nkv3_risk_guard">
@@ -131,47 +152,7 @@
           </block>
         </value>
         <next>
-          <block type="controls_if" id="nkv3_stake_after_result">
-            <mutation else="1"/>
-            <value name="IF0">
-              <block type="contract_check_result" id="nkv3_result_is_win">
-                <field name="CHECK_RESULT">win</field>
-              </block>
-            </value>
-            <statement name="DO0">
-              <block type="variables_set" id="nkv3_reset_stake">
-                <field name="VAR" id="nkv3_stake">stake</field>
-                <value name="VALUE">
-                  <block type="variables_get" id="nkv3_base_stake_get">
-                    <field name="VAR" id="nkv3_base_stake">base_stake</field>
-                  </block>
-                </value>
-              </block>
-            </statement>
-            <statement name="ELSE">
-              <block type="variables_set" id="nkv3_increase_stake">
-                <field name="VAR" id="nkv3_stake">stake</field>
-                <value name="VALUE">
-                  <block type="math_arithmetic" id="nkv3_martingale_product">
-                    <field name="OP">MULTIPLY</field>
-                    <value name="A">
-                      <block type="variables_get" id="nkv3_current_stake">
-                        <field name="VAR" id="nkv3_stake">stake</field>
-                      </block>
-                    </value>
-                    <value name="B">
-                      <block type="variables_get" id="nkv3_martingale_get">
-                        <field name="VAR" id="nkv3_martingale">martingale</field>
-                      </block>
-                    </value>
-                  </block>
-                </value>
-              </block>
-            </statement>
-            <next>
-              <block type="trade_again" id="nkv3_trade_again"/>
-            </next>
-          </block>
+          <block type="trade_again" id="nkv3_trade_again"/>
         </next>
       </block>
     </statement>

@@ -738,7 +738,7 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_virtual_hook 
     const barrier = Number(predictionBlock?.getFieldValue?.('NUM') || 0);
     const helperName = ensureHelper('kingFisherVirtualHook', [
         'var kingFisherHookStates = {};',
-        `function ${generator().FUNCTION_NAME_PLACEHOLDER_}(key, signal, enabled, required, targetResult, contractType, barrier, purchaseTiming) {`,
+        `function ${generator().FUNCTION_NAME_PLACEHOLDER_}(key, signal, enabled, required, targetResult, contractType, barrier, purchaseTiming, pipelineMode) {`,
         '  if (!enabled) return Boolean(signal);',
         '  var state = kingFisherHookStates[key] || (kingFisherHookStates[key] = { lastEpoch: null, pendingEpoch: null, pendingDigit: null, confirmations: 0, purchaseAuthorized: false, purchaseAuthorizationEpoch: null });',
         '  var tick = Bot.getLastTick(true);',
@@ -751,6 +751,11 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_virtual_hook 
         '    if (state.purchaseAuthorizationEpoch != null && tick.epoch === state.purchaseAuthorizationEpoch) return false;',
         '    state.purchaseAuthorized = false;',
         '    state.purchaseAuthorizationEpoch = null;',
+        '    if (pipelineMode === "SIDE") {',
+        '      if (typeof Bot.purchaseNormalKillerTick === "function") Bot.purchaseNormalKillerTick(contractType, Number(tick.epoch));',
+        '      return false;',
+        '    }',
+        '    if (pipelineMode === "MAIN" && typeof Bot.setNormalKillerPurchaseEpoch === "function") Bot.setNormalKillerPurchaseEpoch(Number(tick.epoch));',
         '    return true;',
         '  }',
         '  if (state.pendingEpoch != null && tick.epoch !== state.pendingEpoch) {',
@@ -764,7 +769,14 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_virtual_hook 
         '    state.confirmations = result === targetResult ? state.confirmations + 1 : 0;',
         '    if (state.confirmations >= required) {',
         '      state.confirmations = 0;',
-        '      if (purchaseTiming === "IMMEDIATE") return true;',
+        '      if (purchaseTiming === "IMMEDIATE") {',
+        '        if (pipelineMode === "SIDE") {',
+        '          if (typeof Bot.purchaseNormalKillerTick === "function") Bot.purchaseNormalKillerTick(contractType, Number(tick.epoch));',
+        '          return false;',
+        '        }',
+        '        if (pipelineMode === "MAIN" && typeof Bot.setNormalKillerPurchaseEpoch === "function") Bot.setNormalKillerPurchaseEpoch(Number(tick.epoch));',
+        '        return true;',
+        '      }',
         '      state.purchaseAuthorized = true;',
         '      state.purchaseAuthorizationEpoch = tick.epoch;',
         '    }',
@@ -778,8 +790,48 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_virtual_hook 
         '  return false;',
         '}',
     ]);
+    const isNormalKillerPipelineHook = block.data === 'nkv3-shared-hook';
+    let ancestor = block.getParent?.();
+    let isDuringPurchaseHook = false;
+    while (ancestor) {
+        if (ancestor.type === 'during_purchase') {
+            isDuringPurchaseHook = true;
+            break;
+        }
+        ancestor = ancestor.getParent?.();
+    }
+    const pipelineMode = isNormalKillerPipelineHook
+        ? (isDuringPurchaseHook ? 'SIDE' : 'MAIN')
+        : 'NONE';
+    const workspaceVariables = block.workspace?.getVariableMap?.()?.getVariables?.() ?? [];
+    const normalizeVariable = value => String(value ?? '')
+        .trim()
+        .toLowerCase()
+        .replace(/[\s_-]+/g, ' ');
+    const variableCode = name => {
+        const variable = workspaceVariables.find(candidate =>
+            normalizeVariable(candidate.name) === normalizeVariable(name)
+        );
+        return variable
+            ? window.Blockly.JavaScript.variableDB_.getName(
+                variable.getId(),
+                window.Blockly.Variables.CATEGORY_NAME,
+            )
+            : null;
+    };
+    const pipelineVariables = isNormalKillerPipelineHook
+        ? ['stake', 'base_stake', 'martingale', 'take_profit', 'stop_loss'].map(variableCode)
+        : [];
+    const pipelineConfig = pipelineVariables.length === 5 && pipelineVariables.every(Boolean)
+        ? `Bot.configureNormalKillerPipeline(Number(${pipelineVariables.join('), Number(')}));`
+        : '';
+    const key = isNormalKillerPipelineHook ? 'nkv3-shared-hook' : block.id;
+    const hookCall = `${helperName}(${JSON.stringify(key)}, ${signal}, ${enabled}, ${confirmations}, '${targetResult}', '${contractType}', ${barrier}, '${purchaseTiming}', '${pipelineMode}')`;
+    const expression = pipelineConfig
+        ? `(function(){ ${pipelineConfig} return ${hookCall}; })()`
+        : hookCall;
     return [
-        `${helperName}('${block.id}', ${signal}, ${enabled}, ${confirmations}, '${targetResult}', '${contractType}', ${barrier}, '${purchaseTiming}')`,
+        expression,
         generator().ORDER_FUNCTION_CALL,
     ];
 };

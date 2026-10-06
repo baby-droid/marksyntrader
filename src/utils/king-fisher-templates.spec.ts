@@ -50,13 +50,20 @@ describe('Normal Killer Bot V3 template', () => {
         expect(xml).toContain('<field name="PURCHASE_TIMING">IMMEDIATE</field>');
         expect(xml).toContain('<field name="PURCHASE_LIST">DIGITOVER</field>');
         const beforePurchaseStart = xml.indexOf('<block type="before_purchase"');
+        const duringPurchaseStart = xml.indexOf('<block type="during_purchase"');
         const afterPurchaseStart = xml.indexOf('<block type="after_purchase"');
-        const beforePurchase = xml.slice(beforePurchaseStart, afterPurchaseStart);
+        const beforePurchase = xml.slice(beforePurchaseStart, duringPurchaseStart);
+        const duringPurchase = xml.slice(duringPurchaseStart, afterPurchaseStart);
         expect(beforePurchase).toMatch(/<value name="IF0">\s*<block type="king_fisher_virtual_hook"/);
         expect(beforePurchase).toMatch(
             /<statement name="DO0">\s*<block type="purchase" id="nkv3_purchase">\s*<field name="PURCHASE_LIST">DIGITOVER<\/field>/,
         );
         expect(beforePurchase.match(/<block type="purchase"/g) ?? []).toHaveLength(1);
+        expect((xml.match(/<data>nkv3-shared-hook<\/data>/g) ?? [])).toHaveLength(2);
+        expect(duringPurchase).toContain('<block type="king_fisher_virtual_hook" id="nkv3_during_virtual_hook">');
+        expect(duringPurchase).not.toContain('<block type="purchase"');
+        expect(xml).not.toContain('nkv3_increase_stake');
+        expect(xml).toContain('nkv3_during');
         expect(xml).toContain('<block type="trade_again"');
         expect(xml).not.toContain('<block type="multiple_purchase"');
     });
@@ -106,7 +113,10 @@ describe('King Fisher virtual-hook purchase gate', () => {
         expect(source).toContain('if (state.purchaseAuthorized)');
         expect(source).toContain('state.purchaseAuthorized = true;');
         expect(source).toContain('state.purchaseAuthorizationEpoch = tick.epoch;');
-        expect(source).toContain('if (purchaseTiming === "IMMEDIATE") return true;');
+        expect(source).toContain('if (purchaseTiming === "IMMEDIATE") {');
+        expect(source).toContain('pipelineMode === "SIDE"');
+        expect(source).toContain('Bot.purchaseNormalKillerTick(contractType, Number(tick.epoch))');
+        expect(source).toContain('Bot.configureNormalKillerPipeline');
         expect(source).toContain('hookType: result === "won" ? "HOOK PROFIT" : "HOOK LOSS"');
         expect(source).toContain('state.confirmations = 0;');
         expect(source).toMatch(

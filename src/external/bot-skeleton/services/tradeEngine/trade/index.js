@@ -85,6 +85,7 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
         const [token, options] = expectInitArg(args);
         const { symbol } = options;
 
+        this.resetNormalKillerPipeline?.();
         this.initArgs = args;
         this.options = options;
         this.marketRotationRuns = 0;

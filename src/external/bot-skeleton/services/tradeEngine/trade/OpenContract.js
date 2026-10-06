@@ -25,6 +25,11 @@ export default Engine =>
                         this.contractId = '';
                         clearTimeout(this.transaction_recovery_timeout);
                         this.updateTotals(contract);
+                        const normalKillerEntry = this.normalKillerMainEntry;
+                        if (normalKillerEntry) {
+                            this.normalKillerMainEntry = null;
+                            this.settleNormalKillerContract(normalKillerEntry, contract);
+                        }
                         const pairExecution = this._kingFisherCurrentPair;
                         if (
                             pairExecution
