@@ -1,5 +1,6 @@
 // @ts-nocheck — vendored bot code with known upstream type gaps; see AGENTS.md
 import React, { useEffect } from 'react';
+import { DBOT_TABS } from '@/constants/bot-contents';
 import classNames from 'classnames';
 import { Field, Form, Formik } from 'formik';
 import { observer } from 'mobx-react-lite';
@@ -186,7 +187,7 @@ const SaveModal = observer(() => {
     const { active_tab } = dashboard;
 
     useEffect(() => {
-        if (active_tab === 1) {
+        if (active_tab === DBOT_TABS.BOT_BUILDER) {
             updateBotName(dashboard_strategies?.[0]?.name ?? '');
         }
     }, [active_tab, dashboard_strategies, updateBotName]);

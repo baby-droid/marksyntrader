@@ -1,6 +1,7 @@
 // @ts-nocheck — vendored bot code with known upstream type gaps; see AGENTS.md
 import React from 'react';
 import { observer } from 'mobx-react-lite';
+import { DBOT_TABS } from '@/constants/bot-contents';
 import { useStore } from '@/hooks/useStore';
 import { isPreviewMode } from '@/utils/is-preview-mode';
 import { getSetting } from '@/utils/settings';
@@ -19,7 +20,7 @@ const BotBuilderTourDesktop = observer(() => {
     React.useEffect(() => {
         // Onboarding tours are noise inside the App Builder preview — skip them.
         if (isPreviewMode()) return;
-        if (active_tab === 1) {
+        if (active_tab === DBOT_TABS.BOT_BUILDER) {
             const timeoutId = setTimeout(() => {
                 const token = getSetting('bot_builder_token');
                 if (!token && !is_tour_dialog_visible) {

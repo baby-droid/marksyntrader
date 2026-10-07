@@ -2,7 +2,7 @@
 import localForage from 'localforage';
 import LZString from 'lz-string';
 import { action, makeObservable, observable } from 'mobx';
-import { MAX_STRATEGIES } from '@/constants/bot-contents';
+import { DBOT_TABS, MAX_STRATEGIES } from '@/constants/bot-contents';
 import { button_status } from '@/constants/button-status';
 import {
     getSavedWorkspaces,
@@ -139,7 +139,7 @@ export default class SaveModalStore implements ISaveModalStore {
         const { saveFile } = google_drive;
         let xml;
         let main_strategy = null;
-        if (active_tab === 1) {
+        if (active_tab === DBOT_TABS.BOT_BUILDER) {
             xml = window.Blockly?.Xml?.workspaceToDom(window.Blockly?.derivWorkspace);
         } else {
             const recent_files = await getSavedWorkspaces();

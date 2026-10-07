@@ -10,15 +10,15 @@ import React, { useEffect, useRef, useState } from 'react';
  * text buffer while focused (so partial/empty input is allowed) and only
  * parses + clamps + commits the numeric value on blur or Enter.
  */
-const NumberField: React.FC<{
+const NumberField: React.FC<Omit<
+    React.InputHTMLAttributes<HTMLInputElement>,
+    'value' | 'onChange' | 'onBlur' | 'onKeyDown' | 'type' | 'inputMode' | 'min' | 'max'
+> & {
     value: number;
     onCommit: (n: number) => void;
     min?: number;
     max?: number;
-    disabled?: boolean;
-    className?: string;
-    placeholder?: string;
-}> = ({ value, onCommit, min, max, disabled, className, placeholder }) => {
+}> = ({ value, onCommit, min, max, disabled, className, placeholder, ...inputProps }) => {
     const [text, setText] = useState(String(value));
     const focusedRef = useRef(false);
 
@@ -38,6 +38,7 @@ const NumberField: React.FC<{
 
     return (
         <input
+            {...inputProps}
             type='text'
             inputMode='decimal'
             className={`num-field ${className || ''}`}

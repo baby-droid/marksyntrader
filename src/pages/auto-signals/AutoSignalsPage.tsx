@@ -20,6 +20,7 @@ import type {
     AutoSignalsPageProps,
     AutoSignalsSettings,
 } from './types';
+import NumberField from '@/components/number-field';
 import './auto-signals.scss';
 
 const FAMILY_OPTIONS: { value: AutoSignalFamily; label: string; short: string }[] = [
@@ -281,18 +282,14 @@ function SettingsPanel({
                         <span className='as-field__label'>{field.label}</span>
                         <span className='as-field__input'>
                             {field.prefix && <i>{field.prefix}</i>}
-                            <input
-                                type='number'
+                            <NumberField
                                 min={field.min}
                                 max={field.max}
                                 step={field.step}
                                 value={settings[field.key]}
-                                onChange={(event) => {
-                                    const next = Number(event.target.value);
-                                    if (!Number.isNaN(next)) {
-                                        const clamped = Math.max(field.min, field.max ? Math.min(field.max, next) : next);
-                                        onSettingsChange(field.key, clamped as AutoSignalsSettings[typeof field.key]);
-                                    }
+                                onCommit={(next) => {
+                                    const committed = field.key === 'maxRuns' ? Math.round(next) : next;
+                                    onSettingsChange(field.key, committed as AutoSignalsSettings[typeof field.key]);
                                 }}
                                 aria-label={field.label}
                                 data-testid={`input-setting-${field.key}`}

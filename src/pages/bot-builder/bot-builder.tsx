@@ -6,6 +6,7 @@ import { load, registerXmlBlockFallbacks, save_types } from '@/external/bot-skel
 import { botNotification } from '@/components/bot-notification/bot-notification';
 import { notification_message } from '@/components/bot-notification/bot-notification-utils';
 import { useStore } from '@/hooks/useStore';
+import { DBOT_TABS } from '@/constants/bot-contents';
 import { localize } from '@deriv-com/translations';
 import { useDevice } from '@deriv-com/ui';
 import { TBlocklyEvents } from 'Types';
@@ -474,7 +475,7 @@ const BotBuilder = observer(() => {
         <>
             <div
                 className={classNames('bot-builder', {
-                    'bot-builder--active': active_tab === 1 && !is_preview_on_popup,
+                    'bot-builder--active': active_tab === DBOT_TABS.BOT_BUILDER && !is_preview_on_popup,
                     'bot-builder--inactive': is_preview_on_popup,
                     'bot-builder--tour-active': active_tour,
                 })}
@@ -484,7 +485,7 @@ const BotBuilder = observer(() => {
                 </div>
 
                 {/* Free Bots toggle button — draggable, position persisted, hidden while panel is open */}
-                {active_tab === 1 && !showFreeBots && (
+                {active_tab === DBOT_TABS.BOT_BUILDER && !showFreeBots && (
                     <button
                         ref={freeBotBtnRef}
                         onClick={() => setShowFreeBots(true)}
@@ -513,7 +514,7 @@ const BotBuilder = observer(() => {
                 )}
 
                 {/* Free Bots side panel */}
-                {active_tab === 1 && showFreeBots && (
+                {active_tab === DBOT_TABS.BOT_BUILDER && showFreeBots && (
                     <FreeBotsSidePanel
                         onClose={() => setShowFreeBots(false)}
                         onLoadDone={handleBotLoadDone}
@@ -521,7 +522,7 @@ const BotBuilder = observer(() => {
                 )}
 
                 {/* ── Scanner button — fixed to right side of builder, above Free Bots ── */}
-                {active_tab === 1 && !showFreeBots && (
+                {active_tab === DBOT_TABS.BOT_BUILDER && !showFreeBots && (
                     <button
                         onClick={() => setShowScanner(s => !s)}
                         title='AI Market Scanner — live digit frequency analysis + trading signals'
@@ -550,9 +551,9 @@ const BotBuilder = observer(() => {
                 )}
             </div>
             {/* AI Scanner floating panel — shown when scanner button is active */}
-            {active_tab === 1 && showScanner && <AIScanner />}
-            {active_tab === 1 && <StrategyEngineChecker check={strategyCheck} />}
-            {active_tab === 1 && <BotBuilderTourHandler is_mobile={!isDesktop} />}
+            {active_tab === DBOT_TABS.BOT_BUILDER && showScanner && <AIScanner />}
+            {active_tab === DBOT_TABS.BOT_BUILDER && <StrategyEngineChecker check={strategyCheck} />}
+            {active_tab === DBOT_TABS.BOT_BUILDER && <BotBuilderTourHandler is_mobile={!isDesktop} />}
             {/* removed this outside from toolbar becuase it needs to loaded seperately without dependency */}
             <LoadModal />
             <SaveModal />

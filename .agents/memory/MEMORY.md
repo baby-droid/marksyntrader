@@ -1,4 +1,4 @@
-- [Marksyntrader tab order](marksyntrader-tabs.md) — DBOT_TABS: DASHBOARD=0, AHMED_LEARNING=1 (Bot Builder tab), FREE_BOTS=2, AHMED_SCALPER_BOTS=3, DCIRCLES=4, SPEEDLAB=5, HEDGE=6, CHART=7, MANUAL_TRADER=8, AUTO_TRADES=9, COPY_TRADING=10, REPORT=11, BULK_TRADE=12, ANALYSIS=13, TUTORIAL=14, TRADING_SOFTWARE=15, BOT_BUILDER=1 (alias only).
+- [Marksyntrader tab order](marksyntrader-tabs.md) — Auto-Signals is tab 1; Bot Builder is the AHMED_LEARNING alias at tab 2, followed by the aligned main tabs and navigation menus.
 - [Initialization loading screen](marksyntrader-loading.md) — Futuristic LoadingScreen (src/components/loading-screen/) replaces ChunkLoader in app-content.jsx; shows AHMED SYN TRADER branding + animated progress.
 - [Merge conflict pattern](marksyntrader-conflicts.md) — bot-contents.ts and header/* files re-conflict after every task agent merge; resolve with python3 re.sub keeping HEAD section; verify with grep "^<<<<<<< " (7 chars), not "=======" which appears in legit comment dividers.
 - [BotBuilder architecture](marksyntrader-botbuilder.md) — Single BotBuilder instance only in app-content.jsx (line 203); bot-builder tab content must be transparent (no background); BotBuilder uses position:fixed top:9rem z-index:10 when active_tab===1.
@@ -83,3 +83,4 @@
 - [Fast execution scope](fast-execution-scope.md) — Normal Killer V3 is always zero-delay/direct-buy; Fast toggle stays scoped to supported pages and other Free Bots retain pacing.
 - [King Fisher XML fallback](king-fisher-loader-fallback.md) — unknown Blockly blocks must match their XML connection shape; mixed output and statement connections make imports fail.
 - [Featured parity isolation](featured-bot-recovery-isolation.md) — keep sequence recovery separate from the generic dominant-parity block used elsewhere.
+- [Auto-Signals run session](auto-signals-run-session.md) — contract progress and run-limit stopping must persist after Tabs unmounts the Auto-Signals page during Bot Builder handoff.

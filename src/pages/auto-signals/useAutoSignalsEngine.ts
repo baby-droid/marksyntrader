@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     api_base,
     load,
-    observer as globalObserver,
     save_types,
 } from '@/external/bot-skeleton';
 import { useDerivTrade, type TickData } from '@/hooks/useDerivTrade';
@@ -13,6 +12,13 @@ import {
     AUTO_SIGNAL_BOTS,
     patchAutoSignalsBotXml,
 } from './bot-xml';
+import {
+    beginAutoSignalsRun,
+    clearAutoSignalsRun,
+    getAutoSignalsRunSession,
+    setAutoSignalsRunMessage,
+    subscribeAutoSignalsRunSession,
+} from './auto-signals-run-session';
 import { evaluateAutoSignal, shouldExcludeAutoSignalMarket } from './auto-signals-engine';
 import type {
     AutoSignalAction,
@@ -113,15 +119,6 @@ const marketSnapshot = (
     };
 };
 
-const isSettledBotContract = (contract: any) => {
-    const status = String(contract?.status ?? contract?.contract_status ?? '').toLowerCase();
-    return contract?.is_sold === 1
-        || contract?.is_sold === true
-        || contract?.is_expired === 1
-        || contract?.is_expired === true
-        || ['won', 'lost', 'sold', 'settled', 'expired'].includes(status);
-};
-
 const wait = (milliseconds: number) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 
 const getBlocklyWorkspace = () => (window as any).Blockly?.derivWorkspace;
@@ -149,21 +146,22 @@ export const useAutoSignalsEngine = ({
 }): AutoSignalsPageProps => {
     const { connected, authorized, currency, send, subscribeTicks } = useDerivTrade();
     const [status, setStatus] = useState<AutoSignalsPageProps['status']>('idle');
-    const [message, setMessage] = useState('Authorize the Deriv account to scan available synthetic markets.');
+    const [runSession, setRunSession] = useState(getAutoSignalsRunSession);
+    const [message, setMessage] = useState(
+        () => getAutoSignalsRunSession().message || 'Authorize the Deriv account to scan available synthetic markets.',
+    );
     const [markets, setMarkets] = useState<AutoSignalMarket[]>([]);
     const [family, setFamily] = useState<AutoSignalFamily>('AUTO');
     const [settings, setSettings] = useState<AutoSignalsSettings>(readSettings);
-    const [activeRun, setActiveRun] = useState<AutoSignalsRun | null>(null);
+    const activeRun = runSession.run;
     const [displayCurrency, setDisplayCurrency] = useState(getDisplayCurrency);
     const [refreshToken, setRefreshToken] = useState(0);
     const runtimesRef = useRef(new Map<string, MarketRuntime>());
     const unsubscribeRef = useRef<Array<() => void>>([]);
     const generationRef = useRef(0);
     const familyRef = useRef(family);
-    const runRef = useRef<AutoSignalsRun | null>(null);
     const isPreparingRunRef = useRef(false);
-    const contractIdsRef = useRef(new Set<string>());
-    const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const flushTimerRef = useRef<number | null>(null);
     familyRef.current = family;
 
     const queueMarketRefresh = useCallback(() => {
@@ -193,6 +191,11 @@ export const useAutoSignalsEngine = ({
         const unsubscribe = subscribeCurrency(() => setDisplayCurrency(getDisplayCurrency()));
         return unsubscribe;
     }, []);
+
+    useEffect(() => subscribeAutoSignalsRunSession((nextSession) => {
+        setRunSession(nextSession);
+        if (nextSession.message) setMessage(nextSession.message);
+    }), []);
 
     useEffect(() => {
         try {
@@ -385,48 +388,6 @@ export const useAutoSignalsEngine = ({
         };
     }, [authorized, connected, queueMarketRefresh, refreshToken, send, subscribeTicks]);
 
-    useEffect(() => {
-        const onBotContract = (contract: any) => {
-            const currentRun = runRef.current;
-            if (!currentRun || !isSettledBotContract(contract)) return;
-            const symbol = String(contract?.underlying || contract?.underlying_symbol || contract?.symbol || '');
-            if (symbol && symbol !== currentRun.symbol) return;
-            const contractId = String(
-                contract?.contract_id
-                ?? contract?.id
-                ?? `${contract?.date_start ?? contract?.purchase_time ?? ''}:${contract?.profit ?? ''}:${contract?.status ?? ''}`,
-            );
-            if (contractIdsRef.current.has(contractId)) return;
-            contractIdsRef.current.add(contractId);
-
-            const completedRuns = currentRun.completedRuns + 1;
-            const updatedRun = { ...currentRun, completedRuns };
-            runRef.current = updatedRun;
-            setActiveRun(updatedRun);
-            if (completedRuns >= currentRun.maxRuns) {
-                setMessage(`Completed the ${currentRun.maxRuns}-run limit. Bot Builder is stopping this run.`);
-                window.setTimeout(() => {
-                    if (runRef.current?.symbol === currentRun.symbol) runPanel.onStopButtonClick?.();
-                }, 0);
-            }
-        };
-
-        const onBotStop = () => {
-            const stopped = runRef.current;
-            if (!stopped) return;
-            runRef.current = null;
-            setActiveRun(null);
-            setMessage(`Bot Builder stopped ${stopped.completedRuns} of ${stopped.maxRuns} runs on ${stopped.symbol}.`);
-        };
-
-        globalObserver.register('bot.contract', onBotContract);
-        globalObserver.register('bot.stop', onBotStop);
-        return () => {
-            globalObserver.unregister('bot.contract', onBotContract);
-            globalObserver.unregister('bot.stop', onBotStop);
-        };
-    }, [runPanel]);
-
     const onFamilyChange = useCallback((nextFamily: AutoSignalFamily) => {
         familyRef.current = nextFamily;
         setFamily(nextFamily);
@@ -446,7 +407,7 @@ export const useAutoSignalsEngine = ({
 
     const onTrade = useCallback(async (market: AutoSignalMarket, action: AutoSignalAction) => {
         if (isPreparingRunRef.current) return;
-        if (runPanel.is_running || runRef.current) {
+        if (runPanel.is_running || getAutoSignalsRunSession().run) {
             setMessage('A Bot Builder run is already active. Stop it in Bot Builder before starting another.');
             return;
         }
@@ -519,9 +480,11 @@ export const useAutoSignalsEngine = ({
                 maxRuns: settings.maxRuns,
                 completedRuns: 0,
             };
-            runRef.current = nextRun;
-            contractIdsRef.current.clear();
-            setActiveRun(nextRun);
+            beginAutoSignalsRun(
+                nextRun,
+                () => runPanel.onStopButtonClick?.(),
+                `${bot.name} is starting on ${market.symbol} in Bot Builder.`,
+            );
 
             let lastError: unknown = null;
             for (let attempt = 0; attempt < 6; attempt += 1) {
@@ -541,11 +504,13 @@ export const useAutoSignalsEngine = ({
                 }
             }
             if (lastError) throw lastError;
-            setMessage(`${bot.name} is loaded in Bot Builder on ${market.symbol}. Use the main Stop control there at any time.`);
+            const runMessage = `${bot.name} is loaded in Bot Builder on ${market.symbol}. Use the main Stop control there at any time.`;
+            setMessage(runMessage);
+            setAutoSignalsRunMessage(runMessage);
         } catch (error: any) {
-            runRef.current = null;
-            setActiveRun(null);
-            setMessage(error?.message || 'The Bot Builder handoff failed.');
+            const errorMessage = error?.message || 'The Bot Builder handoff failed.';
+            clearAutoSignalsRun(errorMessage);
+            setMessage(errorMessage);
         } finally {
             isPreparingRunRef.current = false;
         }

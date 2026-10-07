@@ -45,6 +45,7 @@ import { DBOT_TABS } from '@/constants/bot-contents';
 
 const MAIN_MENU_ITEMS = [
     { tab: DBOT_TABS.DASHBOARD, icon: '🏠', label: 'Dashboard' },
+    { tab: DBOT_TABS.AUTO_SIGNALS, icon: '📡', label: 'Auto-Signals' },
     { tab: DBOT_TABS.BOT_BUILDER, icon: '🧱', label: 'Bot Builder' },
     { tab: DBOT_TABS.FREE_BOTS, icon: '🤖', label: 'Free Bots & Personal Bots' },
     { tab: DBOT_TABS.AHMED_SCALPER_BOTS, icon: '⚡', label: 'Scalper Bots' },
