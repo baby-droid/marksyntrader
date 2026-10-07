@@ -422,10 +422,6 @@ export const useAutoSignalsEngine = ({
             queueMarketRefresh();
             return;
         }
-        if (action === 'entry-trade' && !candidate.entryReady) {
-            setMessage('The entry digit is not confirmed on the latest live ticks yet.');
-            return;
-        }
         if (!api_base.api || !authorized) {
             setMessage('Authorize the Deriv account before loading a trading bot.');
             return;
@@ -472,6 +468,15 @@ export const useAutoSignalsEngine = ({
             workspace.strategy_to_load = configuredXml;
             setActiveTab(DBOT_TABS.BOT_BUILDER);
 
+            const latestRuntime = runtimesRef.current.get(market.symbol);
+            const latestCandidate = latestRuntime?.candidate;
+            const latestTickIsLive = latestRuntime?.lastTickAt != null
+                && Date.now() - latestRuntime.lastTickAt <= LIVE_TICK_STALE_MS;
+            if (!latestCandidate || latestCandidate.id !== candidate.id || !latestTickIsLive
+                || latestCandidate.expiresAt == null || latestCandidate.expiresAt <= Date.now()) {
+                throw new Error('The signal changed while the bot was loading. Return to Auto-Signals and choose the latest signal.');
+            }
+
             const nextRun: AutoSignalsRun = {
                 symbol: market.symbol,
                 action,
@@ -486,31 +491,31 @@ export const useAutoSignalsEngine = ({
                 `${bot.name} is starting on ${market.symbol} in Bot Builder.`,
             );
 
-            let lastError: unknown = null;
-            for (let attempt = 0; attempt < 6; attempt += 1) {
-                try {
-                    if (!runPanel.onRunButtonClick) throw new Error('Bot Builder Run control is unavailable.');
-                    if (runPanel.is_running) break;
-                    await runPanel.onRunButtonClick();
-                    lastError = null;
-                    break;
-                } catch (error) {
-                    lastError = error;
-                    if (runPanel.is_running) {
-                        lastError = null;
-                        break;
-                    }
-                    if (attempt < 5) await wait(200);
-                }
+            if (!runPanel.onRunButtonClick) throw new Error('Bot Builder Run control is unavailable.');
+            const startAttempt = runPanel.onRunButtonClick();
+            // RunPanel sets is_running synchronously when shouldRunBot() accepts
+            // the workspace. Capture that before awaiting: a one-tick contract
+            // can settle and stop the bot before the promise continuation runs.
+            const startedSynchronously = Boolean(runPanel.is_running);
+            await startAttempt;
+            if (!startedSynchronously && !runPanel.is_running) {
+                throw new Error('Bot Builder did not start this bot. Check the selected account and bot trade settings.');
             }
-            if (lastError) throw lastError;
-            const runMessage = `${bot.name} is loaded in Bot Builder on ${market.symbol}. Use the main Stop control there at any time.`;
-            setMessage(runMessage);
-            setAutoSignalsRunMessage(runMessage);
+            const currentSession = getAutoSignalsRunSession();
+            if (currentSession.run?.startedAt === nextRun.startedAt) {
+                const runMessage = action === 'entry-trade' && !candidate.entryReady
+                    ? `${bot.name} is watching for its entry condition on ${market.symbol}.`
+                    : `${bot.name} is trading ${market.symbol} with one-tick contracts.`;
+                setMessage(runMessage);
+                setAutoSignalsRunMessage(runMessage);
+            } else {
+                setMessage(currentSession.message || `${bot.name} started on ${market.symbol}.`);
+            }
         } catch (error: any) {
             const errorMessage = error?.message || 'The Bot Builder handoff failed.';
             clearAutoSignalsRun(errorMessage);
             setMessage(errorMessage);
+            setActiveTab(DBOT_TABS.AUTO_SIGNALS);
         } finally {
             isPreparingRunRef.current = false;
         }

@@ -83,4 +83,4 @@
 - [Fast execution scope](fast-execution-scope.md) — Normal Killer V3 is always zero-delay/direct-buy; Fast toggle stays scoped to supported pages and other Free Bots retain pacing.
 - [King Fisher XML fallback](king-fisher-loader-fallback.md) — unknown Blockly blocks must match their XML connection shape; mixed output and statement connections make imports fail.
 - [Featured parity isolation](featured-bot-recovery-isolation.md) — keep sequence recovery separate from the generic dominant-parity block used elsewhere.
-- [Auto-Signals run session](auto-signals-run-session.md) — contract progress and run-limit stopping must persist after Tabs unmounts the Auto-Signals page during Bot Builder handoff.
+- [Auto-Signals run session](auto-signals-run-session.md) — progress/limits survive tab handoff; all action bots trade one tick, and historical alignment is not a win guarantee.

@@ -14,6 +14,7 @@ import {
     WifiOff,
 } from 'lucide-react';
 import type {
+    AutoSignalAction,
     AutoSignalCandidate,
     AutoSignalFamily,
     AutoSignalMarket,
@@ -114,7 +115,7 @@ function WindowConfidence({ market }: { market: AutoSignalMarket }) {
     }
 
     return (
-        <div className='as-windows' aria-label='Tick window confirmations'>
+        <div className='as-windows' aria-label='Historical one-tick outcome windows, not future win probabilities'>
             {windows.map((item) => (
                 <div className={`as-window ${item.agrees ? 'is-agree' : 'is-diverge'}`} key={item.window}>
                     <div className='as-window__top'>
@@ -144,12 +145,26 @@ function MarketCard({
     onTrade: AutoSignalsPageProps['onTrade'];
 }) {
     const candidate = market.candidate;
+    const [pendingAction, setPendingAction] = useState<AutoSignalAction | null>(null);
     const score = Math.max(0, Math.min(100, candidate?.score ?? 0));
     const isLive = market.feedState === 'live';
-    const canTrade = Boolean(candidate && candidate.state !== 'expired' && candidate.state !== 'unavailable');
-    const canEntry = Boolean(canTrade && candidate?.entryReady);
+    const canTrade = Boolean(
+        candidate
+        && candidate.state !== 'expired'
+        && candidate.state !== 'unavailable'
+        && isLive,
+    );
     const directionUp = ['RISE', 'ONLY_UPS'].includes(candidate?.strategy ?? '');
     const signalTone = candidate?.tier === 'ELITE' || candidate?.tier === 'STRONG' ? 'strong' : 'steady';
+    const startTrade = async (action: AutoSignalAction) => {
+        if (pendingAction) return;
+        setPendingAction(action);
+        try {
+            await onTrade(market, action);
+        } finally {
+            setPendingAction(null);
+        }
+    };
 
     return (
         <article className={`as-market-card as-market-card--${candidate?.state ?? 'no-signal'}`} data-testid={`card-market-${market.symbol}`}>
@@ -192,10 +207,15 @@ function MarketCard({
                 </div>
             </div>
 
-            <div className='as-score-line'>
+            <div className='as-score-line' title='Alignment score is a historical pattern score, not a predicted win probability.'>
                 <div className='as-score-line__label'>
-                    <span>CONFLUENCE</span>
-                    <strong data-testid={`text-score-${market.symbol}`}>{candidate ? `${Math.round(score)}%` : '—'}</strong>
+                    <span>ALIGNMENT SCORE</span>
+                    <strong
+                        title='Composite score from historical tick-window alignment; it is not a win probability.'
+                        data-testid={`text-score-${market.symbol}`}
+                    >
+                        {candidate ? `${Math.round(score)}/100` : '—'}
+                    </strong>
                 </div>
                 <div className='as-score-track'><i style={{ width: `${score}%` }} /></div>
                 <span className='as-score-line__tier'>{candidate?.tier ?? 'SCANNING'}</span>
@@ -204,7 +224,13 @@ function MarketCard({
             <div className={`as-entry-state ${candidate?.entryReady ? 'is-ready' : ''}`} data-testid={`status-entry-${market.symbol}`}>
                 <span>ENTRY CONDITION</span>
                 <strong>{candidate ? (candidate.entryReady ? 'CONFIRMED' : 'WAITING') : 'NO SETUP'}</strong>
-                <small>{candidate?.entryDigit != null ? `Digit ${candidate.entryDigit}` : 'Entry digit —'}</small>
+                <small>
+                    {candidate?.entryDigit != null
+                        ? `Digit ${candidate.entryDigit}`
+                        : candidate && ['RISE', 'FALL', 'ONLY_UPS', 'ONLY_DOWNS'].includes(candidate.strategy)
+                            ? 'Price direction'
+                            : 'Entry digit —'}
+                </small>
             </div>
 
             <WindowConfidence market={market} />
@@ -222,7 +248,7 @@ function MarketCard({
             </div>
             <div className='as-revalidation'>
                 <span className='as-revalidation__pulse' />
-                <span>5-minute signal · revalidated on each tick</span>
+                <span>Signal valid for 5m · 1-tick contract · checked on each tick</span>
                 <small>Updated {clockText(market.updatedAt)}</small>
             </div>
 
@@ -230,25 +256,27 @@ function MarketCard({
                 <button
                     className='as-button as-button--quiet'
                     type='button'
-                    disabled={!canTrade}
-                    onClick={() => onTrade(market, 'trade-only')}
+                    disabled={!canTrade || pendingAction !== null}
+                    aria-busy={pendingAction === 'trade-only'}
+                    onClick={() => void startTrade('trade-only')}
                     data-testid={`button-trade-only-${market.symbol}`}
                 >
-                    Trade Only
+                    {pendingAction === 'trade-only' ? 'Loading bot…' : 'Trade Only'}
                 </button>
                 <button
                     className='as-button as-button--primary'
                     type='button'
-                    disabled={!canEntry}
-                    onClick={() => onTrade(market, 'entry-trade')}
+                    disabled={!canTrade || pendingAction !== null}
+                    aria-busy={pendingAction === 'entry-trade'}
+                    onClick={() => void startTrade('entry-trade')}
                     data-testid={`button-entry-trade-${market.symbol}`}
                 >
                     {directionUp ? <ArrowUpRight size={15} aria-hidden='true' /> : <ArrowDownRight size={15} aria-hidden='true' />}
-                    Entry Trade
+                    {pendingAction === 'entry-trade' ? 'Loading bot…' : 'Entry Trade'}
                 </button>
             </div>
             {candidate && !candidate.entryReady && (
-                <p className='as-entry-note' data-testid={`text-entry-wait-${market.symbol}`}>Entry Trade unlocks when the entry condition is confirmed.</p>
+                <p className='as-entry-note' data-testid={`text-entry-wait-${market.symbol}`}>Entry Trade starts the bot now; it waits for its configured entry condition before buying.</p>
             )}
             {!candidate && <p className='as-entry-note'>Trade handoff is available when a signal is active.</p>}
         </article>
@@ -302,7 +330,7 @@ function SettingsPanel({
             </div>
             <div className='as-settings__foot'>
                 <ShieldCheck size={15} aria-hidden='true' />
-                <span>Limits apply in Bot Builder. Signals never place trades.</span>
+                <span>Press a trade button to load and start its bot. Contract duration is one tick.</span>
             </div>
         </section>
     );
@@ -393,7 +421,7 @@ const AutoSignalsPage = ({
                 <div className='as-overview__stat as-overview__stat--mode'>
                     <span className='as-overline'>HANDOFF MODE</span>
                     <strong>{activeRun ? 'RUN IN PROGRESS' : 'BOT BUILDER'}</strong>
-                    <small>{activeRun ? `${activeRun.symbol} · ${activeRun.completedRuns}/${activeRun.maxRuns} runs` : `${currencyLabel} · never auto-executes`}</small>
+                    <small>{activeRun ? `${activeRun.symbol} · ${activeRun.completedRuns}/${activeRun.maxRuns} runs` : `${currencyLabel} · one-tick contracts`}</small>
                 </div>
             </section>
 
@@ -467,7 +495,7 @@ const AutoSignalsPage = ({
 
             <footer className='as-footer'>
                 <span><span className='as-footer__mark'>M</span> MARKSYNTRADER <b>·</b> AUTO SIGNALS</span>
-                <span><span className='as-footer__signal' /> Live market data is informational. Confirm every signal before handoff.</span>
+                <span><span className='as-footer__signal' /> Historical tick rates are not future win probabilities; one-tick trades can lose.</span>
                 <span className='as-footer__clock'>LOCAL UPDATE {clockText(now)}</span>
             </footer>
         </main>

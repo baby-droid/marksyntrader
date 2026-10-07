@@ -111,5 +111,5 @@ export interface AutoSignalsPageProps {
         value: AutoSignalsSettings[K],
     ) => void;
     onRefresh: () => void;
-    onTrade: (market: AutoSignalMarket, action: AutoSignalAction) => void;
+    onTrade: (market: AutoSignalMarket, action: AutoSignalAction) => void | Promise<void>;
 }

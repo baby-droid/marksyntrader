@@ -7,6 +7,7 @@ import type {
 
 const BLOCKLY_XML_NS = 'https://developers.google.com/blockly/xml';
 const RUN_COUNT_VARIABLE = 'AUTO_SIGNAL_RUN_COUNT';
+export const AUTO_SIGNAL_DURATION_TICKS = 1;
 let generatedId = 0;
 const boundedInteger = (value: number, minimum: number, maximum: number) =>
     Math.max(minimum, Math.min(maximum, Math.floor(value)));
@@ -313,7 +314,9 @@ const configureTradeParameters = (
     setContractType(doc, config.candidate);
 
     setFieldValue(optionsBlock, 'DURATIONTYPE_LIST', 't');
-    setNumberInput(optionsBlock, 'DURATION', 2);
+    if (!setNumberInput(optionsBlock, 'DURATION', AUTO_SIGNAL_DURATION_TICKS)) {
+        throw new Error('Bot XML is missing its tick-duration input.');
+    }
     setNumberInput(optionsBlock, 'AMOUNT', config.accountAmounts.stake1);
 
     const needsPrediction = ['DIGITOVER', 'DIGITUNDER', 'DIGITMATCH', 'DIGITDIFF']
@@ -350,7 +353,7 @@ const configureTradeParameters = (
         setVariableValue(doc, 'takeprofit', config.accountAmounts.takeProfit);
         setVariableValue(doc, 'stoploss', config.accountAmounts.stopLoss);
         setVariableValue(doc, 'martingalelevel', config.settings.martingale);
-        setVariableValue(doc, 'entrypoint1', config.candidate.entryDigit ?? 0);
+        setVariableValue(doc, 'entrypoint1', config.candidate.entryDigit ?? config.market.latestDigit ?? 0);
         setVariableValue(doc, 'prediction digit', config.candidate.barrier ?? config.candidate.entryDigit ?? 0);
     }
 };

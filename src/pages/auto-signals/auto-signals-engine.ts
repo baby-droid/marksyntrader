@@ -90,27 +90,22 @@ const routeWins = (route: Route, tick: AutoLabTick) => {
 };
 
 const probabilityFor = (route: Route, ticks: AutoLabTick[]) => {
-    if (route.strategy === 'RISE' || route.strategy === 'FALL') {
-        const sampleSize = Math.max(0, ticks.length - 2);
+    if (
+        route.strategy === 'RISE'
+        || route.strategy === 'FALL'
+        || route.strategy === 'ONLY_UPS'
+        || route.strategy === 'ONLY_DOWNS'
+    ) {
+        // These signal cards trade one tick, so measure the next adjacent tick,
+        // not the two-tick move previously used by the scanner.
+        const sampleSize = Math.max(0, ticks.length - 1);
         if (!sampleSize) return { probability: 0, sampleSize };
         const wins = ticks.slice(0, sampleSize).reduce((count, tick, index) => {
-            const exit = ticks[index + 2];
+            const exit = ticks[index + 1];
             const up = exit.quote > tick.quote;
             const down = exit.quote < tick.quote;
-            return count + Number(route.strategy === 'RISE' ? up : down);
-        }, 0);
-        return { probability: (wins / sampleSize) * 100, sampleSize };
-    }
-
-    if (route.strategy === 'ONLY_UPS' || route.strategy === 'ONLY_DOWNS') {
-        const sampleSize = Math.max(0, ticks.length - 2);
-        if (!sampleSize) return { probability: 0, sampleSize };
-        const wins = ticks.slice(0, sampleSize).reduce((count, tick, index) => {
-            const middle = ticks[index + 1];
-            const end = ticks[index + 2];
-            const allUp = middle.quote > tick.quote && end.quote > middle.quote;
-            const allDown = middle.quote < tick.quote && end.quote < middle.quote;
-            return count + Number(route.strategy === 'ONLY_UPS' ? allUp : allDown);
+            const predictsUp = route.strategy === 'RISE' || route.strategy === 'ONLY_UPS';
+            return count + Number(predictsUp ? up : down);
         }, 0);
         return { probability: (wins / sampleSize) * 100, sampleSize };
     }
@@ -123,6 +118,12 @@ const probabilityFor = (route: Route, ticks: AutoLabTick[]) => {
 };
 
 const entryDigitFor = (route: Route, ticks: AutoLabTick[]) => {
+    if (
+        route.strategy === 'RISE'
+        || route.strategy === 'FALL'
+        || route.strategy === 'ONLY_UPS'
+        || route.strategy === 'ONLY_DOWNS'
+    ) return null;
     if (route.strategy === 'MATCHES') return route.barrier;
     const counts = Array.from({ length: 10 }, (_, digit) => ({
         digit,
@@ -141,22 +142,22 @@ const entryDigitFor = (route: Route, ticks: AutoLabTick[]) => {
 
 const entryConditionConfirmed = (route: Route, ticks: AutoLabTick[], entryDigit: number | null) => {
     const latest = ticks[ticks.length - 1];
-    if (!latest || entryDigit == null || latest.digit !== entryDigit) return false;
+    if (!latest) return false;
 
-    if (route.strategy === 'RISE' || route.strategy === 'FALL') {
-        const start = ticks[ticks.length - 3];
-        return Boolean(start && (route.strategy === 'RISE'
-            ? latest.quote > start.quote
-            : latest.quote < start.quote));
+    if (
+        route.strategy === 'RISE'
+        || route.strategy === 'FALL'
+        || route.strategy === 'ONLY_UPS'
+        || route.strategy === 'ONLY_DOWNS'
+    ) {
+        const previous = ticks[ticks.length - 2];
+        if (!previous) return false;
+        return route.strategy === 'RISE' || route.strategy === 'ONLY_UPS'
+            ? latest.quote > previous.quote
+            : latest.quote < previous.quote;
     }
-    if (route.strategy === 'ONLY_UPS' || route.strategy === 'ONLY_DOWNS') {
-        const before = ticks[ticks.length - 2];
-        const start = ticks[ticks.length - 3];
-        if (!before || !start) return false;
-        return route.strategy === 'ONLY_UPS'
-            ? before.quote > start.quote && latest.quote > before.quote
-            : before.quote < start.quote && latest.quote < before.quote;
-    }
+
+    if (entryDigit == null || latest.digit !== entryDigit) return false;
     return routeWins(route, latest);
 };
 
@@ -259,7 +260,7 @@ export const evaluateAutoSignal = ({
                 ? 'setup'
                 : 'watch';
         const latest = ticks[ticks.length - 1];
-        const reason = `${agreements}/${evidenceWindows.length} longer windows show an edge over baseline; entry digit ${entryDigit ?? '—'}${entryReady ? ' is confirmed' : ' is waiting'}.`;
+        const reason = `${agreements}/${evidenceWindows.length} longer windows show observed outcomes above baseline; ${entryDigit == null ? 'price-direction entry' : `entry digit ${entryDigit}`} ${entryReady ? 'is confirmed' : 'is waiting'}.`;
 
         return [{
             id: routeId(market.symbol, route),
