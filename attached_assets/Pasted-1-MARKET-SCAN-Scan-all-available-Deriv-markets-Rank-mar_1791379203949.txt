@@ -1,0 +1,356 @@
+1. MARKET SCAN
+→ Scan all available Deriv markets.
+→ Rank markets by signal quality.
+→ Select only markets with sufficient tick history and valid contract availability.
+
+2. TICK ANALYSIS
+Use:
+→ 1000 ticks = primary market regime
+→ 100 ticks = structure
+→ 50 ticks = momentum
+→ 20 ticks = confirmation
+→ 10 ticks = entry timing
+
+3. DIGIT ANALYSIS
+For digits 0–9 calculate:
+→ frequency %
+→ recent frequency %
+→ streak
+→ gap
+→ recurrence
+→ momentum
+→ distribution change
+→ pattern repetition
+→ concentration
+→ entropy
+
+4. PATTERN ANALYSIS
+Detect:
+→ AAA
+→ AAAA
+→ ABAB
+→ AABB
+→ ABBA
+→ ABA
+→ ABC
+→ repeated digits
+→ alternating digits
+→ alternating EVEN/ODD
+→ digit clusters
+→ digit gaps
+
+Pattern alone must NEVER trigger an entry.
+
+5. EVEN SIGNAL
+Calculate EVEN % across:
+1000 / 100 / 50 / 20 / 10
+
+Generate EVEN only when:
+→ long-term distribution supports EVEN
+→ short-term momentum supports EVEN
+→ 20-tick confirmation supports EVEN
+→ 10-tick entry trigger supports EVEN
+→ no major contradiction exists.
+
+6. ODD SIGNAL
+Same logic as EVEN, inverted.
+
+7. MATCH SIGNAL
+Find the strongest candidate digit.
+
+Require:
+→ strong distribution
+→ increasing recurrence
+→ short-term confirmation
+→ 20-tick confirmation
+→ 10-tick entry trigger.
+
+Output:
+MATCH + ENTRY DIGIT.
+
+8. DIFFERS SIGNAL
+Find weak/low-concentration digits.
+
+Require:
+→ low concentration
+→ high distribution dispersion
+→ weak recurrence
+→ no strong dominant digit
+→ multi-window confirmation.
+
+Output:
+DIFFERS + EXCLUDED DIGIT.
+
+9. OVER SIGNALS
+Evaluate:
+
+OVER 1
+OVER 2
+OVER 3
+OVER 4
+OVER 5
+OVER 6
+OVER 7
+
+For each:
+
+P(OVER n) =
+count(lastDigit > n) / total ticks
+
+Compare:
+1000 / 100 / 50 / 20 / 10
+
+Select the strongest barrier only when:
+→ baseline supports it
+→ short-term trend supports it
+→ momentum confirms
+→ entry trigger occurs.
+
+10. UNDER SIGNALS
+Evaluate:
+
+UNDER 8
+UNDER 7
+UNDER 6
+UNDER 5
+UNDER 4
+UNDER 3
+UNDER 2
+UNDER 1
+
+For each:
+
+P(UNDER n) =
+count(lastDigit < n) / total ticks
+
+Use the same multi-window confirmation.
+
+11. RISE SIGNAL
+Calculate:
+
+UP = current tick > previous tick
+DOWN = current tick < previous tick
+
+Generate RISE when:
+→ 1000 regime supports upward movement
+→ 100/50 structure is bullish
+→ 20 confirms momentum
+→ 10 produces entry trigger
+→ reversal/chop is low.
+
+12. FALL SIGNAL
+Inverse of RISE.
+
+13. ONLY UP
+Require:
+→ persistent upward movement
+→ low reversal frequency
+→ positive 50/20 momentum
+→ positive 10-tick trigger
+→ low chop.
+
+14. ONLY DOWN
+Require the inverse.
+
+15. HIGH TICK
+Analyze:
+→ rolling highs
+→ new-high frequency
+→ distance from high
+→ breakout/rejection behavior
+→ 20/10 confirmation.
+
+16. LOW TICK
+Analyze:
+→ rolling lows
+→ new-low frequency
+→ distance from low
+→ breakdown/rejection behavior
+→ 20/10 confirmation.
+
+17. SIGNAL SCORE
+
+SignalScore =
+MarketQuality
++ DistributionStrength
++ PatternStrength
++ Momentum
++ MultiWindowAgreement
++ EntryTiming
++ Stability
+- Noise
+- Contradiction
+
+Normalize to 0–100.
+
+18. SIGNAL CLASSIFICATION
+
+0–49   = NO TRADE
+50–64  = WATCH
+65–74  = SETUP
+75–84  = STRONG
+85–100 = ELITE
+
+19. ENTRY LOGIC
+
+WAIT
+↓
+WATCH
+↓
+SETUP
+↓
+CONFIRMING
+↓
+READY
+↓
+ENTRY NOW
+
+ENTRY NOW requires:
+
+1000 regime
++
+100/50 structure
++
+20 confirmation
++
+10 entry trigger
++
+contract available
++
+risk limits clear
++
+signal not expired.
+
+20. ENTRY DIGIT
+
+For MATCH:
+→ return strongest confirmed digit.
+
+For DIFFERS:
+→ return weakest confirmed digit as excluded barrier.
+
+For OVER:
+→ return selected barrier 1–7.
+
+For UNDER:
+→ return selected barrier 8–1.
+
+For EVEN/ODD:
+→ no digit barrier unless the selected contract requires one.
+
+21. BEST MARKET SELECTION
+
+For every market:
+
+scan all strategies
+→ calculate scores
+→ reject conflicting signals
+→ rank remaining signals
+→ select highest-quality opportunity.
+
+Example:
+
+BEST MARKET:
+1HZ75
+
+SIGNAL:
+DIGITODD
+
+SCORE:
+88
+
+STATUS:
+ENTRY NOW
+
+22. RUN LOGIC
+
+1–10 runs are maximum permitted executions while the signal remains valid.
+
+Example:
+
+65–69 → 1 run
+70–74 → 2 runs
+75–79 → 3 runs
+80–84 → 4 runs
+85–89 → 5 runs
+90–94 → 7 runs
+95–100 → 10 runs
+
+A new run requires the signal to remain valid.
+
+23. SIGNAL INVALIDATION
+
+Immediately cancel the signal when:
+
+→ multi-window agreement disappears
+→ entry condition disappears
+→ market becomes noisy
+→ strategy reverses
+→ selected barrier loses statistical support
+→ signal expires
+→ risk limit is reached.
+
+24. LOSS CONTROL
+
+After each loss:
+→ rescan market
+→ recalculate signal
+→ do NOT blindly repeat.
+
+After maximum consecutive losses:
+→ STOP
+→ clear signal
+→ wait for a new setup.
+
+25. FINAL SIGNAL FORMAT
+
+MARKET: 1HZ75
+CONTRACT: DIGITOVER
+BARRIER: 3
+SIGNAL SCORE: 87/100
+ENTRY: NEXT TICK
+RUNS: 3
+STATUS: ENTRY NOW
+
+or
+
+MARKET: 1HZ100
+CONTRACT: DIGITMATCH
+ENTRY DIGIT: 7
+SIGNAL SCORE: 89/100
+ENTRY: NEXT TICK
+RUNS: 3
+STATUS: ENTRY NOW
+
+or
+
+MARKET: R_50
+CONTRACT: RISE
+ENTRY: NEXT TICK
+SIGNAL SCORE: 84/100
+RUNS: 2
+STATUS: ENTRY NOW
+
+26. MASTER RULE
+
+The system must never trade simply because one digit, pattern, indicator, or window is strong.
+
+TRADE ONLY WHEN:
+
+MARKET
++
+STRATEGY
++
+DISTRIBUTION
++
+PATTERN
++
+MOMENTUM
++
+MULTI-WINDOW CONFIRMATION
++
+ENTRY TRIGGER
++
+RISK FILTER
+
+ALL AGREE.

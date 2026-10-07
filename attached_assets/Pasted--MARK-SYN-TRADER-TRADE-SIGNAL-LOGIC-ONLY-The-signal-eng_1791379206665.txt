@@ -1,0 +1,893 @@
+# MARK SYN TRADER — TRADE SIGNAL LOGIC ONLY
+
+The signal engine should treat **market selection, contract selection, barrier/digit selection, and entry timing as separate decisions**. No trade is generated unless the required conditions align.
+
+## 1. Universal market-analysis engine
+
+For every market, continuously maintain:
+
+```text
+1000 ticks → regime/baseline
+100 ticks  → current structure
+50 ticks   → momentum
+20 ticks   → confirmation
+10 ticks   → entry timing
+```
+
+For each window calculate:
+
+```text
+• digit distribution 0–9
+• even/odd distribution
+• rise/fall ratio
+• consecutive runs
+• reversals
+• repetition
+• gaps
+• momentum
+• volatility
+• entropy/dispersion
+• pattern recurrence
+• recent-vs-baseline change
+```
+
+### Universal signal condition
+
+```text
+1000 = LONG-TERM CONTEXT
+100  = STRUCTURE
+50   = MOMENTUM
+20   = CONFIRMATION
+10   = ENTRY TRIGGER
+```
+
+If the windows materially disagree:
+
+```text
+NO TRADE
+```
+
+If they converge:
+
+```text
+SETUP → CONFIRM → ENTRY NOW
+```
+
+---
+
+# 2. DIGIT ODD
+
+### Analysis
+
+Calculate:
+
+```text
+Odd% = digits {1,3,5,7,9}
+Even% = digits {0,2,4,6,8}
+```
+
+Across:
+
+```text
+1000 / 100 / 50 / 20 / 10
+```
+
+### Strong ODD setup
+
+Require:
+
+```text
+1000 → ODD baseline acceptable
+100  → ODD strengthening
+50   → ODD strengthening
+20   → ODD confirmation
+10   → ODD entry trigger
+```
+
+Also check:
+
+```text
+odd run structure
+odd/even alternation
+recent odd frequency
+parity momentum
+```
+
+### Entry
+
+Do **not** enter merely because ODD has the highest percentage.
+
+Entry:
+
+```text
+ODD SETUP
+↓
+20-tick confirmation
+↓
+10-tick confirmation
+↓
+NEXT VALID TICK = ENTRY
+```
+
+---
+
+# 3. DIGIT EVEN
+
+Inverse of ODD.
+
+```text
+Even = 0,2,4,6,8
+```
+
+Strong setup:
+
+```text
+1000 → baseline supports EVEN
+100  → strengthening
+50   → strengthening
+20   → confirmation
+10   → trigger
+```
+
+Entry:
+
+```text
+NEXT VALID TICK
+```
+
+Reject when:
+
+```text
+strong alternating O/E pattern
+rapid parity reversal
+10/20 contradiction
+```
+
+---
+
+# 4. DIGIT MATCH
+
+This requires an **entry digit**.
+
+### Step 1 — rank digits
+
+For every digit:
+
+```text
+0–9
+```
+
+calculate:
+
+```text
+frequency
+percentage
+recent frequency
+50-tick frequency
+20-tick frequency
+10-tick frequency
+recurrence
+gap
+streak
+```
+
+### Step 2 — candidate digit
+
+Choose:
+
+```text
+highest-quality digit
+```
+
+not simply the highest raw percentage.
+
+Example:
+
+```text
+7 = high baseline
+7 = increasing recent frequency
+7 = recurring
+7 = supported by 20/10
+```
+
+Candidate:
+
+```text
+ENTRY DIGIT = 7
+```
+
+### Step 3 — confirmation
+
+```text
+1000 supports 7
+100 supports 7
+50 supports 7
+20 confirms 7
+10 confirms 7
+```
+
+Then:
+
+```text
+DIGITMATCH 7
+ENTRY NOW
+```
+
+If the 10-tick structure weakens:
+
+```text
+WAIT
+```
+
+---
+
+# 5. DIGIT DIFFERS
+
+The objective is to identify a digit that should **not** occur.
+
+Calculate:
+
+```text
+distribution
+concentration
+entropy
+recent frequency
+gap
+```
+
+Find the weakest candidate:
+
+```text
+DIGIT 7 = weak
+```
+
+Then verify:
+
+```text
+1000 → weak
+100  → weak
+50   → weak
+20   → weak
+10   → weak
+```
+
+Signal:
+
+```text
+DIFFERS
+BARRIER = 7
+```
+
+Do not select a digit merely because it has the lowest percentage in one window.
+
+---
+
+# 6. DIGIT OVER
+
+For every barrier:
+
+```text
+OVER 1
+OVER 2
+OVER 3
+OVER 4
+OVER 5
+OVER 6
+OVER 7
+```
+
+Calculate:
+
+```text
+P(digit > barrier)
+```
+
+For example:
+
+```text
+OVER 3
+
+1000 → 61%
+100  → 64%
+50   → 68%
+20   → 72%
+10   → 80%
+```
+
+This produces:
+
+```text
+OVER 3 = strong candidate
+```
+
+### Entry
+
+Require:
+
+```text
+baseline favorable
++
+short-term improvement
++
+20 confirmation
++
+10 trigger
+```
+
+Then:
+
+```text
+DIGITOVER
+BARRIER = 3
+ENTRY NOW
+```
+
+---
+
+# 7. DIGIT UNDER
+
+Evaluate:
+
+```text
+UNDER 8
+UNDER 7
+UNDER 6
+UNDER 5
+UNDER 4
+UNDER 3
+UNDER 2
+UNDER 1
+```
+
+For barrier `b`:
+
+```text
+P(digit < b)
+```
+
+Example:
+
+```text
+UNDER 8
+
+1000 → 79%
+100  → 81%
+50   → 83%
+20   → 85%
+10   → 90%
+```
+
+Signal:
+
+```text
+DIGITUNDER
+BARRIER = 8
+```
+
+Entry only after the short-window confirmation.
+
+---
+
+# 8. RISE
+
+For every tick:
+
+```text
+current > previous = UP
+```
+
+Calculate:
+
+```text
+UP%
+DOWN%
+```
+
+across:
+
+```text
+1000
+100
+50
+20
+10
+```
+
+Strong RISE:
+
+```text
+1000 → bullish baseline
+100  → bullish structure
+50   → bullish momentum
+20   → bullish confirmation
+10   → bullish trigger
+```
+
+Also require:
+
+```text
+higher-high tendency
+low reversal rate
+low chop
+```
+
+Entry:
+
+```text
+NEXT CONFIRMED UP ENTRY
+```
+
+---
+
+# 9. FALL
+
+Inverse:
+
+```text
+current < previous = DOWN
+```
+
+Require:
+
+```text
+1000 → bearish
+100  → bearish
+50   → bearish
+20   → confirmation
+10   → trigger
+```
+
+Reject if:
+
+```text
+rapid UP/DOWN alternation
+high reversal frequency
+10-tick bullish reversal
+```
+
+---
+
+# 10. ONLY UP
+
+This needs **persistence**, not just UP probability.
+
+Measure:
+
+```text
+consecutive UP ticks
+higher-high frequency
+pullback frequency
+reversal frequency
+UP dominance
+```
+
+Strong setup:
+
+```text
+UP dominance
++
+persistent structure
++
+low reversal
++
+20 confirmation
++
+10 confirmation
+```
+
+Signal:
+
+```text
+ONLY UP
+ENTRY NOW
+```
+
+If a meaningful reversal occurs:
+
+```text
+CANCEL SIGNAL
+```
+
+---
+
+# 11. ONLY DOWN
+
+Inverse:
+
+```text
+DOWN persistence
++
+lower-low structure
++
+low reversal frequency
++
+20 confirmation
++
+10 confirmation
+```
+
+Signal:
+
+```text
+ONLY DOWN
+ENTRY NOW
+```
+
+---
+
+# 12. HIGH TICK
+
+Track:
+
+```text
+highest quote
+distance from high
+new-high frequency
+rejection from high
+momentum
+```
+
+Identify:
+
+```text
+HIGH BREAKOUT
+```
+
+when:
+
+```text
+new highs increasing
++
+momentum increasing
++
+20 confirmation
++
+10 trigger
+```
+
+Or identify:
+
+```text
+HIGH REJECTION
+```
+
+when repeated attempts fail and reversal structure appears.
+
+The signal must specify which high-tick condition is being traded.
+
+---
+
+# 13. LOW TICK
+
+Track:
+
+```text
+lowest quote
+distance from low
+new-low frequency
+low rejection
+downward momentum
+```
+
+Identify:
+
+```text
+LOW BREAKOUT
+```
+
+or:
+
+```text
+LOW REJECTION
+```
+
+Only enter after the 20/10 confirmation sequence.
+
+---
+
+# 14. ENTRY DIGIT ENGINE
+
+For digit contracts, calculate a score for every digit:
+
+```text
+DigitScore(d) =
+    1000-window support
+  + 100-window support
+  + 50-window momentum
+  + 20-window confirmation
+  + 10-window trigger
+  + recurrence
+  + gap structure
+  + pattern support
+  - contradiction
+  - noise
+```
+
+Rank:
+
+```text
+#1 candidate
+#2 candidate
+#3 candidate
+```
+
+The **entry digit** is:
+
+```text
+highest validated candidate
+```
+
+not necessarily the digit with the highest historical frequency.
+
+---
+
+# 15. ENTRY POINT ENGINE
+
+Separate the prediction from timing.
+
+### Prediction
+
+```text
+WHAT should be traded?
+```
+
+Example:
+
+```text
+DIGITMATCH 7
+```
+
+### Entry point
+
+```text
+WHEN should it be traded?
+```
+
+Use:
+
+```text
+10-tick trigger
+```
+
+after:
+
+```text
+1000 → context
+100 → structure
+50 → momentum
+20 → confirmation
+```
+
+Therefore:
+
+```text
+Prediction = MATCH 7
+Entry point = NEXT VALID TICK
+```
+
+---
+
+# 16. ENTRY STATES
+
+```text
+NO SETUP
+    ↓
+WATCH
+    ↓
+SETUP
+    ↓
+CONFIRMING
+    ↓
+READY
+    ↓
+ENTRY NOW
+```
+
+Never skip:
+
+```text
+CONFIRMING
+```
+
+for a fast trade simply because the long-term percentage looks attractive.
+
+---
+
+# 17. ENTRY INVALIDATION
+
+Cancel the signal if:
+
+```text
+10-tick direction reverses
+20-tick confirmation disappears
+selected digit loses ranking
+market becomes highly alternating
+new pattern contradicts setup
+signal expires
+market changes regime
+```
+
+Then:
+
+```text
+CANCEL
+→ RESCAN
+```
+
+---
+
+# 18. BEST-MARKET SELECTION
+
+For every market:
+
+```text
+analyze all supported strategies
+```
+
+Then calculate:
+
+```text
+MarketScore =
+strategy strength
++
+multi-window agreement
++
+entry quality
++
+pattern stability
++
+momentum
+-
+noise
+-
+contradiction
+```
+
+Rank:
+
+```text
+#1 BEST MARKET
+#2
+#3
+```
+
+Trade only the top validated opportunity.
+
+---
+
+# 19. RUN LOGIC
+
+The signal should return:
+
+```text
+RUNS = 1–10
+```
+
+based on signal persistence and quality.
+
+Example:
+
+```text
+65–69 → 1 run
+70–74 → 2 runs
+75–79 → 3 runs
+80–84 → 4 runs
+85–89 → 5 runs
+90+   → maximum configured runs
+```
+
+But every run must be **revalidated**.
+
+```text
+RUN 1
+↓
+RESCAN
+↓
+still valid?
+↓
+RUN 2
+```
+
+Never:
+
+```text
+RUN 1 LOSS
+↓
+automatically double
+↓
+RUN 2
+```
+
+unless the user explicitly enables a bounded recovery strategy.
+
+---
+
+# 20. Final signal format
+
+Every signal should ultimately produce:
+
+```text
+━━━━━━━━━━━━━━━━━━━━━━
+MARK SYN SIGNAL
+━━━━━━━━━━━━━━━━━━━━━━
+
+MARKET: 1HZ75
+
+TYPE: DIGITMATCH
+
+ENTRY DIGIT: 7
+
+ENTRY POINT:
+NEXT VALID TICK
+
+SCORE:
+88/100
+
+RUNS:
+3
+
+1000:
+SUPPORTIVE
+
+100:
+SUPPORTIVE
+
+50:
+STRENGTHENING
+
+20:
+CONFIRMED
+
+10:
+TRIGGERED
+
+PATTERN:
+RECURRING
+
+MOMENTUM:
+POSITIVE
+
+NOISE:
+LOW
+
+STATUS:
+🔥 ENTRY NOW
+━━━━━━━━━━━━━━━━━━━━━━
+```
+
+For Over/Under:
+
+```text
+MARKET: 1HZ100
+TYPE: DIGITOVER
+BARRIER: 3
+ENTRY: NEXT VALID TICK
+SCORE: 86
+RUNS: 3
+STATUS: ENTRY NOW
+```
+
+For Rise/Fall:
+
+```text
+MARKET: R_75
+TYPE: RISE
+ENTRY: NEXT CONFIRMED UP TICK
+SCORE: 84
+RUNS: 2
+STATUS: ENTRY NOW
+```
+
+For Even/Odd:
+
+```text
+MARKET: 1HZ50
+TYPE: DIGITEVEN
+ENTRY DIGIT: N/A
+ENTRY: NEXT VALID TICK
+SCORE: 82
+RUNS: 2
+STATUS: ENTRY NOW
+```
+
+**Core rule:** the engine should never equate a high historical percentage with a guaranteed next outcome. The strongest signal is the one where **baseline + structure + momentum + confirmation + entry timing** agree, while contradictory evidence forces **WAIT/NO TRADE**.
