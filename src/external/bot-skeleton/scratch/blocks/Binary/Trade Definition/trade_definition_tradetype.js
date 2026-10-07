@@ -25,6 +25,7 @@ window.Blockly.Blocks.trade_definition_tradetype = {
                         [localize('Over/Under'), 'overunder'],
                         [localize('Matches/Differs'), 'matchesdiffers'],
                         [localize('Rise/Fall'), 'risefall'],
+                        [localize('Only Ups/Downs'), 'runs'],
                     ],
                 },
             ],

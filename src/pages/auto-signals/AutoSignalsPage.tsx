@@ -200,6 +200,12 @@ function MarketCard({
                 <span className='as-score-line__tier'>{candidate?.tier ?? 'SCANNING'}</span>
             </div>
 
+            <div className={`as-entry-state ${candidate?.entryReady ? 'is-ready' : ''}`} data-testid={`status-entry-${market.symbol}`}>
+                <span>ENTRY CONDITION</span>
+                <strong>{candidate ? (candidate.entryReady ? 'CONFIRMED' : 'WAITING') : 'NO SETUP'}</strong>
+                <small>{candidate?.entryDigit != null ? `Digit ${candidate.entryDigit}` : 'Entry digit —'}</small>
+            </div>
+
             <WindowConfidence market={market} />
 
             <div className='as-market-card__reason' data-testid={`text-reason-${market.symbol}`}>
