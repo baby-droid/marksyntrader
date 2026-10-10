@@ -99,16 +99,16 @@ const stateLabel: Record<AutoSignalCandidate['state'], string> = {
     expired: 'EXPIRED',
 };
 
-function getFamily(market: AutoSignalMarket): AutoSignalFamily {
-    return market.candidate ? STRATEGY_FAMILY[market.candidate.strategy] || 'AUTO' : 'AUTO';
+function getFamily(candidate: AutoSignalCandidate): AutoSignalFamily {
+    return STRATEGY_FAMILY[candidate.strategy] || 'AUTO';
 }
 
-function WindowConfidence({ market }: { market: AutoSignalMarket }) {
-    const windows = market.candidate?.windows ?? [];
+function WindowConfidence({ candidate, symbol }: { candidate: AutoSignalCandidate | null; symbol: string }) {
+    const windows = candidate?.windows ?? [];
 
     if (!windows.length) {
         return (
-            <div className='as-window-empty' data-testid={`text-window-state-${market.symbol}`}>
+            <div className='as-window-empty' data-testid={`text-window-state-${symbol}`}>
                 Window confirmation will appear as ticks arrive.
             </div>
         );
@@ -117,7 +117,13 @@ function WindowConfidence({ market }: { market: AutoSignalMarket }) {
     return (
         <div className='as-windows' aria-label='Historical one-tick outcome windows, not future win probabilities'>
             {windows.map((item) => (
-                <div className={`as-window ${item.agrees ? 'is-agree' : 'is-diverge'}`} key={item.window}>
+                    <div
+                        className={`as-window ${item.agrees ? 'is-agree' : 'is-diverge'} ${item.window === 20 ? 'as-window--recent' : ''}`}
+                        key={item.window}
+                        title={item.window === 20
+                            ? `Observed rate across the latest 20 ticks (${item.sampleSize} one-tick outcomes); not a prediction.`
+                            : `${item.sampleSize} historical one-tick outcomes.`}
+                    >
                     <div className='as-window__top'>
                         <span>{item.window}T</span>
                         {item.agrees ? <Check size={12} aria-hidden='true' /> : <span className='as-window__dash'>–</span>}
@@ -135,17 +141,19 @@ function WindowConfidence({ market }: { market: AutoSignalMarket }) {
 
 function MarketCard({
     market,
+    candidate,
     now,
     currency,
     onTrade,
 }: {
     market: AutoSignalMarket;
+    candidate: AutoSignalCandidate | null;
     now: number;
     currency: string;
     onTrade: AutoSignalsPageProps['onTrade'];
 }) {
-    const candidate = market.candidate;
     const [pendingAction, setPendingAction] = useState<AutoSignalAction | null>(null);
+    const [showTradeChoices, setShowTradeChoices] = useState(false);
     const score = Math.max(0, Math.min(100, candidate?.score ?? 0));
     const isLive = market.feedState === 'live';
     const canTrade = Boolean(
@@ -159,28 +167,36 @@ function MarketCard({
     const startTrade = async (action: AutoSignalAction) => {
         if (pendingAction) return;
         setPendingAction(action);
+        setShowTradeChoices(false);
         try {
             await onTrade(market, action);
         } finally {
             setPendingAction(null);
         }
     };
+    const cardId = candidate
+        ? `${market.symbol}-${candidate.strategy}-${candidate.barrier ?? 'none'}`
+        : market.symbol;
+    const openTradeChoices = () => {
+        if (!canTrade || pendingAction) return;
+        setShowTradeChoices((open) => !open);
+    };
 
     return (
-        <article className={`as-market-card as-market-card--${candidate?.state ?? 'no-signal'}`} data-testid={`card-market-${market.symbol}`}>
+        <article className={`as-market-card as-market-card--${candidate?.state ?? 'no-signal'}`} data-testid={`card-market-${cardId}`}>
             <div className='as-market-card__head'>
                 <div className='as-market-card__identity'>
-                    <span className={`as-market-card__feed ${isLive ? 'is-live' : `is-${market.feedState}`}`} data-testid={`status-feed-${market.symbol}`}>
+                    <span className={`as-market-card__feed ${isLive ? 'is-live' : `is-${market.feedState}`}`} data-testid={`status-feed-${cardId}`}>
                         <i />
                         {feedLabel[market.feedState]}
                     </span>
-                    <h3 data-testid={`text-market-label-${market.symbol}`}>{market.label}</h3>
+                    <h3 data-testid={`text-market-label-${cardId}`}>{market.label}</h3>
                     <span className='as-market-card__marketline'>{market.market} <b>/</b> {market.submarket}</span>
                 </div>
                 <div className='as-market-card__quote'>
                     <span>LAST QUOTE</span>
-                    <strong data-testid={`text-quote-${market.symbol}`}>{numberText(market.latestQuote, 3)}</strong>
-                    <small>digit <b data-testid={`text-digit-${market.symbol}`}>{market.latestDigit ?? '—'}</b></small>
+                    <strong data-testid={`text-quote-${cardId}`}>{numberText(market.latestQuote, 3)}</strong>
+                    <small>digit <b data-testid={`text-digit-${cardId}`}>{market.latestDigit ?? '—'}</b></small>
                 </div>
             </div>
 
@@ -189,7 +205,7 @@ function MarketCard({
                     <span className='as-overline'>CURRENT READ</span>
                     {candidate ? (
                         <>
-                            <strong data-testid={`text-signal-${market.symbol}`}>
+                            <strong data-testid={`text-signal-${cardId}`}>
                                 {candidate.label}
                                 {candidate.barrier != null && <em> {candidate.barrier}</em>}
                             </strong>
@@ -202,7 +218,7 @@ function MarketCard({
                         </>
                     )}
                 </div>
-                <div className={`as-signal-state as-signal-state--${candidate?.state ?? 'no-signal'}`} data-testid={`status-signal-${market.symbol}`}>
+                <div className={`as-signal-state as-signal-state--${candidate?.state ?? 'no-signal'}`} data-testid={`status-signal-${cardId}`}>
                     {candidate ? stateLabel[candidate.state] : 'NO SIGNAL'}
                 </div>
             </div>
@@ -212,7 +228,7 @@ function MarketCard({
                     <span>ALIGNMENT SCORE</span>
                     <strong
                         title='Composite score from historical tick-window alignment; it is not a win probability.'
-                        data-testid={`text-score-${market.symbol}`}
+                        data-testid={`text-score-${cardId}`}
                     >
                         {candidate ? `${Math.round(score)}/100` : '—'}
                     </strong>
@@ -221,7 +237,7 @@ function MarketCard({
                 <span className='as-score-line__tier'>{candidate?.tier ?? 'SCANNING'}</span>
             </div>
 
-            <div className={`as-entry-state ${candidate?.entryReady ? 'is-ready' : ''}`} data-testid={`status-entry-${market.symbol}`}>
+            <div className={`as-entry-state ${candidate?.entryReady ? 'is-ready' : ''}`} data-testid={`status-entry-${cardId}`}>
                 <span>ENTRY CONDITION</span>
                 <strong>{candidate ? (candidate.entryReady ? 'CONFIRMED' : 'WAITING') : 'NO SETUP'}</strong>
                 <small>
@@ -233,16 +249,16 @@ function MarketCard({
                 </small>
             </div>
 
-            <WindowConfidence market={market} />
+            <WindowConfidence candidate={candidate} symbol={cardId} />
 
-            <div className='as-market-card__reason' data-testid={`text-reason-${market.symbol}`}>
+            <div className='as-market-card__reason' data-testid={`text-reason-${cardId}`}>
                 <span className='as-reason-mark'><Activity size={13} aria-hidden='true' /></span>
                 <p>{candidate?.reason || 'No candidate has cleared the confirmation windows yet.'}</p>
             </div>
 
             <div className='as-market-card__meta'>
                 <span><Clock3 size={12} aria-hidden='true' /> {candidate?.createdAt ? clockText(candidate.createdAt) : 'No signal time'}</span>
-                <span className='as-expiry' data-testid={`text-expiry-${market.symbol}`}>
+                <span className='as-expiry' data-testid={`text-expiry-${cardId}`}>
                     Expires in <b>{remainingText(candidate?.expiresAt, now)}</b>
                 </span>
             </div>
@@ -257,11 +273,14 @@ function MarketCard({
                     className='as-button as-button--quiet'
                     type='button'
                     disabled={!canTrade || pendingAction !== null}
-                    aria-busy={pendingAction === 'trade-only'}
-                    onClick={() => void startTrade('trade-only')}
-                    data-testid={`button-trade-only-${market.symbol}`}
+                    aria-busy={pendingAction === 'trade-only' || pendingAction === 'over-dt' || pendingAction === 'under-dt'}
+                    aria-expanded={showTradeChoices}
+                    onClick={openTradeChoices}
+                    data-testid={`button-trade-only-${cardId}`}
                 >
-                    {pendingAction === 'trade-only' ? 'Loading bot…' : 'Trade Only'}
+                    {pendingAction === 'trade-only' || pendingAction === 'over-dt' || pendingAction === 'under-dt'
+                        ? 'Loading bot…'
+                        : 'Trade Only'}
                 </button>
                 <button
                     className='as-button as-button--primary'
@@ -269,14 +288,33 @@ function MarketCard({
                     disabled={!canTrade || pendingAction !== null}
                     aria-busy={pendingAction === 'entry-trade'}
                     onClick={() => void startTrade('entry-trade')}
-                    data-testid={`button-entry-trade-${market.symbol}`}
+                    data-testid={`button-entry-trade-${cardId}`}
                 >
                     {directionUp ? <ArrowUpRight size={15} aria-hidden='true' /> : <ArrowDownRight size={15} aria-hidden='true' />}
                     {pendingAction === 'entry-trade' ? 'Loading bot…' : 'Entry Trade'}
                 </button>
             </div>
+            {showTradeChoices && candidate && (
+                <div className='as-trade-choice' role='dialog' aria-label={`Choose a ${candidate.label} bot for ${market.label}`}>
+                    <strong>Choose a bot for this signal</strong>
+                    <button type='button' onClick={() => void startTrade('trade-only')}>
+                        Current bot <small>Use the existing Trade Only bot with this signal</small>
+                    </button>
+                    {candidate.strategy === 'OVER' && (
+                        <button type='button' onClick={() => void startTrade('over-dt')}>
+                            Over DT <small>Use Ahmed OVER DT Oppo Killer</small>
+                        </button>
+                    )}
+                    {candidate.strategy === 'UNDER' && (
+                        <button type='button' onClick={() => void startTrade('under-dt')}>
+                            Under DT <small>Use Ahmed UNDER DT Oppo Killer</small>
+                        </button>
+                    )}
+                    <button className='as-trade-choice__cancel' type='button' onClick={() => setShowTradeChoices(false)}>Cancel</button>
+                </div>
+            )}
             {candidate && !candidate.entryReady && (
-                <p className='as-entry-note' data-testid={`text-entry-wait-${market.symbol}`}>Entry Trade starts the bot now; it waits for its configured entry condition before buying.</p>
+                <p className='as-entry-note' data-testid={`text-entry-wait-${cardId}`}>Entry Trade starts the bot now; it waits for its configured entry condition before buying.</p>
             )}
             {!candidate && <p className='as-entry-note'>Trade handoff is available when a signal is active.</p>}
         </article>
@@ -359,11 +397,34 @@ const AutoSignalsPage = ({
         return () => window.clearInterval(interval);
     }, []);
 
-    const visibleMarkets = useMemo(
-        () => family === 'AUTO' ? markets : markets.filter((market) => getFamily(market) === family),
+    const visibleCards = useMemo(
+        () => markets.flatMap((market) => {
+            const candidates = market.candidates?.length
+                ? market.candidates
+                : market.candidate
+                    ? [market.candidate]
+                    : [];
+            const filtered = family === 'AUTO'
+                ? candidates
+                : candidates.filter((candidate) => getFamily(candidate) === family);
+            if (!filtered.length) {
+                return family === 'AUTO' && !candidates.length
+                    ? [{ key: market.symbol, market, candidate: null }]
+                    : [];
+            }
+            return filtered.map((candidate) => ({
+                key: `${market.symbol}:${candidate.id}`,
+                market: { ...market, candidate },
+                candidate,
+            }));
+        }),
         [family, markets],
     );
-    const readyCount = markets.filter((market) => market.candidate?.state === 'ready').length;
+    const readyCount = markets.reduce(
+        (total, market) => total + (market.candidates ?? (market.candidate ? [market.candidate] : []))
+            .filter((candidate) => candidate.state === 'ready').length,
+        0,
+    );
     const liveCount = markets.filter((market) => market.feedState === 'live').length;
     const statusText = status === 'error' ? 'Scanner issue' : status === 'loading' ? 'Starting scanner' : status === 'scanning' ? 'Scanning markets' : 'Scanner idle';
     const currencyLabel = displayCurrency || currency || 'USD';
@@ -432,7 +493,7 @@ const AutoSignalsPage = ({
                     <div className='as-scanner__heading'>
                         <div>
                             <div className='as-section-kicker'><span className='as-section-index'>02</span><span className='as-overline'>MARKET RADAR</span></div>
-                            <h2 id='as-scanner-heading'>Signal board <small data-testid='text-market-count'>{visibleMarkets.length} markets</small></h2>
+                            <h2 id='as-scanner-heading'>Signal board <small data-testid='text-market-count'>{visibleCards.length} cards</small></h2>
                         </div>
                         <div className='as-scanner__legend'>
                             <span><i className='is-pass' /> aligned</span>
@@ -467,12 +528,13 @@ const AutoSignalsPage = ({
                         </div>
                     )}
 
-                    {visibleMarkets.length > 0 ? (
+                    {visibleCards.length > 0 ? (
                         <div className='as-market-grid' data-testid='grid-markets'>
-                            {visibleMarkets.map((market) => (
+                            {visibleCards.map(({ key, market, candidate }) => (
                                 <MarketCard
-                                    key={market.symbol}
+                                    key={key}
                                     market={market}
+                                    candidate={candidate}
                                     now={now}
                                     currency={currencyLabel}
                                     onTrade={onTrade}

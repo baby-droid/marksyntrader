@@ -1,7 +1,7 @@
 import { COMPILER_REVISION, REVISION_CHANGES } from '../base';
 import Exception from '../exception';
 import { isArray } from '../utils';
-import CodeGen from './code-gen';
+import CodeGen, { safeJsonLiteral } from './code-gen';
 
 function Literal(value) {
   this.value = value;
@@ -19,7 +19,7 @@ JavaScriptCompiler.prototype = {
     return [
       this.aliasable('container.lookup'),
       '(depths, ',
-      JSON.stringify(name),
+      this.quotedString(name),
       ')'
     ];
   },
@@ -56,7 +56,7 @@ JavaScriptCompiler.prototype = {
   // END PUBLIC API
   internalNameLookup: function(parent, name) {
     this.lookupPropertyFunctionIsUsed = true;
-    return ['lookupProperty(', parent, ',', JSON.stringify(name), ')'];
+    return ['lookupProperty(', parent, ',', this.quotedString(name), ')'];
   },
 
   lookupPropertyFunctionIsUsed: false,
@@ -832,7 +832,7 @@ JavaScriptCompiler.prototype = {
     }
 
     if (indent) {
-      options.indent = JSON.stringify(indent);
+      options.indent = this.quotedString(indent);
     }
     options.helpers = 'helpers';
     options.partials = 'partials';
@@ -894,7 +894,7 @@ JavaScriptCompiler.prototype = {
           '].path[' +
           name[1] +
           ']' +
-          (child ? ' + ' + JSON.stringify('.' + child) : '')
+          (child ? ' + ' + this.quotedString('.' + child) : '')
       );
     } else if (type === 'PathExpression') {
       this.pushString(name);
@@ -1224,7 +1224,7 @@ JavaScriptCompiler.prototype = {
 
   setupHelperArgs: function(helper, paramSize, params, useRegister) {
     let options = this.setupParams(helper, paramSize, params);
-    options.loc = JSON.stringify(this.source.currentLocation);
+    options.loc = locationLiteral(this);
     options = this.objectLiteral(options);
     if (useRegister) {
       this.useRegister('options');
@@ -1276,6 +1276,22 @@ JavaScriptCompiler.isValidJavaScriptVariableName = function(name) {
   );
 };
 
+/**
+ * The compiler's current source location as a JavaScript literal.
+ *
+ * Hand-built ASTs may omit `loc`; emitting the literal `undefined` then
+ * keeps the generated code valid and drops the key from object literals.
+ * The location's `source` is the `srcName` option, so it is escaped like
+ * every other string in the generated code.
+ *
+ * @param {JavaScriptCompiler} compiler the compiler whose location is emitted
+ * @returns {string} a JSON object literal, or the string "undefined"
+ */
+function locationLiteral(compiler) {
+  let loc = compiler.source.currentLocation;
+  return loc ? safeJsonLiteral(loc) : 'undefined';
+}
+
 function strictLookup(requireTerminal, compiler, parts, startPartIndex, type) {
   let stack = compiler.popStack(),
     len = parts.length;
@@ -1295,7 +1311,7 @@ function strictLookup(requireTerminal, compiler, parts, startPartIndex, type) {
       ', ',
       compiler.quotedString(parts[len]),
       ', ',
-      JSON.stringify(compiler.source.currentLocation),
+      locationLiteral(compiler),
       ' )'
     ];
   } else {

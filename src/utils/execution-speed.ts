@@ -112,6 +112,7 @@ export const isFastExecutionEnabledForContext = (): boolean => {
     const context = getTradeContext();
     const page = String(context.page || '').trim().toLowerCase();
     return page === 'bot builder'
+        || page === 'auto-signals'
         || page === 'scalper bots'
         || isNormalKillerBotV3Context()
         || isTwoPredictionCycleContext();

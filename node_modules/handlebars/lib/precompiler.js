@@ -3,6 +3,7 @@
 import Async from 'neo-async';
 import fs from 'fs';
 import * as Handlebars from './handlebars';
+import { safeJsonLiteral } from './handlebars/compiler/code-gen';
 import { basename } from 'path';
 import { SourceMapConsumer, SourceNode } from 'source-map';
 
@@ -320,10 +321,12 @@ function arrayCast(value) {
 /*
  * Safely quotes a value for embedding in generated JavaScript strings
  *
- * Uses JSON.stringify which handles all special characters.
+ * Uses JSON.stringify which handles all special characters, and also escapes
+ * line separators and the sequences that could end or change the parsing of an
+ * enclosing <script> element.
  */
 function quoteForJavaScript(value) {
-  return JSON.stringify(String(value));
+  return safeJsonLiteral(String(value));
 }
 
 /**
@@ -338,10 +341,14 @@ function isValidNamespace(namespace) {
 
 /**
  * Strips line terminators from source map URLs to prevent injection of new
- * JavaScript lines via the sourceMappingURL comment
+ * JavaScript lines via the sourceMappingURL comment, and percent-encodes "<"
+ * so that the comment cannot end or change the parsing of an enclosing
+ * <script> element.
  */
 function sanitizeSourceMapComment(value) {
-  return String(value).replace(/[\r\n\u2028\u2029]/g, '');
+  return String(value)
+    .replace(/[\r\n\u2028\u2029]/g, '')
+    .replace(/</g, '%3C');
 }
 
 /**
@@ -372,7 +379,9 @@ function minify(output, sourceMapFile) {
   return require('uglify-js').minify(output.code, {
     sourceMap: {
       content: output.map,
-      url: sourceMapFile
+      // uglify writes its own sourceMappingURL comment, so the URL has to be
+      // sanitized here as well.
+      url: sourceMapFile && sanitizeSourceMapComment(sourceMapFile)
     }
   });
 }

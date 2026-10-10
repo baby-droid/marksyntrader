@@ -70,7 +70,7 @@ const getValueNumber = (block: Element | undefined, inputName: string) => {
         .find((field) => field.getAttribute('name') === 'NUM')?.textContent;
 };
 
-const readTemplate = (action: 'trade-only' | 'entry-trade') =>
+const readTemplate = (action: keyof typeof AUTO_SIGNAL_BOTS) =>
     fs.readFileSync(path.resolve(process.cwd(), 'public', AUTO_SIGNAL_BOTS[action].file.replace(/^\//, '')), 'utf8');
 
 describe('Auto-Signals bot templates', () => {
@@ -110,4 +110,44 @@ describe('Auto-Signals bot templates', () => {
             if (barrier !== null) expect(getValueNumber(tradeOptions, 'PREDICTION')).toBe(String(barrier));
         },
     );
+
+    it('adds the two-loss Over 4 to Under 5 recovery to Entry Trade only', () => {
+        const xml = patchAutoSignalsBotXml(readTemplate('entry-trade'), {
+            action: 'entry-trade',
+            market,
+            candidate: makeCandidate('DIGITOVER', 'OVER', 4, 'over'),
+            settings: { ...settings, maxRuns: 4 },
+            accountAmounts: { stake1: 1, stake2: 2, takeProfit: 5, stopLoss: 10 },
+        });
+        const doc = new DOMParser().parseFromString(xml, 'application/xml');
+        const variableNames = Array.from(doc.getElementsByTagNameNS(XML_NS, 'variable'))
+            .map((variable) => variable.textContent);
+        const purchases = Array.from(doc.getElementsByTagNameNS(XML_NS, 'block'))
+            .filter((block) => block.getAttribute('type') === 'purchase')
+            .map((block) => getField(block, 'PURCHASE_LIST'));
+
+        expect(doc.getElementsByTagName('parsererror')).toHaveLength(0);
+        expect(variableNames).toEqual(expect.arrayContaining([
+            'AUTO_SIGNAL_OVER4_RECOVERY',
+            'AUTO_SIGNAL_OVER4_LOSSES',
+        ]));
+        expect(purchases).toEqual(expect.arrayContaining(['DIGITOVER', 'DIGITUNDER']));
+        expect(getField(getBlock(doc, 'trade_definition_contracttype'), 'TYPE_LIST')).toBe('DIGITOVER');
+        expect(getField(getBlock(doc, 'trade_definition_tradetype'), 'TRADETYPE_LIST')).toBe('overunder');
+    });
+
+    it('can patch the existing Over DT Free Bot for a selected market and barrier', () => {
+        const xml = patchAutoSignalsBotXml(readTemplate('over-dt'), {
+            action: 'over-dt',
+            market,
+            candidate: makeCandidate('DIGITOVER', 'OVER', 4, 'over'),
+            settings,
+            accountAmounts: { stake1: 1, stake2: 2, takeProfit: 5, stopLoss: 10 },
+        });
+        const doc = new DOMParser().parseFromString(xml, 'application/xml');
+
+        expect(doc.getElementsByTagName('parsererror')).toHaveLength(0);
+        expect(getField(getBlock(doc, 'trade_definition_contracttype'), 'TYPE_LIST')).toBe('DIGITOVER');
+        expect(getValueNumber(getBlock(doc, 'trade_definition_tradeoptions'), 'DURATION')).toBe('1');
+    });
 });

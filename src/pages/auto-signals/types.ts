@@ -7,7 +7,7 @@ export type AutoSignalFamily =
     | 'DIFFERS'
     | 'MATCHES';
 
-export type AutoSignalAction = 'trade-only' | 'entry-trade';
+export type AutoSignalAction = 'trade-only' | 'entry-trade' | 'over-dt' | 'under-dt';
 
 export type AutoSignalTier = 'NO SIGNAL' | 'WATCH' | 'SETUP' | 'STRONG' | 'ELITE';
 
@@ -72,6 +72,7 @@ export interface AutoSignalMarket {
     updatedAt: number | null;
     feedState: 'loading' | 'live' | 'stale' | 'error' | 'unavailable';
     candidate: AutoSignalCandidate | null;
+    candidates?: AutoSignalCandidate[];
     availableContractTypes: string[];
     error?: string;
 }

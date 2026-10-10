@@ -7,8 +7,6 @@ export interface AutoSignalsRunSession {
 }
 
 let session: AutoSignalsRunSession = { run: null, message: '' };
-let stopBot: (() => void) | null = null;
-let stopRequested = false;
 const contractIds = new Set<string>();
 const listeners = new Set<(next: AutoSignalsRunSession) => void>();
 
@@ -39,20 +37,16 @@ const onBotContract = (contract: any) => {
     contractIds.add(contractId);
 
     const completedRuns = currentRun.completedRuns + 1;
+    // Each Auto-Signals handoff patches the bot's trade_again block with the
+    // same run cap. Let its after-purchase stack finish that decision; stopping
+    // from this observer can interrupt Blockly before the cap is evaluated.
     session = {
         run: { ...currentRun, completedRuns },
         message: completedRuns >= currentRun.maxRuns
-            ? `Completed the ${currentRun.maxRuns}-run limit. Bot Builder is stopping this run.`
+            ? `Run limit reached (${currentRun.maxRuns}). Bot Builder is finishing its after-purchase stop.`
             : `Bot Builder completed ${completedRuns} of ${currentRun.maxRuns} runs on ${currentRun.symbol}.`,
     };
     emit();
-
-    if (completedRuns >= currentRun.maxRuns && !stopRequested) {
-        stopRequested = true;
-        window.setTimeout(() => {
-            if (session.run?.startedAt === currentRun.startedAt) stopBot?.();
-        }, 0);
-    }
 };
 
 const onBotStop = () => {
@@ -64,8 +58,6 @@ const onBotStop = () => {
             ? `Completed the ${stopped.maxRuns}-run limit on ${stopped.symbol}.`
             : `Bot Builder stopped ${stopped.completedRuns} of ${stopped.maxRuns} runs on ${stopped.symbol}.`,
     };
-    stopBot = null;
-    stopRequested = false;
     contractIds.clear();
     emit();
 };
@@ -88,20 +80,15 @@ export const subscribeAutoSignalsRunSession = (
 
 export const beginAutoSignalsRun = (
     run: AutoSignalsRun,
-    stop: () => void,
     message: string,
 ) => {
     session = { run, message };
-    stopBot = stop;
-    stopRequested = false;
     contractIds.clear();
     emit();
 };
 
 export const clearAutoSignalsRun = (message: string) => {
     session = { run: null, message };
-    stopBot = null;
-    stopRequested = false;
     contractIds.clear();
     emit();
 };

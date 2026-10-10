@@ -19,7 +19,7 @@ import {
     setAutoSignalsRunMessage,
     subscribeAutoSignalsRunSession,
 } from './auto-signals-run-session';
-import { evaluateAutoSignal, shouldExcludeAutoSignalMarket } from './auto-signals-engine';
+import { evaluateAutoSignalCandidates, shouldExcludeAutoSignalMarket } from './auto-signals-engine';
 import type {
     AutoSignalAction,
     AutoSignalCandidate,
@@ -55,6 +55,7 @@ type MarketRuntime = {
     lastTickAt: number | null;
     feedState: AutoSignalMarket['feedState'];
     candidate: AutoSignalCandidate | null;
+    candidates: AutoSignalCandidate[];
     error?: string;
 };
 
@@ -90,22 +91,17 @@ const digitFromQuote = (quote: number, pipSize: number) => {
     return Number.isInteger(digit) && digit >= 0 && digit <= 9 ? digit : null;
 };
 
-const marketSnapshot = (
-    runtime: MarketRuntime,
-    family: AutoSignalFamily,
-    now: number,
-): AutoSignalMarket => {
+const marketSnapshot = (runtime: MarketRuntime, now: number): AutoSignalMarket => {
     const ticks = runtime.ticks;
     const latest = ticks[ticks.length - 1];
     const live = runtime.lastTickAt != null && now - runtime.lastTickAt <= LIVE_TICK_STALE_MS;
-    const expired = runtime.candidate?.expiresAt != null && now >= runtime.candidate.expiresAt;
-    const candidate = runtime.candidate
-        ? expired
-            ? { ...runtime.candidate, state: 'expired' as const, entryReady: false }
-            : !live
-                ? { ...runtime.candidate, state: 'unavailable' as const, entryReady: false }
-                : runtime.candidate
-        : null;
+    const candidates = runtime.candidates.map((item) => {
+        if (item.expiresAt != null && now >= item.expiresAt) {
+            return { ...item, state: 'expired' as const, entryReady: false };
+        }
+        return !live ? { ...item, state: 'unavailable' as const, entryReady: false } : item;
+    });
+    const candidate = candidates.find((item) => item.id === runtime.candidate?.id) ?? candidates[0] ?? null;
     return {
         ...runtime.info,
         tickCount: ticks.length,
@@ -114,20 +110,74 @@ const marketSnapshot = (
         updatedAt: runtime.lastTickAt,
         feedState: live ? 'live' : runtime.feedState === 'error' ? 'error' : runtime.lastTickAt ? 'stale' : runtime.feedState,
         candidate,
-        availableContractTypes: candidate ? [candidate.contractType] : [],
+        candidates,
+        availableContractTypes: [...new Set(candidates.map((item) => item.contractType))],
         error: runtime.error,
     };
 };
 
-const wait = (milliseconds: number) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+const nextFrame = () => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+
+const rebuildRuntimeTicks = (runtime: MarketRuntime) => {
+    if (!runtime.pipSize) {
+        runtime.ticks = [];
+        return;
+    }
+    const sorted = Array.from(runtime.rawTicks.entries())
+        .sort(([left], [right]) => left - right)
+        .slice(-HISTORY_COUNT);
+    runtime.rawTicks = new Map(sorted);
+    runtime.ticks = sorted.flatMap(([epoch, quote]) => {
+        const digit = digitFromQuote(quote, runtime.pipSize!);
+        return digit == null ? [] : [{
+            symbol: runtime.info.symbol,
+            epoch,
+            quote,
+            digit,
+            pip_size: runtime.pipSize!,
+        }];
+    });
+};
+
+const appendLiveTick = (runtime: MarketRuntime, tick: TickData) => {
+    const previousPipSize = runtime.pipSize;
+    if (Number.isFinite(tick.pip_size) && tick.pip_size > 0) runtime.pipSize = tick.pip_size;
+    if (!runtime.pipSize) return;
+
+    const alreadySeen = runtime.rawTicks.has(tick.epoch);
+    runtime.rawTicks.set(tick.epoch, tick.quote);
+    const digit = digitFromQuote(tick.quote, runtime.pipSize);
+    if (digit == null) return;
+
+    const latestEpoch = runtime.ticks[runtime.ticks.length - 1]?.epoch ?? -Infinity;
+    if (
+        !alreadySeen
+        && tick.epoch > latestEpoch
+        && previousPipSize === runtime.pipSize
+    ) {
+        runtime.ticks.push({
+            symbol: runtime.info.symbol,
+            epoch: tick.epoch,
+            quote: tick.quote,
+            digit,
+            pip_size: runtime.pipSize,
+        });
+        if (runtime.ticks.length > HISTORY_COUNT) {
+            const removed = runtime.ticks.shift();
+            if (removed) runtime.rawTicks.delete(removed.epoch);
+        }
+    } else {
+        rebuildRuntimeTicks(runtime);
+    }
+};
 
 const getBlocklyWorkspace = () => (window as any).Blockly?.derivWorkspace;
 
 const waitForWorkspace = async () => {
-    for (let attempt = 0; attempt < 50; attempt += 1) {
+    for (let attempt = 0; attempt < 300; attempt += 1) {
         const workspace = getBlocklyWorkspace();
         if (workspace) return workspace;
-        await wait(100);
+        await nextFrame();
     }
     throw new Error('Bot Builder workspace did not become ready.');
 };
@@ -159,32 +209,31 @@ export const useAutoSignalsEngine = ({
     const runtimesRef = useRef(new Map<string, MarketRuntime>());
     const unsubscribeRef = useRef<Array<() => void>>([]);
     const generationRef = useRef(0);
-    const familyRef = useRef(family);
     const isPreparingRunRef = useRef(false);
-    const flushTimerRef = useRef<number | null>(null);
-    familyRef.current = family;
-
+    const flushFrameRef = useRef<number | null>(null);
+    const dirtySymbolsRef = useRef(new Set<string>());
     const queueMarketRefresh = useCallback(() => {
-        if (flushTimerRef.current != null) return;
-        flushTimerRef.current = window.setTimeout(() => {
-            flushTimerRef.current = null;
+        if (flushFrameRef.current != null) return;
+        flushFrameRef.current = window.requestAnimationFrame(() => {
+            flushFrameRef.current = null;
             const now = Date.now();
             const snapshot = Array.from(runtimesRef.current.values()).map((runtime) => {
-                if (runtime.ticks.length >= MIN_TICK_SIZE) {
-                    runtime.candidate = evaluateAutoSignal({
-                        market: runtime.info,
-                        ticks: runtime.ticks,
-                        family: familyRef.current,
-                        previous: runtime.candidate,
-                        now,
-                    });
-                } else {
-                    runtime.candidate = null;
+                if (dirtySymbolsRef.current.delete(runtime.info.symbol)) {
+                    runtime.candidates = runtime.ticks.length >= MIN_TICK_SIZE
+                        ? evaluateAutoSignalCandidates({
+                            market: runtime.info,
+                            ticks: runtime.ticks,
+                            family: 'AUTO',
+                            previous: runtime.candidate,
+                            now,
+                        })
+                        : [];
+                    runtime.candidate = runtime.candidates[0] ?? null;
                 }
-                return marketSnapshot(runtime, familyRef.current, now);
+                return marketSnapshot(runtime, now);
             });
             setMarkets(snapshot);
-        }, 120);
+        });
     }, []);
 
     useEffect(() => {
@@ -256,7 +305,7 @@ export const useAutoSignalsEngine = ({
                         market: String(item.market),
                         submarket: String(item.submarket || 'random_index'),
                     };
-                    const runtime: MarketRuntime = {
+                         const runtime: MarketRuntime = {
                         info,
                         rawTicks: new Map(),
                         ticks: [],
@@ -264,6 +313,7 @@ export const useAutoSignalsEngine = ({
                         lastTickAt: null,
                         feedState: 'loading',
                         candidate: null,
+                            candidates: [],
                     };
                     runtimesRef.current.set(symbol, runtime);
                     return runtime;
@@ -278,33 +328,19 @@ export const useAutoSignalsEngine = ({
                     feedState: 'loading',
                     candidate: null,
                     availableContractTypes: [],
+                    candidates: [],
                 })));
 
                 for (const runtime of runtimes) {
                     const unsubscribe = subscribeTicks(runtime.info.symbol, (tick: TickData) => {
                         if (cancelled || generation !== generationRef.current) return;
                         if (!Number.isFinite(tick.epoch) || !Number.isFinite(tick.quote)) return;
-                        if (Number.isFinite(tick.pip_size) && tick.pip_size > 0) runtime.pipSize = tick.pip_size;
-                        if (!runtime.pipSize) return;
-                        runtime.rawTicks.set(tick.epoch, tick.quote);
-                        const digit = digitFromQuote(tick.quote, runtime.pipSize);
-                        if (digit == null) return;
+                        appendLiveTick(runtime, tick);
+                        if (!runtime.pipSize || !runtime.ticks.length) return;
                         runtime.lastTickAt = Date.now();
                         runtime.feedState = 'live';
                         runtime.error = undefined;
-                        runtime.ticks = Array.from(runtime.rawTicks.entries())
-                            .sort(([left], [right]) => left - right)
-                            .slice(-HISTORY_COUNT)
-                            .flatMap(([epoch, quote]) => {
-                                const historicalDigit = digitFromQuote(quote, runtime.pipSize!);
-                                return historicalDigit == null ? [] : [{
-                                    symbol: runtime.info.symbol,
-                                    epoch,
-                                    quote,
-                                    digit: historicalDigit,
-                                    pip_size: runtime.pipSize!,
-                                }];
-                            });
+                        dirtySymbolsRef.current.add(runtime.info.symbol);
                         queueMarketRefresh();
                     });
                     unsubscribeRef.current.push(unsubscribe);
@@ -339,21 +375,8 @@ export const useAutoSignalsEngine = ({
                                     runtime.rawTicks.set(epoch, quote);
                                 }
                             }
-                            if (runtime.pipSize) {
-                                runtime.ticks = Array.from(runtime.rawTicks.entries())
-                                    .sort(([left], [right]) => left - right)
-                                    .slice(-HISTORY_COUNT)
-                                    .flatMap(([epoch, quote]) => {
-                                        const digit = digitFromQuote(quote, runtime.pipSize!);
-                                        return digit == null ? [] : [{
-                                            symbol: runtime.info.symbol,
-                                            epoch,
-                                            quote,
-                                            digit,
-                                            pip_size: runtime.pipSize!,
-                                        }];
-                                    });
-                            }
+                            if (runtime.pipSize) rebuildRuntimeTicks(runtime);
+                            dirtySymbolsRef.current.add(runtime.info.symbol);
                             queueMarketRefresh();
                         } catch (error: any) {
                             if (cancelled || generation !== generationRef.current) return;
@@ -381,18 +404,17 @@ export const useAutoSignalsEngine = ({
             cancelled = true;
             generationRef.current += 1;
             detachFeeds();
-            if (flushTimerRef.current != null) {
-                window.clearTimeout(flushTimerRef.current);
-                flushTimerRef.current = null;
+            dirtySymbolsRef.current.clear();
+            if (flushFrameRef.current != null) {
+                window.cancelAnimationFrame(flushFrameRef.current);
+                flushFrameRef.current = null;
             }
         };
     }, [authorized, connected, queueMarketRefresh, refreshToken, send, subscribeTicks]);
 
     const onFamilyChange = useCallback((nextFamily: AutoSignalFamily) => {
-        familyRef.current = nextFamily;
         setFamily(nextFamily);
-        queueMarketRefresh();
-    }, [queueMarketRefresh]);
+    }, []);
 
     const onSettingsChange = useCallback(<K extends keyof AutoSignalsSettings>(
         key: K,
@@ -413,10 +435,11 @@ export const useAutoSignalsEngine = ({
         }
 
         const runtime = runtimesRef.current.get(market.symbol);
-        const candidate = runtime?.candidate;
+        const candidate = market.candidate;
         const now = Date.now();
         const live = runtime?.lastTickAt != null && now - runtime.lastTickAt <= LIVE_TICK_STALE_MS;
-        if (!runtime || !candidate || candidate.id !== market.candidate?.id || !live
+        const latestCandidate = runtime?.candidates.find((item) => item.id === candidate?.id);
+        if (!runtime || !candidate || !latestCandidate || latestCandidate.id !== candidate.id || !live
             || candidate.expiresAt == null || candidate.expiresAt <= now) {
             setMessage('That signal is no longer current. Wait for the authenticated feed to rescan it.');
             queueMarketRefresh();
@@ -469,7 +492,7 @@ export const useAutoSignalsEngine = ({
             setActiveTab(DBOT_TABS.BOT_BUILDER);
 
             const latestRuntime = runtimesRef.current.get(market.symbol);
-            const latestCandidate = latestRuntime?.candidate;
+            const latestCandidate = latestRuntime?.candidates.find((item) => item.id === candidate.id);
             const latestTickIsLive = latestRuntime?.lastTickAt != null
                 && Date.now() - latestRuntime.lastTickAt <= LIVE_TICK_STALE_MS;
             if (!latestCandidate || latestCandidate.id !== candidate.id || !latestTickIsLive
@@ -485,11 +508,7 @@ export const useAutoSignalsEngine = ({
                 maxRuns: settings.maxRuns,
                 completedRuns: 0,
             };
-            beginAutoSignalsRun(
-                nextRun,
-                () => runPanel.onStopButtonClick?.(),
-                `${bot.name} is starting on ${market.symbol} in Bot Builder.`,
-            );
+            beginAutoSignalsRun(nextRun, `${bot.name} is starting on ${market.symbol} in Bot Builder.`);
 
             if (!runPanel.onRunButtonClick) throw new Error('Bot Builder Run control is unavailable.');
             const startAttempt = runPanel.onRunButtonClick();

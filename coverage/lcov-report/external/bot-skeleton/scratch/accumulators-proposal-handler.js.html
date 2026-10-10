@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">25% </span>
+                <span class="strong">42.42% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>21/84</span>
+                <span class='fraction'>42/99</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">77.77% </span>
+                <span class="strong">83.33% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>7/9</span>
+                <span class='fraction'>35/42</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">50% </span>
+                <span class="strong">80% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>4/8</span>
+                <span class='fraction'>8/10</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">25% </span>
+                <span class="strong">42.42% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>21/84</span>
+                <span class='fraction'>42/99</span>
             </div>
         
             
@@ -147,8 +147,22 @@
 <a name='L82'></a><a href='#L82'>82</a>
 <a name='L83'></a><a href='#L83'>83</a>
 <a name='L84'></a><a href='#L84'>84</a>
-<a name='L85'></a><a href='#L85'>85</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<a name='L85'></a><a href='#L85'>85</a>
+<a name='L86'></a><a href='#L86'>86</a>
+<a name='L87'></a><a href='#L87'>87</a>
+<a name='L88'></a><a href='#L88'>88</a>
+<a name='L89'></a><a href='#L89'>89</a>
+<a name='L90'></a><a href='#L90'>90</a>
+<a name='L91'></a><a href='#L91'>91</a>
+<a name='L92'></a><a href='#L92'>92</a>
+<a name='L93'></a><a href='#L93'>93</a>
+<a name='L94'></a><a href='#L94'>94</a>
+<a name='L95'></a><a href='#L95'>95</a>
+<a name='L96'></a><a href='#L96'>96</a>
+<a name='L97'></a><a href='#L97'>97</a>
+<a name='L98'></a><a href='#L98'>98</a>
+<a name='L99'></a><a href='#L99'>99</a>
+<a name='L100'></a><a href='#L100'>100</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -163,11 +177,27 @@
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -232,7 +262,7 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { getLocalizedErrorMessage } from '@/constants/backend-error-messages';
-<span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" ><span class="branch-0 cbranch-no" title="branch not covered" ><span class="branch-0 cbranch-no" title="branch not covered" >import { api_base } from '../services/api';</span></span></span></span>
+<span class="branch-0 cbranch-no" title="branch not covered" ><span class="branch-0 cbranch-no" title="branch not covered" ><span class="branch-0 cbranch-no" title="branch not covered" >import { api_base } from '../services/api';</span></span></span>
 import DBotStore from './dbot-store';
 &nbsp;
 export const DEFAULT_PROPOSAL_REQUEST = {
@@ -246,12 +276,27 @@ export const DEFAULT_PROPOSAL_REQUEST = {
     subscribe: 1,
 };
 &nbsp;
-export const forgetAccumulatorsProposalRequest = <span class="fstat-no" title="function not covered" >async instance =&gt; {</span>
-<span class="cstat-no" title="statement not covered" >    if (instance &amp;&amp; !instance.is_bot_running) {</span>
-<span class="cstat-no" title="statement not covered" >        await api_base?.api?.send({ forget_all: 'proposal' });</span>
-<span class="cstat-no" title="statement not covered" >        instance.subscription_id_for_accumulators = null;</span>
-<span class="cstat-no" title="statement not covered" >        instance.is_proposal_requested_for_accumulators = false;</span>
-<span class="cstat-no" title="statement not covered" >        window.Blockly.accumulators_request = {};</span>
+export const forgetAccumulatorsProposalRequest = async instance =&gt; {
+    if (!instance || instance.is_bot_running<span class="branch-0 cbranch-no" title="branch not covered" >) return;</span>
+&nbsp;
+    const subscriptionId = instance.subscription_id_for_accumulators;
+    const proposalIsPending = instance.is_proposal_requested_for_accumulators;
+    if (!subscriptionId &amp;&amp; !proposalIsPending) return;
+&nbsp;
+    try {
+        if (subscriptionId &amp;&amp; api_base?.api?.forget) {
+            await api_base.api.forget(subscriptionId);
+        } else if (proposalIsPending<span class="branch-0 cbranch-no" title="branch not covered" >) {</span>
+            await api_base<span class="branch-0 cbranch-no" title="branch not covered" >?.a</span>pi<span class="branch-0 cbranch-no" title="branch not covered" >?.s</span>end({ forget_all: 'proposal' });
+        }
+    } catch (error) {
+        // Proposal cleanup is best-effort; a rejected forget must not escape a
+        // Blockly change event as an unhandled promise rejection.
+        console.warn('Unable to clear accumulator proposal subscription:', error);
+    } finally {
+        instance.subscription_id_for_accumulators = null;
+        instance.is_proposal_requested_for_accumulators = false;
+        if (window.Blockly) window.Blockly.accumulators_request = {};
     }
 };
 &nbsp;
@@ -322,7 +367,7 @@ export const requestProposalForQS = <span class="fstat-no" title="function not c
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-09-17T15:06:20.827Z
+                at 2026-10-10T21:32:10.529Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

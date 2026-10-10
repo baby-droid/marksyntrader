@@ -204,7 +204,7 @@ const makeWindowResults = (route: Route, ticks: AutoLabTick[]): AutoSignalWindow
         }];
     });
 
-export const evaluateAutoSignal = ({
+export const evaluateAutoSignalCandidates = ({
     market,
     ticks,
     family,
@@ -216,8 +216,8 @@ export const evaluateAutoSignal = ({
     family: AutoSignalFamily;
     previous?: AutoSignalCandidate | null;
     now?: number;
-}): AutoSignalCandidate | null => {
-    if (ticks.length < 20) return null;
+}): AutoSignalCandidate[] => {
+    if (ticks.length < 20) return [];
 
     const patternCandidates = getPatternCandidates(ticks);
     const digitOptions = digitRoutes();
@@ -287,13 +287,20 @@ export const evaluateAutoSignal = ({
         } satisfies AutoSignalCandidate];
     });
 
-    return ranked.sort((left, right) =>
+    const sorted = ranked.sort((left, right) =>
         right.score - left.score
         || right.windows.filter((item) => item.agrees).length - left.windows.filter((item) => item.agrees).length
         || String(left.strategy).localeCompare(String(right.strategy))
         || (left.barrier ?? -1) - (right.barrier ?? -1)
-    )[0] ?? null;
+    );
+
+    // Keep enough qualified alternatives to show multiple barriers on a
+    // market, without letting weak near-baseline noise flood the signal board.
+    return sorted.filter((candidate) => candidate.score >= 58).slice(0, 12);
 };
+
+export const evaluateAutoSignal = (input: Parameters<typeof evaluateAutoSignalCandidates>[0]) =>
+    evaluateAutoSignalCandidates(input)[0] ?? null;
 
 export const shouldExcludeAutoSignalMarket = (market: {
     symbol?: unknown;

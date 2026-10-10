@@ -17,6 +17,14 @@ export const AUTO_SIGNAL_BOTS: Record<AutoSignalAction, { name: string; file: st
         name: 'Ahmed SYN Even/Odd Market Killer v1.2',
         file: '/bots/ahmed-syn-even-odd.xml',
     },
+    'over-dt': {
+        name: 'Ahmed OVER DT Oppo Killer',
+        file: '/bots/ahmed-over-dt-oppo-killer.xml',
+    },
+    'under-dt': {
+        name: 'Ahmed UNDER DT Oppo Killer',
+        file: '/bots/ahmed-under-dt-oppo-killer.xml',
+    },
     'entry-trade': {
         name: 'Speed Bot With Entry v2.2',
         file: '/bots/speed-bot-v2.2.xml',
@@ -75,9 +83,14 @@ const makeNumberBlock = (doc: Document, value: number, type = 'math_number') => 
     return block;
 };
 
-const makeVariableBlock = (doc: Document, type: 'variables_get' | 'variables_set', id: string) => {
+const makeVariableBlock = (
+    doc: Document,
+    type: 'variables_get' | 'variables_set',
+    id: string,
+    variableName = RUN_COUNT_VARIABLE,
+) => {
     const block = makeBlock(doc, type);
-    addField(doc, block, 'VAR', RUN_COUNT_VARIABLE, id);
+    addField(doc, block, 'VAR', variableName, id);
     return block;
 };
 
@@ -145,6 +158,168 @@ const makeRunCounterVariable = (doc: Document) => {
     variable.textContent = RUN_COUNT_VARIABLE;
     variables.appendChild(variable);
     return id;
+};
+
+const ensureVariable = (doc: Document, name: string) => {
+    const existingId = findVariableId(doc, name);
+    if (existingId) return existingId;
+    const variables = directElement(doc.documentElement, 'variables');
+    if (!variables) throw new Error('Bot XML has no variables section.');
+    const id = nextId();
+    const variable = makeElement(doc, 'variable');
+    variable.setAttribute('id', id);
+    variable.textContent = name;
+    variables.appendChild(variable);
+    return id;
+};
+
+const makeLogicCompare = (doc: Document, op: string, left: Element, right: Element) => {
+    const compare = makeBlock(doc, 'logic_compare');
+    addField(doc, compare, 'OP', op);
+    appendValue(doc, compare, 'A', left);
+    appendValue(doc, compare, 'B', right);
+    return compare;
+};
+
+const makeIfBlock = (
+    doc: Document,
+    condition: Element,
+    thenBlock: Element,
+    elseBlock?: Element,
+) => {
+    const conditional = makeBlock(doc, 'controls_if');
+    if (elseBlock) {
+        const mutation = makeElement(doc, 'mutation');
+        mutation.setAttribute('else', '1');
+        conditional.appendChild(mutation);
+    }
+    appendValue(doc, conditional, 'IF0', condition);
+    const thenStatement = makeElement(doc, 'statement');
+    thenStatement.setAttribute('name', 'DO0');
+    thenStatement.appendChild(thenBlock);
+    conditional.appendChild(thenStatement);
+    if (elseBlock) {
+        const elseStatement = makeElement(doc, 'statement');
+        elseStatement.setAttribute('name', 'ELSE');
+        elseStatement.appendChild(elseBlock);
+        conditional.appendChild(elseStatement);
+    }
+    return conditional;
+};
+
+const makeSetVariable = (doc: Document, name: string, id: string, value: number) => {
+    const setter = makeVariableBlock(doc, 'variables_set', id, name);
+    appendValue(doc, setter, 'VALUE', makeNumberBlock(doc, value));
+    return setter;
+};
+
+const makeIncrementVariable = (doc: Document, name: string, id: string) => {
+    const setter = makeVariableBlock(doc, 'variables_set', id, name);
+    const add = makeBlock(doc, 'math_arithmetic');
+    addField(doc, add, 'OP', 'ADD');
+    appendValue(doc, add, 'A', makeVariableBlock(doc, 'variables_get', id, name));
+    appendValue(doc, add, 'B', makeNumberBlock(doc, 1));
+    appendValue(doc, setter, 'VALUE', add);
+    return setter;
+};
+
+const makeContractResult = (doc: Document, result: 'win' | 'loss') => {
+    const block = makeBlock(doc, 'contract_check_result');
+    addField(doc, block, 'CHECK_RESULT', result);
+    return block;
+};
+
+const addOver4Recovery = (doc: Document) => {
+    const phaseName = 'AUTO_SIGNAL_OVER4_RECOVERY';
+    const lossesName = 'AUTO_SIGNAL_OVER4_LOSSES';
+    const phaseId = ensureVariable(doc, phaseName);
+    const lossesId = ensureVariable(doc, lossesName);
+
+    const tradeDefinition = blocksOfType(doc, 'trade_definition')[0];
+    if (!tradeDefinition) throw new Error('Bot XML has no trade parameters block.');
+    let initialization = directElement(tradeDefinition, 'statement', 'name', 'INITIALIZATION');
+    if (!initialization) {
+        initialization = makeElement(doc, 'statement');
+        initialization.setAttribute('name', 'INITIALIZATION');
+        const submarket = directElement(tradeDefinition, 'statement', 'name', 'SUBMARKET');
+        if (submarket) tradeDefinition.insertBefore(initialization, submarket);
+        else tradeDefinition.appendChild(initialization);
+    }
+    const initialize = makeSetVariable(doc, phaseName, phaseId, 0);
+    appendNext(doc, initialize, makeSetVariable(doc, lossesName, lossesId, 0));
+    prependStatementBlock(doc, initialization, initialize);
+
+    const entryStack = directElement(blocksOfType(doc, 'before_purchase')[0], 'statement', 'name', 'BEFOREPURCHASE_STACK');
+    const originalPurchase = entryStack
+        ? Array.from(entryStack.getElementsByTagNameNS(BLOCKLY_XML_NS, 'block'))
+            .find((block) => block.getAttribute('type') === 'purchase')
+        : null;
+    if (!entryStack || !originalPurchase?.parentElement) {
+        throw new Error('Entry bot XML has no before-purchase DIGITUNDER purchase block.');
+    }
+
+    const makePurchase = (contractType: 'DIGITOVER' | 'DIGITUNDER') => {
+        const purchase = makeBlock(doc, 'purchase');
+        addField(doc, purchase, 'PURCHASE_LIST', contractType);
+        return purchase;
+    };
+    const purchaseSwitch = makeIfBlock(
+        doc,
+        makeLogicCompare(
+            doc,
+            'EQ',
+            makeVariableBlock(doc, 'variables_get', phaseId, phaseName),
+            makeNumberBlock(doc, 0),
+        ),
+        makePurchase('DIGITOVER'),
+        makePurchase('DIGITUNDER'),
+    );
+    originalPurchase.parentElement.replaceChild(purchaseSwitch, originalPurchase);
+
+    const lossIncrement = makeIncrementVariable(doc, lossesName, lossesId);
+    const enterRecovery = makeIfBlock(
+        doc,
+        makeLogicCompare(
+            doc,
+            'GTE',
+            makeVariableBlock(doc, 'variables_get', lossesId, lossesName),
+            makeNumberBlock(doc, 2),
+        ),
+        (() => {
+            const setPhase = makeSetVariable(doc, phaseName, phaseId, 1);
+            appendNext(doc, setPhase, makeSetVariable(doc, 'prediction digit', ensureVariable(doc, 'prediction digit'), 5));
+            return setPhase;
+        })(),
+    );
+    appendNext(doc, lossIncrement, enterRecovery);
+    const countInitialPhaseLosses = makeIfBlock(
+        doc,
+        makeLogicCompare(
+            doc,
+            'EQ',
+            makeVariableBlock(doc, 'variables_get', phaseId, phaseName),
+            makeNumberBlock(doc, 0),
+        ),
+        lossIncrement,
+    );
+    const resetAfterWin = makeSetVariable(doc, phaseName, phaseId, 0);
+    appendNext(doc, resetAfterWin, makeSetVariable(doc, lossesName, lossesId, 0));
+    appendNext(
+        doc,
+        lastInNextChain(resetAfterWin),
+        makeSetVariable(doc, 'prediction digit', ensureVariable(doc, 'prediction digit'), 4),
+    );
+    const updateAfterResult = makeIfBlock(
+        doc,
+        makeContractResult(doc, 'win'),
+        resetAfterWin,
+        makeIfBlock(doc, makeContractResult(doc, 'loss'), countInitialPhaseLosses),
+    );
+    const afterPurchase = allElements(doc, 'statement')
+        .filter((statement) => statement.getAttribute('name') === 'AFTERPURCHASE_STACK')
+        .find((statement) => directElement(statement, 'block'));
+    if (!afterPurchase) throw new Error('Entry bot XML has no after-purchase logic.');
+    prependStatementBlock(doc, afterPurchase, updateAfterResult);
 };
 
 const prependStatementBlock = (doc: Document, statement: Element, first: Element) => {
@@ -296,7 +471,9 @@ const setContractType = (doc: Document, candidate: AutoSignalCandidate) => {
     setFieldValue(tradeTypeBlock, 'TRADETYPECAT_LIST', category);
     setFieldValue(tradeTypeBlock, 'TRADETYPE_LIST', tradeType);
     setFieldValue(contractTypeBlock, 'TYPE_LIST', candidate.contractType);
-    setFieldValue(purchaseBlock, 'PURCHASE_LIST', candidate.contractType);
+    blocksOfType(doc, 'purchase').forEach((purchase) =>
+        setFieldValue(purchase, 'PURCHASE_LIST', candidate.contractType)
+    );
 };
 
 const configureTradeParameters = (
@@ -341,13 +518,7 @@ const configureTradeParameters = (
         optionsBlock.removeChild(prediction);
     }
 
-    if (config.action === 'trade-only') {
-        setVariableValue(doc, 'stake', config.accountAmounts.stake1);
-        setVariableValue(doc, 'initial stake', config.accountAmounts.stake1);
-        setVariableValue(doc, 'totalprofit', config.accountAmounts.takeProfit);
-        setVariableValue(doc, 'totalloss', config.accountAmounts.stopLoss);
-        setVariableValue(doc, 'martingale', config.settings.martingale);
-    } else {
+    if (config.action === 'entry-trade') {
         setVariableValue(doc, 'STAKE', config.accountAmounts.stake1);
         setVariableValue(doc, 'stake2', config.accountAmounts.stake2);
         setVariableValue(doc, 'takeprofit', config.accountAmounts.takeProfit);
@@ -355,6 +526,26 @@ const configureTradeParameters = (
         setVariableValue(doc, 'martingalelevel', config.settings.martingale);
         setVariableValue(doc, 'entrypoint1', config.candidate.entryDigit ?? config.market.latestDigit ?? 0);
         setVariableValue(doc, 'prediction digit', config.candidate.barrier ?? config.candidate.entryDigit ?? 0);
+    } else {
+        // The current bot and the Free Bots DT templates use different
+        // variable names. Set every matching alias; missing aliases are fine.
+        for (const name of ['stake', 'initial stake', 'STAKE']) {
+            setVariableValue(doc, name, config.accountAmounts.stake1);
+        }
+        for (const name of ['totalprofit', 'takeprofit']) {
+            setVariableValue(doc, name, config.accountAmounts.takeProfit);
+        }
+        for (const name of ['totalloss', 'stoploss']) {
+            setVariableValue(doc, name, config.accountAmounts.stopLoss);
+        }
+        for (const name of ['martingale', 'Martingale']) {
+            setVariableValue(doc, name, config.settings.martingale);
+        }
+        for (const name of ['prediction', 'prediction digit', 'Prediction']) {
+            if (config.candidate.barrier != null) {
+                setVariableValue(doc, name, config.candidate.barrier);
+            }
+        }
     }
 };
 
@@ -372,6 +563,14 @@ export const patchAutoSignalsBotXml = (xml: string, config: AutoSignalBotConfigu
         ? directElement(beforePurchase, 'statement', 'name', 'BEFOREPURCHASE_STACK')
         : null;
     if (beforePurchaseStack) unwrapTimeouts(beforePurchaseStack);
+    if (
+        config.action === 'entry-trade'
+        && config.candidate.strategy === 'OVER'
+        && config.candidate.barrier === 4
+    ) {
+        setVariableValue(doc, 'prediction digit', 4);
+        addOver4Recovery(doc);
+    }
     addRunLimit(doc, boundedInteger(config.settings.maxRuns, 1, 10));
 
     return new XMLSerializer().serializeToString(doc);

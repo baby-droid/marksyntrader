@@ -62,8 +62,8 @@ describe('Auto-Signals trade actions', () => {
     it('lets both bot buttons start from a live signal before the entry trigger is confirmed', async () => {
         render(<AutoSignalsPage {...props} />);
 
-        const tradeOnly = screen.getByTestId('button-trade-only-R_10') as HTMLButtonElement;
-        const entryTrade = screen.getByTestId('button-entry-trade-R_10') as HTMLButtonElement;
+        const tradeOnly = screen.getByTestId('button-trade-only-R_10-OVER-4') as HTMLButtonElement;
+        const entryTrade = screen.getByTestId('button-entry-trade-R_10-OVER-4') as HTMLButtonElement;
 
         expect(tradeOnly.disabled).toBe(false);
         expect(entryTrade.disabled).toBe(false);
@@ -73,5 +73,56 @@ describe('Auto-Signals trade actions', () => {
             await Promise.resolve();
         });
         expect(props.onTrade).toHaveBeenCalledWith(market, 'entry-trade');
+    });
+
+    it('offers the current bot and the matching Over DT bot from Trade Only', async () => {
+        render(<AutoSignalsPage {...props} />);
+
+        fireEvent.click(screen.getByTestId('button-trade-only-R_10-OVER-4'));
+        expect(screen.getByRole('dialog', { name: 'Choose a Over bot for Volatility 10' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /Over DT/ }));
+        await act(async () => Promise.resolve());
+
+        expect(props.onTrade).toHaveBeenCalledWith(market, 'over-dt');
+    });
+
+    it('renders alternative barriers as separate cards and shows the exact 20-tick rate', () => {
+        const under7 = {
+            ...market.candidate!,
+            id: 'R_10:UNDER:DIGITUNDER:7',
+            strategy: 'UNDER' as const,
+            label: 'Under',
+            contractType: 'DIGITUNDER',
+            barrier: 7,
+            direction: 'under' as const,
+            windows: [{ window: 20 as const, sampleSize: 20, probability: 50, agrees: true }],
+        };
+        render(<AutoSignalsPage {...props} markets={[{
+            ...market,
+            candidates: [market.candidate!, under7],
+        }]} />);
+
+        expect(screen.getByTestId('card-market-R_10-OVER-4')).toBeInTheDocument();
+        expect(screen.getByTestId('card-market-R_10-UNDER-7')).toBeInTheDocument();
+        expect(screen.getAllByText('50%')).toHaveLength(1);
+    });
+
+    it('offers the matching Under DT bot for an Under signal', async () => {
+        const under = {
+            ...market.candidate!,
+            strategy: 'UNDER' as const,
+            label: 'Under',
+            contractType: 'DIGITUNDER',
+            barrier: 4,
+            direction: 'under' as const,
+        };
+        const underMarket = { ...market, candidate: under, candidates: [under] };
+        render(<AutoSignalsPage {...props} markets={[underMarket]} />);
+
+        fireEvent.click(screen.getByTestId('button-trade-only-R_10-UNDER-4'));
+        fireEvent.click(screen.getByRole('button', { name: /Under DT/ }));
+        await act(async () => Promise.resolve());
+
+        expect(props.onTrade).toHaveBeenCalledWith(expect.objectContaining({ candidate: under }), 'under-dt');
     });
 });

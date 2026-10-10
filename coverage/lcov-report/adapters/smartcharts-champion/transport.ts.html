@@ -23,16 +23,16 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">89.03% </span>
+                <span class="strong">80.95% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>138/155</span>
+                <span class='fraction'>136/168</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">82.35% </span>
+                <span class="strong">70% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>14/17</span>
+                <span class='fraction'>14/20</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">89.03% </span>
+                <span class="strong">80.95% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>138/155</span>
+                <span class='fraction'>136/168</span>
             </div>
         
             
@@ -218,7 +218,20 @@
 <a name='L153'></a><a href='#L153'>153</a>
 <a name='L154'></a><a href='#L154'>154</a>
 <a name='L155'></a><a href='#L155'>155</a>
-<a name='L156'></a><a href='#L156'>156</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
+<a name='L156'></a><a href='#L156'>156</a>
+<a name='L157'></a><a href='#L157'>157</a>
+<a name='L158'></a><a href='#L158'>158</a>
+<a name='L159'></a><a href='#L159'>159</a>
+<a name='L160'></a><a href='#L160'>160</a>
+<a name='L161'></a><a href='#L161'>161</a>
+<a name='L162'></a><a href='#L162'>162</a>
+<a name='L163'></a><a href='#L163'>163</a>
+<a name='L164'></a><a href='#L164'>164</a>
+<a name='L165'></a><a href='#L165'>165</a>
+<a name='L166'></a><a href='#L166'>166</a>
+<a name='L167'></a><a href='#L167'>167</a>
+<a name='L168'></a><a href='#L168'>168</a>
+<a name='L169'></a><a href='#L169'>169</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -349,6 +362,15 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -361,11 +383,15 @@
 <span class="cline-any cline-yes">13x</span>
 <span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-yes">2x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-yes">3x</span>
@@ -499,7 +525,16 @@ export function createTransport(): TTransport {
 <span class="cstat-no" title="statement not covered" ></span>
 <span class="cstat-no" title="statement not covered" >                // Send forget request to server using the real subscription ID</span>
 <span class="cstat-no" title="statement not covered" >                if (api_base.api &amp;&amp; subscription.realSubscriptionId) {</span>
-<span class="cstat-no" title="statement not covered" >                    (api_base.api as any).forget(subscription.realSubscriptionId);</span>
+<span class="cstat-no" title="statement not covered" >                    try {</span>
+<span class="cstat-no" title="statement not covered" >                        const request = (api_base.api as any).forget(subscription.realSubscriptionId);</span>
+<span class="cstat-no" title="statement not covered" >                        if (request &amp;&amp; typeof request.catch === 'function') {</span>
+<span class="cstat-no" title="statement not covered" >                            void request.catch((error: any) =&gt; {</span>
+<span class="cstat-no" title="statement not covered" >                                logger.warn('Forget request failed during cleanup:', error);</span>
+<span class="cstat-no" title="statement not covered" >                            });</span>
+<span class="cstat-no" title="statement not covered" >                        }</span>
+<span class="cstat-no" title="statement not covered" >                    } catch (error) {</span>
+<span class="cstat-no" title="statement not covered" >                        logger.warn('Forget request failed during cleanup:', error);</span>
+<span class="cstat-no" title="statement not covered" >                    }</span>
 <span class="cstat-no" title="statement not covered" >                }</span>
 <span class="cstat-no" title="statement not covered" ></span>
 <span class="cstat-no" title="statement not covered" >                // Clean up local storage</span>
@@ -515,12 +550,16 @@ export function createTransport(): TTransport {
          */
         unsubscribeAll(msgType?: string): void {
             if (api_base.api) {
-                if (msgType) {
-                    (api_base.api as any).forgetAll(msgType);
-                } else {
-                    // Forget all ticks by default
-                    (api_base.api as any).forgetAll('ticks');
-                }
+                try {
+                    const request = (api_base.api as any).forgetAll(msgType || 'ticks');
+                    if (request<span class="branch-0 cbranch-no" title="branch not covered" > &amp;&amp; typeof request.catch === 'function')</span> <span class="branch-0 cbranch-no" title="branch not covered" >{</span>
+<span class="cstat-no" title="statement not covered" >                        void request.catch((error: any) =&gt; {</span>
+<span class="cstat-no" title="statement not covered" >                            logger.warn('Forget-all request failed during cleanup:', error);</span>
+<span class="cstat-no" title="statement not covered" >                        });</span>
+<span class="cstat-no" title="statement not covered" >                    }</span>
+                } <span class="branch-0 cbranch-no" title="branch not covered" >catch (error) {</span>
+<span class="cstat-no" title="statement not covered" >                    logger.warn('Forget-all request failed during cleanup:', error);</span>
+<span class="cstat-no" title="statement not covered" >                }</span>
             }
 &nbsp;
             // Clean up local subscriptions
@@ -535,7 +574,7 @@ export function createTransport(): TTransport {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-09-29T22:38:49.572Z
+                at 2026-10-10T21:32:10.529Z
             </div>
         <script src="../../prettify.js"></script>
         <script>
