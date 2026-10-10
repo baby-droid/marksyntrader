@@ -328,7 +328,7 @@ export default Engine =>
             voidNormalKillerEntry(this.normalKillerPipeline, entry);
         }
 
-        purchaseNormalKillerTick(contract_type, epoch) {
+        purchaseNormalKillerTick(contract_type, epoch, tickSlot = 0) {
             const pipeline = this.normalKillerPipeline;
             if (
                 !isNormalKillerBotV3Context()
@@ -348,9 +348,16 @@ export default Engine =>
                 stake: pipeline.currentStake,
                 maxOpen: NORMAL_KILLER_MAX_OPEN_CONTRACTS,
                 tickKey: `${this.tradeOptions?.symbol || this.options?.symbol || ''}:${Number(epoch)}`,
+                tickSlot,
+                maxPerTick: getPurchasesPerTick(),
             });
             if (!entry) return Promise.resolve(false);
 
+            return this.executeNormalKillerSideEntry(contract_type, entry);
+        }
+
+        executeNormalKillerSideEntry(contract_type, entry) {
+            const pipeline = this.normalKillerPipeline;
             const tradeOptions = {
                 ...this.tradeOptions,
                 amount: entry.stake,
@@ -395,14 +402,31 @@ export default Engine =>
                 this.normalKillerNextPurchaseKey = null;
                 if (this.normalKillerRiskReached()) return Promise.resolve();
 
+                const purchasesPerTick = getPurchasesPerTick();
                 const entry = reserveNormalKillerEntry(this.normalKillerPipeline, {
                     epoch,
                     kind: 'main',
                     stake: this.normalKillerPipeline.currentStake,
                     maxOpen: NORMAL_KILLER_MAX_OPEN_CONTRACTS,
                     tickKey,
+                    tickSlot: 0,
+                    maxPerTick: purchasesPerTick,
                 });
                 if (!entry) return Promise.resolve();
+
+                for (let tickSlot = 1; tickSlot < purchasesPerTick; tickSlot += 1) {
+                    const sideEntry = reserveNormalKillerEntry(this.normalKillerPipeline, {
+                        epoch,
+                        kind: 'side',
+                        stake: this.normalKillerPipeline.currentStake,
+                        maxOpen: NORMAL_KILLER_MAX_OPEN_CONTRACTS,
+                        tickKey,
+                        tickSlot,
+                        maxPerTick: purchasesPerTick,
+                    });
+                    if (!sideEntry) break;
+                    this.executeNormalKillerSideEntry(contract_type, sideEntry);
+                }
 
                 const tradeOptions = {
                     ...this.tradeOptions,
@@ -415,11 +439,8 @@ export default Engine =>
                     });
             }
 
-            // Speed-tier fan-out: Normal fires 1 purchase per tick. Explicit
-            // Crazy/Turbo can still use their legacy side-contract throughput,
-            // but A-SPEED BOOST is a latency preset and must remain one order
-            // per tick.
-            const speed = getExecutionSpeed();
+            // Fast fires a bounded three-order burst in supported flows.
+            // Auto-Signals and A-SPEED stay sequential so they can revalidate.
             const purchases_per_tick = getPurchasesPerTick();
             if (purchases_per_tick > 1 && this.tradeOptions) {
                 for (let i = 0; i < purchases_per_tick - 1; i++) {

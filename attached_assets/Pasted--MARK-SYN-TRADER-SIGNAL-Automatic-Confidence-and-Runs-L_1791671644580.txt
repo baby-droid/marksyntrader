@@ -1,0 +1,95 @@
+# MARK SYN TRADER SIGNAL — Automatic Confidence % and Runs Logic
+
+Use this logic to calculate a confidence percentage for every trade signal and automatically choose the number of runs from 1–10. Confidence must be calculated separately from the estimated probability of winning: a signal can have high data confidence without having a profitable edge.
+
+## 1. Calculate the confidence score
+
+Use five components, each normalized to 0–100.
+
+| Component              | Weight | What it measures                                                      |
+| ---------------------- | ------ | --------------------------------------------------------------------- |
+| Predictive edge        | 30%    | Strength of the strategy's validated advantage over break-even        |
+| Multi-window agreement | 20%    | Agreement between 1,000, 100, 50 and 20-tick analysis                 |
+| Entry confirmation     | 15%    | Whether the live entry trigger is valid                               |
+| Historical reliability | 20%    | Out-of-sample performance, sample size and probability calibration    |
+| Data quality           | 15%    | Freshness, missing ticks, stable connection and valid contract quotes |
+
+Calculate:
+
+\\[ C = 0.30E+0.20A+0.15T+0.20H+0.15D \\]
+
+Where \\(C\\) is the confidence score, and \\(E,A,T,H,D\\) are the component scores.
+
+The result is a 0–100 signal-quality score, not automatically a win probability. Calibrate the actual win probability separately using historical out-of-sample results.
+
+## 2. Automatic number-of-runs engine
+
+Use the confidence score to set the maximum permitted runs, subject to all safety gates passing.
+
+| Confidence score | Maximum runs | Action                                      |
+| ---------------- | ------------ | ------------------------------------------- |
+| Below 60%        | 0            | Reject signal                               |
+| 60–64%           | 1            | Experimental/watch mode                     |
+| 65–69%           | 1            | Lowest permitted exposure                   |
+| 70–74%           | 2            | Limited runs                                |
+| 75–79%           | 3            | Moderate runs                               |
+| 80–84%           | 4            | Stronger candidate                          |
+| 85–89%           | 5            | High-quality candidate                      |
+| 90–94%           | 7            | High confidence; additional checks required |
+| 95–100%          | 10           | Maximum allowed only after validation       |
+
+These are configurable starting thresholds, not proven guarantees that higher confidence produces better results. If confidence is uncalibrated, keep the system in paper-trading mode. A high score alone must never authorize ten live trades.
+
+## 3. Required safety gates
+
+Even if confidence is high, set runs to zero when any of these conditions is true:
+
+- Estimated expected value is zero or negative after the quoted payout.
+- The model's validated win probability does not exceed the contract's break-even probability by the required safety margin.
+- The entry trigger has expired or confirmation has failed.
+- Market data is stale, incomplete or contradictory.
+- The contract is unavailable or its payout has changed.
+- The daily loss limit, drawdown limit or maximum exposure would be exceeded.
+
+For each additional run, rescan the market and recalculate confidence. Do not automatically execute all remaining runs from the original signal.
+
+## 4. Implementation logic
+
+```
+def calculate_signal_confidence(    edge_score,    agreement_score,    entry_score,    reliability_score,    data_quality_score):    components = [        edge_score,        agreement_score,        entry_score,        reliability_score,        data_quality_score,    ]    if any(x < 0 or x > 100 for x in components):        raise ValueError("Scores must be between 0 and 100")    confidence = (        0.30 * edge_score        + 0.20 * agreement_score        + 0.15 * entry_score        + 0.20 * reliability_score        + 0.15 * data_quality_score    )    return round(confidence, 1)def automatic_runs(    confidence,    edge_validated,    positive_expected_value,    entry_confirmed,    data_valid,    risk_limits_passed,
+```
+
+## 5. Run-by-run revalidation
+
+The execution loop should be:
+
+Calculate confidence and initial run limit
+
+Execute one eligible trade
+
+Read settlement result and rescan market
+
+Still valid
+
+Recalculate confidence and risk budget before another run.
+
+Invalid
+
+Stop remaining runs and wait for a new signal.
+
+Important: A losing trade must not automatically increase confidence, stake or run count. Martingale must not be used to override the confidence engine or risk limits.
+
+## 6. What the signal card should display
+
+For every market and trade type, output:
+
+- `CONFIDENCE: 82.5%` — signal-quality score.
+- `ESTIMATED WIN PROBABILITY: 57%` — only when calibrated and supported by sufficient data.
+- `BREAK-EVEN PROBABILITY: 54%` — calculated from the current contract payout.
+- `EXPECTED VALUE: +X` or `NEGATIVE`.
+- `AUTO RUNS: 3`.
+- `MAX RUNS: 3`.
+- `ENTRY: CONFIRMED` or `WAIT`.
+- `STATUS: ENTRY NOW`, `WATCH`, or `NO TRADE`.
+
+The numbers above are illustrative. The engine should populate these fields from real market data, validated model results and the current contract quote—not hardcoded percentages.

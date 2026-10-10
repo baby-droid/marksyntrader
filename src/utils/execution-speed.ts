@@ -43,17 +43,16 @@ export const SPEED_MAX_INFLIGHT: Record<ExecutionSpeed, number> = {
 // unbounded burst of buy requests.
 const FAST_EXEC_MAX_INFLIGHT = 3;
 
-// Purchases fired per tick for each speed tier. Normal and Turbo fire a
-// single purchase per live tick. Crazy retains its legacy multi-contract
-// fan-out when explicitly selected. Fast Execution is deliberately different:
-// it is a latency preset, not a volume preset, so it always allows exactly
-// one purchase per tick.
+// Purchases fired per tick for each speed tier. Normal and Turbo fire one,
+// while Crazy retains its legacy fan-out. Fast allows a bounded three-entry
+// burst in supported flows; Auto-Signals stays one-at-a-time so each run can
+// be revalidated against a fresh signal. A-SPEED remains one per tick.
 export const SPEED_PURCHASES_PER_TICK: Record<ExecutionSpeed, number> = {
     normal: 1,
     crazy: 5,
     turbo: 1,
 };
-const FAST_EXEC_PURCHASES_PER_TICK = 1; // individual contracts — no bulk side-fires
+const FAST_EXEC_PURCHASES_PER_TICK = 3; // finite burst; V3 also enforces its three-open-contract cap
 
 const listeners = new Set<(speed: ExecutionSpeed) => void>();
 const fastExecListeners = new Set<(enabled: boolean) => void>();
@@ -118,6 +117,9 @@ export const isFastExecutionEnabledForContext = (): boolean => {
         || isTwoPredictionCycleContext();
 };
 
+const isAutoSignalsContext = (): boolean =>
+    String(getTradeContext().page || '').trim().toLowerCase() === 'auto-signals';
+
 /** True while the header's app-wide A-SPEED BOOST preset is active. */
 export const isASpeedBoostEnabled = (): boolean => aSpeedBoostEnabled;
 
@@ -148,14 +150,14 @@ export const getMaxInflight = (): number =>
         ? Math.max(SPEED_MAX_INFLIGHT[current], FAST_EXEC_MAX_INFLIGHT)
         : SPEED_MAX_INFLIGHT[current];
 
-/** Effective purchases fired per tick. Fast and the paired Free Bots never inherit Turbo fan-out. */
-export const getPurchasesPerTick = (): number =>
-    isFastExecutionEnabledForContext()
-        || aSpeedBoostEnabled
-        || isNormalKillerBotV3Context()
-        || isTwoPredictionCycleContext()
-        ? FAST_EXEC_PURCHASES_PER_TICK
-        : SPEED_PURCHASES_PER_TICK[current];
+/** Effective purchases fired per tick, independent from the latency override. */
+export const getPurchasesPerTick = (): number => {
+    if (isFastExecutionEnabledForContext()) {
+        return isAutoSignalsContext() ? 1 : FAST_EXEC_PURCHASES_PER_TICK;
+    }
+    if (aSpeedBoostEnabled || isNormalKillerBotV3Context() || isTwoPredictionCycleContext()) return 1;
+    return SPEED_PURCHASES_PER_TICK[current];
+};
 
 /** True when the engine should skip the proposal round-trip and buy directly. */
 export const useDirectBuyForSpeed = (): boolean =>

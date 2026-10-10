@@ -32,6 +32,78 @@ describe('Normal Killer V3 contract pipeline', () => {
         expect(reserveNormalKillerEntry(pipeline, { epoch: 102, kind: 'side', stake: 0.35 })).toBeNull();
     });
 
+    it('allows at most three distinct entries on one tick when Fast is enabled', () => {
+        const pipeline = createNormalKillerPipeline();
+        configureNormalKillerPipeline(pipeline, {
+            currentStake: 0.35,
+            baseStake: 0.35,
+            multiplier: 2,
+        });
+
+        expect(reserveNormalKillerEntry(pipeline, {
+            epoch: 150,
+            tickKey: 'R_10:150',
+            tickSlot: 0,
+            maxPerTick: 3,
+            kind: 'main',
+            stake: 0.35,
+        })).not.toBeNull();
+        expect(reserveNormalKillerEntry(pipeline, {
+            epoch: 150,
+            tickKey: 'R_10:150',
+            tickSlot: 1,
+            maxPerTick: 3,
+            kind: 'side',
+            stake: 0.35,
+        })).not.toBeNull();
+        expect(reserveNormalKillerEntry(pipeline, {
+            epoch: 150,
+            tickKey: 'R_10:150',
+            tickSlot: 2,
+            maxPerTick: 3,
+            kind: 'side',
+            stake: 0.35,
+        })).not.toBeNull();
+        expect(reserveNormalKillerEntry(pipeline, {
+            epoch: 150,
+            tickKey: 'R_10:150',
+            tickSlot: 3,
+            maxPerTick: 3,
+            kind: 'side',
+            stake: 0.35,
+        })).toBeNull();
+        expect(reserveNormalKillerEntry(pipeline, {
+            epoch: 150,
+            tickKey: 'R_10:150',
+            tickSlot: 1,
+            maxPerTick: 3,
+            kind: 'side',
+            stake: 0.35,
+        })).toBeNull();
+        expect(getNormalKillerOpenCount(pipeline)).toBe(3);
+    });
+
+    it('uses the Restart Trade multiplier after each loss and resets the next stake after a win', () => {
+        const pipeline = createNormalKillerPipeline();
+        configureNormalKillerPipeline(pipeline, {
+            currentStake: 0.35,
+            baseStake: 0.35,
+            multiplier: 2,
+        });
+
+        const first = reserveNormalKillerEntry(pipeline, { epoch: 160, stake: 0.35 });
+        settleNormalKillerEntry(pipeline, first, false);
+        expect(pipeline.currentStake).toBe(0.7);
+
+        const second = reserveNormalKillerEntry(pipeline, { epoch: 161, stake: 0.7 });
+        settleNormalKillerEntry(pipeline, second, false);
+        expect(pipeline.currentStake).toBe(1.4);
+
+        const third = reserveNormalKillerEntry(pipeline, { epoch: 162, stake: 1.4 });
+        settleNormalKillerEntry(pipeline, third, true);
+        expect(pipeline.currentStake).toBe(0.35);
+    });
+
     it('applies settled outcomes in entry order even when contracts settle out of order', () => {
         const pipeline = createNormalKillerPipeline();
         configureNormalKillerPipeline(pipeline, {

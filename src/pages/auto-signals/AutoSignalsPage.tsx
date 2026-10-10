@@ -223,50 +223,67 @@ function MarketCard({
                 </div>
             </div>
 
-            <div className='as-score-line' title='Alignment score is a historical pattern score, not a predicted win probability.'>
-                <div className='as-score-line__label'>
-                    <span>ALIGNMENT SCORE</span>
-                    <strong
-                        title='Composite score from historical tick-window alignment; it is not a win probability.'
-                        data-testid={`text-score-${cardId}`}
-                    >
-                        {candidate ? `${Math.round(score)}/100` : '—'}
-                    </strong>
-                </div>
-                <div className='as-score-track'><i style={{ width: `${score}%` }} /></div>
-                <span className='as-score-line__tier'>{candidate?.tier ?? 'SCANNING'}</span>
-            </div>
-
-            <div className={`as-entry-state ${candidate?.entryReady ? 'is-ready' : ''}`} data-testid={`status-entry-${cardId}`}>
-                <span>ENTRY CONDITION</span>
-                <strong>{candidate ? (candidate.entryReady ? 'CONFIRMED' : 'WAITING') : 'NO SETUP'}</strong>
-                <small>
-                    {candidate?.entryDigit != null
-                        ? `Digit ${candidate.entryDigit}`
-                        : candidate && ['RISE', 'FALL', 'ONLY_UPS', 'ONLY_DOWNS'].includes(candidate.strategy)
-                            ? 'Price direction'
-                            : 'Entry digit —'}
-                </small>
-            </div>
-
-            <WindowConfidence candidate={candidate} symbol={cardId} />
-
-            <div className='as-market-card__reason' data-testid={`text-reason-${cardId}`}>
-                <span className='as-reason-mark'><Activity size={13} aria-hidden='true' /></span>
-                <p>{candidate?.reason || 'No candidate has cleared the confirmation windows yet.'}</p>
-            </div>
-
             <div className='as-market-card__meta'>
                 <span><Clock3 size={12} aria-hidden='true' /> {candidate?.createdAt ? clockText(candidate.createdAt) : 'No signal time'}</span>
                 <span className='as-expiry' data-testid={`text-expiry-${cardId}`}>
                     Expires in <b>{remainingText(candidate?.expiresAt, now)}</b>
                 </span>
             </div>
-            <div className='as-revalidation'>
-                <span className='as-revalidation__pulse' />
-                <span>Signal valid for 5m · 1-tick contract · checked on each tick</span>
-                <small>Updated {clockText(market.updatedAt)}</small>
-            </div>
+
+            <details className='as-card-analysis'>
+                <summary className='as-card-analysis__summary' aria-label={`Show signal analysis for ${market.label}`}>
+                    <span>Signal analysis</span>
+                    <strong>
+                        {candidate
+                            ? `${Math.round(score)}/100 · Entry ${candidate.entryReady ? 'confirmed' : 'waiting'}`
+                            : 'Waiting for a signal'}
+                    </strong>
+                </summary>
+                <div className='as-card-analysis__body'>
+                    <div className='as-score-line' title='Alignment score is a historical pattern score, not a predicted win probability.'>
+                        <div className='as-score-line__label'>
+                            <span>ALIGNMENT SCORE</span>
+                            <strong
+                                title='Composite score from historical tick-window alignment; it is not a win probability.'
+                                data-testid={`text-score-${cardId}`}
+                            >
+                                {candidate ? `${Math.round(score)}/100` : '—'}
+                            </strong>
+                        </div>
+                        <div className='as-score-track'><i style={{ width: `${score}%` }} /></div>
+                        <span className='as-score-line__tier'>{candidate?.tier ?? 'SCANNING'}</span>
+                    </div>
+
+                    <div className={`as-entry-state ${candidate?.entryReady ? 'is-ready' : ''}`} data-testid={`status-entry-${cardId}`}>
+                        <span>ENTRY CONDITION</span>
+                        <strong>{candidate ? (candidate.entryReady ? 'CONFIRMED' : 'WAITING') : 'NO SETUP'}</strong>
+                        <small>
+                            {candidate?.entryDigit != null
+                                ? `Digit ${candidate.entryDigit}`
+                                : candidate && ['RISE', 'FALL', 'ONLY_UPS', 'ONLY_DOWNS'].includes(candidate.strategy)
+                                    ? 'Price direction'
+                                    : 'Entry digit —'}
+                        </small>
+                    </div>
+
+                    <WindowConfidence candidate={candidate} symbol={cardId} />
+
+                    <div className='as-market-card__reason' data-testid={`text-reason-${cardId}`}>
+                        <span className='as-reason-mark'><Activity size={13} aria-hidden='true' /></span>
+                        <p>{candidate?.reason || 'No candidate has cleared the confirmation windows yet.'}</p>
+                    </div>
+
+                    <div className='as-revalidation'>
+                        <span className='as-revalidation__pulse' />
+                        <span>Signal valid for 5m · 1-tick contract · checked on each tick</span>
+                        <small>Updated {clockText(market.updatedAt)}</small>
+                    </div>
+                    {candidate && !candidate.entryReady && (
+                        <p className='as-entry-note' data-testid={`text-entry-wait-${cardId}`}>Entry Trade starts the bot now; it waits for its configured entry condition before buying.</p>
+                    )}
+                    {!candidate && <p className='as-entry-note'>Trade handoff is available when a signal is active.</p>}
+                </div>
+            </details>
 
             <div className='as-market-card__actions'>
                 <button
@@ -313,10 +330,6 @@ function MarketCard({
                     <button className='as-trade-choice__cancel' type='button' onClick={() => setShowTradeChoices(false)}>Cancel</button>
                 </div>
             )}
-            {candidate && !candidate.entryReady && (
-                <p className='as-entry-note' data-testid={`text-entry-wait-${cardId}`}>Entry Trade starts the bot now; it waits for its configured entry condition before buying.</p>
-            )}
-            {!candidate && <p className='as-entry-note'>Trade handoff is available when a signal is active.</p>}
         </article>
     );
 }

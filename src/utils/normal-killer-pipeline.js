@@ -10,6 +10,7 @@ export const createNormalKillerPipeline = () => ({
     lastPurchaseKey: null,
     purchaseKeys: new Set(),
     purchaseKeyOrder: [],
+    tickSlots: new Map(),
     nextSequence: 1,
     entries: [],
     riskTripped: false,
@@ -63,7 +64,7 @@ export const getNormalKillerContractWinResult = contract => {
 
 /**
  * @param {any} pipeline
- * @param {{ epoch?: number, tickKey?: string, kind?: string, stake?: number, maxOpen?: number }} options
+ * @param {{ epoch?: number, tickKey?: string, tickSlot?: number, maxPerTick?: number, kind?: string, stake?: number, maxOpen?: number }} options
  */
 export const reserveNormalKillerEntry = (pipeline, options = {}) => {
     const {
@@ -72,16 +73,29 @@ export const reserveNormalKillerEntry = (pipeline, options = {}) => {
         kind,
         stake,
         maxOpen = NORMAL_KILLER_MAX_OPEN_CONTRACTS,
+        tickSlot: requestedSlot = 0,
+        maxPerTick: requestedMaxPerTick = 1,
     } = options;
     const numericEpoch = Number(epoch);
     const numericStake = Number(stake);
-    const purchaseKey = tickKey == null ? String(numericEpoch) : String(tickKey);
+    const normalizedTickKey = tickKey == null ? String(numericEpoch) : String(tickKey);
+    const tickSlot = Number.isFinite(Number(requestedSlot))
+        ? Math.max(0, Math.floor(Number(requestedSlot)))
+        : 0;
+    const maxPerTick = Number.isFinite(Number(requestedMaxPerTick))
+        ? Math.max(1, Math.min(NORMAL_KILLER_MAX_OPEN_CONTRACTS, Math.floor(Number(requestedMaxPerTick))))
+        : 1;
+    const purchaseKey = `${normalizedTickKey}#${tickSlot}`;
+    if (!(pipeline.tickSlots instanceof Map)) pipeline.tickSlots = new Map();
+    const slotsForTick = pipeline.tickSlots.get(normalizedTickKey) ?? new Set();
     if (
         !Number.isFinite(numericEpoch)
         || !Number.isFinite(numericStake)
         || numericStake <= 0
         || pipeline.riskTripped
         || getNormalKillerOpenCount(pipeline) >= maxOpen
+        || slotsForTick.has(tickSlot)
+        || slotsForTick.size >= maxPerTick
         || pipeline.purchaseKeys?.has(purchaseKey)
         || pipeline.lastPurchaseKey === purchaseKey
     ) {
@@ -91,7 +105,9 @@ export const reserveNormalKillerEntry = (pipeline, options = {}) => {
     const entry = {
         sequence: pipeline.nextSequence++,
         epoch: numericEpoch,
-        tickKey: purchaseKey,
+        tickKey: normalizedTickKey,
+        tickSlot,
+        purchaseKey,
         kind,
         stake: numericStake,
         status: 'pending',
@@ -101,12 +117,22 @@ export const reserveNormalKillerEntry = (pipeline, options = {}) => {
     pipeline.entries.push(entry);
     pipeline.lastPurchaseEpoch = numericEpoch;
     pipeline.lastPurchaseKey = purchaseKey;
+    slotsForTick.add(tickSlot);
+    pipeline.tickSlots.set(normalizedTickKey, slotsForTick);
     if (pipeline.purchaseKeys instanceof Set) {
         pipeline.purchaseKeys.add(purchaseKey);
-        pipeline.purchaseKeyOrder.push(purchaseKey);
+        pipeline.purchaseKeyOrder.push({ purchaseKey, tickKey: normalizedTickKey, tickSlot });
         if (pipeline.purchaseKeyOrder.length > 2048) {
             const expiredKey = pipeline.purchaseKeyOrder.shift();
-            if (expiredKey != null) pipeline.purchaseKeys.delete(expiredKey);
+            if (expiredKey != null) {
+                const expiredPurchaseKey = typeof expiredKey === 'string' ? expiredKey : expiredKey.purchaseKey;
+                pipeline.purchaseKeys.delete(expiredPurchaseKey);
+                if (typeof expiredKey !== 'string') {
+                    const expiredSlots = pipeline.tickSlots.get(expiredKey.tickKey);
+                    expiredSlots?.delete(expiredKey.tickSlot);
+                    if (expiredSlots?.size === 0) pipeline.tickSlots.delete(expiredKey.tickKey);
+                }
+            }
         }
     }
     return entry;

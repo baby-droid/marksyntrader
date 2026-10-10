@@ -1,0 +1,76 @@
+# MARK SYN TRADER SIGNAL — Under 5 to Under 2, Over 6 to Over 8
+
+Configure the automatic analysis engine to scan these six contract barriers independently, calculate confidence, and select the strongest validated signal.
+
+## 1. Contract configuration
+
+| Trade type   | Winning condition | Digits that win |
+| ------------ | ----------------- | --------------- |
+| DIGITUNDER 5 | Final digit < 5   | 0, 1, 2, 3, 4   |
+| DIGITUNDER 4 | Final digit < 4   | 0, 1, 2, 3      |
+| DIGITUNDER 3 | Final digit < 3   | 0, 1, 2         |
+| DIGITUNDER 2 | Final digit < 2   | 0, 1            |
+| DIGITOVER 6  | Final digit > 6   | 7, 8, 9         |
+| DIGITOVER 7  | Final digit > 7   | 8, 9            |
+| DIGITOVER 8  | Final digit > 8   | 9               |
+
+Note: That is seven contracts, including Under 5, 4, 3, 2 and Over 6, 7, 8.
+
+## 2. Analysis logic for each barrier
+
+For every available market, calculate the following for each contract:
+
+- Digit distribution over 1,000, 100, 50, 20 and 10 ticks.
+- Empirical probability of the contract winning in each window.
+- Validated predictive probability for the next contract outcome.
+- Agreement between windows and uncertainty of the estimate.
+- Current payout, break-even probability and expected value.
+- Entry validity, data freshness and market-specific historical performance.
+
+For each barrier \\(b\\):
+
+\\[ P(\text{Under }b)=P(d\<b) \\]
+
+\\[ P(\text{Over }b)=P(d>b) \\]
+
+The historical digit proportions are baseline statistics, not guaranteed next-tick probabilities. Use the calibrated predictive model for trade decisions.
+
+## 3. Confidence and automatic runs
+
+Use the confidence formula from the previous specification:
+
+\\[ C=0.30E+0.20A+0.15T+0.20H+0.15D \\]
+
+Here, \\(C\\) is the signal-quality score, not the probability of winning.
+
+| Quality score | Initial run limit |
+| ------------- | ----------------- |
+| Below 65      | 0                 |
+| 65–69         | 1                 |
+| 70–74         | 2                 |
+| 75–79         | 3                 |
+| 80–84         | 4                 |
+| 85–89         | 5                 |
+| 90–94         | 7                 |
+| 95–100        | 10                |
+
+These are initial configuration thresholds, not validated performance guarantees. If expected value is negative, the model is uncalibrated, or any risk/data gate fails, the engine must return 0 runs regardless of score.
+
+## 4. Ready-to-implement Python logic
+
+```
+UNDER_BARRIERS = [5, 4, 3, 2]OVER_BARRIERS = [6, 7, 8]WINDOWS = [1000, 100, 50, 20, 10]def contract_win_probability(digit_probabilities, contract, barrier):    """    digit_probabilities: mapping of digits 0-9 to probabilities.    Use calibrated next-contract probabilities for live decisions.    """    if set(digit_probabilities) != set(range(10)):        raise ValueError("Probabilities must cover digits 0-9")    if abs(sum(digit_probabilities.values()) - 1.0) > 0.001:        raise ValueError("Digit probabilities must sum to 1")    if contract == "DIGITUNDER":        return sum(            p for digit, p in digit_probabilities.items()            if digit < barrier        )    if contract == "DIGITOVER":        return sum(            p for digit, p in digit_probabilities.items()            if digit > barrier        )    raise ValueError("Unsupported contract")def choose_run_limit(confidence):    if confidence < 65:        return 0
+```
+
+The execution system must obtain actual digit probabilities, confidence components, payout-derived break-even probabilities and contract availability from live data and validated historical results. The code deliberately does not fabricate those inputs.
+
+## 5. Final selection rule
+
+1. Scan all seven contracts on each eligible market.
+2. Reject candidates that fail the edge, data, entry or risk checks.
+3. Rank remaining candidates by validated expected value and signal quality.
+4. Select the strongest qualifying candidate, subject to exposure limits.
+5. Execute one trade and rescan before authorizing the next run.
+6. If no contract qualifies, display `NO TRADE`.
+
+This prevents the system from automatically choosing Under or Over simply because its historical winning-digit group is larger or smaller.
