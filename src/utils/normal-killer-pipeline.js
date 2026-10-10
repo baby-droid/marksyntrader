@@ -63,7 +63,7 @@ export const getNormalKillerContractWinResult = contract => {
 
 /**
  * @param {any} pipeline
- * @param {{ epoch?: number, kind?: string, stake?: number, maxOpen?: number }} options
+ * @param {{ epoch?: number, tickKey?: string, kind?: string, stake?: number, maxOpen?: number }} options
  */
 export const reserveNormalKillerEntry = (pipeline, options = {}) => {
     const {

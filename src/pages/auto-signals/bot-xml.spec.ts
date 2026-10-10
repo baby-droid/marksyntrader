@@ -141,7 +141,7 @@ describe('Auto-Signals bot templates', () => {
             'AUTO_SIGNAL_OVER4_LOSSES',
         ]));
         expect(purchases).toEqual(expect.arrayContaining(['DIGITOVER', 'DIGITUNDER']));
-        expect(getField(getBlock(doc, 'trade_definition_contracttype'), 'TYPE_LIST')).toBe('both');
+        expect(getField(getBlock(doc, 'trade_definition_contracttype'), 'TYPE_LIST')).toBe('DIGITOVER');
         expect(getField(getBlock(doc, 'trade_definition_tradetype'), 'TRADETYPE_LIST')).toBe('overunder');
     });
 

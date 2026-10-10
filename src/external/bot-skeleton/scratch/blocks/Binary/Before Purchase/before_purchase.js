@@ -79,6 +79,7 @@ window.Blockly.Blocks.before_purchase = {
 window.Blockly.JavaScript.javascriptGenerator.forBlock.before_purchase = block => {
     const stack = window.Blockly.JavaScript.javascriptGenerator.statementToCode(block, 'BEFOREPURCHASE_STACK');
     const workspace = block.workspace ?? window.Blockly.derivWorkspace;
+    const workspaceBlocks = workspace?.getAllBlocks?.() ?? [];
     const variables = workspace?.getVariableMap?.()?.getVariables?.() ?? [];
     const normalizeName = value => String(value ?? '')
         .trim()
@@ -93,12 +94,25 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.before_purchase = block =
             )
             : null;
     };
-    const pipelineVariables = ['stake', 'base_stake', 'martingale', 'take_profit', 'stop_loss']
+    const pipelineVariables = ['stake', 'base_stake', 'take_profit', 'stop_loss']
         .map(variableCode);
+    const restartTradeBlock = workspaceBlocks.find(candidate =>
+        candidate.type === 'king_fisher_restart_trade'
+    );
+    const multiplierVariable = variableCode('martingale');
+    const multiplierCode = restartTradeBlock
+        ? `Number(${Number(restartTradeBlock.getFieldValue('MULTIPLIER') || 2)})`
+        : multiplierVariable ? `Number(${multiplierVariable})` : null;
     const isNormalKillerPipeline = block.data === 'nkv3-pipeline';
-    const pipelineSetup = isNormalKillerPipeline && pipelineVariables.every(Boolean)
+    const pipelineSetup = isNormalKillerPipeline && pipelineVariables.every(Boolean) && multiplierCode
         ? `
-        Bot.configureNormalKillerPipeline(Number(${pipelineVariables.join('), Number(')}));
+        Bot.configureNormalKillerPipeline(
+            Number(${pipelineVariables[0]}),
+            Number(${pipelineVariables[1]}),
+            ${multiplierCode},
+            Number(${pipelineVariables[2]}),
+            Number(${pipelineVariables[3]})
+        );
         var normalKillerTick = Bot.getLastTick(true);
         if (normalKillerTick && normalKillerTick.epoch != null) {
             Bot.setNormalKillerPurchaseEpoch(Number(normalKillerTick.epoch), Bot.getSymbol());

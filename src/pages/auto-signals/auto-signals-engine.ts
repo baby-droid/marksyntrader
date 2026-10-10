@@ -245,7 +245,7 @@ const entryConditionConfirmed = (route: Route, ticks: AutoLabTick[], entryDigit:
     if (route.strategy === 'ONLY_UPS' || route.strategy === 'ONLY_DOWNS') {
         const previous = ticks[ticks.length - 2];
         if (!previous) return false;
-        return route.strategy === 'RISE' || route.strategy === 'ONLY_UPS'
+        return route.strategy === 'ONLY_UPS'
             ? latest.quote > previous.quote
             : latest.quote < previous.quote;
     }

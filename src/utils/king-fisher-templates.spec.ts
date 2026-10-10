@@ -74,6 +74,8 @@ describe('Normal Killer Bot V3 template', () => {
         expect(source).toContain('Bot.configureNormalKillerPipeline');
         expect(source).toContain('Bot.setNormalKillerPurchaseEpoch');
         expect(source).toContain('Bot.getSymbol()');
+        expect(source).toContain("candidate.type === 'king_fisher_restart_trade'");
+        expect(source).toContain("getFieldValue('MULTIPLIER')");
     });
 });
 
