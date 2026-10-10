@@ -1,0 +1,355 @@
+# MARK SYN TRADER SIGNAL — Advanced Market Analysis Engine
+
+The goal is to build a structured signal engine that analyzes all the Deriv trade types you listed, ranks the best market, selects the contract and barrier or entry digit, identifies the entry point, and issues a signal only when the evidence is strong enough.
+
+Important: No analysis can guarantee accurate wins on every trade. Digit outcomes can be effectively random, and a digit appearing less frequently does not mean it is due to appear. The engine should measure actual predictive performance, reject weak setups, and use a no-trade signal whenever evidence is insufficient.
+
+## 1. Core analysis engine
+
+Use five rolling windows together. Each window has a specific purpose.
+
+| Window      | Role               | What to analyze                                             |
+| ----------- | ------------------ | ----------------------------------------------------------- |
+| 1,000 ticks | Long-term baseline | Digit frequencies, parity, direction, volatility, stability |
+| 100 ticks   | Market structure   | Distribution changes, trends, recurring patterns, streaks   |
+| 50 ticks    | Momentum           | Recent strengthening or weakening of a candidate            |
+| 20 ticks    | Confirmation       | Whether the setup remains supported                         |
+| 10 ticks    | Entry timing       | Immediate trigger, reversal, contradiction, noise           |
+
+For every market, calculate:
+
+- Digit frequencies for 0–9 and their percentages.
+- Odd/even proportions.
+- Frequencies of Rise, Fall, unchanged ticks and direction reversals.
+- Over and Under probabilities for each available barrier.
+- Match/Differs candidate-digit statistics.
+- Streak length, repetition, gaps and transitions between digits.
+- Tick volatility, alternation, entropy and distribution stability.
+- Agreement between historical windows and the latest observations.
+- Actual contract win rate, payout, expected value and drawdown from recorded trades.
+
+Critical distinction: Frequency, streaks and gaps describe past data; they are not automatically predictive. The engine must validate whether each feature predicts future outcomes on held-out data before giving it significant weight.
+
+## 2. Universal signal decision pipeline
+
+STEP 1 — SCAN MARKETS
+
+Read live ticks, verify symbol availability and update rolling windows.
+
+STEP 2 — ANALYZE CONTRACTS
+
+Evaluate every eligible trade type, digit candidate and barrier.
+
+STEP 3 — VALIDATE THE EDGE
+
+Check out-of-sample accuracy, payout, expected value, window agreement and risk.
+
+STEP 4 — CONFIRM ENTRY
+
+Wait for a fresh trigger; cancel if the setup becomes invalid or expires.
+
+ENTRY NOW
+
+Only if every required gate passes.
+
+NO TRADE
+
+Insufficient evidence, poor value or conflicting signals.
+
+The 10-tick window is a timing filter, not a reliable standalone predictor. A 10-tick sample is too small to establish a robust statistical edge by itself.
+
+## 3. Trade-type analysis rules
+
+Each contract type needs its own probability model. Do not use one generic rule to choose every trade.
+
+[Free Even and Odd Number Worksheet | Practice Sheets for Kids](https://images.openai.com/static-rsc-4/-pQII8r9CyflkZ7lGDYZohn6sHwteURwlVCzLjvmWr6y6V3FgvwbWLW2w9FFewXgF6iHCYS9Xu33mRg2h6wu7DrYzPr5TCFDWgCPdOqv7uuPrAb6idwaCA4-KmUIx61xy9AjSkL5XetgCdTrPLaxHbdnDA8Hf_ckLVzSmeyrrP8?purpose=inline)
+
+A. DIGIT EVEN / DIGIT ODD
+
+- EVEN: predict 0, 2, 4, 6, 8.
+- ODD: predict 1, 3, 5, 7, 9.
+- Calculate parity probability on each window, and test whether recent parity features predict the next contract outcome.
+- Compare the model's calibrated probability with the actual break-even probability from the quoted payout.
+- Entry: next eligible tick after the signal passes all checks.
+
+Reject: A weak model edge, unstable estimates or a signal that disappears before execution.
+
+[Number 7, Alphabet. Neon retro 3d number isolated on a black background. 3d illustration.](https://images.openai.com/static-rsc-4/Le6HAEeFgAjP4uM0zC22J_8wMXQvBpoNZoYy40z_tGNlwyZ17JilBl67rX62DdthNCrzMUOspQsJ6PuwjbHhLA2wcYPDFTKXrpkQp0sbu-QadkODeIzXzXR92-AmH2mjx7SPnxEbRneozIxU5SIMx-1ecd7-nPJGkekOXKELuVRn_vKaX5ONsGYeHoPZcNl9?purpose=inline)
+
+B. DIGIT MATCH
+
+- Evaluate every candidate digit from 0 to 9.
+- For each digit, record the estimated next-contract probability, historical frequency, short-window changes, model calibration and uncertainty.
+- Rank candidates by estimated profitability, not simply by which digit appeared most often.
+- Entry digit: the best validated candidate, if it has a positive expected value after payout and costs.
+
+Reject: A candidate chosen only because it has a long absence, a streak or the highest recent frequency.
+
+[Red light Digit 7](https://images.openai.com/static-rsc-4/nw47fw-FZqVVh-z6rqMQMyQny7SSgouRbkBKxX2oizstVQG6HcCs5814PpKa9CBP-tAfU1xOsq2b-NfKLhmN9u9b0DdT2FATsE-ZcCRT6xCu8eB5yHYAiGOCp3x45qzJ-jsXDKMui3eVZIh9EUMfFrrqIRoKhwgi-gPBq_5Z5XHrRPmuE4uV47yOXlzZ3Yzz?purpose=inline)
+
+C. DIGIT DIFFERS
+
+- Test each possible barrier digit.
+- Estimate the probability that the next contract's relevant final digit will not equal the selected barrier.
+- Rank barriers using calibrated probabilities, quoted payouts and uncertainty.
+- Entry digit/barrier: the digit whose Differs contract has the strongest validated expected value.
+
+Reject: Automatically selecting the least frequent digit. A low historical frequency does not prove a lower next-tick probability.
+
+[Digital numbers, vector illustration.](https://images.openai.com/static-rsc-4/DnR8JI8ZoaaRmt0Xo7shwN2RGLpIAjbEQiHZ_n7CLyDt14qGJ-4RsMBCdaarXvLC87iY-fCdLIh89vDZX-hadQaboaIy4_vJx-r0Ef6WVbl2AAelcq_15uG-rTjoFgI5AvXWvc9gDI_aAZ08QMyQFXXLcTWvdw7mUwG52U2ru4y0Z_px45drJ1BuLTVjoSkx?purpose=inline)
+
+D. DIGIT OVER / DIGIT UNDER
+
+- Evaluate each supported Over barrier from 1 through 7 and each supported Under barrier from 8 through 1.
+- OVER \\(b\\): probability the contract's relevant digit is greater than barrier \\(b\\).
+- UNDER \\(b\\): probability the relevant digit is less than barrier \\(b\\).
+- Confirm the precise contract definition and barrier availability using the broker's contract metadata.
+- Compare every eligible barrier by expected value; do not assume the smallest or largest barrier is automatically best.
+
+Reject: A barrier with a high apparent win probability but an insufficient payout to cover losses.
+
+[إتحاد اسواق المال العربية](https://images.openai.com/static-rsc-4/xyBrbLjnmG2UOY6_Nc_nFU2b0CuAdL4xSN82Cwn-JDZ7dFZ2AvtClG_17J2MsGddcvgQuLNPfGKtX_iD0VGWAEtfvJ2jc1twIqK--6o-bf6NiQdBmYIVuB0ow2wvOjicaRQMs_E_V2RB0CYLJNoatDWtUymraetocC-dulndlJg?purpose=inline)
+
+E. RISE
+
+- Estimate the chance the contract's exit quote will be above its entry quote under the exact contract terms.
+- Measure price direction, short-term momentum, volatility, pullbacks and reversals.
+- Require a validated directional edge and a fresh entry condition.
+- Entry: the next eligible entry quote, subject to the contract's duration and pricing rules.
+
+Reject: A rise signal based solely on several previous upward ticks.
+
+[Candle stick graph chart of stock market investment trading](https://images.openai.com/static-rsc-4/LUskAzamZkTvIHzZqFyDrLYtexwmWJrd74QznMbNeaj3G72S_opaFePKlByVdd5wF6kD_yenI0SqNfGRLjIfifVCuHH298Ny-NUmCqRRqU_6_qBAMEiR_7w3niYzwsAor2DJYSzWJFmMQMWMIFb6VlY9sJ-1kuBp21nYo-urgjKtuAHyOgT2x0D0OSydWoaC?purpose=inline)
+
+F. FALL
+
+- Estimate the probability the exit quote will be below the entry quote.
+- Test downside momentum, lower highs, lower lows, reversals and volatility.
+- Require confirmation from the model's validated directional features and the actual contract terms.
+
+Reject: A fall signal when the model's edge vanishes after a reversal or spread/payout change.
+
+[Stock Arrow Images | Free Photos, PNG Stickers, Wallpapers & Backgrounds - rawpixel](https://images.openai.com/static-rsc-4/FLPlCYJZDCl_OOD1kKl7pTG4RqObJhA77cRL59wHPbKmxid3aibu60Hchs3d0vEmtzC0tR-KzgTZ9scIz3hZBOJtk2PU-E2f6z8R4OycmdDmefUGKkbvxNr5gXeM_Ts5_asOXkcOZzXDBgHPw9ys_tYvLIYMljDL7ODb6LyY5Ns?purpose=inline)
+
+G. ONLY UP
+
+- Verify that the exact Only Ups contract is available for the chosen symbol.
+- Measure consecutive upward movements, higher-high frequency, pullbacks and reversal risk.
+- Estimate the probability of satisfying the contract's complete payout condition, not just the probability of one upward tick.
+- Cancel if the setup fails its defined persistence or reversal rules.
+
+[\[라이프 파이데이아\] "주식 VI 발동" 뜻은? - 한국AI부동산신문](https://images.openai.com/static-rsc-4/2atVBkCekooRj7VwZ5u4EDBR93GRiKD9ot8HHXIZV8aJaUQe1m2uc6XMb4MiHej6hrlrhXZWlClIZmUf2q03xbzmJq7GAqDf7Jn8o7iejKiOLId4p9jYiStCrnCAiEYviZggeAuK6wOZQv8ONiQ1wrfZssjd5mXbClR253B4L_g?purpose=inline)
+
+H. ONLY DOWN
+
+- Apply the inverse persistence test: downward movements, lower lows, pullbacks and upward reversals.
+- Evaluate the exact contract settlement condition and estimated probability of satisfying it.
+- Reject if the downward signal relies only on a recent losing streak or a falling price snapshot.
+
+[Trading Edge Resources](https://images.openai.com/static-rsc-4/2kERvdvHaaXyj8mpWlyntNzNnFvHyuBkqWbv_HyXHImu3VmWAvK3Imz-Snpf7yzxTUyxBju5PiB5TNJLqPT__vPEEAv1qnHHV4AgDTUiBQy5SKsW_dmtefR2rudN8-5a2XxrKxyv2oxY5AY2RZPO_YLl_TrUNNyuVMoPAPkJCaQ?purpose=inline)
+
+I. HIGH TICK
+
+- First establish what “High Tick” means in the available contract: a new high, a touch of a high, or another defined event.
+- If trading a new-high breakout, measure distance to the relevant high, new-high frequency and rejection behavior.
+- Require a fresh breakout trigger and evaluate the probability of the exact contract outcome.
+
+Reject: Treating a high price as automatic evidence that the price must reverse or continue rising.
+
+[A textbook short trading setup that played out by the script | by MonkeyMakesMoney | Medium](https://images.openai.com/static-rsc-4/qojjIiPxKTqtw1SxV_p8IrrYcRpkfIM-GiyXRTcG0max3zYzW1hQNrBYSqQbC2RpJh2mF12z0fMKuA9K3pnxSIOEQWX4m9Ke_V0zOhA9xyIn91HAILL3e76CsCDT1il996YS80XdmAcVCVUw2qqSBKgk6MyJmcsedy2RiHltAsw?purpose=inline)
+
+J. LOW TICK
+
+- Establish the precise Low Tick contract definition.
+- If trading a new-low breakout, measure distance from the relevant low, new-low frequency, downward momentum and rejection.
+- Require a validated low-breakout or low-rejection setup appropriate to the chosen contract.
+
+Reject: Assuming a market must bounce simply because it has reached a recent low.
+
+## 4. Entry digit and entry-point engine
+
+Keep what to predict separate from when to execute.
+
+### Entry digit selection
+
+For every digit \\(d \in \\{0,\ldots,9\\}\\), calculate:
+
+- `P_NEXT(d)`: calibrated probability of the relevant next-contract outcome.
+- `EDGE(d)`: expected net return using the current quoted payout.
+- `UNCERTAINTY(d)`: uncertainty in the probability estimate.
+- `STABILITY(d)`: whether the estimated edge remains valid across tested periods and market conditions.
+- `DATA_QUALITY(d)`: sufficient observations and no missing or stale ticks.
+
+Select the candidate with the best validated expected value, provided it passes the uncertainty and risk checks. If no candidate qualifies, return `NO TRADE`.
+
+Do not assign arbitrary bonuses for digit gaps, streaks or recurrence. Include those features only if testing demonstrates that they improve predictions on unseen data.
+
+### Entry point state machine
+
+### 1
+
+NO SETUP
+
+No validated edge.
+
+### 2
+
+WATCH
+
+A candidate qualifies for monitoring.
+
+### 3
+
+SETUP
+
+The contract, digit or barrier is selected.
+
+### 4
+
+CONFIRMING
+
+Recheck live probability, payout, data freshness and invalidation conditions.
+
+### 5
+
+READY
+
+All conditions pass; prepare the order.
+
+### 6
+
+ENTRY NOW
+
+Submit once, only if the signal is still valid.
+
+Invalidate the signal if its data becomes stale, the selected contract changes, the estimated edge falls below the required threshold, the payout deteriorates, a required confirmation fails, or the execution deadline expires.
+
+A new tick is not necessarily a better entry. The entry rule must match the contract's settlement logic and must be tested against the actual timing and execution delay.
+
+## 5. The most important filter: probability versus payout
+
+The engine must not mistake a high win rate for a profitable strategy.
+
+For a simple contract that pays a net profit \\(r\\) per 1 unit staked on a win and loses the stake on a loss:
+
+\\[ EV = p \cdot r - (1-p) \\]
+
+Where \\(p\\) is the estimated probability of winning and \\(r\\) is the net profit on a winning trade, excluding return of stake.
+
+The break-even probability is:
+
+\\[ p\_{\text{break-even}} = \frac{1}{1+r} \\]
+
+For example, if a contract offers a net profit of 0.80 per 1 unit staked, the break-even probability is approximately 55.6%. A 55% win rate would still have negative expected value under those assumptions.
+
+For actual Deriv contracts, use the live proposal's payout and stake, and calculate expected net profit using the contract's actual payoff rules. Include execution failures, slippage where applicable, and other relevant costs.
+
+## 6. Signal scoring and market ranking
+
+Use a 100-point quality score to rank candidates, but keep it separate from the estimated probability of winning.
+
+| Scoring component                  | Weight |
+| ---------------------------------- | ------ |
+| Validated predictive edge          | 30     |
+| Agreement across tested windows    | 20     |
+| Entry trigger and timing quality   | 15     |
+| Stability across market conditions | 15     |
+| Data quality and freshness         | 10     |
+| Payout and execution quality       | 10     |
+| Total                              | 100    |
+
+These weights are initial engineering choices, not statistically proven optimal weights. Calibrate them using out-of-sample results.
+
+Suggested operating thresholds:
+
+- Below 65: reject.
+- 65–74: watchlist or paper-trading candidate.
+- 75–84: candidate for further validation.
+- 85–100: highest-priority candidate, but only if it also passes the expected-value, uncertainty and risk gates.
+
+A score of 90/100 must never be reported as a 90% chance of winning. Display those as separate metrics.
+
+### Market selection
+
+For each available market, evaluate each supported contract type and eligible barrier. Then rank candidates by:
+
+1. Positive expected value after the current payout.
+2. Reliable out-of-sample predictive performance.
+3. Sufficient statistical confidence.
+4. Acceptable drawdown and execution risk.
+5. Fresh, valid entry conditions.
+
+Return the top three qualifying candidates, or `NO TRADE` if none qualify. Never force a signal just because one market has to be selected.
+
+## 7. Validation before live trading
+
+Before relying on the signal engine, test it on historical data and in paper trading.
+
+- Use chronological train, validation and test periods; do not randomly mix future and past ticks.
+- Compare every strategy with an appropriate baseline, including the contract's break-even probability.
+- Measure win rate, expected net return, sample size, maximum drawdown, longest losing streak and probability calibration.
+- Test different markets, periods and volatility conditions.
+- Record every signal, including rejected signals, so performance cannot be judged only from successful examples.
+- Account for trying many markets, barriers and strategies, which can produce apparently strong results by chance.
+- Revalidate after material changes to the model or market conditions.
+
+For digit strategies in particular, historical frequency differences may be noise. If a strategy cannot demonstrate a stable predictive advantage over a suitable baseline, it should remain in observation mode rather than being promoted to live trading.
+
+## 8. Risk and execution rules
+
+- Keep the stake within a fixed, predefined risk budget.
+- Enforce maximum stake, session loss, daily loss and drawdown limits on the execution side.
+- Do not use martingale to compensate for weak signals or to recover losses automatically.
+- Re-evaluate each run independently instead of blindly executing 1–10 trades.
+- Prevent duplicate orders using a unique signal ID and execution idempotency.
+- If live data, contract availability, payout, or connection status cannot be verified, do not execute.
+- Keep a complete record of signal time, entry quote, contract details, outcome and net profit/loss.
+
+## 9. Standard signal card for MARK SYN TRADER SIGNAL
+
+Every signal should use the same structured output.
+
+## MARK SYN TRADER SIGNAL
+
+Illustrative example
+
+Market
+
+1HZ75
+
+Trade type
+
+DIGITMATCH
+
+Entry digit
+
+7
+
+Entry point
+
+Next eligible tick
+
+Quality score
+
+82/100
+
+Estimated win probability
+
+Not yet validated
+
+Required validation
+
+- 1,000-tick baseline: calculated
+- 100/50-tick structure: tested
+- 20-tick confirmation: required
+- 10-tick entry trigger: required
+- Current payout and expected value: must pass
+- Signal expiry and risk limits: must pass
+
+  Status: WATCH / CONFIRMING
+
+  Illustrative only. Do not interpret this example as a live trading recommendation.
+
+The signal engine should additionally record `signal_id`, timestamp, expiry, contract duration, barrier, stake limits, model version, estimated probability, expected net return, confidence interval, validation sample size and rejection reason when applicable.
+
+Final operating principle: Analyze all markets and trade types, select only candidates with a demonstrated edge, confirm the entry using fresh data, and allow `NO TRADE` to be the normal result whenever the evidence is inadequate. That is more reliable than trying to generate a signal on every tick.
