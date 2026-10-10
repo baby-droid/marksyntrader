@@ -35,7 +35,7 @@ describe('King Fisher bundled templates', () => {
 });
 
 describe('Normal Killer Bot V3 template', () => {
-    it('rotates Continuous Indices and gates one Over 1 purchase behind Virtual Hook', () => {
+    it('rotates Continuous Indices and runs one direct Over 1 purchase without hook settings', () => {
         const xml = fs.readFileSync(
             path.resolve(__dirname, '../../public/bots/normal-killer-bot-v3.xml'),
             'utf8',
@@ -45,27 +45,35 @@ describe('Normal Killer Bot V3 template', () => {
         expect(xml).toContain('<field name="ALTERNATE_MARKETS">TRUE</field>');
         expect(xml).toContain('<field name="ALTERNATE_MODE">EVERY_X_RUNS</field>');
         expect(xml).toContain('<field name="ALTERNATE_EVERY">1</field>');
-        expect(xml).toContain('<block type="king_fisher_virtual_hook"');
-        expect(xml).toContain('<field name="RESULT">LOSS</field>');
-        expect(xml).toContain('<field name="PURCHASE_TIMING">IMMEDIATE</field>');
         expect(xml).toContain('<field name="PURCHASE_LIST">DIGITOVER</field>');
+        expect(xml).toContain('<data>nkv3-pipeline</data>');
+        expect(xml).not.toContain('king_fisher_virtual_hook');
+        expect(xml).not.toContain('<block type="during_purchase"');
         const beforePurchaseStart = xml.indexOf('<block type="before_purchase"');
-        const duringPurchaseStart = xml.indexOf('<block type="during_purchase"');
         const afterPurchaseStart = xml.indexOf('<block type="after_purchase"');
-        const beforePurchase = xml.slice(beforePurchaseStart, duringPurchaseStart);
-        const duringPurchase = xml.slice(duringPurchaseStart, afterPurchaseStart);
-        expect(beforePurchase).toMatch(/<value name="IF0">\s*<block type="king_fisher_virtual_hook"/);
+        const beforePurchase = xml.slice(beforePurchaseStart, afterPurchaseStart);
         expect(beforePurchase).toMatch(
-            /<statement name="DO0">\s*<block type="purchase" id="nkv3_purchase">\s*<field name="PURCHASE_LIST">DIGITOVER<\/field>/,
+            /<statement name="BEFOREPURCHASE_STACK">\s*<block type="purchase" id="nkv3_purchase">\s*<field name="PURCHASE_LIST">DIGITOVER<\/field>/,
         );
         expect(beforePurchase.match(/<block type="purchase"/g) ?? []).toHaveLength(1);
-        expect((xml.match(/<data>nkv3-shared-hook<\/data>/g) ?? [])).toHaveLength(2);
-        expect(duringPurchase).toContain('<block type="king_fisher_virtual_hook" id="nkv3_during_virtual_hook">');
-        expect(duringPurchase).not.toContain('<block type="purchase"');
         expect(xml).not.toContain('nkv3_increase_stake');
-        expect(xml).toContain('nkv3_during');
         expect(xml).toContain('<block type="trade_again"');
         expect(xml).not.toContain('<block type="multiple_purchase"');
+    });
+
+    it('configures the internal pipeline from bot variables in the before-purchase generator', () => {
+        const source = fs.readFileSync(
+            path.resolve(
+                __dirname,
+                '../external/bot-skeleton/scratch/blocks/Binary/Before Purchase/before_purchase.js',
+            ),
+            'utf8',
+        );
+
+        expect(source).toContain("block.data === 'nkv3-pipeline'");
+        expect(source).toContain('Bot.configureNormalKillerPipeline');
+        expect(source).toContain('Bot.setNormalKillerPurchaseEpoch');
+        expect(source).toContain('Bot.getSymbol()');
     });
 });
 

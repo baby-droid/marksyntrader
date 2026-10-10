@@ -267,6 +267,7 @@ export default Engine =>
             this.normalKillerPipeline = createNormalKillerPipeline();
             this.normalKillerMainEntry = null;
             this.normalKillerNextPurchaseEpoch = null;
+            this.normalKillerNextPurchaseKey = null;
         }
 
         configureNormalKillerPipeline(currentStake, baseStake, multiplier, takeProfit, stopLoss) {
@@ -282,8 +283,11 @@ export default Engine =>
             });
         }
 
-        setNormalKillerPurchaseEpoch(epoch) {
+        setNormalKillerPurchaseEpoch(epoch, symbol = this.tradeOptions?.symbol || this.options?.symbol) {
             this.normalKillerNextPurchaseEpoch = Number(epoch);
+            this.normalKillerNextPurchaseKey = symbol
+                ? `${String(symbol)}:${Number(epoch)}`
+                : String(Number(epoch));
         }
 
         normalKillerRiskReached() {
@@ -343,6 +347,7 @@ export default Engine =>
                 kind: 'side',
                 stake: pipeline.currentStake,
                 maxOpen: NORMAL_KILLER_MAX_OPEN_CONTRACTS,
+                tickKey: `${this.tradeOptions?.symbol || this.options?.symbol || ''}:${Number(epoch)}`,
             });
             if (!entry) return Promise.resolve(false);
 
@@ -385,7 +390,9 @@ export default Engine =>
                 && this.normalKillerPipeline.currentStake != null
             ) {
                 const epoch = this.normalKillerNextPurchaseEpoch;
+                const tickKey = this.normalKillerNextPurchaseKey;
                 this.normalKillerNextPurchaseEpoch = null;
+                this.normalKillerNextPurchaseKey = null;
                 if (this.normalKillerRiskReached()) return Promise.resolve();
 
                 const entry = reserveNormalKillerEntry(this.normalKillerPipeline, {
@@ -393,6 +400,7 @@ export default Engine =>
                     kind: 'main',
                     stake: this.normalKillerPipeline.currentStake,
                     maxOpen: NORMAL_KILLER_MAX_OPEN_CONTRACTS,
+                    tickKey,
                 });
                 if (!entry) return Promise.resolve();
 

@@ -90,8 +90,8 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
         candidate.type === 'king_fisher_restart_trade'
     );
     const hasNormalKillerPipeline = workspaceBlocks.some(candidate =>
-        candidate.type === 'king_fisher_virtual_hook'
-        && candidate.data === 'nkv3-shared-hook'
+        candidate.type === 'before_purchase'
+        && candidate.data === 'nkv3-pipeline'
     );
     const normalizeVariableName = value => String(value ?? '')
         .trim()

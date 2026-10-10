@@ -93,47 +93,10 @@
     </statement>
   </block>
   <block type="before_purchase" id="nkv3_before" deletable="false" x="0" y="760">
+    <data>nkv3-pipeline</data>
     <statement name="BEFOREPURCHASE_STACK">
-      <block type="controls_if" id="nkv3_virtual_hook_gate">
-        <value name="IF0">
-          <block type="king_fisher_virtual_hook" id="nkv3_virtual_hook">
-            <data>nkv3-shared-hook</data>
-            <field name="ENABLED">TRUE</field>
-            <field name="CONFIRMATIONS">1</field>
-            <field name="RESULT">LOSS</field>
-            <field name="PURCHASE_TIMING">IMMEDIATE</field>
-            <value name="SIGNAL">
-              <block type="logic_boolean" id="nkv3_hook_signal">
-                <field name="BOOL">TRUE</field>
-              </block>
-            </value>
-          </block>
-        </value>
-        <statement name="DO0">
-          <block type="purchase" id="nkv3_purchase">
-            <field name="PURCHASE_LIST">DIGITOVER</field>
-          </block>
-        </statement>
-      </block>
-    </statement>
-  </block>
-  <block type="during_purchase" id="nkv3_during" deletable="false" x="430" y="760">
-    <statement name="DURING_PURCHASE_STACK">
-      <block type="controls_if" id="nkv3_during_hook_gate">
-        <value name="IF0">
-          <block type="king_fisher_virtual_hook" id="nkv3_during_virtual_hook">
-            <data>nkv3-shared-hook</data>
-            <field name="ENABLED">TRUE</field>
-            <field name="CONFIRMATIONS">1</field>
-            <field name="RESULT">LOSS</field>
-            <field name="PURCHASE_TIMING">IMMEDIATE</field>
-            <value name="SIGNAL">
-              <block type="logic_boolean" id="nkv3_during_hook_signal">
-                <field name="BOOL">TRUE</field>
-              </block>
-            </value>
-          </block>
-        </value>
+      <block type="purchase" id="nkv3_purchase">
+        <field name="PURCHASE_LIST">DIGITOVER</field>
       </block>
     </statement>
   </block>

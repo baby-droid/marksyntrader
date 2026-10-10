@@ -70,6 +70,15 @@ const getValueNumber = (block: Element | undefined, inputName: string) => {
         .find((field) => field.getAttribute('name') === 'NUM')?.textContent;
 };
 
+const getVariableSetNumber = (doc: Document, variableName: string) => {
+    const setter = Array.from(doc.getElementsByTagNameNS(XML_NS, 'block'))
+        .find((block) =>
+            block.getAttribute('type') === 'variables_set'
+            && getField(block, 'VAR') === variableName
+        );
+    return getValueNumber(setter, 'VALUE');
+};
+
 const readTemplate = (action: keyof typeof AUTO_SIGNAL_BOTS) =>
     fs.readFileSync(path.resolve(process.cwd(), 'public', AUTO_SIGNAL_BOTS[action].file.replace(/^\//, '')), 'utf8');
 
@@ -132,11 +141,11 @@ describe('Auto-Signals bot templates', () => {
             'AUTO_SIGNAL_OVER4_LOSSES',
         ]));
         expect(purchases).toEqual(expect.arrayContaining(['DIGITOVER', 'DIGITUNDER']));
-        expect(getField(getBlock(doc, 'trade_definition_contracttype'), 'TYPE_LIST')).toBe('DIGITOVER');
+        expect(getField(getBlock(doc, 'trade_definition_contracttype'), 'TYPE_LIST')).toBe('both');
         expect(getField(getBlock(doc, 'trade_definition_tradetype'), 'TRADETYPE_LIST')).toBe('overunder');
     });
 
-    it('can patch the existing Over DT Free Bot for a selected market and barrier', () => {
+    it('keeps Over DT at Over 1 and preserves the Under 5 recovery purchase', () => {
         const xml = patchAutoSignalsBotXml(readTemplate('over-dt'), {
             action: 'over-dt',
             market,
@@ -147,7 +156,33 @@ describe('Auto-Signals bot templates', () => {
         const doc = new DOMParser().parseFromString(xml, 'application/xml');
 
         expect(doc.getElementsByTagName('parsererror')).toHaveLength(0);
-        expect(getField(getBlock(doc, 'trade_definition_contracttype'), 'TYPE_LIST')).toBe('DIGITOVER');
+        expect(getField(getBlock(doc, 'trade_definition_contracttype'), 'TYPE_LIST')).toBe('both');
         expect(getValueNumber(getBlock(doc, 'trade_definition_tradeoptions'), 'DURATION')).toBe('1');
+        expect(getVariableSetNumber(doc, 'PREDICTION-1')).toBe('1');
+        expect(getVariableSetNumber(doc, 'PREDICTION-2')).toBe('5');
+        expect(Array.from(doc.getElementsByTagNameNS(XML_NS, 'block'))
+            .filter((block) => block.getAttribute('type') === 'purchase')
+            .map((block) => getField(block, 'PURCHASE_LIST')))
+            .toEqual(['DIGITOVER', 'DIGITUNDER']);
+    });
+
+    it('keeps Under DT recovery at Under 5 when the main barrier is selected', () => {
+        const xml = patchAutoSignalsBotXml(readTemplate('under-dt'), {
+            action: 'under-dt',
+            market,
+            candidate: makeCandidate('DIGITUNDER', 'UNDER', 7, 'under'),
+            settings,
+            accountAmounts: { stake1: 1, stake2: 2, takeProfit: 5, stopLoss: 10 },
+        });
+        const doc = new DOMParser().parseFromString(xml, 'application/xml');
+
+        expect(doc.getElementsByTagName('parsererror')).toHaveLength(0);
+        expect(getField(getBlock(doc, 'trade_definition_contracttype'), 'TYPE_LIST')).toBe('both');
+        expect(getVariableSetNumber(doc, 'PREDICTION-1')).toBe('7');
+        expect(getVariableSetNumber(doc, 'PREDICTION-2')).toBe('5');
+        expect(Array.from(doc.getElementsByTagNameNS(XML_NS, 'block'))
+            .filter((block) => block.getAttribute('type') === 'purchase')
+            .map((block) => getField(block, 'PURCHASE_LIST')))
+            .toEqual(['DIGITUNDER', 'DIGITUNDER']);
     });
 });

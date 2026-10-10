@@ -37,7 +37,7 @@ describe('Normal Killer V3 contract pipeline', () => {
         configureNormalKillerPipeline(pipeline, {
             currentStake: 0.35,
             baseStake: 0.35,
-            multiplier: 2,
+            multiplier: 2.5,
         });
         const main = reserveNormalKillerEntry(pipeline, { epoch: 200, kind: 'main', stake: 0.35 });
         const side1 = reserveNormalKillerEntry(pipeline, { epoch: 201, kind: 'side', stake: 0.35 });
@@ -48,11 +48,45 @@ describe('Normal Killer V3 contract pipeline', () => {
         expect(pipeline.currentStake).toBe(0.35);
 
         expect(settleNormalKillerEntry(pipeline, main, false)).toEqual([
-            expect.objectContaining({ sequence: 1, won: false, nextStake: 0.7 }),
+            expect.objectContaining({ sequence: 1, won: false, nextStake: 0.875 }),
             expect.objectContaining({ sequence: 2, won: true, nextStake: 0.35 }),
-            expect.objectContaining({ sequence: 3, won: false, nextStake: 0.7 }),
+            expect.objectContaining({ sequence: 3, won: false, nextStake: 0.875 }),
         ]);
-        expect(pipeline.currentStake).toBe(0.7);
+        expect(pipeline.currentStake).toBe(0.875);
+    });
+
+    it('deduplicates a market tick but permits the same epoch from another market', () => {
+        const pipeline = createNormalKillerPipeline();
+        configureNormalKillerPipeline(pipeline, {
+            currentStake: 0.35,
+            baseStake: 0.35,
+            multiplier: 2,
+        });
+
+        expect(reserveNormalKillerEntry(pipeline, {
+            epoch: 100,
+            tickKey: 'R_10:100',
+            kind: 'main',
+            stake: 0.35,
+        })).not.toBeNull();
+        expect(reserveNormalKillerEntry(pipeline, {
+            epoch: 100,
+            tickKey: 'R_10:100',
+            kind: 'main',
+            stake: 0.35,
+        })).toBeNull();
+        expect(reserveNormalKillerEntry(pipeline, {
+            epoch: 100,
+            tickKey: 'R_25:100',
+            kind: 'main',
+            stake: 0.35,
+        })).not.toBeNull();
+        expect(reserveNormalKillerEntry(pipeline, {
+            epoch: 100,
+            tickKey: 'R_10:100',
+            kind: 'main',
+            stake: 0.35,
+        })).toBeNull();
     });
 
     it('reuses capacity as soon as contracts settle even if an older contract is still open', () => {

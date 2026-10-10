@@ -7,6 +7,9 @@ export const createNormalKillerPipeline = () => ({
     takeProfit: 0,
     stopLoss: 0,
     lastPurchaseEpoch: null,
+    lastPurchaseKey: null,
+    purchaseKeys: new Set(),
+    purchaseKeyOrder: [],
     nextSequence: 1,
     entries: [],
     riskTripped: false,
@@ -65,19 +68,22 @@ export const getNormalKillerContractWinResult = contract => {
 export const reserveNormalKillerEntry = (pipeline, options = {}) => {
     const {
         epoch,
+        tickKey,
         kind,
         stake,
         maxOpen = NORMAL_KILLER_MAX_OPEN_CONTRACTS,
     } = options;
     const numericEpoch = Number(epoch);
     const numericStake = Number(stake);
+    const purchaseKey = tickKey == null ? String(numericEpoch) : String(tickKey);
     if (
         !Number.isFinite(numericEpoch)
         || !Number.isFinite(numericStake)
         || numericStake <= 0
         || pipeline.riskTripped
         || getNormalKillerOpenCount(pipeline) >= maxOpen
-        || pipeline.lastPurchaseEpoch === numericEpoch
+        || pipeline.purchaseKeys?.has(purchaseKey)
+        || pipeline.lastPurchaseKey === purchaseKey
     ) {
         return null;
     }
@@ -85,6 +91,7 @@ export const reserveNormalKillerEntry = (pipeline, options = {}) => {
     const entry = {
         sequence: pipeline.nextSequence++,
         epoch: numericEpoch,
+        tickKey: purchaseKey,
         kind,
         stake: numericStake,
         status: 'pending',
@@ -93,6 +100,15 @@ export const reserveNormalKillerEntry = (pipeline, options = {}) => {
     };
     pipeline.entries.push(entry);
     pipeline.lastPurchaseEpoch = numericEpoch;
+    pipeline.lastPurchaseKey = purchaseKey;
+    if (pipeline.purchaseKeys instanceof Set) {
+        pipeline.purchaseKeys.add(purchaseKey);
+        pipeline.purchaseKeyOrder.push(purchaseKey);
+        if (pipeline.purchaseKeyOrder.length > 2048) {
+            const expiredKey = pipeline.purchaseKeyOrder.shift();
+            if (expiredKey != null) pipeline.purchaseKeys.delete(expiredKey);
+        }
+    }
     return entry;
 };
 

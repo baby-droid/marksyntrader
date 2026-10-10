@@ -449,7 +449,11 @@ const unwrapTimeouts = (container: Element) => {
     }
 };
 
-const setContractType = (doc: Document, candidate: AutoSignalCandidate) => {
+const setContractType = (
+    doc: Document,
+    candidate: AutoSignalCandidate,
+    preserveRecoveryPurchaseTypes = false,
+) => {
     const category = candidate.contractType === 'CALL' || candidate.contractType === 'PUT'
         ? 'callput'
         : 'digits';
@@ -470,10 +474,16 @@ const setContractType = (doc: Document, candidate: AutoSignalCandidate) => {
     }
     setFieldValue(tradeTypeBlock, 'TRADETYPECAT_LIST', category);
     setFieldValue(tradeTypeBlock, 'TRADETYPE_LIST', tradeType);
-    setFieldValue(contractTypeBlock, 'TYPE_LIST', candidate.contractType);
-    blocksOfType(doc, 'purchase').forEach((purchase) =>
-        setFieldValue(purchase, 'PURCHASE_LIST', candidate.contractType)
+    setFieldValue(
+        contractTypeBlock,
+        'TYPE_LIST',
+        preserveRecoveryPurchaseTypes ? 'both' : candidate.contractType,
     );
+    if (!preserveRecoveryPurchaseTypes) {
+        blocksOfType(doc, 'purchase').forEach((purchase) =>
+            setFieldValue(purchase, 'PURCHASE_LIST', candidate.contractType)
+        );
+    }
 };
 
 const configureTradeParameters = (
@@ -488,7 +498,11 @@ const configureTradeParameters = (
     setFieldValue(marketBlock, 'SUBMARKET_LIST', config.market.submarket);
     setFieldValue(marketBlock, 'SYMBOL_LIST', config.market.symbol);
     setFieldValue(marketBlock, 'ALTERNATE_MARKETS', 'FALSE', false);
-    setContractType(doc, config.candidate);
+    setContractType(
+        doc,
+        config.candidate,
+        config.action === 'over-dt' || config.action === 'under-dt',
+    );
 
     setFieldValue(optionsBlock, 'DURATIONTYPE_LIST', 't');
     if (!setNumberInput(optionsBlock, 'DURATION', AUTO_SIGNAL_DURATION_TICKS)) {
@@ -545,6 +559,15 @@ const configureTradeParameters = (
             if (config.candidate.barrier != null) {
                 setVariableValue(doc, name, config.candidate.barrier);
             }
+        }
+        if (config.action === 'over-dt' || config.action === 'under-dt') {
+            setVariableValue(
+                doc,
+                'PREDICTION-1',
+                config.action === 'over-dt' ? 1 : config.candidate.barrier ?? 7,
+            );
+            // Both DT templates recover with Under 5 after the primary entry.
+            setVariableValue(doc, 'PREDICTION-2', 5);
         }
     }
 };

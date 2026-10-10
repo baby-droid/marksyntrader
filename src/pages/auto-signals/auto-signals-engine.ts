@@ -125,6 +125,9 @@ const entryDigitFor = (route: Route, ticks: AutoLabTick[]) => {
         || route.strategy === 'ONLY_DOWNS'
     ) return null;
     if (route.strategy === 'MATCHES') return route.barrier;
+    if (route.strategy === 'OVER' || route.strategy === 'UNDER') {
+        return selectOverUnderEntryDigit(route.strategy, route.barrier ?? 0, ticks);
+    }
     const counts = Array.from({ length: 10 }, (_, digit) => ({
         digit,
         count: ticks.reduce((total, tick) => total + Number(tick.digit === digit), 0),
@@ -140,16 +143,106 @@ const entryDigitFor = (route: Route, ticks: AutoLabTick[]) => {
     return eligible.sort((left, right) => right.count - left.count || left.digit - right.digit)[0]?.digit ?? null;
 };
 
+const selectOverUnderEntryDigit = (
+    strategy: 'OVER' | 'UNDER',
+    barrier: number,
+    ticks: AutoLabTick[],
+) => {
+    const route: Route = {
+        strategy,
+        contractType: strategy === 'OVER' ? 'DIGITOVER' : 'DIGITUNDER',
+        barrier,
+        direction: strategy === 'OVER' ? 'over' : 'under',
+        baseline: 0,
+    };
+    const entryDigits = strategy === 'OVER' ? [1, 8] : [2, 9];
+    const recent = ticks.slice(-50);
+    const metrics = entryDigits.map((digit) => {
+        let samples = 0;
+        let wins = 0;
+        let occurrences = 0;
+        for (let index = 0; index < recent.length; index += 1) {
+            if (recent[index].digit !== digit) continue;
+            occurrences += 1;
+            const next = recent[index + 1];
+            if (!next) continue;
+            samples += 1;
+            wins += Number(routeWins(route, next));
+        }
+        return {
+            digit,
+            samples,
+            wins,
+            occurrences,
+            observedRate: samples >= 3 ? wins / samples : null,
+        };
+    });
+
+    return metrics.sort((left, right) => {
+        if (left.observedRate != null && right.observedRate != null) {
+            const rateDifference = right.observedRate - left.observedRate;
+            if (Math.abs(rateDifference) > Number.EPSILON) return rateDifference;
+        } else if (left.observedRate != null || right.observedRate != null) {
+            return left.observedRate != null ? -1 : 1;
+        }
+        return right.samples - left.samples
+            || right.occurrences - left.occurrences
+            || left.digit - right.digit;
+    })[0]?.digit ?? null;
+};
+
+export const selectAutoSignalEntryDigit = (
+    strategy: 'OVER' | 'UNDER',
+    barrier: number,
+    ticks: AutoLabTick[],
+) => selectOverUnderEntryDigit(strategy, barrier, ticks);
+
+const movementAt = (ticks: AutoLabTick[], movementIndex: number) =>
+    Math.sign(ticks[movementIndex + 1].quote - ticks[movementIndex].quote);
+
+const movementStreakEndingAt = (
+    ticks: AutoLabTick[],
+    endIndex: number,
+    direction: number,
+) => {
+    let streak = 0;
+    for (let index = endIndex; index >= 0; index -= 1) {
+        if (movementAt(ticks, index) !== direction) break;
+        streak += 1;
+    }
+    return streak;
+};
+
+export const hasAutoSignalPriceEntryPattern = (
+    strategy: 'RISE' | 'FALL',
+    ticks: AutoLabTick[],
+) => {
+    if (ticks.length < 3) return false;
+    const lastMove = ticks.length - 2;
+    const latestDirection = movementAt(ticks, lastMove);
+    if (strategy === 'FALL') {
+        if (latestDirection === -1) {
+            const precedingRiseCount = movementStreakEndingAt(ticks, lastMove - 1, 1);
+            return precedingRiseCount >= 3 && precedingRiseCount <= 5;
+        }
+        return latestDirection === 1 && movementStreakEndingAt(ticks, lastMove, 1) >= 5;
+    }
+
+    if (latestDirection === -1) {
+        return movementStreakEndingAt(ticks, lastMove, -1) >= 2;
+    }
+    return latestDirection === 1
+        && movementStreakEndingAt(ticks, lastMove - 1, -1) >= 2;
+};
+
 const entryConditionConfirmed = (route: Route, ticks: AutoLabTick[], entryDigit: number | null) => {
     const latest = ticks[ticks.length - 1];
     if (!latest) return false;
 
-    if (
-        route.strategy === 'RISE'
-        || route.strategy === 'FALL'
-        || route.strategy === 'ONLY_UPS'
-        || route.strategy === 'ONLY_DOWNS'
-    ) {
+    if (route.strategy === 'RISE' || route.strategy === 'FALL') {
+        return hasAutoSignalPriceEntryPattern(route.strategy, ticks);
+    }
+    if (route.strategy === 'ONLY_UPS' || route.strategy === 'ONLY_DOWNS') {
         const previous = ticks[ticks.length - 2];
         if (!previous) return false;
         return route.strategy === 'RISE' || route.strategy === 'ONLY_UPS'
@@ -158,6 +251,7 @@ const entryConditionConfirmed = (route: Route, ticks: AutoLabTick[], entryDigit:
     }
 
     if (entryDigit == null || latest.digit !== entryDigit) return false;
+    if (route.strategy === 'OVER' || route.strategy === 'UNDER') return true;
     return routeWins(route, latest);
 };
 
@@ -179,6 +273,11 @@ const getPatternCandidates = (ticks: AutoLabTick[]) => {
 };
 
 const strategyPatternBoost = (route: Route, ticks: AutoLabTick[], patterns: ReturnType<typeof getPatternCandidates>) => {
+    if (
+        (route.strategy === 'RISE' || route.strategy === 'FALL')
+        && hasAutoSignalPriceEntryPattern(route.strategy, ticks)
+    ) return 9;
+
     const matching = patterns.some((pattern) =>
         pattern.contract_type === route.contractType
         && (route.barrier == null || pattern.barrier == null || pattern.barrier === route.barrier)
@@ -221,15 +320,7 @@ export const evaluateAutoSignalCandidates = ({
 
     const patternCandidates = getPatternCandidates(ticks);
     const digitOptions = digitRoutes();
-    const latestQuote = ticks[ticks.length - 1].quote;
-    const previousQuote = ticks[ticks.length - 2]?.quote;
-    const latestMovement = previousQuote == null ? 0 : Math.sign(latestQuote - previousQuote);
-    const movementRoutes = priceRoutes.filter((route) => {
-        if (route.strategy === 'RISE' || route.strategy === 'ONLY_UPS') return latestMovement > 0;
-        if (route.strategy === 'FALL' || route.strategy === 'ONLY_DOWNS') return latestMovement < 0;
-        return false;
-    });
-    const routes = [...digitOptions, ...movementRoutes].filter((route) => isRouteInFamily(route, family));
+    const routes = [...digitOptions, ...priceRoutes].filter((route) => isRouteInFamily(route, family));
 
     const ranked = routes.flatMap((route) => {
         const windows = makeWindowResults(route, ticks);
@@ -247,7 +338,7 @@ export const evaluateAutoSignalCandidates = ({
         if (weightedEdge < 1.25 && patternBoost === 0) return [];
 
         const score = clamp(48 + weightedEdge * 2.2 + agreementRatio * 19 + patternBoost, 0, 99.9);
-        const entryDigit = entryDigitFor(route, ticks.slice(-100));
+        const entryDigit = entryDigitFor(route, ticks.slice(-50));
         const entryReady = entryConditionConfirmed(route, ticks, entryDigit);
         const sameSignal = previous?.id === routeId(market.symbol, route);
         const stillValid = Boolean(sameSignal && previous?.expiresAt && previous.expiresAt > now);
@@ -260,7 +351,12 @@ export const evaluateAutoSignalCandidates = ({
                 ? 'setup'
                 : 'watch';
         const latest = ticks[ticks.length - 1];
-        const reason = `${agreements}/${evidenceWindows.length} longer windows show observed outcomes above baseline; ${entryDigit == null ? 'price-direction entry' : `entry digit ${entryDigit}`} ${entryReady ? 'is confirmed' : 'is waiting'}.`;
+        const entryDescription = route.strategy === 'RISE'
+            ? 'Rise entry (2+ falls, optionally followed by a rise)'
+            : route.strategy === 'FALL'
+                ? 'Fall entry (3–5 rises or a 5-rise run)'
+                : entryDigit == null ? 'price-direction entry' : `entry digit ${entryDigit}`;
+        const reason = `${agreements}/${evidenceWindows.length} longer windows show observed outcomes above baseline; ${entryDescription} ${entryReady ? 'is confirmed' : 'is waiting'}.`;
 
         return [{
             id: routeId(market.symbol, route),

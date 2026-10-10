@@ -78,9 +78,36 @@ window.Blockly.Blocks.before_purchase = {
 
 window.Blockly.JavaScript.javascriptGenerator.forBlock.before_purchase = block => {
     const stack = window.Blockly.JavaScript.javascriptGenerator.statementToCode(block, 'BEFOREPURCHASE_STACK');
+    const workspace = block.workspace ?? window.Blockly.derivWorkspace;
+    const variables = workspace?.getVariableMap?.()?.getVariables?.() ?? [];
+    const normalizeName = value => String(value ?? '')
+        .trim()
+        .toLowerCase()
+        .replace(/[\s_-]+/g, ' ');
+    const variableCode = name => {
+        const variable = variables.find(candidate => normalizeName(candidate.name) === normalizeName(name));
+        return variable
+            ? window.Blockly.JavaScript.variableDB_.getName(
+                variable.getId(),
+                window.Blockly.Variables.CATEGORY_NAME
+            )
+            : null;
+    };
+    const pipelineVariables = ['stake', 'base_stake', 'martingale', 'take_profit', 'stop_loss']
+        .map(variableCode);
+    const isNormalKillerPipeline = block.data === 'nkv3-pipeline';
+    const pipelineSetup = isNormalKillerPipeline && pipelineVariables.every(Boolean)
+        ? `
+        Bot.configureNormalKillerPipeline(Number(${pipelineVariables.join('), Number(')}));
+        var normalKillerTick = Bot.getLastTick(true);
+        if (normalKillerTick && normalKillerTick.epoch != null) {
+            Bot.setNormalKillerPurchaseEpoch(Number(normalKillerTick.epoch), Bot.getSymbol());
+        }`
+        : '';
 
     const code = `BinaryBotPrivateBeforePurchase = function BinaryBotPrivateBeforePurchase() {
         Bot.highlightBlock('${block.id}');
+        ${pipelineSetup}
         ${stack}
     };\n`;
     return code;
