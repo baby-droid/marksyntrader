@@ -13,6 +13,22 @@ export function isChunkLoadFailure(error: unknown): boolean {
     );
 }
 
+export function isSameOriginChunkAsset(target: EventTarget | null): boolean {
+    if (typeof window === 'undefined' || !target) return false;
+
+    const isScript = target instanceof HTMLScriptElement;
+    const isStylesheet = target instanceof HTMLLinkElement && target.rel === 'stylesheet';
+    if (!isScript && !isStylesheet) return false;
+
+    const source = isScript ? (target as HTMLScriptElement).src : (target as HTMLLinkElement).href;
+    const sameOrigin = source.startsWith('/') || source.startsWith(window.location.origin);
+    if (!sameOrigin) return false;
+
+    return isScript
+        ? /\/static\/js\/|\.js(?:$|\?)/i.test(source)
+        : /\/static\/css\/|\.css(?:$|\?)/i.test(source);
+}
+
 export function reloadAfterChunkFailure(): boolean {
     if (typeof window === 'undefined') return false;
 
@@ -40,16 +56,7 @@ export function installChunkRecovery(): () => void {
     };
 
     const handleError = (event: ErrorEvent) => {
-        const target = event.target;
-        const source = target instanceof HTMLScriptElement ? target.src : '';
-        const sameOriginScript =
-            source.startsWith('/') || source.startsWith(window.location.origin);
-        const failedScript =
-            target instanceof HTMLScriptElement &&
-            sameOriginScript &&
-            /\/static\/js\/|\.js(?:$|\?)/i.test(source);
-
-        if (failedScript || isChunkLoadFailure(event.error ?? event.message)) {
+        if (isSameOriginChunkAsset(event.target) || isChunkLoadFailure(event.error ?? event.message)) {
             reloadAfterChunkFailure();
         }
     };

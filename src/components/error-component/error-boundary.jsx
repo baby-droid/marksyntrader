@@ -1,6 +1,7 @@
 import React from 'react';
 import PropTypes from 'prop-types';
 import ErrorComponent from './index';
+import { isChunkLoadFailure, reloadAfterChunkFailure } from '@/utils/chunk-recovery';
 
 class ErrorBoundary extends React.Component {
     constructor(props) {
@@ -9,6 +10,10 @@ class ErrorBoundary extends React.Component {
     }
 
     componentDidCatch = (error, info) => {
+        if (isChunkLoadFailure(error)) {
+            reloadAfterChunkFailure();
+        }
+
         if (window.TrackJS) window.TrackJS.console.log(this.props.root_store);
 
         this.setState({
