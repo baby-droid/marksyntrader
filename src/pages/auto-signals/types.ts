@@ -93,6 +93,7 @@ export interface AutoSignalsRun {
     startedAt: number;
     maxRuns: number;
     completedRuns: number;
+    purchasesPerTick: number;
 }
 
 export interface AutoSignalsPageProps {

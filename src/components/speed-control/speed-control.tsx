@@ -109,13 +109,13 @@ const SpeedControl: React.FC<TSpeedControl> = ({ className, compact }) => {
                   • Removes app-added inter-trade delays in supported flows
                   • Uses direct buys where the strategy supports them
                   • Allows up to three purchases per tick in supported flows
-                  • Keeps Auto-Signals one-at-a-time for run-by-run revalidation
+                  • Auto-Signals revalidates between signal cycles
                   • Still depends on Deriv tick delivery and network response time */}
             <button
                 type='button'
                 title={fastExec
-                    ? 'FAST MODE ACTIVE — no app-added waits; up to 3 purchases per tick in supported flows. Auto-Signals stays sequential. Deriv limits and network latency still apply. Click to disable.'
-                    : 'Fast removes app-added waits and allows up to 3 purchases per tick in supported flows. Auto-Signals stays sequential; Deriv limits and network latency still apply.'}
+                    ? 'FAST MODE ACTIVE — no app-added waits; Auto-Signals can send up to 3 separate purchases per signal tick. Deriv limits and network latency still apply. Click to disable.'
+                    : 'Fast removes app-added waits; Auto-Signals can send up to 3 separate purchases per signal tick. Deriv limits and network latency still apply.'}
                 aria-pressed={fastExec}
                 className={`speed-control__fast ${fastExec ? 'active' : ''}`}
                 onClick={() => setFastExecutionEnabled(!fastExec)}

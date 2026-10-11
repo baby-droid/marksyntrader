@@ -206,7 +206,7 @@ function MarketCard({
                     >
                         <span>MARKET CONFIDENCE</span>
                         <strong>{candidate ? `${Math.round(score)}%` : '—'}</strong>
-                        <small>{candidate ? `${selectedRuns} suggested runs` : 'No run target'}</small>
+                        <small>{candidate ? `${selectedRuns} suggested cycles` : 'No cycle target'}</small>
                     </div>
                     <span>LAST QUOTE</span>
                     <strong data-testid={`text-quote-${cardId}`}>{numberText(market.latestQuote, 3)}</strong>
@@ -249,7 +249,7 @@ function MarketCard({
                     <span>Signal analysis</span>
                     <strong>
                         {candidate
-                            ? `${selectedRuns} suggested runs · ${Math.round(score)}/100`
+                            ? `${selectedRuns} suggested cycles · ${Math.round(score)}/100`
                             : 'Waiting for a signal'}
                     </strong>
                 </summary>
@@ -269,11 +269,12 @@ function MarketCard({
                     </div>
 
                     <div className='as-run-recommendation' data-testid={`text-run-recommendation-${cardId}`}>
-                        <span>Signal-selected runs</span>
+                        <span>Signal cycles</span>
                         <strong>{candidate ? selectedRuns : 0}</strong>
                         <small>
-                            The bot uses this run cap, then stops. Stop it manually in Bot Builder at any time; configured
-                            take-profit or stop-loss limits can stop it sooner.
+                            Fast mode can send 3 separate one-tick purchases per cycle at the configured stake (up to 3×
+                            stake exposure per cycle). With Fast off, each cycle sends one purchase. The cycle cap,
+                            take-profit, and stop-loss limits still apply.
                         </small>
                     </div>
 
@@ -371,7 +372,7 @@ function SettingsPanel({
             <summary className='as-settings__summary'>
                 <span className='as-settings__summary-title'>
                     <SlidersHorizontal size={14} aria-hidden='true' />
-                    <span>BOT SETTINGS</span>
+                    <span>SETTINGS</span>
                 </span>
                 <span className='as-settings__summary-hint'>Edit</span>
             </summary>
@@ -527,7 +528,11 @@ const AutoSignalsPage = ({
                 <div className='as-overview__stat as-overview__stat--mode'>
                     <span className='as-overline'>HANDOFF MODE</span>
                     <strong>{activeRun ? 'RUN IN PROGRESS' : 'BOT BUILDER'}</strong>
-                    <small>{activeRun ? `${activeRun.symbol} · ${activeRun.completedRuns}/${activeRun.maxRuns} runs` : `${currencyLabel} · one-tick contracts`}</small>
+                    <small>
+                        {activeRun
+                            ? `${activeRun.symbol} · ${activeRun.completedRuns}/${activeRun.maxRuns} cycles · ${activeRun.purchasesPerTick} purchases/tick`
+                            : `${currencyLabel} · one-tick contracts`}
+                    </small>
                 </div>
             </section>
 

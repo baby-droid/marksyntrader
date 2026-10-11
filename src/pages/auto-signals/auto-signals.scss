@@ -158,7 +158,7 @@
 
 .as-workspace {
     display: grid;
-    grid-template-columns: minmax(235px, 0.72fr) minmax(0, 3fr);
+    grid-template-columns: minmax(140px, 0.72fr) minmax(0, 3fr);
     align-items: start;
     gap: 0.9rem;
     width: min(100%, 1720px);
@@ -168,7 +168,7 @@
 .as-settings {
     position: sticky;
     top: 0.75rem;
-    width: 50%;
+    width: 100%;
     min-width: 0;
     border: 1px solid var(--as-line);
     border-radius: 8px;
@@ -328,15 +328,13 @@
 
 .as-market-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(8.5rem, calc(25% - 0.145rem)));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
     align-items: stretch;
-    justify-content: start;
+    justify-content: stretch;
     gap: 0.58rem;
     width: 100%;
     max-width: none;
     margin-left: 0;
-    overflow-x: auto;
-    scrollbar-width: thin;
 }
 
 .as-market-card {
@@ -679,9 +677,8 @@
 @media (max-width: 1050px) {
     .as-overview { grid-template-columns: minmax(15rem, 1.7fr) repeat(2, minmax(6rem, 0.65fr)); }
     .as-overview__stat--mode { grid-column: 1 / -1; min-height: 3rem; border-top: 1px solid var(--as-line); }
-    .as-workspace { grid-template-columns: minmax(210px, 0.75fr) minmax(0, 2.4fr); }
-    .as-market-grid { grid-template-columns: repeat(3, minmax(0, calc(25% - 0.145rem))); }
-    .as-market-grid { width: 100%; max-width: none; margin-left: 0; }
+    .as-workspace { grid-template-columns: minmax(115px, 0.75fr) minmax(0, 2.4fr); }
+    .as-settings__summary-hint { display: none; }
     .as-market-card__actions { grid-template-columns: 0.88fr 1.12fr; }
     .as-header { align-items: flex-start; flex-direction: column; }
 }
@@ -699,7 +696,7 @@
     .as-overview__stat:nth-child(3) { border-right: 0; }
     .as-overview__stat--mode { grid-column: 1 / -1; border-top: 1px solid var(--as-line); }
     .as-workspace { display: flex; flex-direction: column; gap: 0.9rem; }
-    .as-settings { position: static; width: 50%; align-self: flex-start; }
+    .as-settings { position: static; width: 100%; align-self: stretch; }
     .as-settings[open] { width: 100%; }
     .as-settings__fields { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .as-scanner { width: 100%; }
@@ -709,7 +706,6 @@
     .as-filter-label { padding: 0; border: 0; }
     .as-filters { width: 100%; }
     .as-filter { white-space: nowrap; }
-    .as-market-grid { grid-template-columns: repeat(3, minmax(0, 50%)); }
     .as-market-card { width: 100%; max-width: none; margin: 0; padding: 0.42rem; }
     .as-market-card__actions { grid-template-columns: 0.88fr 1.12fr; }
     .as-button { min-height: 1.85rem; }

@@ -120,10 +120,10 @@ describe('Auto-Signals trade actions', () => {
         }]} />);
 
         expect(screen.getByTestId('text-confidence-R_10-OVER-4')).toHaveTextContent('89%');
-        expect(screen.getByText('4 suggested runs')).toBeInTheDocument();
+        expect(screen.getByText('4 suggested cycles')).toBeInTheDocument();
         expect(screen.getByTestId('panel-bot-settings')).not.toHaveAttribute('open');
 
-        fireEvent.click(screen.getByText('BOT SETTINGS'));
+        fireEvent.click(screen.getByText('SETTINGS'));
         expect(screen.getByTestId('input-setting-stake1')).toBeInTheDocument();
     });
 

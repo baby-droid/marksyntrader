@@ -43,8 +43,8 @@ const onBotContract = (contract: any) => {
     session = {
         run: { ...currentRun, completedRuns },
         message: completedRuns >= currentRun.maxRuns
-            ? `Run limit reached (${currentRun.maxRuns}). Bot Builder is finishing its after-purchase stop.`
-            : `Bot Builder completed ${completedRuns} of ${currentRun.maxRuns} runs on ${currentRun.symbol}.`,
+            ? `Cycle limit reached (${currentRun.maxRuns}). Bot Builder is finishing its after-purchase stop.`
+            : `Bot Builder completed ${completedRuns} of ${currentRun.maxRuns} cycles on ${currentRun.symbol}.`,
     };
     emit();
 };
@@ -55,8 +55,8 @@ const onBotStop = () => {
     session = {
         run: null,
         message: stopped.completedRuns >= stopped.maxRuns
-            ? `Completed the ${stopped.maxRuns}-run limit on ${stopped.symbol}.`
-            : `Bot Builder stopped ${stopped.completedRuns} of ${stopped.maxRuns} runs on ${stopped.symbol}.`,
+            ? `Completed the ${stopped.maxRuns}-cycle limit on ${stopped.symbol}.`
+            : `Bot Builder stopped ${stopped.completedRuns} of ${stopped.maxRuns} cycles on ${stopped.symbol}.`,
     };
     contractIds.clear();
     emit();

@@ -1,13 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-    api_base,
-    load,
-    save_types,
-} from '@/external/bot-skeleton';
+import { api_base } from '@/external/bot-skeleton';
 import { useDerivTrade, type TickData } from '@/hooks/useDerivTrade';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { getDisplayCurrency, subscribeCurrency, toUsd } from '@/utils/currency-display';
 import { setTradeContext } from '@/utils/trade-metadata';
+import { getPurchasesPerTick } from '@/utils/execution-speed';
 import {
     AUTO_SIGNAL_BOTS,
     patchAutoSignalsBotXml,
@@ -20,6 +17,7 @@ import {
     subscribeAutoSignalsRunSession,
 } from './auto-signals-run-session';
 import { evaluateAutoSignalCandidates, shouldExcludeAutoSignalMarket } from './auto-signals-engine';
+import { isAutoSignalWorkspaceReady } from './bot-builder-handoff';
 import type {
     AutoSignalAction,
     AutoSignalCandidate,
@@ -175,13 +173,13 @@ const appendLiveTick = (runtime: MarketRuntime, tick: TickData) => {
 
 const getBlocklyWorkspace = () => (window as any).Blockly?.derivWorkspace;
 
-const waitForWorkspace = async () => {
+const waitForWorkspace = async (expectedXml: string) => {
     for (let attempt = 0; attempt < 300; attempt += 1) {
         const workspace = getBlocklyWorkspace();
-        if (workspace) return workspace;
+        if (isAutoSignalWorkspaceReady(workspace, expectedXml)) return workspace;
         await nextFrame();
     }
-    throw new Error('Bot Builder workspace did not become ready.');
+    throw new Error('Bot Builder did not finish loading the selected bot. Try choosing it again.');
 };
 
 const accountAmount = (amount: number, currency: string, displayCurrency: string) => {
@@ -484,24 +482,16 @@ export const useAutoSignalsEngine = ({
             });
 
             setTradeContext({ page: 'Auto-Signals', bot: bot.name });
+            const purchasesPerTick = getPurchasesPerTick();
             (window as any).__pendingBotXml = configuredXml;
             (window as any).__pendingBotName = bot.name;
             setActiveTab(DBOT_TABS.BOT_BUILDER);
             runPanel.toggleDrawer?.(true);
-            const workspace = await waitForWorkspace();
+            // Bot Builder consumes these pending values while its Blockly
+            // workspace mounts. Wait for that load to finish instead of
+            // starting a second, overlapping clear-and-load operation here.
+            await waitForWorkspace(configuredXml);
             if (runPanel.is_running) throw new Error('Stop the currently running Bot Builder bot before loading another.');
-            await load({
-                block_string: configuredXml,
-                drop_event: null,
-                file_name: bot.name,
-                strategy_id: `auto-signals-${action}`,
-                from: save_types.LOCAL,
-                workspace,
-                showIncompatibleStrategyDialog: false,
-                show_snackbar: false,
-            });
-            workspace.strategy_to_load = configuredXml;
-            setActiveTab(DBOT_TABS.BOT_BUILDER);
 
             const latestRuntime = runtimesRef.current.get(market.symbol);
             const latestCandidate = latestRuntime?.candidates.find((item) => item.id === candidate.id);
@@ -519,10 +509,11 @@ export const useAutoSignalsEngine = ({
                 startedAt: Date.now(),
                 maxRuns: selectedRuns,
                 completedRuns: 0,
+                purchasesPerTick,
             };
             beginAutoSignalsRun(
                 nextRun,
-                `${bot.name} is starting on ${market.symbol} with a ${selectedRuns}-trade limit in Bot Builder.`,
+                `${bot.name} is starting on ${market.symbol} for ${selectedRuns} signal cycles, with up to ${purchasesPerTick} separate purchases per tick.`,
             );
 
             if (!runPanel.onRunButtonClick) throw new Error('Bot Builder Run control is unavailable.');
@@ -538,8 +529,8 @@ export const useAutoSignalsEngine = ({
             const currentSession = getAutoSignalsRunSession();
             if (currentSession.run?.startedAt === nextRun.startedAt) {
                 const runMessage = action === 'entry-trade' && !candidate.entryReady
-                    ? `${bot.name} is watching for its entry condition on ${market.symbol}; it will stop at ${selectedRuns} trades.`
-                    : `${bot.name} is trading ${market.symbol} for up to ${selectedRuns} one-tick trades.`;
+                    ? `${bot.name} is watching for its entry condition on ${market.symbol}; it will stop after ${selectedRuns} cycles.`
+                    : `${bot.name} is trading ${market.symbol} for up to ${selectedRuns} signal cycles (${purchasesPerTick} separate purchases per tick).`;
                 setMessage(runMessage);
                 setAutoSignalsRunMessage(runMessage);
             } else {
@@ -547,6 +538,10 @@ export const useAutoSignalsEngine = ({
             }
         } catch (error: any) {
             const errorMessage = error?.message || 'The Bot Builder handoff failed.';
+            if ((window as any).__pendingBotName === bot.name) {
+                (window as any).__pendingBotXml = null;
+                (window as any).__pendingBotName = null;
+            }
             clearAutoSignalsRun(errorMessage);
             setMessage(errorMessage);
             setActiveTab(DBOT_TABS.AUTO_SIGNALS);
