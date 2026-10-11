@@ -32,7 +32,7 @@ describe('execution speed controls', () => {
         speed.setASpeedBoostEnabled(false);
     });
 
-    it('keeps Fast scoped to Bot Builder, Auto-Signals, Scalper, and designated Free Bot contexts', async () => {
+    it('enables Fast on automated trading surfaces while preserving Auto-Signals one-at-a-time', async () => {
         const speed = await import('../execution-speed');
         const { setTradeContext } = await import('../trade-metadata');
 
@@ -40,8 +40,12 @@ describe('execution speed controls', () => {
         speed.setFastExecutionEnabled(true);
 
         setTradeContext({ page: 'Auto Trades', bot: 'Odd' });
-        expect(speed.isFastExecutionEnabledForContext()).toBe(false);
-        expect(speed.getExecutionSpeedDelay()).toBe(200);
+        expect(speed.isFastExecutionEnabledForContext()).toBe(true);
+        expect(speed.getExecutionSpeedDelay()).toBe(0);
+
+        setTradeContext({ page: 'Speed Lab', bot: 'Tick Bot' });
+        expect(speed.isFastExecutionEnabledForContext()).toBe(true);
+        expect(speed.getExecutionSpeedDelay()).toBe(0);
 
         setTradeContext({ page: 'Scalper Bots', bot: 'Rise' });
         expect(speed.isFastExecutionEnabledForContext()).toBe(true);
@@ -107,7 +111,7 @@ describe('execution speed controls', () => {
 
         setTradeContext({ page: 'Free Bots', bot: 'ACC FLIPPER' });
         expect(speed.isFastExecutionEnabledForContext()).toBe(false);
-        expect(speed.getExecutionSpeedDelay()).toBe(200);
+        expect(speed.getExecutionSpeedDelay()).toBe(0);
 
         speed.setFastExecutionEnabled(false);
         setTradeContext({ page: 'Bot Builder', bot: '' });

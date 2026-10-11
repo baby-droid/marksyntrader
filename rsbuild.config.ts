@@ -58,6 +58,8 @@ export default defineConfig({
         GD_API_KEY: JSON.stringify(process.env.GD_API_KEY),
       },
     },
+  },
+  resolve: {
     alias: {
       // Resolve from wherever the package actually lives so the build works
       // both standalone and inside the monorepo (npm workspaces hoist react to
@@ -71,8 +73,6 @@ export default defineConfig({
       '@/constants': path.resolve(__dirname, './src/constants'),
       '@/stores': path.resolve(__dirname, './src/stores'),
     },
-  },
-  resolve: {
     // The vendored bot runtime and shared UI still contain JSX modules.
     // Explicit extensions prevent Rsbuild from treating those imports as
     // missing modules during a hot rebuild.

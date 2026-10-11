@@ -6,7 +6,7 @@ import {
     connectionStatus$,
 } from '@/external/bot-skeleton/services/api/observables/connection-status-stream';
 import { useDerivTrade } from '@/hooks/useDerivTrade';
-import { isFastExecutionEnabledForContext } from '@/utils/execution-speed';
+import { isInstantExecutionForContext } from '@/utils/execution-speed';
 import NumberField from '@/components/number-field';
 import { setTradeContext } from '@/utils/trade-metadata';
 import {
@@ -768,9 +768,24 @@ function AiBotCard({
     const isCycleBot = Boolean(bot.cycle);
     const marketCandidatesRef = useRef<AutoBotMarketCandidate[]>([]);
     const scannerTickVersionRef = useRef(scannerTickVersion);
+    const scannerTickWaitersRef = useRef(new Set<() => void>());
+    const wakeScannerTickWaiters = useCallback(() => {
+        const waiters = Array.from(scannerTickWaitersRef.current);
+        scannerTickWaitersRef.current.clear();
+        waiters.forEach(resolve => resolve());
+    }, []);
     const runVersionRef = useRef(0);
-    useEffect(() => { scannerTickVersionRef.current = scannerTickVersion; }, [scannerTickVersion]);
     const stopRef = useRef(false);
+    useEffect(() => {
+        const changed = scannerTickVersionRef.current !== scannerTickVersion;
+        scannerTickVersionRef.current = scannerTickVersion;
+        if (changed) wakeScannerTickWaiters();
+    }, [scannerTickVersion, wakeScannerTickWaiters]);
+    useEffect(() => () => {
+        stopRef.current = true;
+        runVersionRef.current += 1;
+        wakeScannerTickWaiters();
+    }, [wakeScannerTickWaiters]);
     const pausedStakeRef = useRef<number | null>(null); // for resume-with-martingale
     const { buyAndWait } = useBuyAndWait();
     const usesPairRotation = true;
@@ -969,15 +984,14 @@ function AiBotCard({
 
         while (isCurrentRun()) {
             try {
-                // The scanner subscribes to every supported authenticated
-                // market in the background. A global version only wakes this
-                // loop; each market still needs its own fresh tick before it
-                // can be selected.
-                while (isCurrentRun() && scannerTickVersionRef.current <= 0) {
-                    await new Promise(r => setTimeout(r, isFastExecutionEnabledForContext() ? 0 : 80));
-                }
-                while (isCurrentRun() && scannerTickVersionRef.current === Number(lastScanKey)) {
-                    await new Promise(r => setTimeout(r, isFastExecutionEnabledForContext() ? 0 : 80));
+                // Wake on the authenticated feed's actual React tick update
+                // rather than polling every 40–80ms. This removes avoidable
+                // scan latency without producing extra entries per tick.
+                while (isCurrentRun() && (
+                    scannerTickVersionRef.current <= 0
+                    || scannerTickVersionRef.current === Number(lastScanKey)
+                )) {
+                    await new Promise<void>(resolve => scannerTickWaitersRef.current.add(resolve));
                 }
                 if (!isCurrentRun()) break;
                 lastScanKey = String(scannerTickVersionRef.current);
@@ -1090,7 +1104,7 @@ function AiBotCard({
                 }
             } catch (err: any) {
                 onLog(`⚠️ ${err?.message || 'Error'}`);
-                await new Promise(r => setTimeout(r, isFastExecutionEnabledForContext() ? 0 : 1500));
+                await new Promise(r => setTimeout(r, isInstantExecutionForContext() ? 0 : 1500));
             }
         }
 
@@ -1105,6 +1119,7 @@ function AiBotCard({
         if (session.active) {
             stopRef.current = true;
             runVersionRef.current += 1;
+            wakeScannerTickWaiters();
             onSessionUpdate({ active: false });
             onLog('⏹ Stop requested. Waiting for any open contract to settle safely.');
         } else {
@@ -1115,7 +1130,7 @@ function AiBotCard({
                 onLog(`⚠️ ${describeTradeError(error)}`);
             });
         }
-    }, [session.active, start, onLog, onSessionUpdate]);
+    }, [session.active, start, onLog, onSessionUpdate, wakeScannerTickWaiters]);
 
     const canResume = !session.active && pausedStakeRef.current !== null;
 
@@ -1372,7 +1387,17 @@ const AutoTrades: React.FC = () => {
     const smartDigitsRef = useRef(smartDigits);
     useEffect(() => { smartDigitsRef.current = smartDigits; }, [smartDigits]);
     const smartTickVersionRef = useRef(smartFeed.tickVersion);
-    useEffect(() => { smartTickVersionRef.current = smartFeed.tickVersion; }, [smartFeed.tickVersion]);
+    const smartTickWaitersRef = useRef(new Set<() => void>());
+    const wakeSmartTickWaiters = useCallback(() => {
+        const waiters = Array.from(smartTickWaitersRef.current);
+        smartTickWaitersRef.current.clear();
+        waiters.forEach(resolve => resolve());
+    }, []);
+    useEffect(() => {
+        const changed = smartTickVersionRef.current !== smartFeed.tickVersion;
+        smartTickVersionRef.current = smartFeed.tickVersion;
+        if (changed) wakeSmartTickWaiters();
+    }, [smartFeed.tickVersion, wakeSmartTickWaiters]);
     // Keep a snapshot for each live tick so a slow proposal/buy request does
     // not collapse several incoming ticks into one latest-state evaluation.
     const smartDigitSnapshotsRef = useRef<Map<number, number[]>>(new Map());
@@ -1483,6 +1508,7 @@ const AutoTrades: React.FC = () => {
                     smartStopFlags.current[otherId] = true;
                 }
             });
+            wakeSmartTickWaiters();
             setSmartExecutionMode('normal');
         }
         setSmartCardCfg(prev => {
@@ -1495,7 +1521,7 @@ const AutoTrades: React.FC = () => {
             });
             return next;
         });
-    }, [smartCardSess]);
+    }, [smartCardSess, wakeSmartTickWaiters]);
 
     const updateSess = useCallback((id: SmartCardId, patch: Partial<typeof smartCardSess['risefall']>) => {
         setSmartCardSess(prev => ({ ...prev, [id]: { ...prev[id], ...patch } }));
@@ -1506,6 +1532,7 @@ const AutoTrades: React.FC = () => {
         if (smartCardSess[id].running) {
             smartStopFlags.current[id] = true;
             invalidateSmartRun(smartRunTokens.current, id);
+            wakeSmartTickWaiters();
             updateSess(id, { running: false, lastLog: 'Stop requested. Waiting for open contract cleanup…' });
             return;
         }
@@ -1554,7 +1581,7 @@ const AutoTrades: React.FC = () => {
                     // each-tick/super-speed modes, process queued snapshots
                     // one by one instead of jumping to the latest tick.
                     while (isRunActive() && smartTickVersionRef.current <= evaluatedTick) {
-                        await new Promise(r => setTimeout(r, 40));
+                        await new Promise<void>(resolve => smartTickWaitersRef.current.add(resolve));
                     }
                     if (!isRunActive()) break;
                     const nextTick = evaluatedTick + 1;
@@ -1823,7 +1850,7 @@ const AutoTrades: React.FC = () => {
                         ].slice(0, 50));
                         updateSess(id, { lastLog: `⚠ ${message}` });
                     }
-                    await new Promise(r => setTimeout(r, isFastExecutionEnabledForContext() ? 0 : 1500));
+                    await new Promise(r => setTimeout(r, isInstantExecutionForContext() ? 0 : 1500));
                 }
             }
             if (isSmartRunCurrent(smartRunTokens.current, id, runToken)) {
@@ -1848,7 +1875,7 @@ const AutoTrades: React.FC = () => {
                 ...prev,
             ].slice(0, 50));
         });
-    }, [smartCardSess, buyAndWait, updateSess]);
+    }, [smartCardSess, buyAndWait, updateSess, wakeSmartTickWaiters]);
 
     // ── AI Bots state
     const [globalStake, setGlobalStake] = useState(1.0);

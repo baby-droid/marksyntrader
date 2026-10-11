@@ -17,9 +17,7 @@ const requiredFiles = [
     path.join(root, 'node_modules', '.bin', 'rsbuild'),
     path.join(root, 'node_modules', '@rsbuild', 'core', 'compiled', 'html-rspack-plugin', 'loader.js'),
 ];
-const requiredModules = [
-    '@rsbuild/core/package.json',
-];
+const requiredModules = ['@rsbuild/core/package.json', 'lucide-react'];
 
 const canResolve = moduleName => {
     try {
@@ -116,7 +114,12 @@ const main = async () => {
     }
 
     if (!isReady()) {
-        throw new Error('Rsbuild is still incomplete after dependency restore; html-rspack-plugin/loader.js is missing.');
+        const missingFiles = requiredFiles.filter(file => !fs.existsSync(file));
+        const missingModules = requiredModules.filter(moduleName => !canResolve(moduleName));
+        throw new Error(
+            `Dependency restore is incomplete. Missing files: ${missingFiles.join(', ') || 'none'}; ` +
+            `unresolvable packages: ${missingModules.join(', ') || 'none'}.`
+        );
     }
 };
 

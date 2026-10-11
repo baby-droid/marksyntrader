@@ -4,12 +4,9 @@
  * Two independent axes:
  *  1. `speed` (normal | crazy | turbo) — how many purchases are allowed per tick
  *     and how the engine reacts to rate limits.
- *  2. `fastExecution` (on/off) — an independent "Fast Execution" toggle that
- *     forces zero delay for EVERY single trade regardless of which speed
- *     tier is selected. It can be combined with Normal, Crazy, or Turbo —
- *     e.g. Crazy + Fast Execution fans out several purchases per tick AND
- *     removes any remaining inter-trade delay/cooldown/contract-switch pause
- *     for each of them.
+ *  2. `fastExecution` (on/off) — an independent toggle that removes
+ *     client-added waits in supported trading surfaces. Tick and settlement
+ *     rules still control when another contract may be started.
  *
  * Both values are shared app-wide (speed toggle beside Run, the floating AI,
  * and the trade engine all read them) and persisted so they survive reloads.
@@ -26,7 +23,7 @@ const FAST_EXEC_STORAGE_KEY = 'fast_execution_enabled';
 // Inter-trade delay (ms) applied by the engine between purchases per speed,
 // BEFORE Fast or A-SPEED zero-delay overrides are taken into account.
 export const SPEED_DELAY_MS: Record<ExecutionSpeed, number> = {
-    normal: 200,  // reduced from 1000ms — fast like dBot.deriv.com
+    normal: 0,    // no client-added delay between successful executions
     crazy: 0,     // no artificial delay — fires the instant the engine is ready
     turbo: 0,     // no artificial delay — fastest re-entry the API allows
 };
@@ -103,8 +100,8 @@ const isTwoPredictionCycleContext = (): boolean => {
 export const isFastExecutionEnabled = (): boolean => fastExecutionEnabled;
 
 /**
- * Fast is scoped to Bot Builder, Scalper Bots, and the two Free Bots with
- * explicit same-tick execution support. Other Free Bots keep their own pacing.
+ * Fast applies to the app's automated execution surfaces; each surface keeps
+ * its own tick and settlement entry rules.
  */
 export const isFastExecutionEnabledForContext = (): boolean => {
     if (!fastExecutionEnabled) return false;
@@ -112,6 +109,8 @@ export const isFastExecutionEnabledForContext = (): boolean => {
     const page = String(context.page || '').trim().toLowerCase();
     return page === 'bot builder'
         || page === 'auto-signals'
+        || page === 'auto trades'
+        || page === 'speed lab'
         || page === 'scalper bots'
         || isNormalKillerBotV3Context()
         || isTwoPredictionCycleContext();

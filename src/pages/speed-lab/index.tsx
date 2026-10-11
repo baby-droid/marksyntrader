@@ -4,7 +4,7 @@ import { observer } from 'mobx-react-lite';
 import DigitCircles from '@/components/digit-circles';
 import { useDigitStats } from '@/hooks/useDigitStats';
 import { useDerivTrade } from '@/hooks/useDerivTrade';
-import { isFastExecutionEnabledForContext, isTickWiseExecutionEnabled, subscribeFastExecution } from '@/utils/execution-speed';
+import { isInstantExecutionForContext, isTickWiseExecutionEnabled, subscribeFastExecution } from '@/utils/execution-speed';
 import { setTradeContext } from '@/utils/trade-metadata';
 import './speed-lab.scss';
 
@@ -194,8 +194,9 @@ const SpeedLab = observer(() => {
         });
 
         const fastMode = isTickWiseExecutionEnabled();
-        // Zero inter-trade delay in Fast mode; otherwise tier-specific.
-        const POST_DELAY = fastMode ? 0 : speed === 'turbo' ? 0 : speed === 'crazy' ? 50 : 200;
+        // Successful executions have no client-added inter-trade delay in any
+        // tier. Fast/A-SPEED still use the live tick stream as their clock.
+        const POST_DELAY = 0;
 
         if (fastMode) {
             let lastTickEpoch = 0;
@@ -278,7 +279,7 @@ const SpeedLab = observer(() => {
                 if (POST_DELAY > 0) await new Promise(r => setTimeout(r, POST_DELAY));
             } catch (e: any) {
                 logEntry(`❌ ${e?.message || 'Unknown error'}`);
-                await new Promise(r => setTimeout(r, isFastExecutionEnabledForContext() ? 0 : 300));
+                await new Promise(r => setTimeout(r, isInstantExecutionForContext() ? 0 : 300));
             }
         }
         setIsRunning(false);
