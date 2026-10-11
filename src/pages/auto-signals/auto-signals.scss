@@ -360,7 +360,8 @@
 
 .as-market-grid {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    // Keep the former four-column card width and spacing; leave the fourth slot empty.
+    grid-template-columns: repeat(3, minmax(0, calc(25% - 0.435rem)));
     align-items: stretch;
     justify-content: stretch;
     gap: 0.58rem;
