@@ -351,7 +351,7 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
             return false;
         }`;
     }
-    const continuation = isKingFisher
+    const continuation = isKingFisher || hasNormalKillerPipeline
         ? 'if (typeof Bot.shouldRescanKingFisher === "function" && Bot.shouldRescanKingFisher()) return false; Bot.isTradeAgain(true); return true;'
         : 'Bot.isTradeAgain(false); return false;';
     const code = `${recoveryStateDeclaration}

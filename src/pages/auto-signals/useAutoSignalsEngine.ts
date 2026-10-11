@@ -476,10 +476,10 @@ export const useAutoSignalsEngine = ({
                 action,
                 market,
                 candidate,
-                // The signal selects the recommended run count, but only one
-                // live trade is authorized until payout/EV and calibrated
-                // probability gates are available.
-                settings: { ...settings, maxRuns: 1 },
+                // Apply the candidate's signal-selected count to the XML
+                // after-purchase run cap. Bot Builder's Stop control remains
+                // available throughout the run.
+                settings: { ...settings, maxRuns: selectedRuns },
                 accountAmounts,
             });
 
@@ -517,10 +517,13 @@ export const useAutoSignalsEngine = ({
                 action,
                 strategy: candidate.strategy,
                 startedAt: Date.now(),
-                maxRuns: 1,
+                maxRuns: selectedRuns,
                 completedRuns: 0,
             };
-            beginAutoSignalsRun(nextRun, `${bot.name} is starting on ${market.symbol} in Bot Builder.`);
+            beginAutoSignalsRun(
+                nextRun,
+                `${bot.name} is starting on ${market.symbol} with a ${selectedRuns}-trade limit in Bot Builder.`,
+            );
 
             if (!runPanel.onRunButtonClick) throw new Error('Bot Builder Run control is unavailable.');
             const startAttempt = runPanel.onRunButtonClick();
@@ -535,8 +538,8 @@ export const useAutoSignalsEngine = ({
             const currentSession = getAutoSignalsRunSession();
             if (currentSession.run?.startedAt === nextRun.startedAt) {
                 const runMessage = action === 'entry-trade' && !candidate.entryReady
-                    ? `${bot.name} is watching for its entry condition on ${market.symbol}.`
-                    : `${bot.name} is trading ${market.symbol} with one-tick contracts.`;
+                    ? `${bot.name} is watching for its entry condition on ${market.symbol}; it will stop at ${selectedRuns} trades.`
+                    : `${bot.name} is trading ${market.symbol} for up to ${selectedRuns} one-tick trades.`;
                 setMessage(runMessage);
                 setAutoSignalsRunMessage(runMessage);
             } else {

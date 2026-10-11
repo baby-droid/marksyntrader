@@ -145,6 +145,23 @@ describe('Auto-Signals bot templates', () => {
         expect(getField(getBlock(doc, 'trade_definition_tradetype'), 'TRADETYPE_LIST')).toBe('overunder');
     });
 
+    it('caps the loaded bot at the signal-selected suggested run count', () => {
+        const xml = patchAutoSignalsBotXml(readTemplate('entry-trade'), {
+            action: 'entry-trade',
+            market,
+            candidate: makeCandidate('DIGITOVER', 'OVER', 4, 'over'),
+            settings: { ...settings, maxRuns: 4 },
+            accountAmounts: { stake1: 1, stake2: 2, takeProfit: 5, stopLoss: 10 },
+        });
+        const doc = new DOMParser().parseFromString(xml, 'application/xml');
+        const tradeAgain = getBlock(doc, 'trade_again');
+        const runLimit = tradeAgain?.parentElement?.parentElement;
+
+        expect(doc.getElementsByTagName('parsererror')).toHaveLength(0);
+        expect(runLimit?.getAttribute('type')).toBe('controls_if');
+        expect(getValueNumber(runLimit, 'B')).toBe('4');
+    });
+
     it('keeps Over DT at Over 1 and preserves the Under 5 recovery purchase', () => {
         const xml = patchAutoSignalsBotXml(readTemplate('over-dt'), {
             action: 'over-dt',

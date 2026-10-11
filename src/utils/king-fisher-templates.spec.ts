@@ -35,18 +35,32 @@ describe('King Fisher bundled templates', () => {
 });
 
 describe('Normal Killer Bot V3 template', () => {
-    it('rotates Continuous Indices and runs one direct Over 1 purchase without hook settings', () => {
+    it('uses default Blockly martingale/restart blocks without hook settings', () => {
         const xml = fs.readFileSync(
             path.resolve(__dirname, '../../public/bots/normal-killer-bot-v3.xml'),
             'utf8',
         );
+        const doc = new DOMParser().parseFromString(xml, 'application/xml');
+        const blockIds = Array.from(doc.getElementsByTagNameNS(
+            'https://developers.google.com/blockly/xml',
+            'block',
+        ))
+            .map((block) => block.getAttribute('id'))
+            .filter((id): id is string => typeof id === 'string' && id.length > 0);
 
+        expect(doc.getElementsByTagName('parsererror')).toHaveLength(0);
+        expect(new Set(blockIds).size).toBe(blockIds.length);
         expect(xml).toContain('<field name="SYMBOL_LIST">1HZ15V</field>');
         expect(xml).toContain('<field name="ALTERNATE_MARKETS">TRUE</field>');
         expect(xml).toContain('<field name="ALTERNATE_MODE">EVERY_X_RUNS</field>');
         expect(xml).toContain('<field name="ALTERNATE_EVERY">1</field>');
         expect(xml).toContain('<field name="PURCHASE_LIST">DIGITOVER</field>');
         expect(xml).toContain('<data>nkv3-pipeline</data>');
+        expect(xml).toContain('<block type="controls_if" id="nkv3_restart_martingale">');
+        expect(xml).toContain('<field name="CHECK_RESULT">win</field>');
+        expect(xml).toContain('<field name="OP">MULTIPLY</field>');
+        expect(xml).toContain('<field name="VAR" id="nkv3_martingale">martingale</field>');
+        expect(xml).not.toContain('<block type="king_fisher_restart_trade"');
         expect(xml).not.toContain('king_fisher_virtual_hook');
         expect(xml).not.toContain('<block type="during_purchase"');
         const beforePurchaseStart = xml.indexOf('<block type="before_purchase"');
@@ -76,6 +90,27 @@ describe('Normal Killer Bot V3 template', () => {
         expect(source).toContain('Bot.getSymbol()');
         expect(source).toContain("candidate.type === 'king_fisher_restart_trade'");
         expect(source).toContain("getFieldValue('MULTIPLIER')");
+    });
+
+    it('keeps the pipeline restart and continuous-market rotation when the default Trade again block runs', () => {
+        const afterPurchaseSource = fs.readFileSync(
+            path.resolve(
+                __dirname,
+                '../external/bot-skeleton/scratch/blocks/Binary/After Purchase/after_purchase.js',
+            ),
+            'utf8',
+        );
+        const tradeAgainSource = fs.readFileSync(
+            path.resolve(
+                __dirname,
+                '../external/bot-skeleton/scratch/blocks/Binary/After Purchase/trade_again.js',
+            ),
+            'utf8',
+        );
+
+        expect(afterPurchaseSource).toContain('isKingFisher || hasNormalKillerPipeline');
+        expect(tradeAgainSource).toContain('candidate.type === \'before_purchase\' && candidate.data === \'nkv3-pipeline\'');
+        expect(tradeAgainSource).toContain('if (isKingFisher || isNormalKillerPipeline) return');
     });
 });
 

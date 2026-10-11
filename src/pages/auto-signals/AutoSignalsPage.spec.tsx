@@ -107,6 +107,26 @@ describe('Auto-Signals trade actions', () => {
         expect(screen.getAllByText('50%')).toHaveLength(1);
     });
 
+    it('shows the historical alignment score and suggested run count and keeps settings compact until opened', () => {
+        const suggestedCandidate = {
+            ...market.candidate!,
+            score: 89,
+            recommendedRuns: 4,
+        };
+        render(<AutoSignalsPage {...props} markets={[{
+            ...market,
+            candidate: suggestedCandidate,
+            candidates: [suggestedCandidate],
+        }]} />);
+
+        expect(screen.getByTestId('text-confidence-R_10-OVER-4')).toHaveTextContent('89%');
+        expect(screen.getByText('4 suggested runs')).toBeInTheDocument();
+        expect(screen.getByTestId('panel-bot-settings')).not.toHaveAttribute('open');
+
+        fireEvent.click(screen.getByText('BOT SETTINGS'));
+        expect(screen.getByTestId('input-setting-stake1')).toBeInTheDocument();
+    });
+
     it('offers the matching Under DT bot for an Under signal', async () => {
         const under = {
             ...market.candidate!,

@@ -199,6 +199,15 @@ function MarketCard({
                     <span className='as-market-card__marketline'>{market.market} <b>/</b> {market.submarket}</span>
                 </div>
                 <div className='as-market-card__quote'>
+                    <div
+                        className='as-market-card__confidence'
+                        data-testid={`text-confidence-${cardId}`}
+                        title='Historical alignment score, not a predicted win probability.'
+                    >
+                        <span>MARKET CONFIDENCE</span>
+                        <strong>{candidate ? `${Math.round(score)}%` : '—'}</strong>
+                        <small>{candidate ? `${selectedRuns} suggested runs` : 'No run target'}</small>
+                    </div>
                     <span>LAST QUOTE</span>
                     <strong data-testid={`text-quote-${cardId}`}>{numberText(market.latestQuote, 3)}</strong>
                     <small>digit <b data-testid={`text-digit-${cardId}`}>{market.latestDigit ?? '—'}</b></small>
@@ -263,8 +272,8 @@ function MarketCard({
                         <span>Signal-selected runs</span>
                         <strong>{candidate ? selectedRuns : 0}</strong>
                         <small>
-                            Based on historical alignment, not win probability. Live automation is limited to one trade until
-                            calibrated probability and live payout/EV checks are available.
+                            The bot uses this run cap, then stops. Stop it manually in Bot Builder at any time; configured
+                            take-profit or stop-loss limits can stop it sooner.
                         </small>
                     </div>
 
@@ -358,46 +367,55 @@ function SettingsPanel({
     onSettingsChange: AutoSignalsPageProps['onSettingsChange'];
 }) {
     return (
-        <section className='as-settings' aria-labelledby='as-settings-heading'>
-            <div className='as-settings__intro'>
-                <div className='as-settings__title'>
-                    <span className='as-section-index'>01</span>
-                    <div>
-                        <span className='as-overline'>BOT BUILDER HANDOFF</span>
-                        <h2 id='as-settings-heading'>Execution guardrails</h2>
+        <details className='as-settings' aria-labelledby='as-settings-heading' data-testid='panel-bot-settings'>
+            <summary className='as-settings__summary'>
+                <span className='as-settings__summary-title'>
+                    <SlidersHorizontal size={14} aria-hidden='true' />
+                    <span>BOT SETTINGS</span>
+                </span>
+                <span className='as-settings__summary-hint'>Edit</span>
+            </summary>
+            <div className='as-settings__body'>
+                <div className='as-settings__intro'>
+                    <div className='as-settings__title'>
+                        <span className='as-section-index'>01</span>
+                        <div>
+                            <span className='as-overline'>BOT BUILDER HANDOFF</span>
+                            <h2 id='as-settings-heading'>Execution guardrails</h2>
+                        </div>
                     </div>
+                    <p>Configure the limits that travel with your selected signal.</p>
                 </div>
-                <p>Configure the limits that travel with your selected signal.</p>
+                <div className='as-settings__fields'>
+                    {SETTINGS_FIELDS.map((field) => (
+                        <label className='as-field' key={field.key}>
+                            <span className='as-field__label'>{field.label}</span>
+                            <span className='as-field__input'>
+                                {field.prefix && <i>{field.prefix}</i>}
+                                <NumberField
+                                    min={field.min}
+                                    max={field.max}
+                                    step={field.step}
+                                    value={settings[field.key]}
+                                    onCommit={(next) => {
+                                        const committed = field.key === 'maxRuns' ? Math.round(next) : next;
+                                        onSettingsChange(field.key, committed as AutoSignalsSettings[typeof field.key]);
+                                    }}
+                                    aria-label={field.label}
+                                    data-testid={`input-setting-${field.key}`}
+                                />
+                                {field.key !== 'maxRuns' && field.key !== 'martingale' && <i className='as-field__currency'>{currency}</i>}
+                            </span>
+                            <small>{field.hint}</small>
+                        </label>
+                    ))}
+                </div>
+                <div className='as-settings__foot'>
+                    <ShieldCheck size={15} aria-hidden='true' />
+                    <span>Press a trade button to load and start its bot. Contract duration is one tick.</span>
+                </div>
             </div>
-            <div className='as-settings__fields'>
-                {SETTINGS_FIELDS.map((field) => (
-                    <label className='as-field' key={field.key}>
-                        <span className='as-field__label'>{field.label}</span>
-                        <span className='as-field__input'>
-                            {field.prefix && <i>{field.prefix}</i>}
-                            <NumberField
-                                min={field.min}
-                                max={field.max}
-                                step={field.step}
-                                value={settings[field.key]}
-                                onCommit={(next) => {
-                                    const committed = field.key === 'maxRuns' ? Math.round(next) : next;
-                                    onSettingsChange(field.key, committed as AutoSignalsSettings[typeof field.key]);
-                                }}
-                                aria-label={field.label}
-                                data-testid={`input-setting-${field.key}`}
-                            />
-                            {field.key !== 'maxRuns' && field.key !== 'martingale' && <i className='as-field__currency'>{currency}</i>}
-                        </span>
-                        <small>{field.hint}</small>
-                    </label>
-                ))}
-            </div>
-            <div className='as-settings__foot'>
-                <ShieldCheck size={15} aria-hidden='true' />
-                <span>Press a trade button to load and start its bot. Contract duration is one tick.</span>
-            </div>
-        </section>
+        </details>
     );
 }
 
