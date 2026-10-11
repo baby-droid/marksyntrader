@@ -12,7 +12,13 @@ import {
     TrendingUp,
     Wifi,
     WifiOff,
+    Zap,
 } from 'lucide-react';
+import {
+    isASpeedBoostEnabled,
+    setASpeedBoostEnabled,
+    subscribeASpeedBoost,
+} from '@/utils/execution-speed';
 import type {
     AutoSignalAction,
     AutoSignalCandidate,
@@ -437,11 +443,13 @@ const AutoSignalsPage = ({
     onTrade,
 }: AutoSignalsPageProps) => {
     const [now, setNow] = useState(() => Date.now());
+    const [speedBoost, setSpeedBoost] = useState(isASpeedBoostEnabled());
 
     useEffect(() => {
         const interval = window.setInterval(() => setNow(Date.now()), 1000);
         return () => window.clearInterval(interval);
     }, []);
+    useEffect(() => subscribeASpeedBoost(setSpeedBoost), []);
 
     const visibleCards = useMemo(
         () => markets.flatMap((market) => {
@@ -495,6 +503,21 @@ const AutoSignalsPage = ({
                         <ShieldCheck size={14} aria-hidden='true' />
                         <span>{authorized ? 'ACCOUNT AUTHORIZED' : 'AUTHORIZATION REQUIRED'}</span>
                     </div>
+                    <button
+                        className={`as-speed-booster ${speedBoost ? 'is-active' : ''}`}
+                        type='button'
+                        aria-pressed={speedBoost}
+                        aria-label={`A-SPEED BOOST ${speedBoost ? 'on' : 'off'}`}
+                        title={speedBoost
+                            ? 'A-SPEED BOOST is on: one purchase per tick, no app-added wait. Deriv and network timing still apply.'
+                            : 'Enable A-SPEED BOOST: one purchase per tick, no app-added wait. Deriv and network timing still apply.'}
+                        onClick={() => setASpeedBoostEnabled(!speedBoost)}
+                        data-testid='button-auto-signals-speed-boost'
+                    >
+                        <Zap size={14} aria-hidden='true' />
+                        <span>A-SPEED BOOST</span>
+                        <small>{speedBoost ? 'ON' : 'OFF'}</small>
+                    </button>
                     <button
                         className='as-refresh'
                         type='button'

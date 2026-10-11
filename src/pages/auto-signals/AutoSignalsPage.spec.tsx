@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import AutoSignalsPage from './AutoSignalsPage';
 import type { AutoSignalMarket, AutoSignalsPageProps } from './types';
+import { isASpeedBoostEnabled, setASpeedBoostEnabled } from '@/utils/execution-speed';
 
 const market: AutoSignalMarket = {
     symbol: 'R_10',
@@ -59,6 +60,26 @@ const props: AutoSignalsPageProps = {
 };
 
 describe('Auto-Signals trade actions', () => {
+    it('exposes the bounded one-purchase-per-tick speed booster and syncs its state', () => {
+        setASpeedBoostEnabled(false);
+        render(<AutoSignalsPage {...props} />);
+
+        const button = screen.getByTestId('button-auto-signals-speed-boost');
+        expect(button).toHaveAttribute('aria-pressed', 'false');
+        expect(button).toHaveAccessibleName('A-SPEED BOOST off');
+
+        act(() => fireEvent.click(button));
+        expect(isASpeedBoostEnabled()).toBe(true);
+        expect(button).toHaveAttribute('aria-pressed', 'true');
+        expect(button).toHaveAccessibleName('A-SPEED BOOST on');
+        expect(button).toHaveAttribute(
+            'title',
+            'A-SPEED BOOST is on: one purchase per tick, no app-added wait. Deriv and network timing still apply.',
+        );
+
+        act(() => setASpeedBoostEnabled(false));
+    });
+
     it('lets both bot buttons start from a live signal before the entry trigger is confirmed', async () => {
         render(<AutoSignalsPage {...props} />);
 
