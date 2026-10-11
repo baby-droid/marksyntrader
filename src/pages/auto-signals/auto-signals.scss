@@ -373,7 +373,8 @@
 .as-market-card {
     position: relative;
     display: flex;
-    width: 100%;
+    width: 50%;
+    justify-self: start;
     min-width: 0;
     flex-direction: column;
     margin: 0;
@@ -739,7 +740,7 @@
     .as-filter-label { padding: 0; border: 0; }
     .as-filters { width: 100%; }
     .as-filter { white-space: nowrap; }
-    .as-market-card { width: 100%; max-width: none; margin: 0; padding: 0.42rem; }
+    .as-market-card { width: 50%; max-width: none; margin: 0; padding: 0.42rem; }
     .as-market-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .as-market-card__actions { grid-template-columns: 0.88fr 1.12fr; }
     .as-button { min-height: 1.85rem; }
