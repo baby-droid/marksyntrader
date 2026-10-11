@@ -56,7 +56,6 @@ const SETTINGS_FIELDS: {
     step: number;
     prefix?: string;
 }[] = [
-    { key: 'maxRuns', label: 'Runs', hint: '1–10 maximum', min: 1, max: 10, step: 1 },
     { key: 'stake1', label: 'Stake 01', hint: 'Initial amount', min: 0.01, step: 0.01 },
     { key: 'stake2', label: 'Stake 02', hint: 'Second amount', min: 0.01, step: 0.01 },
     { key: 'takeProfit', label: 'Take profit', hint: 'Stop at this gain', min: 0, step: 0.01 },
@@ -144,20 +143,26 @@ function MarketCard({
     candidate,
     now,
     currency,
+    settings,
     onTrade,
 }: {
     market: AutoSignalMarket;
     candidate: AutoSignalCandidate | null;
     now: number;
     currency: string;
+    settings: AutoSignalsSettings;
     onTrade: AutoSignalsPageProps['onTrade'];
 }) {
     const [pendingAction, setPendingAction] = useState<AutoSignalAction | null>(null);
     const [showTradeChoices, setShowTradeChoices] = useState(false);
     const score = Math.max(0, Math.min(100, candidate?.score ?? 0));
+    const selectedRuns = candidate
+        ? Math.min(candidate.recommendedRuns, settings.maxRuns)
+        : 0;
     const isLive = market.feedState === 'live';
     const canTrade = Boolean(
         candidate
+        && candidate.recommendedRuns > 0
         && candidate.state !== 'expired'
         && candidate.state !== 'unavailable'
         && isLive,
@@ -235,7 +240,7 @@ function MarketCard({
                     <span>Signal analysis</span>
                     <strong>
                         {candidate
-                            ? `${Math.round(score)}/100 · Entry ${candidate.entryReady ? 'confirmed' : 'waiting'}`
+                            ? `${selectedRuns} suggested runs · ${Math.round(score)}/100`
                             : 'Waiting for a signal'}
                     </strong>
                 </summary>
@@ -252,6 +257,15 @@ function MarketCard({
                         </div>
                         <div className='as-score-track'><i style={{ width: `${score}%` }} /></div>
                         <span className='as-score-line__tier'>{candidate?.tier ?? 'SCANNING'}</span>
+                    </div>
+
+                    <div className='as-run-recommendation' data-testid={`text-run-recommendation-${cardId}`}>
+                        <span>Signal-selected runs</span>
+                        <strong>{candidate ? selectedRuns : 0}</strong>
+                        <small>
+                            Based on historical alignment, not win probability. Live automation is limited to one trade until
+                            calibrated probability and live payout/EV checks are available.
+                        </small>
                     </div>
 
                     <div className={`as-entry-state ${candidate?.entryReady ? 'is-ready' : ''}`} data-testid={`status-entry-${cardId}`}>
@@ -550,6 +564,7 @@ const AutoSignalsPage = ({
                                     candidate={candidate}
                                     now={now}
                                     currency={currencyLabel}
+                                    settings={settings}
                                     onTrade={onTrade}
                                 />
                             ))}

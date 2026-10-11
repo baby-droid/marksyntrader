@@ -379,7 +379,7 @@ export const evaluateAutoSignalCandidates = ({
             createdAt,
             expiresAt,
             updatedAt: now,
-            recommendedRuns: 1,
+            recommendedRuns: recommendedAutoSignalRuns(score, route.strategy),
         } satisfies AutoSignalCandidate];
     });
 
@@ -393,6 +393,25 @@ export const evaluateAutoSignalCandidates = ({
     // Keep enough qualified alternatives to show multiple barriers on a
     // market, without letting weak near-baseline noise flood the signal board.
     return sorted.filter((candidate) => candidate.score >= 58).slice(0, 12);
+};
+
+/**
+ * Convert the historical alignment score into the supplied signal-run bands.
+ * For Over/Under digit barriers, require 65 before recommending any run.
+ * This is a run recommendation only; it is not a win-probability estimate.
+ */
+export const recommendedAutoSignalRuns = (score: number, strategy: AutoSignalStrategy): number => {
+    if (!Number.isFinite(score)) return 0;
+    const boundedScore = clamp(score, 0, 100);
+    const isDigitBarrier = strategy === 'OVER' || strategy === 'UNDER';
+    if (boundedScore < (isDigitBarrier ? 65 : 60)) return 0;
+    if (boundedScore < 70) return 1;
+    if (boundedScore < 75) return 2;
+    if (boundedScore < 80) return 3;
+    if (boundedScore < 85) return 4;
+    if (boundedScore < 90) return 5;
+    if (boundedScore < 95) return 7;
+    return 10;
 };
 
 export const evaluateAutoSignal = (input: Parameters<typeof evaluateAutoSignalCandidates>[0]) =>

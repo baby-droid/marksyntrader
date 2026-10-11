@@ -42,7 +42,7 @@ const props: AutoSignalsPageProps = {
     markets: [market],
     family: 'AUTO',
     settings: {
-        maxRuns: 1,
+        maxRuns: 10,
         stake1: 1,
         stake2: 2,
         takeProfit: 5,

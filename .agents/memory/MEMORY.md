@@ -80,7 +80,7 @@
 - [King Fisher hook purchase gate](king-fisher-hook-gate.md) — keep the hook as the direct gate; immediate mode trades on confirmation without leaving a duplicate authorization.
 - [King Fisher cycle recovery sequences](king-fisher-cycle-recovery-sequences.md) — Pair V2 and Differ Over/Under V1 recovery triggers and stage order are user-confirmed.
 - [Interpreter-safe generated code](interpreter-safe-generated-code.md) — Blockly interpreter code cannot assume browser globals or Number static helpers; use primitive checks and host bridge methods.
-- [Fast execution scope](fast-execution-scope.md) — Normal Killer V3 is always zero-delay/direct-buy; Fast toggle stays scoped to supported pages and other Free Bots retain pacing.
+- [Fast execution scope](fast-execution-scope.md) — V3 Fast allows three tick-slot orders with a three-open cap; Auto-Signals, 2 Prediction Cycle, and A-SPEED stay sequential.
 - [King Fisher XML fallback](king-fisher-loader-fallback.md) — unknown Blockly blocks must match their XML connection shape; mixed output and statement connections make imports fail.
 - [Featured parity isolation](featured-bot-recovery-isolation.md) — keep sequence recovery separate from the generic dominant-parity block used elsewhere.
-- [Auto-Signals run session](auto-signals-run-session.md) — progress/limits survive tab handoff; all action bots trade one tick, and historical alignment is not a win guarantee.
+- [Auto-Signals run session](auto-signals-run-session.md) — score-based recommendations are not win probabilities; repeated live trades need calibration, payout/EV checks, and per-run rescans.

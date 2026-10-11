@@ -37,7 +37,7 @@ const LIVE_TICK_STALE_MS = 8000;
 const MIN_TICK_SIZE = 20;
 
 const DEFAULT_SETTINGS: AutoSignalsSettings = {
-    maxRuns: 1,
+    maxRuns: 10,
     stake1: 1,
     stake2: 2,
     takeProfit: 5,
@@ -71,7 +71,9 @@ const readSettings = (): AutoSignalsSettings => {
         const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
         if (!saved || typeof saved !== 'object') return DEFAULT_SETTINGS;
         return {
-            maxRuns: Math.max(1, Math.min(10, Math.floor(Number(saved.maxRuns) || 1))),
+            // Run count is selected per signal; stored legacy maxRuns values
+            // must not pin every new candidate to the old default of one.
+            maxRuns: 10,
             stake1: Math.max(0.01, Number(saved.stake1) || DEFAULT_SETTINGS.stake1),
             stake2: Math.max(0.01, Number(saved.stake2) || DEFAULT_SETTINGS.stake2),
             takeProfit: Math.max(0, Number(saved.takeProfit) || 0),
@@ -436,6 +438,13 @@ export const useAutoSignalsEngine = ({
 
         const runtime = runtimesRef.current.get(market.symbol);
         const candidate = market.candidate;
+        const selectedRuns = candidate
+            ? Math.min(candidate.recommendedRuns, settings.maxRuns)
+            : 0;
+        if (selectedRuns < 1) {
+            setMessage('This signal is below the minimum run threshold. Wait for a stronger, current signal.');
+            return;
+        }
         const now = Date.now();
         const live = runtime?.lastTickAt != null && now - runtime.lastTickAt <= LIVE_TICK_STALE_MS;
         const latestCandidate = runtime?.candidates.find((item) => item.id === candidate?.id);
@@ -467,7 +476,10 @@ export const useAutoSignalsEngine = ({
                 action,
                 market,
                 candidate,
-                settings,
+                // The signal selects the recommended run count, but only one
+                // live trade is authorized until payout/EV and calibrated
+                // probability gates are available.
+                settings: { ...settings, maxRuns: 1 },
                 accountAmounts,
             });
 
@@ -505,7 +517,7 @@ export const useAutoSignalsEngine = ({
                 action,
                 strategy: candidate.strategy,
                 startedAt: Date.now(),
-                maxRuns: settings.maxRuns,
+                maxRuns: 1,
                 completedRuns: 0,
             };
             beginAutoSignalsRun(nextRun, `${bot.name} is starting on ${market.symbol} in Bot Builder.`);

@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">89.71% </span>
+                <span class="strong">90.16% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>375/418</span>
+                <span class='fraction'>394/437</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">74.84% </span>
+                <span class="strong">76.96% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>119/159</span>
+                <span class='fraction'>137/178</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">94.73% </span>
+                <span class="strong">95% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>18/19</span>
+                <span class='fraction'>19/20</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">89.71% </span>
+                <span class="strong">90.16% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>375/418</span>
+                <span class='fraction'>394/437</span>
             </div>
         
             
@@ -482,7 +482,26 @@
 <a name='L417'></a><a href='#L417'>417</a>
 <a name='L418'></a><a href='#L418'>418</a>
 <a name='L419'></a><a href='#L419'>419</a>
-<a name='L420'></a><a href='#L420'>420</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
+<a name='L420'></a><a href='#L420'>420</a>
+<a name='L421'></a><a href='#L421'>421</a>
+<a name='L422'></a><a href='#L422'>422</a>
+<a name='L423'></a><a href='#L423'>423</a>
+<a name='L424'></a><a href='#L424'>424</a>
+<a name='L425'></a><a href='#L425'>425</a>
+<a name='L426'></a><a href='#L426'>426</a>
+<a name='L427'></a><a href='#L427'>427</a>
+<a name='L428'></a><a href='#L428'>428</a>
+<a name='L429'></a><a href='#L429'>429</a>
+<a name='L430'></a><a href='#L430'>430</a>
+<a name='L431'></a><a href='#L431'>431</a>
+<a name='L432'></a><a href='#L432'>432</a>
+<a name='L433'></a><a href='#L433'>433</a>
+<a name='L434'></a><a href='#L434'>434</a>
+<a name='L435'></a><a href='#L435'>435</a>
+<a name='L436'></a><a href='#L436'>436</a>
+<a name='L437'></a><a href='#L437'>437</a>
+<a name='L438'></a><a href='#L438'>438</a>
+<a name='L439'></a><a href='#L439'>439</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -878,6 +897,25 @@
 <span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">27x</span>
+<span class="cline-any cline-yes">27x</span>
+<span class="cline-any cline-yes">27x</span>
+<span class="cline-any cline-yes">27x</span>
+<span class="cline-any cline-yes">27x</span>
+<span class="cline-any cline-yes">27x</span>
+<span class="cline-any cline-yes">27x</span>
+<span class="cline-any cline-yes">27x</span>
+<span class="cline-any cline-yes">27x</span>
+<span class="cline-any cline-yes">27x</span>
+<span class="cline-any cline-yes">16x</span>
+<span class="cline-any cline-yes">16x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -1282,7 +1320,7 @@ export const evaluateAutoSignalCandidates = ({
             createdAt,
             expiresAt,
             updatedAt: now,
-            recommendedRuns: 1,
+            recommendedRuns: recommendedAutoSignalRuns(score, route.strategy),
         } satisfies AutoSignalCandidate];
     });
 &nbsp;
@@ -1296,6 +1334,25 @@ export const evaluateAutoSignalCandidates = ({
     // Keep enough qualified alternatives to show multiple barriers on a
     // market, without letting weak near-baseline noise flood the signal board.
     return sorted.filter((candidate) =&gt; candidate.score &gt;= 58).slice(0, 12);
+};
+&nbsp;
+/**
+ * Convert the historical alignment score into the supplied signal-run bands.
+ * For Over/Under digit barriers, require 65 before recommending any run.
+ * This is a run recommendation only; it is not a win-probability estimate.
+ */
+export const recommendedAutoSignalRuns = (score: number, strategy: AutoSignalStrategy): number =&gt; {
+    if (!Number.isFinite(score)) <span class="branch-0 cbranch-no" title="branch not covered" >return 0;</span>
+    const boundedScore = clamp(score, 0, 100);
+    const isDigitBarrier = strategy === 'OVER' || strategy === 'UNDER';
+    if (boundedScore &lt; (isDigitBarrier ? 65 : 60)) return 0;
+    if (boundedScore &lt; 70) return 1;
+    if (boundedScore &lt; 75) return 2;
+    if (boundedScore &lt; 80) return 3;
+    if (boundedScore &lt; 85) return 4;
+    if (boundedScore &lt; 90) return 5;
+    if (boundedScore &lt; 95) return 7;
+    return 10;
 };
 &nbsp;
 export const evaluateAutoSignal = (input: Parameters&lt;typeof evaluateAutoSignalCandidates&gt;[0]) =&gt;
@@ -1327,7 +1384,7 @@ export const shouldExcludeAutoSignalMarket = <span class="fstat-no" title="funct
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-10-10T22:19:45.549Z
+                at 2026-10-11T09:02:38.763Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

@@ -152,8 +152,9 @@ export const getMaxInflight = (): number =>
 
 /** Effective purchases fired per tick, independent from the latency override. */
 export const getPurchasesPerTick = (): number => {
+    if (isAutoSignalsContext() || isTwoPredictionCycleContext()) return 1;
     if (isFastExecutionEnabledForContext()) {
-        return isAutoSignalsContext() ? 1 : FAST_EXEC_PURCHASES_PER_TICK;
+        return FAST_EXEC_PURCHASES_PER_TICK;
     }
     if (aSpeedBoostEnabled || isNormalKillerBotV3Context() || isTwoPredictionCycleContext()) return 1;
     return SPEED_PURCHASES_PER_TICK[current];

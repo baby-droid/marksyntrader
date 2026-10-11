@@ -2,6 +2,7 @@ import {
     evaluateAutoSignal,
     evaluateAutoSignalCandidates,
     hasAutoSignalPriceEntryPattern,
+    recommendedAutoSignalRuns,
     selectAutoSignalEntryDigit,
 } from './auto-signals-engine';
 import type { AutoLabTick } from '@/pages/auto-lab/auto-lab-engine';
@@ -24,6 +25,23 @@ const makeOneTickTrend = (): AutoLabTick[] => {
 };
 
 describe('Auto-Signals one-tick analysis', () => {
+    it.each([
+        [59.9, 'EVEN', 0],
+        [60, 'EVEN', 1],
+        [69.9, 'EVEN', 1],
+        [70, 'EVEN', 2],
+        [75, 'EVEN', 3],
+        [80, 'EVEN', 4],
+        [85, 'EVEN', 5],
+        [90, 'EVEN', 7],
+        [95, 'EVEN', 10],
+        [64.9, 'UNDER', 0],
+        [65, 'UNDER', 1],
+        [90, 'OVER', 7],
+    ] as const)('selects %i score runs for %s', (score, strategy, expected) => {
+        expect(recommendedAutoSignalRuns(score, strategy)).toBe(expected);
+    });
+
     it('evaluates Rise using the next adjacent tick and does not gate price entries on a digit', () => {
         const candidate = evaluateAutoSignal({
             market: { symbol: 'R_10', label: 'Volatility 10' },

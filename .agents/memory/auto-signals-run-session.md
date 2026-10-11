@@ -26,3 +26,9 @@ Show each candidate's observed per-window hit rate separately from its alignment
 **Why:** the supplied analysis distinguishes measured outcomes from predictive probability, and small samples can mislead.
 
 **How to apply:** preserve separate cards for contract/barrier alternatives, label empirical rates by sample window, and do not call them win probabilities.
+
+Candidate run recommendations are score-based guidance only. Do not authorize repeated live trades from historical alignment alone; live multi-run execution stays capped at one until calibrated probability, live payout/EV, and per-run revalidation are available.
+
+**Why:** the scanner currently has no calibrated probability model or quoted-payout EV gate, and its feed does not continue scanning through the Bot Builder handoff.
+
+**How to apply:** keep recommendations visible as historical signal guidance, but do not pass them as an XML `trade_again` cap above one without the live gates and a fresh post-settlement scan.
