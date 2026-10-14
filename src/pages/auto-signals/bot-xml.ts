@@ -31,6 +31,22 @@ export const AUTO_SIGNAL_BOTS: Record<AutoSignalAction, { name: string; file: st
     },
 };
 
+export const getAutoSignalBot = (
+    action: AutoSignalAction,
+    candidate: AutoSignalCandidate,
+) => {
+    if (
+        action === 'trade-only'
+        && (candidate.strategy === 'MATCHES' || candidate.strategy === 'DIFFERS')
+    ) {
+        return {
+            name: 'Normal Killer Bot V3',
+            file: '/bots/normal-killer-bot-v3.xml',
+        };
+    }
+    return AUTO_SIGNAL_BOTS[action];
+};
+
 export interface AutoSignalBotConfiguration {
     action: AutoSignalAction;
     market: AutoSignalMarket;
@@ -421,6 +437,17 @@ const addRunLimit = (doc: Document, maxRuns: number) => {
     }
 };
 
+const addAutoSignalRunPolicy = (doc: Document, maxRuns: number) => {
+    const afterPurchase = blocksOfType(doc, 'after_purchase')[0];
+    if (!afterPurchase) throw new Error('Bot XML has no after-purchase logic.');
+    let data = directElement(afterPurchase, 'data');
+    if (!data) {
+        data = makeElement(doc, 'data');
+        afterPurchase.appendChild(data);
+    }
+    data.textContent = `auto-signal-v1;stop-after-win=1;max-runs=${boundedInteger(maxRuns, 1, 10)}`;
+};
+
 const unwrapTimeouts = (container: Element) => {
     for (const block of directElements(container, 'block')) {
         for (const child of directElements(block)) {
@@ -553,13 +580,13 @@ const configureTradeParameters = (
     } else {
         // The current bot and the Free Bots DT templates use different
         // variable names. Set every matching alias; missing aliases are fine.
-        for (const name of ['stake', 'initial stake', 'STAKE']) {
+        for (const name of ['stake', 'base_stake', 'base stake', 'initial stake', 'STAKE']) {
             setVariableValue(doc, name, config.accountAmounts.stake1);
         }
-        for (const name of ['totalprofit', 'takeprofit']) {
+        for (const name of ['totalprofit', 'takeprofit', 'take_profit', 'take profit']) {
             setVariableValue(doc, name, config.accountAmounts.takeProfit);
         }
-        for (const name of ['totalloss', 'stoploss']) {
+        for (const name of ['totalloss', 'stoploss', 'stop_loss', 'stop loss']) {
             setVariableValue(doc, name, config.accountAmounts.stopLoss);
         }
         for (const name of ['martingale', 'Martingale']) {
@@ -605,6 +632,13 @@ export const patchAutoSignalsBotXml = (xml: string, config: AutoSignalBotConfigu
         addOver4Recovery(doc);
     }
     addRunLimit(doc, boundedInteger(config.settings.maxRuns, 1, 10));
+    if (
+        config.action === 'trade-only'
+        && (config.candidate.strategy === 'MATCHES' || config.candidate.strategy === 'DIFFERS')
+        && blocksOfType(doc, 'normal_killer_tick_acceleration').length > 0
+    ) {
+        addAutoSignalRunPolicy(doc, config.settings.maxRuns);
+    }
 
     return new XMLSerializer().serializeToString(doc);
 };

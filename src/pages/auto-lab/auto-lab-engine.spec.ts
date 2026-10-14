@@ -5,6 +5,7 @@ import {
     getAutoLabDurationParams,
     getAutoLabDigitStats,
     isAutoLabContractWin,
+    isAutoLabMarketExcluded,
     type AutoLabMarketWindow,
     type AutoLabStrategySettings,
     type AutoLabTick,
@@ -35,6 +36,12 @@ const market = (ticks: AutoLabTick[]): AutoLabMarketWindow => ({
 });
 
 describe('Auto Lab strategy signals', () => {
+    it('excludes Jump 100 by symbol or display name', () => {
+        expect(isAutoLabMarketExcluded('JD100')).toBe(true);
+        expect(isAutoLabMarketExcluded('OTHER', 'Jump 100 Index')).toBe(true);
+        expect(isAutoLabMarketExcluded('JD50', 'Jump 50 Index')).toBe(false);
+    });
+
     it('creates a contrarian parity signal after the configured same-parity streak', () => {
         const signals = evaluateAutoLabCandidates('RC Even/Odd', [market(makeTicks([2, 4, 6, 8]))], {
             ...settings,

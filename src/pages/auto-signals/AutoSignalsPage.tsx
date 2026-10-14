@@ -175,7 +175,7 @@ function MarketCard({
         setPendingAction(action);
         setShowTradeChoices(false);
         try {
-            await onTrade(market, action);
+            await onTrade(candidate ? { ...market, candidate } : market, action);
         } finally {
             setPendingAction(null);
         }
@@ -348,7 +348,7 @@ function MarketCard({
                 <div className='as-trade-choice' role='dialog' aria-label={`Choose a ${candidate.label} bot for ${market.label}`}>
                     <strong>Choose a bot for this signal</strong>
                     <button type='button' onClick={() => void startTrade('trade-only')}>
-                        Current bot <small>Use the existing Trade Only bot with this signal</small>
+                        Trade Only <small>Load the bot matched to this signal and run it automatically</small>
                     </button>
                     {candidate.strategy === 'OVER' && (
                         <button type='button' onClick={() => void startTrade('over-dt')}>

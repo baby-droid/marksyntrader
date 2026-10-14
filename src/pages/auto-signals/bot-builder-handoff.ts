@@ -12,7 +12,7 @@ export type AutoSignalsRunPanel = {
 export const isAutoSignalWorkspaceReady = (
     workspace: BlocklyWorkspaceLike | null | undefined,
     expectedXml: string,
-): workspace is BlocklyWorkspaceLike => {
+): boolean => {
     if (!workspace || typeof workspace.getTopBlocks !== 'function') return false;
 
     try {
@@ -25,6 +25,21 @@ export const isAutoSignalWorkspaceReady = (
     } catch {
         return false;
     }
+};
+
+export const ensureAutoSignalWorkspaceLoaded = async (
+    workspace: BlocklyWorkspaceLike,
+    expectedXml: string,
+    loadStrategy: (workspace: BlocklyWorkspaceLike, xml: string) => void | Promise<void>,
+) => {
+    if (!isAutoSignalWorkspaceReady(workspace, expectedXml)) {
+        await loadStrategy(workspace, expectedXml);
+        workspace.strategy_to_load = expectedXml;
+    }
+    if (!isAutoSignalWorkspaceReady(workspace, expectedXml)) {
+        throw new Error('Bot Builder did not load the selected strategy.');
+    }
+    return workspace;
 };
 
 export const startAutoSignalsBot = async (

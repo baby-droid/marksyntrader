@@ -112,13 +112,13 @@ const MODE_LABELS: Record<AutoLabMode, string> = {
   'RC Over4/Under5': 'Over / Under',
   '%Even/Odd': 'Even / Odd distribution',
   'Matches/Differs': 'Matches / Differs',
-  'Rise/Fall': 'Rise / Fall',
+  'Rise/Fall': '1 Rise / 2 Fall',
 };
 
 const CONTRACT_LABELS: Record<AutoLabContractChoice, string> = {
   AUTO: 'Automatic for selected strategy',
-  CALL: 'Rise',
-  PUT: 'Fall',
+  CALL: '1 Rise',
+  PUT: '2 Fall',
   DIGITEVEN: 'Even',
   DIGITODD: 'Odd',
   DIGITOVER: 'Over',

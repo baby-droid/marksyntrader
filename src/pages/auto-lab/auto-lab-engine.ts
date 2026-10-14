@@ -66,6 +66,11 @@ const MODE_CONTRACT_TYPES: Record<AutoLabMode, AutoLabContractType[]> = {
 export const getAutoLabSupportedContracts = (mode: AutoLabMode): AutoLabContractType[] =>
     [...MODE_CONTRACT_TYPES[mode]];
 
+export const isAutoLabMarketExcluded = (symbol: unknown, label: unknown = '') => (
+    String(symbol ?? '').trim().toUpperCase() === 'JD100'
+    || /\bjump\s*100\b/i.test(String(label ?? ''))
+);
+
 export type AutoLabTick = {
     symbol: string;
     digit: number;

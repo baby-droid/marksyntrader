@@ -10,6 +10,7 @@ import {
     getAutoLabDurationParams,
     getAutoLabDigitStats,
     isAutoLabContractWin,
+    isAutoLabMarketExcluded,
     resetAutoLabGateAfterTrade,
     type AutoLabCandidate,
     type AutoLabContractType,
@@ -89,17 +90,33 @@ const normalizeActiveSymbols = (response: any): MarketInfo[] => {
     if (!Array.isArray(activeSymbols)) return [];
     const available = new Set(
         activeSymbols
-            .filter((item: any) => item?.exchange_is_open !== 0 && item?.is_trading_suspended !== 1)
+            .filter((item: any) =>
+                item?.exchange_is_open !== 0
+                && item?.is_trading_suspended !== 1
+                && !isAutoLabMarketExcluded(
+                    item?.underlying_symbol ?? item?.symbol,
+                    item?.display_name ?? item?.underlying_symbol_name,
+                )
+            )
             .map((item: any) => String(item?.underlying_symbol ?? item?.symbol ?? '')),
     );
     return KING_FISHER_MARKETS
-        .filter(market => available.has(market.symbol))
+        .filter(market =>
+            !isAutoLabMarketExcluded(market.symbol, market.label)
+            && available.has(market.symbol)
+        )
         .map(market => ({ symbol: market.symbol, label: market.label }));
+};
+
+const contractLabel = (contractType: AutoLabContractType) => {
+    if (contractType === 'CALL') return '1 Rise';
+    if (contractType === 'PUT') return '2 Fall';
+    return contractType.replace('DIGIT', 'Digit ');
 };
 
 const displaySignal = (value: AutoLabCandidate | null, detailFallback: string): AutoLabSignal => value
     ? {
-        label: value.contract_type.replace('DIGIT', 'Digit '),
+        label: contractLabel(value.contract_type),
         detail: `${value.strategy} · ${value.detail}`,
         market: value.label,
         confidence: value.score,
@@ -269,7 +286,7 @@ export const useAutoLabEngine = (
                 tickCount: runtime?.ticks.length ?? 0,
                 score: candidateForMarket?.score ?? null,
                 signal: candidateForMarket?.contract_type
-                    ? candidateForMarket.contract_type.replace('DIGIT', 'Digit ')
+                    ? contractLabel(candidateForMarket.contract_type)
                     : latest ? 'Tracking' : 'Waiting',
             };
         }));

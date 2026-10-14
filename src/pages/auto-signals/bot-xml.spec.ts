@@ -5,7 +5,12 @@ import type {
     AutoSignalMarket,
     AutoSignalsSettings,
 } from './types';
-import { AUTO_SIGNAL_BOTS, AUTO_SIGNAL_DURATION_TICKS, patchAutoSignalsBotXml } from './bot-xml';
+import {
+    AUTO_SIGNAL_BOTS,
+    AUTO_SIGNAL_DURATION_TICKS,
+    getAutoSignalBot,
+    patchAutoSignalsBotXml,
+} from './bot-xml';
 
 const XML_NS = 'https://developers.google.com/blockly/xml';
 const settings: AutoSignalsSettings = {
@@ -79,13 +84,19 @@ const getVariableSetNumber = (doc: Document, variableName: string) => {
     return getValueNumber(setter, 'VALUE');
 };
 
-const readTemplate = (action: keyof typeof AUTO_SIGNAL_BOTS) =>
-    fs.readFileSync(path.resolve(process.cwd(), 'public', AUTO_SIGNAL_BOTS[action].file.replace(/^\//, '')), 'utf8');
+const readTemplate = (
+    action: keyof typeof AUTO_SIGNAL_BOTS,
+    candidate: AutoSignalCandidate = makeCandidate('DIGITEVEN', 'EVEN', null, 'even'),
+) => {
+    const bot = getAutoSignalBot(action, candidate);
+    return fs.readFileSync(path.resolve(process.cwd(), 'public', bot.file.replace(/^\//, '')), 'utf8');
+};
 
 describe('Auto-Signals bot templates', () => {
     it.each([
         ['trade-only', 'DIGITOVER', 'OVER', 4, 'digits', 'overunder', 'DIGITOVER'],
         ['trade-only', 'DIGITMATCH', 'MATCHES', 3, 'digits', 'matchesdiffers', 'DIGITMATCH'],
+        ['trade-only', 'DIGITDIFF', 'DIFFERS', 3, 'digits', 'matchesdiffers', 'DIGITDIFF'],
         ['entry-trade', 'DIGITUNDER', 'UNDER', 5, 'digits', 'overunder', 'DIGITUNDER'],
         ['entry-trade', 'DIGITMATCH', 'MATCHES', 3, 'digits', 'matchesdiffers', 'DIGITMATCH'],
         ['entry-trade', 'DIGITDIFF', 'DIFFERS', 3, 'digits', 'matchesdiffers', 'DIGITDIFF'],
@@ -98,18 +109,19 @@ describe('Auto-Signals bot templates', () => {
     ] as const)(
         'patches %s for %s to the selected one-tick contract',
         (action, contractType, strategy, barrier, category, tradeType, purchaseType) => {
-            const xml = patchAutoSignalsBotXml(readTemplate(action), {
+            const candidate = makeCandidate(
+                contractType,
+                strategy,
+                barrier,
+                strategy === 'RISE' ? 'rise'
+                    : strategy === 'FALL' ? 'fall'
+                        : strategy === 'ONLY_UPS' ? 'up'
+                            : strategy === 'ONLY_DOWNS' ? 'down' : 'even',
+            );
+            const xml = patchAutoSignalsBotXml(readTemplate(action, candidate), {
                 action,
                 market,
-                candidate: makeCandidate(
-                    contractType,
-                    strategy,
-                    barrier,
-                    strategy === 'RISE' ? 'rise'
-                        : strategy === 'FALL' ? 'fall'
-                            : strategy === 'ONLY_UPS' ? 'up'
-                                : strategy === 'ONLY_DOWNS' ? 'down' : 'even',
-                ),
+                candidate,
                 settings,
                 accountAmounts: { stake1: 1.5, stake2: 1.5, takeProfit: 5, stopLoss: 10 },
             });
@@ -123,17 +135,46 @@ describe('Auto-Signals bot templates', () => {
             expect(getField(getBlock(doc, 'trade_definition_tradetype'), 'TRADETYPE_LIST')).toBe(tradeType);
             expect(getField(getBlock(doc, 'trade_definition_contracttype'), 'TYPE_LIST')).toBe(contractType);
             expect(getField(getBlock(doc, 'purchase'), 'PURCHASE_LIST')).toBe(purchaseType);
-            expect(getValueNumber(tradeOptions, 'AMOUNT')).toBe('1.5');
+            const usesNormalKillerV3 = action === 'trade-only'
+                && (strategy === 'MATCHES' || strategy === 'DIFFERS');
+            if (usesNormalKillerV3) {
+                expect(getField(tradeOptions, 'VAR')).toBe('stake');
+            } else {
+                expect(getValueNumber(tradeOptions, 'AMOUNT')).toBe('1.5');
+            }
             expect(getVariableSetNumber(doc, isEntryTrade ? 'STAKE' : 'stake')).toBe('1.5');
-            expect(getVariableSetNumber(doc, isEntryTrade ? 'martingalelevel' : 'Martingale')).toBe('2');
+            expect(getVariableSetNumber(
+                doc,
+                isEntryTrade ? 'martingalelevel' : usesNormalKillerV3 ? 'martingale' : 'Martingale',
+            )).toBe('2');
             if (isEntryTrade) {
                 expect(getVariableSetNumber(doc, 'stake2')).toBe('1.5');
                 expect(getField(getBlock(doc, 'auto_signal_entry_gate'), 'STRATEGY')).toBe(strategy);
                 expect(getField(getBlock(doc, 'auto_signal_entry_gate'), 'ENTRY_DIGIT')).toBe('6');
             }
             if (barrier !== null) expect(getValueNumber(tradeOptions, 'PREDICTION')).toBe(String(barrier));
+            if (
+                action === 'trade-only'
+                && (strategy === 'MATCHES' || strategy === 'DIFFERS')
+            ) {
+                expect(getBlock(doc, 'normal_killer_tick_acceleration')).toBeDefined();
+                expect(getVariableSetNumber(doc, 'base_stake')).toBe('1.5');
+                expect(getVariableSetNumber(doc, 'take_profit')).toBe('5');
+                expect(getVariableSetNumber(doc, 'stop_loss')).toBe('10');
+                expect(getBlock(doc, 'after_purchase')?.getElementsByTagNameNS(XML_NS, 'data')[0]?.textContent)
+                    .toBe('auto-signal-v1;stop-after-win=1;max-runs=1');
+            }
         },
     );
+
+    it.each([
+        ['MATCHES', 'DIGITMATCH'],
+        ['DIFFERS', 'DIGITDIFF'],
+    ] as const)('routes Trade Only %s through Normal Killer Bot V3', (strategy, contractType) => {
+        const bot = getAutoSignalBot('trade-only', makeCandidate(contractType, strategy, 6, strategy.toLowerCase() as AutoSignalCandidate['direction']));
+        expect(bot.name).toBe('Normal Killer Bot V3');
+        expect(bot.file).toBe('/bots/normal-killer-bot-v3.xml');
+    });
 
     it('sets both Entry Trade stakes to 1.5 with a 2x martingale', () => {
         const xml = patchAutoSignalsBotXml(readTemplate('entry-trade'), {

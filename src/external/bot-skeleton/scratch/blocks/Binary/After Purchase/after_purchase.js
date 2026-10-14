@@ -386,9 +386,23 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
             return false;
         }`;
     }
-    const continuation = isKingFisher || hasNormalKillerPipeline
-        ? 'if (typeof Bot.shouldRescanKingFisher === "function" && Bot.shouldRescanKingFisher()) return false; Bot.isTradeAgain(true); return true;'
-        : 'Bot.isTradeAgain(false); return false;';
+    const autoSignalPolicy = workspaceBlocks.find(
+        candidate => candidate.type === 'after_purchase'
+            && /^auto-signal-v1;/.test(String(candidate.data || ''))
+    );
+    const autoSignalPolicyText = String(autoSignalPolicy?.data || '');
+    const maxRunsMatch = autoSignalPolicyText.match(/(?:^|;)max-runs=(\d+)/);
+    const autoSignalMaxRuns = maxRunsMatch ? Number(maxRunsMatch[1]) : null;
+    const autoSignalRunCount = autoSignalPolicy ? variableName('AUTO_SIGNAL_RUN_COUNT') : null;
+    const autoSignalContinuation = autoSignalPolicy && hasNormalKillerPipeline
+        ? autoSignalRunCount && Number.isInteger(autoSignalMaxRuns) && autoSignalMaxRuns > 0
+            ? `if (Bot.isResult("win") || Number(${autoSignalRunCount}) >= ${autoSignalMaxRuns}) { Bot.isTradeAgain(false); return false; } Bot.isTradeAgain(true); return true;`
+            : 'Bot.isTradeAgain(false); return false;'
+        : null;
+    const continuation = autoSignalContinuation
+        || (isKingFisher || hasNormalKillerPipeline
+            ? 'if (typeof Bot.shouldRescanKingFisher === "function" && Bot.shouldRescanKingFisher()) return false; Bot.isTradeAgain(true); return true;'
+            : 'Bot.isTradeAgain(false); return false;');
     const code = `${recoveryStateDeclaration}
     BinaryBotPrivateAfterPurchase = function BinaryBotPrivateAfterPurchase() {
         Bot.highlightBlock('${block.id}');

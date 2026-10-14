@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import AutoSignalsPage from './AutoSignalsPage';
 import type { AutoSignalMarket, AutoSignalsPageProps } from './types';
 
@@ -111,6 +111,34 @@ describe('Auto-Signals trade actions', () => {
         expect(screen.getByTestId('card-market-R_10-UNDER-7')).toBeInTheDocument();
         expect(screen.getByTestId('text-confidence-R_10-OVER-4')).toHaveTextContent('35%');
         expect(screen.getByTestId('text-confidence-R_10-UNDER-7')).toHaveTextContent('50%');
+    });
+
+    it('sends the candidate from the selected card, not the market default candidate', async () => {
+        const over = market.candidate!;
+        const differs = {
+            ...over,
+            id: 'R_10:DIFFERS:DIGITDIFF:3',
+            strategy: 'DIFFERS' as const,
+            label: 'Differs',
+            contractType: 'DIGITDIFF',
+            barrier: 3,
+            direction: 'differs' as const,
+        };
+        render(<AutoSignalsPage {...props} family='AUTO' markets={[{
+            ...market,
+            candidate: over,
+            candidates: [over, differs],
+        }]} />);
+
+        fireEvent.click(screen.getByTestId('button-trade-only-R_10-DIFFERS-3'));
+        const dialog = screen.getByRole('dialog', { name: 'Choose a Differs bot for Volatility 10' });
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Trade Only' }));
+        await act(async () => Promise.resolve());
+
+        expect(props.onTrade).toHaveBeenCalledWith(
+            expect.objectContaining({ candidate: differs }),
+            'trade-only',
+        );
     });
 
     it('keeps the alignment score and suggested run count in the analysis panel', () => {

@@ -4,6 +4,7 @@ import {
     hasAutoSignalPriceEntryPattern,
     recommendedAutoSignalRuns,
     selectAutoSignalEntryDigit,
+    shouldExcludeAutoSignalMarket,
 } from './auto-signals-engine';
 import type { AutoLabTick } from '@/pages/auto-lab/auto-lab-engine';
 
@@ -25,6 +26,26 @@ const makeOneTickTrend = (): AutoLabTick[] => {
 };
 
 describe('Auto-Signals one-tick analysis', () => {
+    it('does not include Jump 100 in the live synthetic-market scan', () => {
+        expect(shouldExcludeAutoSignalMarket({
+            symbol: 'JD100',
+            market: 'synthetic_index',
+            exchange_is_open: 1,
+        })).toBe(true);
+        expect(shouldExcludeAutoSignalMarket({
+            symbol: 'OTHER',
+            display_name: 'Jump 100 Index',
+            market: 'synthetic_index',
+            exchange_is_open: 1,
+        })).toBe(true);
+        expect(shouldExcludeAutoSignalMarket({
+            symbol: 'JD50',
+            display_name: 'Jump 50 Index',
+            market: 'synthetic_index',
+            exchange_is_open: 1,
+        })).toBe(false);
+    });
+
     it.each([
         [59.9, 'EVEN', 0],
         [60, 'EVEN', 1],
