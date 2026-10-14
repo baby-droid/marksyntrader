@@ -18,7 +18,10 @@ import {
 } from './auto-signals-run-session';
 import { evaluateAutoSignalCandidates, shouldExcludeAutoSignalMarket } from './auto-signals-engine';
 import { isAutoSignalWorkspaceReady, startAutoSignalsBot } from './bot-builder-handoff';
-import { startDigitMatchMarketRescan } from './digit-match-rescan';
+import {
+    isDigitMatchRescanDue,
+    startDigitMatchMarketRescan,
+} from './digit-match-rescan';
 import type {
     AutoSignalAction,
     AutoSignalCandidate,
@@ -210,6 +213,7 @@ export const useAutoSignalsEngine = ({
     );
     const [markets, setMarkets] = useState<AutoSignalMarket[]>([]);
     const [family, setFamily] = useState<AutoSignalFamily>('AUTO');
+    const familyRef = useRef<AutoSignalFamily>('AUTO');
     const [settings, setSettings] = useState<AutoSignalsSettings>(readSettings);
     const activeRun = runSession.run;
     const [displayCurrency, setDisplayCurrency] = useState(getDisplayCurrency);
@@ -218,6 +222,8 @@ export const useAutoSignalsEngine = ({
     const unsubscribeRef = useRef<Array<() => void>>([]);
     const generationRef = useRef(0);
     const isPreparingRunRef = useRef(false);
+    const forceScoreRefreshRef = useRef(false);
+    const lastDigitMatchScanAtRef = useRef(0);
     const flushFrameRef = useRef<number | null>(null);
     const dirtySymbolsRef = useRef(new Set<string>());
     const queueMarketRefresh = useCallback(() => {
@@ -225,13 +231,21 @@ export const useAutoSignalsEngine = ({
         flushFrameRef.current = window.requestAnimationFrame(() => {
             flushFrameRef.current = null;
             const now = Date.now();
+            const activeFamily = familyRef.current;
+            const forceScoreRefresh = forceScoreRefreshRef.current;
+            forceScoreRefreshRef.current = false;
+            const shouldScore = activeFamily !== 'MATCHES'
+                || isDigitMatchRescanDue(now, lastDigitMatchScanAtRef.current, forceScoreRefresh);
+            if (activeFamily === 'MATCHES' && shouldScore) {
+                lastDigitMatchScanAtRef.current = now;
+            }
             const snapshot = Array.from(runtimesRef.current.values()).map((runtime) => {
-                if (dirtySymbolsRef.current.delete(runtime.info.symbol)) {
+                if (shouldScore && dirtySymbolsRef.current.delete(runtime.info.symbol)) {
                     runtime.candidates = runtime.ticks.length >= MIN_TICK_SIZE
                         ? evaluateAutoSignalCandidates({
                             market: runtime.info,
                             ticks: runtime.ticks,
-                            family: 'AUTO',
+                            family: activeFamily,
                             previous: runtime.candidate,
                             now,
                         })
@@ -244,6 +258,7 @@ export const useAutoSignalsEngine = ({
         });
     }, []);
     const queueFullMarketRefresh = useCallback(() => {
+        forceScoreRefreshRef.current = true;
         runtimesRef.current.forEach((runtime) => {
             dirtySymbolsRef.current.add(runtime.info.symbol);
         });
@@ -437,8 +452,11 @@ export const useAutoSignalsEngine = ({
     }, [authorized, connected, queueMarketRefresh, refreshToken, send, subscribeTicks]);
 
     const onFamilyChange = useCallback((nextFamily: AutoSignalFamily) => {
+        familyRef.current = nextFamily;
+        forceScoreRefreshRef.current = true;
         setFamily(nextFamily);
-    }, []);
+        queueFullMarketRefresh();
+    }, [queueFullMarketRefresh]);
 
     const onSettingsChange = useCallback(<K extends keyof AutoSignalsSettings>(
         key: K,

@@ -535,6 +535,14 @@ const configureTradeParameters = (
     }
 
     if (config.action === 'entry-trade') {
+        const entryGate = blocksOfType(doc, 'auto_signal_entry_gate')[0];
+        if (!entryGate) throw new Error('Entry bot XML is missing its Auto-Signal entry gate.');
+        setFieldValue(entryGate, 'STRATEGY', config.candidate.strategy);
+        setFieldValue(
+            entryGate,
+            'ENTRY_DIGIT',
+            String(config.candidate.entryDigit ?? config.market.latestDigit ?? 0),
+        );
         setVariableValue(doc, 'STAKE', config.accountAmounts.stake1);
         setVariableValue(doc, 'stake2', config.accountAmounts.stake2);
         setVariableValue(doc, 'takeprofit', config.accountAmounts.takeProfit);

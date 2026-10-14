@@ -223,16 +223,17 @@ export const hasAutoSignalPriceEntryPattern = (
     if (strategy === 'FALL') {
         if (latestDirection === -1) {
             const precedingRiseCount = movementStreakEndingAt(ticks, lastMove - 1, 1);
-            return precedingRiseCount >= 3 && precedingRiseCount <= 5;
+            return precedingRiseCount === 3 || precedingRiseCount === 4;
         }
-        return latestDirection === 1 && movementStreakEndingAt(ticks, lastMove, 1) >= 5;
+        return latestDirection === 1 && movementStreakEndingAt(ticks, lastMove, 1) === 5;
     }
 
     if (latestDirection === -1) {
-        return movementStreakEndingAt(ticks, lastMove, -1) >= 2;
+        const fallingStreak = movementStreakEndingAt(ticks, lastMove, -1);
+        return fallingStreak === 2 || fallingStreak === 3;
     }
     return latestDirection === 1
-        && movementStreakEndingAt(ticks, lastMove - 1, -1) >= 2;
+        && movementStreakEndingAt(ticks, lastMove - 1, -1) === 2;
 };
 
 const entryConditionConfirmed = (route: Route, ticks: AutoLabTick[], entryDigit: number | null) => {
@@ -352,9 +353,9 @@ export const evaluateAutoSignalCandidates = ({
                 : 'watch';
         const latest = ticks[ticks.length - 1];
         const entryDescription = route.strategy === 'RISE'
-            ? 'Rise entry (2+ falls, optionally followed by a rise)'
+            ? 'Rise entry (2 falls, 2 falls then 1 rise, or 3 falls)'
             : route.strategy === 'FALL'
-                ? 'Fall entry (3–5 rises or a 5-rise run)'
+                ? 'Fall entry (3/4 rises then 1 fall, or 5 consecutive rises)'
                 : entryDigit == null ? 'price-direction entry' : `entry digit ${entryDigit}`;
         const reason = `${agreements}/${evidenceWindows.length} longer windows show observed outcomes above baseline; ${entryDescription} ${entryReady ? 'is confirmed' : 'is waiting'}.`;
 

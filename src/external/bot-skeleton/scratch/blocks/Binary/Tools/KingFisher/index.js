@@ -835,3 +835,199 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_virtual_hook 
         generator().ORDER_FUNCTION_CALL,
     ];
 };
+
+window.Blockly.Blocks.normal_killer_tick_acceleration = {
+    init() {
+        this.jsonInit({
+            message0: localize('Normal Killer tick-wise acceleration'),
+            previousStatement: null,
+            nextStatement: null,
+            colour: '#0f9f8f',
+            tooltip: localize(
+                'Runs the Normal Killer pipeline on live ticks. Uses the bot stake and martingale variables; it does not use Virtual Hook confirmation.'
+            ),
+            helpUrl: '',
+        });
+    },
+    meta() {
+        return {
+            display_name: localize('Normal Killer tick-wise acceleration'),
+            description: localize(
+                'Enables direct tick-wise purchases and synchronizes the visible stake with the pipeline martingale.'
+            ),
+        };
+    },
+    customContextMenu(menu) {
+        modifyContextMenu(menu);
+    },
+};
+
+window.Blockly.JavaScript.javascriptGenerator.forBlock.normal_killer_tick_acceleration = block => {
+    if (block.data !== 'nkv3-tick-acceleration') return '';
+
+    let ancestor = block.getParent?.();
+    let mode = '';
+    while (ancestor) {
+        if (ancestor.type === 'before_purchase') {
+            mode = 'MAIN';
+            break;
+        }
+        if (ancestor.type === 'during_purchase') {
+            mode = 'SIDE';
+            break;
+        }
+        ancestor = ancestor.getParent?.();
+    }
+    if (!mode) return '';
+
+    const workspaceBlocks = block.workspace?.getAllBlocks?.() ?? [];
+    const purchaseBlock = workspaceBlocks.find(candidate => candidate.type === 'purchase');
+    const contractType = purchaseBlock?.getFieldValue?.('PURCHASE_LIST') || 'DIGITOVER';
+    if (mode === 'SIDE') {
+        return [
+            'var normalKillerSideTick = Bot.getLastTick(true);',
+            'if (normalKillerSideTick && normalKillerSideTick.epoch != null) {',
+            `  Bot.purchaseNormalKillerTick(${JSON.stringify(contractType)}, Number(normalKillerSideTick.epoch));`,
+            '}',
+        ].join('\n');
+    }
+
+    const workspaceVariables = block.workspace?.getVariableMap?.()?.getVariables?.() ?? [];
+    const normalizeVariable = value => String(value ?? '')
+        .trim()
+        .toLowerCase()
+        .replace(/[\s_-]+/g, ' ');
+    const variableCode = name => {
+        const variable = workspaceVariables.find(candidate =>
+            normalizeVariable(candidate.name) === normalizeVariable(name)
+        );
+        return variable
+            ? window.Blockly.JavaScript.variableDB_.getName(
+                variable.getId(),
+                window.Blockly.Variables.CATEGORY_NAME,
+            )
+            : null;
+    };
+    const stake = variableCode('stake');
+    const baseStake = variableCode('base_stake');
+    const multiplier = variableCode('martingale');
+    const takeProfit = variableCode('take_profit');
+    const stopLoss = variableCode('stop_loss');
+    if (![stake, baseStake, multiplier, takeProfit, stopLoss].every(Boolean)) {
+        throw new Error('Normal Killer tick acceleration requires stake, base stake, martingale, take profit, and stop loss variables.');
+    }
+
+    return [
+        `Bot.configureNormalKillerPipeline(Number(${stake}), Number(${baseStake}), Number(${multiplier}), Number(${takeProfit}), Number(${stopLoss}));`,
+        `var normalKillerNextStake = Bot.getNormalKillerPipelineStake();`,
+        `if (typeof normalKillerNextStake === 'number' && normalKillerNextStake > 0 && normalKillerNextStake === normalKillerNextStake) ${stake} = normalKillerNextStake;`,
+        'var normalKillerMainTick = Bot.getLastTick(true);',
+        'if (normalKillerMainTick && normalKillerMainTick.epoch != null) Bot.setNormalKillerPurchaseEpoch(Number(normalKillerMainTick.epoch));',
+    ].join('\n');
+};
+
+window.Blockly.Blocks.auto_signal_entry_gate = {
+    init() {
+        this.jsonInit({
+            message0: localize('Auto-Signal entry %1 at digit %2'),
+            args0: [
+                {
+                    type: 'field_dropdown',
+                    name: 'STRATEGY',
+                    options: [
+                        [localize('Over'), 'OVER'],
+                        [localize('Under'), 'UNDER'],
+                        [localize('Matches'), 'MATCHES'],
+                        [localize('Differs'), 'DIFFERS'],
+                        [localize('Even'), 'EVEN'],
+                        [localize('Odd'), 'ODD'],
+                        [localize('Rise'), 'RISE'],
+                        [localize('Fall'), 'FALL'],
+                        [localize('Only Ups'), 'ONLY_UPS'],
+                        [localize('Only Downs'), 'ONLY_DOWNS'],
+                    ],
+                },
+                {
+                    type: 'field_number',
+                    name: 'ENTRY_DIGIT',
+                    value: 0,
+                    min: 0,
+                    max: 9,
+                    precision: 1,
+                },
+            ],
+            output: 'Boolean',
+            outputShape: window.Blockly.OUTPUT_SHAPE_ROUND,
+            colour: '#0f766e',
+            tooltip: localize(
+                'Waits for the selected digit entry or the configured live price-tick sequence before buying.'
+            ),
+            helpUrl: '',
+        });
+    },
+    meta() {
+        return {
+            display_name: localize('Auto-Signal entry gate'),
+            description: localize(
+                'Uses the scanner-selected digit, parity, one-tick price direction, or rise/fall entry sequence.'
+            ),
+        };
+    },
+    customContextMenu(menu) {
+        modifyContextMenu(menu);
+    },
+};
+
+window.Blockly.JavaScript.javascriptGenerator.forBlock.auto_signal_entry_gate = block => {
+    const helperName = ensureHelper('autoSignalEntryGate', [
+        'var autoSignalEntryGateStates = {};',
+        `function ${generator().FUNCTION_NAME_PLACEHOLDER_}(key, strategy, entryDigit) {`,
+        '  var tick = Bot.getLastTick(true);',
+        '  if (!tick || tick.epoch == null) return false;',
+        '  var epoch = Number(tick.epoch);',
+        '  var quote = Number(tick.quote);',
+        '  if (quote !== quote || quote === Infinity || quote === -Infinity) return false;',
+        '  var state = autoSignalEntryGateStates[key] || (autoSignalEntryGateStates[key] = { lastEpoch: null, lastQuote: null, moves: [], lastEntryEpoch: null });',
+        '  if (state.lastEpoch !== epoch) {',
+        '    if (state.lastQuote !== null) {',
+        '      var move = quote > state.lastQuote ? 1 : quote < state.lastQuote ? -1 : 0;',
+        '      state.moves.push(move);',
+        '      if (state.moves.length > 5) state.moves.shift();',
+        '    }',
+        '    state.lastEpoch = epoch;',
+        '    state.lastQuote = quote;',
+        '  }',
+        '  var latestMove = state.moves.length ? state.moves[state.moves.length - 1] : 0;',
+        '  var streak = function(direction, skipLatest) {',
+        '    var index = state.moves.length - 1 - (skipLatest ? 1 : 0);',
+        '    var count = 0;',
+        '    while (index >= 0 && state.moves[index] === direction) { count += 1; index -= 1; }',
+        '    return count;',
+        '  };',
+        '  var ready = false;',
+        '  if (strategy === "FALL") {',
+        '    if (latestMove === -1) { var risesBeforeFall = streak(1, true); ready = risesBeforeFall === 3 || risesBeforeFall === 4; }',
+        '    else if (latestMove === 1) ready = streak(1, false) === 5;',
+        '  } else if (strategy === "RISE") {',
+        '    if (latestMove === -1) { var fallingRun = streak(-1, false); ready = fallingRun === 2 || fallingRun === 3; }',
+        '    else if (latestMove === 1) ready = streak(-1, true) === 2;',
+        '  } else if (strategy === "ONLY_UPS") {',
+        '    ready = latestMove === 1;',
+        '  } else if (strategy === "ONLY_DOWNS") {',
+        '    ready = latestMove === -1;',
+        '  } else {',
+        '    var digit = Number(Bot.getLastDigit());',
+        '    ready = digit === Number(entryDigit);',
+        '  }',
+        '  if (!ready || state.lastEntryEpoch === epoch) return false;',
+        '  state.lastEntryEpoch = epoch;',
+        '  return true;',
+        '}',
+    ]);
+    const strategy = String(block.getFieldValue('STRATEGY') || 'UNDER');
+    const entryDigit = Math.max(0, Math.min(9, Number(block.getFieldValue('ENTRY_DIGIT') || 0)));
+    return [
+        `${helperName}(${JSON.stringify(block.id)}, ${JSON.stringify(strategy)}, ${entryDigit})`,
+        generator().ORDER_FUNCTION_CALL,
+    ];
+};

@@ -85,6 +85,7 @@ const readTemplate = (action: keyof typeof AUTO_SIGNAL_BOTS) =>
 describe('Auto-Signals bot templates', () => {
     it.each([
         ['trade-only', 'DIGITOVER', 'OVER', 4, 'digits', 'overunder', 'DIGITOVER'],
+        ['trade-only', 'DIGITMATCH', 'MATCHES', 3, 'digits', 'matchesdiffers', 'DIGITMATCH'],
         ['entry-trade', 'DIGITUNDER', 'UNDER', 5, 'digits', 'overunder', 'DIGITUNDER'],
         ['entry-trade', 'DIGITMATCH', 'MATCHES', 3, 'digits', 'matchesdiffers', 'DIGITMATCH'],
         ['entry-trade', 'DIGITDIFF', 'DIFFERS', 3, 'digits', 'matchesdiffers', 'DIGITDIFF'],
@@ -125,7 +126,11 @@ describe('Auto-Signals bot templates', () => {
             expect(getValueNumber(tradeOptions, 'AMOUNT')).toBe('1.5');
             expect(getVariableSetNumber(doc, isEntryTrade ? 'STAKE' : 'stake')).toBe('1.5');
             expect(getVariableSetNumber(doc, isEntryTrade ? 'martingalelevel' : 'Martingale')).toBe('2');
-            if (isEntryTrade) expect(getVariableSetNumber(doc, 'stake2')).toBe('1.5');
+            if (isEntryTrade) {
+                expect(getVariableSetNumber(doc, 'stake2')).toBe('1.5');
+                expect(getField(getBlock(doc, 'auto_signal_entry_gate'), 'STRATEGY')).toBe(strategy);
+                expect(getField(getBlock(doc, 'auto_signal_entry_gate'), 'ENTRY_DIGIT')).toBe('6');
+            }
             if (barrier !== null) expect(getValueNumber(tradeOptions, 'PREDICTION')).toBe(String(barrier));
         },
     );

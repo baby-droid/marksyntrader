@@ -77,6 +77,7 @@ describe('execution speed controls', () => {
         expect(speed.getPurchasesPerTick()).toBe(1);
         expect(speed.useDirectBuyForSpeed()).toBe(true);
         expect(speed.isInstantExecutionForContext()).toBe(true);
+        expect(speed.isTickWiseExecutionEnabled()).toBe(true);
 
         speed.setFastExecutionEnabled(true);
         expect(speed.isFastExecutionEnabledForContext()).toBe(true);
@@ -85,6 +86,11 @@ describe('execution speed controls', () => {
         expect(speed.useDirectBuyForSpeed()).toBe(true);
 
         speed.setFastExecutionEnabled(false);
+        speed.setASpeedBoostEnabled(true);
+        expect(speed.isTickWiseExecutionEnabled()).toBe(true);
+        expect(speed.getExecutionSpeedDelay()).toBe(0);
+        expect(speed.getPurchasesPerTick()).toBe(1);
+        speed.setASpeedBoostEnabled(false);
         for (const tier of ['crazy', 'turbo'] as const) {
             speed.setExecutionSpeed(tier);
             expect(speed.getPurchasesPerTick()).toBe(1);

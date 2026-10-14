@@ -87,8 +87,12 @@ describe('Auto-Signals trade actions', () => {
     });
 
     it('renders alternative barriers as separate cards and shows the exact 20-tick rate', () => {
-        const under7 = {
+        const over4 = {
             ...market.candidate!,
+            windows: [{ window: 20 as const, sampleSize: 20, probability: 35, agrees: true }],
+        };
+        const under7 = {
+            ...over4,
             id: 'R_10:UNDER:DIGITUNDER:7',
             strategy: 'UNDER' as const,
             label: 'Under',
@@ -99,15 +103,17 @@ describe('Auto-Signals trade actions', () => {
         };
         render(<AutoSignalsPage {...props} markets={[{
             ...market,
-            candidates: [market.candidate!, under7],
+            candidate: over4,
+            candidates: [over4, under7],
         }]} />);
 
         expect(screen.getByTestId('card-market-R_10-OVER-4')).toBeInTheDocument();
         expect(screen.getByTestId('card-market-R_10-UNDER-7')).toBeInTheDocument();
-        expect(screen.getAllByText('50%')).toHaveLength(1);
+        expect(screen.getByTestId('text-confidence-R_10-OVER-4')).toHaveTextContent('35%');
+        expect(screen.getByTestId('text-confidence-R_10-UNDER-7')).toHaveTextContent('50%');
     });
 
-    it('shows the historical alignment score and suggested run count and keeps settings compact until opened', () => {
+    it('keeps the alignment score and suggested run count in the analysis panel', () => {
         const suggestedCandidate = {
             ...market.candidate!,
             score: 89,
@@ -119,8 +125,9 @@ describe('Auto-Signals trade actions', () => {
             candidates: [suggestedCandidate],
         }]} />);
 
-        expect(screen.getByTestId('text-confidence-R_10-OVER-4')).toHaveTextContent('89%');
-        expect(screen.getByText('4 suggested cycles')).toBeInTheDocument();
+        expect(screen.getByTestId('text-confidence-R_10-OVER-4')).toHaveTextContent('Waiting for 20 ticks');
+        expect(screen.getByTestId('text-score-R_10-OVER-4')).toHaveTextContent('89/100');
+        expect(screen.getByTestId('text-run-recommendation-R_10-OVER-4')).toHaveTextContent('4');
         expect(screen.getByTestId('panel-bot-settings')).not.toHaveAttribute('open');
 
         fireEvent.click(screen.getByText('SETTINGS'));

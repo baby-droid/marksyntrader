@@ -32,3 +32,9 @@ Candidate run recommendations are score-based guidance only. When Fast is explic
 **Why:** the scanner has no calibrated probability model or quoted-payout EV gate, so a faster burst must not be presented as a higher chance of winning.
 
 **How to apply:** keep the three-order burst finite and Fast-only, preserve the configured cycle cap and current-signal checks, and retain the one-tick duration and explicit per-run monitoring.
+
+The Matches family must score only Matches candidates and rescan its cached authenticated tick window once per minute; quote and feed status can continue updating from live ticks between rescans. Entry Trade runs its entry gate inside the generated XML so it survives the Auto-Signals-to-Bot-Builder handoff. Rise uses exactly 2 falls, 2 falls then 1 rise, or 3 falls; Fall uses 3 or 4 rises then 1 fall, or 5 consecutive rises. Over/Under entries choose between 1/8 and 2/9 using recent observed next-tick outcomes.
+
+**Why:** The user requested a one-minute Matches scan, exact tick-sequence entries, and the scanner-selected entry digit to govern the bot after page navigation.
+
+**How to apply:** Re-score the selected family (not AUTO) on its schedule, keep the underlying authenticated feed live, patch the XML entry gate with the selected strategy/digit, and preserve one-tick duration and the XML-owned run limit.

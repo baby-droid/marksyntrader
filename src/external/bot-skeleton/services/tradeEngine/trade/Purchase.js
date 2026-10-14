@@ -283,6 +283,10 @@ export default Engine =>
             });
         }
 
+        getNormalKillerPipelineStake() {
+            return this.normalKillerPipeline?.currentStake ?? null;
+        }
+
         setNormalKillerPurchaseEpoch(epoch, symbol = this.tradeOptions?.symbol || this.options?.symbol) {
             this.normalKillerNextPurchaseEpoch = Number(epoch);
             this.normalKillerNextPurchaseKey = symbol

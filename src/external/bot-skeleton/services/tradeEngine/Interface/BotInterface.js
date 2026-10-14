@@ -33,6 +33,8 @@ const getBotInterface = tradeEngine => {
         purchaseMultiple: contract_types => tradeEngine.purchaseMultiple(contract_types),
         configureNormalKillerPipeline: (...args) =>
             tradeEngine.configureNormalKillerPipeline(...args),
+        getNormalKillerPipelineStake: () =>
+            tradeEngine.getNormalKillerPipelineStake(),
         setNormalKillerPurchaseEpoch: (epoch, symbol) =>
             tradeEngine.setNormalKillerPurchaseEpoch(epoch, symbol),
         purchaseNormalKillerTick: (contract_type, epoch) =>

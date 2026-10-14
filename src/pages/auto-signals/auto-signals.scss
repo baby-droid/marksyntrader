@@ -340,13 +340,13 @@
 
 .as-market-grid {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     align-items: stretch;
-    justify-content: stretch;
+    justify-content: start;
     gap: 0.58rem;
-    width: 100%;
+    width: calc(100% - 4cm);
     max-width: none;
-    margin-left: 0;
+    margin-left: 2cm;
 }
 
 .as-market-card {
@@ -730,7 +730,11 @@
     .as-filter { white-space: nowrap; }
     .as-market-card { width: 100%; max-width: none; margin: 0; padding: 0.42rem; }
     .as-market-card__actions { grid-template-columns: 0.88fr 1.12fr; }
-    .as-market-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .as-market-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        width: 100%;
+        margin-left: 0;
+    }
     .as-button { min-height: 1.85rem; }
     .as-footer { align-items: flex-start; flex-direction: column; gap: 0.45rem; }
 }

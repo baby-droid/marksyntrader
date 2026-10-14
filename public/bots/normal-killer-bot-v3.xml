@@ -95,8 +95,20 @@
   <block type="before_purchase" id="nkv3_before" deletable="false" x="0" y="760">
     <data>nkv3-pipeline</data>
     <statement name="BEFOREPURCHASE_STACK">
-      <block type="purchase" id="nkv3_purchase">
-        <field name="PURCHASE_LIST">DIGITOVER</field>
+      <block type="normal_killer_tick_acceleration" id="nkv3_tick_acceleration_main">
+        <data>nkv3-tick-acceleration</data>
+        <next>
+          <block type="purchase" id="nkv3_purchase">
+            <field name="PURCHASE_LIST">DIGITOVER</field>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+  <block type="during_purchase" id="nkv3_during" deletable="false" x="0" y="1040">
+    <statement name="DURINGPURCHASE_STACK">
+      <block type="normal_killer_tick_acceleration" id="nkv3_tick_acceleration_during">
+        <data>nkv3-tick-acceleration</data>
       </block>
     </statement>
   </block>
