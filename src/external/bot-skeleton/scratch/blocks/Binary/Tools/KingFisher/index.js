@@ -865,6 +865,7 @@ window.Blockly.Blocks.normal_killer_tick_acceleration = {
 window.Blockly.JavaScript.javascriptGenerator.forBlock.normal_killer_tick_acceleration = block => {
     if (block.data !== 'nkv3-tick-acceleration') return '';
 
+    const workspace = block.workspace ?? window.Blockly.derivWorkspace;
     let ancestor = block.getParent?.();
     let mode = '';
     while (ancestor) {
@@ -880,7 +881,7 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.normal_killer_tick_accele
     }
     if (!mode) return '';
 
-    const workspaceBlocks = block.workspace?.getAllBlocks?.() ?? [];
+    const workspaceBlocks = workspace?.getAllBlocks?.() ?? [];
     const purchaseBlock = workspaceBlocks.find(candidate => candidate.type === 'purchase');
     const contractType = purchaseBlock?.getFieldValue?.('PURCHASE_LIST') || 'DIGITOVER';
     if (mode === 'SIDE') {
@@ -892,15 +893,18 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.normal_killer_tick_accele
         ].join('\n');
     }
 
-    const workspaceVariables = block.workspace?.getVariableMap?.()?.getVariables?.() ?? [];
     const normalizeVariable = value => String(value ?? '')
         .trim()
         .toLowerCase()
         .replace(/[\s_-]+/g, ' ');
+    const variableMap = workspace?.getVariableMap?.();
     const variableCode = name => {
-        const variable = workspaceVariables.find(candidate =>
+        let variable = variableMap?.getVariables?.().find(candidate =>
             normalizeVariable(candidate.name) === normalizeVariable(name)
         );
+        if (!variable && variableMap?.createVariable) {
+            variable = variableMap.createVariable(name, '');
+        }
         return variable
             ? window.Blockly.JavaScript.variableDB_.getName(
                 variable.getId(),
@@ -914,10 +918,18 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.normal_killer_tick_accele
     const takeProfit = variableCode('take_profit');
     const stopLoss = variableCode('stop_loss');
     if (![stake, baseStake, multiplier, takeProfit, stopLoss].every(Boolean)) {
-        throw new Error('Normal Killer tick acceleration requires stake, base stake, martingale, take profit, and stop loss variables.');
+        // A partially edited or older saved Normal Killer workspace may not
+        // expose a writable Blockly variable map. Do not abort generation and
+        // prevent the bot from running because optional pipeline state is absent.
+        return '';
     }
 
     return [
+        `if (!(Number(${stake}) > 0)) ${stake} = Number(${baseStake}) > 0 ? Number(${baseStake}) : 0.35;`,
+        `if (!(Number(${baseStake}) > 0)) ${baseStake} = Number(${stake}) > 0 ? Number(${stake}) : 0.35;`,
+        `if (!(Number(${multiplier}) >= 1)) ${multiplier} = 2;`,
+        `if (!(Number(${takeProfit}) === Number(${takeProfit}) && Number(${takeProfit}) - Number(${takeProfit}) === 0)) ${takeProfit} = 5;`,
+        `if (!(Number(${stopLoss}) === Number(${stopLoss}) && Number(${stopLoss}) - Number(${stopLoss}) === 0)) ${stopLoss} = 15;`,
         `Bot.configureNormalKillerPipeline(Number(${stake}), Number(${baseStake}), Number(${multiplier}), Number(${takeProfit}), Number(${stopLoss}));`,
         `var normalKillerNextStake = Bot.getNormalKillerPipelineStake();`,
         `if (typeof normalKillerNextStake === 'number' && normalKillerNextStake > 0 && normalKillerNextStake === normalKillerNextStake) ${stake} = normalKillerNextStake;`,

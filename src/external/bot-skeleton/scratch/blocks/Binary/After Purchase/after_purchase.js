@@ -73,7 +73,6 @@ window.Blockly.Blocks.after_purchase = {
 };
 
 window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block => {
-    const stack = window.Blockly.JavaScript.javascriptGenerator.statementToCode(block, 'AFTERPURCHASE_STACK');
     // King Fisher templates deliberately keep scanning after every settlement.
     // Their risk variables are still updated by the workspace blocks, but a
     // TP/SL branch must not end the interpreter after the first contract.
@@ -97,7 +96,8 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
         .trim()
         .toLowerCase()
         .replace(/[\s_-]+/g, ' ');
-    const workspaceVariables = workspace?.getVariableMap?.()?.getVariables?.() ?? [];
+    const variableMap = workspace?.getVariableMap?.();
+    let workspaceVariables = variableMap?.getVariables?.() ?? [];
     const isTwoPredictionCycle = [
         'over 1 stake',
         'over 2 stake',
@@ -106,6 +106,41 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
     ].every(expectedName =>
         workspaceVariables.some(candidate => normalizeVariableName(candidate.name) === expectedName)
     );
+    if (isTwoPredictionCycle && variableMap?.createVariable) {
+        let canonicalPhase = workspaceVariables.find(
+            candidate => normalizeVariableName(candidate.name) === 'recovery phase'
+        );
+        if (!canonicalPhase) {
+            canonicalPhase = variableMap.createVariable('recovery_phase', '');
+            workspaceVariables = variableMap.getVariables?.() ?? workspaceVariables;
+        }
+
+        // Older saved workspaces can have more than the Recovery Escalation
+        // field bound to the orphaned recovery_phase2 variable. Rebind every
+        // variable field before generating the statement stack so ordinary
+        // variables_get/set blocks use the visible phase router's state too.
+        if (canonicalPhase) {
+            const canonicalPhaseId = canonicalPhase.getId();
+            workspaceBlocks.forEach(candidate => {
+                (candidate.inputList ?? []).forEach(input => {
+                    (input.fieldRow ?? []).forEach(field => {
+                        const variableId = field.getValue?.()
+                            ?? candidate.getFieldValue?.(field.name);
+                        const boundVariable = workspaceVariables.find(
+                            variable => variable.getId() === variableId
+                        );
+                        if (
+                            boundVariable
+                            && normalizeVariableName(boundVariable.name) === 'recovery phase2'
+                        ) {
+                            field.setValue?.(canonicalPhaseId);
+                        }
+                    });
+                });
+            });
+        }
+    }
+    const stack = window.Blockly.JavaScript.javascriptGenerator.statementToCode(block, 'AFTERPURCHASE_STACK');
     const variableName = variableNameText => {
         const targetName = normalizeVariableName(variableNameText);
         const variable = workspaceVariables.find(candidate => candidate.name === variableNameText)

@@ -115,6 +115,14 @@ describe('2 Prediction Cycle martingale', () => {
             RETURN_PHASE: '0',
             USE_PAIR_RESULT: 'TRUE',
         };
+        let phaseRouterVariableId = 'phase2';
+        const phaseRouterField = {
+            name: 'VAR',
+            getValue: () => phaseRouterVariableId,
+            setValue: (id: string) => {
+                phaseRouterVariableId = id;
+            },
+        };
         const recoveryBlock = {
             type: 'king_fisher_recovery_escalation',
             getFieldValue: (name: string) => recoveryFieldValues[name],
@@ -128,6 +136,11 @@ describe('2 Prediction Cycle martingale', () => {
         const blocks = [
             { type: 'king_fisher_pair_purchase_with_stakes' },
             recoveryBlock,
+            {
+                type: 'variables_get',
+                inputList: [{ fieldRow: [phaseRouterField] }],
+                getFieldValue: () => phaseRouterVariableId,
+            },
             { type: 'king_fisher_restart_trade' },
             {
                 type: 'trade_definition_tradeoptions',
@@ -141,7 +154,7 @@ describe('2 Prediction Cycle martingale', () => {
                     variableDB_: { getName: (id: string) => `v_${id}` },
                     javascriptGenerator: {
                         forBlock: { variables_get: () => ['0'] },
-                        statementToCode: () => '',
+                        statementToCode: () => `var phaseRouterState = v_${phaseRouterVariableId};`,
                         ORDER_ATOMIC: 0,
                     },
                 },
@@ -175,8 +188,106 @@ describe('2 Prediction Cycle martingale', () => {
         expect(generatedCode).toContain('Bot.isKingFisherPairWin()');
         expect(generatedCode).toContain('v_over1 = v_over1 * twoPredictionMartingaleFactor');
         expect(generatedCode).toContain('Number(v_created_recovery_phase)');
+        expect(generatedCode).toContain('var phaseRouterState = v_created_recovery_phase;');
+        expect(generatedCode).not.toContain('v_phase2');
         expect(generatedCode).not.toContain('recovery_phase2');
         expect(recoveryFieldValues.PHASE).toBe('created_recovery_phase');
         expect(recoveryFieldValues.LOSS_COUNT).toBe('created_paired_loss_count');
+        expect(phaseRouterVariableId).toBe('created_recovery_phase');
+    });
+});
+
+describe('2 Prediction Cycle paired-entry flow', () => {
+    const xml = readFileSync(
+        resolve(__dirname, '../../../public/bots/two-prediction-cycle.xml'),
+        'utf8',
+    );
+    const doc = new DOMParser().parseFromString(xml, 'application/xml');
+    const getBlock = (id: string) =>
+        Array.from(doc.getElementsByTagNameNS('https://developers.google.com/blockly/xml', 'block'))
+            .find(block => block.getAttribute('id') === id);
+    const readFields = (block: Element | undefined) =>
+        Object.fromEntries(
+            Array.from(block?.getElementsByTagNameNS('https://developers.google.com/blockly/xml', 'field') ?? [])
+                .map(field => [field.getAttribute('name') || '', field.textContent || '']),
+        );
+    const readStakeVariables = (block: Element | undefined) =>
+        Array.from(block?.getElementsByTagNameNS('https://developers.google.com/blockly/xml', 'block') ?? [])
+            .filter(child => child.getAttribute('type') === 'variables_get')
+            .map(child => Array.from(child.getElementsByTagNameNS('https://developers.google.com/blockly/xml', 'field'))
+                .find(field => field.getAttribute('name') === 'VAR')?.textContent);
+
+    it('routes Over 1/2 and Under 8/7 as distinct simultaneous pairs with their own stakes', () => {
+        expect(doc.getElementsByTagName('parsererror')).toHaveLength(0);
+        expect(readFields(getBlock('tp2_over_pair'))).toMatchObject({
+            CONTRACT_1: 'DIGITOVER',
+            PREDICTION_1: '1',
+            CONTRACT_2: 'DIGITOVER',
+            PREDICTION_2: '2',
+        });
+        expect(readStakeVariables(getBlock('tp2_over_pair'))).toEqual(['over_1_stake', 'over_2_stake']);
+        expect(readFields(getBlock('tp2_under_pair'))).toMatchObject({
+            CONTRACT_1: 'DIGITUNDER',
+            PREDICTION_1: '8',
+            CONTRACT_2: 'DIGITUNDER',
+            PREDICTION_2: '7',
+        });
+        expect(readStakeVariables(getBlock('tp2_under_pair'))).toEqual(['under_8_stake', 'under_7_stake']);
+    });
+
+    it('generates a same-entry paired purchase with each configured stake passed independently', () => {
+        const toolsSource = readFileSync(
+            resolve(__dirname, '../../external/bot-skeleton/scratch/blocks/Binary/Tools/KingFisher/index.js'),
+            'utf8',
+        );
+        const startMarker =
+            'window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_pair_purchase_with_stakes = block => {';
+        const start = toolsSource.indexOf(startMarker);
+        const end = toolsSource.indexOf('\n};', start);
+        expect(start).toBeGreaterThanOrEqual(0);
+        expect(end).toBeGreaterThan(start);
+
+        const generatorSource = toolsSource.slice(start, end + 3);
+        const mockWindow = {
+            Blockly: {
+                JavaScript: {
+                    javascriptGenerator: {
+                        ORDER_ATOMIC: 0,
+                        valueToCode: (block: any, inputName: string) => block.stakes[inputName],
+                        forBlock: {} as Record<string, unknown>,
+                    },
+                },
+            },
+        };
+        const createGenerator = new Function(
+            'window',
+            `${generatorSource}\nreturn window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_pair_purchase_with_stakes;`,
+        ) as (windowObject: typeof mockWindow) => (block: any) => string;
+        const generator = createGenerator(mockWindow);
+        const overCode = generator({
+            getFieldValue: (name: string) => ({
+                CONTRACT_1: 'DIGITOVER',
+                PREDICTION_1: '1',
+                CONTRACT_2: 'DIGITOVER',
+                PREDICTION_2: '2',
+            })[name],
+            stakes: { STAKE_1: 'over1Stake', STAKE_2: 'over2Stake' },
+        });
+        const underCode = generator({
+            getFieldValue: (name: string) => ({
+                CONTRACT_1: 'DIGITUNDER',
+                PREDICTION_1: '8',
+                CONTRACT_2: 'DIGITUNDER',
+                PREDICTION_2: '7',
+            })[name],
+            stakes: { STAKE_1: 'under8Stake', STAKE_2: 'under7Stake' },
+        });
+
+        expect(overCode).toContain('amount: (over1Stake), prediction: 1');
+        expect(overCode).toContain('amount: (over2Stake), prediction: 2');
+        expect(underCode).toContain('amount: (under8Stake), prediction: 8');
+        expect(underCode).toContain('amount: (under7Stake), prediction: 7');
+        expect(overCode.match(/same_tick_pair: true/g)).toHaveLength(2);
+        expect(underCode.match(/same_tick_pair: true/g)).toHaveLength(2);
     });
 });

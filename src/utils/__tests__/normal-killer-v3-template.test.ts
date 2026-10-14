@@ -43,4 +43,74 @@ describe('Normal Killer Bot V3 template', () => {
         expect(operands).toEqual(expect.arrayContaining(['stake', 'martingale']));
         expect(getBlock(doc, 'trade_again', 'nkv3_trade_again')).toBeDefined();
     });
+
+    it('creates missing pipeline variables and keeps the Normal Killer generator runnable', () => {
+        const source = fs.readFileSync(
+            path.resolve(
+                process.cwd(),
+                'src/external/bot-skeleton/scratch/blocks/Binary/Tools/KingFisher/index.js',
+            ),
+            'utf8',
+        );
+        const startMarker =
+            'window.Blockly.JavaScript.javascriptGenerator.forBlock.normal_killer_tick_acceleration = block => {';
+        const start = source.indexOf(startMarker);
+        const end = source.indexOf('\n};', start);
+        expect(start).toBeGreaterThanOrEqual(0);
+        expect(end).toBeGreaterThan(start);
+
+        const generatorSource = source.slice(start, end + 3);
+        const variables: Array<{ name: string; getId: () => string }> = [];
+        const variableMap = {
+            getVariables: () => variables,
+            createVariable: (name: string) => {
+                const id = `nkv3_${variables.length}`;
+                const variable = { name, getId: () => id };
+                variables.push(variable);
+                return variable;
+            },
+        };
+        const mockWindow = {
+            Blockly: {
+                derivWorkspace: null,
+                Variables: { CATEGORY_NAME: 'VARIABLE' },
+                JavaScript: {
+                    variableDB_: { getName: (id: string) => `v_${id}` },
+                    javascriptGenerator: { forBlock: {} as Record<string, unknown> },
+                },
+            },
+        };
+        const createGenerator = new Function(
+            'window',
+            `${generatorSource}\nreturn window.Blockly.JavaScript.javascriptGenerator.forBlock.normal_killer_tick_acceleration;`,
+        ) as (windowObject: typeof mockWindow) => (block: any) => string;
+        const generator = createGenerator(mockWindow);
+        const workspace = {
+            getAllBlocks: () => [{
+                type: 'purchase',
+                getFieldValue: () => 'DIGITOVER',
+            }],
+            getVariableMap: () => variableMap,
+        };
+        const block = {
+            data: 'nkv3-tick-acceleration',
+            workspace,
+            getParent: () => ({ type: 'before_purchase' }),
+        };
+
+        const generatedCode = generator(block);
+
+        expect(variables.map(variable => variable.name)).toEqual([
+            'stake',
+            'base_stake',
+            'martingale',
+            'take_profit',
+            'stop_loss',
+        ]);
+        expect(generatedCode).toContain('Bot.configureNormalKillerPipeline');
+        expect(generatedCode).toContain(': 0.35;');
+        expect(generatedCode).toContain('= 2;');
+        expect(generatedCode).toContain('= 5;');
+        expect(generatedCode).toContain('= 15;');
+    });
 });
