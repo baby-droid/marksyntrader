@@ -17,7 +17,8 @@ import {
     subscribeAutoSignalsRunSession,
 } from './auto-signals-run-session';
 import { evaluateAutoSignalCandidates, shouldExcludeAutoSignalMarket } from './auto-signals-engine';
-import { isAutoSignalWorkspaceReady } from './bot-builder-handoff';
+import { isAutoSignalWorkspaceReady, startAutoSignalsBot } from './bot-builder-handoff';
+import { startDigitMatchMarketRescan } from './digit-match-rescan';
 import type {
     AutoSignalAction,
     AutoSignalCandidate,
@@ -36,8 +37,8 @@ const MIN_TICK_SIZE = 20;
 
 const DEFAULT_SETTINGS: AutoSignalsSettings = {
     maxRuns: 10,
-    stake1: 1,
-    stake2: 2,
+    stake1: 1.5,
+    stake2: 1.5,
     takeProfit: 5,
     stopLoss: 10,
     martingale: 2,
@@ -68,12 +69,19 @@ const readSettings = (): AutoSignalsSettings => {
     try {
         const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
         if (!saved || typeof saved !== 'object') return DEFAULT_SETTINGS;
+        // Migrate the previous built-in 1/2 stake pair once, while preserving
+        // any amounts the user deliberately customized.
+        const hadPreviousDefaultStakes = Number(saved.stake1) === 1 && Number(saved.stake2) === 2;
         return {
             // Run count is selected per signal; stored legacy maxRuns values
             // must not pin every new candidate to the old default of one.
             maxRuns: 10,
-            stake1: Math.max(0.01, Number(saved.stake1) || DEFAULT_SETTINGS.stake1),
-            stake2: Math.max(0.01, Number(saved.stake2) || DEFAULT_SETTINGS.stake2),
+            stake1: hadPreviousDefaultStakes
+                ? DEFAULT_SETTINGS.stake1
+                : Math.max(0.01, Number(saved.stake1) || DEFAULT_SETTINGS.stake1),
+            stake2: hadPreviousDefaultStakes
+                ? DEFAULT_SETTINGS.stake2
+                : Math.max(0.01, Number(saved.stake2) || DEFAULT_SETTINGS.stake2),
             takeProfit: Math.max(0, Number(saved.takeProfit) || 0),
             stopLoss: Math.max(0, Number(saved.stopLoss) || 0),
             martingale: Math.max(1, Number(saved.martingale) || DEFAULT_SETTINGS.martingale),
@@ -235,6 +243,12 @@ export const useAutoSignalsEngine = ({
             setMarkets(snapshot);
         });
     }, []);
+    const queueFullMarketRefresh = useCallback(() => {
+        runtimesRef.current.forEach((runtime) => {
+            dirtySymbolsRef.current.add(runtime.info.symbol);
+        });
+        queueMarketRefresh();
+    }, [queueMarketRefresh]);
 
     useEffect(() => {
         const unsubscribe = subscribeCurrency(() => setDisplayCurrency(getDisplayCurrency()));
@@ -258,6 +272,16 @@ export const useAutoSignalsEngine = ({
         const interval = window.setInterval(queueMarketRefresh, 1000);
         return () => window.clearInterval(interval);
     }, [queueMarketRefresh]);
+
+    useEffect(() => {
+        // Re-score the current authenticated tick windows locally. Live ticks
+        // continue refreshing cards between sweeps, so no extra Deriv history
+        // requests are needed.
+        return startDigitMatchMarketRescan(
+            family === 'MATCHES' && connected && authorized && status === 'scanning',
+            queueFullMarketRefresh,
+        );
+    }, [authorized, connected, family, queueFullMarketRefresh, status]);
 
     useEffect(() => {
         if (!connected || !authorized) {
@@ -516,16 +540,14 @@ export const useAutoSignalsEngine = ({
                 `${bot.name} is starting on ${market.symbol} for ${selectedRuns} signal cycles, with up to ${purchasesPerTick} separate purchases per tick.`,
             );
 
-            if (!runPanel.onRunButtonClick) throw new Error('Bot Builder Run control is unavailable.');
-            const startAttempt = runPanel.onRunButtonClick();
-            // RunPanel sets is_running synchronously when shouldRunBot() accepts
-            // the workspace. Capture that before awaiting: a one-tick contract
-            // can settle and stop the bot before the promise continuation runs.
-            const startedSynchronously = Boolean(runPanel.is_running);
-            await startAttempt;
-            if (!startedSynchronously && !runPanel.is_running) {
-                throw new Error('Bot Builder did not start this bot. Check the selected account and bot trade settings.');
-            }
+            // Automatically start after the selected XML is ready. The single
+            // app-level Builder keeps running when this page returns to the
+            // signal board.
+            await startAutoSignalsBot(runPanel, (error: any) => {
+                    const startError = error?.message || 'Bot Builder could not start this bot.';
+                    clearAutoSignalsRun(startError);
+                    setAutoSignalsRunMessage(startError);
+            });
             const currentSession = getAutoSignalsRunSession();
             if (currentSession.run?.startedAt === nextRun.startedAt) {
                 const runMessage = action === 'entry-trade' && !candidate.entryReady
@@ -536,6 +558,8 @@ export const useAutoSignalsEngine = ({
             } else {
                 setMessage(currentSession.message || `${bot.name} started on ${market.symbol}.`);
             }
+            setActiveTab(DBOT_TABS.AUTO_SIGNALS);
+            runPanel.toggleDrawer?.(false);
         } catch (error: any) {
             const errorMessage = error?.message || 'The Bot Builder handoff failed.';
             if ((window as any).__pendingBotName === bot.name) {

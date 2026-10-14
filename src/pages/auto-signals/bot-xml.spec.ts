@@ -10,8 +10,8 @@ import { AUTO_SIGNAL_BOTS, AUTO_SIGNAL_DURATION_TICKS, patchAutoSignalsBotXml } 
 const XML_NS = 'https://developers.google.com/blockly/xml';
 const settings: AutoSignalsSettings = {
     maxRuns: 1,
-    stake1: 1,
-    stake2: 2,
+    stake1: 1.5,
+    stake2: 1.5,
     takeProfit: 5,
     stopLoss: 10,
     martingale: 2,
@@ -92,6 +92,8 @@ describe('Auto-Signals bot templates', () => {
         ['entry-trade', 'DIGITODD', 'ODD', null, 'digits', 'evenodd', 'DIGITODD'],
         ['entry-trade', 'CALL', 'RISE', null, 'callput', 'risefall', 'CALL'],
         ['entry-trade', 'PUT', 'FALL', null, 'callput', 'risefall', 'PUT'],
+        ['entry-trade', 'RUNHIGH', 'ONLY_UPS', null, 'digits', 'runs', 'RUNHIGH'],
+        ['entry-trade', 'RUNLOW', 'ONLY_DOWNS', null, 'digits', 'runs', 'RUNLOW'],
     ] as const)(
         'patches %s for %s to the selected one-tick contract',
         (action, contractType, strategy, barrier, category, tradeType, purchaseType) => {
@@ -102,13 +104,17 @@ describe('Auto-Signals bot templates', () => {
                     contractType,
                     strategy,
                     barrier,
-                    strategy === 'RISE' ? 'rise' : strategy === 'FALL' ? 'fall' : 'even',
+                    strategy === 'RISE' ? 'rise'
+                        : strategy === 'FALL' ? 'fall'
+                            : strategy === 'ONLY_UPS' ? 'up'
+                                : strategy === 'ONLY_DOWNS' ? 'down' : 'even',
                 ),
                 settings,
-                accountAmounts: { stake1: 1, stake2: 2, takeProfit: 5, stopLoss: 10 },
+                accountAmounts: { stake1: 1.5, stake2: 1.5, takeProfit: 5, stopLoss: 10 },
             });
             const doc = new DOMParser().parseFromString(xml, 'application/xml');
             const tradeOptions = getBlock(doc, 'trade_definition_tradeoptions');
+            const isEntryTrade = action === 'entry-trade';
 
             expect(getField(tradeOptions, 'DURATIONTYPE_LIST')).toBe('t');
             expect(getValueNumber(tradeOptions, 'DURATION')).toBe(String(AUTO_SIGNAL_DURATION_TICKS));
@@ -116,9 +122,29 @@ describe('Auto-Signals bot templates', () => {
             expect(getField(getBlock(doc, 'trade_definition_tradetype'), 'TRADETYPE_LIST')).toBe(tradeType);
             expect(getField(getBlock(doc, 'trade_definition_contracttype'), 'TYPE_LIST')).toBe(contractType);
             expect(getField(getBlock(doc, 'purchase'), 'PURCHASE_LIST')).toBe(purchaseType);
+            expect(getValueNumber(tradeOptions, 'AMOUNT')).toBe('1.5');
+            expect(getVariableSetNumber(doc, isEntryTrade ? 'STAKE' : 'stake')).toBe('1.5');
+            expect(getVariableSetNumber(doc, isEntryTrade ? 'martingalelevel' : 'Martingale')).toBe('2');
+            if (isEntryTrade) expect(getVariableSetNumber(doc, 'stake2')).toBe('1.5');
             if (barrier !== null) expect(getValueNumber(tradeOptions, 'PREDICTION')).toBe(String(barrier));
         },
     );
+
+    it('sets both Entry Trade stakes to 1.5 with a 2x martingale', () => {
+        const xml = patchAutoSignalsBotXml(readTemplate('entry-trade'), {
+            action: 'entry-trade',
+            market,
+            candidate: makeCandidate('DIGITEVEN', 'EVEN', null, 'even'),
+            settings: { ...settings, martingale: 2 },
+            accountAmounts: { stake1: 1.5, stake2: 1.5, takeProfit: 5, stopLoss: 10 },
+        });
+        const doc = new DOMParser().parseFromString(xml, 'application/xml');
+
+        expect(getValueNumber(getBlock(doc, 'trade_definition_tradeoptions'), 'AMOUNT')).toBe('1.5');
+        expect(getVariableSetNumber(doc, 'STAKE')).toBe('1.5');
+        expect(getVariableSetNumber(doc, 'stake2')).toBe('1.5');
+        expect(getVariableSetNumber(doc, 'martingalelevel')).toBe('2');
+    });
 
     it('adds the two-loss Over 4 to Under 5 recovery to Entry Trade only', () => {
         const xml = patchAutoSignalsBotXml(readTemplate('entry-trade'), {
@@ -126,7 +152,7 @@ describe('Auto-Signals bot templates', () => {
             market,
             candidate: makeCandidate('DIGITOVER', 'OVER', 4, 'over'),
             settings: { ...settings, maxRuns: 4 },
-            accountAmounts: { stake1: 1, stake2: 2, takeProfit: 5, stopLoss: 10 },
+            accountAmounts: { stake1: 1.5, stake2: 1.5, takeProfit: 5, stopLoss: 10 },
         });
         const doc = new DOMParser().parseFromString(xml, 'application/xml');
         const variableNames = Array.from(doc.getElementsByTagNameNS(XML_NS, 'variable'))
@@ -151,7 +177,7 @@ describe('Auto-Signals bot templates', () => {
             market,
             candidate: makeCandidate('DIGITOVER', 'OVER', 4, 'over'),
             settings: { ...settings, maxRuns: 4 },
-            accountAmounts: { stake1: 1, stake2: 2, takeProfit: 5, stopLoss: 10 },
+            accountAmounts: { stake1: 1.5, stake2: 1.5, takeProfit: 5, stopLoss: 10 },
         });
         const doc = new DOMParser().parseFromString(xml, 'application/xml');
         const tradeAgain = getBlock(doc, 'trade_again');
@@ -168,7 +194,7 @@ describe('Auto-Signals bot templates', () => {
             market,
             candidate: makeCandidate('DIGITOVER', 'OVER', 4, 'over'),
             settings,
-            accountAmounts: { stake1: 1, stake2: 2, takeProfit: 5, stopLoss: 10 },
+            accountAmounts: { stake1: 1.5, stake2: 1.5, takeProfit: 5, stopLoss: 10 },
         });
         const doc = new DOMParser().parseFromString(xml, 'application/xml');
 
@@ -181,6 +207,8 @@ describe('Auto-Signals bot templates', () => {
             .filter((block) => block.getAttribute('type') === 'purchase')
             .map((block) => getField(block, 'PURCHASE_LIST')))
             .toEqual(['DIGITOVER', 'DIGITUNDER']);
+        expect(getVariableSetNumber(doc, 'stake')).toBe('1.5');
+        expect(getVariableSetNumber(doc, 'Martingale')).toBe('2');
     });
 
     it('keeps Under DT recovery at Under 5 when the main barrier is selected', () => {
@@ -189,7 +217,7 @@ describe('Auto-Signals bot templates', () => {
             market,
             candidate: makeCandidate('DIGITUNDER', 'UNDER', 7, 'under'),
             settings,
-            accountAmounts: { stake1: 1, stake2: 2, takeProfit: 5, stopLoss: 10 },
+            accountAmounts: { stake1: 1.5, stake2: 1.5, takeProfit: 5, stopLoss: 10 },
         });
         const doc = new DOMParser().parseFromString(xml, 'application/xml');
 
@@ -201,5 +229,7 @@ describe('Auto-Signals bot templates', () => {
             .filter((block) => block.getAttribute('type') === 'purchase')
             .map((block) => getField(block, 'PURCHASE_LIST')))
             .toEqual(['DIGITUNDER', 'DIGITUNDER']);
+        expect(getVariableSetNumber(doc, 'stake')).toBe('1.5');
+        expect(getVariableSetNumber(doc, 'Martingale')).toBe('2');
     });
 });

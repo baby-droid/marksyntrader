@@ -290,6 +290,14 @@ export default class TicksService {
             if (!api_base.api) resolve([]);
             doUntilDone(() => api_base.api.send(request_object), ['AlreadySubscribed'], api_base)
                 .then(r => {
+                    const subscriptionId = r?.subscription?.id;
+                    if (subscriptionId) {
+                        const subscriptionPath = style === 'ticks'
+                            ? ['tick', symbol]
+                            : ['ohlc', symbol, Number(granularity)];
+                        this.subscriptions = this.subscriptions.setIn(subscriptionPath, subscriptionId);
+                    }
+
                     if (style === 'ticks') {
                         const ticks = historyToTicks(r.history);
 
@@ -323,60 +331,63 @@ export default class TicksService {
         });
     }
 
-    forget = () => {
-        return new Promise((resolve, reject) => {
-            if (api_base?.api) {
-                try {
-                    api_base.api
-                        .forgetAll('ticks')
-                        .then(() => {
-                            resolve();
-                        })
-                        .catch(reject);
-                } catch (e) {
-                    console.log('Error in forget ticks', e);
-                }
-            } else {
-                resolve();
+    forgetTrackedSubscriptions = type => {
+        const ids = [];
+        const collectIds = value => {
+            if (value == null) return;
+            if (typeof value === 'string' || typeof value === 'number') {
+                ids.push(value);
+                return;
             }
+            if (typeof value.forEach === 'function') value.forEach(collectIds);
+        };
+        collectIds(this.subscriptions.get(type));
+
+        if (!api_base?.api || ids.length === 0) {
+            this.subscriptions = this.subscriptions.delete(type);
+            return Promise.resolve();
+        }
+
+        let rateLimited = false;
+        const noteRateLimit = () => {
+            if (!rateLimited) {
+                console.warn('Deriv rate-limited a tick subscription cleanup; its ID will be retained for the next cleanup.');
+            }
+            rateLimited = true;
+        };
+
+        return Promise.all(ids.map(id =>
+            Promise.resolve()
+                .then(() => api_base.api.send({ forget: id }))
+                .then(response => {
+                    if (!response?.error) return;
+                    const error = response.error;
+                    if (error.code === 'RateLimit' || error.code === 'RateLimitExceeded') {
+                        noteRateLimit();
+                        return;
+                    }
+                    throw error;
+                })
+                .catch(error => {
+                    const code = error?.error?.code || error?.code;
+                    if (code === 'RateLimit' || code === 'RateLimitExceeded') {
+                        noteRateLimit();
+                        return;
+                    }
+                    throw error;
+                })
+        )).then(() => {
+            if (!rateLimited) this.subscriptions = this.subscriptions.delete(type);
         });
     };
 
-    forgetCandleSubscription = () => {
-        return new Promise((resolve, reject) => {
-            if (api_base?.api) {
-                try {
-                    api_base.api
-                        .forgetAll('candles')
-                        .then(() => {
-                            resolve();
-                        })
-                        .catch(reject);
-                } catch (e) {
-                    console.log('Error in forget candles', e);
-                }
-            } else {
-                resolve();
-            }
-        });
-    };
+    forget = () => this.forgetTrackedSubscriptions('tick');
+
+    forgetCandleSubscription = () => this.forgetTrackedSubscriptions('ohlc');
 
     unsubscribeFromTicksService() {
-        return new Promise((resolve, reject) => {
-            this.forget()
-                .then(() => {
-                    try {
-                        this.forgetCandleSubscription()
-                            .then(() => {
-                                resolve();
-                            })
-                            .catch(reject);
-                    } catch (e) {
-                        console.log('Error in unsubscribeFromTicksService', e);
-                    }
-                })
-                .catch(reject);
-            this.ticks_history_promise = null;
-        });
+        this.ticks_history_promise = null;
+        this.candles_promise = null;
+        return this.forget().then(() => this.forgetCandleSubscription());
     }
 }

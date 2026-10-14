@@ -454,26 +454,28 @@ const setContractType = (
     candidate: AutoSignalCandidate,
     preserveRecoveryPurchaseTypes = false,
 ) => {
-    const category = candidate.contractType === 'CALL' || candidate.contractType === 'PUT'
-        ? 'callput'
-        : 'digits';
-    const tradeType = candidate.contractType === 'CALL' || candidate.contractType === 'PUT'
-        ? 'risefall'
-        : candidate.contractType === 'DIGITEVEN' || candidate.contractType === 'DIGITODD'
-            ? 'evenodd'
-            : candidate.contractType === 'DIGITOVER' || candidate.contractType === 'DIGITUNDER'
-                ? 'overunder'
-                : candidate.contractType === 'DIGITMATCH' || candidate.contractType === 'DIGITDIFF'
-                    ? 'matchesdiffers'
-                    : 'runs';
+    const tradeTypeByContract: Record<string, { category: string; tradeType: string }> = {
+        CALL: { category: 'callput', tradeType: 'risefall' },
+        PUT: { category: 'callput', tradeType: 'risefall' },
+        DIGITEVEN: { category: 'digits', tradeType: 'evenodd' },
+        DIGITODD: { category: 'digits', tradeType: 'evenodd' },
+        DIGITOVER: { category: 'digits', tradeType: 'overunder' },
+        DIGITUNDER: { category: 'digits', tradeType: 'overunder' },
+        DIGITMATCH: { category: 'digits', tradeType: 'matchesdiffers' },
+        DIGITDIFF: { category: 'digits', tradeType: 'matchesdiffers' },
+        RUNHIGH: { category: 'digits', tradeType: 'runs' },
+        RUNLOW: { category: 'digits', tradeType: 'runs' },
+    };
+    const selection = tradeTypeByContract[candidate.contractType];
+    if (!selection) throw new Error(`Unsupported Auto-Signals contract type: ${candidate.contractType}.`);
     const tradeTypeBlock = blocksOfType(doc, 'trade_definition_tradetype')[0];
     const contractTypeBlock = blocksOfType(doc, 'trade_definition_contracttype')[0];
     const purchaseBlock = blocksOfType(doc, 'purchase')[0];
     if (!tradeTypeBlock || !contractTypeBlock || !purchaseBlock) {
         throw new Error('Bot XML is missing a trade type or purchase block.');
     }
-    setFieldValue(tradeTypeBlock, 'TRADETYPECAT_LIST', category);
-    setFieldValue(tradeTypeBlock, 'TRADETYPE_LIST', tradeType);
+    setFieldValue(tradeTypeBlock, 'TRADETYPECAT_LIST', selection.category);
+    setFieldValue(tradeTypeBlock, 'TRADETYPE_LIST', selection.tradeType);
     setFieldValue(
         contractTypeBlock,
         'TYPE_LIST',

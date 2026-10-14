@@ -27,8 +27,8 @@ Show each candidate's observed per-window hit rate separately from its alignment
 
 **How to apply:** preserve separate cards for contract/barrier alternatives, label empirical rates by sample window, and do not call them win probabilities.
 
-Candidate run recommendations are score-based guidance only. Do not authorize repeated live trades from historical alignment alone; live multi-run execution stays capped at one until calibrated probability, live payout/EV, and per-run revalidation are available.
+Candidate run recommendations are score-based guidance only. When Fast is explicitly enabled, an eligible current signal may dispatch a bounded three-purchase burst per tick at the configured stake (up to 3× stake exposure); this changes execution throughput, not signal confidence.
 
-**Why:** the scanner currently has no calibrated probability model or quoted-payout EV gate, and its feed does not continue scanning through the Bot Builder handoff.
+**Why:** the scanner has no calibrated probability model or quoted-payout EV gate, so a faster burst must not be presented as a higher chance of winning.
 
-**How to apply:** keep recommendations visible as historical signal guidance, but do not pass them as an XML `trade_again` cap above one without the live gates and a fresh post-settlement scan.
+**How to apply:** keep the three-order burst finite and Fast-only, preserve the configured cycle cap and current-signal checks, and retain the one-tick duration and explicit per-run monitoring.

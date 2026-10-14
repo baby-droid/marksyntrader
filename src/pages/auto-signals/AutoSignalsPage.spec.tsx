@@ -127,6 +127,16 @@ describe('Auto-Signals trade actions', () => {
         expect(screen.getByTestId('input-setting-stake1')).toBeInTheDocument();
     });
 
+    it('shows the one-minute rescan note only for Digit Match', () => {
+        const { rerender } = render(<AutoSignalsPage {...props} family='MATCHES' />);
+
+        expect(screen.getByTestId('text-digit-match-scan-cadence')).toHaveTextContent('every minute');
+        expect(screen.getByTestId('text-digit-match-scan-cadence')).toHaveTextContent('live ticks update the cards');
+
+        rerender(<AutoSignalsPage {...props} family='AUTO' />);
+        expect(screen.queryByTestId('text-digit-match-scan-cadence')).not.toBeInTheDocument();
+    });
+
     it('offers the matching Under DT bot for an Under signal', async () => {
         const under = {
             ...market.candidate!,

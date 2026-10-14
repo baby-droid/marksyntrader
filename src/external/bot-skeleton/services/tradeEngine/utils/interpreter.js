@@ -227,7 +227,7 @@ const Interpreter = () => {
 
                 ticksService.unsubscribeFromTicksService().then(() => {
                     resolve();
-                });
+                }).catch(reject);
             } catch (error) {
                 reject(error);
             }
@@ -240,7 +240,7 @@ const Interpreter = () => {
             try {
                 ticksService.unsubscribeFromTicksService().then(() => {
                     resolve();
-                });
+                }).catch(reject);
             } catch (e) {
                 reject(e);
             }

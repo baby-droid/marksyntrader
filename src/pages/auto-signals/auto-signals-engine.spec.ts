@@ -99,6 +99,64 @@ describe('Auto-Signals one-tick analysis', () => {
         expect(candidates.filter((candidate) => candidate.strategy === 'UNDER').length).toBeGreaterThan(1);
     });
 
+    it('uses the exact Match digit as the DIGITMATCH barrier and waits until that digit is current', () => {
+        const makeTicks = (matchAtEnd: boolean): AutoLabTick[] => [
+            ...Array.from({ length: matchAtEnd ? 80 : 79 }, (_, index) => ({
+                symbol: 'R_10',
+                digit: 1,
+                quote: 100.01,
+                epoch: index + 1,
+                pip_size: 2,
+            })),
+            ...Array.from({ length: 20 }, (_, index) => ({
+                symbol: 'R_10',
+                digit: 6,
+                quote: 100.06,
+                epoch: (matchAtEnd ? 80 : 79) + index + 1,
+                pip_size: 2,
+            })),
+            ...(!matchAtEnd ? [{
+                symbol: 'R_10',
+                digit: 1,
+                quote: 100.01,
+                epoch: 100,
+                pip_size: 2,
+            }] : []),
+        ];
+        const readyCandidates = evaluateAutoSignalCandidates({
+            market: { symbol: 'R_10', label: 'Volatility 10' },
+            ticks: makeTicks(true),
+            family: 'MATCHES',
+            now: 1_000,
+        });
+        const digitSix = readyCandidates.find((candidate) =>
+            candidate.strategy === 'MATCHES' && candidate.barrier === 6
+        );
+        const waitingCandidates = evaluateAutoSignalCandidates({
+            market: { symbol: 'R_10', label: 'Volatility 10' },
+            ticks: makeTicks(false),
+            family: 'MATCHES',
+            now: 1_000,
+        });
+        const digitSixWaiting = waitingCandidates.find((candidate) =>
+            candidate.strategy === 'MATCHES' && candidate.barrier === 6
+        );
+
+        expect(readyCandidates.every((candidate) => candidate.contractType === 'DIGITMATCH')).toBe(true);
+        expect(digitSix).toMatchObject({
+            contractType: 'DIGITMATCH',
+            barrier: 6,
+            entryDigit: 6,
+            entryReady: true,
+        });
+        expect(digitSixWaiting).toMatchObject({
+            contractType: 'DIGITMATCH',
+            barrier: 6,
+            entryDigit: 6,
+            entryReady: false,
+        });
+    });
+
     it.each([
         ['FALL', [1, 1, 1, -1]],
         ['FALL', [1, 1, 1, 1, -1]],

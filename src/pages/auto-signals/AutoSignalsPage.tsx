@@ -413,7 +413,7 @@ function SettingsPanel({
                 </div>
                 <div className='as-settings__foot'>
                     <ShieldCheck size={15} aria-hidden='true' />
-                    <span>Press a trade button to load and start its bot. Contract duration is one tick.</span>
+                    <span>Selected bots start automatically after loading. Contract duration is one tick.</span>
                 </div>
             </div>
         </details>
@@ -569,6 +569,12 @@ const AutoSignalsPage = ({
                             ))}
                         </div>
                     </div>
+            {family === 'MATCHES' && (
+                <div className='as-match-scan-note' role='status' data-testid='text-digit-match-scan-cadence'>
+                    <Clock3 size={13} aria-hidden='true' />
+                    Digit Match rechecks all live markets every minute; live ticks update the cards between sweeps.
+                </div>
+            )}
 
                     {status === 'error' && (
                         <div className='as-alert' role='status' data-testid='status-scanner-error'>

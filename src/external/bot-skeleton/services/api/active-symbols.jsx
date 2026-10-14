@@ -13,6 +13,7 @@ export default class ActiveSymbols {
         this.init_promise = new PendingPromise();
         this.is_initialised = false;
         this.has_initialization_error = false;
+        this.retry_after = 0;
         this.processed_symbols = {};
         this.trading_times = trading_times;
     }
@@ -22,11 +23,12 @@ export default class ActiveSymbols {
         this.processed_symbols = {};
         this.is_initialised = false;
         this.has_initialization_error = false;
+        this.retry_after = 0;
         this.init_promise = new PendingPromise();
     }
 
     /**
-     * Retrieves active symbols from the API with retry logic.
+     * Retrieves active symbols from the shared API request.
      *
      * @param {boolean} is_forced_update - Force refresh even if already initialized
      * @returns {Promise<Array>} Array of active symbol objects
@@ -44,6 +46,16 @@ export default class ActiveSymbols {
      */
     async retrieveActiveSymbols(is_forced_update = false) {
         await this.trading_times.initialise();
+
+        if (is_forced_update && this.has_initialization_error) {
+            if (Date.now() < this.retry_after) return this.active_symbols;
+            // Allow an explicit/reconnect retry after a short cooldown, but
+            // make concurrent startup callers reuse the same new promise.
+            api_base.active_symbols_promise = null;
+            this.is_initialised = false;
+            this.has_initialization_error = false;
+            this.init_promise = new PendingPromise();
+        }
 
         if (!is_forced_update && this.is_initialised) {
             await this.init_promise;
@@ -64,23 +76,16 @@ export default class ActiveSymbols {
             this.active_symbols = symbols ?? api_base?.active_symbols ?? [];
         }
 
-        // If still no symbols after waiting, try one more time with a fresh fetch
-        if (!this.active_symbols || this.active_symbols.length === 0) {
-            console.warn('No symbols found, attempting fresh fetch...');
-            try {
-                const symbols = await api_base.getActiveSymbols();
-                this.active_symbols = symbols ?? [];
-
-                // If still no symbols after retry, mark as error state
-                if (!this.active_symbols || this.active_symbols.length === 0) {
-                    this.has_initialization_error = true;
-                    console.error('Failed to fetch active symbols: No symbols returned after retry');
-                }
-            } catch (error) {
-                console.error('Failed to fetch active symbols:', error);
-                this.active_symbols = [];
-                this.has_initialization_error = true;
-            }
+        // Do not immediately issue a second active_symbols request after an
+        // empty/rate-limited response. Startup callers share this result; an
+        // automatic retry here multiplied the same failed request and caused
+        // Deriv rate limits. Reconnect/explicit refresh can start a new fetch.
+        this.has_initialization_error = !Array.isArray(this.active_symbols) || this.active_symbols.length === 0;
+        if (this.has_initialization_error) {
+            this.retry_after = Date.now() + 15_000;
+            console.warn('Active symbols are unavailable; waiting for a reconnect or explicit refresh before retrying.');
+        } else {
+            this.retry_after = 0;
         }
 
         this.is_initialised = true;
