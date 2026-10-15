@@ -69,7 +69,7 @@ const FREE_BOTS = [
   {
     id: 'normal-killer-bot-v3',
     name: 'Normal killer bot v3',
-    description: 'Rotates through plain and 1s Continuous Indices after each settled contract. Configure stake, take profit, stop loss, and martingale in the bot. Tick-wise direct purchases use the selected multiplier after each loss.',
+    description: 'Uses direct one-tick entries with live tick-wise acceleration and a three-contract open limit. A win resets stake; each loss applies the user-set martingale multiplier. Take profit and stop loss are configurable in the bot.',
     category: 'Scanner', market: 'Continuous Indices', type: 'DIGIT OVER', prediction: 'OVER 1',
     xmlFile: '/bots/normal-killer-bot-v3.xml',
     badge: 'NORMAL KILLER V3', badgeColor: '#38bdf8', icon: '🔄', winRate: '—',

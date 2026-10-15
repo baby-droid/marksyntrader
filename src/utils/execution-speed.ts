@@ -131,7 +131,7 @@ export const isInstantExecutionForContext = (): boolean =>
 
 /** True when an execution path must be driven by live ticks instead of settlement timing. */
 export const isTickWiseExecutionEnabled = (): boolean =>
-    isFastExecutionEnabledForContext() || aSpeedBoostEnabled;
+    isNormalKillerBotV3Context() || isFastExecutionEnabledForContext() || aSpeedBoostEnabled;
 
 /**
  * Effective inter-trade delay (ms). Fast Execution always wins — 0ms,

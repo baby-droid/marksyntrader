@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api_base } from '@/external/bot-skeleton';
+import { api_base, load, save_types } from '@/external/bot-skeleton';
 import { useDerivTrade, type TickData } from '@/hooks/useDerivTrade';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { getDisplayCurrency, subscribeCurrency, toUsd } from '@/utils/currency-display';
 import { setTradeContext } from '@/utils/trade-metadata';
 import { getPurchasesPerTick } from '@/utils/execution-speed';
 import {
-    AUTO_SIGNAL_BOTS,
+    getAutoSignalBot,
     patchAutoSignalsBotXml,
 } from './bot-xml';
 import {
@@ -16,8 +16,20 @@ import {
     setAutoSignalsRunMessage,
     subscribeAutoSignalsRunSession,
 } from './auto-signals-run-session';
-import { evaluateAutoSignalCandidates, shouldExcludeAutoSignalMarket } from './auto-signals-engine';
-import { isAutoSignalWorkspaceReady } from './bot-builder-handoff';
+import {
+    evaluateAutoSignalCandidates,
+    getSuggestedAutoSignalRuns,
+    shouldExcludeAutoSignalMarket,
+} from './auto-signals-engine';
+import {
+    ensureAutoSignalWorkspaceLoaded,
+    isAutoSignalWorkspaceReady,
+    startAutoSignalsBot,
+} from './bot-builder-handoff';
+import {
+    isDigitMatchRescanDue,
+    startDigitMatchMarketRescan,
+} from './digit-match-rescan';
 import type {
     AutoSignalAction,
     AutoSignalCandidate,
@@ -36,8 +48,8 @@ const MIN_TICK_SIZE = 20;
 
 const DEFAULT_SETTINGS: AutoSignalsSettings = {
     maxRuns: 10,
-    stake1: 1,
-    stake2: 2,
+    stake1: 1.5,
+    stake2: 1.5,
     takeProfit: 5,
     stopLoss: 10,
     martingale: 2,
@@ -68,12 +80,19 @@ const readSettings = (): AutoSignalsSettings => {
     try {
         const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
         if (!saved || typeof saved !== 'object') return DEFAULT_SETTINGS;
+        // Migrate the previous built-in 1/2 stake pair once, while preserving
+        // any amounts the user deliberately customized.
+        const hadPreviousDefaultStakes = Number(saved.stake1) === 1 && Number(saved.stake2) === 2;
         return {
             // Run count is selected per signal; stored legacy maxRuns values
             // must not pin every new candidate to the old default of one.
             maxRuns: 10,
-            stake1: Math.max(0.01, Number(saved.stake1) || DEFAULT_SETTINGS.stake1),
-            stake2: Math.max(0.01, Number(saved.stake2) || DEFAULT_SETTINGS.stake2),
+            stake1: hadPreviousDefaultStakes
+                ? DEFAULT_SETTINGS.stake1
+                : Math.max(0.01, Number(saved.stake1) || DEFAULT_SETTINGS.stake1),
+            stake2: hadPreviousDefaultStakes
+                ? DEFAULT_SETTINGS.stake2
+                : Math.max(0.01, Number(saved.stake2) || DEFAULT_SETTINGS.stake2),
             takeProfit: Math.max(0, Number(saved.takeProfit) || 0),
             stopLoss: Math.max(0, Number(saved.stopLoss) || 0),
             martingale: Math.max(1, Number(saved.martingale) || DEFAULT_SETTINGS.martingale),
@@ -117,6 +136,14 @@ const marketSnapshot = (runtime: MarketRuntime, now: number): AutoSignalMarket =
 };
 
 const nextFrame = () => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+
+const isLiveBuilderWorkspace = (workspace: any): boolean => {
+    if (!workspace || typeof workspace.getTopBlocks !== 'function') return false;
+    const disposed = typeof workspace.isDisposed === 'function'
+        ? workspace.isDisposed()
+        : workspace.isDisposed;
+    return !disposed;
+};
 
 const rebuildRuntimeTicks = (runtime: MarketRuntime) => {
     if (!runtime.pipSize) {
@@ -173,13 +200,70 @@ const appendLiveTick = (runtime: MarketRuntime, tick: TickData) => {
 
 const getBlocklyWorkspace = () => (window as any).Blockly?.derivWorkspace;
 
-const waitForWorkspace = async (expectedXml: string) => {
+const waitForBuilderWorkspace = async () => {
     for (let attempt = 0; attempt < 300; attempt += 1) {
         const workspace = getBlocklyWorkspace();
-        if (isAutoSignalWorkspaceReady(workspace, expectedXml)) return workspace;
+        if (isLiveBuilderWorkspace(workspace)) return workspace;
         await nextFrame();
     }
-    throw new Error('Bot Builder did not finish loading the selected bot. Try choosing it again.');
+    throw new Error('Bot Builder workspace did not become available. Open Bot Builder and try again.');
+};
+
+const isExpectedBotLoaded = (workspace: any, expectedXml: string) => (
+    isAutoSignalWorkspaceReady(workspace, expectedXml)
+    && workspace.getTopBlocks(false).some((block: any) => block.type === 'trade_definition')
+);
+
+const waitForPendingBotLoad = async (expectedXml: string) => {
+    let latestWorkspace: any = null;
+    for (let attempt = 0; attempt < 300; attempt += 1) {
+        const workspace = getBlocklyWorkspace();
+        if (isLiveBuilderWorkspace(workspace)) {
+            latestWorkspace = workspace;
+            if (isExpectedBotLoaded(workspace, expectedXml)) return workspace;
+            const hasPreviousBlocks = workspace.getTopBlocks(false).length > 0
+                && workspace.strategy_to_load !== expectedXml;
+            if (
+                hasPreviousBlocks
+                && (window as any).__pendingBotXml !== expectedXml
+            ) {
+                return null;
+            }
+        }
+        await nextFrame();
+    }
+    return isLiveBuilderWorkspace(latestWorkspace) ? latestWorkspace : null;
+};
+
+const loadBotIntoWorkspace = async (
+    expectedXml: string,
+    botName: string,
+    waitForPendingLoad: boolean,
+) => {
+    const workspace = (
+        waitForPendingLoad ? await waitForPendingBotLoad(expectedXml) : null
+    ) || await waitForBuilderWorkspace();
+    const isExpected = () => isExpectedBotLoaded(workspace, expectedXml);
+    if (isExpected()) return workspace;
+
+    await ensureAutoSignalWorkspaceLoaded(workspace, expectedXml, async targetWorkspace => {
+        await load({
+            block_string: expectedXml,
+            drop_event: null,
+            file_name: botName,
+            strategy_id: `auto_signal_${Date.now()}`,
+            from: save_types.LOCAL,
+            workspace: targetWorkspace,
+            showIncompatibleStrategyDialog: false,
+            show_snackbar: false,
+        });
+    });
+
+    for (let attempt = 0; attempt < 300; attempt += 1) {
+        if (isExpected()) return workspace;
+        await nextFrame();
+    }
+    throw new Error('Bot Builder could not load the selected Auto-Signals bot. Try choosing it again.');
 };
 
 const accountAmount = (amount: number, currency: string, displayCurrency: string) => {
@@ -202,6 +286,7 @@ export const useAutoSignalsEngine = ({
     );
     const [markets, setMarkets] = useState<AutoSignalMarket[]>([]);
     const [family, setFamily] = useState<AutoSignalFamily>('AUTO');
+    const familyRef = useRef<AutoSignalFamily>('AUTO');
     const [settings, setSettings] = useState<AutoSignalsSettings>(readSettings);
     const activeRun = runSession.run;
     const [displayCurrency, setDisplayCurrency] = useState(getDisplayCurrency);
@@ -210,6 +295,8 @@ export const useAutoSignalsEngine = ({
     const unsubscribeRef = useRef<Array<() => void>>([]);
     const generationRef = useRef(0);
     const isPreparingRunRef = useRef(false);
+    const forceScoreRefreshRef = useRef(false);
+    const lastDigitMatchScanAtRef = useRef(0);
     const flushFrameRef = useRef<number | null>(null);
     const dirtySymbolsRef = useRef(new Set<string>());
     const queueMarketRefresh = useCallback(() => {
@@ -217,13 +304,21 @@ export const useAutoSignalsEngine = ({
         flushFrameRef.current = window.requestAnimationFrame(() => {
             flushFrameRef.current = null;
             const now = Date.now();
+            const activeFamily = familyRef.current;
+            const forceScoreRefresh = forceScoreRefreshRef.current;
+            forceScoreRefreshRef.current = false;
+            const shouldScore = activeFamily !== 'MATCHES'
+                || isDigitMatchRescanDue(now, lastDigitMatchScanAtRef.current, forceScoreRefresh);
+            if (activeFamily === 'MATCHES' && shouldScore) {
+                lastDigitMatchScanAtRef.current = now;
+            }
             const snapshot = Array.from(runtimesRef.current.values()).map((runtime) => {
-                if (dirtySymbolsRef.current.delete(runtime.info.symbol)) {
+                if (shouldScore && dirtySymbolsRef.current.delete(runtime.info.symbol)) {
                     runtime.candidates = runtime.ticks.length >= MIN_TICK_SIZE
                         ? evaluateAutoSignalCandidates({
                             market: runtime.info,
                             ticks: runtime.ticks,
-                            family: 'AUTO',
+                            family: activeFamily,
                             previous: runtime.candidate,
                             now,
                         })
@@ -235,6 +330,13 @@ export const useAutoSignalsEngine = ({
             setMarkets(snapshot);
         });
     }, []);
+    const queueFullMarketRefresh = useCallback(() => {
+        forceScoreRefreshRef.current = true;
+        runtimesRef.current.forEach((runtime) => {
+            dirtySymbolsRef.current.add(runtime.info.symbol);
+        });
+        queueMarketRefresh();
+    }, [queueMarketRefresh]);
 
     useEffect(() => {
         const unsubscribe = subscribeCurrency(() => setDisplayCurrency(getDisplayCurrency()));
@@ -258,6 +360,16 @@ export const useAutoSignalsEngine = ({
         const interval = window.setInterval(queueMarketRefresh, 1000);
         return () => window.clearInterval(interval);
     }, [queueMarketRefresh]);
+
+    useEffect(() => {
+        // Re-score the current authenticated tick windows locally. Live ticks
+        // continue refreshing cards between sweeps, so no extra Deriv history
+        // requests are needed.
+        return startDigitMatchMarketRescan(
+            family === 'MATCHES' && connected && authorized && status === 'scanning',
+            queueFullMarketRefresh,
+        );
+    }, [authorized, connected, family, queueFullMarketRefresh, status]);
 
     useEffect(() => {
         if (!connected || !authorized) {
@@ -347,7 +459,7 @@ export const useAutoSignalsEngine = ({
                 }
 
                 setStatus('scanning');
-                setMessage(`Live authenticated scan on ${runtimes.length} open synthetic markets; Jump 100 is excluded.`);
+                setMessage(`Live authenticated scan on ${runtimes.length} open synthetic markets.`);
                 queueMarketRefresh();
 
                 let cursor = 0;
@@ -413,8 +525,11 @@ export const useAutoSignalsEngine = ({
     }, [authorized, connected, queueMarketRefresh, refreshToken, send, subscribeTicks]);
 
     const onFamilyChange = useCallback((nextFamily: AutoSignalFamily) => {
+        familyRef.current = nextFamily;
+        forceScoreRefreshRef.current = true;
         setFamily(nextFamily);
-    }, []);
+        queueFullMarketRefresh();
+    }, [queueFullMarketRefresh]);
 
     const onSettingsChange = useCallback(<K extends keyof AutoSignalsSettings>(
         key: K,
@@ -437,7 +552,7 @@ export const useAutoSignalsEngine = ({
         const runtime = runtimesRef.current.get(market.symbol);
         const candidate = market.candidate;
         const selectedRuns = candidate
-            ? Math.min(candidate.recommendedRuns, settings.maxRuns)
+            ? getSuggestedAutoSignalRuns(candidate.recommendedRuns, settings.maxRuns)
             : 0;
         if (selectedRuns < 1) {
             setMessage('This signal is below the minimum run threshold. Wait for a stronger, current signal.');
@@ -458,7 +573,7 @@ export const useAutoSignalsEngine = ({
         }
 
         isPreparingRunRef.current = true;
-        const bot = AUTO_SIGNAL_BOTS[action];
+        const bot = getAutoSignalBot(action, candidate);
         try {
             setMessage(`Preparing ${bot.name} for ${market.label}…`);
             const response = await fetch(bot.file);
@@ -483,14 +598,25 @@ export const useAutoSignalsEngine = ({
 
             setTradeContext({ page: 'Auto-Signals', bot: bot.name });
             const purchasesPerTick = getPurchasesPerTick();
-            (window as any).__pendingBotXml = configuredXml;
-            (window as any).__pendingBotName = bot.name;
+            const builderAlreadyMounted = isLiveBuilderWorkspace(getBlocklyWorkspace());
+            if (!builderAlreadyMounted) {
+                (window as any).__pendingBotXml = configuredXml;
+                (window as any).__pendingBotName = bot.name;
+            }
             setActiveTab(DBOT_TABS.BOT_BUILDER);
             runPanel.toggleDrawer?.(true);
-            // Bot Builder consumes these pending values while its Blockly
-            // workspace mounts. Wait for that load to finish instead of
-            // starting a second, overlapping clear-and-load operation here.
-            await waitForWorkspace(configuredXml);
+            // The pending values cover a workspace that is still mounting.
+            // If Bot Builder is already mounted, use its official loader now;
+            // changing only strategy_to_load would leave its old blocks active.
+            const loadedWorkspace = await loadBotIntoWorkspace(
+                configuredXml,
+                bot.name,
+                !builderAlreadyMounted,
+            );
+            if ((window as any).__pendingBotXml === configuredXml) {
+                (window as any).__pendingBotXml = null;
+                (window as any).__pendingBotName = null;
+            }
             if (runPanel.is_running) throw new Error('Stop the currently running Bot Builder bot before loading another.');
 
             const latestRuntime = runtimesRef.current.get(market.symbol);
@@ -500,6 +626,9 @@ export const useAutoSignalsEngine = ({
             if (!latestCandidate || latestCandidate.id !== candidate.id || !latestTickIsLive
                 || latestCandidate.expiresAt == null || latestCandidate.expiresAt <= Date.now()) {
                 throw new Error('The signal changed while the bot was loading. Return to Auto-Signals and choose the latest signal.');
+            }
+            if (loadedWorkspace !== getBlocklyWorkspace()) {
+                throw new Error('Bot Builder workspace changed while loading. Choose the current signal again.');
             }
 
             const nextRun: AutoSignalsRun = {
@@ -516,16 +645,14 @@ export const useAutoSignalsEngine = ({
                 `${bot.name} is starting on ${market.symbol} for ${selectedRuns} signal cycles, with up to ${purchasesPerTick} separate purchases per tick.`,
             );
 
-            if (!runPanel.onRunButtonClick) throw new Error('Bot Builder Run control is unavailable.');
-            const startAttempt = runPanel.onRunButtonClick();
-            // RunPanel sets is_running synchronously when shouldRunBot() accepts
-            // the workspace. Capture that before awaiting: a one-tick contract
-            // can settle and stop the bot before the promise continuation runs.
-            const startedSynchronously = Boolean(runPanel.is_running);
-            await startAttempt;
-            if (!startedSynchronously && !runPanel.is_running) {
-                throw new Error('Bot Builder did not start this bot. Check the selected account and bot trade settings.');
-            }
+            // Automatically start after the selected XML is ready. The single
+            // app-level Builder keeps running when this page returns to the
+            // signal board.
+            await startAutoSignalsBot(runPanel, (error: any) => {
+                    const startError = error?.message || 'Bot Builder could not start this bot.';
+                    clearAutoSignalsRun(startError);
+                    setAutoSignalsRunMessage(startError);
+            });
             const currentSession = getAutoSignalsRunSession();
             if (currentSession.run?.startedAt === nextRun.startedAt) {
                 const runMessage = action === 'entry-trade' && !candidate.entryReady
@@ -536,6 +663,8 @@ export const useAutoSignalsEngine = ({
             } else {
                 setMessage(currentSession.message || `${bot.name} started on ${market.symbol}.`);
             }
+            setActiveTab(DBOT_TABS.AUTO_SIGNALS);
+            runPanel.toggleDrawer?.(false);
         } catch (error: any) {
             const errorMessage = error?.message || 'The Bot Builder handoff failed.';
             if ((window as any).__pendingBotName === bot.name) {

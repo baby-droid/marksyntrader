@@ -91,6 +91,9 @@ class DBot {
 
                             that.interpreter.unsubscribeFromTicksService().then(async () => {
                                 await that.interpreter?.bot.tradeEngine.watchTicks(symbol);
+                            }).catch(error => {
+                                console.error('Failed to switch the bot tick feed:', error);
+                                if (run_button) run_button.disabled = false;
                             });
                         }
                     } else if (is_trade_type_cat_list_change && event.blockId === this.id) {

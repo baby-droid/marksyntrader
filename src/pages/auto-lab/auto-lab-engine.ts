@@ -66,6 +66,28 @@ const MODE_CONTRACT_TYPES: Record<AutoLabMode, AutoLabContractType[]> = {
 export const getAutoLabSupportedContracts = (mode: AutoLabMode): AutoLabContractType[] =>
     [...MODE_CONTRACT_TYPES[mode]];
 
+export const passesAutoLabProposalEdgeCheck = (
+    confidenceLowerBound: number,
+    askPrice: number,
+    payout: number,
+    minimumEdge = 0.02,
+) => {
+    if (
+        !Number.isFinite(confidenceLowerBound)
+        || !Number.isFinite(askPrice)
+        || !Number.isFinite(payout)
+        || askPrice <= 0
+        || payout <= 0
+        || minimumEdge < 0
+    ) return false;
+    return confidenceLowerBound > (askPrice / payout) + minimumEdge;
+};
+
+export const isAutoLabMarketExcluded = (symbol: unknown, label: unknown = '') => (
+    String(symbol ?? '').trim().toUpperCase() === 'JD100'
+    || /\bjump\s*100\b/i.test(String(label ?? ''))
+);
+
 export type AutoLabTick = {
     symbol: string;
     digit: number;
@@ -86,6 +108,7 @@ export type AutoLabStrategySettings = {
     barrier: number;
     autoBarrier?: boolean;
     contractBarrier?: number;
+    matchEntryDigit?: number | null;
     secondaryBarrier?: number;
     requiredStreak: number;
     contractType: AutoLabContractChoice;
@@ -99,6 +122,8 @@ export type AutoLabCandidate = {
     barrier2?: number;
     strategy: Exclude<AutoLabMode, 'Multimarket'>;
     score: number;
+    predictedProbability?: number;
+    confidenceLowerBound?: number;
     detail: string;
     epoch: number;
     entryQuote: number;
@@ -116,6 +141,7 @@ const candidate = (
     score: number,
     detail: string,
     barrier?: number,
+    validation?: Pick<AutoLabCandidate, 'predictedProbability' | 'confidenceLowerBound'>,
 ): AutoLabCandidate | null => {
     const latest = market.ticks[market.ticks.length - 1];
     if (!latest) return null;
@@ -124,6 +150,7 @@ const candidate = (
         label: market.label,
         contract_type,
         ...(barrier == null ? {} : { barrier }),
+        ...validation,
         strategy,
         score: clamp(score, 0, 99.9),
         detail,
@@ -218,8 +245,46 @@ const evaluateMatchesDiffers = (
     barrier: number,
     threshold: number,
     contractChoice: AutoLabContractChoice,
+    entryDigit?: number | null,
 ): AutoLabCandidate | null => {
     if (!digits.length) return null;
+    if (entryDigit != null) {
+        if (
+            (contractChoice !== 'AUTO' && contractChoice !== 'DIGITMATCH')
+            || digits[digits.length - 1] !== entryDigit
+            || digits.length < 22
+        ) return null;
+
+        let entries = 0;
+        let matchesAfterEntry = 0;
+        for (let index = 0; index < digits.length - 1; index += 1) {
+            if (digits[index] !== entryDigit) continue;
+            entries += 1;
+            if (digits[index + 1] === barrier) matchesAfterEntry += 1;
+        }
+        if (entries < 20) return null;
+
+        const baselineDigits = digits.slice(1);
+        const baseline = baselineDigits.filter(digit => digit === barrier).length / baselineDigits.length;
+        const rate = matchesAfterEntry / entries;
+        const z = 1.96;
+        const zSquared = z * z;
+        const denominator = 1 + zSquared / entries;
+        const center = rate + zSquared / (2 * entries);
+        const margin = z * Math.sqrt((rate * (1 - rate) + zSquared / (4 * entries)) / entries);
+        const lowerBound = (center - margin) / denominator;
+        if (rate - baseline < 0.03 || lowerBound <= baseline + 0.02) return null;
+
+        return candidate(
+            market,
+            'Matches/Differs',
+            'DIGITMATCH',
+            rate * 100,
+            `Entry digit ${entryDigit} was followed by target ${barrier} on ${matchesAfterEntry}/${entries} observed transitions (${(rate * 100).toFixed(1)}%); the 95% lower bound ${(lowerBound * 100).toFixed(1)}% exceeded the ${(baseline * 100).toFixed(1)}% baseline.`,
+            barrier,
+            { predictedProbability: rate, confidenceLowerBound: lowerBound },
+        );
+    }
     const matches = digits.filter(digit => digit === barrier).length;
     const matchPercent = (matches / digits.length) * 100;
     const differsPercent = 100 - matchPercent;
@@ -308,7 +373,16 @@ const evaluateOneMode = (
         case '%Even/Odd':
             return evaluateParityPercentage({ ...market, ticks }, digits, threshold, settings.contractType);
         case 'Matches/Differs':
-            return evaluateMatchesDiffers({ ...market, ticks }, digits, barrier, threshold, settings.contractType);
+            return evaluateMatchesDiffers(
+                { ...market, ticks },
+                digits,
+                settings.matchEntryDigit != null
+                    ? settings.contractBarrier ?? barrier
+                    : barrier,
+                threshold,
+                settings.contractType,
+                settings.matchEntryDigit,
+            );
         case 'Rise/Fall':
             return evaluateRiseFall({ ...market, ticks }, requiredStreak);
     }

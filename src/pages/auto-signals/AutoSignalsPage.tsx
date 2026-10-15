@@ -28,6 +28,7 @@ import type {
     AutoSignalsSettings,
 } from './types';
 import NumberField from '@/components/number-field';
+import { getSuggestedAutoSignalRuns } from './auto-signals-engine';
 import './auto-signals.scss';
 
 const FAMILY_OPTIONS: { value: AutoSignalFamily; label: string; short: string }[] = [
@@ -162,8 +163,9 @@ function MarketCard({
     const [pendingAction, setPendingAction] = useState<AutoSignalAction | null>(null);
     const [showTradeChoices, setShowTradeChoices] = useState(false);
     const score = Math.max(0, Math.min(100, candidate?.score ?? 0));
+    const recentWindow = candidate?.windows.find((item) => item.window === 20) ?? null;
     const selectedRuns = candidate
-        ? Math.min(candidate.recommendedRuns, settings.maxRuns)
+        ? getSuggestedAutoSignalRuns(candidate.recommendedRuns, settings.maxRuns)
         : 0;
     const isLive = market.feedState === 'live';
     const canTrade = Boolean(
@@ -180,7 +182,7 @@ function MarketCard({
         setPendingAction(action);
         setShowTradeChoices(false);
         try {
-            await onTrade(market, action);
+            await onTrade(candidate ? { ...market, candidate } : market, action);
         } finally {
             setPendingAction(null);
         }
@@ -208,11 +210,15 @@ function MarketCard({
                     <div
                         className='as-market-card__confidence'
                         data-testid={`text-confidence-${cardId}`}
-                        title='Historical alignment score, not a predicted win probability.'
+                        title={candidate && recentWindow
+                            ? `Observed one-tick rate for ${candidate.label}${candidate.barrier == null ? '' : ` ${candidate.barrier}`} across the latest 20 ticks; descriptive history, not a forecast.`
+                            : 'Waiting for a complete 20-tick sample.'}
                     >
-                        <span>MARKET CONFIDENCE</span>
-                        <strong>{candidate ? `${Math.round(score)}%` : '—'}</strong>
-                        <small>{candidate ? `${selectedRuns} suggested cycles` : 'No cycle target'}</small>
+                        <span>20-TICK OBSERVED RATE</span>
+                        <strong>{recentWindow ? `${Math.round(recentWindow.probability)}%` : '—'}</strong>
+                        <small>{recentWindow
+                            ? `${recentWindow.sampleSize} one-tick outcomes`
+                            : candidate ? 'Waiting for 20 ticks' : 'No active signal'}</small>
                     </div>
                     <span>LAST QUOTE</span>
                     <strong data-testid={`text-quote-${cardId}`}>{numberText(market.latestQuote, 3)}</strong>
@@ -290,8 +296,12 @@ function MarketCard({
                         <small>
                             {candidate?.entryDigit != null
                                 ? `Digit ${candidate.entryDigit}`
-                                : candidate && ['RISE', 'FALL', 'ONLY_UPS', 'ONLY_DOWNS'].includes(candidate.strategy)
-                                    ? 'Price direction'
+                        : candidate?.strategy === 'RISE'
+                            ? '2 falls; 2 falls then 1 rise; or 3 falls'
+                            : candidate?.strategy === 'FALL'
+                                ? '3/4 rises then 1 fall; or 5 rises'
+                                : candidate && ['ONLY_UPS', 'ONLY_DOWNS'].includes(candidate.strategy)
+                                    ? '1-tick price direction'
                                     : 'Entry digit —'}
                         </small>
                     </div>
@@ -345,7 +355,7 @@ function MarketCard({
                 <div className='as-trade-choice' role='dialog' aria-label={`Choose a ${candidate.label} bot for ${market.label}`}>
                     <strong>Choose a bot for this signal</strong>
                     <button type='button' onClick={() => void startTrade('trade-only')}>
-                        Current bot <small>Use the existing Trade Only bot with this signal</small>
+                        Trade Only <small>Load the bot matched to this signal and run it automatically</small>
                     </button>
                     {candidate.strategy === 'OVER' && (
                         <button type='button' onClick={() => void startTrade('over-dt')}>
@@ -419,7 +429,7 @@ function SettingsPanel({
                 </div>
                 <div className='as-settings__foot'>
                     <ShieldCheck size={15} aria-hidden='true' />
-                    <span>Press a trade button to load and start its bot. Contract duration is one tick.</span>
+                    <span>Selected bots start automatically after loading. Contract duration is one tick.</span>
                 </div>
             </div>
         </details>
@@ -592,6 +602,12 @@ const AutoSignalsPage = ({
                             ))}
                         </div>
                     </div>
+            {family === 'MATCHES' && (
+                <div className='as-match-scan-note' role='status' data-testid='text-digit-match-scan-cadence'>
+                    <Clock3 size={13} aria-hidden='true' />
+                    Digit Match rechecks all live markets every minute; live ticks update the cards between sweeps.
+                </div>
+            )}
 
                     {status === 'error' && (
                         <div className='as-alert' role='status' data-testid='status-scanner-error'>

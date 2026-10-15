@@ -7,7 +7,7 @@ Auto-Signals run tracking must outlive the Auto-Signals page component. The main
 
 **Why:** page-scoped observers and state disappear on the intentional handoff to Bot Builder, losing progress.
 
-**How to apply:** if the handoff lifecycle changes, preserve a single observer owner across tab switches; do not move run tracking back into a page-only effect. Enforce the configured run limit in the generated Blockly after-purchase flow; the settlement observer reports progress but must not interrupt that flow at the limit.
+**How to apply:** if the handoff lifecycle changes, preserve a single observer owner across tab switches; do not move run tracking back into a page-only effect. Every action must use the same candidate-recommended cycle count shown on its card, capped by settings. Generated Blockly must continue after wins and losses until the cap; the settlement observer reports progress but must not interrupt the after-purchase flow.
 
 Auto-Signals action bots use one-tick duration across digit, parity, and price-direction contracts. Show historical alignment as context, not as a promise or probability of future wins.
 
@@ -27,8 +27,14 @@ Show each candidate's observed per-window hit rate separately from its alignment
 
 **How to apply:** preserve separate cards for contract/barrier alternatives, label empirical rates by sample window, and do not call them win probabilities.
 
-Candidate run recommendations are score-based guidance only. Do not authorize repeated live trades from historical alignment alone; live multi-run execution stays capped at one until calibrated probability, live payout/EV, and per-run revalidation are available.
+Candidate run recommendations are score-based guidance only. When Fast is explicitly enabled, an eligible current signal may dispatch a bounded three-purchase burst per tick at the configured stake (up to 3× stake exposure); this changes execution throughput, not signal confidence.
 
-**Why:** the scanner currently has no calibrated probability model or quoted-payout EV gate, and its feed does not continue scanning through the Bot Builder handoff.
+**Why:** the scanner has no calibrated probability model or quoted-payout EV gate, so a faster burst must not be presented as a higher chance of winning.
 
-**How to apply:** keep recommendations visible as historical signal guidance, but do not pass them as an XML `trade_again` cap above one without the live gates and a fresh post-settlement scan.
+**How to apply:** keep the three-order burst finite and Fast-only, preserve the configured cycle cap and current-signal checks, and retain the one-tick duration and explicit per-run monitoring.
+
+The Matches family must score only Matches candidates and rescan its cached authenticated tick window once per minute; quote and feed status can continue updating from live ticks between rescans. Entry Trade runs its entry gate inside the generated XML so it survives the Auto-Signals-to-Bot-Builder handoff. Rise uses exactly 2 falls, 2 falls then 1 rise, or 3 falls; Fall uses 3 or 4 rises then 1 fall, or 5 consecutive rises. Over/Under entries choose between 1/8 and 2/9 using recent observed next-tick outcomes.
+
+**Why:** The user requested a one-minute Matches scan, exact tick-sequence entries, and the scanner-selected entry digit to govern the bot after page navigation.
+
+**How to apply:** Re-score the selected family (not AUTO) on its schedule, keep the underlying authenticated feed live, patch the XML entry gate with the selected strategy/digit, and preserve one-tick duration and the XML-owned run limit.

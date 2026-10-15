@@ -43,7 +43,7 @@ const useMobileMenuConfig = (
             { tab: DBOT_TABS.AUTO_DIGITS, icon: '◉', label: 'Auto-Digits' },
             { tab: DBOT_TABS.AUTO_LAB, icon: '⌁', label: 'Auto Lab' },
             { tab: DBOT_TABS.DCIRCLES, icon: '⬤', label: 'D-Circles' },
-            { tab: DBOT_TABS.DTRADER, icon: '📊', label: 'D-Trader' },
+            { tab: DBOT_TABS.DTRADER, icon: '📊', label: 'Money Print' },
             { tab: DBOT_TABS.SPEEDLAB, icon: '🚀', label: 'Speed Lab' },
             { tab: DBOT_TABS.HEDGE, icon: '🔀', label: 'Hedge Trading' },
             { tab: DBOT_TABS.CHART, icon: '📈', label: 'Charts' },

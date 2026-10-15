@@ -62,12 +62,13 @@ describe('Normal Killer Bot V3 template', () => {
         expect(xml).toContain('<field name="VAR" id="nkv3_martingale">martingale</field>');
         expect(xml).not.toContain('<block type="king_fisher_restart_trade"');
         expect(xml).not.toContain('king_fisher_virtual_hook');
-        expect(xml).not.toContain('<block type="during_purchase"');
+        expect(xml).toContain('<block type="during_purchase"');
+        expect(xml).toContain('normal_killer_tick_acceleration');
         const beforePurchaseStart = xml.indexOf('<block type="before_purchase"');
         const afterPurchaseStart = xml.indexOf('<block type="after_purchase"');
         const beforePurchase = xml.slice(beforePurchaseStart, afterPurchaseStart);
         expect(beforePurchase).toMatch(
-            /<statement name="BEFOREPURCHASE_STACK">\s*<block type="purchase" id="nkv3_purchase">\s*<field name="PURCHASE_LIST">DIGITOVER<\/field>/,
+            /<statement name="BEFOREPURCHASE_STACK">\s*<block type="normal_killer_tick_acceleration"[\s\S]*?<next>\s*<block type="purchase" id="nkv3_purchase">\s*<field name="PURCHASE_LIST">DIGITOVER<\/field>/,
         );
         expect(beforePurchase.match(/<block type="purchase"/g) ?? []).toHaveLength(1);
         expect(xml).not.toContain('nkv3_increase_stake');

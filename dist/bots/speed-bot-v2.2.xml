@@ -273,16 +273,9 @@
     <statement name="BEFOREPURCHASE_STACK">
       <block type="controls_if" id="~i4:N7WEbd^0m5`9N)B=">
         <value name="IF0">
-          <block type="logic_compare" id=";hC@)fMf]US;F3Hv93yF">
-            <field name="OP">EQ</field>
-            <value name="A">
-              <block type="last_digit" id="le2.:(b+Wt}Z~@U:)IfP"></block>
-            </value>
-            <value name="B">
-              <block type="variables_get" id="]edJK#]J)@s(.X(So23H">
-                <field name="VAR" id="IFK8|B2=c?zWFub_]Sm8">entrypoint1</field>
-              </block>
-            </value>
+          <block type="auto_signal_entry_gate" id="as_entry_gate">
+            <field name="STRATEGY">UNDER</field>
+            <field name="ENTRY_DIGIT">5</field>
           </block>
         </value>
         <statement name="DO0">

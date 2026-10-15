@@ -10,6 +10,8 @@ import {
     getAutoLabDurationParams,
     getAutoLabDigitStats,
     isAutoLabContractWin,
+    isAutoLabMarketExcluded,
+    passesAutoLabProposalEdgeCheck,
     resetAutoLabGateAfterTrade,
     type AutoLabCandidate,
     type AutoLabContractType,
@@ -84,22 +86,58 @@ const toAutoLabTick = (tick: TickData): AutoLabTick | null => {
     return { symbol, quote, epoch, pip_size: pipSize, digit };
 };
 
-const normalizeActiveSymbols = (response: any): MarketInfo[] => {
+type MarketDiscoveryMode = 'king-fisher' | 'all-synthetic';
+export type AutoLabStakePolicy = {
+    autoStake: boolean;
+    riskPercent: number;
+    maxStake: number;
+    martingaleEnabled: boolean;
+};
+
+const normalizeActiveSymbols = (
+    response: any,
+    discoveryMode: MarketDiscoveryMode = 'king-fisher',
+): MarketInfo[] => {
     const activeSymbols = response?.active_symbols;
     if (!Array.isArray(activeSymbols)) return [];
-    const available = new Set(
-        activeSymbols
-            .filter((item: any) => item?.exchange_is_open !== 0 && item?.is_trading_suspended !== 1)
-            .map((item: any) => String(item?.underlying_symbol ?? item?.symbol ?? '')),
+    const tradable = activeSymbols.filter((item: any) =>
+        item?.exchange_is_open !== 0
+        && item?.is_trading_suspended !== 1
+        && !isAutoLabMarketExcluded(
+            item?.underlying_symbol ?? item?.symbol,
+            item?.display_name ?? item?.underlying_symbol_name,
+        )
     );
+
+    if (discoveryMode === 'all-synthetic') {
+        return tradable
+            .filter((item: any) => item?.market === 'synthetic_index')
+            .map((item: any) => ({
+                symbol: String(item?.underlying_symbol ?? item?.symbol ?? ''),
+                label: String(item?.underlying_symbol_name ?? item?.display_name ?? item?.symbol ?? ''),
+            }))
+            .filter((market: MarketInfo) => market.symbol && market.label)
+            .sort((left: MarketInfo, right: MarketInfo) => left.label.localeCompare(right.label));
+    }
+
+    const available = new Set(tradable.map((item: any) => String(item?.underlying_symbol ?? item?.symbol ?? '')));
     return KING_FISHER_MARKETS
-        .filter(market => available.has(market.symbol))
+        .filter(market =>
+            !isAutoLabMarketExcluded(market.symbol, market.label)
+            && available.has(market.symbol)
+        )
         .map(market => ({ symbol: market.symbol, label: market.label }));
+};
+
+const contractLabel = (contractType: AutoLabContractType) => {
+    if (contractType === 'CALL') return '1 Rise';
+    if (contractType === 'PUT') return '2 Fall';
+    return contractType.replace('DIGIT', 'Digit ');
 };
 
 const displaySignal = (value: AutoLabCandidate | null, detailFallback: string): AutoLabSignal => value
     ? {
-        label: value.contract_type.replace('DIGIT', 'Digit '),
+        label: contractLabel(value.contract_type),
         detail: `${value.strategy} · ${value.detail}`,
         market: value.label,
         confidence: value.score,
@@ -138,6 +176,9 @@ export const useAutoLabEngine = (
     mode: AutoLabMode,
     settings: AutoLabSettings,
     liveAcknowledged: boolean,
+    marketDiscovery: MarketDiscoveryMode = 'king-fisher',
+    stakePolicy?: AutoLabStakePolicy,
+    scanAllMarkets = false,
 ) => {
     const { connected, authorized, balance, currency, send, subscribeTicks, buyContract } = useDerivTrade();
     const { client } = useStore();
@@ -151,12 +192,28 @@ export const useAutoLabEngine = (
         currency,
         loginId,
     };
+    const calculatedStake = stakePolicy?.autoStake
+        ? roundStake(Math.min(
+            Math.max(0, stakePolicy.maxStake),
+            Math.max(0, balance ?? 0) * (Math.max(0, stakePolicy.riskPercent) / 100),
+        ))
+        : settings.stake;
+    const executionSettings: AutoLabSettings = stakePolicy
+        ? {
+            ...settings,
+            stake: calculatedStake,
+            multiplier: stakePolicy.martingaleEnabled ? settings.multiplier : 1,
+            maxMartingaleLevel: stakePolicy.martingaleEnabled
+                ? Math.max(1, Math.min(2, settings.maxMartingaleLevel))
+                : 50,
+        }
+        : settings;
     const accountRef = useRef(account);
-    const settingsRef = useRef(settings);
+    const settingsRef = useRef(executionSettings);
     const modeRef = useRef(mode);
     const liveAcknowledgedRef = useRef(liveAcknowledged);
     accountRef.current = account;
-    settingsRef.current = settings;
+    settingsRef.current = executionSettings;
     modeRef.current = mode;
     liveAcknowledgedRef.current = liveAcknowledged;
 
@@ -172,7 +229,7 @@ export const useAutoLabEngine = (
         market: '',
         confidence: null,
     });
-    const [session, setSession] = useState<AutoLabSession>(() => initialSession(settings.stake));
+    const [session, setSession] = useState<AutoLabSession>(() => initialSession(executionSettings.stake));
 
     const sessionRef = useRef(session);
     const statusRef = useRef(status);
@@ -181,6 +238,7 @@ export const useAutoLabEngine = (
     const gateRef = useRef(createAutoLabGate(settings.virtualLossesRequired, settings.virtualWinsRequired));
     const tickDataRef = useRef<Map<string, RuntimeMarket>>(new Map());
     const activeMarketsRef = useRef<MarketInfo[]>([]);
+    const subscribedMarketsRef = useRef<MarketInfo[]>([]);
     const startedAccountRef = useRef<string | null>(null);
     const lastTickAtRef = useRef<Map<string, number>>(new Map());
     const historyErrorsRef = useRef(new Set<string>());
@@ -202,6 +260,8 @@ export const useAutoLabEngine = (
         return instruments.filter(market => market.symbol === settings.marketSelection);
     }, [instruments, settings.marketSelection]);
     activeMarketsRef.current = activeMarkets;
+    const subscribedMarkets = scanAllMarkets ? instruments : activeMarkets;
+    subscribedMarketsRef.current = subscribedMarkets;
 
     const stopEngine = useCallback((nextStatus: AutoLabStatus, nextMessage: string) => {
         runRef.current = false;
@@ -228,7 +288,7 @@ export const useAutoLabEngine = (
             .then((response: any) => {
                 if (cancelled) return;
                 if (response?.error) throw new Error(response.error.message || 'Deriv rejected the active-symbols request.');
-                const supported = normalizeActiveSymbols(response);
+                const supported = normalizeActiveSymbols(response, marketDiscovery);
                 setInstruments(supported);
                 setMessage(supported.length
                     ? 'Attaching authenticated live feeds and loading recent tick history…'
@@ -243,16 +303,18 @@ export const useAutoLabEngine = (
         return () => {
             cancelled = true;
         };
-    }, [connected, authorized, send, stopEngine]);
+    }, [connected, authorized, send, stopEngine, marketDiscovery]);
 
     const refreshMarketView = useCallback(() => {
-        const infos = activeMarketsRef.current;
+        const infos = subscribedMarketsRef.current;
         const windows: AutoLabMarketWindow[] = infos.map(info => ({
             ...info,
             ticks: tickDataRef.current.get(info.symbol)?.ticks ?? [],
         }));
+        const activeSymbols = new Set(activeMarketsRef.current.map(market => market.symbol));
+        const strategyWindows = windows.filter(window => activeSymbols.has(window.symbol));
         const strategySettings = settingsRef.current;
-        const candidates = evaluateAutoLabCandidates(modeRef.current, windows, strategySettings);
+        const candidates = evaluateAutoLabCandidates(modeRef.current, strategyWindows, strategySettings);
         const bestBySymbol = new Map<string, AutoLabCandidate>();
         for (const item of candidates) {
             if (!bestBySymbol.has(item.symbol)) bestBySymbol.set(item.symbol, item);
@@ -267,17 +329,18 @@ export const useAutoLabEngine = (
                 digit: latest?.digit ?? null,
                 quote: latest?.quote ?? null,
                 tickCount: runtime?.ticks.length ?? 0,
+                digitHistory: runtime?.ticks.slice(-HISTORY_COUNT).map(tick => tick.digit) ?? [],
                 score: candidateForMarket?.score ?? null,
                 signal: candidateForMarket?.contract_type
-                    ? candidateForMarket.contract_type.replace('DIGIT', 'Digit ')
+                    ? contractLabel(candidateForMarket.contract_type)
                     : latest ? 'Tracking' : 'Waiting',
             };
         }));
 
         const selectedMarket = candidates[0]?.symbol
-            ?? windows.find(window => window.ticks.length)?.symbol
-            ?? windows[0]?.symbol;
-        const selectedTicks = windows.find(window => window.symbol === selectedMarket)?.ticks ?? [];
+            ?? strategyWindows.find(window => window.ticks.length)?.symbol
+            ?? strategyWindows[0]?.symbol;
+        const selectedTicks = strategyWindows.find(window => window.symbol === selectedMarket)?.ticks ?? [];
         setDigitStats(getAutoLabDigitStats(selectedTicks.slice(-Math.max(1, strategySettings.ticksWindow))));
         const best = candidates[0] ?? null;
         const gate = gateRef.current;
@@ -291,11 +354,11 @@ export const useAutoLabEngine = (
         } else {
             setCurrentSignal(displaySignal(best, `Waiting for at least ${MIN_READY_TICKS} valid ticks and a qualifying strategy condition.`));
         }
-        return { candidates, windows };
+        return { candidates, windows: strategyWindows };
     }, []);
 
     useEffect(() => {
-        if (!connected || !authorized || !activeMarkets.length) {
+        if (!connected || !authorized || !subscribedMarkets.length) {
             tickDataRef.current.clear();
             lastTickAtRef.current.clear();
             setMarkets([]);
@@ -306,11 +369,11 @@ export const useAutoLabEngine = (
         let cancelled = false;
         const cleanups = new Map<string, () => void>();
         const now = () => Date.now();
-        tickDataRef.current = new Map(activeMarkets.map(market => [
+        tickDataRef.current = new Map(subscribedMarkets.map(market => [
             market.symbol,
             { pipSize: null, rawHistory: [], ticks: [], tickSequence: 0, lastLiveEpoch: null },
         ]));
-        lastTickAtRef.current = new Map(activeMarkets.map(market => [market.symbol, now()]));
+        lastTickAtRef.current = new Map(subscribedMarkets.map(market => [market.symbol, now()]));
         historyErrorsRef.current = new Set();
 
         const handleTick = (symbol: string, tick: TickData) => {
@@ -347,11 +410,11 @@ export const useAutoLabEngine = (
             lastTickAtRef.current.set(market.symbol, now());
         };
 
-        activeMarkets.forEach(attach);
+        subscribedMarkets.forEach(attach);
         refreshMarketView();
 
         const loadHistories = async () => {
-            for (const market of activeMarkets) {
+            for (const market of subscribedMarkets) {
                 if (cancelled) return;
                 try {
                     const response: any = await send({
@@ -410,7 +473,7 @@ export const useAutoLabEngine = (
         void loadHistories();
 
         const watchdog = window.setInterval(() => {
-            for (const market of activeMarkets) {
+            for (const market of subscribedMarkets) {
                 const lastTickAt = lastTickAtRef.current.get(market.symbol) ?? 0;
                 if (now() - lastTickAt > TICK_WATCHDOG_MS) attach(market);
             }
@@ -422,7 +485,7 @@ export const useAutoLabEngine = (
             cleanups.forEach(cleanup => cleanup());
             cleanups.clear();
         };
-    }, [connected, authorized, activeMarkets, send, subscribeTicks, refreshMarketView]);
+    }, [connected, authorized, subscribedMarkets, send, subscribeTicks, refreshMarketView]);
 
     function processStrategyTick(tick: AutoLabTick, candidates: AutoLabCandidate[], marketTickCount: number) {
         const best = candidates[0];
@@ -567,6 +630,20 @@ export const useAutoLabEngine = (
                     strategy_mode: signal.strategy,
                     setup_score: signal.score,
                 },
+                ...(signal.confidenceLowerBound == null
+                    ? {}
+                    : {
+                        validateProposal: (proposal: unknown) => {
+                            const quote = proposal as { ask_price?: unknown; payout?: unknown };
+                            const askPrice = Number(quote?.ask_price);
+                            const payout = Number(quote?.payout);
+                            return passesAutoLabProposalEdgeCheck(
+                                signal.confidenceLowerBound!,
+                                askPrice,
+                                payout,
+                            );
+                        },
+                    }),
                 shouldBuy,
             }, settled => handleSettlement(settled));
 
@@ -675,9 +752,9 @@ export const useAutoLabEngine = (
             && authorized
             && account.isVirtual != null
             && selectedReady
-            && Number.isFinite(settings.stake)
-            && settings.stake >= 0.35;
-    }, [connected, authorized, account.isVirtual, activeMarkets, markets, settings.stake]);
+            && Number.isFinite(executionSettings.stake)
+            && executionSettings.stake >= 0.35;
+    }, [connected, authorized, account.isVirtual, activeMarkets, markets, executionSettings.stake]);
 
     const onStart = useCallback(() => {
         const currentAccount = accountRef.current;

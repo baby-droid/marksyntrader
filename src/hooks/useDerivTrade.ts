@@ -75,6 +75,9 @@ export interface BuyParams {
     // Optional final guard for long-running traders. It is checked after the
     // proposal response and immediately before the irreversible buy request.
     shouldBuy?: () => boolean;
+    // Optional proposal-quality check run before purchase. Returning false
+    // prevents a purchase using that proposal ID.
+    validateProposal?: (proposal: unknown) => boolean;
 }
 
 const NEEDS_BARRIER = new Set([
@@ -393,6 +396,9 @@ export function useDerivTrade() {
             const askPrice   = Number(proposalRes?.proposal?.ask_price ?? stake);
             if (!proposalId) {
                 throw new Error('Proposal failed — no proposal ID returned');
+            }
+            if (params.validateProposal && !params.validateProposal(proposalRes.proposal)) {
+                throw new Error('The live proposal did not pass the strategy break-even check. No order was placed.');
             }
             if (params.shouldBuy && !params.shouldBuy()) {
                 throw new Error('Trade cancelled before purchase because the run or account changed.');

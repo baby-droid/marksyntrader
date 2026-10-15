@@ -31,6 +31,22 @@ export const AUTO_SIGNAL_BOTS: Record<AutoSignalAction, { name: string; file: st
     },
 };
 
+export const getAutoSignalBot = (
+    action: AutoSignalAction,
+    candidate: AutoSignalCandidate,
+) => {
+    if (
+        action === 'trade-only'
+        && (candidate.strategy === 'MATCHES' || candidate.strategy === 'DIFFERS')
+    ) {
+        return {
+            name: 'Normal Killer Bot V3',
+            file: '/bots/normal-killer-bot-v3.xml',
+        };
+    }
+    return AUTO_SIGNAL_BOTS[action];
+};
+
 export interface AutoSignalBotConfiguration {
     action: AutoSignalAction;
     market: AutoSignalMarket;
@@ -421,6 +437,17 @@ const addRunLimit = (doc: Document, maxRuns: number) => {
     }
 };
 
+const addAutoSignalRunPolicy = (doc: Document, maxRuns: number) => {
+    const afterPurchase = blocksOfType(doc, 'after_purchase')[0];
+    if (!afterPurchase) throw new Error('Bot XML has no after-purchase logic.');
+    let data = directElement(afterPurchase, 'data');
+    if (!data) {
+        data = makeElement(doc, 'data');
+        afterPurchase.appendChild(data);
+    }
+    data.textContent = `auto-signal-v1;max-runs=${boundedInteger(maxRuns, 1, 10)}`;
+};
+
 const unwrapTimeouts = (container: Element) => {
     for (const block of directElements(container, 'block')) {
         for (const child of directElements(block)) {
@@ -454,26 +481,28 @@ const setContractType = (
     candidate: AutoSignalCandidate,
     preserveRecoveryPurchaseTypes = false,
 ) => {
-    const category = candidate.contractType === 'CALL' || candidate.contractType === 'PUT'
-        ? 'callput'
-        : 'digits';
-    const tradeType = candidate.contractType === 'CALL' || candidate.contractType === 'PUT'
-        ? 'risefall'
-        : candidate.contractType === 'DIGITEVEN' || candidate.contractType === 'DIGITODD'
-            ? 'evenodd'
-            : candidate.contractType === 'DIGITOVER' || candidate.contractType === 'DIGITUNDER'
-                ? 'overunder'
-                : candidate.contractType === 'DIGITMATCH' || candidate.contractType === 'DIGITDIFF'
-                    ? 'matchesdiffers'
-                    : 'runs';
+    const tradeTypeByContract: Record<string, { category: string; tradeType: string }> = {
+        CALL: { category: 'callput', tradeType: 'risefall' },
+        PUT: { category: 'callput', tradeType: 'risefall' },
+        DIGITEVEN: { category: 'digits', tradeType: 'evenodd' },
+        DIGITODD: { category: 'digits', tradeType: 'evenodd' },
+        DIGITOVER: { category: 'digits', tradeType: 'overunder' },
+        DIGITUNDER: { category: 'digits', tradeType: 'overunder' },
+        DIGITMATCH: { category: 'digits', tradeType: 'matchesdiffers' },
+        DIGITDIFF: { category: 'digits', tradeType: 'matchesdiffers' },
+        RUNHIGH: { category: 'digits', tradeType: 'runs' },
+        RUNLOW: { category: 'digits', tradeType: 'runs' },
+    };
+    const selection = tradeTypeByContract[candidate.contractType];
+    if (!selection) throw new Error(`Unsupported Auto-Signals contract type: ${candidate.contractType}.`);
     const tradeTypeBlock = blocksOfType(doc, 'trade_definition_tradetype')[0];
     const contractTypeBlock = blocksOfType(doc, 'trade_definition_contracttype')[0];
     const purchaseBlock = blocksOfType(doc, 'purchase')[0];
     if (!tradeTypeBlock || !contractTypeBlock || !purchaseBlock) {
         throw new Error('Bot XML is missing a trade type or purchase block.');
     }
-    setFieldValue(tradeTypeBlock, 'TRADETYPECAT_LIST', category);
-    setFieldValue(tradeTypeBlock, 'TRADETYPE_LIST', tradeType);
+    setFieldValue(tradeTypeBlock, 'TRADETYPECAT_LIST', selection.category);
+    setFieldValue(tradeTypeBlock, 'TRADETYPE_LIST', selection.tradeType);
     setFieldValue(
         contractTypeBlock,
         'TYPE_LIST',
@@ -533,6 +562,14 @@ const configureTradeParameters = (
     }
 
     if (config.action === 'entry-trade') {
+        const entryGate = blocksOfType(doc, 'auto_signal_entry_gate')[0];
+        if (!entryGate) throw new Error('Entry bot XML is missing its Auto-Signal entry gate.');
+        setFieldValue(entryGate, 'STRATEGY', config.candidate.strategy);
+        setFieldValue(
+            entryGate,
+            'ENTRY_DIGIT',
+            String(config.candidate.entryDigit ?? config.market.latestDigit ?? 0),
+        );
         setVariableValue(doc, 'STAKE', config.accountAmounts.stake1);
         setVariableValue(doc, 'stake2', config.accountAmounts.stake2);
         setVariableValue(doc, 'takeprofit', config.accountAmounts.takeProfit);
@@ -543,13 +580,13 @@ const configureTradeParameters = (
     } else {
         // The current bot and the Free Bots DT templates use different
         // variable names. Set every matching alias; missing aliases are fine.
-        for (const name of ['stake', 'initial stake', 'STAKE']) {
+        for (const name of ['stake', 'base_stake', 'base stake', 'initial stake', 'STAKE']) {
             setVariableValue(doc, name, config.accountAmounts.stake1);
         }
-        for (const name of ['totalprofit', 'takeprofit']) {
+        for (const name of ['totalprofit', 'takeprofit', 'take_profit', 'take profit']) {
             setVariableValue(doc, name, config.accountAmounts.takeProfit);
         }
-        for (const name of ['totalloss', 'stoploss']) {
+        for (const name of ['totalloss', 'stoploss', 'stop_loss', 'stop loss']) {
             setVariableValue(doc, name, config.accountAmounts.stopLoss);
         }
         for (const name of ['martingale', 'Martingale']) {
@@ -595,6 +632,7 @@ export const patchAutoSignalsBotXml = (xml: string, config: AutoSignalBotConfigu
         addOver4Recovery(doc);
     }
     addRunLimit(doc, boundedInteger(config.settings.maxRuns, 1, 10));
+    addAutoSignalRunPolicy(doc, config.settings.maxRuns);
 
     return new XMLSerializer().serializeToString(doc);
 };
