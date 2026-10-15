@@ -1,0 +1,625 @@
+# Complete Deriv Strategy Engine Logic
+
+This specification combines Over 1–Over 7, Under 8–Under 1, automatic run selection from 1–20, Matches/Differs, Rise/Fall, and Even/Odd into one market-analysis and execution framework.
+
+The key requirement is that the LLM must build a strategy engine that can analyze each contract independently, select a suitable market, identify entry conditions, calculate risk, and decide when not to trade. It must not force a trade simply because a strategy has been selected.
+
+## 1. Universal market-analysis engine
+
+Every strategy should use the same data pipeline but apply its own contract-specific rules.
+
+1000 ticks — Historical baseline
+
+Digit distribution, historical frequency, volatility, parity, and regime
+
+100 ticks — Local context
+
+Recent changes, distribution shifts, clustering, and trend context
+
+50 ticks — Confirmation
+
+Confirm whether the candidate strategy still fits recent data
+
+20 ticks — Flow
+
+Detect current clustering, directional movement, and conflicting signals
+
+10 ticks — Entry timing
+
+Check the latest setup, but do not treat a short sequence as proof of the next outcome
+
+Use a rolling buffer for each market. Every new tick updates the shorter windows and the 1000-tick history. Do not mix ticks from different markets or use future ticks when backtesting a past signal.
+
+Important statistical limitation: digit frequencies can help describe past behavior, but a low-frequency digit is not necessarily due to appear next. The same applies to Odd/Even and Matches/Differs. Entry conditions must be tested against subsequent outcomes rather than assumed to predict them.
+
+## 2. Over and Under contract logic
+
+For the standard last-digit contracts, define the predicted final digit as \\(d\\), where \\(d\in\\{0,\ldots,9\\}\\).
+
+- Over \\(b\\) wins when \\(d>b\\).
+- Under \\(b\\) wins when \\(d\<b\\).
+- The barrier digit itself loses for both contracts.
+
+That last rule is essential: Over 3 requires a digit of 4–9; Under 3 requires a digit of 0–2.
+
+| Contract | Winning digits | Losing digits |
+| -------- | -------------- | ------------- |
+| Over 1   | 2–9            | 0–1           |
+| Over 2   | 3–9            | 0–2           |
+| Over 3   | 4–9            | 0–3           |
+| Over 4   | 5–9            | 0–4           |
+| Over 5   | 6–9            | 0–5           |
+| Over 6   | 7–9            | 0–6           |
+| Over 7   | 8–9            | 0–7           |
+| Under 8  | 0–7            | 8–9           |
+| Under 7  | 0–6            | 7–9           |
+| Under 6  | 0–5            | 6–9           |
+| Under 5  | 0–4            | 5–9           |
+| Under 4  | 0–3            | 4–9           |
+| Under 3  | 0–2            | 3–9           |
+| Under 2  | 0–1            | 2–9           |
+| Under 1  | 0              | 1–9           |
+
+The implementation must confirm the exact contract type and barrier supported by the selected Deriv market before requesting a proposal.
+
+### 2.1 Over/Under probability engine
+
+For every barrier, calculate the historical probability of a winning digit in each window.
+
+For Over 3:
+
+\\[ P(\text{win})=\sum\_{d=4}^{9}P(d) \\]
+
+For Under 3:
+
+\\[ P(\text{win})=\sum\_{d=0}^{2}P(d) \\]
+
+Calculate these values for the 1000-, 100-, 50-, 20-, and 10-tick windows.
+
+Example:
+
+```
+Contract: OVER 3
+
+1000T estimated win frequency: 62%
+100T estimated win frequency: 67%
+50T estimated win frequency: 70%
+20T estimated win frequency: 65%
+10T estimated win frequency: 60%
+
+Assessment:
+Long-term baseline: favorable historically
+Recent confirmation: favorable
+Immediate flow: mixed
+Entry: WAIT
+```
+
+These percentages are hypothetical observed frequencies, not guaranteed future probabilities. In particular, a 10-tick sample is very small: 6 winning observations out of 10 does not establish a reliable 60% future win probability.
+
+### 2.2 Contract-specific candidate selection
+
+For each market, evaluate every permitted Over/Under barrier independently.
+
+For each candidate, calculate:
+
+- `baseline_probability`: winning-digit frequency in 1000 ticks.
+- `local_probability`: winning-digit frequency in 100 ticks.
+- `confirmation_probability`: winning-digit frequency in 50 ticks.
+- `flow_probability`: winning-digit frequency in 20 ticks.
+- `entry_probability`: winning-digit frequency in 10 ticks.
+- `sample_uncertainty`: uncertainty due to the number of observations.
+- `distribution_shift`: whether recent digit distribution differs from baseline.
+- `quoted_payout`: payout from the actual Deriv proposal.
+- `expected_value`: expected net profit based on calibrated probability and quoted payout.
+- `signal_validity`: whether the market data and proposal are current.
+
+Do not select Over 7 simply because its losing digits are frequent, or Under 1 simply because zero is underrepresented. Compare the actual probability of winning and the actual offered payout.
+
+### 2.3 Example of barrier selection
+
+Suppose a market produces these illustrative estimates:
+
+| Contract | Estimated win probability | Net profit if successful per 1 unit staked |
+| -------- | ------------------------- | ------------------------------------------ |
+| Over 1   | 88%                       | 0.10                                       |
+| Over 3   | 65%                       | 0.65                                       |
+| Over 5   | 43%                       | 1.30                                       |
+| Over 7   | 19%                       | 3.50                                       |
+
+These figures are illustrative only. A high probability does not necessarily mean a better trade.
+
+For a contract risking 1 unit and earning net profit \\(r\\) on a win:
+
+\\[ EV=p r-(1-p) \\]
+
+For Over 3 in the example:
+
+\\[ EV=(0.65)(0.65)-(0.35)=0.0725 \\]
+
+The estimated EV is +0.0725 units per stake before any additional costs or model error. The engine must use the actual quoted payout and a calibrated probability estimate, not these sample numbers.
+
+Entry rule: choose a contract only if the estimated edge remains positive after accounting for uncertainty, payout, and a safety margin. Otherwise return `NO TRADE`.
+
+## 3. Over/Under entry pattern logic
+
+The engine should distinguish between digit distribution and entry timing. The fact that several losing-range digits appeared recently is not evidence that a winning-range digit is now due.
+
+For each barrier, divide the digit set into:
+
+- `winning_range`
+- `losing_range`
+- `barrier_digit`
+- `winning_frequency`
+- `losing_frequency`
+- `recent_winning_range_count`
+- `recent_losing_range_count`
+- `distribution_shift`
+- `current_signal_quality`
+
+Example for Over 3:
+
+```
+Winning range: 4, 5, 6, 7, 8, 9
+Losing range:  0, 1, 2, 3
+
+1000T: baseline distribution
+100T: local distribution
+50T: confirmation
+20T: flow
+10T: entry timing
+```
+
+The engine may flag a candidate when the winning-range frequency is favorable in the historical baseline and remains favorable in the recent data. It should not automatically buy after 2–5 losing-range observations, because that sequence alone does not make a winning digit more likely.
+
+### Over/Under decision states
+
+```
+NO DATA
+   ↓
+BASELINE READY
+   ↓
+CANDIDATE FOUND
+   ↓
+50T CONFIRMATION
+   ↓
+20T FLOW CHECK
+   ↓
+10T ENTRY CHECK
+   ↓
+PAYOUT / EXPECTED-VALUE CHECK
+   ↓
+RISK CHECK
+   ↓
+SIGNAL READY or NO TRADE
+```
+
+If the windows conflict, the payout is poor, or the signal is stale, the engine should wait and rescan.
+
+# 4. Automatic run selection: 1–20 runs
+
+The run selector must define what a run means. For this specification, treat a run as one executed contract attempt, not as a guaranteed number of consecutive wins. If the user instead means a contract duration of 1–20 ticks, that needs a separate duration setting.
+
+The goal is to determine how many attempts the bot is permitted to make during a strategy cycle, based on signal quality, risk limits, and the remaining session budget.
+
+## 4.1 Inputs to the run selector
+
+```
+account_balance
+available_session_risk
+stake_per_trade
+daily_loss_limit_remaining
+session_profit_target_remaining
+consecutive_losses
+consecutive_wins
+market_quality_score
+strategy_score
+validated_edge
+recent_out_of_sample_performance
+signal_expiry
+```
+
+The selector should also know the actual contract payout and the maximum possible loss per attempt.
+
+## 4.2 Run eligibility
+
+First determine whether a trade is eligible. Only then select the maximum number of attempts.
+
+Example decision table:
+
+| Conditions                                                               | Permitted run plan                                 |
+| ------------------------------------------------------------------------ | -------------------------------------------------- |
+| Invalid data, weak edge, conflicting windows                             | 0 runs; wait                                       |
+| Candidate but not fully validated                                        | 0 executed runs; continue testing                  |
+| One strong, independently validated setup                                | 1 run                                              |
+| Stable conditions and sufficient risk budget                             | Up to 2–3 attempts, each independently revalidated |
+| Proven strategy with sufficient out-of-sample evidence and risk capacity | Consider a higher cap, up to the configured 20     |
+| Daily loss limit reached, stale signal, or circuit breaker triggered     | 0 additional runs                                  |
+
+These are maximum permitted attempts, not a target the bot must complete. The default should be conservative; reaching 20 must never be a requirement.
+
+## 4.3 Adaptive run score
+
+Calculate a normalized quality score:
+
+\\[ Q=0.30S+0.25E+0.20M+0.15D+0.10R \\]
+
+Where:
+
+- \\(S\\) = signal quality, normalized from 0–100.
+- \\(E\\) = estimated edge quality, normalized from 0–100.
+- \\(M\\) = multi-window agreement, normalized from 0–100.
+- \\(D\\) = data quality, normalized from 0–100.
+- \\(R\\) = risk capacity, normalized from 0–100.
+
+These weights are initial engineering defaults and must be validated. They do not mean a score of 90 corresponds to a 90% chance of winning.
+
+Use the score to propose a run cap, then apply all hard risk constraints:
+
+```
+IF data_quality < minimum:
+    max_runs = 0
+
+ELSE IF expected_value <= safety_margin:
+    max_runs = 0
+
+ELSE IF daily_loss_limit_reached:
+    max_runs = 0
+
+ELSE IF consecutive_losses >= configured_stop:
+    max_runs = 0
+
+ELSE:
+    max_runs = score_based_run_cap
+    max_runs = MIN(max_runs, configured_cap)
+    max_runs = MIN(max_runs, affordable_risk_cap)
+```
+
+The maximum cap is configurable from 1 to 20. The system can return fewer attempts, including zero, when the evidence or risk budget is insufficient.
+
+## 5. Matches and Differs strategy
+
+These are digit contracts and should use the same 1000/100/50/20/10-tick framework, but their probability calculations differ from Over/Under.
+
+### 5.1 Matches — `DIGITMATCH`
+
+The strategy selects a specific digit from 0–9 as the barrier.
+
+For each digit \\(d\\), calculate:
+
+\\[ P(d)=\frac{\text{number of occurrences of }d}{\text{ticks observed}} \\]
+
+Analyze:
+
+- Digit frequency in 1000 ticks.
+- Frequency in 100 ticks.
+- Frequency in 50 ticks.
+- Frequency in 20 ticks.
+- Latest 10-tick pattern.
+- Time since the digit last appeared.
+- Repeated clusters and distribution shifts.
+- The quoted payout and estimated expected value.
+
+Example:
+
+```
+Candidate digit: 7
+
+1000T frequency: 12.0%
+100T frequency:  15.0%
+50T frequency:   16.0%
+20T frequency:   20.0%
+10T frequency:   10.0%
+
+Interpretation:
+Historical concentration: elevated
+Recent confirmation: elevated
+Immediate sample: weak
+Decision: WAIT FOR VALIDATION
+```
+
+The next digit is not necessarily more likely to be 7 just because 7 has been frequent. The short windows are noisy, so test whether this type of frequency pattern predicts future Matches outcomes.
+
+### 5.2 Matches entry procedure
+
+```
+1. Calculate all ten digit frequencies.
+2. Rank digits by baseline frequency.
+3. Identify candidate digits.
+4. Check recent frequency against baseline.
+5. Estimate probability with uncertainty adjustment.
+6. Check the actual Matches payout.
+7. Require positive expected value after a safety margin.
+8. Apply risk limits.
+9. Execute only if the signal remains valid.
+```
+
+Select the digit with the best validated expected value, not necessarily the most frequent digit.
+
+### 5.3 Differs — `DIGITDIFF`
+
+Differs wins when the final digit does not equal the selected barrier digit.
+
+For barrier \\(d\\):
+
+\\[ P(\text{Differs wins})=1-P(d) \\]
+
+If the digit 7 has an estimated probability of 12%, the estimated Differs win frequency against 7 is 88%. This is not automatically profitable: Differs generally has a different payout, and its expected value must be evaluated separately.
+
+The engine should:
+
+1. Estimate each candidate digit's probability.
+2. Calculate the probability of differing from that digit.
+3. Compare available payouts.
+4. Select the candidate with the best sufficiently reliable expected value.
+5. Reject the trade if no candidate passes validation.
+
+Do not switch automatically from Matches to Differs after a loss. Recalculate the evidence and compare both strategies again.
+
+## 6. Rise and Fall strategy
+
+Rise/Fall is based on price movement, not last-digit parity.
+
+### Rise — `CALL`
+
+Evaluate:
+
+- Positive price displacement.
+- Upward movement ratio.
+- Momentum and acceleration.
+- Higher highs and higher lows.
+- Agreement across 1000/100/50/20 ticks.
+- Immediate entry condition from the latest data.
+- Contract duration and offered payout.
+
+### Fall — `PUT`
+
+Apply the inverse criteria:
+
+- Negative price displacement.
+- Downward movement ratio.
+- Negative momentum.
+- Lower highs and lower lows.
+- Multi-window bearish agreement.
+- Valid entry and payout.
+
+### Rise/Fall entry gate
+
+```
+IF long-term regime is bullish
+AND local trend is bullish
+AND short-term flow confirms
+AND no unresolved reversal exists
+AND expected value passes
+AND risk limits pass:
+    RISE CANDIDATE
+
+ELSE IF long-term regime is bearish
+AND local trend is bearish
+AND short-term flow confirms
+AND no unresolved reversal exists
+AND expected value passes
+AND risk limits pass:
+    FALL CANDIDATE
+
+ELSE:
+    NO TRADE
+```
+
+A market's label alone must not trigger a contract. A Bull market can temporarily fall, and a Bear market can temporarily rise.
+
+For Rise/Fall contracts, validate the specific contract duration as well. A directional trend can be real but still fail to produce the required movement within a short duration.
+
+## 7. Even and Odd strategy
+
+Use the parity classification:
+
+- Even: `0, 2, 4, 6, 8`
+- Odd: `1, 3, 5, 7, 9`
+
+For each window calculate:
+
+```
+odd_count
+even_count
+odd_percentage
+even_percentage
+parity_runs
+alternation_rate
+parity_distribution_shift
+```
+
+### Odd — `DIGITODD`
+
+Require:
+
+- An adequately supported baseline Odd estimate.
+- Recent confirmation in the 100/50-tick windows.
+- Consistent evidence in the 20-tick window.
+- A valid 10-tick entry state.
+- Positive estimated expected value using the actual payout.
+
+### Even — `DIGITEVEN`
+
+Use the same process with Even as the target.
+
+Do not assume that Odd must follow an Even streak or that Even must follow an Odd streak. A sequence such as `O-O-O-O` does not guarantee that the next digit will be Even.
+
+### Parity example
+
+```
+1000T: Odd 54%, Even 46%
+100T:  Odd 57%, Even 43%
+50T:   Odd 60%, Even 40%
+20T:   Odd 55%, Even 45%
+10T:   Odd 40%, Even 60%
+
+Decision: WAIT
+Reason: immediate parity conflicts with the longer windows
+```
+
+A short-window conflict should trigger a recheck rather than an automatic reversal.
+
+## 8. Universal strategy-selection engine
+
+All strategy modules should return the same structured result so the scanner can compare them.
+
+| Strategy  | Primary evidence                              | Contract     |
+| --------- | --------------------------------------------- | ------------ |
+| Over 1–7  | Probability mass above barrier                | `DIGITOVER`  |
+| Under 8–1 | Probability mass below barrier                | `DIGITUNDER` |
+| Matches   | Probability of a specified digit              | `DIGITMATCH` |
+| Differs   | Probability of not matching a specified digit | `DIGITDIFF`  |
+| Rise      | Upward price movement                         | `CALL`       |
+| Fall      | Downward price movement                       | `PUT`        |
+| Odd       | Odd-digit probability                         | `DIGITODD`   |
+| Even      | Even-digit probability                        | `DIGITEVEN`  |
+
+For each strategy, return:
+
+```
+market
+strategy
+contract_type
+barrier
+duration
+baseline_estimate
+recent_estimate
+uncertainty
+quoted_payout
+expected_value
+signal_score
+entry_condition
+rejection_reasons
+maximum_permitted_runs
+risk_status
+```
+
+Only the execution layer should turn a validated signal into a purchase request.
+
+## 9. Market scanner and strategy ranking
+
+For every supported market:
+
+1. Discover the available market symbols dynamically.
+2. Confirm that the market is active and its data is valid.
+3. Load 1000 ticks and maintain rolling windows.
+4. Evaluate every enabled strategy.
+5. Estimate each contract's probability and uncertainty.
+6. Obtain the actual contract proposal and payout.
+7. Calculate expected value and apply a safety margin.
+8. Reject invalid, stale, conflicting, or over-risk candidates.
+9. Rank the remaining candidates by validated expected value, evidence quality, and risk suitability.
+10. Select the best eligible candidate—or select no trade.
+
+Do not rank candidates by confidence score alone. A high probability with a poor payout can be inferior to a lower probability with a better payout.
+
+## 10. Backtesting and calibration
+
+Before allowing automatic live execution, test each contract family separately.
+
+The test should use chronological, out-of-sample data and simulate the actual entry timing and payout structure. Track:
+
+- Win rate and loss rate.
+- Expected value per trade.
+- Maximum drawdown.
+- Longest losing streak.
+- Results by market and strategy.
+- Results by confidence band.
+- Results by proposed run count.
+- Results under changing volatility and distribution regimes.
+
+Calibrate probability estimates on historical training data and evaluate them on data not used to select the strategy. Avoid tuning thresholds on the same period used to report performance.
+
+A strategy that performs well on one market may not work on another. Keep separate performance estimates by market, contract type, barrier, and duration.
+
+## 11. Master pseudocode for the LLM
+
+```
+FOR each active market:
+
+    validate_market_data()
+
+    IF fewer than 1000 usable ticks:
+        reject_market()
+        CONTINUE
+
+    calculate_windows(1000, 100, 50, 20, 10)
+
+    calculate_digit_distribution()
+    calculate_parity_statistics()
+    calculate_price_momentum()
+    calculate_distribution_shifts()
+    calculate_pattern_statistics()
+    calculate_uncertainty()
+
+    candidates = []
+
+    FOR each enabled strategy:
+
+        IF strategy is OVER or UNDER:
+            evaluate_each_supported_barrier()
+
+        IF strategy is MATCHES or DIFFERS:
+            evaluate_each_supported_digit()
+
+        IF strategy is RISE or FALL:
+            evaluate_direction_and_duration()
+
+        IF strategy is ODD or EVEN:
+            evaluate_parity()
+
+        estimate_probability()
+        obtain_actual_contract_payout()
+        calculate_expected_value()
+        apply_uncertainty_margin()
+
+        IF candidate passes all entry conditions:
+            candidates.add(candidate)
+
+    rank_candidates_by:
+        expected_value
+        evidence_quality
+        payout
+        risk
+        market_suitability
+
+    IF no eligible candidate:
+        return NO_TRADE
+
+    selected = best_eligible_candidate()
+
+    determine_maximum_runs(
+        selected,
+        account_balance,
+        risk_budget,
+        loss_limits,
+        validated_performance
+    )
+
+    FOR each permitted attempt:
+
+        recheck_market_data()
+        recheck_signal()
+        recheck_payout()
+        recheck_expected_value()
+        recheck_risk_limits()
+
+        IF any check fails:
+            cancel_remaining_attempts()
+            BREAK
+
+        execute_one_contract()
+        monitor_contract_result()
+        record_trade()
+
+        IF stop condition reached:
+            cancel_remaining_attempts()
+            BREAK
+
+        recalculate_all_windows()
+        revalidate_before_next_attempt()
+```
+
+### Final implementation rule
+
+The bot should calculate the best eligible strategy and the maximum permitted number of attempts, not attempt to predict a guaranteed winning streak. A 20-run plan means permission for up to 20 independently validated attempts—not a forecast of 20 consecutive wins. No strategy should automatically increase stakes or continue trading to recover previous losses.

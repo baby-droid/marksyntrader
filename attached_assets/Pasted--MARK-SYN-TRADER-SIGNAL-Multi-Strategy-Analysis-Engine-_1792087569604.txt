@@ -1,0 +1,205 @@
+# MARK SYN TRADER SIGNAL — Multi-Strategy Analysis Engine
+
+Build one analysis engine that scans Over 1–Over 7, Under 8–Under 1, Matches, Rise/Fall, and Even/Odd, ranks the strongest validated opportunities, and automatically selects a permitted run count from 1 to 20.
+
+The system must distinguish three different measurements:
+
+- Confidence score: how strong and reliable the signal appears.
+- Estimated win probability: the calibrated probability of the specific contract winning.
+- Automatic runs: how many trades the risk engine permits—not how many trades are guaranteed to win.
+
+A high confidence score must never automatically mean a high win probability. Digit outcomes may be random, so the engine must be able to return `NO TRADE`.
+
+## 1. Over 1–Over 7 analysis
+
+For a final digit \\(d\\) from 0 to 9, the winning condition is \\(d>b\\), where \\(b\\) is the selected barrier.
+
+| Contract | Winning digits | Fair probability if digits are uniform |
+| -------- | -------------- | -------------------------------------- |
+| Over 1   | 2–9            | 80%                                    |
+| Over 2   | 3–9            | 70%                                    |
+| Over 3   | 4–9            | 60%                                    |
+| Over 4   | 5–9            | 50%                                    |
+| Over 5   | 6–9            | 40%                                    |
+| Over 6   | 7–9            | 30%                                    |
+| Over 7   | 8–9            | 20%                                    |
+
+The percentages are theoretical baselines under a uniform 0–9 digit distribution, not live predictions or guaranteed win rates.
+
+For each market and barrier:
+
+1. Calculate digit distributions over 1,000, 100, 50, 20 and 10 ticks.
+2. Calculate the historical proportion of digits above the barrier in each window.
+3. Estimate the next-contract win probability using a validated predictive model.
+4. Compare that probability with the current payout's break-even probability.
+5. Reject stale signals, contradictory evidence, poor expected value and excessive uncertainty.
+6. Select the best qualifying Over barrier rather than always choosing Over 1 or Over 7.
+
+## 2. Under 8–Under 1 analysis
+
+For Under, the winning condition is \\(d\<b\\).
+
+| Contract | Winning digits | Fair probability if digits are uniform |
+| -------- | -------------- | -------------------------------------- |
+| Under 8  | 0–7            | 80%                                    |
+| Under 7  | 0–6            | 70%                                    |
+| Under 6  | 0–5            | 60%                                    |
+| Under 5  | 0–4            | 50%                                    |
+| Under 4  | 0–3            | 40%                                    |
+| Under 3  | 0–2            | 30%                                    |
+| Under 2  | 0–1            | 20%                                    |
+| Under 1  | 0              | 10%                                    |
+
+Use the same five-window analysis and payout validation as Over. Notice that Under 1 and Over 7 have very different winning conditions despite both being relatively selective contracts.
+
+Important: A larger winning-digit group often has a higher theoretical win probability, but the payout is usually different. Choose by expected value and validated performance, not win probability alone.
+
+## 3. Matches strategy — select the entry digit
+
+For `DIGITMATCH`, the contract wins when the relevant final digit equals the selected barrier digit.
+
+The engine must evaluate all ten candidates: `MATCH 0` through `MATCH 9`.
+
+For each candidate digit, calculate:
+
+- Its frequency and proportion in the five analysis windows.
+- The model's estimated probability that the next contract's relevant digit matches it.
+- Performance of the digit-selection model on unseen historical data.
+- Sample size, uncertainty and probability calibration.
+- Current contract payout, break-even probability and expected value.
+
+### Match selection logic
+
+1. Rank digits 0–9 by validated expected value.
+2. Select the highest-ranked digit only if its predictive edge is sufficiently reliable.
+3. Use recent frequency, streaks and gaps as model features only if historical testing demonstrates predictive value.
+4. Recalculate before each subsequent run.
+5. If no digit has a validated positive edge, return `NO TRADE`.
+
+Do not assume a digit is more likely to appear because it has not appeared recently. Under a uniform independent-digit baseline, each digit has a 10% probability on the next tick regardless of its previous gap.
+
+## 4. Even and Odd strategy
+
+| Contract    | Winning digits | Uniform baseline |
+| ----------- | -------------- | ---------------- |
+| `DIGITEVEN` | 0, 2, 4, 6, 8  | 50%              |
+| `DIGITODD`  | 1, 3, 5, 7, 9  | 50%              |
+
+Analyze parity using the same five windows. The model should test whether parity, recent transitions, market-specific behavior or other features provide a stable predictive edge.
+
+Selection rules:
+
+- Compare the estimated win probabilities of Even and Odd against their respective quoted payouts.
+- Reject a signal if the edge is within the model's uncertainty.
+- Do not switch to Odd just because Even won several consecutive times, or vice versa.
+- Do not trade both contracts simultaneously as a way of forcing a signal.
+
+## 5. Rise and Fall strategy
+
+`RISE` and `FALL` are price-direction contracts, not last-digit contracts. Use tick prices and the exact contract settlement rules.
+
+| Analysis         | Rise                           | Fall                             |
+| ---------------- | ------------------------------ | -------------------------------- |
+| Price structure  | Higher highs and higher lows   | Lower highs and lower lows       |
+| Momentum         | Positive directional movement  | Negative directional movement    |
+| Reversal risk    | Evidence of downward reversal  | Evidence of upward reversal      |
+| Entry validation | Fresh, validated upward signal | Fresh, validated downward signal |
+
+Calculate directional features over the same 1,000, 100, 50, 20 and 10-tick windows. Estimate the probability of the contract finishing in the winning state for its actual duration.
+
+A rising sequence alone does not prove that the next Rise contract will win. Likewise, a falling sequence does not prove that Fall is favorable.
+
+The engine should select Rise or Fall only when the calibrated probability, payout and expected value justify the trade. If neither qualifies, return `NO TRADE`.
+
+## 6. Automatic confidence and run-count engine: 1–20
+
+Use a quality score to determine the maximum number of runs the system may consider. The thresholds below are configurable starting values, not proven predictors of trading success.
+
+| Signal quality score | Initial maximum runs |
+| -------------------- | -------------------- |
+| Below 65             | 0 — reject           |
+| 65–69                | 1                    |
+| 70–74                | 2                    |
+| 75–79                | 3                    |
+| 80–84                | 5                    |
+| 85–89                | 8                    |
+| 90–92                | 10                   |
+| 93–95                | 12                   |
+| 96–97                | 15                   |
+| 98–100               | 20                   |
+
+These run counts must also pass the risk and validation gates. Even a 100/100 score does not justify 20 trades if the strategy's edge has not been validated or the exposure limit would be exceeded.
+
+### Confidence score calculation
+
+Calculate five component scores, each from 0 to 100:
+
+| Component                 | Weight |
+| ------------------------- | ------ |
+| Validated predictive edge | 30%    |
+| Multi-window agreement    | 20%    |
+| Entry confirmation        | 15%    |
+| Out-of-sample reliability | 20%    |
+| Data quality              | 15%    |
+
+\\[ C=0.30E+0.20A+0.15T+0.20H+0.15D \\]
+
+Here, \\(C\\) is the signal-quality score, not the percentage probability of winning. The win probability must be estimated and calibrated separately.
+
+### Run authorization logic
+
+```
+def get_max_runs(confidence):    if confidence < 65:        return 0    if confidence < 70:        return 1    if confidence < 75:        return 2    if confidence < 80:        return 3    if confidence < 85:        return 5    if confidence < 90:        return 8    if confidence < 93:        return 10    if confidence < 96:        return 12    if confidence < 98:        return 15    return 20def authorize_runs(    confidence,    validated_edge,    positive_expected_value,    probability_calibrated,    entry_confirmed,    data_valid,    risk_limits_passed,    configured_max_runs=20,):    gates = [        validated_edge,        positive_expected_value,
+```
+
+## 7. Unified strategy scanner
+
+The engine should evaluate all of the following for every eligible market:
+
+### Strategy scan sequence
+
+Digit Over
+
+Over 1, 2, 3, 4, 5, 6, 7
+
+Digit Under
+
+Under 8, 7, 6, 5, 4, 3, 2, 1
+
+Digit Matches
+
+Match 0–9
+
+Even / Odd
+
+DIGITEVEN and DIGITODD
+
+Rise / Fall
+
+Directional contracts for the selected duration
+
+For every candidate, output:
+
+- Market and contract type
+- Selected barrier or entry digit
+- Estimated win probability and uncertainty
+- Current payout and expected net return
+- Signal-quality score
+- Maximum authorized runs, from 0 to 20
+- Entry status and signal expiry
+
+Rank candidates using validated expected value, reliability, and risk—not confidence alone. Avoid opening several highly correlated contracts simply because they all rank near the top.
+
+## 8. Revalidate every run
+
+The system should execute this sequence:
+
+1. Scan and rank all strategies.
+2. Confirm a positive expected value and valid entry.
+3. Calculate the maximum authorized runs.
+4. Execute one trade within the stake and exposure limits.
+5. Wait for settlement.
+6. Recalculate the signal, payout, confidence and remaining risk budget.
+7. Continue only if the next run still qualifies; otherwise stop.
+
+Final rule: The number of runs is a ceiling, not a target that must be completed. If only one trade qualifies, execute at most one. If none qualify, execute zero. This prevents the automated engine from forcing trades to reach 20 runs.

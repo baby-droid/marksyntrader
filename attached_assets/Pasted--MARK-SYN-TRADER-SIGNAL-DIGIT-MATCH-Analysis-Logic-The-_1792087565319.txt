@@ -1,0 +1,107 @@
+# MARK SYN TRADER SIGNAL — DIGIT MATCH Analysis Logic
+
+The goal is to analyze digits 0–9, select the strongest validated entry digit, calculate confidence, and determine the permitted number of runs from 1–20.
+
+## 1. Analyze all 10 entry digits
+
+For every available Deriv market, evaluate `DIGITMATCH 0` through `DIGITMATCH 9`.
+
+| Digit   | Required analysis                              |
+| ------- | ---------------------------------------------- |
+| MATCH 0 | Probability of the next relevant digit being 0 |
+| MATCH 1 | Probability of the next relevant digit being 1 |
+| MATCH 2 | Probability of the next relevant digit being 2 |
+| MATCH 3 | Probability of the next relevant digit being 3 |
+| MATCH 4 | Probability of the next relevant digit being 4 |
+| MATCH 5 | Probability of the next relevant digit being 5 |
+| MATCH 6 | Probability of the next relevant digit being 6 |
+| MATCH 7 | Probability of the next relevant digit being 7 |
+| MATCH 8 | Probability of the next relevant digit being 8 |
+| MATCH 9 | Probability of the next relevant digit being 9 |
+
+For each digit, calculate its historical frequency in the 1,000-, 100-, 50-, 20- and 10-tick windows. Also evaluate recent transitions, streaks, gaps, data quality and out-of-sample predictive performance.
+
+Important: Historical frequency is not the same as next-tick probability. If digits are independent and uniformly distributed, every digit has a 10% probability regardless of its recent frequency or gap.
+
+## 2. Digit selection algorithm
+
+Use this sequence:
+
+1. Calculate the baseline frequency of each digit.
+2. Generate a next-contract probability estimate for each digit using a model validated on unseen data.
+3. Measure uncertainty and reliability for each estimate.
+4. Obtain the current contract payout and calculate break-even probability.
+5. Calculate expected net return for each candidate.
+6. Rank candidates by validated expected value, with uncertainty and risk constraints.
+7. Select the best eligible digit, or return `NO TRADE`.
+
+Do not automatically select the highest-frequency digit, lowest-frequency digit, or digit with the longest gap.
+
+## 3. Confidence and automatic runs
+
+Calculate the signal-quality score:
+
+\\[ C=0.30E+0.20A+0.15T+0.20H+0.15D \\]
+
+Where:
+
+- \\(E\\) = validated predictive edge.
+- \\(A\\) = multi-window agreement.
+- \\(T\\) = entry confirmation.
+- \\(H\\) = historical reliability.
+- \\(D\\) = data quality.
+
+Use the configured run thresholds:
+
+| Confidence score | Maximum runs |
+| ---------------- | ------------ |
+| Below 65         | 0            |
+| 65–69            | 1            |
+| 70–74            | 2            |
+| 75–79            | 3            |
+| 80–84            | 5            |
+| 85–89            | 8            |
+| 90–92            | 10           |
+| 93–95            | 12           |
+| 96–97            | 15           |
+| 98–100           | 20           |
+
+These are initial configuration thresholds, not proof of profitability. Runs remain zero if the predictive model is unvalidated, expected value is non-positive, entry confirmation fails, data is stale, or risk limits are exceeded.
+
+## 4. Ready-to-use implementation logic
+
+```
+DIGITS = list(range(10))WINDOWS = [1000, 100, 50, 20, 10]def get_match_probability(digit_probabilities, entry_digit):    """Use calibrated next-contract probabilities."""    if entry_digit not in DIGITS:        raise ValueError("Entry digit must be between 0 and 9")    if set(digit_probabilities) != set(DIGITS):        raise ValueError("Provide probabilities for digits 0-9")    if any(p < 0 or p > 1 for p in digit_probabilities.values()):        raise ValueError("Probabilities must be between 0 and 1")    if abs(sum(digit_probabilities.values()) - 1) > 0.001:        raise ValueError("Digit probabilities must sum to 1")    return digit_probabilities[entry_digit]def get_match_candidates(digit_probabilities):    """Rank digits by estimated probability, for screening only."""    return sorted(        [            {                "contract": "DIGITMATCH",                "entry_digit": digit,                "estimated_probability": digit_probabilities[digit],            }            for digit in DIGITS        ],        key=lambda item: item["estimated_probability"],        reverse=True,    )
+```
+
+The code expects probabilities from a real, calibrated model and a break-even probability derived from the live contract payout. Do not use historical frequencies as if they were calibrated predictions.
+
+## 5. Example signal card
+
+## DIGIT MATCH SIGNAL
+
+Illustrative
+
+Market
+
+1HZ100V
+
+Entry digit
+
+7
+
+Quality score
+
+82/100
+
+Win probability
+
+Requires model validation
+
+Automatic runs
+
+Up to 5, if all gates pass
+
+Example only—not a live prediction. The entry digit, score and run count must be generated from current data and validated results.
+
+Execution rule: Place no more than one trade per signal cycle. After settlement, rescan and recalculate before allowing another run. Stop immediately if the edge disappears or a risk limit is reached.
