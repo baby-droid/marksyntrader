@@ -22,6 +22,7 @@ import type {
     AutoSignalsSettings,
 } from './types';
 import NumberField from '@/components/number-field';
+import { getSuggestedAutoSignalRuns } from './auto-signals-engine';
 import './auto-signals.scss';
 
 const FAMILY_OPTIONS: { value: AutoSignalFamily; label: string; short: string }[] = [
@@ -158,7 +159,7 @@ function MarketCard({
     const score = Math.max(0, Math.min(100, candidate?.score ?? 0));
     const recentWindow = candidate?.windows.find((item) => item.window === 20) ?? null;
     const selectedRuns = candidate
-        ? Math.min(candidate.recommendedRuns, settings.maxRuns)
+        ? getSuggestedAutoSignalRuns(candidate.recommendedRuns, settings.maxRuns)
         : 0;
     const isLive = market.feedState === 'live';
     const canTrade = Boolean(

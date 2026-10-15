@@ -445,7 +445,7 @@ const addAutoSignalRunPolicy = (doc: Document, maxRuns: number) => {
         data = makeElement(doc, 'data');
         afterPurchase.appendChild(data);
     }
-    data.textContent = `auto-signal-v1;stop-after-win=1;max-runs=${boundedInteger(maxRuns, 1, 10)}`;
+    data.textContent = `auto-signal-v1;max-runs=${boundedInteger(maxRuns, 1, 10)}`;
 };
 
 const unwrapTimeouts = (container: Element) => {
@@ -632,13 +632,7 @@ export const patchAutoSignalsBotXml = (xml: string, config: AutoSignalBotConfigu
         addOver4Recovery(doc);
     }
     addRunLimit(doc, boundedInteger(config.settings.maxRuns, 1, 10));
-    if (
-        config.action === 'trade-only'
-        && (config.candidate.strategy === 'MATCHES' || config.candidate.strategy === 'DIFFERS')
-        && blocksOfType(doc, 'normal_killer_tick_acceleration').length > 0
-    ) {
-        addAutoSignalRunPolicy(doc, config.settings.maxRuns);
-    }
+    addAutoSignalRunPolicy(doc, config.settings.maxRuns);
 
     return new XMLSerializer().serializeToString(doc);
 };

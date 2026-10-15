@@ -16,7 +16,11 @@ import {
     setAutoSignalsRunMessage,
     subscribeAutoSignalsRunSession,
 } from './auto-signals-run-session';
-import { evaluateAutoSignalCandidates, shouldExcludeAutoSignalMarket } from './auto-signals-engine';
+import {
+    evaluateAutoSignalCandidates,
+    getSuggestedAutoSignalRuns,
+    shouldExcludeAutoSignalMarket,
+} from './auto-signals-engine';
 import {
     ensureAutoSignalWorkspaceLoaded,
     isAutoSignalWorkspaceReady,
@@ -547,12 +551,8 @@ export const useAutoSignalsEngine = ({
 
         const runtime = runtimesRef.current.get(market.symbol);
         const candidate = market.candidate;
-        const isMatchDiffersTradeOnly = action === 'trade-only'
-            && (candidate?.strategy === 'MATCHES' || candidate?.strategy === 'DIFFERS');
         const selectedRuns = candidate
-            ? isMatchDiffersTradeOnly
-                ? Math.max(1, Math.min(10, Math.floor(settings.maxRuns)))
-                : Math.min(candidate.recommendedRuns, settings.maxRuns)
+            ? getSuggestedAutoSignalRuns(candidate.recommendedRuns, settings.maxRuns)
             : 0;
         if (selectedRuns < 1) {
             setMessage('This signal is below the minimum run threshold. Wait for a stronger, current signal.');

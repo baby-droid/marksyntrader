@@ -1,6 +1,7 @@
 import {
     evaluateAutoSignal,
     evaluateAutoSignalCandidates,
+    getSuggestedAutoSignalRuns,
     hasAutoSignalPriceEntryPattern,
     recommendedAutoSignalRuns,
     selectAutoSignalEntryDigit,
@@ -61,6 +62,16 @@ describe('Auto-Signals one-tick analysis', () => {
         [90, 'OVER', 7],
     ] as const)('selects %i score runs for %s', (score, strategy, expected) => {
         expect(recommendedAutoSignalRuns(score, strategy)).toBe(expected);
+    });
+
+    it.each([
+        [4, 10, 4],
+        [4, 2, 2],
+        [10, 25, 10],
+        [0, 10, 0],
+        [5, 0, 0],
+    ])('uses the suggested count %i under the configured cap %i', (suggested, cap, expected) => {
+        expect(getSuggestedAutoSignalRuns(suggested, cap)).toBe(expected);
     });
 
     it('evaluates Rise using the next adjacent tick and does not gate price entries on a digit', () => {

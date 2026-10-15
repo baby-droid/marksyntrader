@@ -161,9 +161,9 @@ describe('Auto-Signals bot templates', () => {
                 expect(getVariableSetNumber(doc, 'base_stake')).toBe('1.5');
                 expect(getVariableSetNumber(doc, 'take_profit')).toBe('5');
                 expect(getVariableSetNumber(doc, 'stop_loss')).toBe('10');
-                expect(getBlock(doc, 'after_purchase')?.getElementsByTagNameNS(XML_NS, 'data')[0]?.textContent)
-                    .toBe('auto-signal-v1;stop-after-win=1;max-runs=1');
             }
+            expect(getBlock(doc, 'after_purchase')?.getElementsByTagNameNS(XML_NS, 'data')[0]?.textContent)
+                .toBe('auto-signal-v1;max-runs=1');
         },
     );
 
@@ -232,6 +232,8 @@ describe('Auto-Signals bot templates', () => {
         expect(doc.getElementsByTagName('parsererror')).toHaveLength(0);
         expect(runLimit?.getAttribute('type')).toBe('controls_if');
         expect(getValueNumber(runLimit, 'B')).toBe('4');
+        expect(getBlock(doc, 'after_purchase')?.getElementsByTagNameNS(XML_NS, 'data')[0]?.textContent)
+            .toBe('auto-signal-v1;max-runs=4');
     });
 
     it('keeps Over DT at Over 1 and preserves the Under 5 recovery purchase', () => {

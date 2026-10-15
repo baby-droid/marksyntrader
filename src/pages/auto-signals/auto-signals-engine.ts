@@ -415,6 +415,13 @@ export const recommendedAutoSignalRuns = (score: number, strategy: AutoSignalStr
     return 10;
 };
 
+export const getSuggestedAutoSignalRuns = (recommendedRuns: number, maxRuns: number): number => {
+    const suggested = Math.floor(Number(recommendedRuns));
+    const cap = Math.floor(Number(maxRuns));
+    if (!Number.isFinite(suggested) || !Number.isFinite(cap) || suggested < 1 || cap < 1) return 0;
+    return Math.min(10, suggested, cap);
+};
+
 export const evaluateAutoSignal = (input: Parameters<typeof evaluateAutoSignalCandidates>[0]) =>
     evaluateAutoSignalCandidates(input)[0] ?? null;
 

@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-describe('Auto-Signals Normal Killer stop policy', () => {
-    it('continues on losses but stops after a win or the configured run cap', () => {
+describe('Auto-Signals suggested run policy', () => {
+    it('continues after wins and losses until the configured run cap', () => {
         const source = fs.readFileSync(
             path.resolve(
                 process.cwd(),
@@ -21,14 +21,11 @@ describe('Auto-Signals Normal Killer stop policy', () => {
         const afterPurchaseBlock = {
             type: 'after_purchase',
             id: 'as_after_purchase',
-            data: 'auto-signal-v1;stop-after-win=1;max-runs=7',
+            data: 'auto-signal-v1;max-runs=7',
         };
         const runCount = { name: 'AUTO_SIGNAL_RUN_COUNT', getId: () => 'run_count' };
         const workspace = {
-            getAllBlocks: () => [
-                { type: 'before_purchase', data: 'nkv3-pipeline' },
-                afterPurchaseBlock,
-            ],
+            getAllBlocks: () => [afterPurchaseBlock],
             getVariableMap: () => ({ getVariables: () => [runCount] }),
         };
         const mockWindow = {
@@ -51,7 +48,8 @@ describe('Auto-Signals Normal Killer stop policy', () => {
         const generator = createGenerator(mockWindow);
         const generatedCode = generator({ ...afterPurchaseBlock, workspace });
 
-        expect(generatedCode).toContain('Bot.isResult("win") || Number(v_run_count) >= 7');
+        expect(generatedCode).toContain('Number(v_run_count) >= 7');
+        expect(generatedCode).not.toContain('Bot.isResult("win")');
         expect(generatedCode).toContain('Bot.isTradeAgain(false); return false;');
         expect(generatedCode).toContain('Bot.isTradeAgain(true); return true;');
     });

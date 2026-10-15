@@ -7,7 +7,7 @@ Auto-Signals run tracking must outlive the Auto-Signals page component. The main
 
 **Why:** page-scoped observers and state disappear on the intentional handoff to Bot Builder, losing progress.
 
-**How to apply:** if the handoff lifecycle changes, preserve a single observer owner across tab switches; do not move run tracking back into a page-only effect. Enforce the configured run limit in the generated Blockly after-purchase flow; the settlement observer reports progress but must not interrupt that flow at the limit.
+**How to apply:** if the handoff lifecycle changes, preserve a single observer owner across tab switches; do not move run tracking back into a page-only effect. Every action must use the same candidate-recommended cycle count shown on its card, capped by settings. Generated Blockly must continue after wins and losses until the cap; the settlement observer reports progress but must not interrupt the after-purchase flow.
 
 Auto-Signals action bots use one-tick duration across digit, parity, and price-direction contracts. Show historical alignment as context, not as a promise or probability of future wins.
 
