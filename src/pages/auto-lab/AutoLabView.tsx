@@ -10,6 +10,7 @@ export type AutoLabStatus = 'idle' | 'connecting' | 'scanning' | 'running' | 'pa
 export type AutoLabSettings = {
   marketSelection: string;
   contractType: AutoLabContractChoice;
+  allowedContractTypes?: AutoLabContractType[];
   stake: number;
   martingaleMode: 'normal' | 'split';
   multiplier: number;
@@ -82,6 +83,13 @@ export type AutoLabTrade = {
   stake: number;
   profit: number;
   status: 'OPEN' | 'WIN' | 'LOSS';
+  strategy?: AutoLabMode;
+  barrier?: number;
+  entryDigit?: number;
+  entryEpoch?: number;
+  ticksWindow?: number;
+  duration?: number;
+  durationUnit?: AutoLabSettings['durationUnit'];
 };
 
 export type AutoLabViewProps = {

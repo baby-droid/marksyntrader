@@ -112,6 +112,7 @@ export type AutoLabStrategySettings = {
     secondaryBarrier?: number;
     requiredStreak: number;
     contractType: AutoLabContractChoice;
+    allowedContractTypes?: AutoLabContractType[];
 };
 
 export type AutoLabCandidate = {
@@ -462,7 +463,11 @@ export const evaluateAutoLabCandidates = (
             });
         }
     }
-    return output.sort((left, right) => right.score - left.score || right.epoch - left.epoch);
+    const sorted = output.sort((left, right) => right.score - left.score || right.epoch - left.epoch);
+    const allowed = settings.allowedContractTypes?.length
+        ? new Set(settings.allowedContractTypes)
+        : null;
+    return allowed ? sorted.filter(item => allowed.has(item.contract_type)) : sorted;
 };
 
 export const getAutoLabDigitStats = (ticks: AutoLabTick[]): AutoLabDigitStat[] => {

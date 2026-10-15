@@ -483,6 +483,7 @@ async function loadRankings(expression) {
          FROM money_print_trades
          WHERE settled_at >= NOW() - INTERVAL '30 days'
          GROUP BY ${expression}, currency
+         HAVING COUNT(DISTINCT account_hash) >= 5
          ORDER BY win_rate DESC NULLS LAST, COUNT(*) DESC
          LIMIT 5`,
     );
@@ -519,15 +520,19 @@ async function loadAdminAnalytics() {
         pool.query(
             `SELECT COUNT(*)::INTEGER AS trades,
                     COUNT(*) FILTER (WHERE outcome = 'WIN')::INTEGER AS wins,
-                    COUNT(*) FILTER (WHERE outcome = 'LOSS')::INTEGER AS losses
+                    COUNT(*) FILTER (WHERE outcome = 'LOSS')::INTEGER AS losses,
+                    COUNT(DISTINCT account_hash)::INTEGER AS accounts
              FROM money_print_trades
              WHERE settled_at >= NOW() - INTERVAL '30 days'`,
         ),
         pool.query(
-            `SELECT currency, COALESCE(SUM(profit), 0)::FLOAT8 AS net_profit
+            `SELECT currency,
+                    COALESCE(SUM(profit), 0)::FLOAT8 AS net_profit,
+                    COUNT(DISTINCT account_hash)::INTEGER AS accounts
              FROM money_print_trades
              WHERE settled_at >= NOW() - INTERVAL '30 days'
              GROUP BY currency
+             HAVING COUNT(DISTINCT account_hash) >= 5
              ORDER BY currency`,
         ),
         loadRankings('market'),
@@ -538,13 +543,23 @@ async function loadAdminAnalytics() {
                            ELSE duration::TEXT || COALESCE(duration_unit, 't') END`),
     ]);
 
+    const active = presence.rows[0] || {};
+    const tradeTotals = totals.rows[0] || {};
+    const activeAccounts = Number(active.total || 0);
+    const demoAccounts = Number(active.demo || 0);
+    const realAccounts = Number(active.real || 0);
+    const tradeAccountCount = Number(tradeTotals.accounts || 0);
+    const activeSuppressed = activeAccounts < 5;
+    const tradesSuppressed = tradeAccountCount < 5;
     return {
-        activeAccounts10m: Number(presence.rows[0]?.total || 0),
-        demoAccounts10m: Number(presence.rows[0]?.demo || 0),
-        realAccounts10m: Number(presence.rows[0]?.real || 0),
-        settledTrades: Number(totals.rows[0]?.trades || 0),
-        wins: Number(totals.rows[0]?.wins || 0),
-        losses: Number(totals.rows[0]?.losses || 0),
+        activeAccounts10m: activeSuppressed ? null : activeAccounts,
+        demoAccounts10m: demoAccounts < 5 ? null : demoAccounts,
+        realAccounts10m: realAccounts < 5 ? null : realAccounts,
+        settledTrades: tradesSuppressed ? null : Number(tradeTotals.trades || 0),
+        wins: tradesSuppressed ? null : Number(tradeTotals.wins || 0),
+        losses: tradesSuppressed ? null : Number(tradeTotals.losses || 0),
+        privacySuppressed: activeSuppressed || tradesSuppressed
+            || demoAccounts < 5 || realAccounts < 5,
         netProfitByCurrency: profitByCurrency.rows.map((row) => ({
             currency: String(row.currency),
             netProfit: Number(row.net_profit),
@@ -577,6 +592,10 @@ async function handleApi(request, response, url) {
     if (pathname === `${API_PREFIX}/presence` && request.method === 'POST') {
         requireDatabase();
         requireSameOrigin(request);
+        const body = await readJson(request);
+        if (body.analyticsConsent !== true) {
+            throw new ApiError(400, 'Explicit analytics consent is required.');
+        }
         const token = getBearerToken(request);
         return withAuthorizedDeriv(token, async (authorize) => {
             const identity = deriveIdentity(authorize);
@@ -590,6 +609,18 @@ async function handleApi(request, response, url) {
                 API_PREFIX,
             );
             return sendJson(response, 200, { ok: true });
+        });
+    }
+
+    if (pathname === `${API_PREFIX}/consent` && request.method === 'DELETE') {
+        requireDatabase();
+        requireSameOrigin(request);
+        const token = getBearerToken(request);
+        return withAuthorizedDeriv(token, async (authorize) => {
+            const identity = deriveIdentity(authorize);
+            await pool.query('DELETE FROM money_print_presence WHERE account_hash = $1', [identity.accountHash]);
+            clearCookie(request, response, USER_COOKIE, API_PREFIX);
+            return sendJson(response, 200, { ok: true, deleted: true });
         });
     }
 

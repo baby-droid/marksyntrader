@@ -7,6 +7,7 @@ import {
     CheckCircle2,
     Download,
     LockKeyhole,
+    Play,
     Radio,
     ShieldCheck,
     Target,
@@ -88,6 +89,9 @@ export type MoneyPrintNeuralLinkProps = {
     lockUntil: number | null;
     currency: string;
     status: 'idle' | 'connecting' | 'running' | 'scanning' | 'paused' | 'stopped' | 'risk-stopped';
+    canStartPlan: boolean;
+    planBlockReason: string;
+    onStartPlan: () => void;
 };
 
 /** Stable key convention for the controlled selectedMatchKey prop. */
@@ -165,6 +169,9 @@ const MoneyPrintNeuralLink = ({
     lockUntil,
     currency,
     status,
+    canStartPlan,
+    planBlockReason,
+    onStartPlan,
 }: MoneyPrintNeuralLinkProps) => {
     const id = useId();
     const lockActive = lockUntil != null && Number.isFinite(lockUntil)
@@ -277,6 +284,16 @@ const MoneyPrintNeuralLink = ({
                                         <p className='mp-neural-link__target-note'>
                                             One Deriv DIGITMATCH contract accepts one target digit at a time. A route listing multiple digits is not a single multi-digit contract.
                                         </p>
+                                        <button
+                                            type='button'
+                                            className='mp-button mp-button--start mp-neural-link__start-plan'
+                                            onClick={onStartPlan}
+                                            disabled={report.verdict !== 'PLAN' || !canStartPlan}
+                                        >
+                                            <Play aria-hidden='true' size={15} />
+                                            Start this trade plan
+                                        </button>
+                                        {planBlockReason && <p className='mp-neural-link__engine-note' role='status'>{planBlockReason}</p>}
                                     </>
                                 ) : (
                                     <p className='mp-neural-link__performance-empty'>No route was supplied for this report.</p>

@@ -24,6 +24,7 @@ import {
     Zap,
 } from 'lucide-react';
 import { useAutoLabEngine } from '../auto-lab/useAutoLabEngine';
+import { useStore } from '@/hooks/useStore';
 import {
     AUTO_LAB_CONTRACT_TYPES,
     AUTO_LAB_MODES,
@@ -59,12 +60,42 @@ type MoneyPrintPrefs = {
     days: number;
     hourlyTarget: number;
 };
+type MoneyPrintModeProfile = {
+    settings: AutoLabSettings;
+    autoStake: boolean;
+    riskPercent: number;
+    maxStake: number;
+    martingaleEnabled: boolean;
+    scheduledSessions: boolean;
+    strategyMode: AutoLabMode;
+    goalBalance: number;
+    days: number;
+    hourlyTarget: number;
+};
+type MoneyPrintAdminAnalytics = {
+    activeAccounts10m: number | null;
+    demoAccounts10m: number | null;
+    realAccounts10m: number | null;
+    settledTrades: number | null;
+    wins: number | null;
+    losses: number | null;
+    privacySuppressed: boolean;
+    netProfitByCurrency: Array<{ currency: string; netProfit: number }>;
+    bestMarkets: Array<{ label: string; currency: string; trades: number; wins: number; losses: number; netProfit: number; winRate: number | null }>;
+    bestStrategies: Array<{ label: string; currency: string; trades: number; wins: number; losses: number; netProfit: number; winRate: number | null }>;
+    bestTradeTypes: Array<{ label: string; currency: string; trades: number; wins: number; losses: number; netProfit: number; winRate: number | null }>;
+    bestBarriers: Array<{ label: string; currency: string; trades: number; wins: number; losses: number; netProfit: number; winRate: number | null }>;
+    bestDurations: Array<{ label: string; currency: string; trades: number; wins: number; losses: number; netProfit: number; winRate: number | null }>;
+    updatedAt: string;
+};
 
 const SETTINGS_KEY = 'money_print_settings_v2';
 const LEGACY_SETTINGS_KEY = 'money_print_settings_v1';
 const PREFS_KEY = 'money_print_prefs_v2';
 const LEGACY_PREFS_KEY = 'money_print_prefs_v1';
 const JOURNAL_KEY = 'money_print_journal_v1';
+const MODE_PROFILES_KEY = 'money_print_mode_profiles_v1';
+const ANALYTICS_CONSENT_KEY = 'money_print_analytics_consent_v1';
 const BASE_SETTINGS: AutoLabSettings = {
     marketSelection: 'ALL',
     contractType: 'AUTO',
@@ -104,6 +135,7 @@ const BASE_PREFS: MoneyPrintPrefs = {
     days: 7,
     hourlyTarget: 1.8,
 };
+const MONEY_MODES: MoneyMode[] = ['accumulation', 'challenge', 'growth', 'earnings', 'sessions', 'flip'];
 const storageWarnings = new Set<string>();
 const safeWriteMoneyPrintStorage = (key: string, value: string) => {
     try {
@@ -216,6 +248,39 @@ const readPrefs = (): MoneyPrintPrefs => {
         return BASE_PREFS;
     }
 };
+const profileFrom = (settings: AutoLabSettings, prefs: MoneyPrintPrefs): MoneyPrintModeProfile => ({
+    settings: { ...settings },
+    autoStake: prefs.autoStake,
+    riskPercent: prefs.riskPercent,
+    maxStake: prefs.maxStake,
+    martingaleEnabled: prefs.martingaleEnabled,
+    scheduledSessions: prefs.scheduledSessions,
+    strategyMode: prefs.strategyMode,
+    goalBalance: prefs.goalBalance,
+    days: prefs.days,
+    hourlyTarget: prefs.hourlyTarget,
+});
+const readModeProfiles = (): Record<MoneyMode, MoneyPrintModeProfile> => {
+    const base = profileFrom(readSettings(), readPrefs());
+    let saved: Partial<Record<MoneyMode, Partial<MoneyPrintModeProfile>>> = {};
+    try {
+        const raw = localStorage.getItem(MODE_PROFILES_KEY);
+        if (raw) saved = JSON.parse(raw);
+    } catch {
+        saved = {};
+    }
+    return Object.fromEntries(MONEY_MODES.map(mode => {
+        const profile = saved[mode] ?? {};
+        const modeBase = mode === 'earnings'
+            ? { ...base, settings: { ...base.settings, duration: 1, durationUnit: 'h' as const } }
+            : base;
+        return [mode, {
+            ...modeBase,
+            ...profile,
+            settings: { ...modeBase.settings, ...(profile.settings ?? {}) },
+        }];
+    })) as Record<MoneyMode, MoneyPrintModeProfile>;
+};
 const getEastAfricaTime = (date = new Date()) => {
     const parts = new Intl.DateTimeFormat('en-GB', {
         timeZone: 'Africa/Nairobi',
@@ -262,18 +327,28 @@ const tradeSnapshot = (trade: AutoLabTrade) =>
     `${trade.status}|${trade.profit}|${trade.stake}|${trade.market}|${trade.contract}`;
 
 const DTraderContent: React.FC = () => {
+    const { client } = useStore();
     const [settings, setSettings] = useState<AutoLabSettings>(readSettings);
     const [prefs, setPrefs] = useState<MoneyPrintPrefs>(readPrefs);
+    const [modeProfiles, setModeProfiles] = useState<Record<MoneyMode, MoneyPrintModeProfile>>(readModeProfiles);
     const [liveAcknowledged, setLiveAcknowledged] = useState(false);
     const [, setDisplayCurrency] = useState(getDisplayCurrency());
     const [journal, setJournal] = useState<AutoLabTrade[]>([]);
     const [neuralReport, setNeuralReport] = useState<MoneyPrintNeuralReport | null>(null);
     const [selectedMatchKey, setSelectedMatchKey] = useState<string | null>(null);
     const [autoMatchArmed, setAutoMatchArmed] = useState(false);
+    const [analyticsConsent, setAnalyticsConsent] = useState(false);
+    const [analyticsSessionReady, setAnalyticsSessionReady] = useState(false);
+    const [analyticsStatus, setAnalyticsStatus] = useState('');
+    const [adminPin, setAdminPin] = useState('');
+    const [adminUnlocked, setAdminUnlocked] = useState(false);
+    const [adminLoading, setAdminLoading] = useState(false);
+    const [adminError, setAdminError] = useState('');
+    const [adminAnalytics, setAdminAnalytics] = useState<MoneyPrintAdminAnalytics | null>(null);
     const [riskLockState, setRiskLockState] = useState<{ loginId: string; until: number } | null>(null);
     const [clock, setClock] = useState(() => getEastAfricaTime());
     const [notice, setNotice] = useState('');
-    const [activePanel, setActivePanel] = useState<'dashboard' | 'settings' | 'reports'>('dashboard');
+    const [activePanel, setActivePanel] = useState<'dashboard' | 'settings' | 'reports' | 'admin'>('dashboard');
     const previousAccountRef = useRef('');
     const riskLockStateRef = useRef(riskLockState);
     const scheduleStartedRef = useRef('');
@@ -282,7 +357,10 @@ const DTraderContent: React.FC = () => {
     const activeRunAccountRef = useRef('');
     const tradeSnapshotsRef = useRef(new Map<string, string>());
     const pendingMatchStartRef = useRef<string | null>(null);
+    const pendingNeuralStartRef = useRef<MoneyPrintNeuralReport['route'] | null>(null);
     const pendingSettlementIdsRef = useRef(new Set<string>());
+    const syncedTradeIdsRef = useRef(new Set<string>());
+    const syncingTradeIdsRef = useRef(new Set<string>());
 
     useEffect(() => subscribeCurrency(() => setDisplayCurrency(getDisplayCurrency())), []);
     useEffect(() => {
@@ -295,6 +373,9 @@ const DTraderContent: React.FC = () => {
     useEffect(() => {
         safeWriteMoneyPrintStorage(PREFS_KEY, JSON.stringify(prefs));
     }, [prefs]);
+    useEffect(() => {
+        safeWriteMoneyPrintStorage(MODE_PROFILES_KEY, JSON.stringify(modeProfiles));
+    }, [modeProfiles]);
 
     const effectiveStakeFromPrefs = (balance: number | null) => {
         if (!prefs.autoStake) return settings.stake;
@@ -342,7 +423,13 @@ const DTraderContent: React.FC = () => {
             setRiskLockState(null);
             setNeuralReport(null);
             setAutoMatchArmed(false);
+            setAnalyticsConsent(false);
+            setAnalyticsSessionReady(false);
+            setAnalyticsStatus('');
             pendingMatchStartRef.current = null;
+            pendingNeuralStartRef.current = null;
+            syncedTradeIdsRef.current.clear();
+            syncingTradeIdsRef.current.clear();
             setJournal([]);
             setLiveAcknowledged(false);
             tradeSnapshotsRef.current.clear();
@@ -350,12 +437,20 @@ const DTraderContent: React.FC = () => {
             return;
         }
         activeRunAccountRef.current = '';
+        setAnalyticsSessionReady(false);
+        syncedTradeIdsRef.current.clear();
+        syncingTradeIdsRef.current.clear();
         tradeSnapshotsRef.current = new Map(engineRef.current.trades.map(trade => [trade.id, tradeSnapshot(trade)]));
         pendingSettlementIdsRef.current.clear();
         setRiskLockState({
             loginId: engine.account.loginId,
             until: readNeuralRiskLock(engine.account.loginId) ?? 0,
         });
+        try {
+            setAnalyticsConsent(localStorage.getItem(`${ANALYTICS_CONSENT_KEY}:${engine.account.loginId}`) === 'true');
+        } catch {
+            setAnalyticsConsent(false);
+        }
         setNeuralReport(null);
         setSelectedMatchKey(null);
         setAutoMatchArmed(false);
@@ -490,6 +585,13 @@ const DTraderContent: React.FC = () => {
             return;
         }
         setSettings(previous => ({ ...previous, [key]: value }));
+        setModeProfiles(previous => ({
+            ...previous,
+            [prefs.mode]: {
+                ...previous[prefs.mode],
+                settings: { ...previous[prefs.mode].settings, [key]: value },
+            },
+        }));
     };
     const patchPrefs = <K extends keyof MoneyPrintPrefs>(key: K, value: MoneyPrintPrefs[K]) => {
         if (
@@ -500,17 +602,34 @@ const DTraderContent: React.FC = () => {
             return;
         }
         setPrefs(previous => ({ ...previous, [key]: value }));
+        if (key !== 'mode' && key !== 'challenge') {
+            const profilePatch = { [key]: value } as Partial<MoneyPrintModeProfile>;
+            setModeProfiles(previous => ({
+                ...previous,
+                [prefs.mode]: { ...previous[prefs.mode], ...profilePatch },
+            }));
+        }
     };
     const selectMode = (mode: MoneyMode) => {
         if (riskLockActive) {
             setNotice('Trade modes are locked until the five-hour risk pause ends.');
             return;
         }
-        if (mode === 'flip' && engine.account.isVirtual === false) {
-            setNotice('Auto Flip is restricted to a verified demo account.');
-            return;
-        }
-        patchPrefs('mode', mode);
+        const profile = modeProfiles[mode];
+        setSettings({ ...profile.settings });
+        setPrefs(previous => ({
+            ...previous,
+            mode,
+            autoStake: profile.autoStake,
+            riskPercent: profile.riskPercent,
+            maxStake: profile.maxStake,
+            martingaleEnabled: profile.martingaleEnabled,
+            scheduledSessions: profile.scheduledSessions,
+            strategyMode: profile.strategyMode,
+            goalBalance: profile.goalBalance,
+            days: profile.days,
+            hourlyTarget: profile.hourlyTarget,
+        }));
         setNotice(mode === 'sessions'
             ? 'Scheduled sessions use East Africa time and stop when the window or risk limit ends.'
             : '');
@@ -542,7 +661,6 @@ const DTraderContent: React.FC = () => {
     const canStart = engine.canStart
         && autoStake >= MIN_DERIV_STAKE
         && (!accountIsReal || liveAcknowledged)
-        && !(prefs.mode === 'flip' && !accountIsDemo)
         && !riskLockActive;
     const connectionCopy = !engine.account.connected
         ? 'Not connected'
@@ -583,10 +701,6 @@ const DTraderContent: React.FC = () => {
             setNotice('DO NOT TRADE: the account risk lock is active. New entries stay disabled until it expires.');
             return;
         }
-        if (prefs.mode === 'flip' && !accountIsDemo) {
-            setNotice('Auto Flip is demo-only. Switch to a verified demo account to run it.');
-            return;
-        }
         if (accountIsReal && !liveAcknowledged) {
             setNotice('Confirm real-account trading in Trade Settings before starting.');
             setActivePanel('settings');
@@ -605,6 +719,178 @@ const DTraderContent: React.FC = () => {
         activeRunAccountRef.current = engine.account.loginId;
         tradeSnapshotsRef.current = new Map(engine.trades.map(trade => [trade.id, tradeSnapshot(trade)]));
         engine.onStart();
+    };
+
+    const updateAnalyticsConsent = async (enabled: boolean) => {
+        if (!engine.account.authorized || !engine.account.loginId) {
+            setAnalyticsStatus('Authorize the active Deriv account before changing analytics consent.');
+            return;
+        }
+        const token = client.getToken();
+        if (!token) {
+            setAnalyticsStatus('The active account token is unavailable. Reconnect before changing consent.');
+            return;
+        }
+        setAnalyticsStatus(enabled ? 'Saving consent…' : 'Withdrawing consent and deleting shared activity…');
+        try {
+            const response = await fetch(`/api/money-print/${enabled ? 'presence' : 'consent'}`, {
+                method: enabled ? 'POST' : 'DELETE',
+                credentials: 'same-origin',
+                headers: {
+                    'content-type': 'application/json',
+                    authorization: `Bearer ${token}`,
+                },
+                ...(enabled ? { body: JSON.stringify({ analyticsConsent: true }) } : {}),
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(payload.error || 'The consent request could not be completed.');
+            const key = `${ANALYTICS_CONSENT_KEY}:${engine.account.loginId}`;
+            if (enabled) {
+                safeWriteMoneyPrintStorage(key, 'true');
+                setAnalyticsConsent(true);
+                setAnalyticsSessionReady(true);
+                setAnalyticsStatus('Consent saved. Only anonymized activity summaries are shared.');
+            } else {
+                try { localStorage.removeItem(key); } catch { /* local sharing remains off for this page session */ }
+                setAnalyticsConsent(false);
+                setAnalyticsSessionReady(false);
+                syncedTradeIdsRef.current.clear();
+                syncingTradeIdsRef.current.clear();
+                setAnalyticsStatus('Consent withdrawn. Server-side activity for this account was deleted.');
+            }
+        } catch (error) {
+            setAnalyticsStatus(error instanceof Error ? error.message : 'The consent request could not be completed.');
+        }
+    };
+
+    useEffect(() => {
+        if (!analyticsConsent || analyticsSessionReady || !engine.account.loginId || !engine.account.authorized) return;
+        const token = client.getToken();
+        if (!token) {
+            setAnalyticsStatus('Reconnect the active account to resume opted-in activity summaries.');
+            return;
+        }
+        let cancelled = false;
+        fetch('/api/money-print/presence', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'content-type': 'application/json',
+                authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ analyticsConsent: true }),
+        }).then(async response => {
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(payload.error || 'Analytics consent could not be restored.');
+            if (!cancelled) {
+                setAnalyticsSessionReady(true);
+                setAnalyticsStatus('Opted-in activity summaries are connected.');
+            }
+        }).catch(error => {
+            if (!cancelled) setAnalyticsStatus(error instanceof Error ? error.message : 'Analytics consent could not be restored.');
+        });
+        return () => { cancelled = true; };
+    }, [analyticsConsent, analyticsSessionReady, client, engine.account.authorized, engine.account.loginId]);
+
+    useEffect(() => {
+        if (!analyticsConsent || !analyticsSessionReady || !engine.account.loginId) return;
+        const pending = journal.filter(trade =>
+            (trade.status === 'WIN' || trade.status === 'LOSS')
+            && /^\d{1,18}$/.test(trade.id)
+            && !syncedTradeIdsRef.current.has(trade.id)
+            && !syncingTradeIdsRef.current.has(trade.id),
+        ).slice(0, 25);
+        if (!pending.length) return;
+        pending.forEach(trade => syncingTradeIdsRef.current.add(trade.id));
+        const token = client.getToken();
+        if (!token) {
+            pending.forEach(trade => syncingTradeIdsRef.current.delete(trade.id));
+            setAnalyticsStatus('Reconnect the active account to sync opted-in activity.');
+            return;
+        }
+        let cancelled = false;
+        fetch('/api/money-print/trades', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'content-type': 'application/json',
+                authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+                contracts: pending.map(trade => ({ id: trade.id, strategyMode: trade.strategy })),
+            }),
+        }).then(async response => {
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(payload.error || 'Activity sync failed.');
+            if (!cancelled) {
+                pending.forEach(trade => syncedTradeIdsRef.current.add(trade.id));
+                setAnalyticsStatus(`Shared ${payload.stored ?? 0} verified settled trade record${payload.stored === 1 ? '' : 's'} for anonymous summaries.`);
+            }
+        }).catch(error => {
+            if (!cancelled) setAnalyticsStatus(error instanceof Error ? error.message : 'Activity sync failed.');
+        }).finally(() => {
+            pending.forEach(trade => syncingTradeIdsRef.current.delete(trade.id));
+        });
+        return () => { cancelled = true; };
+    }, [analyticsConsent, analyticsSessionReady, client, engine.account.loginId, journal]);
+
+    const refreshAdminAnalytics = async () => {
+        setAdminLoading(true);
+        setAdminError('');
+        try {
+            const response = await fetch('/api/money-print/admin/analytics', {
+                credentials: 'same-origin',
+                cache: 'no-store',
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                if (response.status === 401) setAdminUnlocked(false);
+                throw new Error(payload.error || 'Admin analytics could not be loaded.');
+            }
+            setAdminAnalytics(payload as MoneyPrintAdminAnalytics);
+        } catch (error) {
+            setAdminError(error instanceof Error ? error.message : 'Admin analytics could not be loaded.');
+        } finally {
+            setAdminLoading(false);
+        }
+    };
+
+    const unlockAdmin = async (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        if (!adminPin.trim() || adminLoading) return;
+        setAdminLoading(true);
+        setAdminError('');
+        try {
+            const response = await fetch('/api/money-print/admin/unlock', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ pin: adminPin }),
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(payload.error || 'Admin access could not be unlocked.');
+            setAdminUnlocked(true);
+            setAdminPin('');
+            await refreshAdminAnalytics();
+        } catch (error) {
+            setAdminPin('');
+            setAdminError(error instanceof Error ? error.message : 'Admin access could not be unlocked.');
+            setAdminLoading(false);
+        }
+    };
+
+    const lockAdmin = async () => {
+        try {
+            await fetch('/api/money-print/admin/lock', {
+                method: 'POST',
+                credentials: 'same-origin',
+            });
+        } finally {
+            setAdminUnlocked(false);
+            setAdminAnalytics(null);
+            setAdminError('');
+            setAdminPin('');
+        }
     };
 
     const activateNeuralRiskLock = (losingSide: string) => {
@@ -632,6 +918,15 @@ const DTraderContent: React.FC = () => {
             challenge: prefs.challenge,
             trades: journal,
             matches: matchRoutes,
+            tradeTypes: settings.allowedContractTypes?.length
+                ? settings.allowedContractTypes
+                : settings.contractType === 'AUTO'
+                    ? AUTO_LAB_CONTRACT_TYPES
+                    : [settings.contractType],
+            currentSignal: engine.currentSignal,
+            markets: engine.markets,
+            contractBarrier: settings.contractBarrier,
+            matchEntryDigit: settings.matchEntryDigit,
             accountContext: {
                 accountType: accountIsDemo ? 'Demo' : accountIsReal ? 'Real' : 'Unknown',
                 balance: engine.account.balance,
@@ -666,6 +961,15 @@ const DTraderContent: React.FC = () => {
             challenge: prefs.challenge,
             trades: journal,
             matches: matchRoutes,
+            tradeTypes: settings.allowedContractTypes?.length
+                ? settings.allowedContractTypes
+                : settings.contractType === 'AUTO'
+                    ? AUTO_LAB_CONTRACT_TYPES
+                    : [settings.contractType],
+            currentSignal: engine.currentSignal,
+            markets: engine.markets,
+            contractBarrier: settings.contractBarrier,
+            matchEntryDigit: settings.matchEntryDigit,
             accountContext: {
                 accountType: accountIsDemo ? 'Demo' : accountIsReal ? 'Real' : 'Unknown',
                 balance: engine.account.balance,

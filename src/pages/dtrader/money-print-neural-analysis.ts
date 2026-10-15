@@ -1,5 +1,6 @@
-import type { AutoLabMarket, AutoLabTrade } from '../auto-lab/AutoLabView';
+import type { AutoLabMarket, AutoLabSignal, AutoLabTrade } from '../auto-lab/AutoLabView';
 import { isAutoLabMarketExcluded } from '../auto-lab/auto-lab-engine';
+import type { AutoLabContractType, AutoLabMode } from '../auto-lab/auto-lab-engine';
 
 export type MoneyPrintTradeSide = {
     side: string;
@@ -54,6 +55,12 @@ export type MoneyPrintNeuralReport = {
         contract: string;
         entryRule: string;
         targetDigits: number[];
+        marketSymbol: string;
+        contractType: AutoLabContractType;
+        strategy: AutoLabMode;
+        barrier?: number;
+        entryDigit?: number;
+        matchKey?: string;
     } | null;
     strategies: string[];
     evidence: string[];
@@ -255,6 +262,11 @@ export const createMoneyPrintNeuralReport = (input: {
     challenge: string;
     trades: AutoLabTrade[];
     matches: MoneyPrintMatchRoute[];
+    tradeTypes?: AutoLabContractType[];
+    currentSignal?: AutoLabSignal;
+    markets?: Pick<AutoLabMarket, 'symbol' | 'label'>[];
+    contractBarrier?: number;
+    matchEntryDigit?: number | null;
     accountContext?: MoneyPrintNeuralReport['accountContext'];
     now?: number;
 }): MoneyPrintNeuralReport => {
@@ -264,7 +276,42 @@ export const createMoneyPrintNeuralReport = (input: {
     const settledCount = input.trades.filter(trade =>
         trade.status === 'WIN' || trade.status === 'LOSS',
     ).length;
-    const qualifiedRoute = input.matches.find(route => route.eligible);
+    const selectedTypes = input.tradeTypes?.length ? new Set(input.tradeTypes) : null;
+    const qualifiedRoute = selectedTypes?.has('DIGITMATCH')
+        ? input.matches.find(route => route.eligible)
+        : undefined;
+    const signalContract = (() => {
+        const aliases: Record<string, AutoLabContractType> = {
+            '1 Rise': 'CALL',
+            '2 Fall': 'PUT',
+            'Digit EVEN': 'DIGITEVEN',
+            'Digit ODD': 'DIGITODD',
+            'Digit OVER': 'DIGITOVER',
+            'Digit UNDER': 'DIGITUNDER',
+            'Digit MATCH': 'DIGITMATCH',
+            'Digit DIFF': 'DIGITDIFF',
+        };
+        return input.currentSignal ? aliases[input.currentSignal.label] : undefined;
+    })();
+    const signalStrategy = input.currentSignal?.detail.split(' · ')[0] as AutoLabMode | undefined;
+    const signalMarket = input.markets?.find(market => market.label === input.currentSignal?.market);
+    const signalRoute = signalContract
+        && signalStrategy
+        && signalMarket
+        && (!selectedTypes || selectedTypes.has(signalContract))
+        && input.currentSignal?.confidence != null
+        ? {
+            market: input.currentSignal.market,
+            marketSymbol: signalMarket.symbol,
+            contract: signalContract,
+            contractType: signalContract,
+            strategy: signalStrategy,
+            entryRule: input.currentSignal.detail,
+            targetDigits: input.contractBarrier == null ? [] : [input.contractBarrier],
+            ...(input.contractBarrier == null ? {} : { barrier: input.contractBarrier }),
+            ...(input.matchEntryDigit == null ? {} : { entryDigit: input.matchEntryDigit }),
+        }
+        : undefined;
     const challenge = input.challenge.trim();
     const context = input.accountContext ?? null;
 
@@ -280,7 +327,9 @@ export const createMoneyPrintNeuralReport = (input: {
         ),
         qualifiedRoute
             ? `${qualifiedRoute.label}: ${qualifiedRoute.reason}`
-            : 'No match route passed the minimum history, sample-size, lift, and confidence checks.',
+            : signalRoute
+                ? `Live candidate supplied by ${signalRoute.strategy}: ${signalRoute.market} · ${signalRoute.contractType}. ${signalRoute.entryRule}`
+                : 'No route matched the selected trade types and current evidence gates.',
     ];
     const riskNotes = [
         'Historical tick patterns do not guarantee the next outcome. Do not increase stake to recover losses.',
@@ -322,7 +371,7 @@ export const createMoneyPrintNeuralReport = (input: {
         };
     }
 
-    if (!qualifiedRoute) {
+    if (!qualifiedRoute && !signalRoute) {
         return {
             generatedAt,
             verdict: 'WAIT',
@@ -339,23 +388,40 @@ export const createMoneyPrintNeuralReport = (input: {
         };
     }
 
+    const route = qualifiedRoute
+        ? {
+            market: qualifiedRoute.label,
+            marketSymbol: qualifiedRoute.symbol,
+            contract: 'DIGITMATCH' as const,
+            contractType: 'DIGITMATCH' as const,
+            strategy: 'Matches/Differs' as const,
+            entryRule: `Wait for last digit ${qualifiedRoute.entryDigit}; the proposed one-tick target is ${qualifiedRoute.targetDigit}.`,
+            targetDigits: [qualifiedRoute.targetDigit],
+            barrier: qualifiedRoute.targetDigit,
+            entryDigit: qualifiedRoute.entryDigit,
+            matchKey: qualifiedRoute.key,
+        }
+        : signalRoute!;
     return {
         generatedAt,
         verdict: 'PLAN',
         challenge,
-        summary: 'A historical match transition passed the screening checks. Treat it as a research route, not proof of a profitable trade.',
+        summary: qualifiedRoute
+            ? 'A historical match transition passed the screening checks. Treat it as a research route, not proof of a profitable trade.'
+            : 'A live candidate matches the selected trade types. Treat the setup score as a scan score, not a win probability or profit forecast.',
         accountContext: context,
-        route: {
-            market: qualifiedRoute.label,
-            contract: `DIGITMATCH ${qualifiedRoute.targetDigit}`,
-            entryRule: `Wait for last digit ${qualifiedRoute.entryDigit}; the proposed one-tick target is ${qualifiedRoute.targetDigit}.`,
-            targetDigits: [qualifiedRoute.targetDigit],
-        },
-        strategies: [
-            `Watch ${qualifiedRoute.label} and wait for entry digit ${qualifiedRoute.entryDigit}.`,
-            `At that entry, test only DIGITMATCH ${qualifiedRoute.targetDigit}; the contract supports one target digit per order.`,
-            'Re-check the market history and live proposal before every entry; stop if the route no longer meets the evidence checks.',
-        ],
+        route,
+        strategies: qualifiedRoute
+            ? [
+                `Watch ${qualifiedRoute.label} and wait for entry digit ${qualifiedRoute.entryDigit}.`,
+                `At that entry, test only DIGITMATCH ${qualifiedRoute.targetDigit}; the contract supports one target digit per order.`,
+                'Re-check the market history and live proposal before every entry; stop if the route no longer meets the evidence checks.',
+            ]
+            : [
+                `Use the selected ${signalRoute.strategy} engine on ${signalRoute.market} for ${signalRoute.contractType}.`,
+                'The Start Trade button applies this route to the existing risk-controlled engine; no order is sent until you press it.',
+                'The live signal may change before the next tick. Review the current market and stop limits before starting.',
+            ],
         evidence,
         riskNotes,
         sidePerformance,

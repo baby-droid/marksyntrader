@@ -545,10 +545,10 @@ export const useAutoLabEngine = (
             return;
         }
         if (activeGate.armedEpoch != null && activeGate.armedEpoch > 0 && tick.epoch <= activeGate.armedEpoch) return;
-        void placeRealTrade(best);
+        void placeRealTrade(best, tick);
     }
 
-    const placeRealTrade = async (signal: AutoLabCandidate) => {
+    const placeRealTrade = async (signal: AutoLabCandidate, entryTick: AutoLabTick) => {
         if (realOrderPendingRef.current || !runRef.current) return;
         const startIdentity = startedAccountRef.current;
         const accountNow = accountRef.current;
@@ -661,6 +661,13 @@ export const useAutoLabEngine = (
                 stake: Number.isFinite(actualStake) && actualStake > 0 ? actualStake : stake,
                 profit: earlySettlement?.profit ?? 0,
                 status: earlySettlement ? earlySettlement.status === 'won' ? 'WIN' : 'LOSS' : 'OPEN',
+                strategy: signal.strategy,
+                barrier: signal.barrier,
+                entryDigit: entryTick.digit,
+                entryEpoch: entryTick.epoch,
+                ticksWindow: currentSettings.ticksWindow,
+                duration: durationless ? undefined : timing.duration,
+                durationUnit: durationless ? undefined : timing.duration_unit,
             };
             setTrades(previous => [newTrade, ...previous].slice(0, 100));
             updateSession({ ...sessionRef.current, trades: sessionRef.current.trades + 1 });
