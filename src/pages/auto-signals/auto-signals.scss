@@ -423,6 +423,40 @@
     &__actions { display: grid; grid-template-columns: 0.88fr 1.12fr; gap: 0.32rem; margin-top: 0.32rem; }
 }
 
+.as-card-run-control {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.35rem;
+    min-height: 1.25rem;
+    margin: 0 0 0.22rem;
+    color: #000;
+
+    label {
+        color: #000;
+        font-size: 0.5rem;
+        font-weight: 950;
+        letter-spacing: 0.045em;
+    }
+
+    &__input {
+        width: 2.35rem;
+        min-height: 1.15rem;
+        padding: 0.08rem 0.18rem;
+        border: 1px solid rgba(15, 23, 42, 0.22);
+        border-radius: 3px;
+        background: #fff;
+        color: #000;
+        font-size: 0.64rem;
+        font-weight: 950;
+        line-height: 1;
+        text-align: center;
+
+        &:focus-visible { outline: 2px solid var(--as-cyan); outline-offset: 1px; }
+        &:disabled { background: #f1f5f9; color: #000; opacity: 0.65; }
+    }
+}
+
 @keyframes as-card-in {
     from { opacity: 0; transform: translateY(7px); }
     to { opacity: 1; transform: translateY(0); }

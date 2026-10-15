@@ -129,9 +129,13 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
                         const boundVariable = workspaceVariables.find(
                             variable => variable.getId() === variableId
                         );
+                        const visibleVariableName = boundVariable?.name
+                            ?? field.getText?.()
+                            ?? candidate.getField?.(field.name)?.getText?.();
+                        const normalizedVisibleName = normalizeVariableName(visibleVariableName);
                         if (
-                            boundVariable
-                            && normalizeVariableName(boundVariable.name) === 'recovery phase2'
+                            normalizedVisibleName === 'recovery phase2'
+                            || normalizedVisibleName === 'recovery phase 2'
                         ) {
                             field.setValue?.(canonicalPhaseId);
                         }

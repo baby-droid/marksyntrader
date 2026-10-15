@@ -601,7 +601,7 @@ const configureTradeParameters = (
             setVariableValue(
                 doc,
                 'PREDICTION-1',
-                config.action === 'over-dt' ? 1 : config.candidate.barrier ?? 7,
+                config.candidate.barrier ?? (config.action === 'over-dt' ? 1 : 7),
             );
             // Both DT templates recover with Under 5 after the primary entry.
             setVariableValue(doc, 'PREDICTION-2', 5);

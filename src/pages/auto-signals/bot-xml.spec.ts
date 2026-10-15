@@ -95,6 +95,8 @@ const readTemplate = (
 describe('Auto-Signals bot templates', () => {
     it.each([
         ['trade-only', 'DIGITOVER', 'OVER', 4, 'digits', 'overunder', 'DIGITOVER'],
+        ['trade-only', 'DIGITOVER', 'OVER', 6, 'digits', 'overunder', 'DIGITOVER'],
+        ['trade-only', 'DIGITUNDER', 'UNDER', 2, 'digits', 'overunder', 'DIGITUNDER'],
         ['trade-only', 'DIGITMATCH', 'MATCHES', 3, 'digits', 'matchesdiffers', 'DIGITMATCH'],
         ['trade-only', 'DIGITDIFF', 'DIFFERS', 3, 'digits', 'matchesdiffers', 'DIGITDIFF'],
         ['entry-trade', 'DIGITUNDER', 'UNDER', 5, 'digits', 'overunder', 'DIGITUNDER'],
@@ -236,7 +238,7 @@ describe('Auto-Signals bot templates', () => {
             .toBe('auto-signal-v1;max-runs=4');
     });
 
-    it('keeps Over DT at Over 1 and preserves the Under 5 recovery purchase', () => {
+    it('uses the selected Over barrier in Over DT and preserves the Under 5 recovery purchase', () => {
         const xml = patchAutoSignalsBotXml(readTemplate('over-dt'), {
             action: 'over-dt',
             market,
@@ -249,7 +251,7 @@ describe('Auto-Signals bot templates', () => {
         expect(doc.getElementsByTagName('parsererror')).toHaveLength(0);
         expect(getField(getBlock(doc, 'trade_definition_contracttype'), 'TYPE_LIST')).toBe('both');
         expect(getValueNumber(getBlock(doc, 'trade_definition_tradeoptions'), 'DURATION')).toBe('1');
-        expect(getVariableSetNumber(doc, 'PREDICTION-1')).toBe('1');
+        expect(getVariableSetNumber(doc, 'PREDICTION-1')).toBe('4');
         expect(getVariableSetNumber(doc, 'PREDICTION-2')).toBe('5');
         expect(Array.from(doc.getElementsByTagNameNS(XML_NS, 'block'))
             .filter((block) => block.getAttribute('type') === 'purchase')
@@ -259,11 +261,11 @@ describe('Auto-Signals bot templates', () => {
         expect(getVariableSetNumber(doc, 'Martingale')).toBe('2');
     });
 
-    it('keeps Under DT recovery at Under 5 when the main barrier is selected', () => {
+    it('uses Under 3 in Under DT Prediction 1 and preserves the Under 5 recovery purchase', () => {
         const xml = patchAutoSignalsBotXml(readTemplate('under-dt'), {
             action: 'under-dt',
             market,
-            candidate: makeCandidate('DIGITUNDER', 'UNDER', 7, 'under'),
+            candidate: makeCandidate('DIGITUNDER', 'UNDER', 3, 'under'),
             settings,
             accountAmounts: { stake1: 1.5, stake2: 1.5, takeProfit: 5, stopLoss: 10 },
         });
@@ -271,7 +273,7 @@ describe('Auto-Signals bot templates', () => {
 
         expect(doc.getElementsByTagName('parsererror')).toHaveLength(0);
         expect(getField(getBlock(doc, 'trade_definition_contracttype'), 'TYPE_LIST')).toBe('both');
-        expect(getVariableSetNumber(doc, 'PREDICTION-1')).toBe('7');
+        expect(getVariableSetNumber(doc, 'PREDICTION-1')).toBe('3');
         expect(getVariableSetNumber(doc, 'PREDICTION-2')).toBe('5');
         expect(Array.from(doc.getElementsByTagNameNS(XML_NS, 'block'))
             .filter((block) => block.getAttribute('type') === 'purchase')
@@ -279,5 +281,29 @@ describe('Auto-Signals bot templates', () => {
             .toEqual(['DIGITUNDER', 'DIGITUNDER']);
         expect(getVariableSetNumber(doc, 'stake')).toBe('1.5');
         expect(getVariableSetNumber(doc, 'Martingale')).toBe('2');
+    });
+
+    it('keeps Over 6 on the selected Over DT card instead of reverting to Over 1', () => {
+        const xml = patchAutoSignalsBotXml(readTemplate(
+            'over-dt',
+            makeCandidate('DIGITOVER', 'OVER', 6, 'over'),
+        ), {
+            action: 'over-dt',
+            market,
+            candidate: makeCandidate('DIGITOVER', 'OVER', 6, 'over'),
+            settings,
+            accountAmounts: { stake1: 1.5, stake2: 1.5, takeProfit: 5, stopLoss: 10 },
+        });
+        const doc = new DOMParser().parseFromString(xml, 'application/xml');
+
+        expect(doc.getElementsByTagName('parsererror')).toHaveLength(0);
+        expect(getField(getBlock(doc, 'trade_definition_tradetype'), 'TRADETYPE_LIST')).toBe('overunder');
+        expect(getField(getBlock(doc, 'trade_definition_contracttype'), 'TYPE_LIST')).toBe('both');
+        expect(getVariableSetNumber(doc, 'PREDICTION-1')).toBe('6');
+        expect(getVariableSetNumber(doc, 'PREDICTION-2')).toBe('5');
+        expect(Array.from(doc.getElementsByTagNameNS(XML_NS, 'block'))
+            .filter((block) => block.getAttribute('type') === 'purchase')
+            .map((block) => getField(block, 'PURCHASE_LIST')))
+            .toEqual(['DIGITOVER', 'DIGITUNDER']);
     });
 });

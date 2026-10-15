@@ -4,6 +4,14 @@ type BlocklyWorkspaceLike = {
     getTopBlocks?: (ordered?: boolean) => unknown[];
 };
 
+const waitForWorkspaceFrame = () => new Promise<void>((resolve) => {
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+        window.requestAnimationFrame(() => resolve());
+    } else {
+        setTimeout(resolve, 0);
+    }
+});
+
 export type AutoSignalsRunPanel = {
     is_running?: boolean;
     onRunButtonClick?: () => void | Promise<void>;
@@ -32,14 +40,20 @@ export const ensureAutoSignalWorkspaceLoaded = async (
     expectedXml: string,
     loadStrategy: (workspace: BlocklyWorkspaceLike, xml: string) => void | Promise<void>,
 ) => {
-    if (!isAutoSignalWorkspaceReady(workspace, expectedXml)) {
+    const loadAlreadyInProgress = workspace.strategy_to_load === expectedXml;
+    if (!isAutoSignalWorkspaceReady(workspace, expectedXml) && !loadAlreadyInProgress) {
         await loadStrategy(workspace, expectedXml);
         workspace.strategy_to_load = expectedXml;
     }
-    if (!isAutoSignalWorkspaceReady(workspace, expectedXml)) {
-        throw new Error('Bot Builder did not load the selected strategy.');
+
+    // The official Blockly loader can finish its promise before the next paint
+    // has created all workspace blocks. Wait for the imported bot to become
+    // available instead of treating that short render window as a load failure.
+    for (let attempt = 0; attempt < 300; attempt += 1) {
+        if (isAutoSignalWorkspaceReady(workspace, expectedXml)) return workspace;
+        await waitForWorkspaceFrame();
     }
-    return workspace;
+    throw new Error('Bot Builder did not load the selected strategy.');
 };
 
 export const startAutoSignalsBot = async (

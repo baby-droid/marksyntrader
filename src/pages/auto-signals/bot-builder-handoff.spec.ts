@@ -52,6 +52,20 @@ describe('Auto-Signals Bot Builder handoff readiness', () => {
         expect(isAutoSignalWorkspaceReady(workspace, xml)).toBe(true);
     });
 
+    it('waits for Blockly to finish creating blocks after the loader resolves', async () => {
+        let blocksReady = false;
+        const workspace = {
+            strategy_to_load: '',
+            getTopBlocks: () => blocksReady ? [{ type: 'trade_definition' }] : [],
+        };
+
+        await ensureAutoSignalWorkspaceLoaded(workspace, xml, async () => {
+            setTimeout(() => { blocksReady = true; }, 0);
+        });
+
+        expect(isAutoSignalWorkspaceReady(workspace, xml)).toBe(true);
+    });
+
     it('automatically runs the bot as soon as the loaded workspace is ready', async () => {
         const runPanel: { is_running: boolean; onRunButtonClick: jest.Mock } = {
             is_running: false,

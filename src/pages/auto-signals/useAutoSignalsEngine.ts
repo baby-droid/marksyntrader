@@ -574,6 +574,7 @@ export const useAutoSignalsEngine = ({
 
         isPreparingRunRef.current = true;
         const bot = getAutoSignalBot(action, candidate);
+        let botLoaded = false;
         try {
             setMessage(`Preparing ${bot.name} for ${market.label}…`);
             const response = await fetch(bot.file);
@@ -613,6 +614,7 @@ export const useAutoSignalsEngine = ({
                 bot.name,
                 !builderAlreadyMounted,
             );
+            botLoaded = true;
             if ((window as any).__pendingBotXml === configuredXml) {
                 (window as any).__pendingBotXml = null;
                 (window as any).__pendingBotName = null;
@@ -658,13 +660,10 @@ export const useAutoSignalsEngine = ({
                 const runMessage = action === 'entry-trade' && !candidate.entryReady
                     ? `${bot.name} is watching for its entry condition on ${market.symbol}; it will stop after ${selectedRuns} cycles.`
                     : `${bot.name} is trading ${market.symbol} for up to ${selectedRuns} signal cycles (${purchasesPerTick} separate purchases per tick).`;
-                setMessage(runMessage);
                 setAutoSignalsRunMessage(runMessage);
             } else {
-                setMessage(currentSession.message || `${bot.name} started on ${market.symbol}.`);
+                setAutoSignalsRunMessage(currentSession.message || `${bot.name} started on ${market.symbol}.`);
             }
-            setActiveTab(DBOT_TABS.AUTO_SIGNALS);
-            runPanel.toggleDrawer?.(false);
         } catch (error: any) {
             const errorMessage = error?.message || 'The Bot Builder handoff failed.';
             if ((window as any).__pendingBotName === bot.name) {
@@ -672,8 +671,12 @@ export const useAutoSignalsEngine = ({
                 (window as any).__pendingBotName = null;
             }
             clearAutoSignalsRun(errorMessage);
-            setMessage(errorMessage);
-            setActiveTab(DBOT_TABS.AUTO_SIGNALS);
+            setAutoSignalsRunMessage(errorMessage);
+            if (!botLoaded) {
+                setMessage(errorMessage);
+                setActiveTab(DBOT_TABS.AUTO_SIGNALS);
+                runPanel.toggleDrawer?.(false);
+            }
         } finally {
             isPreparingRunRef.current = false;
         }

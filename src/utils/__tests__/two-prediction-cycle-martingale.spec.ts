@@ -86,7 +86,6 @@ describe('2 Prediction Cycle martingale', () => {
 
         const generatorSource = source.slice(start, end + endMarker.length);
         const variableDefinitions = [
-            ['phase2', 'recovery_phase2'],
             ['stake', 'stake'],
             ['martingale', 'martingale'],
             ['over1', 'over_1_stake'],
@@ -102,7 +101,12 @@ describe('2 Prediction Cycle martingale', () => {
             name,
             getId: () => id,
         }));
-        const namesById = Object.fromEntries(variableDefinitions);
+        // The stale variable ID is deliberately absent from the variable map:
+        // older workspaces can retain a field pointing at a deleted model.
+        const namesById = Object.fromEntries([
+            ...variableDefinitions,
+            ['phase2', 'recovery_phase2'],
+        ]);
         const recoveryFieldValues: Record<string, string> = {
             PHASE: 'phase2',
             LOSS_COUNT: 'loss',
@@ -119,6 +123,7 @@ describe('2 Prediction Cycle martingale', () => {
         const phaseRouterField = {
             name: 'VAR',
             getValue: () => phaseRouterVariableId,
+            getText: () => namesById[phaseRouterVariableId],
             setValue: (id: string) => {
                 phaseRouterVariableId = id;
             },

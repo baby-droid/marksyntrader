@@ -162,10 +162,11 @@ function MarketCard({
 }) {
     const [pendingAction, setPendingAction] = useState<AutoSignalAction | null>(null);
     const [showTradeChoices, setShowTradeChoices] = useState(false);
+    const [runCountOverride, setRunCountOverride] = useState<number | null>(null);
     const score = Math.max(0, Math.min(100, candidate?.score ?? 0));
     const recentWindow = candidate?.windows.find((item) => item.window === 20) ?? null;
     const selectedRuns = candidate
-        ? getSuggestedAutoSignalRuns(candidate.recommendedRuns, settings.maxRuns)
+        ? getSuggestedAutoSignalRuns(runCountOverride ?? candidate.recommendedRuns, settings.maxRuns)
         : 0;
     const isLive = market.feedState === 'live';
     const canTrade = Boolean(
@@ -177,12 +178,23 @@ function MarketCard({
     );
     const directionUp = ['RISE', 'ONLY_UPS'].includes(candidate?.strategy ?? '');
     const signalTone = candidate?.tier === 'ELITE' || candidate?.tier === 'STRONG' ? 'strong' : 'steady';
+
+    useEffect(() => {
+        setRunCountOverride(null);
+    }, [candidate?.id]);
+
     const startTrade = async (action: AutoSignalAction) => {
         if (pendingAction) return;
         setPendingAction(action);
         setShowTradeChoices(false);
         try {
-            await onTrade(candidate ? { ...market, candidate } : market, action);
+            const tradeCandidate = candidate
+                ? { ...candidate, recommendedRuns: selectedRuns }
+                : null;
+            await onTrade(
+                tradeCandidate ? { ...market, candidate: tradeCandidate } : market,
+                action,
+            );
         } finally {
             setPendingAction(null);
         }
@@ -197,6 +209,23 @@ function MarketCard({
 
     return (
         <article className={`as-market-card as-market-card--${candidate?.state ?? 'no-signal'}`} data-testid={`card-market-${cardId}`}>
+            <div className='as-card-run-control' data-testid={`run-count-control-${cardId}`}>
+                <label htmlFor={`input-suggested-runs-${cardId}`}>SUGGESTED RUNS</label>
+                <NumberField
+                    id={`input-suggested-runs-${cardId}`}
+                    className='as-card-run-control__input'
+                    min={1}
+                    max={settings.maxRuns}
+                    step={1}
+                    value={selectedRuns}
+                    disabled={!candidate || candidate.recommendedRuns < 1}
+                    onCommit={(next) => setRunCountOverride(
+                        Math.max(1, Math.min(settings.maxRuns, Math.round(next))),
+                    )}
+                    aria-label={`Suggested runs for ${market.label}`}
+                    data-testid={`input-suggested-runs-${cardId}`}
+                />
+            </div>
             <div className='as-market-card__head'>
                 <div className='as-market-card__identity'>
                     <span className={`as-market-card__feed ${isLive ? 'is-live' : `is-${market.feedState}`}`} data-testid={`status-feed-${cardId}`}>

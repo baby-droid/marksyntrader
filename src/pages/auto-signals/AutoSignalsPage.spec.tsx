@@ -185,6 +185,37 @@ describe('Auto-Signals trade actions', () => {
         expect(screen.getByTestId('input-setting-stake1')).toBeInTheDocument();
     });
 
+    it('lets each signal card edit the exact run cap sent to Bot Builder', async () => {
+        const suggestedCandidate = {
+            ...market.candidate!,
+            recommendedRuns: 4,
+        };
+        render(<AutoSignalsPage {...props} markets={[{
+            ...market,
+            candidate: suggestedCandidate,
+            candidates: [suggestedCandidate],
+        }]} />);
+
+        const runInput = screen.getByTestId('input-suggested-runs-R_10-OVER-4');
+        expect(runInput).toHaveValue('4');
+        fireEvent.change(runInput, { target: { value: '6' } });
+        fireEvent.blur(runInput);
+        expect(screen.getByTestId('text-run-recommendation-R_10-OVER-4')).toHaveTextContent('6');
+
+        fireEvent.click(screen.getByTestId('button-trade-only-R_10-OVER-4'));
+        fireEvent.click(screen.getByRole('button', {
+            name: /Trade Only Load the bot matched to this signal/,
+        }));
+        await act(async () => Promise.resolve());
+
+        expect(props.onTrade).toHaveBeenCalledWith(
+            expect.objectContaining({
+                candidate: expect.objectContaining({ recommendedRuns: 6 }),
+            }),
+            'trade-only',
+        );
+    });
+
     it('shows the one-minute rescan note only for Digit Match', () => {
         const { rerender } = render(<AutoSignalsPage {...props} family='MATCHES' />);
 
@@ -201,13 +232,13 @@ describe('Auto-Signals trade actions', () => {
             strategy: 'UNDER' as const,
             label: 'Under',
             contractType: 'DIGITUNDER',
-            barrier: 4,
+            barrier: 2,
             direction: 'under' as const,
         };
         const underMarket = { ...market, candidate: under, candidates: [under] };
         render(<AutoSignalsPage {...props} markets={[underMarket]} />);
 
-        fireEvent.click(screen.getByTestId('button-trade-only-R_10-UNDER-4'));
+        fireEvent.click(screen.getByTestId('button-trade-only-R_10-UNDER-2'));
         fireEvent.click(screen.getByRole('button', { name: /Under DT/ }));
         await act(async () => Promise.resolve());
 
