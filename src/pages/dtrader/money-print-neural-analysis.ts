@@ -184,7 +184,9 @@ export const rankMoneyPrintMatchRoutes = (markets: AutoLabMarket[]): MoneyPrintM
         .sort((left, right) =>
             Number(right.eligible) - Number(left.eligible)
             || right.score - left.score
-            || right.observations - left.observations,
+            || right.observations - left.observations
+            || left.entryDigit - right.entryDigit
+            || left.targetDigit - right.targetDigit,
         )
         .slice(0, 4);
 };

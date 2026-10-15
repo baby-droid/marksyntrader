@@ -34,6 +34,7 @@ import type { AutoLabSettings, AutoLabTrade } from '../auto-lab/AutoLabView';
 import { formatMoney, fromUsd, getDisplayCurrency, subscribeCurrency, toUsd } from '@/utils/currency-display';
 import { calculateAutoStake, MIN_DERIV_STAKE, usesUnchangedLegacyAutoStakeDefaults } from './money-print-utils';
 import MoneyPrintNeuralLink, { getMatchRouteKey, type MatchRoute } from './MoneyPrintNeuralLink';
+import MoneyPrintErrorBoundary from './MoneyPrintErrorBoundary';
 import {
     createMoneyPrintNeuralReport,
     findMoneyPrintLosingSide,
@@ -102,6 +103,19 @@ const BASE_PREFS: MoneyPrintPrefs = {
     goalBalance: 20,
     days: 7,
     hourlyTarget: 1.8,
+};
+const storageWarnings = new Set<string>();
+const safeWriteMoneyPrintStorage = (key: string, value: string) => {
+    try {
+        localStorage.setItem(key, value);
+        return true;
+    } catch (error) {
+        if (!storageWarnings.has(key)) {
+            storageWarnings.add(key);
+            console.warn('Money Print could not persist local data in this browser.', error);
+        }
+        return false;
+    }
 };
 const CONTRACT_LABELS: Record<AutoLabContractType, string> = {
     CALL: 'Rise',
@@ -177,7 +191,7 @@ const readSettings = (): AutoLabSettings => {
             ...saved,
             ...(hadUnchangedDefaults ? { stake: MIN_DERIV_STAKE } : {}),
         };
-        localStorage.setItem(SETTINGS_KEY, JSON.stringify(migrated));
+        safeWriteMoneyPrintStorage(SETTINGS_KEY, JSON.stringify(migrated));
         return migrated;
     } catch {
         return BASE_SETTINGS;
@@ -196,7 +210,7 @@ const readPrefs = (): MoneyPrintPrefs => {
             ...saved,
             ...(usesUnchangedLegacyAutoStakeDefaults(saved) ? { autoStake: false } : {}),
         };
-        localStorage.setItem(PREFS_KEY, JSON.stringify(migrated));
+        safeWriteMoneyPrintStorage(PREFS_KEY, JSON.stringify(migrated));
         return migrated;
     } catch {
         return BASE_PREFS;
@@ -247,7 +261,7 @@ const mergeJournal = (saved: AutoLabTrade[], incoming: AutoLabTrade[]) => {
 const tradeSnapshot = (trade: AutoLabTrade) =>
     `${trade.status}|${trade.profit}|${trade.stake}|${trade.market}|${trade.contract}`;
 
-const DTrader: React.FC = () => {
+const DTraderContent: React.FC = () => {
     const [settings, setSettings] = useState<AutoLabSettings>(readSettings);
     const [prefs, setPrefs] = useState<MoneyPrintPrefs>(readPrefs);
     const [liveAcknowledged, setLiveAcknowledged] = useState(false);
@@ -276,10 +290,10 @@ const DTrader: React.FC = () => {
         return () => window.clearInterval(timer);
     }, []);
     useEffect(() => {
-        localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+        safeWriteMoneyPrintStorage(SETTINGS_KEY, JSON.stringify(settings));
     }, [settings]);
     useEffect(() => {
-        localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+        safeWriteMoneyPrintStorage(PREFS_KEY, JSON.stringify(prefs));
     }, [prefs]);
 
     const effectiveStakeFromPrefs = (balance: number | null) => {
@@ -354,7 +368,12 @@ const DTrader: React.FC = () => {
         const accountKey = `${JOURNAL_KEY}:${engine.account.loginId}`;
         try {
             const saved = localStorage.getItem(accountKey);
-            setJournal(saved ? JSON.parse(saved) : []);
+            const parsed = saved ? JSON.parse(saved) : [];
+            setJournal(Array.isArray(parsed)
+                ? parsed.filter((trade): trade is AutoLabTrade =>
+                    Boolean(trade && typeof trade === 'object' && typeof trade.id === 'string'),
+                )
+                : []);
         } catch {
             setJournal([]);
         }
@@ -373,9 +392,10 @@ const DTrader: React.FC = () => {
             .forEach(trade => pendingSettlementIdsRef.current.add(trade.id));
         setJournal(previous => {
             const next = mergeJournal(previous, currentRunTrades);
-            try {
-                localStorage.setItem(`${JOURNAL_KEY}:${engine.account.loginId}`, JSON.stringify(next));
-            } catch {
+            if (!safeWriteMoneyPrintStorage(
+                `${JOURNAL_KEY}:${engine.account.loginId}`,
+                JSON.stringify(next),
+            )) {
                 setNotice('This browser could not save the local trade journal.');
             }
             return next;
@@ -594,9 +614,7 @@ const DTrader: React.FC = () => {
             ? existingLock
             : Date.now() + NEURAL_RISK_LOCK_MS;
         if (loginId) {
-            try {
-                localStorage.setItem(`${NEURAL_RISK_LOCK_KEY}:${loginId}`, String(until));
-            } catch {
+            if (!safeWriteMoneyPrintStorage(`${NEURAL_RISK_LOCK_KEY}:${loginId}`, String(until))) {
                 setNotice('Storage is unavailable. Trading is stopped for this page session, but the five-hour lock could not be saved.');
             }
             setRiskLockState({ loginId, until });
@@ -1430,6 +1448,12 @@ const ReportPanel: React.FC<{
         </div>
         {!compact && <p className='mp-report-footnote'>This report contains this browser’s locally saved records for the currently active account. It does not include unsaved trades from other devices.</p>}
     </section>
+);
+
+const DTrader: React.FC = () => (
+    <MoneyPrintErrorBoundary>
+        <DTraderContent />
+    </MoneyPrintErrorBoundary>
 );
 
 export default DTrader;

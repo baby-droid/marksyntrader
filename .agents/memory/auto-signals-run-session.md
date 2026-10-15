@@ -27,11 +27,11 @@ Show each candidate's observed per-window hit rate separately from its alignment
 
 **How to apply:** preserve separate cards for contract/barrier alternatives, label empirical rates by sample window, and do not call them win probabilities.
 
-Candidate run recommendations are score-based guidance only. When Fast is explicitly enabled, an eligible current signal may dispatch a bounded three-purchase burst per tick at the configured stake (up to 3× stake exposure); this changes execution throughput, not signal confidence.
+Auto-Signals candidates require a full 1,000-tick baseline, a 95% Wilson lower bound above the contract's fair-rate baseline, and agreement from at least two longer windows before they can receive a run recommendation. The alignment score maps to a 0–20 run ceiling; it is not a calibrated win probability or payout/EV estimate. Execute one contract per signal cycle with no added post-settlement wait.
 
-**Why:** the scanner has no calibrated probability model or quoted-payout EV gate, so a faster burst must not be presented as a higher chance of winning.
+**Why:** the supplied strategy specification distinguishes historical observations from calibrated prediction and requires revalidation after each settlement; the app does not have an out-of-sample calibration or payout/EV gate.
 
-**How to apply:** keep the three-order burst finite and Fast-only, preserve the configured cycle cap and current-signal checks, and retain the one-tick duration and explicit per-run monitoring.
+**How to apply:** keep the 1,000-tick and multi-window evidence gates, enforce the same 20-cycle maximum in the UI and generated XML, and do not make Fast mode dispatch multiple contracts in one cycle. Preserve one-tick duration, live-signal checks, and per-settlement revalidation.
 
 The Matches family must score only Matches candidates and rescan its cached authenticated tick window once per minute; quote and feed status can continue updating from live ticks between rescans. Entry Trade runs its entry gate inside the generated XML so it survives the Auto-Signals-to-Bot-Builder handoff. Rise uses exactly 2 falls, 2 falls then 1 rise, or 3 falls; Fall uses 3 or 4 rises then 1 fall, or 5 consecutive rises. Over/Under entries choose between 1/8 and 2/9 using recent observed next-tick outcomes.
 

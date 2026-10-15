@@ -4,7 +4,6 @@ import { useDerivTrade, type TickData } from '@/hooks/useDerivTrade';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { getDisplayCurrency, subscribeCurrency, toUsd } from '@/utils/currency-display';
 import { setTradeContext } from '@/utils/trade-metadata';
-import { getPurchasesPerTick } from '@/utils/execution-speed';
 import {
     getAutoSignalBot,
     patchAutoSignalsBotXml,
@@ -44,10 +43,10 @@ import type { AutoLabTick } from '@/pages/auto-lab/auto-lab-engine';
 const SETTINGS_KEY = 'auto_signals_settings_v1';
 const HISTORY_COUNT = 1000;
 const LIVE_TICK_STALE_MS = 8000;
-const MIN_TICK_SIZE = 20;
+const MIN_TICK_SIZE = HISTORY_COUNT;
 
 const DEFAULT_SETTINGS: AutoSignalsSettings = {
-    maxRuns: 10,
+    maxRuns: 20,
     stake1: 1.5,
     stake2: 1.5,
     takeProfit: 5,
@@ -86,7 +85,7 @@ const readSettings = (): AutoSignalsSettings => {
         return {
             // Run count is selected per signal; stored legacy maxRuns values
             // must not pin every new candidate to the old default of one.
-            maxRuns: 10,
+            maxRuns: 20,
             stake1: hadPreviousDefaultStakes
                 ? DEFAULT_SETTINGS.stake1
                 : Math.max(0.01, Number(saved.stake1) || DEFAULT_SETTINGS.stake1),
@@ -297,12 +296,15 @@ export const useAutoSignalsEngine = ({
     const isPreparingRunRef = useRef(false);
     const forceScoreRefreshRef = useRef(false);
     const lastDigitMatchScanAtRef = useRef(0);
-    const flushFrameRef = useRef<number | null>(null);
+    const flushQueuedRef = useRef(false);
+    const mountedRef = useRef(true);
     const dirtySymbolsRef = useRef(new Set<string>());
     const queueMarketRefresh = useCallback(() => {
-        if (flushFrameRef.current != null) return;
-        flushFrameRef.current = window.requestAnimationFrame(() => {
-            flushFrameRef.current = null;
+        if (flushQueuedRef.current) return;
+        flushQueuedRef.current = true;
+        queueMicrotask(() => {
+            flushQueuedRef.current = false;
+            if (!mountedRef.current) return;
             const now = Date.now();
             const activeFamily = familyRef.current;
             const forceScoreRefresh = forceScoreRefreshRef.current;
@@ -337,6 +339,13 @@ export const useAutoSignalsEngine = ({
         });
         queueMarketRefresh();
     }, [queueMarketRefresh]);
+
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => {
+            mountedRef.current = false;
+        };
+    }, []);
 
     useEffect(() => {
         const unsubscribe = subscribeCurrency(() => setDisplayCurrency(getDisplayCurrency()));
@@ -517,10 +526,7 @@ export const useAutoSignalsEngine = ({
             generationRef.current += 1;
             detachFeeds();
             dirtySymbolsRef.current.clear();
-            if (flushFrameRef.current != null) {
-                window.cancelAnimationFrame(flushFrameRef.current);
-                flushFrameRef.current = null;
-            }
+            flushQueuedRef.current = false;
         };
     }, [authorized, connected, queueMarketRefresh, refreshToken, send, subscribeTicks]);
 
@@ -598,7 +604,9 @@ export const useAutoSignalsEngine = ({
             });
 
             setTradeContext({ page: 'Auto-Signals', bot: bot.name });
-            const purchasesPerTick = getPurchasesPerTick();
+            // Auto-Signals uses one live-tick contract per cycle. Faster mode
+            // removes client-added waits; it must not fan out duplicate orders.
+            const purchasesPerTick = 1;
             const builderAlreadyMounted = isLiveBuilderWorkspace(getBlocklyWorkspace());
             if (!builderAlreadyMounted) {
                 (window as any).__pendingBotXml = configuredXml;

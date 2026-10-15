@@ -445,7 +445,7 @@ const addAutoSignalRunPolicy = (doc: Document, maxRuns: number) => {
         data = makeElement(doc, 'data');
         afterPurchase.appendChild(data);
     }
-    data.textContent = `auto-signal-v1;max-runs=${boundedInteger(maxRuns, 1, 10)}`;
+    data.textContent = `auto-signal-v1;max-runs=${boundedInteger(maxRuns, 1, 20)}`;
 };
 
 const unwrapTimeouts = (container: Element) => {
@@ -631,7 +631,7 @@ export const patchAutoSignalsBotXml = (xml: string, config: AutoSignalBotConfigu
         setVariableValue(doc, 'prediction digit', 4);
         addOver4Recovery(doc);
     }
-    addRunLimit(doc, boundedInteger(config.settings.maxRuns, 1, 10));
+    addRunLimit(doc, boundedInteger(config.settings.maxRuns, 1, 20));
     addAutoSignalRunPolicy(doc, config.settings.maxRuns);
 
     return new XMLSerializer().serializeToString(doc);

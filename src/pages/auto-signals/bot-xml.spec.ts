@@ -219,12 +219,15 @@ describe('Auto-Signals bot templates', () => {
         expect(getField(getBlock(doc, 'trade_definition_tradetype'), 'TRADETYPE_LIST')).toBe('overunder');
     });
 
-    it('caps the loaded bot at the signal-selected suggested run count', () => {
+    it.each([
+        [4, 4],
+        [25, 20],
+    ])('caps the loaded bot at %i requested cycles to %i', (requestedRuns, expectedRuns) => {
         const xml = patchAutoSignalsBotXml(readTemplate('entry-trade'), {
             action: 'entry-trade',
             market,
             candidate: makeCandidate('DIGITOVER', 'OVER', 4, 'over'),
-            settings: { ...settings, maxRuns: 4 },
+            settings: { ...settings, maxRuns: requestedRuns },
             accountAmounts: { stake1: 1.5, stake2: 1.5, takeProfit: 5, stopLoss: 10 },
         });
         const doc = new DOMParser().parseFromString(xml, 'application/xml');
@@ -233,9 +236,9 @@ describe('Auto-Signals bot templates', () => {
 
         expect(doc.getElementsByTagName('parsererror')).toHaveLength(0);
         expect(runLimit?.getAttribute('type')).toBe('controls_if');
-        expect(getValueNumber(runLimit, 'B')).toBe('4');
+        expect(getValueNumber(runLimit, 'B')).toBe(String(expectedRuns));
         expect(getBlock(doc, 'after_purchase')?.getElementsByTagNameNS(XML_NS, 'data')[0]?.textContent)
-            .toBe('auto-signal-v1;max-runs=4');
+            .toBe(`auto-signal-v1;max-runs=${expectedRuns}`);
     });
 
     it('uses the selected Over barrier in Over DT and preserves the Under 5 recovery purchase', () => {

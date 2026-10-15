@@ -84,4 +84,4 @@
 - [Fast execution scope](fast-execution-scope.md) — V3 Fast allows three tick-slot orders with a three-open cap; Auto-Signals, 2 Prediction Cycle, and A-SPEED stay sequential.
 - [King Fisher XML fallback](king-fisher-loader-fallback.md) — unknown Blockly blocks must match their XML connection shape; mixed output and statement connections make imports fail.
 - [Featured parity isolation](featured-bot-recovery-isolation.md) — keep sequence recovery separate from the generic dominant-parity block used elsewhere.
-- [Auto-Signals run session](auto-signals-run-session.md) — score-based recommendations are not win probabilities; repeated live trades need calibration, payout/EV checks, and per-run rescans.
+- [Auto-Signals run session](auto-signals-run-session.md) — 1,000-tick/Wilson and multi-window gates; score ceiling 0–20, one contract per cycle, and no calibrated payout/EV model.

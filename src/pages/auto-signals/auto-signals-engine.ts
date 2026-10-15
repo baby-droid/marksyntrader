@@ -20,6 +20,7 @@ type Route = {
 };
 
 const WINDOW_SIZES: AutoSignalWindowSize[] = [1000, 100, 50, 20, 10];
+const MIN_ANALYSIS_TICKS = 1000;
 const WINDOW_WEIGHTS: Record<AutoSignalWindowSize, number> = {
     1000: 0.38,
     100: 0.28,
@@ -31,6 +32,18 @@ const WINDOW_WEIGHTS: Record<AutoSignalWindowSize, number> = {
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 const routeId = (symbol: string, route: Route) =>
     `${symbol}:${route.strategy}:${route.contractType}:${route.barrier ?? 'none'}`;
+
+const wilsonLowerBound = (probability: number, sampleSize: number, z = 1.96) => {
+    if (sampleSize <= 0) return 0;
+    const observed = clamp(probability / 100, 0, 1);
+    const zSquared = z * z;
+    const denominator = 1 + zSquared / sampleSize;
+    const center = observed + zSquared / (2 * sampleSize);
+    const margin = z * Math.sqrt(
+        (observed * (1 - observed) + zSquared / (4 * sampleSize)) / sampleSize,
+    );
+    return Math.max(0, (center - margin) / denominator);
+};
 
 const isRouteInFamily = (route: Route, family: AutoSignalFamily) => {
     if (family === 'AUTO') return true;
@@ -73,8 +86,8 @@ const digitRoutes = (): Route[] => {
 const priceRoutes: Route[] = [
     { strategy: 'RISE', contractType: 'CALL', barrier: null, direction: 'rise', baseline: 50 },
     { strategy: 'FALL', contractType: 'PUT', barrier: null, direction: 'fall', baseline: 50 },
-    { strategy: 'ONLY_UPS', contractType: 'RUNHIGH', barrier: null, direction: 'up', baseline: 25 },
-    { strategy: 'ONLY_DOWNS', contractType: 'RUNLOW', barrier: null, direction: 'down', baseline: 25 },
+    { strategy: 'ONLY_UPS', contractType: 'RUNHIGH', barrier: null, direction: 'up', baseline: 50 },
+    { strategy: 'ONLY_DOWNS', contractType: 'RUNLOW', barrier: null, direction: 'down', baseline: 50 },
 ];
 
 const routeWins = (route: Route, tick: AutoLabTick) => {
@@ -317,7 +330,7 @@ export const evaluateAutoSignalCandidates = ({
     previous?: AutoSignalCandidate | null;
     now?: number;
 }): AutoSignalCandidate[] => {
-    if (ticks.length < 20) return [];
+    if (ticks.length < MIN_ANALYSIS_TICKS) return [];
 
     const patternCandidates = getPatternCandidates(ticks);
     const digitOptions = digitRoutes();
@@ -328,6 +341,14 @@ export const evaluateAutoSignalCandidates = ({
         if (!windows.length) return [];
         const relevant = windows.filter((item) => item.window >= 50);
         const evidenceWindows = relevant.length ? relevant : windows;
+        const baselineWindow = windows.find((item) => item.window === MIN_ANALYSIS_TICKS);
+        const requiredBaselineSamples = route.strategy === 'RISE'
+            || route.strategy === 'FALL'
+            || route.strategy === 'ONLY_UPS'
+            || route.strategy === 'ONLY_DOWNS'
+            ? MIN_ANALYSIS_TICKS - 1
+            : MIN_ANALYSIS_TICKS;
+        if (!baselineWindow || baselineWindow.sampleSize < requiredBaselineSamples) return [];
         const weightTotal = evidenceWindows.reduce((sum, item) => sum + WINDOW_WEIGHTS[item.window], 0);
         const weightedEdge = weightTotal
             ? evidenceWindows.reduce((sum, item) =>
@@ -336,7 +357,11 @@ export const evaluateAutoSignalCandidates = ({
         const agreements = evidenceWindows.filter((item) => item.agrees).length;
         const agreementRatio = agreements / evidenceWindows.length;
         const patternBoost = strategyPatternBoost(route, ticks, patternCandidates);
-        if (weightedEdge < 1.25 && patternBoost === 0) return [];
+        const longWindowHasPositiveEvidence = wilsonLowerBound(
+            baselineWindow.probability,
+            baselineWindow.sampleSize,
+        ) > route.baseline / 100;
+        if (weightedEdge < 1.25 || agreements < 2 || !longWindowHasPositiveEvidence) return [];
 
         const score = clamp(48 + weightedEdge * 2.2 + agreementRatio * 19 + patternBoost, 0, 99.9);
         const entryDigit = entryDigitFor(route, ticks.slice(-50));
@@ -397,29 +422,29 @@ export const evaluateAutoSignalCandidates = ({
 };
 
 /**
- * Convert the historical alignment score into the supplied signal-run bands.
- * For Over/Under digit barriers, require 65 before recommending any run.
- * This is a run recommendation only; it is not a win-probability estimate.
+ * Convert the historical alignment score into the supplied 1–20 run bands.
+ * This is a run ceiling only; it is not a win-probability estimate.
  */
-export const recommendedAutoSignalRuns = (score: number, strategy: AutoSignalStrategy): number => {
+export const recommendedAutoSignalRuns = (score: number, _strategy: AutoSignalStrategy): number => {
     if (!Number.isFinite(score)) return 0;
     const boundedScore = clamp(score, 0, 100);
-    const isDigitBarrier = strategy === 'OVER' || strategy === 'UNDER';
-    if (boundedScore < (isDigitBarrier ? 65 : 60)) return 0;
+    if (boundedScore < 65) return 0;
     if (boundedScore < 70) return 1;
     if (boundedScore < 75) return 2;
     if (boundedScore < 80) return 3;
-    if (boundedScore < 85) return 4;
-    if (boundedScore < 90) return 5;
-    if (boundedScore < 95) return 7;
-    return 10;
+    if (boundedScore < 85) return 5;
+    if (boundedScore < 90) return 8;
+    if (boundedScore < 93) return 10;
+    if (boundedScore < 96) return 12;
+    if (boundedScore < 98) return 15;
+    return 20;
 };
 
 export const getSuggestedAutoSignalRuns = (recommendedRuns: number, maxRuns: number): number => {
     const suggested = Math.floor(Number(recommendedRuns));
     const cap = Math.floor(Number(maxRuns));
     if (!Number.isFinite(suggested) || !Number.isFinite(cap) || suggested < 1 || cap < 1) return 0;
-    return Math.min(10, suggested, cap);
+    return Math.min(20, suggested, cap);
 };
 
 export const evaluateAutoSignal = (input: Parameters<typeof evaluateAutoSignalCandidates>[0]) =>

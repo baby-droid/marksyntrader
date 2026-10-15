@@ -165,6 +165,10 @@ function MarketCard({
     const [runCountOverride, setRunCountOverride] = useState<number | null>(null);
     const score = Math.max(0, Math.min(100, candidate?.score ?? 0));
     const recentWindow = candidate?.windows.find((item) => item.window === 20) ?? null;
+    const noSignalReason = market.error
+        || (market.tickCount < 1000
+            ? `Loading the 1,000-tick baseline (${market.tickCount.toLocaleString()}/1,000 ticks).`
+            : 'No signal passed the full-history confidence and multi-window checks.');
     const selectedRuns = candidate
         ? getSuggestedAutoSignalRuns(runCountOverride ?? candidate.recommendedRuns, settings.maxRuns)
         : 0;
@@ -269,7 +273,7 @@ function MarketCard({
                     ) : (
                         <>
                             <strong className='as-signal-strip__idle'>No active setup</strong>
-                            <small>{market.error || 'Waiting for multi-window alignment'}</small>
+                            <small>{noSignalReason}</small>
                         </>
                     )}
                 </div>
@@ -313,8 +317,8 @@ function MarketCard({
                         <span>Signal cycles</span>
                         <strong>{candidate ? selectedRuns : 0}</strong>
                         <small>
-                            Fast mode can send 3 separate one-tick purchases per cycle at the configured stake (up to 3×
-                            stake exposure per cycle). With Fast off, each cycle sends one purchase. The cycle cap,
+                            Tick-driven execution sends one contract per cycle, with no added wait after settlement.
+                            Actual speed depends on the next Deriv tick and the API response. The cycle cap,
                             take-profit, and stop-loss limits still apply.
                         </small>
                     </div>

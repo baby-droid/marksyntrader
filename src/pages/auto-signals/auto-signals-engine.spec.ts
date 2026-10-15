@@ -10,7 +10,7 @@ import {
 import type { AutoLabTick } from '@/pages/auto-lab/auto-lab-engine';
 
 const makeOneTickTrend = (): AutoLabTick[] => {
-    const ticks = Array.from({ length: 120 }, (_, index) => ({
+    const ticks = Array.from({ length: 1000 }, (_, index) => ({
         symbol: 'R_10',
         digit: index % 10,
         quote: [100, 102, 103][index % 3],
@@ -20,9 +20,10 @@ const makeOneTickTrend = (): AutoLabTick[] => {
     const lastQuote = ticks[ticks.length - 1].quote;
     return [
         ...ticks,
-        { symbol: 'R_10', digit: 1, quote: lastQuote - 3, epoch: 121, pip_size: 2 },
-        { symbol: 'R_10', digit: 2, quote: lastQuote - 6, epoch: 122, pip_size: 2 },
-        { symbol: 'R_10', digit: 3, quote: lastQuote - 5, epoch: 123, pip_size: 2 },
+        { symbol: 'R_10', digit: 1, quote: lastQuote + 1, epoch: 1001, pip_size: 2 },
+        { symbol: 'R_10', digit: 2, quote: lastQuote - 2, epoch: 1002, pip_size: 2 },
+        { symbol: 'R_10', digit: 3, quote: lastQuote - 5, epoch: 1003, pip_size: 2 },
+        { symbol: 'R_10', digit: 4, quote: lastQuote - 4, epoch: 1004, pip_size: 2 },
     ];
 };
 
@@ -48,18 +49,21 @@ describe('Auto-Signals one-tick analysis', () => {
     });
 
     it.each([
-        [59.9, 'EVEN', 0],
-        [60, 'EVEN', 1],
+        [64.9, 'EVEN', 0],
+        [65, 'EVEN', 1],
         [69.9, 'EVEN', 1],
         [70, 'EVEN', 2],
         [75, 'EVEN', 3],
-        [80, 'EVEN', 4],
-        [85, 'EVEN', 5],
-        [90, 'EVEN', 7],
-        [95, 'EVEN', 10],
+        [80, 'EVEN', 5],
+        [85, 'EVEN', 8],
+        [90, 'EVEN', 10],
+        [93, 'EVEN', 12],
+        [96, 'EVEN', 15],
+        [98, 'EVEN', 20],
         [64.9, 'UNDER', 0],
         [65, 'UNDER', 1],
-        [90, 'OVER', 7],
+        [90, 'OVER', 10],
+        [99.9, 'OVER', 20],
     ] as const)('selects %i score runs for %s', (score, strategy, expected) => {
         expect(recommendedAutoSignalRuns(score, strategy)).toBe(expected);
     });
@@ -68,6 +72,8 @@ describe('Auto-Signals one-tick analysis', () => {
         [4, 10, 4],
         [4, 2, 2],
         [10, 25, 10],
+        [20, 25, 20],
+        [25, 25, 20],
         [0, 10, 0],
         [5, 0, 0],
     ])('uses the suggested count %i under the configured cap %i', (suggested, cap, expected) => {
@@ -91,13 +97,64 @@ describe('Auto-Signals one-tick analysis', () => {
         expect(candidate?.windows.find((item) => item.window === 100)?.probability).toBeGreaterThan(60);
     });
 
+    it('does not produce candidates before the full 1000-tick baseline is available', () => {
+        expect(evaluateAutoSignalCandidates({
+            market: { symbol: 'R_10', label: 'Volatility 10' },
+            ticks: makeOneTickTrend().slice(0, 999),
+            family: 'AUTO',
+            now: 1_000,
+        })).toEqual([]);
+    });
+
+    it('rejects long-window outcomes that do not beat the fair baseline with confidence', () => {
+        const balancedTicks: AutoLabTick[] = Array.from({ length: 1000 }, (_, index) => {
+            const digit = index % 10;
+            return {
+                symbol: 'R_10',
+                digit,
+                quote: 100,
+                epoch: index + 1,
+                pip_size: 2,
+            };
+        });
+        expect(evaluateAutoSignalCandidates({
+            market: { symbol: 'R_10', label: 'Volatility 10' },
+            ticks: balancedTicks,
+            family: 'AUTO',
+            now: 1_000,
+        })).toEqual([]);
+    });
+
+    it('uses a 50 percent fair baseline for one-tick price-direction contracts', () => {
+        const alternatingPrices: AutoLabTick[] = Array.from({ length: 1000 }, (_, index) => ({
+            symbol: 'R_10',
+            digit: index % 10,
+            quote: 100 + (index % 2),
+            epoch: index + 1,
+            pip_size: 2,
+        }));
+        expect(evaluateAutoSignalCandidates({
+            market: { symbol: 'R_10', label: 'Volatility 10' },
+            ticks: alternatingPrices,
+            family: 'ONLY_UP_DOWN',
+            now: 1_000,
+        })).toEqual([]);
+    });
+
     it('keeps qualified barrier alternatives and reports the exact last-20 rate per barrier', () => {
         const ticks: AutoLabTick[] = [
-            ...Array.from({ length: 100 }, (_, index) => ({
+            ...Array.from({ length: 880 }, (_, index) => ({
                 symbol: 'R_10',
                 digit: 1,
                 quote: 100.01,
                 epoch: index + 1,
+                pip_size: 2,
+            })),
+            ...Array.from({ length: 100 }, (_, index) => ({
+                symbol: 'R_10',
+                digit: 1,
+                quote: 100.01,
+                epoch: index + 881,
                 pip_size: 2,
             })),
             ...Array.from({ length: 20 }, (_, index) => {
@@ -106,7 +163,7 @@ describe('Auto-Signals one-tick analysis', () => {
                     symbol: 'R_10',
                     digit,
                     quote: 100 + digit / 100,
-                    epoch: 101 + index,
+                    epoch: 981 + index,
                     pip_size: 2,
                 };
             }),
@@ -133,25 +190,32 @@ describe('Auto-Signals one-tick analysis', () => {
 
     it('uses the exact Match digit as the DIGITMATCH barrier and waits until that digit is current', () => {
         const makeTicks = (matchAtEnd: boolean): AutoLabTick[] => [
+            ...Array.from({ length: 900 }, (_, index) => ({
+                symbol: 'R_10',
+                digit: 6,
+                quote: 100.06,
+                epoch: index + 1,
+                pip_size: 2,
+            })),
             ...Array.from({ length: matchAtEnd ? 80 : 79 }, (_, index) => ({
                 symbol: 'R_10',
                 digit: 1,
                 quote: 100.01,
-                epoch: index + 1,
+                epoch: index + 901,
                 pip_size: 2,
             })),
             ...Array.from({ length: 20 }, (_, index) => ({
                 symbol: 'R_10',
                 digit: 6,
                 quote: 100.06,
-                epoch: (matchAtEnd ? 80 : 79) + index + 1,
+                epoch: (matchAtEnd ? 980 : 979) + index + 1,
                 pip_size: 2,
             })),
             ...(!matchAtEnd ? [{
                 symbol: 'R_10',
                 digit: 1,
                 quote: 100.01,
-                epoch: 100,
+                epoch: 1000,
                 pip_size: 2,
             }] : []),
         ];
@@ -253,12 +317,14 @@ describe('Auto-Signals one-tick analysis', () => {
     });
 
     it('can confirm an Over entry digit separately from the selected trade barrier', () => {
-        const digits = Array.from({ length: 120 }, () => 9);
+        const digits = Array.from({ length: 1000 }, () => 9);
         for (let index = 60; index < 100; index += 10) {
             digits[index] = 1;
             digits[index + 1] = 9;
         }
-        digits[119] = 1;
+        digits[990] = 1;
+        digits[991] = 9;
+        digits[999] = 1;
         const ticks: AutoLabTick[] = digits.map((digit, index) => ({
             symbol: 'R_10',
             digit,
@@ -275,7 +341,6 @@ describe('Auto-Signals one-tick analysis', () => {
         const over4 = candidates.find((candidate) =>
             candidate.strategy === 'OVER' && candidate.barrier === 4
         );
-
         expect(over4).toMatchObject({
             entryDigit: 1,
             entryReady: true,
