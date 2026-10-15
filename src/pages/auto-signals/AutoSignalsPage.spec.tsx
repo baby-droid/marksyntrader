@@ -132,7 +132,9 @@ describe('Auto-Signals trade actions', () => {
 
         fireEvent.click(screen.getByTestId('button-trade-only-R_10-DIFFERS-3'));
         const dialog = screen.getByRole('dialog', { name: 'Choose a Differs bot for Volatility 10' });
-        fireEvent.click(within(dialog).getByRole('button', { name: 'Trade Only' }));
+        fireEvent.click(within(dialog).getByRole('button', {
+            name: /Trade Only Load the bot matched to this signal/,
+        }));
         await act(async () => Promise.resolve());
 
         expect(props.onTrade).toHaveBeenCalledWith(
