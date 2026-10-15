@@ -32,6 +32,7 @@ import {
 } from '../auto-lab/auto-lab-engine';
 import type { AutoLabSettings, AutoLabTrade } from '../auto-lab/AutoLabView';
 import { formatMoney, fromUsd, getDisplayCurrency, subscribeCurrency, toUsd } from '@/utils/currency-display';
+import { calculateAutoStake, MIN_DERIV_STAKE, usesUnchangedLegacyAutoStakeDefaults } from './money-print-utils';
 import './dtrader.scss';
 
 type MoneyMode = 'accumulation' | 'challenge' | 'growth' | 'earnings' | 'sessions' | 'flip';
@@ -49,13 +50,15 @@ type MoneyPrintPrefs = {
     hourlyTarget: number;
 };
 
-const SETTINGS_KEY = 'money_print_settings_v1';
-const PREFS_KEY = 'money_print_prefs_v1';
+const SETTINGS_KEY = 'money_print_settings_v2';
+const LEGACY_SETTINGS_KEY = 'money_print_settings_v1';
+const PREFS_KEY = 'money_print_prefs_v2';
+const LEGACY_PREFS_KEY = 'money_print_prefs_v1';
 const JOURNAL_KEY = 'money_print_journal_v1';
 const BASE_SETTINGS: AutoLabSettings = {
     marketSelection: 'ALL',
     contractType: 'AUTO',
-    stake: 1,
+    stake: MIN_DERIV_STAKE,
     martingaleMode: 'normal',
     multiplier: 1.8,
     maxMartingaleLevel: 2,
@@ -79,7 +82,7 @@ const BASE_SETTINGS: AutoLabSettings = {
 };
 const BASE_PREFS: MoneyPrintPrefs = {
     mode: 'accumulation',
-    autoStake: true,
+    autoStake: false,
     riskPercent: 0.5,
     maxStake: 2,
     martingaleEnabled: false,
@@ -127,13 +130,54 @@ const SESSION_WINDOWS = [
     { id: 'late', label: '21:00–23:00', start: 1260, end: 1380 },
 ];
 const STORAGE_JOURNAL_LIMIT = 500;
-const round2 = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
 const safeRead = <T,>(key: string, fallback: T): T => {
     try {
         const saved = localStorage.getItem(key);
         return saved ? { ...fallback, ...JSON.parse(saved) } : fallback;
     } catch {
         return fallback;
+    }
+};
+const readSettings = (): AutoLabSettings => {
+    try {
+        const current = localStorage.getItem(SETTINGS_KEY);
+        if (current) return { ...BASE_SETTINGS, ...JSON.parse(current) };
+
+        const legacy = localStorage.getItem(LEGACY_SETTINGS_KEY);
+        if (!legacy) return BASE_SETTINGS;
+        const saved = JSON.parse(legacy);
+        const oldDefaults: AutoLabSettings = { ...BASE_SETTINGS, stake: 1 };
+        const hadUnchangedDefaults = Object.entries(oldDefaults).every(
+            ([key, value]) => saved[key] === value,
+        );
+        const migrated = {
+            ...BASE_SETTINGS,
+            ...saved,
+            ...(hadUnchangedDefaults ? { stake: MIN_DERIV_STAKE } : {}),
+        };
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify(migrated));
+        return migrated;
+    } catch {
+        return BASE_SETTINGS;
+    }
+};
+const readPrefs = (): MoneyPrintPrefs => {
+    try {
+        const current = localStorage.getItem(PREFS_KEY);
+        if (current) return { ...BASE_PREFS, ...JSON.parse(current) };
+
+        const legacy = localStorage.getItem(LEGACY_PREFS_KEY);
+        if (!legacy) return BASE_PREFS;
+        const saved = JSON.parse(legacy);
+        const migrated = {
+            ...BASE_PREFS,
+            ...saved,
+            ...(usesUnchangedLegacyAutoStakeDefaults(saved) ? { autoStake: false } : {}),
+        };
+        localStorage.setItem(PREFS_KEY, JSON.stringify(migrated));
+        return migrated;
+    } catch {
+        return BASE_PREFS;
     }
 };
 const getEastAfricaTime = (date = new Date()) => {
@@ -174,8 +218,8 @@ const mergeJournal = (saved: AutoLabTrade[], incoming: AutoLabTrade[]) => {
 };
 
 const DTrader: React.FC = () => {
-    const [settings, setSettings] = useState<AutoLabSettings>(() => safeRead(SETTINGS_KEY, BASE_SETTINGS));
-    const [prefs, setPrefs] = useState<MoneyPrintPrefs>(() => safeRead(PREFS_KEY, BASE_PREFS));
+    const [settings, setSettings] = useState<AutoLabSettings>(readSettings);
+    const [prefs, setPrefs] = useState<MoneyPrintPrefs>(readPrefs);
     const [liveAcknowledged, setLiveAcknowledged] = useState(false);
     const [, setDisplayCurrency] = useState(getDisplayCurrency());
     const [journal, setJournal] = useState<AutoLabTrade[]>([]);
@@ -203,9 +247,7 @@ const DTrader: React.FC = () => {
 
     const effectiveStakeFromPrefs = (balance: number | null) => {
         if (!prefs.autoStake) return settings.stake;
-        if (balance == null || balance <= 0) return 0;
-        const calculated = Math.min(prefs.maxStake, balance * (prefs.riskPercent / 100));
-        return round2(calculated);
+        return calculateAutoStake(balance, prefs.riskPercent, prefs.maxStake);
     };
 
     const engine = useAutoLabEngine(
@@ -357,7 +399,7 @@ const DTrader: React.FC = () => {
     const openCount = engine.trades.filter(trade => trade.status === 'OPEN').length;
     const effectiveStakeDisplay = prefs.autoStake ? autoStake : settings.stake;
     const canStart = engine.canStart
-        && autoStake >= 0.35
+        && autoStake >= MIN_DERIV_STAKE
         && (!accountIsReal || liveAcknowledged)
         && !(prefs.mode === 'flip' && !accountIsDemo);
     const connectionCopy = !engine.account.connected
@@ -383,7 +425,7 @@ const DTrader: React.FC = () => {
                 trade.status,
             ]),
         ];
-        const csv = rows.map(row => row.map(value => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\n');
+        const csv = rows.map(row => row.map(value => `"${String(value).replace(/"/g, '""')}"`).join(',')).join('\n');
         const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
         const anchor = document.createElement('a');
         anchor.href = url;
@@ -402,8 +444,8 @@ const DTrader: React.FC = () => {
             setActivePanel('settings');
             return;
         }
-        if (effectiveStakeDisplay < 0.35) {
-            setNotice('The account-based stake is below Deriv’s minimum. Lower the risk controls only if appropriate, or use a larger demo balance.');
+        if (effectiveStakeDisplay < MIN_DERIV_STAKE) {
+            setNotice('The account-based stake is below Deriv’s minimum. Turn off auto stake to use the fixed base stake, or change the risk settings deliberately.');
             setActivePanel('settings');
             return;
         }
@@ -568,6 +610,19 @@ const DTrader: React.FC = () => {
                                         </label>
                                         <span>{prefs.autoStake ? `${prefs.riskPercent}% risk · capped at ${money(prefs.maxStake, engine.account.currency)}` : 'Fixed base stake'}</span>
                                     </div>
+                                    {prefs.autoStake && autoStake < MIN_DERIV_STAKE && (
+                                        <div className='mp-risk-warning mp-risk-warning--action'>
+                                            <AlertTriangle size={15} />
+                                            <p>
+                                                Auto stake is {money(autoStake, engine.account.currency)}, below the {money(MIN_DERIV_STAKE, engine.account.currency)} minimum.
+                                                On a small demo balance, use the fixed base stake instead of silently exceeding the selected risk cap.
+                                            </p>
+                                            <button type='button' onClick={() => {
+                                                patchPrefs('autoStake', false);
+                                                setNotice(`Auto stake disabled. The fixed base stake is ${money(settings.stake, engine.account.currency)}; review risk settings before starting.`);
+                                            }}>Use fixed stake</button>
+                                        </div>
+                                    )}
                                     <div className='mp-risk-caption'><ShieldAlert size={13} /> Capped martingale is optional, off by default, and limited to 2 recovery steps.</div>
                                     <button className='mp-link-button' onClick={() => setActivePanel('settings')}>Open full risk settings <ArrowUpRight size={14} /></button>
                                 </section>
@@ -781,7 +836,7 @@ const SettingsPanel: React.FC<{
             <div className='mp-form-grid'>
                 <label className='mp-field'>
                     <span>Base stake {prefs.autoStake ? '(calculated)' : ''}</span>
-                    <input type='number' min='0.35' step='0.01' disabled={prefs.autoStake} value={prefs.autoStake ? fromUsd(stake).toFixed(2) : fromUsd(settings.stake).toFixed(2)} onChange={event => onSetting('stake', toUsd(Number(event.target.value) || 0))} />
+                    <input type='number' min={MIN_DERIV_STAKE} step='0.01' disabled={prefs.autoStake} value={prefs.autoStake ? fromUsd(stake).toFixed(2) : fromUsd(settings.stake).toFixed(2)} onChange={event => onSetting('stake', Math.max(MIN_DERIV_STAKE, toUsd(Number(event.target.value) || MIN_DERIV_STAKE)))} />
                 </label>
                 <label className='mp-field'>
                     <span>Risk per trade · % of balance</span>
@@ -789,7 +844,7 @@ const SettingsPanel: React.FC<{
                 </label>
                 <label className='mp-field'>
                     <span>Maximum stake</span>
-                    <input type='number' min='0.35' step='0.01' value={fromUsd(prefs.maxStake).toFixed(2)} onChange={event => onPref('maxStake', Math.max(0.35, toUsd(Number(event.target.value) || 0.35)))} />
+                    <input type='number' min={MIN_DERIV_STAKE} step='0.01' value={fromUsd(prefs.maxStake).toFixed(2)} onChange={event => onPref('maxStake', Math.max(MIN_DERIV_STAKE, toUsd(Number(event.target.value) || MIN_DERIV_STAKE)))} />
                 </label>
                 <label className='mp-field'>
                     <span>Take profit · session</span>
@@ -845,6 +900,16 @@ const SettingsPanel: React.FC<{
                     <b>Scan Over 0–9 and Under 0–9 barriers</b>
                 </label>
             </div>
+            {prefs.autoStake && stake < MIN_DERIV_STAKE && (
+                <div className='mp-risk-warning mp-risk-warning--action'>
+                    <AlertTriangle size={15} />
+                    <p>
+                        The selected balance-risk limit calculates to less than {money(MIN_DERIV_STAKE, currency)}.
+                        Money Print will not raise it to the minimum automatically.
+                    </p>
+                    <button type='button' onClick={() => onPref('autoStake', false)}>Use fixed base stake</button>
+                </div>
+            )}
             {!settings.autoBarrier && (
                 <div className='mp-digit-picks'>
                     <span>Selected digit barrier</span>

@@ -1,0 +1,57 @@
+PROJECT: MONEY PRINT — NEURAL LINK SMART TRADING ENGINE
+
+Build a production-oriented, fully integrated automated Deriv trading module inside my existing Mark Syn Trader application. Inspect the current repository, framework, routes, backend, database, Deriv connection, account authentication, trading engine, and existing UI before making changes. Preserve all working functionality and reuse the existing services wherever possible. Do not create a disconnected mock dashboard or replace the application with a new unrelated project.
+
+Implement the complete specification below in phases: responsive Money Print UI; secure Deriv account connection; real-time market scanner; contract registry for supported Over/Under, Even/Odd, Matches/Differs, Rise/Fall and Only Ups/Only Downs contracts; Neural Link analysis and strategy registry; probability calibration and out-of-sample strategy validation; independent risk authorization; reliable contract execution and settlement reconciliation; Accumulation, Earnings, Growth, AI Challenge, Scheduled Sessions, Auto Flip (demo-first, high-risk), Strategy Lab and Capital Preservation modes; admin analytics; printable reports; persistent settings; audit logs; and automated testing.
+
+Before coding, inspect the codebase and produce a short implementation plan identifying existing components to reuse, missing components, database changes, security considerations, and acceptance tests. Then implement the actual features rather than stopping at the plan.
+
+CORE REQUIREMENTS
+1. Create a premium responsive dark interface called Money Print with emerald-green, purple and silver accents, readable typography, account status, balance, session P/L, active contracts, market scanner, ranked signal cards, confidence estimates, strategy details, controls, charts, trade journal, mode selector, reports and admin navigation. Clearly distinguish live data, demo data, simulations and unavailable data.
+2. Use the existing Deriv connection where possible. Verify the current official API message formats, authentication, permissions, supported contract types, proposal fields, purchase workflow, open-contract updates, settlement messages and rate limits before implementing the adapter. Do not fabricate API responses or assume unsupported contract identifiers.
+3. Scan all enabled and actually supported markets and contract types. Include Over 1–Over 7, Under 8–Under 1, Even, Odd, Matches, Differs, Rise, Fall, Only Ups and Only Downs where available. Validate each contract's actual barrier rules, duration, prediction fields, payout and settlement semantics against current API responses.
+4. Calculate digit distributions, parity distributions, threshold frequencies, momentum, reversal statistics, streaks, rolling volatility, regime changes, data freshness and data quality. Support configurable rolling windows and market-specific analysis. Do not claim that historical frequency alone predicts the next result.
+5. Build a strategy engine that generates candidate rules, records strategy versions, calculates payout-aware expected value, measures uncertainty, validates on separate training/validation/test data, supports walk-forward testing and paper trading, detects drift, and disables underperforming strategies. Show sample size and uncertainty alongside confidence. Never fabricate a win probability or claim guaranteed accuracy.
+6. Before every purchase, require an independent Risk Guardian approval. Validate account authorization, fresh market data, proposal validity, quote age, actual payout, allowable stake, exposure, trade limits, session status, daily loss, session loss, consecutive losses, cooldown and account state. Reject any trade that fails any check. The AI must not be able to bypass these controls.
+7. Implement fixed stake, balance-based stake and percentage risk-budget settings. Default automatic martingale to OFF. Any capped martingale experiment must be demo-only, strictly bounded, and never bypass risk limits. Do not automatically double stakes or promise recovery of losses. Use the actual contract cost and maximum possible loss returned by the API to enforce the risk budget.
+8. Implement configurable take profit, session loss limit, daily drawdown limit, maximum consecutive losses, maximum trades per session, maximum open exposure, minimum sample size, minimum expected-value margin, quote-age limit, cooldown and emergency stop. Persist risk state so restarts cannot reset daily limits. A stop must block new entries and reconcile existing open contracts; do not claim an already purchased contract has been cancelled unless the API confirms it.
+9. Implement these modes:
+   A. Accumulation: starting capital, target balance, deadline, daily milestones and enabled sessions; calculate the required growth path, report feasibility and stop when risk limits are reached.
+   B. Earnings: user-defined net profit target per session or hour; stop new entries when the verified target is reached and wait for the next eligible period.
+   C. Growth: user-defined starting balance, target and deadline; calculate required compound growth, assess feasibility and never force trades to meet a target.
+   D. AI Challenge: accept a natural-language goal, convert it into structured settings, explain the proposed strategy and risks, backtest it, and require approval before automated execution.
+   E. Scheduled Sessions: support Africa/Nairobi timezone and configurable windows, initially 03:00–06:00, 11:00–13:00, 16:00–18:00 and 21:00–23:00. Add enabled days, a 15-minute configurable cooldown, session-end stops and persistent daily limits.
+   F. Auto Flip: high-risk experimental mode, demo-only by default, with strict exposure, loss, duration and trade-count limits. Do not advertise or promise extreme targets such as $10 to $200 in an hour.
+   G. Strategy Lab: compare strategies in simulation, backtest, paper-trade, version, approve, pause and roll back them.
+   H. Capital Preservation: conservative configurable limits, reduced exposure and automatic suspension when data quality or strategy performance deteriorates.
+10. The scanner must rank qualified candidates using validated risk-adjusted performance, expected value, confidence interval, sample size, stability, payout, current conditions and data quality. Return NO TRADE when no candidate passes. Do not lower thresholds merely to reach a profit target. Do not rank solely by historical win rate.
+11. Provide signal cards with market, contract type, barrier or prediction digit, duration, entry conditions, quote timestamp, estimated probability, confidence interval, break-even probability, estimated expected value, strategy version, sample size, risk assessment and rejection reason where applicable. Distinguish the next-tick prediction from the observed last digit and from a purchased contract's actual entry and settlement.
+12. Implement reliable execution with unique trade/request IDs, idempotency, proposal revalidation, explicit purchase confirmation, open-contract monitoring, settlement reconciliation, reconnect handling, duplicate-order prevention, stale-data rejection and durable event logging. Do not report a trade as purchased or settled until confirmed by Deriv. After ambiguous network failures, reconcile account/open-contract state before retrying.
+13. Build the admin command center with authorized connected-user counts, user/session status, verified platform trade counts, net P/L, market/strategy/contract/barrier/duration rankings, session analytics, drawdown, risk alerts, rejected entries, API latency, connection errors and settlement mismatches. Separate demo, simulated and real-money metrics. Protect administrative functions with server-side role-based access control and audit all privileged actions. Never expose account tokens or private user data in analytics.
+14. Generate printable daily, session, strategy and account reports and CSV exports. Include opening/closing verified balance, gross profit, gross loss, net P/L, settled wins/losses, win rate, average win/loss, total stake, drawdown, best/worst market, contract, barrier and duration, session statistics, strategy version, predicted probabilities, rejected entries and trade/contract IDs. Use settlement records as the source of truth.
+15. Use secure server-side credential/token handling, encrypted secret storage, least-privilege authorization, input validation, secure session handling, rate limiting and appropriate isolation between users. Never hardcode secrets, commit tokens, expose credentials in frontend code, or silently use a real account. Default to demo mode and require explicit authorization for live trading.
+16. Use the existing framework and dependencies where practical. Keep modules maintainable and typed where supported. Implement persistent database models for user settings, account references, market data metadata, strategies, strategy versions, signals, orders, contracts, settlements, risk events, sessions, reports and audit logs. Add appropriate indexes and migration scripts.
+17. Add tests for contract parsing, payout calculations, break-even probability, stake limits, loss stops, daily drawdown, session boundaries, timezone behavior, cooldown, duplicate-order prevention, reconnect recovery, settlement reconciliation, authorization and multi-user isolation. Include integration tests with mocked API responses and simulation tests for every mode.
+18. Add clear setup instructions, required environment variables, database migrations, deployment instructions, health checks and a safe demo walkthrough. Never claim a feature is complete if it is only a placeholder or mock.
+
+IMPLEMENTATION ORDER
+Phase 1: inspect repository and preserve existing functionality; create the Money Print page and persistent settings.
+Phase 2: verify and integrate Deriv account/data services; implement market subscriptions and supported contract discovery.
+Phase 3: build market analysis, signal cards, contract evaluation and Strategy Lab simulation.
+Phase 4: implement the independent Risk Guardian, demo execution, confirmed settlement and recovery-safe state management.
+Phase 5: add session scheduling and all trading modes.
+Phase 6: add admin analytics, printable reports, audit logs, comprehensive tests and deployment documentation.
+
+ACCEPTANCE CRITERIA
+- The existing application still runs and its working features are preserved.
+- The Money Print page uses the real backend services, not hardcoded dashboard figures.
+- Unsupported markets/contracts are excluded with a clear explanation.
+- No purchase occurs without fresh validated data and risk approval.
+- No trade is duplicated after reconnects or uncertain API responses.
+- Take-profit, session stops and daily stops are calculated from verified settlements and persist across restarts.
+- Every requested mode has implemented settings, execution eligibility rules, status visibility and tests; unsupported live functions are clearly marked.
+- The admin panel uses authorized, verified backend data and enforces permissions.
+- Reports reconcile with settled contract records.
+- The application passes type checks, linting where configured, tests and a build.
+
+Start by inspecting the current project, identifying what already exists, and implementing the first complete vertical slice. Keep a checklist of completed items, missing API capabilities and tests. Do not delete working code or claim profitable trading performance without evidence.

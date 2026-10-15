@@ -387,6 +387,10 @@
 .mp-risk-warning { margin-top: .65rem; padding: .52rem; display: flex; align-items: flex-start; gap: .4rem; border: 1px solid rgba(238, 170, 83, .27); border-radius: 7px; background: rgba(117, 73, 24, .14); color: #e4bd7c; }
 .mp-risk-warning svg { flex: 0 0 auto; }
 .mp-risk-warning p { margin: 0; font-size: .53rem; line-height: 1.45; }
+.mp-risk-warning--action { align-items: center; flex-wrap: wrap; }
+.mp-risk-warning--action p { flex: 1 1 220px; }
+.mp-risk-warning--action button { min-height: 28px; padding: .3rem .5rem; border: 1px solid rgba(238, 186, 104, .42); border-radius: 5px; background: rgba(133, 88, 34, .28); color: #ffe0a5; font-size: .55rem; font-weight: 800; cursor: pointer; }
+.mp-risk-warning--action button:hover { background: rgba(150, 101, 41, .42); }
 .mp-risk-footnote { margin-top: .6rem; color: #8297b0; font-size: .51rem; line-height: 1.4; }
 .mp-footer { padding: .5rem .15rem 0; display: flex; justify-content: space-between; flex-wrap: wrap; gap: .45rem; color: #6d84a1; font-size: .52rem; }
 .mp-footer span { display: inline-flex; align-items: center; gap: .28rem; }
