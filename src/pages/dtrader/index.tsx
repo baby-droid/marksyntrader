@@ -33,6 +33,15 @@ import {
 import type { AutoLabSettings, AutoLabTrade } from '../auto-lab/AutoLabView';
 import { formatMoney, fromUsd, getDisplayCurrency, subscribeCurrency, toUsd } from '@/utils/currency-display';
 import { calculateAutoStake, MIN_DERIV_STAKE, usesUnchangedLegacyAutoStakeDefaults } from './money-print-utils';
+import MoneyPrintNeuralLink, { getMatchRouteKey, type MatchRoute } from './MoneyPrintNeuralLink';
+import {
+    createMoneyPrintNeuralReport,
+    findMoneyPrintLosingSide,
+    rankMoneyPrintMatchRoutes,
+    summarizeMoneyPrintTrades,
+    type MoneyPrintNeuralReport,
+} from './money-print-neural-analysis';
+import { downloadMoneyPrintReportImage } from './money-print-report-image';
 import './dtrader.scss';
 
 type MoneyMode = 'accumulation' | 'challenge' | 'growth' | 'earnings' | 'sessions' | 'flip';
@@ -69,6 +78,7 @@ const BASE_SETTINGS: AutoLabSettings = {
     barrier: 4,
     autoBarrier: true,
     contractBarrier: 4,
+    matchEntryDigit: null,
     secondaryBarrier: 5,
     requiredStreak: 3,
     duration: 1,
@@ -130,6 +140,18 @@ const SESSION_WINDOWS = [
     { id: 'late', label: '21:00–23:00', start: 1260, end: 1380 },
 ];
 const STORAGE_JOURNAL_LIMIT = 500;
+const NEURAL_RISK_LOCK_KEY = 'money_print_neural_risk_lock_v1';
+const NEURAL_RISK_LOCK_MS = 5 * 60 * 60 * 1000;
+const readNeuralRiskLock = (loginId: string): number | null => {
+    if (!loginId) return null;
+    try {
+        const raw = localStorage.getItem(`${NEURAL_RISK_LOCK_KEY}:${loginId}`);
+        const until = raw == null ? NaN : Number(raw);
+        return Number.isFinite(until) && until > 0 ? until : null;
+    } catch {
+        return null;
+    }
+};
 const safeRead = <T,>(key: string, fallback: T): T => {
     try {
         const saved = localStorage.getItem(key);
@@ -210,12 +232,20 @@ const money = (amount: number | null | undefined, accountCurrency = 'USD') => {
 };
 const mergeJournal = (saved: AutoLabTrade[], incoming: AutoLabTrade[]) => {
     const byId = new Map(saved.map(trade => [trade.id, trade]));
+    const incomingIds: string[] = [];
     incoming.forEach(trade => {
-        byId.delete(trade.id);
         byId.set(trade.id, { ...byId.get(trade.id), ...trade });
+        incomingIds.push(trade.id);
     });
-    return [...byId.values()].reverse().slice(0, STORAGE_JOURNAL_LIMIT);
+    const orderedIds = [...new Set([...incomingIds, ...saved.map(trade => trade.id)])];
+    return orderedIds
+        .map(id => byId.get(id))
+        .filter((trade): trade is AutoLabTrade => Boolean(trade))
+        .slice(0, STORAGE_JOURNAL_LIMIT);
 };
+
+const tradeSnapshot = (trade: AutoLabTrade) =>
+    `${trade.status}|${trade.profit}|${trade.stake}|${trade.market}|${trade.contract}`;
 
 const DTrader: React.FC = () => {
     const [settings, setSettings] = useState<AutoLabSettings>(readSettings);
@@ -223,15 +253,22 @@ const DTrader: React.FC = () => {
     const [liveAcknowledged, setLiveAcknowledged] = useState(false);
     const [, setDisplayCurrency] = useState(getDisplayCurrency());
     const [journal, setJournal] = useState<AutoLabTrade[]>([]);
+    const [neuralReport, setNeuralReport] = useState<MoneyPrintNeuralReport | null>(null);
+    const [selectedMatchKey, setSelectedMatchKey] = useState<string | null>(null);
+    const [autoMatchArmed, setAutoMatchArmed] = useState(false);
+    const [riskLockState, setRiskLockState] = useState<{ loginId: string; until: number } | null>(null);
     const [clock, setClock] = useState(() => getEastAfricaTime());
     const [notice, setNotice] = useState('');
     const [activePanel, setActivePanel] = useState<'dashboard' | 'settings' | 'reports'>('dashboard');
     const previousAccountRef = useRef('');
+    const riskLockStateRef = useRef(riskLockState);
     const scheduleStartedRef = useRef('');
     const scheduledRunRef = useRef(false);
     const scheduleEndRef = useRef(0);
     const activeRunAccountRef = useRef('');
-    const tradeCountAtRunStartRef = useRef(0);
+    const tradeSnapshotsRef = useRef(new Map<string, string>());
+    const pendingMatchStartRef = useRef<string | null>(null);
+    const pendingSettlementIdsRef = useRef(new Set<string>());
 
     useEffect(() => subscribeCurrency(() => setDisplayCurrency(getDisplayCurrency())), []);
     useEffect(() => {
@@ -261,15 +298,54 @@ const DTrader: React.FC = () => {
             maxStake: prefs.maxStake,
             martingaleEnabled: prefs.martingaleEnabled,
         },
+        true,
     );
     const autoStake = effectiveStakeFromPrefs(engine.account.balance);
     const engineRef = useRef(engine);
     engineRef.current = engine;
+    const matchRoutes = useMemo(() => rankMoneyPrintMatchRoutes(engine.markets), [engine.markets]);
+    const selectedMatch = matchRoutes.find(route => route.key === selectedMatchKey) ?? null;
+    const persistedRiskLock = readNeuralRiskLock(engine.account.loginId);
+    const stateRiskLock = riskLockState?.loginId === engine.account.loginId ? riskLockState.until : null;
+    const riskLockUntil = Math.max(persistedRiskLock ?? 0, stateRiskLock ?? 0) || null;
+    const riskLockActive = riskLockUntil != null && riskLockUntil > Date.now();
+    riskLockStateRef.current = riskLockState;
 
     useEffect(() => {
-        if (!engine.account.loginId) return;
+        if (!matchRoutes.length) {
+            setSelectedMatchKey(null);
+            return;
+        }
+        setSelectedMatchKey(current =>
+            current && matchRoutes.some(route => route.key === current)
+                ? current
+                : (matchRoutes.find(route => route.eligible) ?? matchRoutes[0]).key,
+        );
+    }, [matchRoutes]);
+
+    useEffect(() => {
+        if (!engine.account.loginId) {
+            setRiskLockState(null);
+            setNeuralReport(null);
+            setAutoMatchArmed(false);
+            pendingMatchStartRef.current = null;
+            setJournal([]);
+            setLiveAcknowledged(false);
+            tradeSnapshotsRef.current.clear();
+            pendingSettlementIdsRef.current.clear();
+            return;
+        }
         activeRunAccountRef.current = '';
-        tradeCountAtRunStartRef.current = engineRef.current.trades.length;
+        tradeSnapshotsRef.current = new Map(engineRef.current.trades.map(trade => [trade.id, tradeSnapshot(trade)]));
+        pendingSettlementIdsRef.current.clear();
+        setRiskLockState({
+            loginId: engine.account.loginId,
+            until: readNeuralRiskLock(engine.account.loginId) ?? 0,
+        });
+        setNeuralReport(null);
+        setSelectedMatchKey(null);
+        setAutoMatchArmed(false);
+        pendingMatchStartRef.current = null;
         if (previousAccountRef.current && previousAccountRef.current !== engine.account.loginId) {
             setLiveAcknowledged(false);
             setNotice('Account changed. Review the selected account and confirm again before live trading.');
@@ -287,8 +363,14 @@ const DTrader: React.FC = () => {
     useEffect(() => {
         if (!engine.account.loginId || engine.trades.length === 0) return;
         if (activeRunAccountRef.current !== engine.account.loginId) return;
-        const currentRunTrades = engine.trades.slice(tradeCountAtRunStartRef.current);
+        const currentRunTrades = engine.trades.filter(trade =>
+            tradeSnapshotsRef.current.get(trade.id) !== tradeSnapshot(trade),
+        );
         if (!currentRunTrades.length) return;
+        currentRunTrades.forEach(trade => tradeSnapshotsRef.current.set(trade.id, tradeSnapshot(trade)));
+        currentRunTrades
+            .filter(trade => trade.status === 'WIN' || trade.status === 'LOSS')
+            .forEach(trade => pendingSettlementIdsRef.current.add(trade.id));
         setJournal(previous => {
             const next = mergeJournal(previous, currentRunTrades);
             try {
@@ -316,15 +398,38 @@ const DTrader: React.FC = () => {
         const scheduleTick = () => {
             const current = engineRef.current;
             const currentPrefs = safeRead(PREFS_KEY, BASE_PREFS);
-            const currentMode = currentPrefs.mode;
-            const shouldSchedule = currentPrefs.scheduledSessions && currentMode === 'sessions';
+            const shouldSchedule = currentPrefs.scheduledSessions;
+            const persistedLock = readNeuralRiskLock(current.account.loginId);
+            const memoryLock = riskLockStateRef.current?.loginId === current.account.loginId
+                ? riskLockStateRef.current.until
+                : null;
+            const savedLock = Math.max(persistedLock ?? 0, memoryLock ?? 0) || null;
+            const isLocked = savedLock != null && savedLock > Date.now();
+            if (isLocked) {
+                setRiskLockState(currentLock =>
+                    currentLock?.loginId === current.account.loginId && currentLock.until === savedLock
+                        ? currentLock
+                        : { loginId: current.account.loginId, until: savedLock },
+                );
+                if (
+                    scheduledRunRef.current
+                    || ['running', 'scanning', 'connecting'].includes(current.status)
+                ) {
+                    current.onStop();
+                    scheduledRunRef.current = false;
+                    scheduleEndRef.current = Date.now();
+                }
+                return;
+            }
             const activeWindow = SESSION_WINDOWS.find(window =>
                 clock.minutes >= window.start && clock.minutes < window.end,
             );
             const scheduleKey = activeWindow ? `${clock.key}:${activeWindow.id}` : '';
 
             if (!shouldSchedule || !activeWindow) {
-                if (scheduledRunRef.current) {
+                const shouldStopRun = scheduledRunRef.current
+                    || (shouldSchedule && ['running', 'scanning', 'connecting'].includes(current.status));
+                if (shouldStopRun) {
                     current.onStop();
                     scheduledRunRef.current = false;
                     scheduleEndRef.current = Date.now();
@@ -339,11 +444,12 @@ const DTrader: React.FC = () => {
                 && current.canStart
                 && current.status !== 'running'
                 && current.status !== 'scanning'
+                && current.status !== 'connecting'
             ) {
                 scheduleStartedRef.current = scheduleKey;
                 scheduledRunRef.current = true;
                 activeRunAccountRef.current = current.account.loginId;
-                tradeCountAtRunStartRef.current = current.trades.length;
+                tradeSnapshotsRef.current = new Map(current.trades.map(trade => [trade.id, tradeSnapshot(trade)]));
                 current.onStart();
             }
         };
@@ -359,12 +465,27 @@ const DTrader: React.FC = () => {
     }, []);
 
     const patchSetting = <K extends keyof AutoLabSettings>(key: K, value: AutoLabSettings[K]) => {
+        if (riskLockActive) {
+            setNotice('Trade settings are locked until the five-hour risk pause ends.');
+            return;
+        }
         setSettings(previous => ({ ...previous, [key]: value }));
     };
     const patchPrefs = <K extends keyof MoneyPrintPrefs>(key: K, value: MoneyPrintPrefs[K]) => {
+        if (
+            riskLockActive
+            && !(['challenge', 'goalBalance', 'days', 'hourlyTarget'] as Array<keyof MoneyPrintPrefs>).includes(key)
+        ) {
+            setNotice('Trading controls are locked until the five-hour risk pause ends.');
+            return;
+        }
         setPrefs(previous => ({ ...previous, [key]: value }));
     };
     const selectMode = (mode: MoneyMode) => {
+        if (riskLockActive) {
+            setNotice('Trade modes are locked until the five-hour risk pause ends.');
+            return;
+        }
         if (mode === 'flip' && engine.account.isVirtual === false) {
             setNotice('Auto Flip is restricted to a verified demo account.');
             return;
@@ -401,7 +522,8 @@ const DTrader: React.FC = () => {
     const canStart = engine.canStart
         && autoStake >= MIN_DERIV_STAKE
         && (!accountIsReal || liveAcknowledged)
-        && !(prefs.mode === 'flip' && !accountIsDemo);
+        && !(prefs.mode === 'flip' && !accountIsDemo)
+        && !riskLockActive;
     const connectionCopy = !engine.account.connected
         ? 'Not connected'
         : !engine.account.authorized
@@ -435,6 +557,12 @@ const DTrader: React.FC = () => {
     };
 
     const runButton = () => {
+        const savedLock = readNeuralRiskLock(engine.account.loginId);
+        if (riskLockActive || (savedLock != null && savedLock > Date.now())) {
+            if (savedLock != null) setRiskLockState({ loginId: engine.account.loginId, until: savedLock });
+            setNotice('DO NOT TRADE: the account risk lock is active. New entries stay disabled until it expires.');
+            return;
+        }
         if (prefs.mode === 'flip' && !accountIsDemo) {
             setNotice('Auto Flip is demo-only. Switch to a verified demo account to run it.');
             return;
@@ -455,8 +583,234 @@ const DTrader: React.FC = () => {
         }
         setNotice('');
         activeRunAccountRef.current = engine.account.loginId;
-        tradeCountAtRunStartRef.current = engine.trades.length;
+        tradeSnapshotsRef.current = new Map(engine.trades.map(trade => [trade.id, tradeSnapshot(trade)]));
         engine.onStart();
+    };
+
+    const activateNeuralRiskLock = (losingSide: string) => {
+        const loginId = engineRef.current.account.loginId;
+        const existingLock = loginId ? readNeuralRiskLock(loginId) : null;
+        const until = existingLock != null && existingLock > Date.now()
+            ? existingLock
+            : Date.now() + NEURAL_RISK_LOCK_MS;
+        if (loginId) {
+            try {
+                localStorage.setItem(`${NEURAL_RISK_LOCK_KEY}:${loginId}`, String(until));
+            } catch {
+                setNotice('Storage is unavailable. Trading is stopped for this page session, but the five-hour lock could not be saved.');
+            }
+            setRiskLockState({ loginId, until });
+        }
+        pendingMatchStartRef.current = null;
+        setAutoMatchArmed(false);
+        scheduledRunRef.current = false;
+        scheduleEndRef.current = Date.now();
+        engineRef.current.onStop();
+        setNotice(`DO NOT TRADE: ${losingSide} met the loss guard. New Money Print entries are disabled for five hours.`);
+    };
+
+    const analyzeChallenge = () => {
+        const report = createMoneyPrintNeuralReport({
+            challenge: prefs.challenge,
+            trades: journal,
+            matches: matchRoutes,
+            accountContext: {
+                accountType: accountIsDemo ? 'Demo' : accountIsReal ? 'Real' : 'Unknown',
+                balance: engine.account.balance,
+                currency: engine.account.currency || 'USD',
+                baseStake: settings.stake,
+                nextStake: effectiveStakeDisplay,
+                autoStake: prefs.autoStake,
+                riskPercent: prefs.riskPercent,
+                maxStake: prefs.maxStake,
+                takeProfit: settings.takeProfit,
+                stopLoss: settings.stopLoss,
+                sessionPnl: engine.session.pnl,
+                strategyMode: prefs.strategyMode,
+                scheduledSessions: prefs.scheduledSessions,
+            },
+        });
+        setNeuralReport(report);
+        if (report.losingSide) activateNeuralRiskLock(report.losingSide);
+    };
+
+    useEffect(() => {
+        if (!engine.account.loginId || !pendingSettlementIdsRef.current.size) return;
+        const settledIds = [...pendingSettlementIdsRef.current].filter(id =>
+            journal.some(trade => trade.id === id && (trade.status === 'WIN' || trade.status === 'LOSS')),
+        );
+        if (!settledIds.length) return;
+        settledIds.forEach(id => pendingSettlementIdsRef.current.delete(id));
+        const losingSide = findMoneyPrintLosingSide(summarizeMoneyPrintTrades(journal));
+        if (!losingSide) return;
+
+        const report = createMoneyPrintNeuralReport({
+            challenge: prefs.challenge,
+            trades: journal,
+            matches: matchRoutes,
+            accountContext: {
+                accountType: accountIsDemo ? 'Demo' : accountIsReal ? 'Real' : 'Unknown',
+                balance: engine.account.balance,
+                currency: engine.account.currency || 'USD',
+                baseStake: settings.stake,
+                nextStake: effectiveStakeDisplay,
+                autoStake: prefs.autoStake,
+                riskPercent: prefs.riskPercent,
+                maxStake: prefs.maxStake,
+                takeProfit: settings.takeProfit,
+                stopLoss: settings.stopLoss,
+                sessionPnl: engine.session.pnl,
+                strategyMode: prefs.strategyMode,
+                scheduledSessions: prefs.scheduledSessions,
+            },
+        });
+        setNeuralReport(report);
+        activateNeuralRiskLock(losingSide);
+    }, [
+        accountIsDemo,
+        accountIsReal,
+        effectiveStakeDisplay,
+        engine.account.balance,
+        engine.account.currency,
+        engine.account.loginId,
+        engine.session.pnl,
+        journal,
+        matchRoutes,
+        prefs.autoStake,
+        prefs.challenge,
+        prefs.maxStake,
+        prefs.riskPercent,
+        prefs.scheduledSessions,
+        prefs.strategyMode,
+        settings.stake,
+        settings.stopLoss,
+        settings.takeProfit,
+    ]);
+
+    const canAutoMatch = Boolean(
+        selectedMatch?.eligible
+        && !riskLockActive
+        && selectedMatch.tickCount >= 20
+        && engine.account.connected
+        && engine.account.authorized
+        && engine.account.isVirtual != null
+        && autoStake >= MIN_DERIV_STAKE
+        && (!accountIsReal || liveAcknowledged)
+        && !['running', 'scanning', 'connecting'].includes(engine.status),
+    );
+    const autoMatchBlockReason = riskLockActive
+        ? 'The five-hour loss lock is active; trading settings and new entries are disabled.'
+        : !selectedMatch
+            ? 'No match route is available yet. Wait for authenticated market history.'
+            : !selectedMatch.eligible
+                ? 'This route did not pass the sample-size, lift, and confidence checks.'
+                : !engine.account.authorized || engine.account.isVirtual == null
+                    ? 'Authorize an account and verify whether it is demo or real before arming.'
+                    : accountIsReal && !liveAcknowledged
+                        ? 'Confirm real-account execution in Trade Settings first.'
+                        : autoStake < MIN_DERIV_STAKE
+                            ? 'The configured stake is below the Deriv minimum; the risk guard will not round it up.'
+                            : ['running', 'scanning', 'connecting'].includes(engine.status)
+                                ? 'Stop the current strategy before switching to an auto-match route.'
+                                : selectedMatch.tickCount < 20
+                                    ? 'Wait for at least twenty valid ticks on the selected authenticated market.'
+                                    : '';
+
+    const toggleAutoMatch = (enabled: boolean) => {
+        if (!enabled) {
+            pendingMatchStartRef.current = null;
+            setAutoMatchArmed(false);
+            if (
+                prefs.strategyMode === 'Matches/Differs'
+                && settings.matchEntryDigit != null
+                && ['running', 'scanning', 'connecting'].includes(engine.status)
+            ) {
+                engineRef.current.onStop();
+                scheduledRunRef.current = false;
+            }
+            return;
+        }
+        if (!selectedMatch || !selectedMatch.eligible || !canAutoMatch) {
+            setNotice(autoMatchBlockReason || 'Select a qualified route before enabling auto-match.');
+            return;
+        }
+        if (riskLockActive) {
+            setNotice('DO NOT TRADE: the five-hour account risk lock is active.');
+            return;
+        }
+        const route = selectedMatch;
+        setNotice('');
+        setAutoMatchArmed(true);
+        setSettings(previous => ({
+            ...previous,
+            marketSelection: route.symbol,
+            contractType: 'DIGITMATCH',
+            ticksWindow: 500,
+            barrier: route.targetDigit,
+            contractBarrier: route.targetDigit,
+            matchEntryDigit: route.entryDigit,
+            duration: 1,
+            durationUnit: 't',
+            autoBarrier: false,
+        }));
+        setPrefs(previous => ({ ...previous, strategyMode: 'Matches/Differs' }));
+
+        if (prefs.scheduledSessions) {
+            pendingMatchStartRef.current = null;
+            setNotice(`Auto-match is armed for ${route.label}. The existing EAT session schedule controls when this strategy starts.`);
+        } else {
+            pendingMatchStartRef.current = route.key;
+            setNotice(`Auto-match is configured for ${route.label}. It will start through the existing engine after settings and feed are ready.`);
+        }
+    };
+
+    useEffect(() => {
+        const pendingKey = pendingMatchStartRef.current;
+        if (!pendingKey || prefs.scheduledSessions) return;
+        if (riskLockActive) {
+            pendingMatchStartRef.current = null;
+            setAutoMatchArmed(false);
+            return;
+        }
+        const route = matchRoutes.find(item => item.key === pendingKey);
+        if (!route?.eligible) {
+            pendingMatchStartRef.current = null;
+            setAutoMatchArmed(false);
+            setNotice('The selected match route is no longer eligible. No trade was started.');
+            return;
+        }
+        const routeConfigured = prefs.strategyMode === 'Matches/Differs'
+            && settings.contractType === 'DIGITMATCH'
+            && settings.marketSelection === route.symbol
+            && settings.matchEntryDigit === route.entryDigit
+            && settings.contractBarrier === route.targetDigit;
+        if (!routeConfigured || !engine.canStart) return;
+        pendingMatchStartRef.current = null;
+        runButton();
+    }, [
+        engine.canStart,
+        engine.markets,
+        matchRoutes,
+        prefs.scheduledSessions,
+        prefs.strategyMode,
+        riskLockActive,
+        settings.contractBarrier,
+        settings.contractType,
+        settings.marketSelection,
+        settings.matchEntryDigit,
+    ]);
+
+    const onScheduleSessionsChange = (enabled: boolean) => {
+        if (riskLockActive) {
+            setNotice('Scheduled trading cannot be changed during the five-hour risk lock.');
+            return;
+        }
+        patchPrefs('scheduledSessions', enabled);
+        if (enabled && !sessionWindow && ['running', 'scanning', 'connecting'].includes(engine.status)) {
+            engineRef.current.onStop();
+            scheduledRunRef.current = false;
+            setNotice('Trading stopped outside the selected EAT windows. The schedule will start the selected strategy in the next open window.');
+        }
     };
 
     return (
@@ -553,6 +907,7 @@ const DTrader: React.FC = () => {
                             liveAcknowledged={liveAcknowledged}
                             stake={effectiveStakeDisplay}
                             currency={engine.account.currency}
+                            riskLockUntil={riskLockActive ? riskLockUntil : null}
                             onSetting={patchSetting}
                             onPref={patchPrefs}
                             onLiveAcknowledged={setLiveAcknowledged}
@@ -572,27 +927,27 @@ const DTrader: React.FC = () => {
                                     <div className='mp-form-grid'>
                                         <label className='mp-field'>
                                             <span>Strategy engine</span>
-                                            <select value={prefs.strategyMode} onChange={event => patchPrefs('strategyMode', event.target.value as AutoLabMode)}>
+                                            <select disabled={riskLockActive || engine.inputsDisabled} value={prefs.strategyMode} onChange={event => patchPrefs('strategyMode', event.target.value as AutoLabMode)}>
                                                 {AUTO_LAB_MODES.map(mode => <option key={mode} value={mode}>{strategyLabel(mode)}</option>)}
                                             </select>
                                         </label>
                                         <label className='mp-field'>
                                             <span>Market universe</span>
-                                            <select value={settings.marketSelection} onChange={event => patchSetting('marketSelection', event.target.value)}>
+                                            <select disabled={riskLockActive || engine.inputsDisabled} value={settings.marketSelection} onChange={event => patchSetting('marketSelection', event.target.value)}>
                                                 <option value='ALL'>All available synthetic markets</option>
                                                 {engine.markets.map(market => <option key={market.symbol} value={market.symbol}>{market.label}</option>)}
                                             </select>
                                         </label>
                                         <label className='mp-field'>
                                             <span>Trade type</span>
-                                            <select value={settings.contractType} onChange={event => patchSetting('contractType', event.target.value as AutoLabSettings['contractType'])}>
+                                            <select disabled={riskLockActive || engine.inputsDisabled} value={settings.contractType} onChange={event => patchSetting('contractType', event.target.value as AutoLabSettings['contractType'])}>
                                                 <option value='AUTO'>Scan all enabled types</option>
                                                 {AUTO_LAB_CONTRACT_TYPES.map(type => <option key={type} value={type}>{CONTRACT_LABELS[type]}</option>)}
                                             </select>
                                         </label>
                                         <label className='mp-field'>
                                             <span>Signal window</span>
-                                            <select value={settings.ticksWindow} onChange={event => patchSetting('ticksWindow', Number(event.target.value))}>
+                                            <select disabled={riskLockActive || engine.inputsDisabled} value={settings.ticksWindow} onChange={event => patchSetting('ticksWindow', Number(event.target.value))}>
                                                 {[5, 12, 15, 20, 50, 100, 500].map(count => <option key={count} value={count}>{count} ticks</option>)}
                                             </select>
                                         </label>
@@ -604,7 +959,7 @@ const DTrader: React.FC = () => {
                                     </div>
                                     <div className='mp-check-row'>
                                         <label className='mp-switch'>
-                                            <input type='checkbox' checked={prefs.autoStake} onChange={event => patchPrefs('autoStake', event.target.checked)} />
+                                            <input type='checkbox' disabled={riskLockActive || engine.inputsDisabled} checked={prefs.autoStake} onChange={event => patchPrefs('autoStake', event.target.checked)} />
                                             <span className='mp-switch__track' />
                                             <b>Auto stake from account size</b>
                                         </label>
@@ -617,7 +972,7 @@ const DTrader: React.FC = () => {
                                                 Auto stake is {money(autoStake, engine.account.currency)}, below the {money(MIN_DERIV_STAKE, engine.account.currency)} minimum.
                                                 On a small demo balance, use the fixed base stake instead of silently exceeding the selected risk cap.
                                             </p>
-                                            <button type='button' onClick={() => {
+                                            <button type='button' disabled={riskLockActive} onClick={() => {
                                                 patchPrefs('autoStake', false);
                                                 setNotice(`Auto stake disabled. The fixed base stake is ${money(settings.stake, engine.account.currency)}; review risk settings before starting.`);
                                             }}>Use fixed stake</button>
@@ -671,7 +1026,7 @@ const DTrader: React.FC = () => {
                                             <span>I understand these trades use real funds and losses are possible.</span>
                                         </label>
                                     )}
-                                    {prefs.mode === 'sessions' && prefs.scheduledSessions && (
+                                    {prefs.scheduledSessions && (
                                         <div className='mp-schedule-status'>
                                             <CalendarClock size={15} />
                                             <span>{sessionWindow ? `Scheduled window active · ${sessionWindow.label} EAT` : 'Waiting for the next enabled window · EAT'}</span>
@@ -681,11 +1036,16 @@ const DTrader: React.FC = () => {
                                         {['running', 'scanning', 'connecting'].includes(engine.status) ? (
                                             <>
                                                 <button className='mp-button mp-button--pause' onClick={engine.onPause}><Pause size={15} /> Pause</button>
-                                                <button className='mp-button mp-button--stop' onClick={engine.onStop}><CircleStop size={15} /> Stop</button>
+                                                <button className='mp-button mp-button--stop' onClick={() => {
+                                                    pendingMatchStartRef.current = null;
+                                                    setAutoMatchArmed(false);
+                                                    scheduledRunRef.current = false;
+                                                    engine.onStop();
+                                                }}><CircleStop size={15} /> Stop</button>
                                             </>
                                         ) : (
-                                            <button className='mp-button mp-button--start' onClick={runButton} disabled={!canStart || (prefs.mode === 'sessions' && prefs.scheduledSessions)}>
-                                                <Play size={16} /> {prefs.mode === 'sessions' && prefs.scheduledSessions ? 'Schedule enabled' : 'Start safe scan'}
+                                            <button className='mp-button mp-button--start' onClick={runButton} disabled={!canStart || prefs.scheduledSessions}>
+                                                <Play size={16} /> {prefs.scheduledSessions ? 'Schedule enabled' : 'Start safe scan'}
                                             </button>
                                         )}
                                     </div>
@@ -703,6 +1063,7 @@ const DTrader: React.FC = () => {
                                             key={card.id}
                                             onClick={() => selectMode(card.id)}
                                             type='button'
+                                            disabled={riskLockActive || engine.inputsDisabled}
                                         >
                                             <span className='mp-mode-card__icon'>{card.icon}</span>
                                             <strong>{card.title}</strong>
@@ -718,8 +1079,39 @@ const DTrader: React.FC = () => {
                                     scheduledSessions={prefs.scheduledSessions}
                                     onPref={patchPrefs}
                                     onSetting={patchSetting}
+                                    tradingLocked={riskLockActive}
                                 />
                             </section>
+
+                            {prefs.mode === 'challenge' && (
+                                <MoneyPrintNeuralLink
+                                    challengeBrief={prefs.challenge}
+                                    onChallengeBriefChange={value => patchPrefs('challenge', value.slice(0, 500))}
+                                    onAnalyze={analyzeChallenge}
+                                    analysisBusy={false}
+                                    report={neuralReport}
+                                    onDownloadImage={() => {
+                                        if (!neuralReport) return;
+                                        try {
+                                            downloadMoneyPrintReportImage(neuralReport, engine.account.currency);
+                                        } catch (error) {
+                                            setNotice(error instanceof Error ? error.message : 'Could not create the report image.');
+                                        }
+                                    }}
+                                    matches={matchRoutes}
+                                    selectedMatchKey={selectedMatchKey}
+                                    onSelectMatch={(route: MatchRoute) => setSelectedMatchKey(getMatchRouteKey(route))}
+                                    onAutoMatch={toggleAutoMatch}
+                                    autoMatchEnabled={autoMatchArmed}
+                                    canAutoMatch={canAutoMatch}
+                                    autoMatchBlockReason={autoMatchBlockReason}
+                                    scheduledSessions={prefs.scheduledSessions}
+                                    onScheduledSessionsChange={onScheduleSessionsChange}
+                                    lockUntil={riskLockActive ? riskLockUntil : null}
+                                    currency={engine.account.currency}
+                                    status={engine.status}
+                                />
+                            )}
 
                             <div className='mp-lower-grid'>
                                 <section className='mp-card mp-markets-card'>
@@ -826,76 +1218,83 @@ const SettingsPanel: React.FC<{
     liveAcknowledged: boolean;
     stake: number;
     currency: string;
+    riskLockUntil: number | null;
     onSetting: <K extends keyof AutoLabSettings>(key: K, value: AutoLabSettings[K]) => void;
     onPref: <K extends keyof MoneyPrintPrefs>(key: K, value: MoneyPrintPrefs[K]) => void;
     onLiveAcknowledged: (value: boolean) => void;
-}> = ({ settings, prefs, accountIsReal, liveAcknowledged, stake, currency, onSetting, onPref, onLiveAcknowledged }) => (
+}> = ({ settings, prefs, accountIsReal, liveAcknowledged, stake, currency, riskLockUntil, onSetting, onPref, onLiveAcknowledged }) => (
     <section className='mp-settings-layout'>
         <div className='mp-card mp-settings-form'>
             <CardHeading icon={<ShieldCheck />} title='Trade settings' meta='SAVED IN THIS BROWSER' />
+            {riskLockUntil != null && (
+                <div className='mp-risk-lock-banner' role='alert'>
+                    <strong>DO NOT TRADE</strong>
+                    <span>Trade settings and new entries are locked until {new Date(riskLockUntil).toLocaleString()}. Open contracts will settle normally.</span>
+                </div>
+            )}
             <div className='mp-form-grid'>
                 <label className='mp-field'>
                     <span>Base stake {prefs.autoStake ? '(calculated)' : ''}</span>
-                    <input type='number' min={MIN_DERIV_STAKE} step='0.01' disabled={prefs.autoStake} value={prefs.autoStake ? fromUsd(stake).toFixed(2) : fromUsd(settings.stake).toFixed(2)} onChange={event => onSetting('stake', Math.max(MIN_DERIV_STAKE, toUsd(Number(event.target.value) || MIN_DERIV_STAKE)))} />
+                    <input type='number' min={MIN_DERIV_STAKE} step='0.01' disabled={riskLockUntil != null || prefs.autoStake} value={prefs.autoStake ? fromUsd(stake).toFixed(2) : fromUsd(settings.stake).toFixed(2)} onChange={event => onSetting('stake', Math.max(MIN_DERIV_STAKE, toUsd(Number(event.target.value) || MIN_DERIV_STAKE)))} />
                 </label>
                 <label className='mp-field'>
                     <span>Risk per trade · % of balance</span>
-                    <input type='number' min='0.1' max='2' step='0.1' disabled={!prefs.autoStake} value={prefs.riskPercent} onChange={event => onPref('riskPercent', Math.min(2, Math.max(0.1, Number(event.target.value) || 0.1)))} />
+                    <input type='number' min='0.1' max='2' step='0.1' disabled={riskLockUntil != null || !prefs.autoStake} value={prefs.riskPercent} onChange={event => onPref('riskPercent', Math.min(2, Math.max(0.1, Number(event.target.value) || 0.1)))} />
                 </label>
                 <label className='mp-field'>
                     <span>Maximum stake</span>
-                    <input type='number' min={MIN_DERIV_STAKE} step='0.01' value={fromUsd(prefs.maxStake).toFixed(2)} onChange={event => onPref('maxStake', Math.max(MIN_DERIV_STAKE, toUsd(Number(event.target.value) || MIN_DERIV_STAKE)))} />
+                    <input type='number' min={MIN_DERIV_STAKE} step='0.01' disabled={riskLockUntil != null} value={fromUsd(prefs.maxStake).toFixed(2)} onChange={event => onPref('maxStake', Math.max(MIN_DERIV_STAKE, toUsd(Number(event.target.value) || MIN_DERIV_STAKE)))} />
                 </label>
                 <label className='mp-field'>
                     <span>Take profit · session</span>
-                    <input type='number' min='0.1' step='0.1' value={fromUsd(settings.takeProfit).toFixed(2)} onChange={event => onSetting('takeProfit', Math.max(0.1, toUsd(Number(event.target.value) || 0.1)))} />
+                    <input type='number' min='0.1' step='0.1' disabled={riskLockUntil != null} value={fromUsd(settings.takeProfit).toFixed(2)} onChange={event => onSetting('takeProfit', Math.max(0.1, toUsd(Number(event.target.value) || 0.1)))} />
                 </label>
                 <label className='mp-field'>
                     <span>Stop loss · session</span>
-                    <input type='number' min='0.1' step='0.1' value={fromUsd(settings.stopLoss).toFixed(2)} onChange={event => onSetting('stopLoss', Math.max(0.1, toUsd(Number(event.target.value) || 0.1)))} />
+                    <input type='number' min='0.1' step='0.1' disabled={riskLockUntil != null} value={fromUsd(settings.stopLoss).toFixed(2)} onChange={event => onSetting('stopLoss', Math.max(0.1, toUsd(Number(event.target.value) || 0.1)))} />
                 </label>
                 <label className='mp-field'>
                     <span>Maximum recovery steps</span>
-                    <select disabled={!prefs.martingaleEnabled} value={Math.min(2, settings.maxMartingaleLevel)} onChange={event => onSetting('maxMartingaleLevel', Number(event.target.value))}>
+                    <select disabled={riskLockUntil != null || !prefs.martingaleEnabled} value={Math.min(2, settings.maxMartingaleLevel)} onChange={event => onSetting('maxMartingaleLevel', Number(event.target.value))}>
                         <option value={1}>1 step</option><option value={2}>2 steps maximum</option>
                     </select>
                 </label>
                 <label className='mp-field'>
                     <span>Martingale multiplier</span>
-                    <select disabled={!prefs.martingaleEnabled} value={settings.multiplier} onChange={event => onSetting('multiplier', Number(event.target.value))}>
+                    <select disabled={riskLockUntil != null || !prefs.martingaleEnabled} value={settings.multiplier} onChange={event => onSetting('multiplier', Number(event.target.value))}>
                         <option value={1.5}>1.5×</option><option value={1.8}>1.8×</option><option value={2}>2×</option>
                     </select>
                 </label>
                 <label className='mp-field'>
                     <span>Signal threshold</span>
-                    <input type='number' min='50' max='100' step='1' value={settings.thresholdPercent} onChange={event => onSetting('thresholdPercent', Math.min(100, Math.max(50, Number(event.target.value) || 50)))} />
+                    <input type='number' min='50' max='100' step='1' disabled={riskLockUntil != null} value={settings.thresholdPercent} onChange={event => onSetting('thresholdPercent', Math.min(100, Math.max(50, Number(event.target.value) || 50)))} />
                 </label>
                 <label className='mp-field'>
                     <span>Direction streak</span>
-                    <select value={settings.requiredStreak} onChange={event => onSetting('requiredStreak', Number(event.target.value))}>
+                    <select disabled={riskLockUntil != null} value={settings.requiredStreak} onChange={event => onSetting('requiredStreak', Number(event.target.value))}>
                         {[2, 3, 4, 5].map(count => <option key={count} value={count}>{count} consecutive ticks</option>)}
                     </select>
                 </label>
                 <label className='mp-field'>
                     <span>Contract duration</span>
-                    <select value={settings.duration} onChange={event => onSetting('duration', Number(event.target.value))}>
+                    <select disabled={riskLockUntil != null} value={settings.duration} onChange={event => onSetting('duration', Number(event.target.value))}>
                         {[1, 2, 3, 5, 10].map(count => <option key={count} value={count}>{count} tick{count === 1 ? '' : 's'}</option>)}
                     </select>
                 </label>
             </div>
             <div className='mp-option-stack'>
                 <label className='mp-switch'>
-                    <input type='checkbox' checked={prefs.autoStake} onChange={event => onPref('autoStake', event.target.checked)} />
+                    <input type='checkbox' disabled={riskLockUntil != null} checked={prefs.autoStake} onChange={event => onPref('autoStake', event.target.checked)} />
                     <span className='mp-switch__track' />
                     <b>Auto stake according to account size</b>
                 </label>
                 <label className='mp-switch'>
-                    <input type='checkbox' checked={prefs.martingaleEnabled} onChange={event => onPref('martingaleEnabled', event.target.checked)} />
+                    <input type='checkbox' disabled={riskLockUntil != null} checked={prefs.martingaleEnabled} onChange={event => onPref('martingaleEnabled', event.target.checked)} />
                     <span className='mp-switch__track' />
                     <b>Enable capped martingale · 2 steps maximum</b>
                 </label>
                 <label className='mp-switch'>
-                    <input type='checkbox' checked={settings.autoBarrier} onChange={event => onSetting('autoBarrier', event.target.checked)} />
+                    <input type='checkbox' disabled={riskLockUntil != null} checked={settings.autoBarrier} onChange={event => onSetting('autoBarrier', event.target.checked)} />
                     <span className='mp-switch__track' />
                     <b>Scan Over 0–9 and Under 0–9 barriers</b>
                 </label>
@@ -907,14 +1306,14 @@ const SettingsPanel: React.FC<{
                         The selected balance-risk limit calculates to less than {money(MIN_DERIV_STAKE, currency)}.
                         Money Print will not raise it to the minimum automatically.
                     </p>
-                    <button type='button' onClick={() => onPref('autoStake', false)}>Use fixed base stake</button>
+                    <button type='button' disabled={riskLockUntil != null} onClick={() => onPref('autoStake', false)}>Use fixed base stake</button>
                 </div>
             )}
             {!settings.autoBarrier && (
                 <div className='mp-digit-picks'>
                     <span>Selected digit barrier</span>
                     {Array.from({ length: 10 }, (_, digit) => (
-                        <button type='button' key={digit} className={settings.barrier === digit ? 'active' : ''} onClick={() => onSetting('barrier', digit)}>{digit}</button>
+                        <button type='button' key={digit} className={settings.barrier === digit ? 'active' : ''} disabled={riskLockUntil != null} onClick={() => onSetting('barrier', digit)}>{digit}</button>
                     ))}
                 </div>
             )}
@@ -945,16 +1344,17 @@ const ModeDetails: React.FC<{
     prefs: MoneyPrintPrefs;
     settings: AutoLabSettings;
     scheduledSessions: boolean;
+    tradingLocked: boolean;
     onPref: <K extends keyof MoneyPrintPrefs>(key: K, value: MoneyPrintPrefs[K]) => void;
     onSetting: <K extends keyof AutoLabSettings>(key: K, value: AutoLabSettings[K]) => void;
-}> = ({ mode, prefs, settings, scheduledSessions, onPref, onSetting }) => {
+}> = ({ mode, prefs, settings, scheduledSessions, tradingLocked, onPref, onSetting }) => {
     if (mode === 'sessions') {
         return (
             <div className='mp-mode-detail'>
                 <div className='mp-mode-detail__intro'><strong>Scheduled sessions · East Africa Time</strong><span>When enabled, the scanner starts inside an open window and stops at the window end or a risk limit. The browser must stay open.</span></div>
                 <div className='mp-session-times'>{SESSION_WINDOWS.map(window => <span key={window.id} className={getEastAfricaTime().minutes >= window.start && getEastAfricaTime().minutes < window.end ? 'active' : ''}><Clock3 size={13} /> {window.label}</span>)}</div>
                 <label className='mp-switch'>
-                    <input type='checkbox' checked={scheduledSessions} onChange={event => onPref('scheduledSessions', event.target.checked)} />
+                    <input type='checkbox' disabled={tradingLocked} checked={scheduledSessions} onChange={event => onPref('scheduledSessions', event.target.checked)} />
                     <span className='mp-switch__track' /><b>Enable automatic session start / stop</b>
                 </label>
             </div>
@@ -962,9 +1362,11 @@ const ModeDetails: React.FC<{
     }
     if (mode === 'challenge') {
         return (
-            <div className='mp-mode-detail mp-mode-detail--form'>
-                <label className='mp-field mp-field--wide'><span>Challenge brief · saved locally only</span><textarea value={prefs.challenge} onChange={event => onPref('challenge', event.target.value)} maxLength={500} placeholder='Describe your goal and the time you have. This text is not sent to an AI service.' /></label>
-                <span className='mp-mode-detail__caution'>The current signal engine does not interpret this text or promise a safe route. Set explicit take-profit and stop-loss limits.</span>
+            <div className='mp-mode-detail'>
+                <div className='mp-mode-detail__intro'>
+                    <strong>Challenge mode · local Neural Link review</strong>
+                    <span>The analysis uses this account’s settled journal and authenticated tick history in the browser. It does not send account data to an external AI service or promise a profitable route.</span>
+                </div>
             </div>
         );
     }

@@ -391,6 +391,9 @@
 .mp-risk-warning--action p { flex: 1 1 220px; }
 .mp-risk-warning--action button { min-height: 28px; padding: .3rem .5rem; border: 1px solid rgba(238, 186, 104, .42); border-radius: 5px; background: rgba(133, 88, 34, .28); color: #ffe0a5; font-size: .55rem; font-weight: 800; cursor: pointer; }
 .mp-risk-warning--action button:hover { background: rgba(150, 101, 41, .42); }
+.mp-risk-lock-banner { margin: .45rem 0 .7rem; padding: .65rem .7rem; display: flex; flex-direction: column; gap: .2rem; border: 1px solid rgba(240, 101, 118, .4); border-radius: 7px; background: rgba(110, 34, 49, .2); }
+.mp-risk-lock-banner strong { color: #ff8794; font-size: .65rem; letter-spacing: .05em; }
+.mp-risk-lock-banner span { color: #d8bac0; font-size: .56rem; line-height: 1.45; }
 .mp-risk-footnote { margin-top: .6rem; color: #8297b0; font-size: .51rem; line-height: 1.4; }
 .mp-footer { padding: .5rem .15rem 0; display: flex; justify-content: space-between; flex-wrap: wrap; gap: .45rem; color: #6d84a1; font-size: .52rem; }
 .mp-footer span { display: inline-flex; align-items: center; gap: .28rem; }

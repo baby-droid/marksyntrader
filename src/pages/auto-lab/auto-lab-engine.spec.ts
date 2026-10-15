@@ -6,6 +6,7 @@ import {
     getAutoLabDigitStats,
     isAutoLabContractWin,
     isAutoLabMarketExcluded,
+    passesAutoLabProposalEdgeCheck,
     type AutoLabMarketWindow,
     type AutoLabStrategySettings,
     type AutoLabTick,
@@ -96,6 +97,48 @@ describe('Auto Lab strategy signals', () => {
             thresholdPercent: 60,
         });
         expect(signals[0]?.contract_type).toBe('DIGITEVEN');
+    });
+
+    it('requires a fresh entry digit and a supported conditional target for auto Matches', () => {
+        const digits = Array.from({ length: 20 }, () => [7, 3]).flat().concat(7);
+        const ticks = makeTicks(digits);
+        const routeSettings: AutoLabStrategySettings = {
+            ...settings,
+            ticksWindow: 50,
+            contractType: 'DIGITMATCH',
+            contractBarrier: 3,
+            matchEntryDigit: 7,
+        };
+
+        const ready = evaluateAutoLabCandidates('Matches/Differs', [market(ticks)], routeSettings);
+        const notAtEntry = evaluateAutoLabCandidates(
+            'Matches/Differs',
+            [market(makeTicks(digits.slice(0, -1).concat(4)))],
+            routeSettings,
+        );
+
+        expect(ready[0]).toMatchObject({ contract_type: 'DIGITMATCH', barrier: 3 });
+        expect(ready[0]?.detail).toContain('Entry digit 7');
+        expect(notAtEntry).toHaveLength(0);
+    });
+
+    it('does not emit a conditional match signal with fewer than twenty prior entry observations', () => {
+        const digits = Array.from({ length: 19 }, () => [7, 3]).flat().concat(7);
+        const signals = evaluateAutoLabCandidates('Matches/Differs', [market(makeTicks(digits))], {
+            ...settings,
+            ticksWindow: 50,
+            contractType: 'DIGITMATCH',
+            contractBarrier: 3,
+            matchEntryDigit: 7,
+        });
+
+        expect(signals).toHaveLength(0);
+    });
+
+    it('rejects match proposals that do not clear live break-even by the configured margin', () => {
+        expect(passesAutoLabProposalEdgeCheck(0.2, 0.35, 3.5)).toBe(true);
+        expect(passesAutoLabProposalEdgeCheck(0.11, 0.35, 3.5)).toBe(false);
+        expect(passesAutoLabProposalEdgeCheck(0.4, 0, 3.5)).toBe(false);
     });
 
     it('can signal both matches and differs from the target digit frequency', () => {

@@ -21,6 +21,7 @@ export type AutoLabSettings = {
   barrier: number;
   autoBarrier: boolean;
   contractBarrier: number;
+  matchEntryDigit?: number | null;
   secondaryBarrier: number;
   requiredStreak: number;
   duration: number;
@@ -67,6 +68,7 @@ export type AutoLabMarket = {
   digit: number | null;
   quote: number | null;
   tickCount: number;
+  digitHistory?: number[];
   score: number | null;
   signal: string;
 };
