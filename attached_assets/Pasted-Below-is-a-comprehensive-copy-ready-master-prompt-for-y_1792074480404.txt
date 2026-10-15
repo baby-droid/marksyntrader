@@ -1,0 +1,47 @@
+Below is a comprehensive, copy-ready master prompt for your Replit AI Agent. It is written as a software implementation specification for Money Print — Neural Link Smart Trading Engine, designed to integrate with your existing Mark Syn Trader application rather than becoming a disconnected dashboard.
+
+The prompt directs Replit to inspect your existing codebase first, preserve working features, implement the requested trading modes, and connect the market scanner, AI strategy engine, Deriv execution, risk protection, admin analytics, and printable reporting into one coordinated system.
+
+# Master prompt for Replit AI Agent
+
+## MONEY PRINT — Neural Link
+
+Full-stack implementation specification · Replit Agent
+
+Copy-ready
+
+Copy the complete prompt below and paste it into Replit Agent in your existing project. If the project is large, ask the agent to execute the phases sequentially while maintaining a working application at each stage.
+
+&#x20;Copy master prompt
+
+## 2. After Replit finishes its first implementation
+
+Do not assume that the first build is complete just because the interface looks good. Send the following follow-up prompt to make Replit verify the actual functionality.
+
+### Follow-up prompt: audit and complete the build
+
+Paste this after Replit has made the initial changes.
+
+&#x20;Copy audit prompt
+
+## 3. Three rules for working with Replit
+
+Rule 1 — Use your existing project. Open the Replit project containing Mark Syn Trader and ask the agent to inspect it before editing. This gives it the opportunity to reuse your current Deriv authentication, account handling, trading functions and UI.
+
+Rule 2 — Build in phases. If Replit starts producing incomplete components or errors, ask it to finish one phase, run the tests, and fix the failures before continuing. A working market scanner and risk engine are more valuable than six attractive but nonfunctional trading modes.
+
+Rule 3 — Test using a demo account first. Verify order confirmation, settlement, stop conditions, reconnection behavior and report accuracy before considering live execution. Never provide a Deriv API token in a prompt or source file; use the project's supported secret-management system.
+
+## 4. What the completed application should achieve
+
+Your finished Money Print module should have one central brain coordinating:
+
+- Market intelligence: scans supported markets and contract types and ranks eligible opportunities.
+- Adaptive strategy engine: develops, tests and compares strategies based on measured performance.
+- Automated execution: handles proposals, entries, contract monitoring and confirmed settlements.
+- Capital protection: independently enforces stake limits, take profit, loss limits, cooldowns and emergency stops.
+- Trading modes: accumulation, earnings, growth, AI challenge, scheduled sessions, Auto Flip, Strategy Lab and Capital Preservation.
+- Admin command center: monitors connected users, market performance, strategy results, contract types, barriers, durations and system health.
+- Reporting engine: generates accurate printable reports and downloadable trade histories.
+
+The central principle to preserve throughout development is that the Neural Link may recommend a trade, but only the independent risk engine may authorize its execution. That separation is what makes the design substantially more robust than a bot that simply increases stakes after losses or trades continuously until a target is reached.
