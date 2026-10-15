@@ -1,4 +1,9 @@
-import { calculateAutoStake, MIN_DERIV_STAKE, usesUnchangedLegacyAutoStakeDefaults } from './money-print-utils';
+import {
+    calculateAutoStake,
+    calculateGoalPlan,
+    MIN_DERIV_STAKE,
+    usesUnchangedLegacyAutoStakeDefaults,
+} from './money-print-utils';
 
 describe('Money Print risk defaults', () => {
     it('does not round an account-risk stake up to Deriv minimum', () => {
@@ -34,5 +39,51 @@ describe('Money Print risk defaults', () => {
 
         expect(usesUnchangedLegacyAutoStakeDefaults(legacyDefaults)).toBe(true);
         expect(usesUnchangedLegacyAutoStakeDefaults({ ...legacyDefaults, riskPercent: 1 })).toBe(false);
+    });
+
+    it('calculates a transparent daily target without changing the configured risk limits', () => {
+        const plan = calculateGoalPlan({
+            currentBalance: 10,
+            targetBalance: 60,
+            days: 10,
+            stake: 0.35,
+            riskPercent: 2,
+            takeProfit: 1.8,
+            stopLoss: 3,
+        });
+
+        expect(plan.requiredDailyProfit).toBe(5);
+        expect(plan.requiredDailyReturnPercent).toBeCloseTo(19.62, 1);
+        expect(plan.stakeRiskPercent).toBe(3.5);
+        expect(plan.minimumBalanceForConfiguredRisk).toBe(17.5);
+        expect(plan.takeProfit).toBe(1.8);
+        expect(plan.stopLoss).toBe(3);
+        expect(plan.planStatus).toBe('ready');
+    });
+
+    it('reports completed and invalid goals distinctly', () => {
+        const completed = calculateGoalPlan({
+            currentBalance: 60,
+            targetBalance: 60,
+            days: 10,
+            stake: 0.35,
+            riskPercent: 2,
+            takeProfit: 1.8,
+            stopLoss: 3,
+        });
+        const invalid = calculateGoalPlan({
+            currentBalance: null,
+            targetBalance: 60,
+            days: 10,
+            stake: 0.35,
+            riskPercent: 2,
+            takeProfit: 1.8,
+            stopLoss: 3,
+        });
+
+        expect(completed.planStatus).toBe('goal-reached');
+        expect(completed.remaining).toBe(0);
+        expect(invalid.planStatus).toBe('invalid');
+        expect(invalid.stakeRiskPercent).toBeNull();
     });
 });
