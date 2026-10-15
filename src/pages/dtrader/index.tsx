@@ -59,6 +59,8 @@ type MoneyPrintPrefs = {
     goalBalance: number;
     days: number;
     hourlyTarget: number;
+    runDuration: number;
+    runDurationUnit: 'h' | 'm';
 };
 type MoneyPrintModeProfile = {
     settings: AutoLabSettings;
@@ -71,6 +73,8 @@ type MoneyPrintModeProfile = {
     goalBalance: number;
     days: number;
     hourlyTarget: number;
+    runDuration: number;
+    runDurationUnit: 'h' | 'm';
 };
 type MoneyPrintAdminAnalytics = {
     activeAccounts10m: number | null;
@@ -134,6 +138,8 @@ const BASE_PREFS: MoneyPrintPrefs = {
     goalBalance: 20,
     days: 7,
     hourlyTarget: 1.8,
+    runDuration: 1,
+    runDurationUnit: 'h',
 };
 const MONEY_MODES: MoneyMode[] = ['accumulation', 'challenge', 'growth', 'earnings', 'sessions', 'flip'];
 const storageWarnings = new Set<string>();
@@ -259,6 +265,8 @@ const profileFrom = (settings: AutoLabSettings, prefs: MoneyPrintPrefs): MoneyPr
     goalBalance: prefs.goalBalance,
     days: prefs.days,
     hourlyTarget: prefs.hourlyTarget,
+    runDuration: prefs.runDuration,
+    runDurationUnit: prefs.runDurationUnit,
 });
 const readModeProfiles = (): Record<MoneyMode, MoneyPrintModeProfile> => {
     const base = profileFrom(readSettings(), readPrefs());
