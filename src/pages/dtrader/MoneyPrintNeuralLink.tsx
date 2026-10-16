@@ -36,9 +36,15 @@ export type ChallengeReport = {
     } | null;
     route: {
         market: string;
+        marketSymbol?: string;
         contract: string;
+        contractType?: string;
+        strategy?: string;
         entryRule: string;
         targetDigits: number[];
+        barrier?: number;
+        entryDigit?: number;
+        matchKey?: string;
     } | null;
     strategies: string[];
     evidence: string[];
@@ -194,7 +200,7 @@ const MoneyPrintNeuralLink = ({
                         <small>NEURAL LINK</small>
                     </div>
                     <p className='mp-neural-link__intro'>
-                        Describe the setup you want reviewed. Analysis is supplied by this page; this panel does not place trades.
+                        Your brief is included in the report. Local quantitative checks use authenticated tick history, settled Money Print trades, and risk settings; no external AI is connected and this panel does not place trades.
                     </p>
                     <label className='mp-field' htmlFor={`${id}-brief`}>
                         <span>What should the report assess?</span>

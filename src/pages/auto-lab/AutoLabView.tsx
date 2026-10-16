@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Activity, AlertTriangle, ArrowUpRight, BarChart3, CircleHelp, Pause, Play, Radio, ShieldCheck, Square, Waves } from 'lucide-react';
 import { formatMoney, fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
-import { AUTO_LAB_MODES, getAutoLabSupportedContracts, type AutoLabContractChoice, type AutoLabMode } from './auto-lab-engine';
+import { AUTO_LAB_MODES, getAutoLabSupportedContracts, type AutoLabContractChoice, type AutoLabContractType, type AutoLabMode } from './auto-lab-engine';
 import './auto-lab-view.scss';
 
 export type { AutoLabMode } from './auto-lab-engine';

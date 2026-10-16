@@ -41,6 +41,7 @@ import {
     findMoneyPrintLosingSide,
     rankMoneyPrintMatchRoutes,
     summarizeMoneyPrintTrades,
+    type MoneyPrintMatchRoute,
     type MoneyPrintNeuralReport,
 } from './money-print-neural-analysis';
 import { downloadMoneyPrintReportImage } from './money-print-report-image';
@@ -1017,58 +1018,50 @@ const DTraderContent: React.FC = () => {
         settings.takeProfit,
     ]);
 
-    const canAutoMatch = Boolean(
-        selectedMatch?.eligible
-        && !riskLockActive
-        && selectedMatch.tickCount >= 20
-        && engine.account.connected
-        && engine.account.authorized
-        && engine.account.isVirtual != null
-        && autoStake >= MIN_DERIV_STAKE
-        && (!accountIsReal || liveAcknowledged)
-        && !['running', 'scanning', 'connecting'].includes(engine.status),
+    const reportMatchRoute = neuralReport?.route?.matchKey
+        ? matchRoutes.find(route => route.key === neuralReport.route?.matchKey) ?? null
+        : null;
+    const matchRouteBlockReason = (route: MoneyPrintMatchRoute | null) => {
+        if (!route) return 'No match route is available yet. Wait for authenticated market history.';
+        if (riskLockActive) return 'The five-hour loss lock is active; trading settings and new entries are disabled.';
+        if (!route.eligible) return 'This route did not pass the sample-size, lift, and confidence checks.';
+        if (!engine.account.connected || !engine.account.authorized || engine.account.isVirtual == null) {
+            return 'Authorize an account and verify whether it is demo or real before arming.';
+        }
+        if (accountIsReal && !liveAcknowledged) return 'Confirm real-account execution in Trade Settings first.';
+        if (autoStake < MIN_DERIV_STAKE) return 'The configured stake is below the Deriv minimum; the risk guard will not round it up.';
+        if (['running', 'scanning', 'connecting'].includes(engine.status)) {
+            return 'Stop the current strategy before switching to an auto-match route.';
+        }
+        if (route.tickCount < 20) return 'Wait for at least twenty valid ticks on the selected authenticated market.';
+        return '';
+    };
+    const autoMatchBlockReason = matchRouteBlockReason(selectedMatch);
+    const canAutoMatch = Boolean(selectedMatch?.eligible && !autoMatchBlockReason);
+    const planBlockReason = (() => {
+        const route = neuralReport?.route;
+        if (!neuralReport || neuralReport.verdict !== 'PLAN' || !route) return 'Send a challenge brief to generate a trade plan first.';
+        if (riskLockActive) return 'The five-hour loss lock is active; new entries remain disabled.';
+        if (!engine.account.connected || !engine.account.authorized || engine.account.isVirtual == null) {
+            return 'Authorize an account and verify whether it is demo or real before starting.';
+        }
+        if (accountIsReal && !liveAcknowledged) return 'Confirm real-account execution in Trade Settings first.';
+        if (autoStake < MIN_DERIV_STAKE) return 'The configured stake is below Deriv’s minimum; it will not be rounded up.';
+        if (['running', 'scanning', 'connecting'].includes(engine.status)) return 'Stop the current strategy before starting this plan.';
+        if (route.matchKey) return matchRouteBlockReason(reportMatchRoute);
+        if (engine.currentSignal.market !== route.market || engine.currentSignal.detail !== route.entryRule) {
+            return 'The live signal changed since this report. Re-analyze before starting the plan.';
+        }
+        return engine.canStart ? '' : engine.message || 'Wait for the live signal and feed to be ready.';
+    })();
+    const canStartPlan = Boolean(
+        neuralReport?.verdict === 'PLAN'
+        && neuralReport.route
+        && !planBlockReason,
     );
-    const autoMatchBlockReason = riskLockActive
-        ? 'The five-hour loss lock is active; trading settings and new entries are disabled.'
-        : !selectedMatch
-            ? 'No match route is available yet. Wait for authenticated market history.'
-            : !selectedMatch.eligible
-                ? 'This route did not pass the sample-size, lift, and confidence checks.'
-                : !engine.account.authorized || engine.account.isVirtual == null
-                    ? 'Authorize an account and verify whether it is demo or real before arming.'
-                    : accountIsReal && !liveAcknowledged
-                        ? 'Confirm real-account execution in Trade Settings first.'
-                        : autoStake < MIN_DERIV_STAKE
-                            ? 'The configured stake is below the Deriv minimum; the risk guard will not round it up.'
-                            : ['running', 'scanning', 'connecting'].includes(engine.status)
-                                ? 'Stop the current strategy before switching to an auto-match route.'
-                                : selectedMatch.tickCount < 20
-                                    ? 'Wait for at least twenty valid ticks on the selected authenticated market.'
-                                    : '';
 
-    const toggleAutoMatch = (enabled: boolean) => {
-        if (!enabled) {
-            pendingMatchStartRef.current = null;
-            setAutoMatchArmed(false);
-            if (
-                prefs.strategyMode === 'Matches/Differs'
-                && settings.matchEntryDigit != null
-                && ['running', 'scanning', 'connecting'].includes(engine.status)
-            ) {
-                engineRef.current.onStop();
-                scheduledRunRef.current = false;
-            }
-            return;
-        }
-        if (!selectedMatch || !selectedMatch.eligible || !canAutoMatch) {
-            setNotice(autoMatchBlockReason || 'Select a qualified route before enabling auto-match.');
-            return;
-        }
-        if (riskLockActive) {
-            setNotice('DO NOT TRADE: the five-hour account risk lock is active.');
-            return;
-        }
-        const route = selectedMatch;
+    const configureMatchRoute = (route: MoneyPrintMatchRoute) => {
+        setSelectedMatchKey(route.key);
         setNotice('');
         setAutoMatchArmed(true);
         setSettings(previous => ({
@@ -1092,6 +1085,53 @@ const DTraderContent: React.FC = () => {
             pendingMatchStartRef.current = route.key;
             setNotice(`Auto-match is configured for ${route.label}. It will start through the existing engine after settings and feed are ready.`);
         }
+    };
+
+    const toggleAutoMatch = (enabled: boolean) => {
+        if (!enabled) {
+            pendingMatchStartRef.current = null;
+            setAutoMatchArmed(false);
+            if (
+                prefs.strategyMode === 'Matches/Differs'
+                && settings.matchEntryDigit != null
+                && ['running', 'scanning', 'connecting'].includes(engine.status)
+            ) {
+                engineRef.current.onStop();
+                scheduledRunRef.current = false;
+            }
+            return;
+        }
+        if (!selectedMatch || !selectedMatch.eligible || !canAutoMatch) {
+            setNotice(autoMatchBlockReason || 'Select a qualified route before enabling auto-match.');
+            return;
+        }
+        if (riskLockActive) {
+            setNotice('DO NOT TRADE: the five-hour account risk lock is active.');
+            return;
+        }
+        configureMatchRoute(selectedMatch);
+    };
+
+    const startReportPlan = () => {
+        const route = neuralReport?.route;
+        if (!route || !canStartPlan) {
+            setNotice(planBlockReason || 'The report route is no longer ready.');
+            return;
+        }
+        if (route.matchKey) {
+            const matchRoute = matchRoutes.find(item => item.key === route.matchKey);
+            if (!matchRoute) {
+                setNotice('The reported match route is no longer available. Re-analyze before starting.');
+                return;
+            }
+            configureMatchRoute(matchRoute);
+            return;
+        }
+        if (prefs.scheduledSessions && !sessionWindow) {
+            setNotice('This plan is ready and will start in the next enabled East Africa trading window.');
+            return;
+        }
+        runButton();
     };
 
     useEffect(() => {
@@ -1440,6 +1480,9 @@ const DTraderContent: React.FC = () => {
                                     lockUntil={riskLockActive ? riskLockUntil : null}
                                     currency={engine.account.currency}
                                     status={engine.status}
+                                    canStartPlan={canStartPlan}
+                                    planBlockReason={neuralReport?.route ? planBlockReason : ''}
+                                    onStartPlan={startReportPlan}
                                 />
                             )}
 

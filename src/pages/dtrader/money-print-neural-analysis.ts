@@ -277,7 +277,7 @@ export const createMoneyPrintNeuralReport = (input: {
         trade.status === 'WIN' || trade.status === 'LOSS',
     ).length;
     const selectedTypes = input.tradeTypes?.length ? new Set(input.tradeTypes) : null;
-    const qualifiedRoute = selectedTypes?.has('DIGITMATCH')
+    const qualifiedRoute = (!selectedTypes || selectedTypes.has('DIGITMATCH'))
         ? input.matches.find(route => route.eligible)
         : undefined;
     const signalContract = (() => {
@@ -392,7 +392,7 @@ export const createMoneyPrintNeuralReport = (input: {
         ? {
             market: qualifiedRoute.label,
             marketSymbol: qualifiedRoute.symbol,
-            contract: 'DIGITMATCH' as const,
+            contract: `DIGITMATCH ${qualifiedRoute.targetDigit}`,
             contractType: 'DIGITMATCH' as const,
             strategy: 'Matches/Differs' as const,
             entryRule: `Wait for last digit ${qualifiedRoute.entryDigit}; the proposed one-tick target is ${qualifiedRoute.targetDigit}.`,

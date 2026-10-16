@@ -85,3 +85,4 @@
 - [King Fisher XML fallback](king-fisher-loader-fallback.md) — unknown Blockly blocks must match their XML connection shape; mixed output and statement connections make imports fail.
 - [Featured parity isolation](featured-bot-recovery-isolation.md) — keep sequence recovery separate from the generic dominant-parity block used elsewhere.
 - [Auto-Signals run session](auto-signals-run-session.md) — 1,000-tick/Wilson and multi-window gates; score ceiling 0–20, one contract per cycle, and no calibrated payout/EV model.
+- [Money Print Neural Link](money-print-neural-link.md) — challenge reports and match routes are local quantitative analysis, not an external LLM; preserve clear disclosure and fail-closed trade gates.
