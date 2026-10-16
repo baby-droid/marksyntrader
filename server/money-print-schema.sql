@@ -2,9 +2,16 @@ CREATE TABLE IF NOT EXISTS money_print_presence (
     account_hash TEXT PRIMARY KEY,
     account_type TEXT NOT NULL CHECK (account_type IN ('demo', 'real')),
     currency TEXT NOT NULL,
+    analytics_consent BOOLEAN NOT NULL DEFAULT FALSE,
+    consented_at TIMESTAMPTZ,
     first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE money_print_presence
+    ADD COLUMN IF NOT EXISTS analytics_consent BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE money_print_presence
+    ADD COLUMN IF NOT EXISTS consented_at TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS money_print_presence_last_seen_idx
     ON money_print_presence (last_seen_at DESC);

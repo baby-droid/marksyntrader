@@ -7,6 +7,7 @@
   },
   "scripts": {
     "dev": "node scripts/ensure-node-modules.js && ./node_modules/.bin/rsbuild dev --port 5000",
+    "api": "node server/index.js",
     "build": "node scripts/ensure-node-modules.js && ./node_modules/.bin/rsbuild build",
     "test": "jest",
     "type-check": "tsc --noEmit",

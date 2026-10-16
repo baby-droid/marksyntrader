@@ -22,6 +22,7 @@ export type ChallengeReport = {
     accountContext: {
         accountType: 'Demo' | 'Real' | 'Unknown';
         balance: number | null;
+        targetBalance?: number;
         currency: string;
         baseStake: number;
         nextStake: number;
@@ -269,6 +270,7 @@ const MoneyPrintNeuralLink = ({
                                     <div className='mp-neural-link__context'>
                                         <span><b>Account</b>{report.accountContext.accountType}</span>
                                         <span><b>Verified balance</b>{formatMoney(report.accountContext.balance ?? NaN, report.accountContext.currency)}</span>
+                                        {report.accountContext.targetBalance != null && <span><b>Target balance</b>{formatMoney(report.accountContext.targetBalance, report.accountContext.currency)}</span>}
                                         <span><b>Next stake</b>{formatMoney(report.accountContext.nextStake, report.accountContext.currency)}{report.accountContext.autoStake ? ` · ${report.accountContext.riskPercent}% risk cap` : ' · fixed'}</span>
                                         <span><b>Session TP / SL</b>{formatMoney(report.accountContext.takeProfit, report.accountContext.currency)} / −{formatMoney(report.accountContext.stopLoss, report.accountContext.currency)}</span>
                                         <span><b>Session P/L</b>{formatMoney(report.accountContext.sessionPnl, report.accountContext.currency)}</span>
@@ -288,7 +290,9 @@ const MoneyPrintNeuralLink = ({
                                             <div><span>Target digit{report.route.targetDigits.length === 1 ? '' : 's'}</span><strong>{report.route.targetDigits.join(', ') || '—'}</strong></div>
                                         </div>
                                         <p className='mp-neural-link__target-note'>
-                                            One Deriv DIGITMATCH contract accepts one target digit at a time. A route listing multiple digits is not a single multi-digit contract.
+                                            {report.route.contractType === 'DIGITMATCH'
+                                                ? 'One Deriv DIGITMATCH contract accepts one target digit at a time. A route listing multiple digits is not a single multi-digit contract.'
+                                                : 'The plan uses the selected live trade type and must still pass the current risk and signal checks before any order is sent.'}
                                         </p>
                                         <button
                                             type='button'

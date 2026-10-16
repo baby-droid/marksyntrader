@@ -184,7 +184,7 @@ const MODE_CARDS: { id: MoneyMode; title: string; note: string; icon: React.Reac
     { id: 'growth', title: 'Growth', note: 'Plan toward a balance goal over a chosen number of days.', icon: <Sparkles /> },
     { id: 'earnings', title: 'Hourly earnings', note: 'Pause after the target or loss limit is reached.', icon: <Clock3 /> },
     { id: 'sessions', title: 'Scheduled sessions', note: 'Trade only during the selected East Africa windows.', icon: <CalendarClock /> },
-    { id: 'flip', title: 'Auto Flip · demo only', note: 'Experimental high-risk mode; never promises a fast return.', icon: <Zap /> },
+    { id: 'flip', title: 'Auto Flip · active account', note: 'Uses the currently authorized demo or real account and its risk limits.', icon: <Zap /> },
 ];
 const SESSION_WINDOWS = [
     { id: 'early', label: '03:00–06:00', start: 180, end: 360 },
@@ -367,9 +367,11 @@ const DTraderContent: React.FC = () => {
     const tradeSnapshotsRef = useRef(new Map<string, string>());
     const pendingMatchStartRef = useRef<string | null>(null);
     const pendingNeuralStartRef = useRef<MoneyPrintNeuralReport['route'] | null>(null);
+    const pendingNeuralDeadlineRef = useRef(0);
     const pendingSettlementIdsRef = useRef(new Set<string>());
     const syncedTradeIdsRef = useRef(new Set<string>());
     const syncingTradeIdsRef = useRef(new Set<string>());
+    const earningsCycleRef = useRef({ deadline: 0, pauseUntil: 0, windowPnl: 0, loginId: '' });
 
     useEffect(() => subscribeCurrency(() => setDisplayCurrency(getDisplayCurrency())), []);
     useEffect(() => {
@@ -437,6 +439,7 @@ const DTraderContent: React.FC = () => {
             setAnalyticsStatus('');
             pendingMatchStartRef.current = null;
             pendingNeuralStartRef.current = null;
+            pendingNeuralDeadlineRef.current = 0;
             syncedTradeIdsRef.current.clear();
             syncingTradeIdsRef.current.clear();
             setJournal([]);
@@ -638,6 +641,8 @@ const DTraderContent: React.FC = () => {
             goalBalance: profile.goalBalance,
             days: profile.days,
             hourlyTarget: profile.hourlyTarget,
+            runDuration: profile.runDuration,
+            runDurationUnit: profile.runDurationUnit,
         }));
         setNotice(mode === 'sessions'
             ? 'Scheduled sessions use East Africa time and stop when the window or risk limit ends.'
@@ -726,9 +731,71 @@ const DTraderContent: React.FC = () => {
         }
         setNotice('');
         activeRunAccountRef.current = engine.account.loginId;
+        if (prefs.mode === 'earnings' && !prefs.scheduledSessions) {
+            const durationMs = prefs.runDurationUnit === 'h'
+                ? prefs.runDuration * 60 * 60 * 1000
+                : prefs.runDuration * 60 * 1000;
+            earningsCycleRef.current = {
+                deadline: Date.now() + durationMs,
+                pauseUntil: 0,
+                windowPnl: engine.session.pnl,
+                loginId: engine.account.loginId,
+            };
+        } else {
+            earningsCycleRef.current = { deadline: 0, pauseUntil: 0, windowPnl: 0, loginId: '' };
+        }
         tradeSnapshotsRef.current = new Map(engine.trades.map(trade => [trade.id, tradeSnapshot(trade)]));
         engine.onStart();
     };
+
+    useEffect(() => {
+        if (prefs.mode !== 'earnings' || prefs.scheduledSessions) return;
+        const timer = window.setInterval(() => {
+            const cycle = earningsCycleRef.current;
+            if (!cycle.deadline) return;
+            const current = engineRef.current;
+            const now = Date.now();
+            if (cycle.loginId && current.account.loginId !== cycle.loginId) {
+                earningsCycleRef.current = { deadline: 0, pauseUntil: 0, windowPnl: 0, loginId: '' };
+                current.onStop();
+                setNotice('Earnings session stopped because the active account changed.');
+                return;
+            }
+            if (riskLockActive) {
+                earningsCycleRef.current = { deadline: 0, pauseUntil: 0, windowPnl: 0, loginId: '' };
+                return;
+            }
+            if (now >= cycle.deadline) {
+                earningsCycleRef.current = { deadline: 0, pauseUntil: 0, windowPnl: 0, loginId: '' };
+                current.onStop();
+                setNotice('Selected earnings duration ended. No new contracts will be opened.');
+                return;
+            }
+            if (cycle.pauseUntil) {
+                if (now >= cycle.pauseUntil && current.canStart) {
+                    cycle.pauseUntil = 0;
+                    cycle.windowPnl = current.session.pnl;
+                    current.onStart();
+                    setNotice('The hourly target pause ended. The selected strategy resumed under the same stop limits.');
+                }
+                return;
+            }
+            const target = prefs.hourlyTarget;
+            if (current.status === 'running' && current.session.pnl - cycle.windowPnl >= target) {
+                const nextHour = (Math.floor(now / 3_600_000) + 1) * 3_600_000;
+                if (nextHour >= cycle.deadline) {
+                    cycle.deadline = 0;
+                    current.onStop();
+                    setNotice('Hourly target reached and the selected earnings duration is ending.');
+                } else {
+                    cycle.pauseUntil = nextHour;
+                    current.onPause();
+                    setNotice('Hourly target reached. New entries are paused until the next hour; the hard TP/SL remains active.');
+                }
+            }
+        }, 1_000);
+        return () => window.clearInterval(timer);
+    }, [prefs.hourlyTarget, prefs.mode, prefs.runDuration, prefs.runDurationUnit, prefs.scheduledSessions, riskLockActive]);
 
     const updateAnalyticsConsent = async (enabled: boolean) => {
         if (!engine.account.authorized || !engine.account.loginId) {
@@ -799,6 +866,34 @@ const DTraderContent: React.FC = () => {
             if (!cancelled) setAnalyticsStatus(error instanceof Error ? error.message : 'Analytics consent could not be restored.');
         });
         return () => { cancelled = true; };
+    }, [analyticsConsent, analyticsSessionReady, client, engine.account.authorized, engine.account.loginId]);
+
+    useEffect(() => {
+        if (!analyticsConsent || !analyticsSessionReady || !engine.account.loginId || !engine.account.authorized) return;
+        let cancelled = false;
+        const heartbeat = async () => {
+            const token = client.getToken();
+            if (!token) return;
+            try {
+                const response = await fetch('/api/money-print/presence', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'content-type': 'application/json',
+                        authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({ analyticsConsent: true }),
+                });
+                if (!response.ok) throw new Error('Anonymous activity consent needs to be reconnected.');
+            } catch (error) {
+                if (!cancelled) setAnalyticsStatus(error instanceof Error ? error.message : 'Activity heartbeat failed.');
+            }
+        };
+        const timer = window.setInterval(() => { void heartbeat(); }, 5 * 60_000);
+        return () => {
+            cancelled = true;
+            window.clearInterval(timer);
+        };
     }, [analyticsConsent, analyticsSessionReady, client, engine.account.authorized, engine.account.loginId]);
 
     useEffect(() => {
@@ -939,6 +1034,7 @@ const DTraderContent: React.FC = () => {
             accountContext: {
                 accountType: accountIsDemo ? 'Demo' : accountIsReal ? 'Real' : 'Unknown',
                 balance: engine.account.balance,
+                targetBalance: prefs.goalBalance,
                 currency: engine.account.currency || 'USD',
                 baseStake: settings.stake,
                 nextStake: effectiveStakeDisplay,
@@ -982,6 +1078,7 @@ const DTraderContent: React.FC = () => {
             accountContext: {
                 accountType: accountIsDemo ? 'Demo' : accountIsReal ? 'Real' : 'Unknown',
                 balance: engine.account.balance,
+                targetBalance: prefs.goalBalance,
                 currency: engine.account.currency || 'USD',
                 baseStake: settings.stake,
                 nextStake: effectiveStakeDisplay,
@@ -1127,11 +1224,40 @@ const DTraderContent: React.FC = () => {
             configureMatchRoute(matchRoute);
             return;
         }
-        if (prefs.scheduledSessions && !sessionWindow) {
-            setNotice('This plan is ready and will start in the next enabled East Africa trading window.');
+        const routeTypes = settings.allowedContractTypes?.includes(route.contractType)
+            ? settings.allowedContractTypes
+            : [route.contractType];
+        const routeSettings = (previous: AutoLabSettings): AutoLabSettings => ({
+            ...previous,
+            marketSelection: route.marketSymbol,
+            contractType: route.contractType,
+            allowedContractTypes: routeTypes,
+            barrier: route.barrier ?? previous.barrier,
+            contractBarrier: route.barrier ?? previous.contractBarrier,
+            matchEntryDigit: route.entryDigit ?? null,
+            duration: 1,
+            durationUnit: 't',
+            autoBarrier: route.barrier == null,
+        });
+        setSettings(routeSettings);
+        setPrefs(previous => ({ ...previous, strategyMode: route.strategy }));
+        setModeProfiles(previous => ({
+            ...previous,
+            [prefs.mode]: {
+                ...previous[prefs.mode],
+                settings: routeSettings(previous[prefs.mode].settings),
+                strategyMode: route.strategy,
+            },
+        }));
+        if (prefs.scheduledSessions) {
+            setNotice(sessionWindow
+                ? `Plan route configured for ${route.market}. The scheduled session will use these settings.`
+                : `Plan route configured for ${route.market}. It will start in the next enabled East Africa session.`);
             return;
         }
-        runButton();
+        pendingNeuralStartRef.current = route;
+        pendingNeuralDeadlineRef.current = Date.now() + 15_000;
+        setNotice(`Plan configured for ${route.market}. Waiting briefly for that exact live signal before starting.`);
     };
 
     useEffect(() => {
@@ -1162,6 +1288,46 @@ const DTraderContent: React.FC = () => {
         engine.markets,
         matchRoutes,
         prefs.scheduledSessions,
+        prefs.strategyMode,
+        riskLockActive,
+        settings.contractBarrier,
+        settings.contractType,
+        settings.marketSelection,
+        settings.matchEntryDigit,
+    ]);
+
+    useEffect(() => {
+        const route = pendingNeuralStartRef.current;
+        if (!route) return;
+        if (riskLockActive) {
+            pendingNeuralStartRef.current = null;
+            pendingNeuralDeadlineRef.current = 0;
+            setNotice('DO NOT TRADE: the risk lock became active before the plan could start.');
+            return;
+        }
+        const routeConfigured = prefs.strategyMode === route.strategy
+            && settings.contractType === route.contractType
+            && settings.marketSelection === route.marketSymbol
+            && (route.barrier == null || settings.contractBarrier === route.barrier)
+            && settings.matchEntryDigit === (route.entryDigit ?? null);
+        if (!routeConfigured) return;
+        const liveSignalMatches = engine.currentSignal.market === route.market
+            && engine.currentSignal.detail === route.entryRule;
+        if (liveSignalMatches && engine.canStart) {
+            pendingNeuralStartRef.current = null;
+            pendingNeuralDeadlineRef.current = 0;
+            runButton();
+            return;
+        }
+        if (Date.now() >= pendingNeuralDeadlineRef.current) {
+            pendingNeuralStartRef.current = null;
+            pendingNeuralDeadlineRef.current = 0;
+            setNotice('The live signal changed before the route was ready. No trade was started; analyze again.');
+        }
+    }, [
+        engine.canStart,
+        engine.currentSignal.detail,
+        engine.currentSignal.market,
         prefs.strategyMode,
         riskLockActive,
         settings.contractBarrier,
@@ -1220,7 +1386,10 @@ const DTraderContent: React.FC = () => {
                     <button onClick={() => setActivePanel('dashboard')}><Radio size={15} /> Markets & Signals</button>
                     <button onClick={() => setActivePanel('dashboard')}><BrainCircuit size={15} /> Strategy Engine</button>
                     <button className={activePanel === 'reports' ? 'active' : ''} onClick={() => setActivePanel('reports')}><BarChart3 size={15} /> Reports</button>
-                    <button onClick={() => setNotice('Platform-wide user data is unavailable in this account-only client.')}><ShieldAlert size={15} /> Admin Insights</button>
+                    <button className={activePanel === 'admin' ? 'active' : ''} onClick={() => {
+                        setActivePanel('admin');
+                        if (adminUnlocked) void refreshAdminAnalytics();
+                    }}><ShieldAlert size={15} /> Admin Insights</button>
                     <div className='mp-side-nav__bottom'>
                         <span className={engine.account.authorized ? 'connected' : ''}><i /> {engine.account.authorized ? 'Deriv link authorized' : 'Connect a Deriv account'}</span>
                         <a href='https://developers.deriv.com/llms.txt' target='_blank' rel='noreferrer'>Deriv API documentation ↗</a>
@@ -1286,8 +1455,22 @@ const DTraderContent: React.FC = () => {
                         <ReportPanel
                             trades={journal}
                             currency={engine.account.currency}
+                            digitStats={engine.digitStats}
+                            distributionMarket={engine.currentSignal.market}
                             onExport={exportCsv}
                             onPrint={() => window.print()}
+                        />
+                    ) : activePanel === 'admin' ? (
+                        <AdminInsightsPanel
+                            analytics={adminAnalytics}
+                            unlocked={adminUnlocked}
+                            loading={adminLoading}
+                            error={adminError}
+                            pin={adminPin}
+                            onPinChange={setAdminPin}
+                            onUnlock={unlockAdmin}
+                            onLock={lockAdmin}
+                            onRefresh={refreshAdminAnalytics}
                         />
                     ) : (
                         <>
@@ -1429,7 +1612,7 @@ const DTraderContent: React.FC = () => {
                                 <div className='mp-mode-grid'>
                                     {MODE_CARDS.map(card => (
                                         <button
-                                            className={`mp-mode-card ${prefs.mode === card.id ? 'selected' : ''} ${card.id === 'flip' && !accountIsDemo ? 'restricted' : ''}`}
+                                            className={`mp-mode-card ${prefs.mode === card.id ? 'selected' : ''}`}
                                             key={card.id}
                                             onClick={() => selectMode(card.id)}
                                             type='button'
@@ -1438,7 +1621,7 @@ const DTraderContent: React.FC = () => {
                                             <span className='mp-mode-card__icon'>{card.icon}</span>
                                             <strong>{card.title}</strong>
                                             <small>{card.note}</small>
-                                            {card.id === 'flip' && <em>{accountIsDemo ? 'DEMO ONLY' : 'DEMO REQUIRED'}</em>}
+                                            {card.id === 'flip' && <em>{accountIsReal ? 'REAL · CONFIRM FIRST' : accountIsDemo ? 'DEMO' : 'AUTHORIZATION REQUIRED'}</em>}
                                         </button>
                                     ))}
                                 </div>
@@ -1449,7 +1632,7 @@ const DTraderContent: React.FC = () => {
                                     scheduledSessions={prefs.scheduledSessions}
                                     onPref={patchPrefs}
                                     onSetting={patchSetting}
-                                    tradingLocked={riskLockActive}
+                                    tradingLocked={riskLockActive || engine.inputsDisabled}
                                 />
                             </section>
 
@@ -1521,20 +1704,28 @@ const DTraderContent: React.FC = () => {
                                     <div className='mp-insight-note'><CheckCircle2 size={14} /> Realized results come from Deriv settlement messages. Open contracts are excluded from profit totals.</div>
                                 </section>
 
-                                <section className='mp-card mp-admin-card'>
-                                    <CardHeading icon={<ShieldAlert />} title='Admin insights' meta='ACCOUNT ONLY' />
-                                    <div className='mp-admin-card__stats'>
-                                        <div><span>Trades in local journal</span><strong>{journal.length}</strong></div>
-                                        <div><span>Top market by recorded P/L</span><strong>{topMarket?.[0] ?? 'Not enough data'}</strong></div>
-                                        <div><span>Best recorded market P/L</span><strong>{topMarket ? money(topMarket[1], engine.account.currency) : '—'}</strong></div>
-                                    </div>
-                                    <p>Connected-user counts and cross-user rankings need a secured admin service; this page does not collect or invent other users’ data.</p>
+                                <section className='mp-card mp-admin-card mp-consent-card'>
+                                    <CardHeading icon={<ShieldAlert />} title='Anonymous activity sharing' meta='OPTIONAL · AGGREGATE ONLY' />
+                                    <label className='mp-switch'>
+                                        <input
+                                            type='checkbox'
+                                            checked={analyticsConsent}
+                                            disabled={!engine.account.authorized || !engine.account.loginId}
+                                            onChange={event => { void updateAnalyticsConsent(event.target.checked); }}
+                                        />
+                                        <span className='mp-switch__track' />
+                                        <b>Contribute opted-in trade activity to aggregate insights</b>
+                                    </label>
+                                    <p>Only verified, settled trade activity is used for summaries. Account balances and login IDs are not shown; admin reports hide groups with fewer than five opted-in accounts. Turning this off deletes this account’s stored activity.</p>
+                                    <p className='mp-consent-card__status' role='status'>{analyticsStatus || (analyticsConsent ? 'Sharing is enabled for this active account.' : 'Sharing is off by default.')}</p>
                                 </section>
                             </div>
 
                             <ReportPanel
                                 trades={latestTrades}
                                 currency={engine.account.currency}
+                                digitStats={engine.digitStats}
+                                distributionMarket={engine.currentSignal.market}
                                 onExport={exportCsv}
                                 onPrint={() => window.print()}
                                 compact
@@ -1721,15 +1912,56 @@ const ModeDetails: React.FC<{
     onPref: <K extends keyof MoneyPrintPrefs>(key: K, value: MoneyPrintPrefs[K]) => void;
     onSetting: <K extends keyof AutoLabSettings>(key: K, value: AutoLabSettings[K]) => void;
 }> = ({ mode, prefs, settings, scheduledSessions, tradingLocked, onPref, onSetting }) => {
+    const challengeTradeTypes: AutoLabContractType[] = [
+        'DIGITOVER', 'DIGITUNDER', 'DIGITMATCH', 'DIGITDIFF',
+        'DIGITEVEN', 'DIGITODD', 'CALL', 'PUT',
+    ];
+    const selectedChallengeTypes = settings.allowedContractTypes?.length
+        ? settings.allowedContractTypes
+        : challengeTradeTypes;
+    const toggleChallengeType = (contract: AutoLabContractType, checked: boolean) => {
+        const next = checked
+            ? [...new Set([...selectedChallengeTypes, contract])]
+            : selectedChallengeTypes.filter(item => item !== contract);
+        if (!next.length) return;
+        onSetting('contractType', 'AUTO');
+        onSetting('allowedContractTypes', next);
+    };
+    const changeRunDurationUnit = (unit: 'h' | 'm') => {
+        if (unit === prefs.runDurationUnit) return;
+        const converted = unit === 'm'
+            ? Math.min(1440, prefs.runDuration * 60)
+            : Math.max(1, Math.ceil(prefs.runDuration / 60));
+        onPref('runDuration', converted);
+        onPref('runDurationUnit', unit);
+    };
+
     if (mode === 'sessions') {
         return (
             <div className='mp-mode-detail'>
-                <div className='mp-mode-detail__intro'><strong>Scheduled sessions · East Africa Time</strong><span>When enabled, the scanner starts inside an open window and stops at the window end or a risk limit. The browser must stay open.</span></div>
+                <div className='mp-mode-detail__intro'><strong>Scheduled sessions · East Africa Time</strong><span>These settings belong to Scheduled Sessions only. The active account, strategy, stake, and TP/SL are rechecked before each start. The browser must stay open.</span></div>
+                <div className='mp-mode-detail--form'>
+                    <label className='mp-field'>
+                        <span>Base stake</span>
+                        <input type='number' min='0.35' step='0.01' disabled={tradingLocked} value={fromUsd(settings.stake).toFixed(2)} onChange={event => onSetting('stake', Math.max(MIN_DERIV_STAKE, toUsd(Number(event.target.value) || MIN_DERIV_STAKE)))} />
+                    </label>
+                    <label className='mp-field'>
+                        <span>Session take profit</span>
+                        <input type='number' min='0.1' step='0.1' disabled={tradingLocked} value={fromUsd(settings.takeProfit).toFixed(2)} onChange={event => onSetting('takeProfit', Math.max(0.1, toUsd(Number(event.target.value) || 0.1)))} />
+                    </label>
+                    <label className='mp-field'>
+                        <span>Strategy</span>
+                        <select disabled={tradingLocked} value={prefs.strategyMode} onChange={event => onPref('strategyMode', event.target.value as AutoLabMode)}>
+                            {AUTO_LAB_MODES.map(item => <option key={item} value={item}>{strategyLabel(item)}</option>)}
+                        </select>
+                    </label>
+                </div>
                 <div className='mp-session-times'>{SESSION_WINDOWS.map(window => <span key={window.id} className={getEastAfricaTime().minutes >= window.start && getEastAfricaTime().minutes < window.end ? 'active' : ''}><Clock3 size={13} /> {window.label}</span>)}</div>
                 <label className='mp-switch'>
                     <input type='checkbox' disabled={tradingLocked} checked={scheduledSessions} onChange={event => onPref('scheduledSessions', event.target.checked)} />
                     <span className='mp-switch__track' /><b>Enable automatic session start / stop</b>
                 </label>
+                <span className='mp-mode-detail__caution'>No trade is guaranteed. Each session still stops at its own TP, SL, or global risk lock.</span>
             </div>
         );
     }
@@ -1737,9 +1969,33 @@ const ModeDetails: React.FC<{
         return (
             <div className='mp-mode-detail'>
                 <div className='mp-mode-detail__intro'>
-                    <strong>Challenge mode · local Neural Link review</strong>
-                    <span>The analysis uses this account’s settled journal and authenticated tick history in the browser. It does not send account data to an external AI service or promise a profitable route.</span>
+                    <strong>Challenge mode · choose a target and eligible trade types</strong>
+                    <span>The current authorized account balance is the starting amount. Neural Link uses local journal and live authenticated market evidence; a target is a plan, not a promise.</span>
                 </div>
+                <div className='mp-mode-detail--form'>
+                    <label className='mp-field'>
+                        <span>Target account balance</span>
+                        <input type='number' min='1' step='1' disabled={tradingLocked} value={fromUsd(prefs.goalBalance).toFixed(2)} onChange={event => onPref('goalBalance', Math.max(1, toUsd(Number(event.target.value) || 1)))} />
+                    </label>
+                    <label className='mp-field'>
+                        <span>Base stake</span>
+                        <input type='number' min='0.35' step='0.01' disabled={tradingLocked} value={fromUsd(settings.stake).toFixed(2)} onChange={event => onSetting('stake', Math.max(MIN_DERIV_STAKE, toUsd(Number(event.target.value) || MIN_DERIV_STAKE)))} />
+                    </label>
+                </div>
+                <fieldset className='mp-contract-type-grid' disabled={tradingLocked}>
+                    <legend>Trade types Neural Link may route</legend>
+                    {challengeTradeTypes.map(contract => (
+                        <label key={contract}>
+                            <input
+                                type='checkbox'
+                                checked={selectedChallengeTypes.includes(contract)}
+                                onChange={event => toggleChallengeType(contract, event.target.checked)}
+                            />
+                            <span>{CONTRACT_LABELS[contract]}</span>
+                        </label>
+                    ))}
+                </fieldset>
+                <span className='mp-mode-detail__caution'>Select at least one type. A plan will wait rather than place an order if its selected route is no longer live.</span>
             </div>
         );
     }
@@ -1755,16 +2011,23 @@ const ModeDetails: React.FC<{
     if (mode === 'earnings') {
         return (
             <div className='mp-mode-detail mp-mode-detail--form'>
-                <label className='mp-field'><span>Hourly profit target</span><input type='number' min='0.1' step='0.1' value={fromUsd(prefs.hourlyTarget).toFixed(2)} onChange={event => onPref('hourlyTarget', Math.max(0.1, toUsd(Number(event.target.value) || 0.1)))} /></label>
-                <label className='mp-field'><span>Current hard TP</span><input type='number' min='0.1' step='0.1' value={fromUsd(settings.takeProfit).toFixed(2)} onChange={event => onSetting('takeProfit', Math.max(0.1, toUsd(Number(event.target.value) || 0.1)))} /></label>
-                <span className='mp-mode-detail__caution'>The hard TP/SL are authoritative. Hourly schedules need this page open to run.</span>
+                <label className='mp-field'><span>Base stake</span><input type='number' min='0.35' step='0.01' disabled={tradingLocked} value={fromUsd(settings.stake).toFixed(2)} onChange={event => onSetting('stake', Math.max(MIN_DERIV_STAKE, toUsd(Number(event.target.value) || MIN_DERIV_STAKE)))} /></label>
+                <label className='mp-field'><span>Hourly target</span><input type='number' min='0.1' step='0.1' disabled={tradingLocked} value={fromUsd(prefs.hourlyTarget).toFixed(2)} onChange={event => onPref('hourlyTarget', Math.max(0.1, toUsd(Number(event.target.value) || 0.1)))} /></label>
+                <label className='mp-field'><span>Session hard TP</span><input type='number' min='0.1' step='0.1' disabled={tradingLocked} value={fromUsd(settings.takeProfit).toFixed(2)} onChange={event => onSetting('takeProfit', Math.max(0.1, toUsd(Number(event.target.value) || 0.1)))} /></label>
+                <label className='mp-field'><span>Run duration</span><input type='number' min='1' max={prefs.runDurationUnit === 'h' ? 24 : 1440} step='1' disabled={tradingLocked} value={prefs.runDuration} onChange={event => onPref('runDuration', Math.min(prefs.runDurationUnit === 'h' ? 24 : 1440, Math.max(1, Math.floor(Number(event.target.value) || 1))))} /></label>
+                <label className='mp-field'><span>Duration unit</span><select disabled={tradingLocked} value={prefs.runDurationUnit} onChange={event => changeRunDurationUnit(event.target.value as 'h' | 'm')}><option value='h'>Hours (1–24)</option><option value='m'>Minutes (1–1,440)</option></select></label>
+                <label className='mp-switch mp-mode-detail__recovery'>
+                    <input type='checkbox' disabled={tradingLocked} checked={prefs.martingaleEnabled} onChange={event => onPref('martingaleEnabled', event.target.checked)} />
+                    <span className='mp-switch__track' /><b>Use capped auto recovery (max 2 steps)</b>
+                </label>
+                <span className='mp-mode-detail__caution'>Hourly target pauses new entries until the next hour. The session TP/SL and global risk lock remain authoritative; targets cannot be guaranteed.</span>
             </div>
         );
     }
     return (
         <div className='mp-mode-detail mp-mode-detail--flip'>
             <Zap size={17} />
-            <div><strong>Demo-only, bounded experiment.</strong><span>Uses the same signal engine, stake cap and stop-loss. Fast balance growth is not promised; real-account execution is blocked.</span></div>
+            <div><strong>Active-account flip plan · high risk.</strong><span>Uses the currently authorized demo or real account. Only one account is traded at a time; real trading requires the explicit acknowledgement and still obeys stake, TP/SL, and lock limits.</span></div>
         </div>
     );
 };
@@ -1772,38 +2035,193 @@ const ModeDetails: React.FC<{
 const ReportPanel: React.FC<{
     trades: AutoLabTrade[];
     currency: string;
+    digitStats?: Array<{ digit: number; percent: number; count?: number }>;
+    distributionMarket?: string;
     onExport: () => void;
     onPrint: () => void;
     compact?: boolean;
-}> = ({ trades, currency, onExport, onPrint, compact = false }) => (
-    <section className={`mp-card mp-report-card ${compact ? 'is-compact' : ''}`}>
-        <div className='mp-report-heading'>
-            <CardHeading icon={<BarChart3 />} title={compact ? 'Recent trades' : 'Printable trade report'} meta={`${trades.length} RECORDS`} />
-            <div className='mp-report-actions'>
-                <button className='mp-button mp-button--outline' onClick={onExport}><Download size={14} /> CSV</button>
-                <button className='mp-button mp-button--outline' onClick={onPrint}><Printer size={14} /> Print</button>
+}> = ({ trades, currency, digitStats = [], distributionMarket = '', onExport, onPrint, compact = false }) => {
+    const settled = [...trades]
+        .filter(trade => trade.status === 'WIN' || trade.status === 'LOSS')
+        .slice(0, 40)
+        .reverse();
+    let runningPnl = 0;
+    const curve = settled.map(trade => {
+        runningPnl += Number.isFinite(trade.profit) ? trade.profit : 0;
+        return runningPnl;
+    });
+    const low = Math.min(0, ...curve);
+    const high = Math.max(0, ...curve);
+    const span = high - low || 1;
+    const points = curve.map((value, index) => {
+        const x = curve.length > 1 ? (index / (curve.length - 1)) * 640 : 320;
+        const y = 154 - ((value - low) / span) * 138;
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+    const currentBalance = curve[curve.length - 1] ?? 0;
+    const latestRoute = (trade: AutoLabTrade) => {
+        const contract = CONTRACT_LABELS[trade.contract as AutoLabContractType] ?? trade.contract;
+        const strategy = trade.strategy ? `${strategyLabel(trade.strategy)} · ` : '';
+        const barrier = trade.barrier == null ? '' : ` ${trade.barrier}`;
+        return `${strategy}${contract}${barrier}`;
+    };
+
+    return (
+        <section className={`mp-card mp-report-card ${compact ? 'is-compact' : ''}`}>
+            <div className='mp-report-heading'>
+                <CardHeading icon={<BarChart3 />} title={compact ? 'Recent trades' : 'Trade analysis report'} meta={`${trades.length} RECORDS`} />
+                <div className='mp-report-actions'>
+                    <button className='mp-button mp-button--outline' onClick={onExport}><Download size={14} /> CSV</button>
+                    <button className='mp-button mp-button--outline' onClick={onPrint}><Printer size={14} /> Print</button>
+                </div>
             </div>
-        </div>
-        <div className='mp-table-wrap'>
-            <table className='mp-table mp-report-table'>
-                <thead><tr><th>Contract</th><th>Time</th><th>Market</th><th>Type</th><th>Stake</th><th>Net P/L</th><th>Result</th></tr></thead>
-                <tbody>
-                    {trades.slice(0, compact ? 8 : 500).map(trade => (
-                        <tr key={trade.id}>
-                            <td>#{trade.id}</td><td>{trade.time}</td><td>{trade.market}</td>
-                            <td>{CONTRACT_LABELS[trade.contract as AutoLabContractType] ?? trade.contract}</td>
-                            <td>{money(trade.stake, currency)}</td>
-                            <td className={trade.status === 'OPEN' ? '' : trade.profit >= 0 ? 'is-green' : 'is-red'}>{trade.status === 'OPEN' ? 'Pending' : money(trade.profit, currency)}</td>
-                            <td><span className={`mp-result ${trade.status.toLowerCase()}`}>{trade.status}</span></td>
-                        </tr>
-                    ))}
-                    {!trades.length && <tr><td colSpan={7} className='mp-empty-row'>Settled trades will appear here after the first run.</td></tr>}
-                </tbody>
-            </table>
-        </div>
-        {!compact && <p className='mp-report-footnote'>This report contains this browser’s locally saved records for the currently active account. It does not include unsaved trades from other devices.</p>}
-    </section>
-);
+            <div className='mp-report-insights'>
+                <div className='mp-report-chart'>
+                    <div className='mp-report-chart__heading'>
+                        <div><span>CUMULATIVE SETTLED P/L</span><small>Most recent {curve.length} trades · not a forecast</small></div>
+                        <strong className={currentBalance >= 0 ? 'is-green' : 'is-red'}>{money(currentBalance, currency)}</strong>
+                    </div>
+                    <svg viewBox='0 0 640 180' role='img' aria-label={`Cumulative settled profit and loss chart, latest total ${money(currentBalance, currency)}`}>
+                        <line x1='0' x2='640' y1={154 - ((0 - low) / span) * 138} y2={154 - ((0 - low) / span) * 138} className='mp-report-chart__baseline' />
+                        {curve.length > 1
+                            ? <polyline points={points} className='mp-report-chart__line' />
+                            : <text x='320' y='94' textAnchor='middle' className='mp-report-chart__empty'>Settled results appear after the first completed trade.</text>}
+                    </svg>
+                </div>
+                <div className='mp-report-digits'>
+                    <div className='mp-digit-distribution__title'>
+                        <span>Current digit distribution</span>
+                        <small>{distributionMarket || 'Waiting for market'} · live scan window</small>
+                    </div>
+                    <div className='mp-digit-bars'>
+                        {digitStats.map(item => (
+                            <div className='mp-digit-bar' key={item.digit} title={`Digit ${item.digit}: ${item.percent.toFixed(1)}%${item.count == null ? '' : ` · ${item.count} ticks`}`}>
+                                <div className='mp-digit-bar__track'><i style={{ height: `${Math.min(100, Math.max(2, item.percent))}%` }} /></div>
+                                <span>{item.digit}</span>
+                            </div>
+                        ))}
+                        {!digitStats.length && <span className='mp-muted'>Digit distribution appears after live ticks arrive.</span>}
+                    </div>
+                </div>
+            </div>
+            <div className='mp-table-wrap'>
+                <table className='mp-table mp-report-table'>
+                    <thead><tr><th>Contract</th><th>Time</th><th>Market</th><th>Route</th><th>Entry / epoch</th><th>Window</th><th>Stake</th><th>Net P/L</th><th>Result</th></tr></thead>
+                    <tbody>
+                        {trades.slice(0, compact ? 8 : 500).map(trade => (
+                            <tr key={trade.id}>
+                                <td>#{trade.id}</td><td>{trade.time}</td><td>{trade.market}</td>
+                                <td>{latestRoute(trade)}</td>
+                                <td>{trade.entryDigit == null ? '—' : `${trade.entryDigit}${trade.entryEpoch == null ? '' : ` · ${trade.entryEpoch}`}`}</td>
+                                <td>{trade.ticksWindow == null ? '—' : `${trade.ticksWindow} ticks`}{trade.duration == null ? '' : ` · ${trade.duration}${trade.durationUnit ?? ''}`}</td>
+                                <td>{money(trade.stake, currency)}</td>
+                                <td className={trade.status === 'OPEN' ? '' : trade.profit >= 0 ? 'is-green' : 'is-red'}>{trade.status === 'OPEN' ? 'Pending' : money(trade.profit, currency)}</td>
+                                <td><span className={`mp-result ${trade.status.toLowerCase()}`}>{trade.status}</span></td>
+                            </tr>
+                        ))}
+                        {!trades.length && <tr><td colSpan={9} className='mp-empty-row'>Settled trades will appear here after the first run.</td></tr>}
+                    </tbody>
+                </table>
+            </div>
+            {!compact && <p className='mp-report-footnote'>This report contains this browser’s locally saved records for the currently active account. It does not include unsaved trades from other devices or imply future results.</p>}
+        </section>
+    );
+};
+
+const AdminInsightsPanel: React.FC<{
+    analytics: MoneyPrintAdminAnalytics | null;
+    unlocked: boolean;
+    loading: boolean;
+    error: string;
+    pin: string;
+    onPinChange: (pin: string) => void;
+    onUnlock: (event: React.FormEvent<HTMLFormElement>) => void;
+    onLock: () => void;
+    onRefresh: () => void;
+}> = ({ analytics, unlocked, loading, error, pin, onPinChange, onUnlock, onLock, onRefresh }) => {
+    const formatMetric = (value: number | null) => value == null ? 'Withheld' : value.toLocaleString();
+    const renderRanking = (
+        title: string,
+        items: MoneyPrintAdminAnalytics['bestMarkets'],
+    ) => (
+        <section className='mp-admin-ranking'>
+            <h3>{title}</h3>
+            {items.length ? items.map((item, index) => (
+                <div className='mp-admin-ranking__row' key={`${item.label}-${item.currency}`}>
+                    <span>{index + 1}</span>
+                    <strong>{item.label}<small>{item.trades} settled · {item.winRate == null ? '—' : `${item.winRate.toFixed(1)}% historical win rate`}</small></strong>
+                    <b className={item.netProfit >= 0 ? 'is-green' : 'is-red'}>{money(item.netProfit, item.currency)}</b>
+                </div>
+            )) : <p className='mp-muted'>Not enough opted-in accounts for a privacy-safe group.</p>}
+        </section>
+    );
+
+    return (
+        <section className='mp-card mp-admin-insights'>
+            <div className='mp-report-heading'>
+                <CardHeading icon={<ShieldAlert />} title='Admin Insights' meta='ANONYMIZED AGGREGATES' />
+                {unlocked && (
+                    <div className='mp-report-actions'>
+                        <button type='button' className='mp-button mp-button--outline' onClick={onRefresh} disabled={loading}>Refresh</button>
+                        <button type='button' className='mp-button mp-button--outline' onClick={onLock}>Lock</button>
+                    </div>
+                )}
+            </div>
+            <p className='mp-admin-insights__privacy'>This view contains aggregate activity from accounts that explicitly opted in. It never displays individual account balances, login IDs, or individual trade records. Groups smaller than five accounts are withheld.</p>
+            {!unlocked ? (
+                <form className='mp-admin-unlock' onSubmit={onUnlock}>
+                    <label className='mp-field'>
+                        <span>Admin PIN</span>
+                        <input
+                            type='password'
+                            autoComplete='current-password'
+                            value={pin}
+                            onChange={event => onPinChange(event.target.value)}
+                            disabled={loading}
+                            required
+                        />
+                    </label>
+                    <button className='mp-button mp-button--start' type='submit' disabled={loading || !pin.trim()}>
+                        {loading ? 'Checking…' : 'Unlock insights'}
+                    </button>
+                    <small>The PIN is checked by the server and is never stored in this page.</small>
+                </form>
+            ) : (
+                <>
+                    {error && <p className='mp-admin-insights__error' role='alert'>{error}</p>}
+                    {loading && <p className='mp-muted'>Loading aggregate activity…</p>}
+                    {analytics && (
+                        <>
+                            <div className='mp-admin-metrics'>
+                                <div><span>Opted-in active accounts · 10 min</span><strong>{formatMetric(analytics.activeAccounts10m)}</strong></div>
+                                <div><span>Demo accounts · 10 min</span><strong>{formatMetric(analytics.demoAccounts10m)}</strong></div>
+                                <div><span>Real accounts · 10 min</span><strong>{formatMetric(analytics.realAccounts10m)}</strong></div>
+                                <div><span>Settled trades · 30 days</span><strong>{formatMetric(analytics.settledTrades)}</strong></div>
+                                <div><span>Wins / losses · 30 days</span><strong>{formatMetric(analytics.wins)} / {formatMetric(analytics.losses)}</strong></div>
+                            </div>
+                            {analytics.privacySuppressed && <p className='mp-admin-insights__suppressed'>Some figures are withheld because their audience is below the five-account privacy threshold.</p>}
+                            <div className='mp-admin-insights__rankings'>
+                                {renderRanking('Top markets', analytics.bestMarkets)}
+                                {renderRanking('Top strategies', analytics.bestStrategies)}
+                                {renderRanking('Trade types', analytics.bestTradeTypes)}
+                                {renderRanking('Barriers', analytics.bestBarriers)}
+                                {renderRanking('Durations', analytics.bestDurations)}
+                            </div>
+                            <div className='mp-admin-profit'>
+                                <strong>Aggregate net P/L by currency</strong>
+                                {analytics.netProfitByCurrency.length
+                                    ? analytics.netProfitByCurrency.map(item => <span key={item.currency}>{item.currency}: {money(item.netProfit, item.currency)}</span>)
+                                    : <span className='mp-muted'>Withheld until each currency group reaches five accounts.</span>}
+                            </div>
+                            <p className='mp-report-footnote'>Updated {new Date(analytics.updatedAt).toLocaleString()} · Aggregates are descriptive, not trading advice.</p>
+                        </>
+                    )}
+                </>
+            )}
+            {error && !unlocked && <p className='mp-admin-insights__error' role='alert'>{error}</p>}
+        </section>
+    );
+};
 
 const DTrader: React.FC = () => (
     <MoneyPrintErrorBoundary>

@@ -246,11 +246,15 @@ async function withAuthorizedDeriv(token, task) {
 
 async function savePresence(accountHash, accountType, currency) {
     await pool.query(
-        `INSERT INTO money_print_presence (account_hash, account_type, currency)
-         VALUES ($1, $2, $3)
+        `INSERT INTO money_print_presence (
+            account_hash, account_type, currency, analytics_consent, consented_at
+         )
+         VALUES ($1, $2, $3, TRUE, NOW())
          ON CONFLICT (account_hash) DO UPDATE
          SET account_type = EXCLUDED.account_type,
              currency = EXCLUDED.currency,
+             analytics_consent = TRUE,
+             consented_at = COALESCE(money_print_presence.consented_at, NOW()),
              last_seen_at = NOW()`,
         [accountHash, accountType, currency],
     );
@@ -408,6 +412,13 @@ async function syncVerifiedTrades(request) {
         if (identity.accountHash !== cookie.accountHash) {
             throw new ApiError(403, 'The active account changed. Reconnect before syncing trades.');
         }
+        const consent = await pool.query(
+            'SELECT analytics_consent FROM money_print_presence WHERE account_hash = $1',
+            [identity.accountHash],
+        );
+        if (consent.rows[0]?.analytics_consent !== true) {
+            throw new ApiError(403, 'Opt in to anonymous activity sharing before syncing trade records.');
+        }
         await savePresence(identity.accountHash, identity.accountType, identity.currency);
         const verified = await getVerifiedTransactions(send, [...contractIds.keys()]);
         const client = await pool.connect();
@@ -482,6 +493,9 @@ async function loadRankings(expression) {
                 END AS win_rate
          FROM money_print_trades
          WHERE settled_at >= NOW() - INTERVAL '30 days'
+           AND account_hash IN (
+               SELECT account_hash FROM money_print_presence WHERE analytics_consent = TRUE
+           )
          GROUP BY ${expression}, currency
          HAVING COUNT(DISTINCT account_hash) >= 5
          ORDER BY win_rate DESC NULLS LAST, COUNT(*) DESC
@@ -515,7 +529,8 @@ async function loadAdminAnalytics() {
                     COUNT(*) FILTER (WHERE account_type = 'demo')::INTEGER AS demo,
                     COUNT(*) FILTER (WHERE account_type = 'real')::INTEGER AS real
              FROM money_print_presence
-             WHERE last_seen_at >= NOW() - INTERVAL '10 minutes'`,
+             WHERE analytics_consent = TRUE
+               AND last_seen_at >= NOW() - INTERVAL '10 minutes'`,
         ),
         pool.query(
             `SELECT COUNT(*)::INTEGER AS trades,
@@ -523,7 +538,10 @@ async function loadAdminAnalytics() {
                     COUNT(*) FILTER (WHERE outcome = 'LOSS')::INTEGER AS losses,
                     COUNT(DISTINCT account_hash)::INTEGER AS accounts
              FROM money_print_trades
-             WHERE settled_at >= NOW() - INTERVAL '30 days'`,
+             WHERE settled_at >= NOW() - INTERVAL '30 days'
+               AND account_hash IN (
+                   SELECT account_hash FROM money_print_presence WHERE analytics_consent = TRUE
+               )`,
         ),
         pool.query(
             `SELECT currency,
@@ -531,6 +549,9 @@ async function loadAdminAnalytics() {
                     COUNT(DISTINCT account_hash)::INTEGER AS accounts
              FROM money_print_trades
              WHERE settled_at >= NOW() - INTERVAL '30 days'
+               AND account_hash IN (
+                   SELECT account_hash FROM money_print_presence WHERE analytics_consent = TRUE
+               )
              GROUP BY currency
              HAVING COUNT(DISTINCT account_hash) >= 5
              ORDER BY currency`,

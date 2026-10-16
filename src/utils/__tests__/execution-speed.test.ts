@@ -32,7 +32,7 @@ describe('execution speed controls', () => {
         speed.setASpeedBoostEnabled(false);
     });
 
-    it('enables a bounded three-purchase Fast burst for Auto-Signals', async () => {
+    it('keeps Auto-Signals to one purchase per eligible tick in Fast mode', async () => {
         const speed = await import('../execution-speed');
         const { setTradeContext } = await import('../trade-metadata');
 
@@ -54,7 +54,8 @@ describe('execution speed controls', () => {
         setTradeContext({ page: 'Auto-Signals', bot: 'Speed Bot With Entry v2.2' });
         expect(speed.isFastExecutionEnabledForContext()).toBe(true);
         expect(speed.getExecutionSpeedDelay()).toBe(0);
-        expect(speed.getPurchasesPerTick()).toBe(3);
+        expect(speed.getPurchasesPerTick()).toBe(1);
+        expect(speed.getMaxInflight()).toBe(1);
         expect(speed.useDirectBuyForSpeed()).toBe(true);
 
         speed.setFastExecutionEnabled(false);

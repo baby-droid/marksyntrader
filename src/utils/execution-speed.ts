@@ -41,9 +41,9 @@ export const SPEED_MAX_INFLIGHT: Record<ExecutionSpeed, number> = {
 const FAST_EXEC_MAX_INFLIGHT = 3;
 
 // Purchases fired per tick for each speed tier. Normal and Turbo fire one,
-// while Crazy retains its legacy fan-out. Fast allows a bounded three-entry
-// burst, including Auto-Signals; its bot still revalidates before each cycle.
-// A-SPEED remains one purchase per tick.
+// while Crazy retains its legacy fan-out. Fast bursts are limited to contexts
+// that explicitly support multiple same-tick entries; Auto-Signals stays at
+// one purchase per eligible signal tick.
 export const SPEED_PURCHASES_PER_TICK: Record<ExecutionSpeed, number> = {
     normal: 1,
     crazy: 5,
@@ -145,15 +145,15 @@ export const getExecutionSpeedDelay = (): number => {
 
 /** Effective max concurrent in-flight contracts — the higher of the active tier or Fast Execution's cap. */
 export const getMaxInflight = (): number =>
-    isFastExecutionEnabledForContext() || aSpeedBoostEnabled
+    isAutoSignalsContext()
+        ? 1
+        : isFastExecutionEnabledForContext() || aSpeedBoostEnabled
         ? Math.max(SPEED_MAX_INFLIGHT[current], FAST_EXEC_MAX_INFLIGHT)
         : SPEED_MAX_INFLIGHT[current];
 
 /** Effective purchases fired per tick, independent from the latency override. */
 export const getPurchasesPerTick = (): number => {
-    if (isAutoSignalsContext()) {
-        return isFastExecutionEnabledForContext() ? FAST_EXEC_PURCHASES_PER_TICK : 1;
-    }
+    if (isAutoSignalsContext()) return 1;
     if (isTwoPredictionCycleContext()) return 1;
     if (isFastExecutionEnabledForContext()) {
         return FAST_EXEC_PURCHASES_PER_TICK;

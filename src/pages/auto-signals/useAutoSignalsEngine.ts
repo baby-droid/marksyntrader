@@ -265,6 +265,21 @@ const loadBotIntoWorkspace = async (
     throw new Error('Bot Builder could not load the selected Auto-Signals bot. Try choosing it again.');
 };
 
+const autoSignalTemplateCache = new Map<string, Promise<string>>();
+const loadAutoSignalTemplate = (file: string) => {
+    const cached = autoSignalTemplateCache.get(file);
+    if (cached) return cached;
+    const request = fetch(file).then(async response => {
+        if (!response.ok) throw new Error(`Could not load bot template (${response.status}).`);
+        return response.text();
+    }).catch(error => {
+        autoSignalTemplateCache.delete(file);
+        throw error;
+    });
+    autoSignalTemplateCache.set(file, request);
+    return request;
+};
+
 const accountAmount = (amount: number, currency: string, displayCurrency: string) => {
     if (currency && currency.toUpperCase() !== 'USD') return amount;
     return displayCurrency === 'KSH' ? toUsd(amount) : amount;
@@ -583,9 +598,7 @@ export const useAutoSignalsEngine = ({
         let botLoaded = false;
         try {
             setMessage(`Preparing ${bot.name} for ${market.label}…`);
-            const response = await fetch(bot.file);
-            if (!response.ok) throw new Error(`Could not load ${bot.name} (${response.status}).`);
-            const template = await response.text();
+            const template = await loadAutoSignalTemplate(bot.file);
             const accountAmounts = {
                 stake1: accountAmount(settings.stake1, currency, displayCurrency),
                 stake2: accountAmount(settings.stake2, currency, displayCurrency),
@@ -652,7 +665,7 @@ export const useAutoSignalsEngine = ({
             };
             beginAutoSignalsRun(
                 nextRun,
-                `${bot.name} is starting on ${market.symbol} for ${selectedRuns} signal cycles, with up to ${purchasesPerTick} separate purchases per tick.`,
+                `${bot.name} is starting on ${market.symbol} for ${selectedRuns} validated signal cycles, with one purchase per eligible tick.`,
             );
 
             // Automatically start after the selected XML is ready. The single
@@ -667,7 +680,7 @@ export const useAutoSignalsEngine = ({
             if (currentSession.run?.startedAt === nextRun.startedAt) {
                 const runMessage = action === 'entry-trade' && !candidate.entryReady
                     ? `${bot.name} is watching for its entry condition on ${market.symbol}; it will stop after ${selectedRuns} cycles.`
-                    : `${bot.name} is trading ${market.symbol} for up to ${selectedRuns} signal cycles (${purchasesPerTick} separate purchases per tick).`;
+                    : `${bot.name} is trading ${market.symbol} for up to ${selectedRuns} validated cycles, one purchase per eligible tick.`;
                 setAutoSignalsRunMessage(runMessage);
             } else {
                 setAutoSignalsRunMessage(currentSession.message || `${bot.name} started on ${market.symbol}.`);

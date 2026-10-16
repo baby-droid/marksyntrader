@@ -110,6 +110,12 @@ export default defineConfig({
     compress: true,
     port: 5000,
     host: '0.0.0.0',
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:5001',
+        changeOrigin: false,
+      },
+    },
     headers: {
       'Access-Control-Allow-Origin': '*',
       // A dev preview must always fetch the current HTML and async chunks.

@@ -18,6 +18,10 @@ author = "agent"
 task = "workflow.run"
 args = "Start application"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Money Print API"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -30,10 +34,22 @@ task = "shell.exec"
 args = "npm run dev"
 waitForPort = 5000
 
+[[workflows.workflow]]
+name = "Money Print API"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npm run api"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
 [deployment]
-deploymentTarget = "static"
+deploymentTarget = "autoscale"
 build = ["npm", "run", "build"]
 publicDir = "dist"
+run = ["node", "server/index.js"]
 
 [userenv]
 
@@ -46,3 +62,7 @@ NEXT_PUBLIC_DERIV_APP_ID = "33FxUklO31bUSd9GkznBN"
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[[ports]]
+localPort = 5001
+externalPort = 3000

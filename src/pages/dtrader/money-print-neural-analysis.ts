@@ -1,6 +1,6 @@
-import type { AutoLabMarket, AutoLabSignal, AutoLabTrade } from '../auto-lab/AutoLabView';
+import type { AutoLabMarket, AutoLabMode, AutoLabSignal, AutoLabTrade } from '../auto-lab/AutoLabView';
 import { isAutoLabMarketExcluded } from '../auto-lab/auto-lab-engine';
-import type { AutoLabContractType, AutoLabMode } from '../auto-lab/auto-lab-engine';
+import type { AutoLabContractType } from '../auto-lab/auto-lab-engine';
 
 export type MoneyPrintTradeSide = {
     side: string;
@@ -38,6 +38,7 @@ export type MoneyPrintNeuralReport = {
     accountContext: {
         accountType: 'Demo' | 'Real' | 'Unknown';
         balance: number | null;
+        targetBalance?: number;
         currency: string;
         baseStake: number;
         nextStake: number;
@@ -319,7 +320,7 @@ export const createMoneyPrintNeuralReport = (input: {
         `Challenge brief: ${challenge || 'not provided'}`,
         `${settledCount} settled journal trade${settledCount === 1 ? '' : 's'} reviewed; open trades excluded.`,
         ...(context ? [
-            `${context.accountType} account · verified balance ${context.balance == null ? 'unavailable' : `${context.balance.toFixed(2)} ${context.currency}`} · next stake ${context.nextStake.toFixed(2)} ${context.currency}.`,
+            `${context.accountType} account · verified balance ${context.balance == null ? 'unavailable' : `${context.balance.toFixed(2)} ${context.currency}`} · target balance ${context.targetBalance?.toFixed(2) ?? 'not set'} ${context.currency} · next stake ${context.nextStake.toFixed(2)} ${context.currency}.`,
             `Risk controls: TP ${context.takeProfit.toFixed(2)} ${context.currency}, SL ${context.stopLoss.toFixed(2)} ${context.currency}, session P/L ${context.sessionPnl.toFixed(2)} ${context.currency}, strategy ${context.strategyMode}${context.scheduledSessions ? ' · EAT schedule enabled' : ''}.`,
         ] : []),
         ...sidePerformance.slice(0, 4).map(side =>
