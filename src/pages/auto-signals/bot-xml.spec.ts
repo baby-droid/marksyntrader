@@ -137,8 +137,7 @@ describe('Auto-Signals bot templates', () => {
             expect(getField(getBlock(doc, 'trade_definition_tradetype'), 'TRADETYPE_LIST')).toBe(tradeType);
             expect(getField(getBlock(doc, 'trade_definition_contracttype'), 'TYPE_LIST')).toBe(contractType);
             expect(getField(getBlock(doc, 'purchase'), 'PURCHASE_LIST')).toBe(purchaseType);
-            const usesNormalKillerV3 = action === 'trade-only'
-                && (strategy === 'MATCHES' || strategy === 'DIFFERS');
+            const usesNormalKillerV3 = action === 'trade-only' && strategy === 'DIFFERS';
             if (usesNormalKillerV3) {
                 expect(getField(tradeOptions, 'VAR')).toBe('stake');
             } else {
@@ -157,23 +156,31 @@ describe('Auto-Signals bot templates', () => {
             if (barrier !== null) expect(getValueNumber(tradeOptions, 'PREDICTION')).toBe(String(barrier));
             if (
                 action === 'trade-only'
-                && (strategy === 'MATCHES' || strategy === 'DIFFERS')
+                && strategy === 'DIFFERS'
             ) {
                 expect(getBlock(doc, 'normal_killer_tick_acceleration')).toBeDefined();
                 expect(getVariableSetNumber(doc, 'base_stake')).toBe('1.5');
                 expect(getVariableSetNumber(doc, 'take_profit')).toBe('5');
                 expect(getVariableSetNumber(doc, 'stop_loss')).toBe('10');
             }
+            if (action === 'trade-only' && strategy === 'MATCHES') {
+                expect(getBlock(doc, 'auto_signal_entry_gate')).toBeDefined();
+                expect(getField(getBlock(doc, 'auto_signal_entry_gate'), 'STRATEGY')).toBe('MATCHES');
+                expect(getField(getBlock(doc, 'auto_signal_entry_gate'), 'ENTRY_DIGIT')).toBe('6');
+            }
             expect(getBlock(doc, 'after_purchase')?.getElementsByTagNameNS(XML_NS, 'data')[0]?.textContent)
                 .toBe('auto-signal-v1;max-runs=1');
         },
     );
 
-    it.each([
-        ['MATCHES', 'DIGITMATCH'],
-        ['DIFFERS', 'DIGITDIFF'],
-    ] as const)('routes Trade Only %s through Normal Killer Bot V3', (strategy, contractType) => {
-        const bot = getAutoSignalBot('trade-only', makeCandidate(contractType, strategy, 6, strategy.toLowerCase() as AutoSignalCandidate['direction']));
+    it('routes Matches Trade Only through Ahmed SYN Even/Odd Market Killer v1.2', () => {
+        const bot = getAutoSignalBot('trade-only', makeCandidate('DIGITMATCH', 'MATCHES', 6, 'matches'));
+        expect(bot.name).toBe('Ahmed SYN Even/Odd Market Killer v1.2');
+        expect(bot.file).toBe('/bots/ahmed-syn-even-odd.xml');
+    });
+
+    it('keeps the Differs Trade Only route on Normal Killer Bot V3', () => {
+        const bot = getAutoSignalBot('trade-only', makeCandidate('DIGITDIFF', 'DIFFERS', 6, 'differs'));
         expect(bot.name).toBe('Normal Killer Bot V3');
         expect(bot.file).toBe('/bots/normal-killer-bot-v3.xml');
     });
@@ -239,6 +246,33 @@ describe('Auto-Signals bot templates', () => {
         expect(getValueNumber(runLimit, 'B')).toBe(String(expectedRuns));
         expect(getBlock(doc, 'after_purchase')?.getElementsByTagNameNS(XML_NS, 'data')[0]?.textContent)
             .toBe(`auto-signal-v1;max-runs=${expectedRuns}`);
+    });
+
+    it('sets the Matches bot prediction, waits for its selected entry digit, and caps the suggested cycles', () => {
+        const candidate = {
+            ...makeCandidate('DIGITMATCH', 'MATCHES', 7, 'matches'),
+            entryDigit: 2,
+            recommendedRuns: 6,
+        };
+        const xml = patchAutoSignalsBotXml(readTemplate('trade-only', candidate), {
+            action: 'trade-only',
+            market,
+            candidate,
+            settings: { ...settings, maxRuns: 6 },
+            accountAmounts: { stake1: 1.5, stake2: 1.5, takeProfit: 5, stopLoss: 10 },
+        });
+        const doc = new DOMParser().parseFromString(xml, 'application/xml');
+        const tradeOptions = getBlock(doc, 'trade_definition_tradeoptions');
+        const runLimit = getBlock(doc, 'trade_again')?.parentElement?.parentElement;
+
+        expect(doc.getElementsByTagName('parsererror')).toHaveLength(0);
+        expect(getField(getBlock(doc, 'trade_definition_contracttype'), 'TYPE_LIST')).toBe('DIGITMATCH');
+        expect(getField(getBlock(doc, 'purchase'), 'PURCHASE_LIST')).toBe('DIGITMATCH');
+        expect(getValueNumber(tradeOptions, 'PREDICTION')).toBe('7');
+        expect(getField(getBlock(doc, 'auto_signal_entry_gate'), 'ENTRY_DIGIT')).toBe('2');
+        expect(getValueNumber(runLimit, 'B')).toBe('6');
+        expect(getBlock(doc, 'after_purchase')?.getElementsByTagNameNS(XML_NS, 'data')[0]?.textContent)
+            .toBe('auto-signal-v1;max-runs=6');
     });
 
     it('uses the selected Over barrier in Over DT and preserves the Under 5 recovery purchase', () => {

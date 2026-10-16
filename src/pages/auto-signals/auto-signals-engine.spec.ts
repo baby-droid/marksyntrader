@@ -107,12 +107,24 @@ describe('Auto-Signals one-tick analysis', () => {
     });
 
     it('rejects long-window outcomes that do not beat the fair baseline with confidence', () => {
+        const nextEdgeByDigit = Array(10).fill(0);
+        const stack = [0];
+        const circuit: number[] = [];
+        while (stack.length) {
+            const current = stack[stack.length - 1];
+            if (nextEdgeByDigit[current] < 10) {
+                stack.push(nextEdgeByDigit[current]++);
+            } else {
+                circuit.push(stack.pop()!);
+            }
+        }
+        const balancedCycle = circuit.reverse().slice(0, -1);
         const balancedTicks: AutoLabTick[] = Array.from({ length: 1000 }, (_, index) => {
-            const digit = index % 10;
+            const digit = balancedCycle[index % balancedCycle.length];
             return {
                 symbol: 'R_10',
                 digit,
-                quote: 100,
+                quote: 100 + digit / 100,
                 epoch: index + 1,
                 pip_size: 2,
             };
@@ -251,6 +263,45 @@ describe('Auto-Signals one-tick analysis', () => {
             entryDigit: 6,
             entryReady: false,
         });
+    });
+
+    it('selects a Matches target from a training segment and confirms it on held-out next-tick transitions', () => {
+        const digits = [0];
+        for (let index = 0; index < 999; index += 1) {
+            const current = digits[digits.length - 1];
+            digits.push(current === 2 ? 7 : (current + 1) % 10);
+        }
+        const ticks: AutoLabTick[] = digits.map((digit, index) => ({
+            symbol: 'R_10',
+            digit,
+            quote: 100 + digit / 100,
+            epoch: index + 1,
+            pip_size: 2,
+        }));
+
+        const candidates = evaluateAutoSignalCandidates({
+            market: { symbol: 'R_10', label: 'Volatility 10' },
+            ticks,
+            family: 'MATCHES',
+            now: 1_000,
+        });
+        const predictedSeven = candidates.find((candidate) =>
+            candidate.strategy === 'MATCHES' && candidate.barrier === 7
+        );
+
+        expect(predictedSeven).toMatchObject({
+            strategy: 'MATCHES',
+            contractType: 'DIGITMATCH',
+            barrier: 7,
+            entryDigit: 2,
+            entryReady: false,
+        });
+        expect(predictedSeven?.windows.find((item) => item.window === 1000)).toMatchObject({
+            sampleSize: expect.any(Number),
+            probability: 100,
+            agrees: true,
+        });
+        expect(predictedSeven?.reason).toMatch(/held-out ticks: target 7 followed entry 2/i);
     });
 
     it.each([

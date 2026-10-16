@@ -37,7 +37,7 @@ export const getAutoSignalBot = (
 ) => {
     if (
         action === 'trade-only'
-        && (candidate.strategy === 'MATCHES' || candidate.strategy === 'DIFFERS')
+        && candidate.strategy === 'DIFFERS'
     ) {
         return {
             name: 'Normal Killer Bot V3',
@@ -476,6 +476,36 @@ const unwrapTimeouts = (container: Element) => {
     }
 };
 
+const addMatchEntryGate = (doc: Document, entryDigit: number) => {
+    const beforePurchase = blocksOfType(doc, 'before_purchase')[0];
+    const stack = beforePurchase
+        ? directElement(beforePurchase, 'statement', 'name', 'BEFOREPURCHASE_STACK')
+        : null;
+    const purchase = stack
+        ? Array.from(stack.getElementsByTagNameNS(BLOCKLY_XML_NS, 'block'))
+            .find((block) => block.getAttribute('type') === 'purchase')
+        : null;
+    if (!stack || !purchase?.parentElement) {
+        throw new Error('Matches bot XML has no before-purchase purchase block.');
+    }
+
+    const purchaseParent = purchase.parentElement;
+    const purchaseNext = directElement(purchase, 'next');
+    if (purchaseNext) purchase.removeChild(purchaseNext);
+
+    const conditional = makeBlock(doc, 'controls_if');
+    const gate = makeBlock(doc, 'auto_signal_entry_gate');
+    addField(doc, gate, 'STRATEGY', 'MATCHES');
+    addField(doc, gate, 'ENTRY_DIGIT', String(boundedInteger(entryDigit, 0, 9)));
+    appendValue(doc, conditional, 'IF0', gate);
+    purchaseParent.replaceChild(conditional, purchase);
+    const doStatement = makeElement(doc, 'statement');
+    doStatement.setAttribute('name', 'DO0');
+    doStatement.appendChild(purchase);
+    conditional.appendChild(doStatement);
+    if (purchaseNext) conditional.appendChild(purchaseNext);
+};
+
 const setContractType = (
     doc: Document,
     candidate: AutoSignalCandidate,
@@ -623,6 +653,12 @@ export const patchAutoSignalsBotXml = (xml: string, config: AutoSignalBotConfigu
         ? directElement(beforePurchase, 'statement', 'name', 'BEFOREPURCHASE_STACK')
         : null;
     if (beforePurchaseStack) unwrapTimeouts(beforePurchaseStack);
+    if (config.action === 'trade-only' && config.candidate.strategy === 'MATCHES') {
+        if (config.candidate.entryDigit == null) {
+            throw new Error('The validated Matches signal has no entry digit.');
+        }
+        addMatchEntryGate(doc, config.candidate.entryDigit);
+    }
     if (
         config.action === 'entry-trade'
         && config.candidate.strategy === 'OVER'

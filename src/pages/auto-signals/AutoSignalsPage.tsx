@@ -206,6 +206,9 @@ function MarketCard({
     const cardId = candidate
         ? `${market.symbol}-${candidate.strategy}-${candidate.barrier ?? 'none'}`
         : market.symbol;
+    const tradeOnlyDescription = candidate?.strategy === 'MATCHES'
+        ? 'Load Ahmed SYN Even/Odd Market Killer v1.2 and run it automatically'
+        : 'Load the bot matched to this signal and run it automatically';
     const openTradeChoices = () => {
         if (!canTrade || pendingAction) return;
         setShowTradeChoices((open) => !open);
@@ -327,7 +330,9 @@ function MarketCard({
                         <span>ENTRY CONDITION</span>
                         <strong>{candidate ? (candidate.entryReady ? 'CONFIRMED' : 'WAITING') : 'NO SETUP'}</strong>
                         <small>
-                            {candidate?.entryDigit != null
+                            {candidate?.strategy === 'MATCHES' && candidate.entryDigit != null
+                                ? `Entry ${candidate.entryDigit} → target ${candidate.barrier}`
+                                : candidate?.entryDigit != null
                                 ? `Digit ${candidate.entryDigit}`
                         : candidate?.strategy === 'RISE'
                             ? '2 falls; 2 falls then 1 rise; or 3 falls'
@@ -352,7 +357,11 @@ function MarketCard({
                         <small>Updated {clockText(market.updatedAt)}</small>
                     </div>
                     {candidate && !candidate.entryReady && (
-                        <p className='as-entry-note' data-testid={`text-entry-wait-${cardId}`}>Entry Trade starts the bot now; it waits for its configured entry condition before buying.</p>
+                        <p className='as-entry-note' data-testid={`text-entry-wait-${cardId}`}>
+                            {candidate.strategy === 'MATCHES'
+                                ? `Trade Only waits for entry digit ${candidate.entryDigit}; it buys Matches target ${candidate.barrier} and stops after ${selectedRuns} cycles.`
+                                : 'Entry Trade starts the bot now; it waits for its configured entry condition before buying.'}
+                        </p>
                     )}
                     {!candidate && <p className='as-entry-note'>Trade handoff is available when a signal is active.</p>}
                 </div>
@@ -388,7 +397,7 @@ function MarketCard({
                 <div className='as-trade-choice' role='dialog' aria-label={`Choose a ${candidate.label} bot for ${market.label}`}>
                     <strong>Choose a bot for this signal</strong>
                     <button type='button' onClick={() => void startTrade('trade-only')}>
-                        Trade Only <small>Load the bot matched to this signal and run it automatically</small>
+                        Trade Only <small>{tradeOnlyDescription}</small>
                     </button>
                     {candidate.strategy === 'OVER' && (
                         <button type='button' onClick={() => void startTrade('over-dt')}>

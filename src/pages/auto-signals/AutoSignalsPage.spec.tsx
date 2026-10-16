@@ -216,6 +216,47 @@ describe('Auto-Signals trade actions', () => {
         );
     });
 
+    it('uses the Ahmed Matches bot and passes the edited suggested run count', async () => {
+        const matchesCandidate = {
+            ...market.candidate!,
+            id: 'R_10:MATCHES:DIGITMATCH:7',
+            strategy: 'MATCHES' as const,
+            label: 'Matches',
+            contractType: 'DIGITMATCH',
+            barrier: 7,
+            direction: 'matches' as const,
+            entryDigit: 2,
+            entryReady: false,
+            recommendedRuns: 4,
+        };
+        const matchesMarket = {
+            ...market,
+            candidate: matchesCandidate,
+            candidates: [matchesCandidate],
+        };
+        render(<AutoSignalsPage {...props} family='MATCHES' markets={[matchesMarket]} />);
+
+        const runInput = screen.getByTestId('input-suggested-runs-R_10-MATCHES-7');
+        expect(runInput).toHaveValue('4');
+        fireEvent.change(runInput, { target: { value: '7' } });
+        fireEvent.blur(runInput);
+        expect(screen.getByTestId('text-run-recommendation-R_10-MATCHES-7')).toHaveTextContent('7');
+
+        fireEvent.click(screen.getByTestId('button-trade-only-R_10-MATCHES-7'));
+        const tradeOnly = screen.getByRole('button', {
+            name: /Trade Only Load Ahmed SYN Even\/Odd Market Killer v1\.2 and run it automatically/,
+        });
+        fireEvent.click(tradeOnly);
+        await act(async () => Promise.resolve());
+
+        expect(props.onTrade).toHaveBeenCalledWith(
+            expect.objectContaining({
+                candidate: expect.objectContaining({ recommendedRuns: 7 }),
+            }),
+            'trade-only',
+        );
+    });
+
     it('shows the one-minute rescan note only for Digit Match', () => {
         const { rerender } = render(<AutoSignalsPage {...props} family='MATCHES' />);
 

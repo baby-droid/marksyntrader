@@ -38,3 +38,9 @@ The Matches family must score only Matches candidates and rescan its cached auth
 **Why:** The user requested a one-minute Matches scan, exact tick-sequence entries, and the scanner-selected entry digit to govern the bot after page navigation.
 
 **How to apply:** Re-score the selected family (not AUTO) on its schedule, keep the underlying authenticated feed live, patch the XML entry gate with the selected strategy/digit, and preserve one-tick duration and the XML-owned run limit.
+
+Matches must predict the next target digit conditional on the current entry digit: choose the pair on the first 70% of the 1,000-tick window and validate it on the held-out final 30%. The Matches Trade Only handoff uses Ahmed SYN Even/Odd Market Killer v1.2, sets its exact target barrier, gates every purchase on the selected entry digit, and carries the card's edited suggested run count into the bot's run cap.
+
+**Why:** Marginal digit frequency does not identify which target follows the current digit; the user asked for more accurate Matches predictions and the named bot.
+
+**How to apply:** Keep the training/holdout split, validation threshold, entry digit, target barrier, and suggested run limit synchronized from the Matches card through the generated bot. Label historical results as evidence, not a guarantee.
