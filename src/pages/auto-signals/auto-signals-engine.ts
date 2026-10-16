@@ -543,7 +543,8 @@ export const evaluateAutoSignalCandidates = ({
 
     // Keep enough qualified alternatives to show multiple barriers on a
     // market, without letting weak near-baseline noise flood the signal board.
-    return sorted.filter((candidate) => candidate.score >= 58).slice(0, 12);
+    const visibleLimit = family === 'OVER_UNDER' ? 16 : 12;
+    return sorted.filter((candidate) => candidate.score >= 58).slice(0, visibleLimit);
 };
 
 /**

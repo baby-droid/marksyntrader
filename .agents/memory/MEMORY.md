@@ -81,7 +81,7 @@
 - [King Fisher hook purchase gate](king-fisher-hook-gate.md) — keep the hook as the direct gate; immediate mode trades on confirmation without leaving a duplicate authorization.
 - [King Fisher cycle recovery sequences](king-fisher-cycle-recovery-sequences.md) — Pair V2 and Differ Over/Under V1 recovery triggers and stage order are user-confirmed.
 - [Interpreter-safe generated code](interpreter-safe-generated-code.md) — Blockly interpreter code cannot assume browser globals or Number static helpers; use primitive checks and host bridge methods.
-- [Fast execution scope](fast-execution-scope.md) — V3 Fast allows three tick-slot orders with a three-open cap; Auto-Signals, 2 Prediction Cycle, and A-SPEED stay sequential.
+- [Fast execution scope](fast-execution-scope.md) — Auto-Signals Fast is one purchase per eligible tick; V3 retains distinct tick-slot orders, while 2 Prediction Cycle and A-SPEED stay sequential.
 - [King Fisher XML fallback](king-fisher-loader-fallback.md) — unknown Blockly blocks must match their XML connection shape; mixed output and statement connections make imports fail.
 - [Featured parity isolation](featured-bot-recovery-isolation.md) — keep sequence recovery separate from the generic dominant-parity block used elsewhere.
 - [Auto-Signals run session](auto-signals-run-session.md) — 1,000-tick/Wilson and multi-window gates; score ceiling 0–20, one contract per cycle, and no calibrated payout/EV model.

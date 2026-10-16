@@ -1,6 +1,6 @@
 import { evaluateAutoSignalCandidates } from './auto-signals-engine';
 
-const repeatedDigitTicks = (digit: number) => Array.from({ length: 100 }, (_, index) => ({
+const repeatedDigitTicks = (digit: number) => Array.from({ length: 1000 }, (_, index) => ({
     symbol: 'R_10',
     epoch: index + 1,
     quote: 100 + index / 100,
@@ -8,7 +8,7 @@ const repeatedDigitTicks = (digit: number) => Array.from({ length: 100 }, (_, in
     pip_size: 2,
 }));
 
-const risingPriceTicks = () => Array.from({ length: 100 }, (_, index) => ({
+const risingPriceTicks = () => Array.from({ length: 1000 }, (_, index) => ({
     symbol: 'R_10',
     epoch: index + 1,
     quote: 100 + index / 100,
