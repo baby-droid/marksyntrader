@@ -115,8 +115,24 @@ export const isFastExecutionEnabledForContext = (): boolean => {
         || isTwoPredictionCycleContext();
 };
 
-const isAutoSignalsContext = (): boolean =>
+export const isAutoSignalsContext = (): boolean =>
     String(getTradeContext().page || '').trim().toLowerCase() === 'auto-signals';
+
+export const shouldSkipDuplicateAutoSignalTick = (
+    purchaseEpochs: Map<string, number>,
+    symbol: string,
+    epoch: number,
+): boolean => {
+    const market = String(symbol || '').trim();
+    if (!market || !Number.isFinite(epoch) || epoch <= 0) return false;
+    if (purchaseEpochs.get(market) === epoch) return true;
+    purchaseEpochs.set(market, epoch);
+    if (purchaseEpochs.size > 100) {
+        const oldestMarket = purchaseEpochs.keys().next().value;
+        if (oldestMarket) purchaseEpochs.delete(oldestMarket);
+    }
+    return false;
+};
 
 /** True while the header's app-wide A-SPEED BOOST preset is active. */
 export const isASpeedBoostEnabled = (): boolean => aSpeedBoostEnabled;

@@ -26,6 +26,7 @@ import {
 import { useAutoLabEngine } from '../auto-lab/useAutoLabEngine';
 import { useStore } from '@/hooks/useStore';
 import {
+    AUTO_LAB_MARKET_UNIVERSE,
     AUTO_LAB_CONTRACT_TYPES,
     AUTO_LAB_MODES,
     type AutoLabContractType,
@@ -1017,9 +1018,13 @@ const DTraderContent: React.FC = () => {
         setNotice(`DO NOT TRADE: ${losingSide} met the loss guard. New Money Print entries are disabled for five hours.`);
     };
 
+    const neuralChallengeBrief = prefs.mode === 'flip' && !prefs.challenge.trim()
+        ? 'Auto Flip current-market review'
+        : prefs.challenge;
+
     const analyzeChallenge = () => {
         const report = createMoneyPrintNeuralReport({
-            challenge: prefs.challenge,
+            challenge: neuralChallengeBrief,
             trades: journal,
             matches: matchRoutes,
             tradeTypes: settings.allowedContractTypes?.length
@@ -1063,7 +1068,7 @@ const DTraderContent: React.FC = () => {
         if (!losingSide) return;
 
         const report = createMoneyPrintNeuralReport({
-            challenge: prefs.challenge,
+            challenge: neuralChallengeBrief,
             trades: journal,
             matches: matchRoutes,
             tradeTypes: settings.allowedContractTypes?.length
@@ -1107,6 +1112,7 @@ const DTraderContent: React.FC = () => {
         prefs.autoStake,
         prefs.challenge,
         prefs.maxStake,
+        prefs.mode,
         prefs.riskPercent,
         prefs.scheduledSessions,
         prefs.strategyMode,
@@ -1488,6 +1494,8 @@ const DTraderContent: React.FC = () => {
                                             <span>Market universe</span>
                                             <select disabled={riskLockActive || engine.inputsDisabled} value={settings.marketSelection} onChange={event => patchSetting('marketSelection', event.target.value)}>
                                                 <option value='ALL'>All available synthetic markets</option>
+                                                <option value={AUTO_LAB_MARKET_UNIVERSE.VOLATILITY}>Volatility only</option>
+                                                <option value={AUTO_LAB_MARKET_UNIVERSE.SMART}>Smart market · Volatility, Jump, Bear, Bull</option>
                                                 {engine.markets.map(market => <option key={market.symbol} value={market.symbol}>{market.label}</option>)}
                                             </select>
                                         </label>
@@ -1636,7 +1644,7 @@ const DTraderContent: React.FC = () => {
                                 />
                             </section>
 
-                            {prefs.mode === 'challenge' && (
+                            {(prefs.mode === 'challenge' || prefs.mode === 'flip') && (
                                 <MoneyPrintNeuralLink
                                     challengeBrief={prefs.challenge}
                                     onChallengeBriefChange={value => patchPrefs('challenge', value.slice(0, 500))}

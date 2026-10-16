@@ -45,6 +45,12 @@ The statistical Matches score may keep its one-minute rescan cadence, but the se
 
 **How to apply:** Update only the live entry gate on each tick, preserve the validated training/holdout score until the next scheduled rescan, and keep the generated bot's own entry check active after handoff.
 
+Auto-Signals must place at most one contract for each fresh (market, tick epoch); repeated purchase callbacks on the same tick are duplicates, while later distinct ticks may each qualify subject to the run and risk limits.
+
+**Why:** The user specified that each produced digit should map to one purchase, and Fast should accelerate that entry rather than create multiple contracts on one tick.
+
+**How to apply:** Deduplicate at the purchase boundary by market and live tick epoch, keep candidate/readiness checks and the run cap, and allow no app-added wait between distinct eligible ticks.
+
 Matches must predict the next target digit conditional on the current entry digit: choose the pair on the first 70% of the 1,000-tick window and validate it on the held-out final 30%. The Matches Trade Only handoff uses Ahmed SYN Even/Odd Market Killer v1.2, sets its exact target barrier, gates every purchase on the selected entry digit, and carries the card's edited suggested run count into the bot's run cap.
 
 **Why:** Marginal digit frequency does not identify which target follows the current digit; the user asked for more accurate Matches predictions and the named bot.

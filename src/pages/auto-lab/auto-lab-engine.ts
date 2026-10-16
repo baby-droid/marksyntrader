@@ -88,6 +88,44 @@ export const isAutoLabMarketExcluded = (symbol: unknown, label: unknown = '') =>
     || /\bjump\s*100\b/i.test(String(label ?? ''))
 );
 
+export const AUTO_LAB_MARKET_UNIVERSE = {
+    ALL: 'ALL',
+    VOLATILITY: 'VOLATILITY_ONLY',
+    SMART: 'SMART_MARKETS',
+} as const;
+
+type AutoLabMarketIdentity = { symbol: string; label: string };
+
+export const isAutoLabVolatilityMarket = (symbol: unknown, label: unknown = '') => {
+    const normalizedSymbol = String(symbol ?? '').trim().toUpperCase();
+    return /^(R_|1HZ)/.test(normalizedSymbol)
+        || /\bvolatility\b/i.test(String(label ?? ''));
+};
+
+export const isAutoLabSmartMarket = (symbol: unknown, label: unknown = '') => {
+    const normalizedSymbol = String(symbol ?? '').trim().toUpperCase();
+    const normalizedLabel = String(label ?? '');
+    if (!normalizedSymbol || isAutoLabMarketExcluded(normalizedSymbol, normalizedLabel)) return false;
+    return isAutoLabVolatilityMarket(normalizedSymbol, normalizedLabel)
+        || /^JD\d+$/.test(normalizedSymbol)
+        || /^(RDBEAR|RDBULL)$/.test(normalizedSymbol)
+        || /\b(jump|bear|bull)\b/i.test(normalizedLabel);
+};
+
+export const filterAutoLabMarkets = <T extends AutoLabMarketIdentity>(
+    markets: T[],
+    selection: string,
+): T[] => {
+    if (selection === AUTO_LAB_MARKET_UNIVERSE.ALL) return markets;
+    if (selection === AUTO_LAB_MARKET_UNIVERSE.VOLATILITY) {
+        return markets.filter(market => isAutoLabVolatilityMarket(market.symbol, market.label));
+    }
+    if (selection === AUTO_LAB_MARKET_UNIVERSE.SMART) {
+        return markets.filter(market => isAutoLabSmartMarket(market.symbol, market.label));
+    }
+    return markets.filter(market => market.symbol === selection);
+};
+
 export type AutoLabTick = {
     symbol: string;
     digit: number;

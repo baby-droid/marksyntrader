@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { Activity, AlertTriangle, ArrowUpRight, BarChart3, CircleHelp, Pause, Play, Radio, ShieldCheck, Square, Waves } from 'lucide-react';
 import { formatMoney, fromUsd, getDisplayCurrency, subscribeCurrency } from '@/utils/currency-display';
-import { AUTO_LAB_MODES, getAutoLabSupportedContracts, type AutoLabContractChoice, type AutoLabContractType, type AutoLabMode } from './auto-lab-engine';
+import {
+  AUTO_LAB_MARKET_UNIVERSE,
+  AUTO_LAB_MODES,
+  getAutoLabSupportedContracts,
+  type AutoLabContractChoice,
+  type AutoLabContractType,
+  type AutoLabMode,
+} from './auto-lab-engine';
 import './auto-lab-view.scss';
 
 export type { AutoLabMode } from './auto-lab-engine';
@@ -399,6 +406,8 @@ const AutoLabView = ({
                     onChange={event => onSettingChange('marketSelection', event.target.value)}
                   >
                     <option value="ALL">All supplied markets</option>
+                    <option value={AUTO_LAB_MARKET_UNIVERSE.VOLATILITY}>Volatility only</option>
+                    <option value={AUTO_LAB_MARKET_UNIVERSE.SMART}>Smart market · Volatility, Jump, Bear, Bull</option>
                     {markets.map(market => (
                       <option key={market.symbol} value={market.symbol}>{market.label} · {market.symbol}</option>
                     ))}

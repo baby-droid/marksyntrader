@@ -57,6 +57,17 @@ describe('execution speed controls', () => {
         expect(speed.getPurchasesPerTick()).toBe(1);
         expect(speed.getMaxInflight()).toBe(1);
         expect(speed.useDirectBuyForSpeed()).toBe(true);
+        for (const tier of ['normal', 'crazy', 'turbo'] as const) {
+            speed.setExecutionSpeed(tier);
+            expect(speed.getPurchasesPerTick()).toBe(1);
+            expect(speed.getMaxInflight()).toBe(1);
+        }
+        const purchaseEpochs = new Map<string, number>();
+        expect(speed.shouldSkipDuplicateAutoSignalTick(purchaseEpochs, 'R_10', 100)).toBe(false);
+        expect(speed.shouldSkipDuplicateAutoSignalTick(purchaseEpochs, 'R_10', 100)).toBe(true);
+        expect(speed.shouldSkipDuplicateAutoSignalTick(purchaseEpochs, 'R_10', 101)).toBe(false);
+        expect(speed.shouldSkipDuplicateAutoSignalTick(purchaseEpochs, 'R_25', 100)).toBe(false);
+        expect(speed.shouldSkipDuplicateAutoSignalTick(purchaseEpochs, 'R_25', 0)).toBe(false);
 
         speed.setFastExecutionEnabled(false);
         expect(speed.getPurchasesPerTick()).toBe(1);

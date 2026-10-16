@@ -149,9 +149,10 @@
 @media (min-width: 1200px) {
     .money-print > .mp-header,
     .money-print > .mp-shell {
-        width: min(calc(min(100%, 1600px) + 5cm), calc(1600px + 5cm));
-        max-width: calc(1600px + 5cm);
-        transform: translateX(-2.5cm);
+        width: min(100%, 1600px);
+        max-width: 1600px;
+        margin-right: auto;
+        margin-left: max(0px, calc((100% - 1600px) / 2 - 5cm));
     }
 }
 

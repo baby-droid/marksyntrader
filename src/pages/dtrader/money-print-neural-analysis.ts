@@ -1,5 +1,5 @@
 import type { AutoLabMarket, AutoLabMode, AutoLabSignal, AutoLabTrade } from '../auto-lab/AutoLabView';
-import { isAutoLabMarketExcluded } from '../auto-lab/auto-lab-engine';
+import { isAutoLabMarketExcluded, isAutoLabSmartMarket } from '../auto-lab/auto-lab-engine';
 import type { AutoLabContractType } from '../auto-lab/auto-lab-engine';
 
 export type MoneyPrintTradeSide = {
@@ -90,8 +90,7 @@ export const isMoneyPrintMatchMarket = (market: Pick<AutoLabMarket, 'symbol' | '
     const symbol = String(market.symbol || '').trim().toUpperCase();
     const label = String(market.label || '');
     if (!symbol || isAutoLabMarketExcluded(symbol, label)) return false;
-    return /^(R_|1HZ|JD\d+|RDBEAR|RDBULL)/.test(symbol)
-        || /\b(volatility|jump|bear|bull)\b/i.test(label);
+    return isAutoLabSmartMarket(symbol, label);
 };
 
 export const rankMoneyPrintMatchRoutes = (markets: AutoLabMarket[]): MoneyPrintMatchRoute[] => {

@@ -1,4 +1,4 @@
-import { getExecutionSpeed, getExecutionSpeedDelay, isInstantExecutionForContext, isASpeedBoostEnabled, getPurchasesPerTick } from '../../../../../utils/execution-speed';
+import { getExecutionSpeed, getExecutionSpeedDelay, isInstantExecutionForContext, isASpeedBoostEnabled, getPurchasesPerTick, isAutoSignalsContext, shouldSkipDuplicateAutoSignalTick } from '../../../../../utils/execution-speed';
 import { recordTradeMeta } from '../../../../../utils/trade-metadata';
 import { isBotPaused } from '../../../../../utils/bot-pause-flag';
 import { LogTypes } from '../../../constants/messages';
@@ -562,6 +562,19 @@ export default Engine =>
             pairExecution = null,
             normalKillerEntry = null,
         ) {
+            if (isAutoSignalsContext()) {
+                const symbol = String(
+                    tradeOptions?.symbol
+                    || this.symbol
+                    || this.options?.symbol
+                    || '',
+                );
+                const epoch = Number(this.store?.getState?.()?.newTick);
+                this.autoSignalPurchaseEpochs ||= new Map();
+                if (shouldSkipDuplicateAutoSignalTick(this.autoSignalPurchaseEpochs, symbol, epoch)) {
+                    return Promise.resolve();
+                }
+            }
             let tradeKey = null;
             const acquireBuySlot = () => bypassRateLimit ? Promise.resolve() : _acquireBuySlot();
             const onSuccess = response => {

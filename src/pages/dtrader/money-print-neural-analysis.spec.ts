@@ -29,12 +29,16 @@ const trade = (id: string, status: AutoLabTrade['status'], profit: number, contr
 });
 
 describe('Money Print Neural Link analysis', () => {
-    it('scans volatility, bear, bull and jump markets while excluding Jump 100', () => {
+    it('scans only the Volatility, Bear, Bull, and eligible Jump smart markets', () => {
         expect(isMoneyPrintMatchMarket(makeMarket('R_10', 'Volatility 10 Index', [1]))).toBe(true);
+        expect(isMoneyPrintMatchMarket(makeMarket('1HZ10V', 'Volatility 10 (1s) Index', [1]))).toBe(true);
         expect(isMoneyPrintMatchMarket(makeMarket('RDBEAR', 'Bear Market', [1]))).toBe(true);
         expect(isMoneyPrintMatchMarket(makeMarket('RDBULL', 'Bull Market', [1]))).toBe(true);
         expect(isMoneyPrintMatchMarket(makeMarket('JD50', 'Jump 50 Index', [1]))).toBe(true);
         expect(isMoneyPrintMatchMarket(makeMarket('JD100', 'Jump 100 Index', [1]))).toBe(false);
+        expect(isMoneyPrintMatchMarket(makeMarket('1HZ100V', 'Volatility 100 (1s) Index', [1]))).toBe(true);
+        expect(isMoneyPrintMatchMarket(makeMarket('stpRNG', 'Step Index', [1]))).toBe(false);
+        expect(isMoneyPrintMatchMarket(makeMarket('frxEURUSD', 'EUR/USD', [1]))).toBe(false);
     });
 
     it('ranks a repeated entry-to-target pattern and returns only the best route', () => {

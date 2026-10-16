@@ -1,4 +1,5 @@
 import { observer as globalObserver } from '@/external/bot-skeleton';
+import { setTradeContext } from '@/utils/trade-metadata';
 import type { AutoSignalsRun } from './types';
 
 export interface AutoSignalsRunSession {
@@ -52,6 +53,7 @@ const onBotContract = (contract: any) => {
 const onBotStop = () => {
     const stopped = session.run;
     if (!stopped) return;
+    setTradeContext({ page: 'Bot Builder', bot: '' });
     session = {
         run: null,
         message: stopped.completedRuns >= stopped.maxRuns
@@ -88,6 +90,7 @@ export const beginAutoSignalsRun = (
 };
 
 export const clearAutoSignalsRun = (message: string) => {
+    setTradeContext({ page: 'Bot Builder', bot: '' });
     session = { run: null, message };
     contractIds.clear();
     emit();

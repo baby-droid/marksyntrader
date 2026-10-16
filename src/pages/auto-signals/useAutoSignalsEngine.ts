@@ -5,6 +5,7 @@ import { DBOT_TABS } from '@/constants/bot-contents';
 import { getDisplayCurrency, subscribeCurrency, toUsd } from '@/utils/currency-display';
 import { setTradeContext } from '@/utils/trade-metadata';
 import {
+    AUTO_SIGNAL_BOTS,
     getAutoSignalBot,
     patchAutoSignalsBotXml,
 } from './bot-xml';
@@ -367,6 +368,19 @@ export const useAutoSignalsEngine = ({
         const unsubscribe = subscribeCurrency(() => setDisplayCurrency(getDisplayCurrency()));
         return unsubscribe;
     }, []);
+
+    useEffect(() => {
+        if (family !== 'MATCHES') return;
+        const filesToWarm = [
+            AUTO_SIGNAL_BOTS['trade-only'].file,
+            AUTO_SIGNAL_BOTS['entry-trade'].file,
+        ];
+        filesToWarm.forEach(file => {
+            // Preload while the Matches scanner is gathering a live signal.
+            // A failed warmup is retried by onTrade, where errors are visible.
+            void loadAutoSignalTemplate(file).catch(() => undefined);
+        });
+    }, [family]);
 
     useEffect(() => subscribeAutoSignalsRunSession((nextSession) => {
         setRunSession(nextSession);

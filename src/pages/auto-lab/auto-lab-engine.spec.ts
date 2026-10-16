@@ -2,10 +2,12 @@ import {
     advanceAutoLabGate,
     createAutoLabGate,
     evaluateAutoLabCandidates,
+    filterAutoLabMarkets,
     getAutoLabDurationParams,
     getAutoLabDigitStats,
     isAutoLabContractWin,
     isAutoLabMarketExcluded,
+    AUTO_LAB_MARKET_UNIVERSE,
     passesAutoLabProposalEdgeCheck,
     type AutoLabMarketWindow,
     type AutoLabStrategySettings,
@@ -41,6 +43,25 @@ describe('Auto Lab strategy signals', () => {
         expect(isAutoLabMarketExcluded('JD100')).toBe(true);
         expect(isAutoLabMarketExcluded('OTHER', 'Jump 100 Index')).toBe(true);
         expect(isAutoLabMarketExcluded('JD50', 'Jump 50 Index')).toBe(false);
+    });
+
+    it('filters Universal Market into volatility-only and smart-market universes', () => {
+        const markets = [
+            { symbol: 'R_10', label: 'Volatility 10 Index' },
+            { symbol: '1HZ25V', label: 'Volatility 25 (1s) Index' },
+            { symbol: 'JD50', label: 'Jump 50 Index' },
+            { symbol: 'JD100', label: 'Jump 100 Index' },
+            { symbol: 'RDBEAR', label: 'Bear Market' },
+            { symbol: 'RDBULL', label: 'Bull Market' },
+            { symbol: '1HZ100V', label: 'Volatility 100 (1s) Index' },
+            { symbol: 'stpRNG', label: 'Step Index' },
+        ];
+
+        expect(filterAutoLabMarkets(markets, AUTO_LAB_MARKET_UNIVERSE.VOLATILITY).map(item => item.symbol))
+            .toEqual(['R_10', '1HZ25V', '1HZ100V']);
+        expect(filterAutoLabMarkets(markets, AUTO_LAB_MARKET_UNIVERSE.SMART).map(item => item.symbol))
+            .toEqual(['R_10', '1HZ25V', 'JD50', 'RDBEAR', 'RDBULL', '1HZ100V']);
+        expect(filterAutoLabMarkets(markets, AUTO_LAB_MARKET_UNIVERSE.ALL)).toEqual(markets);
     });
 
     it('creates a contrarian parity signal after the configured same-parity streak', () => {

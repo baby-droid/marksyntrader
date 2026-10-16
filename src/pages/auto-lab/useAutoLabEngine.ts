@@ -7,6 +7,7 @@ import {
     advanceAutoLabGate,
     createAutoLabGate,
     evaluateAutoLabCandidates,
+    filterAutoLabMarkets,
     getAutoLabDurationParams,
     getAutoLabDigitStats,
     isAutoLabContractWin,
@@ -255,10 +256,10 @@ export const useAutoLabEngine = (
         setSession(next);
     }, []);
 
-    const activeMarkets = useMemo(() => {
-        if (settings.marketSelection === 'ALL') return instruments;
-        return instruments.filter(market => market.symbol === settings.marketSelection);
-    }, [instruments, settings.marketSelection]);
+    const activeMarkets = useMemo(
+        () => filterAutoLabMarkets(instruments, settings.marketSelection),
+        [instruments, settings.marketSelection],
+    );
     activeMarketsRef.current = activeMarkets;
     const subscribedMarkets = scanAllMarkets ? instruments : activeMarkets;
     subscribedMarketsRef.current = subscribedMarkets;
