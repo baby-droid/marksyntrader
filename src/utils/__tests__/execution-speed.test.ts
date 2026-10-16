@@ -4,7 +4,7 @@ describe('execution speed controls', () => {
         jest.resetModules();
     });
 
-    it('allows three bounded Fast purchases per tick and removes client pacing', async () => {
+    it('allows one Fast purchase per eligible tick and removes client pacing', async () => {
         const speed = await import('../execution-speed');
 
         speed.setExecutionSpeed('normal');
@@ -13,7 +13,7 @@ describe('execution speed controls', () => {
         expect(speed.isFastExecutionEnabled()).toBe(true);
         expect(speed.isTickWiseExecutionEnabled()).toBe(true);
         expect(speed.getExecutionSpeedDelay()).toBe(0);
-        expect(speed.getPurchasesPerTick()).toBe(3);
+        expect(speed.getPurchasesPerTick()).toBe(1);
         expect(speed.useDirectBuyForSpeed()).toBe(true);
     });
 
@@ -67,7 +67,7 @@ describe('execution speed controls', () => {
         setTradeContext({ page: 'Bot Builder', bot: '' });
     });
 
-    it('keeps V3 sequential by default and enables three entries per tick under Fast', async () => {
+    it('keeps V3 to one distinct entry per tick under Fast', async () => {
         const speed = await import('../execution-speed');
         const { setTradeContext } = await import('../trade-metadata');
 
@@ -83,7 +83,7 @@ describe('execution speed controls', () => {
         speed.setFastExecutionEnabled(true);
         expect(speed.isFastExecutionEnabledForContext()).toBe(true);
         expect(speed.getExecutionSpeedDelay()).toBe(0);
-        expect(speed.getPurchasesPerTick()).toBe(3);
+        expect(speed.getPurchasesPerTick()).toBe(1);
         expect(speed.useDirectBuyForSpeed()).toBe(true);
 
         speed.setFastExecutionEnabled(false);

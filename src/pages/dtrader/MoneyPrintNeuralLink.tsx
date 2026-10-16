@@ -188,6 +188,11 @@ const MoneyPrintNeuralLink = ({
     const autoMatchDisabled = !autoMatchEnabled && (!canAutoMatch || !availableMatch);
     const reportVerdict = report ? verdictContent(report.verdict) : null;
     const VerdictIcon = reportVerdict?.Icon;
+    const reportTargetDigits = report?.route
+        ? report.route.contractType === 'DIGITMATCH'
+            ? report.route.targetDigits.slice(0, 1)
+            : report.route.targetDigits
+        : [];
 
     return (
         <section className='mp-neural-link' aria-label='Money Print Neural Link challenge report and matches'>
@@ -287,7 +292,7 @@ const MoneyPrintNeuralLink = ({
                                             <div><span>Market</span><strong>{report.route.market}</strong></div>
                                             <div><span>Contract</span><strong>{report.route.contract}</strong></div>
                                             <div><span>Entry rule</span><strong>{report.route.entryRule}</strong></div>
-                                            <div><span>Target digit{report.route.targetDigits.length === 1 ? '' : 's'}</span><strong>{report.route.targetDigits.join(', ') || '—'}</strong></div>
+                                            <div><span>{report.route.contractType === 'DIGITMATCH' || reportTargetDigits.length === 1 ? 'Target digit' : 'Target digits'}</span><strong>{reportTargetDigits.join(', ') || '—'}</strong></div>
                                         </div>
                                         <p className='mp-neural-link__target-note'>
                                             {report.route.contractType === 'DIGITMATCH'
@@ -359,7 +364,7 @@ const MoneyPrintNeuralLink = ({
                         </div>
                         <small>{matches.length} SUPPLIED</small>
                     </div>
-                    <p className='mp-neural-link__match-head'>Historical digit-pair candidates. Selecting a row only selects it; it does not execute a contract.</p>
+                    <p className='mp-neural-link__match-head'>The best qualified historical digit-pair route is shown. Each DIGITMATCH contract uses one target digit. Selecting it does not execute a contract.</p>
                     {matches.length ? (
                         <div className='mp-neural-link__match-list' role='group' aria-label='Available match routes'>
                             {matches.map(match => {

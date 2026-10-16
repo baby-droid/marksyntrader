@@ -40,16 +40,15 @@ export const SPEED_MAX_INFLIGHT: Record<ExecutionSpeed, number> = {
 // unbounded burst of buy requests.
 const FAST_EXEC_MAX_INFLIGHT = 3;
 
-// Purchases fired per tick for each speed tier. Normal and Turbo fire one,
-// while Crazy retains its legacy fan-out. Fast bursts are limited to contexts
-// that explicitly support multiple same-tick entries; Auto-Signals stays at
-// one purchase per eligible signal tick.
+// Fast removes client-side pacing, not the strategy's tick gate: it always
+// sends one purchase per eligible tick and never creates same-tick duplicates.
+// Crazy retains its separate legacy fan-out when Fast is off.
 export const SPEED_PURCHASES_PER_TICK: Record<ExecutionSpeed, number> = {
     normal: 1,
     crazy: 5,
     turbo: 1,
 };
-const FAST_EXEC_PURCHASES_PER_TICK = 3; // finite burst; V3 also enforces its three-open-contract cap
+const FAST_EXEC_PURCHASES_PER_TICK = 1;
 
 const listeners = new Set<(speed: ExecutionSpeed) => void>();
 const fastExecListeners = new Set<(enabled: boolean) => void>();

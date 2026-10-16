@@ -8,3 +8,9 @@ Until a model provider is deliberately connected, Neural Link reports are local 
 **Why:** No external model connection is configured, and a fabricated AI response or accidental credential transfer would mislead users and expose account data.
 
 **How to apply:** Keep the disclosure visible. Use local evidence and live proposal checks for execution; if adding a model later, call it server-side with only necessary non-secret context and keep the deterministic loss lock and risk gates authoritative.
+
+The Neural Link surfaces only its single best qualified digit-pair route at a time, and a DIGITMATCH route displays one target digit.
+
+**Why:** A Deriv DIGITMATCH contract accepts one target digit per order; presenting several at once can be mistaken for one multi-digit contract.
+
+**How to apply:** Keep the top-ranked validated route, its entry digit, and its single target digit synchronized in the match list, report, and order parameters.

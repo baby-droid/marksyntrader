@@ -37,11 +37,11 @@ describe('Money Print Neural Link analysis', () => {
         expect(isMoneyPrintMatchMarket(makeMarket('JD100', 'Jump 100 Index', [1]))).toBe(false);
     });
 
-    it('ranks a repeated entry-to-target pattern and returns up to four digit routes', () => {
+    it('ranks a repeated entry-to-target pattern and returns only the best route', () => {
         const digits = Array.from({ length: 200 }, () => [5, 8]).flat().concat(5);
         const routes = rankMoneyPrintMatchRoutes([makeMarket('R_10', 'Volatility 10 Index', digits)]);
 
-        expect(routes.length).toBeLessThanOrEqual(4);
+        expect(routes).toHaveLength(1);
         expect(routes[0]).toMatchObject({
             symbol: 'R_10',
             entryDigit: 5,
@@ -102,6 +102,7 @@ describe('Money Print Neural Link analysis', () => {
         expect(wait.verdict).toBe('WAIT');
         expect(plan.verdict).toBe('PLAN');
         expect(plan.route?.contract).toBe('DIGITMATCH 8');
+        expect(plan.route?.targetDigits).toEqual([8]);
         expect(plan.riskNotes.join(' ')).toContain('do not guarantee');
         expect(plan.generatedAt).toBe(1_800_000_000_000);
     });

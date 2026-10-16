@@ -196,7 +196,7 @@ export const rankMoneyPrintMatchRoutes = (markets: AutoLabMarket[]): MoneyPrintM
             || left.entryDigit - right.entryDigit
             || left.targetDigit - right.targetDigit,
         )
-        .slice(0, 4);
+        .slice(0, 1);
 };
 
 const tradeSide = (contract: string) => {

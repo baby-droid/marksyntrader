@@ -583,7 +583,7 @@ function AdminPage({ adminUnlocked, adminLoading, adminError, adminAnalytics, on
                         <div className="mp-page-fields">
                             <label className="mp-page-field">
                                 <span>Admin PIN</span>
-                                <input type="password" inputMode="numeric" autoComplete="current-password" value={pin} onChange={event => setPin(event.currentTarget.value)} aria-label="Admin PIN" placeholder="Enter PIN" />
+                                <input type="password" inputMode="text" autoComplete="current-password" value={pin} onChange={event => setPin(event.currentTarget.value)} aria-label="Admin PIN" placeholder="Enter PIN" />
                             </label>
                         </div>
                         {feedback && <Notice tone="caution">{feedback}</Notice>}

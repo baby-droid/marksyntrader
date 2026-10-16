@@ -145,6 +145,16 @@
 .mp-side-nav__bottom a:hover { text-decoration: underline; }
 
 .mp-content { min-width: 0; display: flex; flex-direction: column; gap: .8rem; }
+
+@media (min-width: 1200px) {
+    .money-print > .mp-header,
+    .money-print > .mp-shell {
+        width: min(calc(min(100%, 1600px) + 5cm), calc(1600px + 5cm));
+        max-width: calc(1600px + 5cm);
+        transform: translateX(-2.5cm);
+    }
+}
+
 .mp-page-heading { display: flex; align-items: center; justify-content: space-between; gap: .8rem; padding: .2rem .15rem; }
 .mp-page-heading h2 { margin: .23rem 0 .17rem; font-size: clamp(1.2rem, 2vw, 1.55rem); letter-spacing: -.035em; }
 .mp-page-heading p { margin: 0; color: var(--mp-muted); font-size: .68rem; }

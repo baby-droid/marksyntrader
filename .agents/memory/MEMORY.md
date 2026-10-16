@@ -81,8 +81,8 @@
 - [King Fisher hook purchase gate](king-fisher-hook-gate.md) — keep the hook as the direct gate; immediate mode trades on confirmation without leaving a duplicate authorization.
 - [King Fisher cycle recovery sequences](king-fisher-cycle-recovery-sequences.md) — Pair V2 and Differ Over/Under V1 recovery triggers and stage order are user-confirmed.
 - [Interpreter-safe generated code](interpreter-safe-generated-code.md) — Blockly interpreter code cannot assume browser globals or Number static helpers; use primitive checks and host bridge methods.
-- [Fast execution scope](fast-execution-scope.md) — Auto-Signals Fast is one purchase per eligible tick; V3 retains distinct tick-slot orders, while 2 Prediction Cycle and A-SPEED stay sequential.
+- [Fast execution scope](fast-execution-scope.md) — Fast sends one purchase per strategy-eligible tick, never same-tick duplicates; only purpose-built flows overlap distinct ticks.
 - [King Fisher XML fallback](king-fisher-loader-fallback.md) — unknown Blockly blocks must match their XML connection shape; mixed output and statement connections make imports fail.
 - [Featured parity isolation](featured-bot-recovery-isolation.md) — keep sequence recovery separate from the generic dominant-parity block used elsewhere.
 - [Auto-Signals run session](auto-signals-run-session.md) — preserve validated scoring and one-contract cycles; Matches rescans scores once/min but refreshes live entry readiness every tick.
-- [Money Print Neural Link](money-print-neural-link.md) — challenge reports and match routes are local quantitative analysis, not an external LLM; preserve clear disclosure and fail-closed trade gates.
+- [Money Print Neural Link](money-print-neural-link.md) — local quantitative analysis shows one best validated digit-pair route and one target digit per DIGITMATCH contract.

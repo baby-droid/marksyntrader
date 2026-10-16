@@ -443,9 +443,8 @@ export default Engine =>
                     });
             }
 
-            // Fast fires a bounded three-order burst in supported flows,
-            // including Auto-Signals. Its XML revalidates before the next
-            // signal cycle; A-SPEED remains one purchase per tick.
+            // Fast stays at one purchase per eligible tick. Only the separate
+            // Crazy tier retains its legacy same-tick side-purchase fan-out.
             const purchases_per_tick = getPurchasesPerTick();
             if (purchases_per_tick > 1 && this.tradeOptions) {
                 for (let i = 0; i < purchases_per_tick - 1; i++) {
