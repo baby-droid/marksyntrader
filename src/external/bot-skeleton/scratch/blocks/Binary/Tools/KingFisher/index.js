@@ -611,7 +611,18 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_restart_trade
     const tp = generator().valueToCode(block, 'TAKE_PROFIT', generator().ORDER_ATOMIC) || '0';
     const sl = generator().valueToCode(block, 'STOP_LOSS', generator().ORDER_ATOMIC) || '0';
     const multiplier = Number(block.getFieldValue('MULTIPLIER') || 2);
-    return buildKingFisherRestartTradeCode(tp, sl, multiplier);
+    const variables = block.workspace?.getVariableMap?.()?.getVariables?.() ?? [];
+    const martingale = variables.find(variable =>
+        String(variable.name ?? '').trim().toLowerCase().replace(/[\s_-]+/g, ' ') === 'martingale'
+    );
+    const martingaleName = martingale
+        ? window.Blockly.JavaScript.variableDB_.getName(
+            martingale.getId(),
+            window.Blockly.Variables.CATEGORY_NAME,
+        )
+        : null;
+    const multiplierCode = martingaleName ? `${martingaleName} = ${multiplier};\n` : '';
+    return `${multiplierCode}${buildKingFisherRestartTradeCode(tp, sl, multiplier)}`;
 };
 
 window.Blockly.Blocks.king_fisher_recovery_escalation = {

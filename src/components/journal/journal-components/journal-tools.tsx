@@ -6,6 +6,7 @@ import { LabelPairedBarsFilterCaptionFillIcon } from '@deriv/quill-icons/LabelPa
 import { Localize } from '@deriv-com/translations';
 import { TJournalToolsProps } from '../journal.types';
 import FilterDialog from './filter-dialog';
+import { dispatchBrowserEvent } from '@/external/bot-skeleton/utils/browser-event';
 
 const JournalTools = ({
     checked_filters,
@@ -24,7 +25,7 @@ const JournalTools = ({
                     type='button'
                     className='journal-tools__market-log'
                     title='Show the latest digit for every loaded market'
-                    onClick={() => window.dispatchEvent(new CustomEvent('journal:log-market-digits'))}
+                    onClick={() => dispatchBrowserEvent('journal:log-market-digits')}
                 >
                     📊 Log digits
                 </button>

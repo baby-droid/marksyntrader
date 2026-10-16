@@ -728,7 +728,12 @@ function serveStatic(request, response, url) {
         return sendJson(response, 400, { error: 'Invalid path.' });
     }
     const requestedPath = path.resolve(DIST_DIR, `.${pathname}`);
-    if (!requestedPath.startsWith(`${DIST_DIR}${path.sep}`) && requestedPath !== path.join(DIST_DIR, 'index.html')) {
+    const relativePath = path.relative(DIST_DIR, requestedPath);
+    if (
+        relativePath === '..' ||
+        relativePath.startsWith(`..${path.sep}`) ||
+        path.isAbsolute(relativePath)
+    ) {
         return sendJson(response, 400, { error: 'Invalid path.' });
     }
     let filePath = requestedPath;

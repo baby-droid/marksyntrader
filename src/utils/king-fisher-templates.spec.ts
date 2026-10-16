@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
-import { scoreKingFisherDigits } from './king-fisher-market-scanner';
+import { getKingFisherDigitSetup, scoreKingFisherDigits } from './king-fisher-market-scanner';
 import { buildKingFisherRestartTradeCode } from './king-fisher-restart-trade-code';
+import { normalizeKingFisherXml } from './king-fisher-xml-normalizer';
 
 jest.mock('@/external/bot-skeleton', () => ({
     api_base: { api: null },
@@ -31,6 +32,52 @@ describe('King Fisher bundled templates', () => {
         expect(xml).toContain(`<field name="THRESHOLD">${template.threshold}</field>`);
         expect(xml).toContain('<block type="after_purchase"');
         expect(xml).toContain('<block type="trade_again"');
+    });
+
+    it.each(templates)('normalizes $file without replacing its existing strategy blocks', template => {
+        const source = fs.readFileSync(
+            path.resolve(__dirname, '../../public/bots', template.file),
+            'utf8',
+        );
+        const originalDoc = new DOMParser().parseFromString(source, 'application/xml');
+        const normalizedDoc = new DOMParser().parseFromString(
+            normalizeKingFisherXml(source),
+            'application/xml',
+        );
+        const namespace = 'https://developers.google.com/blockly/xml';
+        const originalIds = Array.from(originalDoc.getElementsByTagNameNS(namespace, 'block'))
+            .map(block => block.getAttribute('id'))
+            .filter((id): id is string => Boolean(id));
+        const normalizedBlocks = Array.from(normalizedDoc.getElementsByTagNameNS(namespace, 'block'));
+        const normalizedTypes = normalizedBlocks.map(block => block.getAttribute('type'));
+        const normalizedIds = normalizedBlocks
+            .map(block => block.getAttribute('id'))
+            .filter((id): id is string => Boolean(id));
+        const tradeDefinition = normalizedBlocks.find(block => block.getAttribute('type') === 'trade_definition');
+        const tradeOptions = Array.from(tradeDefinition?.children ?? [])
+            .find(element => element.localName === 'statement' && element.getAttribute('name') === 'TRADE_OPTIONS');
+        const afterPurchase = normalizedBlocks.find(block => block.getAttribute('type') === 'after_purchase');
+        const afterPurchaseStack = Array.from(afterPurchase?.children ?? [])
+            .find(element => element.localName === 'statement' && element.getAttribute('name') === 'AFTERPURCHASE_STACK');
+        const firstTradeOption = Array.from(tradeOptions?.children ?? [])
+            .find(element => element.localName === 'block');
+        const firstAfterPurchase = Array.from(afterPurchaseStack?.children ?? [])
+            .find(element => element.localName === 'block');
+        const restartValues = Array.from(firstAfterPurchase?.children ?? [])
+            .filter(element => element.localName === 'value');
+        const restartMultiplier = Array.from(firstAfterPurchase?.children ?? [])
+            .find(element => element.localName === 'field' && element.getAttribute('name') === 'MULTIPLIER');
+
+        expect(normalizedDoc.getElementsByTagName('parsererror')).toHaveLength(0);
+        expect(normalizedIds).toEqual(expect.arrayContaining(originalIds));
+        expect(new Set(normalizedIds).size).toBe(normalizedIds.length);
+        expect(firstTradeOption?.getAttribute('type')).toBe('king_fisher_best_market_scanner');
+        expect(firstAfterPurchase?.getAttribute('type')).toBe('king_fisher_restart_trade');
+        expect(restartValues.map(value => value.getAttribute('name'))).toEqual(['TAKE_PROFIT', 'STOP_LOSS']);
+        expect(restartValues.every(value => Array.from(value.children)
+            .some(block => block.localName === 'block' && block.getAttribute('type') === 'variables_get'))).toBe(true);
+        expect(restartMultiplier?.textContent).toBe('2');
+        expect(normalizedTypes).toContain('trade_again');
     });
 });
 
@@ -125,9 +172,37 @@ describe('King Fisher restart trade code', () => {
         expect(code).toContain('STOP LOSS HIT');
         expect(code).toContain('Next stake uses 2× martingale');
     });
+
+    it('applies the restart block multiplier to the existing martingale variable', () => {
+        const source = fs.readFileSync(
+            path.resolve(
+                __dirname,
+                '../external/bot-skeleton/scratch/blocks/Binary/Tools/KingFisher/index.js',
+            ),
+            'utf8',
+        );
+
+        expect(source).toContain("=== 'martingale'");
+        expect(source).toContain('${martingaleName} = ${multiplier};');
+        expect(source).toContain('return `${multiplierCode}${buildKingFisherRestartTradeCode(tp, sl, multiplier)}`;');
+    });
 });
 
 describe('King Fisher market scoring', () => {
+    it.each([
+        { direction: 'BELOW', threshold: '3', contract: 'DIGITOVER', barrier: 3 },
+        { direction: 'ABOVE', threshold: '6', contract: 'DIGITUNDER', barrier: 6 },
+    ])('uses the existing King Fisher entry block for best-market setup: $contract', setup => {
+        expect(getKingFisherDigitSetup([{
+            type: 'king_fisher_entry',
+            getFieldValue: name => name === 'DIRECTION' ? setup.direction : setup.threshold,
+        }])).toEqual({
+            contract: setup.contract,
+            direction: setup.direction === 'BELOW' ? 'BELOW' : 'ABOVE',
+            barrier: setup.barrier,
+        });
+    });
+
     it('scores low-digit streaks for BELOW entries', () => {
         const result = scoreKingFisherDigits([1, 2, 0, 8], 'BELOW', 3);
 

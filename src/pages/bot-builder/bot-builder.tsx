@@ -17,6 +17,7 @@ import BotBuilderTourHandler from '../tutorials/dbot-tours/bot-builder-tour';
 import QuickStrategy1 from './quick-strategy';
 import WorkspaceWrapper from './workspace-wrapper';
 import StrategyEngineChecker, { StrategyCheck } from './strategy-engine-checker';
+import { normalizeKingFisherXml } from '@/utils/king-fisher-xml-normalizer';
 
 const PALE_BLUE = '#7ec8e3';
 const PALE_BLUE2 = '#89c4f4';
@@ -95,7 +96,10 @@ const FreeBotsSidePanel: React.FC<TFreeBotsPanelProps> = ({ onClose, onLoadDone 
     const fetchAndLoad = useCallback(async (bot: typeof FREE_BOTS_LIST[0]): Promise<any> => {
         const response = await fetch(bot.xmlFile);
         if (!response.ok) throw new Error(`Failed to fetch bot XML: ${response.status}`);
-        const block_string = await response.text();
+        const fetchedBlockString = await response.text();
+        const block_string = bot.id.startsWith('king-fisher-')
+            ? normalizeKingFisherXml(fetchedBlockString)
+            : fetchedBlockString;
         const sharedChecks = await Promise.all((bot.sharedBlockAssets || []).map(async asset => {
             // The uploaded files are rendered Blockly SVG fragments. Validate
             // their preserved IDs against the executable bot metadata instead

@@ -27,6 +27,7 @@ import {
 } from './bot-builder-handoff';
 import {
     isDigitMatchRescanDue,
+    refreshMatchEntryReadiness,
     startDigitMatchMarketRescan,
 } from './digit-match-rescan';
 import type {
@@ -476,6 +477,17 @@ export const useAutoSignalsEngine = ({
                         runtime.lastTickAt = Date.now();
                         runtime.feedState = 'live';
                         runtime.error = undefined;
+                        if (familyRef.current === 'MATCHES') {
+                            const latestDigit = runtime.ticks[runtime.ticks.length - 1]?.digit ?? null;
+                            runtime.candidates = refreshMatchEntryReadiness(
+                                runtime.candidates,
+                                latestDigit,
+                                runtime.lastTickAt,
+                            );
+                            runtime.candidate = runtime.candidates.find(
+                                (candidate) => candidate.id === runtime.candidate?.id,
+                            ) ?? runtime.candidates[0] ?? null;
+                        }
                         dirtySymbolsRef.current.add(runtime.info.symbol);
                         queueMarketRefresh();
                     });

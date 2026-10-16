@@ -39,6 +39,12 @@ The Matches family must score only Matches candidates and rescan its cached auth
 
 **How to apply:** Re-score the selected family (not AUTO) on its schedule, keep the underlying authenticated feed live, patch the XML entry gate with the selected strategy/digit, and preserve one-tick duration and the XML-owned run limit.
 
+The statistical Matches score may keep its one-minute rescan cadence, but the selected entry-digit readiness and ready/setup state must refresh on every live tick.
+
+**Why:** Keeping the UI entry gate stale until the next score sweep can hide a valid entry for up to a minute; recomputing full statistics per tick would add avoidable scanner load.
+
+**How to apply:** Update only the live entry gate on each tick, preserve the validated training/holdout score until the next scheduled rescan, and keep the generated bot's own entry check active after handoff.
+
 Matches must predict the next target digit conditional on the current entry digit: choose the pair on the first 70% of the 1,000-tick window and validate it on the held-out final 30%. The Matches Trade Only handoff uses Ahmed SYN Even/Odd Market Killer v1.2, sets its exact target barrier, gates every purchase on the selected entry digit, and carries the card's edited suggested run count into the bot's run cap.
 
 **Why:** Marginal digit frequency does not identify which target follows the current digit; the user asked for more accurate Matches predictions and the named bot.

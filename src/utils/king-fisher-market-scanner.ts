@@ -128,6 +128,18 @@ export const getKingFisherDigitSetup = (
 ): KingFisherDigitSetup | null => {
     const defaultPrediction = fixedTradePrediction(blocks);
     for (const block of blocks) {
+        if (block.type === 'king_fisher_entry') {
+            const threshold = digitBarrier(block.getFieldValue?.('THRESHOLD'));
+            const direction = block.getFieldValue?.('DIRECTION');
+            if (threshold !== null && (direction === 'ABOVE' || direction === 'BELOW')) {
+                const setup = setupForContract(
+                    direction === 'BELOW' ? 'DIGITOVER' : 'DIGITUNDER',
+                    threshold,
+                );
+                if (setup) return setup;
+            }
+        }
+
         if (
             block.type === 'king_fisher_pair_purchase'
             || block.type === 'king_fisher_pair_purchase_with_stakes'
