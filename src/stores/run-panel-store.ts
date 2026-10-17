@@ -113,6 +113,7 @@ export default class RunPanelStore {
     is_paused = false;
     show_bot_stop_message = false;
     is_contract_buying_in_progress = false;
+    pending_async_error_stop = false;
 
     run_id = '';
     onOkButtonClick: (() => void) | null = null;
@@ -209,6 +210,7 @@ export default class RunPanelStore {
             )
         );
         runInAction(() => {
+            this.pending_async_error_stop = false;
             this.setIsRunning(true);
             ui.setPromptHandler(true);
             this.toggleDrawer(true);
@@ -481,6 +483,7 @@ export default class RunPanelStore {
         observer.register('bot.contract', transactions.onBotContractEvent);
         observer.register('bot.stop_button_click', this.onStopBotClick);
         observer.register('Error', this.onError);
+        observer.register('bot.async_error', this.onUnhandledAsyncError);
         observer.register('bot.setPurchaseInProgress', this.SetpurchaseInProgress);
     };
 
@@ -592,6 +595,7 @@ export default class RunPanelStore {
         }
 
         this.setHasOpenContract(false);
+        this.pending_async_error_stop = false;
 
         summary_card.clearContractUpdateConfigValues();
 
@@ -658,6 +662,11 @@ export default class RunPanelStore {
         if (data?.is_sold) {
             this.is_sell_requested = false;
             this.setContractStage(contract_stages.CONTRACT_CLOSED);
+            if (this.pending_async_error_stop) {
+                this.pending_async_error_stop = false;
+                this.error_type = ErrorTypes.UNRECOVERABLE_ERRORS;
+                this.stopBot();
+            }
         }
     };
 
@@ -702,6 +711,22 @@ export default class RunPanelStore {
         }
 
         this.showErrorMessage(error_message, error);
+    };
+
+    onUnhandledAsyncError = () => {
+        // An async Blockly block that rejects cannot resume the interpreter
+        // callback. Stop the run panel after the Error event has been reported,
+        // otherwise it stays in PURCHASE_SENT with a permanent loading row.
+        this.is_contract_buying_in_progress = false;
+        if (!this.is_running) return;
+        if (this.has_open_contract) {
+            // Let an already accepted contract settle under its existing feed,
+            // then stop before the strategy can start another purchase.
+            this.pending_async_error_stop = true;
+            return;
+        }
+        this.error_type = ErrorTypes.UNRECOVERABLE_ERRORS;
+        this.stopBot();
     };
 
     showErrorMessage = (data: string | Error, originalError?: any) => {
@@ -773,6 +798,7 @@ export default class RunPanelStore {
         observer.unregisterAll('bot.click_stop');
         observer.unregisterAll('bot.stop_button_click');
         observer.unregisterAll('bot.trade_again');
+        observer.unregisterAll('bot.async_error');
         observer.unregisterAll('contract.status');
         observer.unregisterAll('bot.contract');
         observer.unregisterAll('Error');

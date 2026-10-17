@@ -18,3 +18,9 @@ Normal Killer Bot V3 must not use Virtual Hook settings; its dedicated tick-wise
 **Why:** The user explicitly requested hook-free tick acceleration and the configured loss multiplier to determine subsequent real purchase amounts; the King Fisher block prefix also selects additional interpreter behavior.
 
 **How to apply:** Keep the XML hook-free, use `normal_killer_` block types, preserve the three-open-contract ceiling and per-tick deduplication, and pass the workspace multiplier into the pipeline. Fast and A-SPEED remove app-added pacing only; neither can guarantee a network/API purchase time of 0.0001 seconds.
+
+Purchase retry limits need an attempt counter separate from the backoff index: high-speed modes can intentionally hold the backoff index flat. Keep bounded retry policy scoped to purchases, and stop the run panel when an async Blockly block rejects because its interpreter callback cannot resume. If a contract was accepted, preserve its feed until settlement before stopping.
+
+**Why:** Reusing the fixed backoff index can leave purchase retries unbounded, while an unhandled async block error can strand the panel at PURCHASE_SENT.
+
+**How to apply:** Count every retry independently of its delay. On terminal async errors, show the error and halt the strategy; defer halting until an already-open contract settles.

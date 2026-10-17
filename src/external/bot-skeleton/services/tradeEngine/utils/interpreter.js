@@ -88,6 +88,10 @@ const Interpreter = () => {
                 .catch(e => {
                     // e.error for errors get from API, e for code errors
                     $scope.observer.emit('Error', e.error || e);
+                    // A rejected async Blockly block never calls the interpreter
+                    // callback, so the run loop cannot resume on its own. Tell the
+                    // run panel to stop cleanly after displaying the error.
+                    $scope.observer.emit('bot.async_error');
                 });
         };
 

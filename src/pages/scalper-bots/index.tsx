@@ -1336,15 +1336,19 @@ const BotDetail: React.FC<{
            across cycles, market switches, and market-2 fallbacks instead of
            resetting to 0/1 every single trade. */
         priorConsLoss?: number;
-        /* ULTRA TURBO: when true, caps the is_stopping teardown poll at 300 ms
-           instead of 3 s so the buy fires the instant the interpreter is free. */
+        /* Faster profiles poll teardown more often, but still wait long enough
+           for the interpreter and run-panel state to finish resetting. */
         ultraTurbo?: boolean;
         onSettled: (info: { profit: number; won: boolean; market: string; buyPrice: number; exitDigit: number | null; consLoss: number }) => void;
         onLog: (msg: string, kind?: string) => void;
     }): Promise<{ forceStopped: boolean; reason: 'tp' | 'sl' | 'loss_limit' | null; cycleProfit: number; consLoss: number; lastWon: boolean; retryNextCycle?: boolean; fatalError?: boolean }> => {
         return new Promise(resolve => { (async () => {
             const rp: any = store?.run_panel;
-            if (!rp?.onRunButtonClick) { resolve({ forceStopped: false, reason: null, cycleProfit: 0, consLoss: params.priorConsLoss || 0, lastWon: true }); return; }
+            if (!rp?.onRunButtonClick) {
+                params.onLog('XML_RUN_PANEL_NOT_READY — Bot Builder is unavailable; no trade was sent.', 'error');
+                resolve({ forceStopped: false, reason: null, cycleProfit: 0, consLoss: params.priorConsLoss || 0, lastWon: false, retryNextCycle: true });
+                return;
+            }
 
             /* A Run action is only valid once the selected XML has finished
                loading into the live Blockly workspace. Starting against a
@@ -1390,9 +1394,8 @@ const BotDetail: React.FC<{
                interpreter, and the freshly patched stake/martingale values never
                reach the actual trade (symptom: stake stays flat after a loss
                instead of escalating). Poll briefly until teardown settles.
-               ULTRA TURBO / ULTRA FAST caps this at 300 ms — enough for normal
-               teardown but tight enough to catch the digit window before the
-               next tick. */
+               Faster profiles use a shorter bounded wait; correctness still
+               takes priority over firing into a half-stopped interpreter. */
             const teardownMax = params.ultraTurbo ? 500 : (isFastExecutionEnabledForContext() ? 1500 : 5000);
             const teardownStart = Date.now();
             while ((api_base.is_stopping || rp.is_running) && Date.now() - teardownStart < teardownMax) {
@@ -1406,8 +1409,8 @@ const BotDetail: React.FC<{
             /* ── Guard: engine still tearing down after timeout ──
                If api_base.is_stopping is still true after teardownMax, calling
                onRunButtonClick now would silently no-op (runBot() bails while
-               is_stopping is set). No contract would ever fire, the 45 s stall
-               timer would resolve with lastWon=true (phantom win since seen.size===0),
+               is_stopping is set). No contract would ever fire, the stall
+               timer would otherwise resolve with lastWon=true (phantom win since seen.size===0),
                and the outer loop would break — killing the martingale chain and
                making the stop button appear unresponsive for 45 s.
                Fix: abort this cycle immediately and return retryNextCycle=true so
@@ -1426,8 +1429,8 @@ const BotDetail: React.FC<{
                it catches it immediately, resolves the cycle with lastWon=true
                (no contract settled yet) and the outer loop breaks on a
                false "win", stopping the bot after every loss.
-               50 ms for ultra/turbo (increased from 25 ms for more reliable drain),
-               60 ms normal. */
+               A short delay lets the previous stop event drain before new handlers
+               are attached. */
             const drainMs = params.ultraTurbo ? 50 : (isFastExecutionEnabledForContext() ? 30 : 60);
             await new Promise(r => setTimeout(r, drainMs));
             if (stopRef.current) {
@@ -1541,17 +1544,23 @@ const BotDetail: React.FC<{
             globalObserver.register('contract.status', onPurchaseStatus);
             globalObserver.register('Error', onError);
 
-            Promise.resolve().then(() => rp.onRunButtonClick()).catch(err => onError(err));
+            Promise.resolve()
+                .then(() => rp.onRunButtonClick())
+                .then(() => {
+                    // The run-panel handler can return normally when a validation
+                    // gate declines to start the bot. Treat that as a safe retry,
+                    // not a phantom win or a full-length stall.
+                    if (!rp.is_running && !purchaseSent && seen.size === 0) {
+                        params.onLog('XML_RUN_NOT_STARTED — Bot Builder declined the Run action; no purchase request was sent.', 'error');
+                        lastWon = false;
+                        retryNextCycle = true;
+                        finish();
+                    }
+                })
+                .catch(err => onError(err));
 
-            /* Stall guard — if neither bot.contract nor bot.stop fires within the
-               timeout the trade is hung (network issue, Blockly not ready, etc.).
-               Force-resolve so the scan loop is not frozen permanently.
-               Ultra Turbo: 10 s (trades should fire in < 1 s; 10 s catches real hangs
-               without the 45 s freeze that made the stop button look unresponsive).
-               Normal: 45 s (generous for slow connections / large Blockly workspaces).
-               IMPORTANT: when no contract settled (seen.size === 0), resolve with
-               lastWon=false so the outer loop retries / continues martingale instead
-               of treating the no-op as a phantom win and breaking out of the loop. */
+            /* Stall guard — bound the wait so a broken run cannot freeze the
+               scanner indefinitely. */
             const stallMs = params.ultraTurbo ? 12_000 : 30_000;
             stallTimer = setTimeout(() => {
                 params.onLog(`⚠ TRADE_STALL — no settled contract within ${params.ultraTurbo ? '12' : '30'}s; stopping this cycle safely.`, 'error');
@@ -2625,7 +2634,13 @@ const BotDetail: React.FC<{
                         subscribeMarket(curMarket);
                         await primeMatchesHistory(curMarket);
                         addLog(`⏱ SCAN_TIMEOUT — no entry in 2 min | rotating → ${curMarket} | reloading XML...`, 'switch');
-                        try { await onPreloadXml(bot, { market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit }); } catch { /* non-fatal */ }
+                        try {
+                            await onPreloadXml(bot, { market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit });
+                        } catch (error: any) {
+                            addLog(`XML_LOAD_FAILED — ${error?.message || 'market rotation could not load the bot strategy.'}`, 'error');
+                            stopRef.current = true;
+                        }
+                        if (stopRef.current) break;
                         patchWorkspaceParams({ market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit });
                         { const rm = curMarket; setTimeout(() => patchWorkspaceParams({ market: rm }), 500); setTimeout(() => patchWorkspaceParams({ market: rm }), 1000); }
                         marketSwitched = true;
@@ -3234,7 +3249,13 @@ const BotDetail: React.FC<{
                         await primeMatchesHistory(curMarket);
                         addLog(`🔀 MARKET_2_SWITCH → ${curMarket} | stake ${curStake.toFixed(2)} | barrier ${slotBarrier()} | martingale ×${slotMartingale()} (${totalConsLoss} losses)`, 'switch');
                         /* Reload XML with new market and duration */
-                        try { await onPreloadXml(bot, { market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit }); } catch { /* non-fatal */ }
+                        try {
+                            await onPreloadXml(bot, { market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit });
+                        } catch (error: any) {
+                            addLog(`XML_LOAD_FAILED — ${error?.message || 'Market 2 could not load the bot strategy.'}`, 'error');
+                            stopRef.current = true;
+                        }
+                        if (stopRef.current) break;
                         patchWorkspaceParams({ market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit });
                         { const rm = curMarket; setTimeout(() => patchWorkspaceParams({ market: rm }), 500); setTimeout(() => patchWorkspaceParams({ market: rm }), 1000); }
                         continue; // re-scan on Market 2 with updated stake
@@ -3252,7 +3273,13 @@ const BotDetail: React.FC<{
                         await primeMatchesHistory(curMarket);
                         addLog(`🔀 MARKET_SWITCH → ${curMarket} | stake ${curStake.toFixed(2)} | martingale ×${slotMartingale()} (${totalConsLoss} losses, threshold: ${cfg.switchOnLosses})`, 'switch');
                         /* Reload XML with new market and sync ticks duration */
-                        try { await onPreloadXml(bot, { market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit }); } catch { /* non-fatal */ }
+                        try {
+                            await onPreloadXml(bot, { market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit });
+                        } catch (error: any) {
+                            addLog(`XML_LOAD_FAILED — ${error?.message || 'market rotation could not load the bot strategy.'}`, 'error');
+                            stopRef.current = true;
+                        }
+                        if (stopRef.current) break;
                         patchWorkspaceParams({ market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit });
                         { const rm = curMarket; setTimeout(() => patchWorkspaceParams({ market: rm }), 500); setTimeout(() => patchWorkspaceParams({ market: rm }), 1000); }
                         continue; // re-scan on new market with martingale stake
@@ -5029,23 +5056,22 @@ const ScalperBots: React.FC = observer(() => {
        Retries up to 30 times (3 s total) so multi-scalper XML loads even
        when Blockly is initialising in the background. */
     const handlePreloadXml = useCallback(async (bot: TScalperBot, opts?: { market?: string; duration?: number; duration_unit?: 't' | 's' }) => {
-        try {
-            const res = await fetch(bot.xmlFile);
-            if (!res.ok) return;
-            let xml = await res.text();
-            // Patch XML with current market + duration before loading into workspace
-            if (opts?.market || opts?.duration != null) {
-                xml = patchXmlContent(xml, opts.market, opts.duration, opts.duration_unit);
+        const res = await fetch(bot.xmlFile);
+        if (!res.ok) throw new Error(`Failed to fetch bot XML (${res.status})`);
+        let xml = await res.text();
+        // Patch XML with current market + duration before loading into workspace
+        if (opts?.market || opts?.duration != null) {
+            xml = patchXmlContent(xml, opts.market, opts.duration, opts.duration_unit);
+        }
+        // Try immediately, then retry until Blockly workspace is ready
+        let ok = await loadXmlIntoWorkspace(xml, bot.name);
+        if (!ok) {
+            for (let n = 0; n < 30 && !ok; n++) {
+                await new Promise(r => setTimeout(r, 100));
+                ok = await loadXmlIntoWorkspace(xml, bot.name);
             }
-            // Try immediately, then retry until Blockly workspace is ready
-            let ok = await loadXmlIntoWorkspace(xml, bot.name);
-            if (!ok) {
-                for (let n = 0; n < 30 && !ok; n++) {
-                    await new Promise(r => setTimeout(r, 100));
-                    ok = await loadXmlIntoWorkspace(xml, bot.name);
-                }
-            }
-        } catch { /* non-fatal — terminal engine trades independently */ }
+        }
+        if (!ok) throw new Error('Blockly workspace was not ready after 3 seconds');
     }, [loadXmlIntoWorkspace]);
 
     if (selectedBot) {

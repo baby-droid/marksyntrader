@@ -113,7 +113,6 @@ export const isFastExecutionEnabledForContext = (): boolean => {
         || page === 'scalper bots'
         || page === 'matches scalper'
         || page === 'auto-digits'
-        || page === 'free bots'
         || page === 'ai engine'
         || isNormalKillerBotV3Context()
         || isTwoPredictionCycleContext();

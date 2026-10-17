@@ -6,6 +6,7 @@ import { localize } from '@deriv-com/translations';
 import { observer as globalObserver } from '../../../utils/observer';
 import { error as logError } from './broadcast';
 import { getTicksHistoryRetryDelayMs, isTicksHistoryRequest } from '@/utils/ticks-history-backoff';
+import { shouldStopPurchaseRetry } from './purchase-retry-policy';
 
 export const tradeOptionToProposal = (trade_option, purchase_reference) =>
     trade_option.contractTypes.map(type => {
@@ -215,9 +216,15 @@ const getBackoffDelayInMs = (error_obj, delay_index) => {
     const next_delay_in_seconds = Math.min(base_delay * Math.max(delay_index, 1), max_delay);
 
     let message_to_print = '';
-    const trade_type_block = Blockly.derivWorkspace
-        .getAllBlocks(true)
-        .find(block => block.type === 'trade_definition_tradetype');
+    let trade_type_block;
+    try {
+        trade_type_block = globalThis.Blockly?.derivWorkspace
+            ?.getAllBlocks?.(true)
+            ?.find(block => block.type === 'trade_definition_tradetype');
+    } catch {
+        // A retry can outlive a workspace transition; error reporting must not
+        // throw while trying to describe the original API failure.
+    }
     const selected_trade_type = trade_type_block?.getFieldValue('TRADETYPECAT_LIST') || '';
     const { TRADE_TYPE_CATEGORY_NAMES } = config();
 
@@ -295,7 +302,15 @@ export const shouldThrowError = (error, errors_to_ignore = []) => {
     return !is_ignorable_error;
 };
 
-export const recoverFromError = (promiseFn, recoverFn, errors_to_ignore, delay_index, api_base) => {
+export const recoverFromError = (
+    promiseFn,
+    recoverFn,
+    errors_to_ignore,
+    delay_index,
+    api_base,
+    retry_policy,
+    retries_already_made = 0,
+) => {
     return new Promise((resolve, reject) => {
         const promise = promiseFn();
 
@@ -305,7 +320,11 @@ export const recoverFromError = (promiseFn, recoverFn, errors_to_ignore, delay_i
                  * if bot is not running there is no point of recovering from error
                  * `!api_base.is_running` will check the bot status if it is not running it will kick out the control from loop
                  */
-                if (shouldThrowError(error, errors_to_ignore) || (api_base && !api_base.is_running)) {
+                if (
+                    shouldThrowError(error, errors_to_ignore)
+                    || (api_base && !api_base.is_running)
+                    || shouldStopPurchaseRetry(error, retries_already_made, retry_policy)
+                ) {
                     // Check if this is a position limit exceeded error
                     if (error?.error?.code === 'OpenPositionLimitExceeded') {
                         // Emit click_stop event to trigger the stopBot method in run-panel-store
@@ -358,11 +377,13 @@ export const recoverFromError = (promiseFn, recoverFn, errors_to_ignore, delay_i
  * @param {*} api_base instance of APIBase class to check if the bot is running or not
  * @returns a new promise
  */
-export const doUntilDone = (promiseFn, errors_to_ignore, api_base) => {
+export const doUntilDone = (promiseFn, errors_to_ignore, api_base, retry_policy) => {
     let delay_index = 1;
+    let retries_already_made = 0;
 
     return new Promise((resolve, reject) => {
         const recoverFn = (error_code, makeDelay) => {
+            retries_already_made += 1;
             const speed = getExecutionSpeed();
             const isRateLimit = error_code === 'RateLimit' || error_code === 'RateLimitExceeded';
             // In fast modes, never compound the delay_index for rate limits —
@@ -374,7 +395,15 @@ export const doUntilDone = (promiseFn, errors_to_ignore, api_base) => {
         };
 
         const repeatFn = () => {
-            recoverFromError(promiseFn, recoverFn, errors_to_ignore, delay_index, api_base).then(resolve).catch(reject);
+            recoverFromError(
+                promiseFn,
+                recoverFn,
+                errors_to_ignore,
+                delay_index,
+                api_base,
+                retry_policy,
+                retries_already_made,
+            ).then(resolve).catch(reject);
         };
 
         repeatFn();
