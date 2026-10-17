@@ -30,6 +30,7 @@ export interface TickData {
     quote: number;
     epoch: number;
     pip_size: number;
+    pip_size_source?: 'live' | 'active_symbols' | 'fallback';
     id?: string | number;
 }
 
@@ -138,6 +139,12 @@ export function buildProposalRequest(params: BuyParams, fallbackCurrency = 'USD'
 function getLastDigit(quote: number, pipSize = 2): number {
     const s = quote.toFixed(pipSize).replace('.', '');
     return parseInt(s[s.length - 1], 10);
+}
+
+function normalizePipSize(value: unknown): number | null {
+    if (value === null || value === undefined || value === '') return null;
+    const pipSize = Number(value);
+    return Number.isInteger(pipSize) && pipSize >= 0 && pipSize <= 10 ? pipSize : null;
 }
 
 export function useDerivTrade() {
@@ -304,24 +311,29 @@ export function useDerivTrade() {
         return (api_base.api.send as unknown as (data: unknown) => Promise<any>)(msg);
     }, []);
 
-    const subscribeTicks = useCallback((symbol: string, cb: (t: TickData) => void) => (
+    const subscribeTicks = useCallback((symbol: string, cb: (t: TickData) => void, onError?: (error: unknown) => void) => (
         subscribeSharedDerivTicks(api_base.api as any, symbol, {
             next: (message: any) => {
                 const tickData = message?.tick ?? message?.data?.tick;
                 const quote = Number(tickData?.quote);
                 const epoch = Number(tickData?.epoch);
-                const pipSize = Number(tickData?.pip_size ?? 2);
-                if (!Number.isFinite(quote) || !Number.isFinite(epoch) || !Number.isFinite(pipSize) || pipSize < 0) return;
+                const tickSymbol = String(tickData?.symbol || symbol);
+                const livePipSize = normalizePipSize(tickData?.pip_size);
+                const symbolPipSize = normalizePipSize((api_base as any).pip_sizes?.[tickSymbol]);
+                const pipSize = livePipSize ?? symbolPipSize ?? 2;
+                if (!Number.isFinite(quote) || !Number.isFinite(epoch)) return;
                 cb({
-                    symbol: String(tickData?.symbol || symbol),
+                    symbol: tickSymbol,
                     digit: getLastDigit(quote, pipSize),
                     quote,
                     epoch,
                     pip_size: pipSize,
+                    pip_size_source: livePipSize !== null ? 'live' : symbolPipSize !== null ? 'active_symbols' : 'fallback',
                     ...(tickData?.id !== undefined && tickData?.id !== null ? { id: tickData.id } : {}),
                 });
             },
             error: error => {
+                onError?.(error);
                 console.error(`Live tick feed failed for ${symbol}:`, error);
             },
         }).unsubscribe

@@ -62,4 +62,27 @@ describe('shared authenticated Deriv tick feed', () => {
         first.unsubscribe();
         second.unsubscribe();
     });
+
+    it('surfaces API error messages instead of silently waiting for a tick', () => {
+        let emit: ((message: any) => void) | undefined;
+        const unsubscribe = jest.fn();
+        const api = {
+            subscribe: jest.fn(() => ({
+                subscribe: jest.fn((observer: { next: (message: any) => void }) => {
+                    emit = observer.next;
+                    return { unsubscribe };
+                }),
+            })),
+        };
+        const next = jest.fn();
+        const error = jest.fn();
+        const sub = subscribeSharedDerivTicks(api as any, '1HZ10V', { next, error });
+
+        emit?.({ error: { code: 'InvalidSymbol', message: 'Market unavailable' } });
+
+        expect(next).not.toHaveBeenCalled();
+        expect(error).toHaveBeenCalledWith(expect.objectContaining({ message: 'Market unavailable' }));
+        expect(unsubscribe).toHaveBeenCalledTimes(1);
+        sub.unsubscribe();
+    });
 });

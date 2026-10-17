@@ -67,6 +67,12 @@ const startFeed = (entry: TickEntry) => {
 
         const subscription = source.subscribe({
             next: message => {
+                const apiError = message?.error ?? message?.data?.error;
+                if (apiError) {
+                    const messageText = apiError?.message || apiError?.code || 'Deriv rejected the tick subscription.';
+                    notifyError(entry, new Error(String(messageText)));
+                    return;
+                }
                 const tick = message?.tick ?? message?.data?.tick;
                 if (tick?.symbol && tick.symbol !== entry.symbol) return;
 

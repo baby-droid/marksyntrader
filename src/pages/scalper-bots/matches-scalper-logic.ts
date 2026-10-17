@@ -13,11 +13,47 @@ export type MatchesScalperTick = {
     digit: number;
 };
 
+export type MatchesScalperRawTick = {
+    epoch: number;
+    quote: number;
+};
+
 export type MatchesScalperEntrySignal = {
     ready: boolean;
     triggerDigit: number | null;
     reason: string;
 };
+
+export const resolveMatchesScalperPipSize = (...candidates: unknown[]): number | null => {
+    for (const candidate of candidates) {
+        if (candidate === null || candidate === undefined || candidate === '') continue;
+        const pipSize = Number(candidate);
+        if (Number.isInteger(pipSize) && pipSize >= 0 && pipSize <= 10) return pipSize;
+    }
+    return null;
+};
+
+export const matchesScalperQuoteToTick = (
+    quote: unknown,
+    epoch: unknown,
+    pipSize: number,
+): MatchesScalperTick | null => {
+    const price = Number(quote);
+    const timestamp = Number(epoch);
+    if (!Number.isFinite(price) || !Number.isFinite(timestamp) || timestamp <= 0) return null;
+    if (!Number.isInteger(pipSize) || pipSize < 0 || pipSize > 10) return null;
+    const formatted = price.toFixed(pipSize).replace('.', '');
+    const digit = Number(formatted[formatted.length - 1]);
+    if (!Number.isInteger(digit) || digit < 0 || digit > 9) return null;
+    return { epoch: timestamp, digit };
+};
+
+export const matchesScalperRawTicksToTicks = (
+    rawTicksNewestFirst: MatchesScalperRawTick[],
+    pipSize: number,
+): MatchesScalperTick[] => rawTicksNewestFirst
+    .map(tick => matchesScalperQuoteToTick(tick.quote, tick.epoch, pipSize))
+    .filter((tick): tick is MatchesScalperTick => tick !== null);
 
 export const matchesScalperHistoryToTicks = (
     prices: unknown[],
@@ -29,16 +65,66 @@ export const matchesScalperHistoryToTicks = (
     const ticks: MatchesScalperTick[] = [];
     const count = Math.min(prices.length, times.length);
     for (let index = 0; index < count; index += 1) {
-        const price = Number(prices[index]);
-        const epoch = Number(times[index]);
-        if (!Number.isFinite(price) || !Number.isFinite(epoch) || epoch <= 0) continue;
-
-        const digits = price.toFixed(pipSize).replace('.', '');
-        const digit = Number(digits[digits.length - 1]);
-        if (!Number.isInteger(digit) || digit < 0 || digit > 9) continue;
-        ticks.push({ epoch, digit });
+        const tick = matchesScalperQuoteToTick(prices[index], times[index], pipSize);
+        if (tick) ticks.push(tick);
     }
     return ticks.sort((left, right) => right.epoch - left.epoch);
+};
+
+export type MatchesScalperLossStep = {
+    target: MatchesScalperTarget;
+    attemptNumber: number;
+    completedTarget: boolean;
+    nextTarget: MatchesScalperTarget | null;
+    exhaustedPlan: boolean;
+};
+
+/** Small state machine shared by the terminal runner and trade-flow tests. */
+export const createMatchesScalperTargetCycle = () => {
+    let targets: MatchesScalperTarget[] = [];
+    let targetIndex = 0;
+    let attemptsUsed = 0;
+
+    const current = () => targets[targetIndex] ?? null;
+    const reset = () => {
+        targets = [];
+        targetIndex = 0;
+        attemptsUsed = 0;
+    };
+
+    return {
+        current,
+        attemptsUsed: () => attemptsUsed,
+        setTargets(nextTargets: MatchesScalperTarget[]) {
+            targets = nextTargets.slice(0, 3);
+            targetIndex = 0;
+            attemptsUsed = 0;
+        },
+        reset,
+        recordWin: reset,
+        recordLoss(): MatchesScalperLossStep | null {
+            const target = current();
+            if (!target) return null;
+
+            attemptsUsed += 1;
+            const attemptNumber = attemptsUsed;
+            const completedTarget = attemptsUsed >= Math.max(1, target.attempts);
+            if (!completedTarget) {
+                return { target, attemptNumber, completedTarget, nextTarget: target, exhaustedPlan: false };
+            }
+
+            targetIndex += 1;
+            attemptsUsed = 0;
+            const nextTarget = current();
+            return {
+                target,
+                attemptNumber,
+                completedTarget,
+                nextTarget,
+                exhaustedPlan: nextTarget === null,
+            };
+        },
+    };
 };
 
 /** Merge server history and live ticks newest-first, preferring live data on overlap. */
