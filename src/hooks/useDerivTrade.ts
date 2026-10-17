@@ -7,11 +7,11 @@ import {
 } from '@/external/bot-skeleton/services/api/observables/connection-status-stream';
 import { publishMasterTrade, getMasterSource, createTradeKey } from '@/utils/trade-bus';
 import { observer } from '@/external/bot-skeleton/utils/observer';
+import { subscribeSharedDerivTicks } from '@/external/bot-skeleton/services/api/shared-deriv-ticks';
 import {
     isFastExecutionEnabled,
     isFastExecutionEnabledForContext,
     recordPhase,
-    recordTick,
     startPingMonitor,
     stopPingMonitor,
     setPingRestartHook,
@@ -30,6 +30,7 @@ export interface TickData {
     quote: number;
     epoch: number;
     pip_size: number;
+    id?: string | number;
 }
 
 export interface ContractResult {
@@ -140,9 +141,6 @@ function getLastDigit(quote: number, pipSize = 2): number {
 }
 
 export function useDerivTrade() {
-    const tickCallbacksRef = useRef<Map<string, (t: TickData) => void>>(new Map());
-    const tickSubscriptionsRef = useRef<Map<string, { token: number; id?: number }>>(new Map());
-    const nextTickSubscriptionTokenRef = useRef(0);
     const pocCallbacksRef = useRef<Map<number, (c: SettledContract) => void>>(new Map());
     const settledContractsRef = useRef<Map<number, SettledContract>>(new Map());
     const contractMetaRef = useRef<Map<number, any>>(new Map());
@@ -204,27 +202,6 @@ export function useDerivTrade() {
             if (d.balance && d.balance.balance != null && mountedRef.current) {
                 setBalance(parseFloat(d.balance.balance));
                 setCurrency(d.balance.currency || 'USD');
-            }
-
-            if (d.tick) {
-                recordTick(); // count tick for Fast mode tick-rate display
-                const q = Number(d.tick.quote);
-                const epoch = Number(d.tick.epoch);
-                const ps = Number(d.tick.pip_size ?? 2);
-                /* Deriv can emit a partial tick while a subscription is being
-                   attached/re-attached. Never forward that payload: scalpers
-                   and charts both use epoch as the ordering/entry anchor. */
-                if (!Number.isFinite(q) || !Number.isFinite(epoch) || !Number.isFinite(ps) || ps < 0) return;
-                const tick: TickData = {
-                    symbol: d.tick.symbol,
-                    digit: getLastDigit(q, ps),
-                    quote: q,
-                    epoch,
-                    pip_size: ps,
-                };
-                if (typeof d.tick.symbol === 'string' && d.tick.symbol) {
-                    tickCallbacksRef.current.get(d.tick.symbol)?.(tick);
-                }
             }
 
             if (d.proposal_open_contract) {
@@ -327,32 +304,28 @@ export function useDerivTrade() {
         return (api_base.api.send as unknown as (data: unknown) => Promise<any>)(msg);
     }, []);
 
-    const subscribeTicks = useCallback((symbol: string, cb: (t: TickData) => void) => {
-        const token = ++nextTickSubscriptionTokenRef.current;
-        const previous = tickSubscriptionsRef.current.get(symbol);
-        if (previous?.id != null) send({ forget: previous.id }).catch(() => {});
-        tickCallbacksRef.current.set(symbol, cb);
-        tickSubscriptionsRef.current.set(symbol, { token });
-        send({ ticks: symbol, subscribe: 1 }).then(response => {
-            const id = Number(response?.subscription?.id);
-            if (!Number.isFinite(id) || id <= 0) return;
-            const current = tickSubscriptionsRef.current.get(symbol);
-            if (current?.token === token) {
-                current.id = id;
-            } else {
-                // The subscription was replaced or cleaned up before Deriv
-                // returned its ID. Forget only this stream.
-                send({ forget: id }).catch(() => {});
-            }
-        }).catch(() => {});
-        return () => {
-            const current = tickSubscriptionsRef.current.get(symbol);
-            if (current?.token !== token) return;
-            tickSubscriptionsRef.current.delete(symbol);
-            tickCallbacksRef.current.delete(symbol);
-            if (current.id != null) send({ forget: current.id }).catch(() => {});
-        };
-    }, [send]);
+    const subscribeTicks = useCallback((symbol: string, cb: (t: TickData) => void) => (
+        subscribeSharedDerivTicks(api_base.api, symbol, {
+            next: (message: any) => {
+                const tickData = message?.tick ?? message?.data?.tick;
+                const quote = Number(tickData?.quote);
+                const epoch = Number(tickData?.epoch);
+                const pipSize = Number(tickData?.pip_size ?? 2);
+                if (!Number.isFinite(quote) || !Number.isFinite(epoch) || !Number.isFinite(pipSize) || pipSize < 0) return;
+                cb({
+                    symbol: String(tickData?.symbol || symbol),
+                    digit: getLastDigit(quote, pipSize),
+                    quote,
+                    epoch,
+                    pip_size: pipSize,
+                    ...(tickData?.id !== undefined && tickData?.id !== null ? { id: tickData.id } : {}),
+                });
+            },
+            error: error => {
+                console.error(`Live tick feed failed for ${symbol}:`, error);
+            },
+        }).unsubscribe
+    ), []);
 
     /**
      * buyContract — always uses the proven proposal→buy two-step flow.

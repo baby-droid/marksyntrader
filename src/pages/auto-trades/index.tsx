@@ -5,6 +5,7 @@ import {
     CONNECTION_STATUS,
     connectionStatus$,
 } from '@/external/bot-skeleton/services/api/observables/connection-status-stream';
+import { subscribeSharedDerivTicks } from '@/external/bot-skeleton/services/api/shared-deriv-ticks';
 import { useDerivTrade } from '@/hooks/useDerivTrade';
 import { isInstantExecutionForContext } from '@/utils/execution-speed';
 import NumberField from '@/components/number-field';
@@ -104,8 +105,8 @@ function useAuthenticatedLiveDigits(symbol: string) {
         let historyPrices: number[] = [];
         let historyEpochs: number[] = [];
         let pipSize = 2;
-        const seenEpochs = new Set<number>();
-        let liveBuffer: Array<{ epoch: number; price: number }> = [];
+        let lastLiveEpoch = -Infinity;
+        let liveBuffer: Array<{ epoch: number; price: number; id?: string | number }> = [];
 
         const publish = (next: number[]) => {
             const bounded = next.slice(-1000);
@@ -150,9 +151,22 @@ function useAuthenticatedLiveDigits(symbol: string) {
                 return;
             }
 
-            const freshHistoryPrices = historyPrices.filter((_, index) =>
-                !seenEpochs.has(Number(historyEpochs[index])),
-            );
+            // History has no stable tick IDs. Remove only one matching history
+            // sample per live tick at the join boundary; never discard every
+            // tick from an epoch second (markets may emit several in a second).
+            const liveOverlapCounts = new Map<string, number>();
+            liveBuffer.forEach(item => {
+                const key = `${item.epoch}:${item.price}`;
+                liveOverlapCounts.set(key, (liveOverlapCounts.get(key) ?? 0) + 1);
+            });
+            const freshHistoryPrices = historyPrices.filter((price, index) => {
+                const key = `${Number(historyEpochs[index])}:${price}`;
+                const count = liveOverlapCounts.get(key) ?? 0;
+                if (!count) return true;
+                if (count === 1) liveOverlapCounts.delete(key);
+                else liveOverlapCounts.set(key, count - 1);
+                return false;
+            });
             const historyDigits = freshHistoryPrices.map(price => extractDigit(price, pipSize));
             publishPrices([
                 ...freshHistoryPrices,
@@ -191,8 +205,8 @@ function useAuthenticatedLiveDigits(symbol: string) {
             historyPrices = [];
             historyEpochs = [];
             pipSize = 2;
-            seenEpochs.clear();
             liveBuffer = [];
+            lastLiveEpoch = -Infinity;
             lastTickAt = Date.now();
 
             const loadHistory = async () => {
@@ -227,23 +241,26 @@ function useAuthenticatedLiveDigits(symbol: string) {
                     // kept as raw prices until this value is available.
                     pipSize = Number(tick.pip_size);
                 }
-                if (epoch && seenEpochs.has(epoch)) return;
-                if (epoch) seenEpochs.add(epoch);
+                if (epoch && epoch < lastLiveEpoch) return;
+                if (epoch) lastLiveEpoch = Math.max(lastLiveEpoch, epoch);
 
                 lastTickAt = Date.now();
                 priceRef.current = quote;
                 setLivePrice(quote);
                 if (alive) setTickVersion(version => version + 1);
-                liveBuffer.push({ epoch, price: quote });
+                liveBuffer.push({
+                    epoch,
+                    price: quote,
+                    ...(tick.id !== undefined && tick.id !== null ? { id: tick.id } : {}),
+                });
+                liveBuffer = liveBuffer.slice(-1000);
                 rebuildDigits();
                 if (!historyLoaded && liveBuffer.length === 1) void loadHistory();
                 armWatchdog(generation);
             };
 
             try {
-                const stream = api.subscribe({ ticks: symbol, subscribe: 1 });
-                if (!stream?.subscribe) throw new Error('Deriv tick stream was not created');
-                rxSub = stream?.subscribe?.({
+                rxSub = subscribeSharedDerivTicks(api, symbol, {
                     next: (message: any) => {
                         if (generation !== streamGeneration) return;
                         if (message?.subscription?.id && !subscriptionId) {

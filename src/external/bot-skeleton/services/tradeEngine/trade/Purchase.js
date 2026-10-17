@@ -287,11 +287,18 @@ export default Engine =>
             return this.normalKillerPipeline?.currentStake ?? null;
         }
 
-        setNormalKillerPurchaseEpoch(epoch, symbol = this.tradeOptions?.symbol || this.options?.symbol) {
+        setNormalKillerPurchaseEpoch(
+            epoch,
+            symbol = this.tradeOptions?.symbol || this.options?.symbol,
+            tickId = null,
+        ) {
             this.normalKillerNextPurchaseEpoch = Number(epoch);
-            this.normalKillerNextPurchaseKey = symbol
-                ? `${String(symbol)}:${Number(epoch)}`
+            const tickIdentity = tickId !== undefined && tickId !== null && String(tickId) !== ''
+                ? String(tickId)
                 : String(Number(epoch));
+            this.normalKillerNextPurchaseKey = symbol
+                ? `${String(symbol)}:${tickIdentity}`
+                : tickIdentity;
         }
 
         normalKillerRiskReached() {
@@ -332,7 +339,7 @@ export default Engine =>
             voidNormalKillerEntry(this.normalKillerPipeline, entry);
         }
 
-        purchaseNormalKillerTick(contract_type, epoch, tickSlot = 0) {
+        purchaseNormalKillerTick(contract_type, epoch, tickId = null, tickSlot = 0) {
             const pipeline = this.normalKillerPipeline;
             if (
                 !isNormalKillerBotV3Context()
@@ -351,7 +358,7 @@ export default Engine =>
                 kind: 'side',
                 stake: pipeline.currentStake,
                 maxOpen: NORMAL_KILLER_MAX_OPEN_CONTRACTS,
-                tickKey: `${this.tradeOptions?.symbol || this.options?.symbol || ''}:${Number(epoch)}`,
+                tickKey: `${this.tradeOptions?.symbol || this.options?.symbol || ''}:${tickId !== undefined && tickId !== null && String(tickId) !== '' ? String(tickId) : Number(epoch)}`,
                 tickSlot,
                 maxPerTick: getPurchasesPerTick(),
             });
@@ -569,9 +576,17 @@ export default Engine =>
                     || this.options?.symbol
                     || '',
                 );
-                const epoch = Number(this.store?.getState?.()?.newTick);
+                const tickState = this.store?.getState?.()?.newTick;
+                const epoch = Number(
+                    tickState && typeof tickState === 'object'
+                        ? tickState.epoch
+                        : tickState,
+                );
                 this.autoSignalPurchaseEpochs ||= new Map();
-                if (shouldSkipDuplicateAutoSignalTick(this.autoSignalPurchaseEpochs, symbol, epoch)) {
+                if (
+                    Number.isFinite(epoch)
+                    && shouldSkipDuplicateAutoSignalTick(this.autoSignalPurchaseEpochs, symbol, epoch)
+                ) {
                     return Promise.resolve();
                 }
             }

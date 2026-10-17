@@ -1,0 +1,206 @@
+## 7. Deriv API integration requirements
+
+The implementation should follow the documented Deriv workflow:
+
+- The `ticks` subscription delivers live market updates.&#x20;
+
+  [image](https://www.google.com/s2/favicons?domain=https://developers.deriv.com\&sz=32)
+
+  Deriv API
+
+- The `proposal` request obtains a contract quote and can provide a stream of updated prices for supported contracts. Some contract/symbol combinations do not support streamed proposals.&#x20;
+
+  [image](https://www.google.com/s2/favicons?domain=https://developers.deriv.be\&sz=32)
+
+  Deriv API
+
+- The authenticated `buy` request purchases a contract using a proposal ID or supported contract parameters.&#x20;
+
+  [image](https://www.google.com/s2/favicons?domain=https://developers.deriv.com\&sz=32)
+
+  Deriv API
+
+- The `proposal_open_contract` subscription monitors purchased contracts.&#x20;
+
+  [image](https://www.google.com/s2/favicons?domain=https://developers.deriv.me\&sz=32)
+
+  Deriv API
+
+
+
+This means the acceleration engine must optimize the complete lifecycle—not just tick calculations. It must also correctly route asynchronous WebSocket responses to the right bot and trade request.
+
+## 8. Core implementation blueprint
+
+The following is the reference architecture your developer should integrate into the existing Blockly runtime and Deriv WebSocket client. It defines the shared FAST engine without rewriting each XML bot's trading strategy.
+
+### A. Global FAST controller
+
+```
+const FastEngine = {
+  enabled: false,
+  autoEntry: false,
+
+  // Conservative starting limits; make configurable.
+  maxConcurrentBuys: 1,
+  maxPendingProposals: 4,
+
+  bots: new Map(),
+  latestTicks: new Map(),
+  subscriptions: new Map(),
+  pendingRequests: new Map(),
+  processedSignals: new Set(),
+
+  enable() {
+    this.enabled = true;
+
+    for (const bot of this.bots.values()) {
+      if (bot.status === "stopped" || !bot.isCompatible) continue;
+
+      bot.adapter.setFastMode(true);
+      this.subscribeMarket(bot.symbol);
+      bot.status = "fast";
+    }
+  },
+
+  disable() {
+    this.enabled = false;
+
+    for (const bot of this.bots.values()) {
+      bot.adapter?.setFastMode(false);
+
+      if (bot.status === "fast") {
+        bot.status = "ready";
+      }
+    }
+
+    // Do not silently cancel or duplicate trades already submitted.
+    // Existing contracts must continue to be monitored.
+  },
+
+  registerBot(bot) {
+    if (!bot.id || !bot.adapter) {
+      throw new Error("Bot requires an ID and execution adapter");
+    }
+
+    this.bots.set(bot.id, bot);
+  }
+};
+```
+
+The app must implement `subscribeMarket`, register the actual Blockly adapters and wire the controller to the existing WebSocket client. The FAST switch should be idempotent: clicking it repeatedly must not create duplicate subscriptions or execution loops.
+
+### B. Route every tick to all relevant bots
+
+```
+function handleDerivTick(tick) {
+  if (!FastEngine.enabled) return;
+  if (!tick?.symbol || tick.quote == null) return;
+
+  const key = `${tick.symbol}:${tick.epoch}:${tick.quote}`;
+
+  // Deduplicate delivery, not legitimate new ticks.
+  if (FastEngine.latestTicks.get(tick.symbol)?.key === key) {
+    return;
+  }
+
+  FastEngine.latestTicks.set(tick.symbol, {
+    key,
+    quote: tick.quote,
+    epoch: tick.epoch
+  });
+
+  for (const bot of FastEngine.bots.values()) {
+    if (bot.status !== "fast") continue;
+    if (bot.symbol !== tick.symbol) continue;
+
+    // Never mutate a bot's own strategy or state from another bot.
+    try {
+      bot.adapter.onTick(tick);
+    } catch (error) {
+      reportBotError(bot.id, error);
+    }
+  }
+}
+```
+
+Use Deriv's subscription ID and request correlation information to identify the source of incoming messages. In production, use the actual tick identifiers provided by the API rather than treating a price and timestamp pair as a universally unique identifier.
+
+### C. Connect the Blockly-generated JavaScript
+
+The key integration point is the Blockly code generator and its runtime helpers.
+
+When XML is loaded:
+
+1. Parse and validate the XML.
+2. Generate the original JavaScript using the existing Blockly generator.
+3. Register the generated program with a bot-specific runtime adapter.
+4. Route tick-related operations through shared market data.
+5. Preserve each bot's variables, entry conditions, loops, contract settings and risk controls.
+6. Identify unsupported blocks and report them instead of silently removing their behavior.
+
+Do not accelerate bots by applying broad regular-expression replacements to generated JavaScript. That can remove required waits, break asynchronous control flow or bypass safety logic.
+
+For genuine tick-by-tick operation, tick-triggered strategies should use event-driven execution. If an XML bot contains a loop that waits for a tick, the runtime must adapt that specific block's behavior while retaining its original semantics.
+
+### D. Centralized trade execution
+
+Every bot should submit eligible signals to a shared coordinator. The coordinator validates the signal and the bot's risk settings before dispatching a proposal or buy request.
+
+```
+async function executeFastSignal(bot, signal) {
+  if (!FastEngine.enabled || !FastEngine.autoEntry) return;
+
+  if (!bot.isCompatible || bot.status !== "fast") return;
+  if (!bot.riskManager.approve(signal)) return;
+  if (!bot.strategy.validateSignal(signal)) return;
+
+  const signalKey = `${bot.id}:${signal.tickId}:${signal.contractType}`;
+
+  if (FastEngine.processedSignals.has(signalKey)) return;
+  if (!executionCapacityAvailable(bot)) return;
+
+  FastEngine.processedSignals.add(signalKey);
+
+  try {
+    const proposal = await requestDerivProposal(bot, signal);
+
+    if (!proposalIsValid(proposal, bot, signal)) return;
+    if (!bot.riskManager.approve(signal)) return;
+
+    await purchaseWithProposal(bot, proposal);
+  } catch (error) {
+    reportExecutionError(bot.id, signalKey, error);
+  } finally {
+    releaseExecutionCapacity(bot.id, signalKey);
+  }
+}
+```
+
+The functions in this example are integration points, not existing Deriv API method names. Implement them using your actual request-response router.
+
+In particular, do not permanently mark a signal as executed merely because a proposal was requested. Track its lifecycle through proposal, buy request, confirmed purchase, failure and settlement. If a buy times out, reconcile its status before attempting a retry.
+
+## 9. What should happen when FAST is ON?
+
+The desired runtime behavior is:
+
+- Every eligible market tick is analyzed immediately.
+- All compatible XML bots receive the ticks relevant to their configured markets.
+- Each bot retains its original strategy and account settings.
+- Signals are dispatched without artificial delays.
+- Trade purchases are concurrent only within explicit account-level and per-bot limits.
+- Existing positions continue to be monitored when FAST is turned off.
+- The interface reports each bot's state: `FAST`, `WAITING FOR SIGNAL`, `PROPOSAL PENDING`, `BUY PENDING`, `TRADE OPEN`, `ERROR` or `STOPPED`.
+
+A FAST button cannot make the market generate ticks faster than it naturally does, and it cannot remove the time needed for a valid quote and confirmed purchase.
+
+## 10. To implement this in your actual app
+
+I have defined the engine logic, but I have not modified your deployed application or inspected its Blockly generator. To produce a code change that works with your existing app, I need the current source for these parts:
+
+- The Blockly workspace/XML loading and JavaScript generation code.
+- The existing Deriv WebSocket connection and message handler.
+- The bot start/stop runtime and trade execution functions.
+
+Upload the relevant source files or provide access to the app's repository. With those, the FAST engine can be integrated into the actual execution path for every loaded XML bot, rather than leaving you with a separate illustrative engine that is not connected to your application.

@@ -4,10 +4,12 @@ import { getLast, historyToTicks } from '../../utils/binary-utils';
 import { observer as globalObserver } from '../../utils/observer';
 import { doUntilDone, getUUID } from '../tradeEngine/utils/helpers';
 import { api_base } from './api-base';
+import { subscribeSharedDerivTicks } from './shared-deriv-ticks';
 
 const parseTick = tick => ({
     epoch: +(tick?.epoch ?? 0),
     quote: +(tick?.quote ?? 0),
+    ...(tick?.id !== undefined && tick?.id !== null ? { id: tick.id } : {}),
 });
 
 const parseOhlc = ohlc => ({
@@ -25,7 +27,9 @@ const updateTicks = (ticks, newTick) => {
     const lastTick = getLast(safeTicks);
     if (!newTick || !Number.isFinite(newTick.epoch) || !Number.isFinite(newTick.quote)) return safeTicks;
     if (!lastTick) return [newTick];
-    return lastTick.epoch >= newTick.epoch ? safeTicks : [...safeTicks.slice(1), newTick];
+    // Deriv can send distinct tick IDs within the same epoch second, including
+    // repeated quotes. Only discard genuinely older events here.
+    return lastTick.epoch > newTick.epoch ? safeTicks : [...safeTicks.slice(1), newTick];
 };
 
 const updateCandles = (candles, ohlc) => {
@@ -56,6 +60,8 @@ export default class TicksService {
         this.tickListeners = new Map();
         this.ohlcListeners = new Map();
         this.subscriptions = new Map();
+        this.liveTickSubscriptions = new globalThis.Map();
+        this.seenTickIds = new globalThis.Map();
         this.ticks_history_promise = null;
         this.active_symbols_promise = null;
         this.candles_promise = null;
@@ -145,14 +151,17 @@ export default class TicksService {
     async unsubscribeIfEmptyListeners(options) {
         const { symbol, granularity } = options;
 
-        let needToUnsubscribe = false;
+        let needToForgetCandles = false;
 
         const tickListener = this.tickListeners.get(symbol);
 
         if (tickListener && !tickListener.size) {
             this.tickListeners = this.tickListeners.delete(symbol);
             this.ticks = this.ticks.delete(symbol);
-            needToUnsubscribe = true;
+            this.seenTickIds.delete(symbol);
+            const liveSubscription = this.liveTickSubscriptions.get(symbol);
+            this.liveTickSubscriptions.delete(symbol);
+            liveSubscription?.unsubscribe?.();
         }
 
         const ohlcListener = this.ohlcListeners.getIn([symbol, Number(granularity)]);
@@ -160,10 +169,10 @@ export default class TicksService {
         if (ohlcListener && !ohlcListener.size) {
             this.ohlcListeners = this.ohlcListeners.deleteIn([symbol, Number(granularity)]);
             this.candles = this.candles.deleteIn([symbol, Number(granularity)]);
-            needToUnsubscribe = true;
+            needToForgetCandles = true;
         }
 
-        if (needToUnsubscribe) {
+        if (needToForgetCandles) {
             await this.unsubscribeAllAndSubscribeListeners(symbol);
         }
     }
@@ -214,19 +223,29 @@ export default class TicksService {
         }
     }
 
+    appendLiveTick(symbol, tick) {
+        if (!tick || !Number.isFinite(tick.epoch) || !Number.isFinite(tick.quote)) return false;
+        if (tick.id !== undefined && tick.id !== null && String(tick.id) !== '') {
+            let ids = this.seenTickIds.get(symbol);
+            if (!ids) {
+                ids = new globalThis.Set();
+                this.seenTickIds.set(symbol, ids);
+            }
+            const id = String(tick.id);
+            if (ids.has(id)) return false;
+            ids.add(id);
+            if (ids.size > 2048) {
+                const oldestId = ids.values().next().value;
+                if (oldestId !== undefined) ids.delete(oldestId);
+            }
+        }
+        this.updateTicksAndCallListeners(symbol, updateTicks(this.ticks.get(symbol), tick));
+        return true;
+    }
+
     observe() {
         if (api_base.api) {
             const subscription = api_base.api.onMessage().subscribe(({ data }) => {
-                if (data.msg_type === 'tick') {
-                    const { tick } = data;
-                    if (!tick) return; // malformed/empty tick payload (e.g. mid-reconnect) — ignore safely
-                    const { symbol, id } = tick;
-                    if (this.ticks.has(symbol)) {
-                        this.subscriptions = this.subscriptions.setIn(['tick', symbol], id);
-                        this.updateTicksAndCallListeners(symbol, updateTicks(this.ticks.get(symbol), parseTick(tick)));
-                    }
-                }
-
                 if (data.msg_type === 'ohlc') {
                     const { ohlc } = data;
                     if (!ohlc) return; // malformed/empty candle during reconnect
@@ -278,31 +297,58 @@ export default class TicksService {
 
     requestTicks(options) {
         const { symbol, granularity, style } = options;
+        const apiSymbol = symbol === 'na' ? 'R_100' : symbol;
         const request_object = {
-            ticks_history: symbol === 'na' ? 'R_100' : symbol,
-            subscribe: 1,
+            ticks_history: apiSymbol,
             end: 'latest',
             count: 1000,
             granularity: granularity ? Number(granularity) : undefined,
             style,
+            ...(style === 'candles' ? { subscribe: 1 } : {}),
         };
         return new Promise((resolve, reject) => {
-            if (!api_base.api) resolve([]);
+            const api = api_base.api;
+            if (!api) {
+                reject(new Error('The authenticated Deriv connection is not ready for tick history.'));
+                return;
+            }
+
+            let historyReady = false;
+            const pendingLiveTicks = [];
+            if (style === 'ticks') {
+                if (!this.ticks.has(symbol)) this.ticks = this.ticks.set(symbol, []);
+                if (!this.liveTickSubscriptions.has(symbol)) {
+                    const liveSubscription = subscribeSharedDerivTicks(api, apiSymbol, {
+                        next: message => {
+                            const tick = parseTick(message?.tick ?? message?.data?.tick);
+                            if (!Number.isFinite(tick.epoch) || !Number.isFinite(tick.quote)) return;
+                            if (!historyReady) {
+                                if (pendingLiveTicks.length >= 1000) pendingLiveTicks.shift();
+                                pendingLiveTicks.push(tick);
+                                return;
+                            }
+                            this.appendLiveTick(symbol, tick);
+                        },
+                        error: error => globalObserver.emit('Error', error),
+                    });
+                    this.liveTickSubscriptions.set(symbol, liveSubscription);
+                }
+            }
+
             doUntilDone(() => api_base.api.send(request_object), ['AlreadySubscribed'], api_base)
                 .then(r => {
                     const subscriptionId = r?.subscription?.id;
-                    if (subscriptionId) {
-                        const subscriptionPath = style === 'ticks'
-                            ? ['tick', symbol]
-                            : ['ohlc', symbol, Number(granularity)];
+                    if (subscriptionId && style === 'candles') {
+                        const subscriptionPath = ['ohlc', symbol, Number(granularity)];
                         this.subscriptions = this.subscriptions.setIn(subscriptionPath, subscriptionId);
                     }
 
                     if (style === 'ticks') {
                         const ticks = historyToTicks(r.history);
-
                         this.updateTicksAndCallListeners(symbol, ticks);
-                        resolve(ticks);
+                        historyReady = true;
+                        pendingLiveTicks.forEach(tick => this.appendLiveTick(symbol, tick));
+                        resolve(this.ticks.get(symbol) || ticks);
                     } else {
                         const candles = parseCandles(r.candles);
 
@@ -388,6 +434,9 @@ export default class TicksService {
     unsubscribeFromTicksService() {
         this.ticks_history_promise = null;
         this.candles_promise = null;
+        const liveSubscriptions = Array.from(this.liveTickSubscriptions.values());
+        this.liveTickSubscriptions.clear();
+        liveSubscriptions.forEach(subscription => subscription?.unsubscribe?.());
         return this.forget().then(() => this.forgetCandleSubscription());
     }
 }

@@ -57,11 +57,18 @@ const DEFAULT_SETTINGS: AutoSignalsSettings = {
 };
 
 type MarketInfo = Pick<AutoSignalMarket, 'symbol' | 'label' | 'market' | 'submarket'>;
-type RawTick = { epoch: number; quote: number };
+type RawTick = {
+    key: string;
+    epoch: number;
+    quote: number;
+    sequence: number;
+};
+type RuntimeTick = AutoLabTick & { key: string; sequence: number };
 type MarketRuntime = {
     info: MarketInfo;
-    rawTicks: Map<number, number>;
-    ticks: AutoLabTick[];
+    rawTicks: Map<string, RawTick>;
+    ticks: RuntimeTick[];
+    nextTickSequence: number;
     pipSize: number | null;
     lastTickAt: number | null;
     feedState: AutoSignalMarket['feedState'];
@@ -151,36 +158,45 @@ const rebuildRuntimeTicks = (runtime: MarketRuntime) => {
         runtime.ticks = [];
         return;
     }
-    const sorted = Array.from(runtime.rawTicks.entries())
-        .sort(([left], [right]) => left - right)
+    const sorted = Array.from(runtime.rawTicks.values())
+        .sort((left, right) => left.epoch - right.epoch || left.sequence - right.sequence)
         .slice(-HISTORY_COUNT);
-    runtime.rawTicks = new Map(sorted);
-    runtime.ticks = sorted.flatMap(([epoch, quote]) => {
-        const digit = digitFromQuote(quote, runtime.pipSize!);
+    runtime.rawTicks = new Map(sorted.map(tick => [tick.key, tick]));
+    runtime.ticks = sorted.flatMap(tick => {
+        const digit = digitFromQuote(tick.quote, runtime.pipSize!);
         return digit == null ? [] : [{
             symbol: runtime.info.symbol,
-            epoch,
-            quote,
+            epoch: tick.epoch,
+            quote: tick.quote,
             digit,
             pip_size: runtime.pipSize!,
+            key: tick.key,
+            sequence: tick.sequence,
         }];
     });
 };
 
 const appendLiveTick = (runtime: MarketRuntime, tick: TickData) => {
+    const latestEpoch = runtime.ticks[runtime.ticks.length - 1]?.epoch ?? -Infinity;
+    if (!Number.isFinite(tick.epoch) || !Number.isFinite(tick.quote) || tick.epoch < latestEpoch) return false;
+
+    const key = tick.id !== undefined && tick.id !== null && String(tick.id) !== ''
+        ? `api:${String(tick.id)}`
+        : `live:${runtime.nextTickSequence + 1}`;
+    if (runtime.rawTicks.has(key)) return false;
+
     const previousPipSize = runtime.pipSize;
     if (Number.isFinite(tick.pip_size) && tick.pip_size > 0) runtime.pipSize = tick.pip_size;
-    if (!runtime.pipSize) return;
+    const sequence = ++runtime.nextTickSequence;
+    const rawTick: RawTick = { key, epoch: tick.epoch, quote: tick.quote, sequence };
+    runtime.rawTicks.set(key, rawTick);
+    if (!runtime.pipSize) return true;
 
-    const alreadySeen = runtime.rawTicks.has(tick.epoch);
-    runtime.rawTicks.set(tick.epoch, tick.quote);
     const digit = digitFromQuote(tick.quote, runtime.pipSize);
-    if (digit == null) return;
+    if (digit == null) return true;
 
-    const latestEpoch = runtime.ticks[runtime.ticks.length - 1]?.epoch ?? -Infinity;
     if (
-        !alreadySeen
-        && tick.epoch > latestEpoch
+        tick.epoch >= latestEpoch
         && previousPipSize === runtime.pipSize
     ) {
         runtime.ticks.push({
@@ -189,14 +205,17 @@ const appendLiveTick = (runtime: MarketRuntime, tick: TickData) => {
             quote: tick.quote,
             digit,
             pip_size: runtime.pipSize,
+            key,
+            sequence,
         });
         if (runtime.ticks.length > HISTORY_COUNT) {
             const removed = runtime.ticks.shift();
-            if (removed) runtime.rawTicks.delete(removed.epoch);
+            if (removed) runtime.rawTicks.delete(removed.key);
         }
     } else {
         rebuildRuntimeTicks(runtime);
     }
+    return true;
 };
 
 const getBlocklyWorkspace = () => (window as any).Blockly?.derivWorkspace;
@@ -460,6 +479,7 @@ export const useAutoSignalsEngine = ({
                         info,
                         rawTicks: new Map(),
                         ticks: [],
+                        nextTickSequence: HISTORY_COUNT,
                         pipSize: null,
                         lastTickAt: null,
                         feedState: 'loading',
@@ -486,7 +506,7 @@ export const useAutoSignalsEngine = ({
                     const unsubscribe = subscribeTicks(runtime.info.symbol, (tick: TickData) => {
                         if (cancelled || generation !== generationRef.current) return;
                         if (!Number.isFinite(tick.epoch) || !Number.isFinite(tick.quote)) return;
-                        appendLiveTick(runtime, tick);
+                        if (!appendLiveTick(runtime, tick)) return;
                         if (!runtime.pipSize || !runtime.ticks.length) return;
                         runtime.lastTickAt = Date.now();
                         runtime.feedState = 'live';
@@ -530,11 +550,25 @@ export const useAutoSignalsEngine = ({
                             if (historyResponse?.error) throw new Error(historyResponse.error.message || 'History request failed.');
                             const prices: unknown[] = historyResponse?.history?.prices ?? [];
                             const times: unknown[] = historyResponse?.history?.times ?? [];
+                            const tickIds: unknown[] = historyResponse?.history?.tick_ids
+                                ?? historyResponse?.history?.ids
+                                ?? [];
                             for (let item = 0; item < Math.min(prices.length, times.length); item += 1) {
                                 const epoch = Number(times[item]);
                                 const quote = Number(prices[item]);
                                 if (Number.isFinite(epoch) && Number.isFinite(quote)) {
-                                    runtime.rawTicks.set(epoch, quote);
+                                    const id = tickIds[item];
+                                    const key = id !== undefined && id !== null && String(id) !== ''
+                                        ? `api:${String(id)}`
+                                        : `history:${epoch}:${item}`;
+                                    if (!runtime.rawTicks.has(key)) {
+                                        runtime.rawTicks.set(key, {
+                                            key,
+                                            epoch,
+                                            quote,
+                                            sequence: item,
+                                        });
+                                    }
                                 }
                             }
                             if (runtime.pipSize) rebuildRuntimeTicks(runtime);

@@ -763,10 +763,10 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_virtual_hook 
         '    state.purchaseAuthorized = false;',
         '    state.purchaseAuthorizationEpoch = null;',
         '    if (pipelineMode === "SIDE") {',
-        '      if (typeof Bot.purchaseNormalKillerTick === "function") Bot.purchaseNormalKillerTick(contractType, Number(tick.epoch));',
+        '      if (typeof Bot.purchaseNormalKillerTick === "function") Bot.purchaseNormalKillerTick(contractType, Number(tick.epoch), tick.id);',
         '      return false;',
         '    }',
-        '    if (pipelineMode === "MAIN" && typeof Bot.setNormalKillerPurchaseEpoch === "function") Bot.setNormalKillerPurchaseEpoch(Number(tick.epoch));',
+        '    if (pipelineMode === "MAIN" && typeof Bot.setNormalKillerPurchaseEpoch === "function") Bot.setNormalKillerPurchaseEpoch(Number(tick.epoch), Bot.getSymbol(), tick.id);',
         '    return true;',
         '  }',
         '  if (state.pendingEpoch != null && tick.epoch !== state.pendingEpoch) {',
@@ -782,10 +782,10 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.king_fisher_virtual_hook 
         '      state.confirmations = 0;',
         '      if (purchaseTiming === "IMMEDIATE") {',
         '        if (pipelineMode === "SIDE") {',
-        '          if (typeof Bot.purchaseNormalKillerTick === "function") Bot.purchaseNormalKillerTick(contractType, Number(tick.epoch));',
+        '          if (typeof Bot.purchaseNormalKillerTick === "function") Bot.purchaseNormalKillerTick(contractType, Number(tick.epoch), tick.id);',
         '          return false;',
         '        }',
-        '        if (pipelineMode === "MAIN" && typeof Bot.setNormalKillerPurchaseEpoch === "function") Bot.setNormalKillerPurchaseEpoch(Number(tick.epoch));',
+        '        if (pipelineMode === "MAIN" && typeof Bot.setNormalKillerPurchaseEpoch === "function") Bot.setNormalKillerPurchaseEpoch(Number(tick.epoch), Bot.getSymbol(), tick.id);',
         '        return true;',
         '      }',
         '      state.purchaseAuthorized = true;',
@@ -899,7 +899,7 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.normal_killer_tick_accele
         return [
             'var normalKillerSideTick = Bot.getLastTick(true);',
             'if (normalKillerSideTick && normalKillerSideTick.epoch != null) {',
-            `  Bot.purchaseNormalKillerTick(${JSON.stringify(contractType)}, Number(normalKillerSideTick.epoch));`,
+            `  Bot.purchaseNormalKillerTick(${JSON.stringify(contractType)}, Number(normalKillerSideTick.epoch), normalKillerSideTick.id);`,
             '}',
         ].join('\n');
     }
@@ -945,7 +945,7 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.normal_killer_tick_accele
         `var normalKillerNextStake = Bot.getNormalKillerPipelineStake();`,
         `if (typeof normalKillerNextStake === 'number' && normalKillerNextStake > 0 && normalKillerNextStake === normalKillerNextStake) ${stake} = normalKillerNextStake;`,
         'var normalKillerMainTick = Bot.getLastTick(true);',
-        'if (normalKillerMainTick && normalKillerMainTick.epoch != null) Bot.setNormalKillerPurchaseEpoch(Number(normalKillerMainTick.epoch));',
+        'if (normalKillerMainTick && normalKillerMainTick.epoch != null) Bot.setNormalKillerPurchaseEpoch(Number(normalKillerMainTick.epoch), Bot.getSymbol(), normalKillerMainTick.id);',
     ].join('\n');
 };
 

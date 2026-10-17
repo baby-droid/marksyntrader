@@ -4,6 +4,7 @@ import {
     CONNECTION_STATUS,
     connectionStatus$,
 } from '@/external/bot-skeleton/services/api/observables/connection-status-stream';
+import { subscribeSharedDerivTicks } from '@/external/bot-skeleton/services/api/shared-deriv-ticks';
 import { classifyAutoBotMarket } from './auto-bot-strategies';
 
 export const AUTO_BOT_MARKETS = [
@@ -306,8 +307,9 @@ export function useAuthenticatedAutoBotScanner(): {
         const generations = new Map<string, number>();
         const marketState = new Map<string, {
             prices: number[];
-            epochs: Set<number>;
-            live: Array<{ epoch: number; price: number }>;
+            historyEpochs: number[];
+            lastEpoch: number;
+            live: Array<{ epoch: number; price: number; id?: string | number }>;
             pipSize: number | null;
         }>();
         const marketLabels = new Map<string, string>(
@@ -336,9 +338,22 @@ export function useAuthenticatedAutoBotScanner(): {
         const publish = (symbol: string, ready = true) => {
             const market = marketState.get(symbol);
             if (!market || !alive) return;
+            const overlapCounts = new Map<string, number>();
+            market.live.forEach(item => {
+                const key = `${item.epoch}:${item.price}`;
+                overlapCounts.set(key, (overlapCounts.get(key) ?? 0) + 1);
+            });
+            const historyPrices = market.prices.filter((price, index) => {
+                const key = `${Number(market.historyEpochs[index])}:${price}`;
+                const count = overlapCounts.get(key) ?? 0;
+                if (!count) return true;
+                if (count === 1) overlapCounts.delete(key);
+                else overlapCounts.set(key, count - 1);
+                return false;
+            });
             const hasPipSize = Number.isFinite(market.pipSize);
-            const history = hasPipSize
-                ? market.prices.map(price => digitFromQuote(price, market.pipSize as number))
+            const historyDigits = hasPipSize
+                ? historyPrices.map(price => digitFromQuote(price, market.pipSize as number))
                 : [];
             const live = hasPipSize
                 ? market.live.map(item => digitFromQuote(item.price, market.pipSize as number))
@@ -348,8 +363,8 @@ export function useAuthenticatedAutoBotScanner(): {
                 [symbol]: {
                     symbol,
                     label: marketLabels.get(symbol) ?? symbol,
-                    digits: [...history, ...live].slice(-1000),
-                    prices: [...market.prices, ...market.live.map(item => item.price)].slice(-1000),
+                    digits: [...historyDigits, ...live].slice(-1000),
+                    prices: [...historyPrices, ...market.live.map(item => item.price)].slice(-1000),
                     livePrice: market.live[market.live.length - 1]?.price ?? null,
                     tickVersion: (previous[symbol]?.tickVersion ?? 0) + (ready ? 1 : 0),
                     ready: ready && hasPipSize,
@@ -399,41 +414,31 @@ export function useAuthenticatedAutoBotScanner(): {
                     generations.set(symbol, marketGeneration);
                     const market = {
                         prices: [],
-                        epochs: new Set<number>(),
+                        historyEpochs: [],
+                        lastEpoch: -Infinity,
                         live: [],
                         pipSize: null as number | null,
                     };
                     marketState.set(symbol, market);
 
                     try {
-                        const historyResponse = await api.send({
-                            ticks_history: symbol,
-                            count: 1000,
-                            end: 'latest',
-                            style: 'ticks',
-                        });
                         if (!alive || generation !== feedGeneration || generations.get(symbol) !== marketGeneration) return;
-                        market.prices = (historyResponse?.history?.prices ?? []).map(Number).filter(Number.isFinite);
-                        publish(symbol, false);
-                    } catch {
-                        // The live stream can still populate this market if history is delayed.
-                    }
-
-                    try {
-                        if (!alive || generation !== feedGeneration || generations.get(symbol) !== marketGeneration) return;
-                        const stream = api.subscribe({ ticks: symbol, subscribe: 1 });
-                        const subscription = stream?.subscribe?.({
+                        const subscription = subscribeSharedDerivTicks(api, symbol, {
                             next: (message: any) => {
                                 if (!alive || generation !== feedGeneration || generations.get(symbol) !== marketGeneration) return;
-                                const tick = message?.tick;
+                                const tick = message?.tick ?? message?.data?.tick;
                                 const price = Number(tick?.quote);
                                 const epoch = Number(tick?.epoch ?? 0);
-                                if (!Number.isFinite(price) || (epoch && market.epochs.has(epoch))) return;
+                                if (!Number.isFinite(price) || (epoch && epoch < market.lastEpoch)) return;
                                 if (Number.isFinite(Number(tick?.pip_size))) {
                                     market.pipSize = Number(tick.pip_size);
                                 }
-                                if (epoch) market.epochs.add(epoch);
-                                market.live.push({ epoch, price });
+                                if (epoch) market.lastEpoch = Math.max(market.lastEpoch, epoch);
+                                market.live.push({
+                                    epoch,
+                                    price,
+                                    ...(tick?.id !== undefined && tick?.id !== null ? { id: tick.id } : {}),
+                                });
                                 market.live = market.live.slice(-1000);
                                 publish(symbol);
                             },
@@ -444,6 +449,30 @@ export function useAuthenticatedAutoBotScanner(): {
                         if (subscription) subscriptions.push(subscription);
                     } catch {
                         // Keep the remaining markets alive if one subscription is rejected.
+                    }
+
+                    try {
+                        const historyResponse = await api.send({
+                            ticks_history: symbol,
+                            count: 1000,
+                            end: 'latest',
+                            style: 'ticks',
+                        });
+                        if (!alive || generation !== feedGeneration || generations.get(symbol) !== marketGeneration) return;
+                        const prices: unknown[] = historyResponse?.history?.prices ?? [];
+                        const times: unknown[] = historyResponse?.history?.times ?? [];
+                        for (let index = 0; index < Math.min(prices.length, times.length); index += 1) {
+                            const price = Number(prices[index]);
+                            const epoch = Number(times[index]);
+                            if (!Number.isFinite(price) || !Number.isFinite(epoch)) continue;
+                            market.prices.push(price);
+                            market.historyEpochs.push(epoch);
+                        }
+                        market.prices = market.prices.slice(-1000);
+                        market.historyEpochs = market.historyEpochs.slice(-1000);
+                        publish(symbol, false);
+                    } catch {
+                        // The live stream can still populate this market if history is delayed.
                     }
                 }));
             } finally {

@@ -3,7 +3,6 @@ import debounce from 'lodash.debounce';
 import { getLocalizedErrorMessage } from '@/constants/backend-error-messages';
 import { localize } from '@deriv-com/translations';
 import { getLast } from '../../../utils/binary-utils';
-import { recordTick } from '@/utils/execution-speed';
 import { observer as globalObserver } from '../../../utils/observer';
 import { api_base } from '../../api/api-base';
 import { getDirection, getLastDigit } from '../utils/helpers';
@@ -30,6 +29,7 @@ export default Engine =>
 
                 this.symbol = symbol;
                 this.tickListenerKey = null;
+                this.lastDispatchedTickKey = null;
                 const callback = ticks => {
                     if (this.tickGeneration !== generation || this.symbol !== symbol) return;
                     if (this.is_proposal_subscription_required) {
@@ -37,9 +37,22 @@ export default Engine =>
                     }
                     const lastTick = ticks.slice(-1)[0];
                     if (!lastTick || !Number.isFinite(Number(lastTick.epoch))) return;
-                    recordTick();
-                    const { epoch } = lastTick;
-                    this.store.dispatch({ type: constants.NEW_TICK, payload: epoch });
+                    const epoch = Number(lastTick.epoch);
+                    const sequence = (this.tickDispatchSequence || 0) + 1;
+                    this.tickDispatchSequence = sequence;
+                    const tickKey = lastTick.id !== undefined && lastTick.id !== null
+                        ? `api:${String(lastTick.id)}`
+                        : `local:${sequence}`;
+                    if (tickKey === this.lastDispatchedTickKey) return;
+                    this.lastDispatchedTickKey = tickKey;
+                    this.store.dispatch({
+                        type: constants.NEW_TICK,
+                        payload: {
+                            epoch,
+                            id: lastTick.id,
+                            sequence,
+                        },
+                    });
                 };
 
                 const key = await ticksService.monitor({ symbol, callback });
