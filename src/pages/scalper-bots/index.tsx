@@ -10,9 +10,18 @@ import { isFastExecutionEnabledForContext } from '@/utils/execution-speed';
 import { setTradeContext } from '@/utils/trade-metadata';
 import { getMasterSource } from '@/utils/trade-bus';
 import { observer as globalObserver, api_base } from '@/external/bot-skeleton';
+import { Crown } from 'lucide-react';
 import { isEnded } from '@/components/shared';
 import manifest from '../../../public/bots/scalpers/manifest.json';
 import VpsMode, { VpsSettings } from './VpsMode';
+import MatchesScalperHub from './matches-scalper-hub';
+import {
+    evaluateMatchesScalperEntry,
+    rankMatchesScalperTargets,
+    type MatchesScalperEntryMode,
+    type MatchesScalperRange,
+    type MatchesScalperTarget,
+} from './matches-scalper-logic';
 import './scalper-bots.scss';
 import './vps-mode.scss';
 
@@ -181,6 +190,7 @@ type BotConfig = {
     strategyLogic: StrategyLogicConfig;
     market2: Market2Config;
     multiTradeCount: number; // number of contracts to fire on each entry (multiple bots)
+    matchesEntryMode: MatchesScalperEntryMode;
     virtualHook: VirtualHookConfig;
     virtualHookAlt: VirtualHookAltConfig;
     coolOff: CoolOffConfig;
@@ -366,6 +376,7 @@ const DEFAULT_CONFIG = (bot: TScalperBot): BotConfig => ({
         barrier: bot.prediction ?? 5,
     },
     multiTradeCount: bot.multiple ? 3 : 1,
+    matchesEntryMode: 'random',
     virtualHook: { ...DEFAULT_VH },
     virtualHookAlt: { ...DEFAULT_VHA },
     coolOff: {
@@ -437,7 +448,27 @@ const DURATION_OPTIONS: { label: string; value: number; unit: 't' | 's' }[] = [
     { label: '90t',  value: 90, unit: 't' },
 ];
 
-const SCALPER_BOTS: TScalperBot[] = manifest as TScalperBot[];
+const SCALPER_BOTS: TScalperBot[] = (manifest as TScalperBot[]).filter(bot => bot.contractType !== 'DIGITMATCH');
+const MATCHES_SCALPER_BOTS: Record<MatchesScalperRange, TScalperBot> = {
+    '0-5': {
+        key: 'matches-scalper-range-0-5',
+        name: 'Matches Scalper 0–5',
+        category: 'Matches/Differs',
+        contractType: 'DIGITMATCH',
+        prediction: 0,
+        multiple: false,
+        xmlFile: '/bots/scalpers/matches-0-scalper.xml',
+    },
+    '6-9': {
+        key: 'matches-scalper-range-6-9',
+        name: 'Matches Scalper 6–9',
+        category: 'Matches/Differs',
+        contractType: 'DIGITMATCH',
+        prediction: 9,
+        multiple: false,
+        xmlFile: '/bots/scalpers/matches-6-scalper.xml',
+    },
+};
 
 /* Individual folder groups — Over and Under (and Matches/Differs, Rise/Fall,
    Even/Odd) are split into their OWN folder icon rather than sharing a
@@ -448,7 +479,6 @@ const GROUP_DEFS: { key: SbGroup; label: string; icon: string }[] = [
     { key: 'Under',   label: 'Under',   icon: '⬇️' },
     { key: 'Rise',    label: 'Rise',    icon: '📈' },
     { key: 'Fall',    label: 'Fall',    icon: '📉' },
-    { key: 'Matches', label: 'Matches', icon: '🎯' },
     { key: 'Differs', label: 'Differs', icon: '🚫' },
     { key: 'Even',    label: 'Even',    icon: '2️⃣' },
     { key: 'Odd',     label: 'Odd',     icon: '1️⃣' },
@@ -1112,8 +1142,25 @@ const BotDetail: React.FC<{
     onBack: () => void;
     onLoadXml: (bot: TScalperBot) => Promise<void>;
     onLoadAndRun: (bot: TScalperBot) => Promise<void>;
-     onPreloadXml: (bot: TScalperBot, opts?: { market?: string; duration?: number; duration_unit?: 't' | 's' }) => Promise<void>;
-}> = ({ bot, derivTrade, onBack, onLoadXml, onLoadAndRun, onPreloadXml }) => {
+    onPreloadXml: (bot: TScalperBot, opts?: { market?: string; duration?: number; duration_unit?: 't' | 's' }) => Promise<void>;
+    matchesRange?: MatchesScalperRange;
+    onMatchWin?: (profit: number) => void;
+    matchesKingVisible?: boolean;
+    matchesSessionProfit?: number;
+    onDismissMatchesKing?: () => void;
+}> = ({
+    bot,
+    derivTrade,
+    onBack,
+    onLoadXml,
+    onLoadAndRun,
+    onPreloadXml,
+    matchesRange,
+    onMatchWin,
+    matchesKingVisible = false,
+    matchesSessionProfit = 0,
+    onDismissMatchesKing,
+}) => {
     const store = useStore();
 
     /* ── Execution speed mode: 'off' | 'fast' | 'ultra' ──
@@ -1450,7 +1497,21 @@ const BotDetail: React.FC<{
         })(); });
     }, [store, patchWorkspaceParams]);
 
-    const [cfg, setCfg]         = useState<BotConfig>(() => DEFAULT_CONFIG(bot));
+    const [cfg, setCfg]         = useState<BotConfig>(() => {
+        const defaults = DEFAULT_CONFIG(bot);
+        if (!matchesRange) return defaults;
+        try {
+            const savedMode = localStorage.getItem(`matches-scalper-entry-mode:${matchesRange}`);
+            if (savedMode === 'random' || savedMode === 'selected') defaults.matchesEntryMode = savedMode;
+        } catch {}
+        return defaults;
+    });
+    useEffect(() => {
+        if (!matchesRange) return;
+        try {
+            localStorage.setItem(`matches-scalper-entry-mode:${matchesRange}`, cfg.matchesEntryMode);
+        } catch {}
+    }, [cfg.matchesEntryMode, matchesRange]);
     const [running, setRunning] = useState(false);
     const [scanning, setScanning] = useState(false); // terminal scanning without trading
     const [tab, setTab]         = useState<'summary' | 'transactions' | 'journal'>('summary');
@@ -1493,6 +1554,7 @@ const BotDetail: React.FC<{
     const termRef         = useRef<HTMLDivElement>(null);
     const digitWindowRef  = useRef<number[]>([]);
     const priceWindowRef  = useRef<number[]>([]); // raw prices (newest first) for Rise/Fall
+    const matchesTargetDigitRef = useRef<number | null>(null);
     const tickUnsubRef    = useRef<(() => void) | null>(null);
     const marketIdxRef    = useRef(0);
     const lastFiredGroupRef = useRef<StrategyOrGroup | null>(null);
@@ -1754,6 +1816,7 @@ const BotDetail: React.FC<{
         stopRef.current    = false;
         consLossRef.current = 0;
         sessionPnlRef.current = 0;
+        matchesTargetDigitRef.current = null;
         marketIdxRef.current  = 0;
         winsRef.current   = 0;
         lossesRef.current = 0;
@@ -1774,7 +1837,7 @@ const BotDetail: React.FC<{
         const marketList = cfg.useMarketSwitch && cfg.markets.length > 0
             ? [cfg.market, ...cfg.markets.filter(m => m !== cfg.market)]
             : [cfg.market];
-        const multiScan = bot.category === 'Even/Odd' && cfg.strategyLogic.active
+        const multiScan = !matchesRange && bot.category === 'Even/Odd' && cfg.strategyLogic.active
             && cfg.useMarketSwitch && marketList.length > 1;
         let curMarketIdx = 0;
         let curMarket    = marketList[curMarketIdx];
@@ -1786,7 +1849,9 @@ const BotDetail: React.FC<{
            keeping the SAME locked contract type. Only engages when cfg.market2.enabled
            and the market-switch loss limit is hit (see loss branch below). */
         let activeSlot: 'm1' | 'm2' = 'm1';
-        const slotBarrier = () => (activeSlot === 'm2' ? cfg.market2.barrier : bot.prediction);
+        const slotBarrier = () => matchesRange
+            ? (matchesTargetDigitRef.current ?? bot.prediction ?? (matchesRange === '0-5' ? 0 : 9))
+            : (activeSlot === 'm2' ? cfg.market2.barrier : bot.prediction);
         const slotTakeProfit = () => (activeSlot === 'm2' ? cfg.market2.takeProfit : cfg.takeProfit);
         const slotMartingale = () => (activeSlot === 'm2' ? cfg.market2.martingale : cfg.martingale);
         const slotBaseStake = () => (activeSlot === 'm2' ? cfg.market2.stake : cfg.stake);
@@ -1827,6 +1892,19 @@ const BotDetail: React.FC<{
         let lastBuyPrice = curStake;
         /* Total consecutive losses across all cycles — drives market-switch and martingale. */
         let totalConsLoss = 0;
+        let matchesTargets: MatchesScalperTarget[] = [];
+        let matchesTargetIndex = 0;
+        let matchesAttemptForTarget = 0;
+        let matchesWaitingForWindowLogged = false;
+        let matchesEntryTickAt = 0;
+        const resetMatchesPlan = () => {
+            if (!matchesRange) return;
+            matchesTargets = [];
+            matchesTargetIndex = 0;
+            matchesAttemptForTarget = 0;
+            matchesWaitingForWindowLogged = false;
+            matchesTargetDigitRef.current = null;
+        };
 
         /* ── Session-level tracking for cool-off and recovery ── */
         let consecutiveWins = 0;     // reset to 0 on any loss; triggers cool-off at 7
@@ -1988,6 +2066,7 @@ const BotDetail: React.FC<{
         } else {
             subscribeMarket(curMarket);
         }
+        matchesEntryTickAt = lastTickAtRef.current;
         addLog(`▶ BOT ENGINE STARTED — ${contractLabel(bot)}`, 'start');
         await runHackerStartup(curMarket, cfg.useMarketSwitch);
 
@@ -2175,6 +2254,7 @@ const BotDetail: React.FC<{
                         curMarketIdx = (curMarketIdx + 1) % marketList.length;
                         curMarket    = marketList[curMarketIdx];
                         curMarketRef.current = curMarket;
+                        resetMatchesPlan();
                         lastFiredGroupRef.current = null;
                         subscribeMarket(curMarket);
                         addLog(`⏱ SCAN_TIMEOUT — no entry in 2 min | rotating → ${curMarket} | reloading XML...`, 'switch');
@@ -2185,7 +2265,49 @@ const BotDetail: React.FC<{
                         break;
                     }
 
-                    if (multiScan) {
+                    if (matchesRange) {
+                        if (!matchesTargets.length) {
+                            const ranked = rankMatchesScalperTargets(digitWindowRef.current, matchesRange);
+                            if (ranked.length) {
+                                matchesTargets = ranked;
+                                matchesTargetIndex = 0;
+                                matchesAttemptForTarget = 0;
+                                matchesWaitingForWindowLogged = false;
+                                const targetSummary = ranked
+                                    .map(target => `${target.digit} (${target.count20}/20, ${target.count10}/10; ${target.attempts} tries)`)
+                                    .join(' → ');
+                                addLog(`MATCHES DEEP SCAN: 20-tick and 10-tick frequency scan complete`, 'scan');
+                                addLog(`MATCH TARGET ORDER: ${targetSummary}`, 'hack');
+                            } else if (!matchesWaitingForWindowLogged) {
+                                addLog(`MATCHES DEEP SCAN: collecting 20 live/history ticks (${digitWindowRef.current.length}/20)`, 'scan');
+                                matchesWaitingForWindowLogged = true;
+                            }
+                        }
+
+                        const target = matchesTargets[matchesTargetIndex];
+                        if (target) {
+                            matchesTargetDigitRef.current = target.digit;
+                            const signal = evaluateMatchesScalperEntry(
+                                digitWindowRef.current,
+                                cfg.matchesEntryMode || 'random',
+                                matchesRange,
+                            );
+                            const currentTickAt = lastTickAtRef.current;
+                            if (signal.ready && currentTickAt > matchesEntryTickAt) {
+                                matchesEntryTickAt = currentTickAt;
+                                addLog(
+                                    `MATCHES ENTRY: target ${target.digit}, attempt ${matchesAttemptForTarget + 1}/${target.attempts} — ${signal.reason}`,
+                                    'entry',
+                                );
+                                entry = true;
+                            } else if (scanTick % 5 === 0) {
+                                addLog(
+                                    `MATCHES SCAN: target ${target.digit} (${target.count20}/20, ${target.count10}/10), ${matchesAttemptForTarget}/${target.attempts} losses; ${signal.reason}`,
+                                    'scan',
+                                );
+                            }
+                        }
+                    } else if (multiScan) {
                         if (readyMarketRef.current) {
                             curMarket = readyMarketRef.current;
                             readyMarketRef.current = null;
@@ -2514,6 +2636,7 @@ const BotDetail: React.FC<{
 
                 let cycle = { forceStopped: false, reason: null as 'tp' | 'sl' | 'loss_limit' | null, cycleProfit: 0, consLoss: 0, lastWon: true };
                 const { isFastExecutionEnabled: isFastNow } = await import('@/utils/execution-speed');
+                let matchesCycleSettled = false;
                 for (let _ci = 0; _ci < tradeCount && !stopRef.current; _ci++) {
                     if (_ci > 0 && !stopRef.current) {
                         // ULTRA TURBO / FAST mode: zero inter-contract delay; normal: 250ms
@@ -2542,6 +2665,8 @@ const BotDetail: React.FC<{
                         priorConsLoss: totalConsLoss,
                         onLog: (msg, kind) => addLog(`${contractTag}${msg}`, kind),
                         onSettled: ({ profit, won, market: mkt, buyPrice, exitDigit, consLoss }) => {
+                            matchesCycleSettled = true;
+                            if (matchesRange && won) onMatchWin?.(profit);
                             lastBuyPrice = buyPrice;
                             const txId = ++txIdRef.current;
                             setTxList(prev => [{
@@ -2652,6 +2777,32 @@ const BotDetail: React.FC<{
                         continue;
                     }
 
+                    if (matchesRange && matchesCycleSettled) {
+                        const target = matchesTargets[matchesTargetIndex];
+                        if (target) {
+                            matchesAttemptForTarget += 1;
+                            addLog(
+                                `MATCH ATTEMPT MISSED: digit ${target.digit} (${matchesAttemptForTarget}/${target.attempts})`,
+                                'loss',
+                            );
+                            if (matchesAttemptForTarget >= target.attempts) {
+                                matchesTargetIndex += 1;
+                                matchesAttemptForTarget = 0;
+                                if (matchesTargetIndex >= matchesTargets.length) {
+                                    addLog('MATCH MISSED — all ranked targets used; collecting a fresh 20/10-tick scan and trying again.', 'switch');
+                                    resetMatchesPlan();
+                                } else {
+                                    const nextTarget = matchesTargets[matchesTargetIndex];
+                                    matchesTargetDigitRef.current = nextTarget.digit;
+                                    addLog(
+                                        `MATCH TARGET ROTATION: now trying digit ${nextTarget.digit} (${nextTarget.count20}/20, ${nextTarget.count10}/10; ${nextTarget.attempts} tries)`,
+                                        'switch',
+                                    );
+                                }
+                            }
+                        }
+                    }
+
                     if (!cycle.forceStopped) {
                         /* Single loss (not a guard stop) — update counters from cycle */
                         consLossRef.current = cycle.consLoss;
@@ -2697,6 +2848,7 @@ const BotDetail: React.FC<{
                         && totalConsLoss >= cfg.switchOnLosses) {
                         curMarketIdx = (curMarketIdx + 1) % marketList.length;
                         curMarket    = marketList[curMarketIdx];
+                        resetMatchesPlan();
                         lastFiredGroupRef.current = null;
                         subscribeMarket(curMarket);
                         curMarketRef.current = curMarket;
@@ -2918,7 +3070,7 @@ const BotDetail: React.FC<{
         addLog('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'separator');
         setRunning(false);
         setEntryReady(false);
-    }, [running, derivTrade, bot, cfg, addLog, subscribeMarket, subscribeAllMarkets, unsubscribeAllMarkets, onPreloadXml, runXmlBotCycle]);
+    }, [running, derivTrade, bot, cfg, addLog, subscribeMarket, subscribeAllMarkets, unsubscribeAllMarkets, onPreloadXml, runXmlBotCycle, matchesRange, onMatchWin]);
 
     const stopBot = useCallback(() => {
         stopRef.current = true;
@@ -2945,7 +3097,9 @@ const BotDetail: React.FC<{
                 <button className='sb-detail__back' onClick={onBack}>‹ Bots</button>
                 <div className='sb-detail__title'>
                     <span className='sb-detail__icon'>
-                        {bot.contractType.includes('EVEN') ? '2️⃣' : bot.contractType.includes('ODD') ? '1️⃣' : bot.contractType.includes('OVER') ? '⬆️' : '⬇️'}
+                        {matchesRange
+                            ? <Crown size={22} aria-hidden='true' />
+                            : bot.contractType.includes('EVEN') ? '2️⃣' : bot.contractType.includes('ODD') ? '1️⃣' : bot.contractType.includes('OVER') ? '⬆️' : '⬇️'}
                     </span>
                     <div>
                         <h2>{bot.name}</h2>
@@ -3012,6 +3166,39 @@ const BotDetail: React.FC<{
                 </button>
                 {/* ── Left Sidebar — Config ── */}
                 <div className={`sb-detail__sidebar${settingsOpen ? ' is-open' : ''}`}>
+
+                    {matchesRange && (
+                        <section className='sb-matches-entry-settings' aria-label='Matches entry settings'>
+                            <h3>Entry mode</h3>
+                            <div className='sb-matches-entry-settings__choices'>
+                                <button
+                                    type='button'
+                                    className={cfg.matchesEntryMode === 'random' ? 'is-active' : ''}
+                                    aria-pressed={cfg.matchesEntryMode === 'random'}
+                                    data-testid='button-matches-entry-random'
+                                    disabled={running}
+                                    onClick={() => cfgSet({ matchesEntryMode: 'random' })}
+                                >
+                                    Random entry
+                                </button>
+                                <button
+                                    type='button'
+                                    className={cfg.matchesEntryMode === 'selected' ? 'is-active' : ''}
+                                    aria-pressed={cfg.matchesEntryMode === 'selected'}
+                                    data-testid='button-matches-entry-selected'
+                                    disabled={running}
+                                    onClick={() => cfgSet({ matchesEntryMode: 'selected' })}
+                                >
+                                    Selected entry
+                                </button>
+                            </div>
+                            <p>
+                                {matchesRange === '0-5'
+                                    ? 'Scans the 0–5 targets and uses digits 6–9 for entry confirmation.'
+                                    : 'Scans the 6–9 targets and uses digits 0–3 for entry confirmation.'}
+                            </p>
+                        </section>
+                    )}
 
                     {/* Builder buttons */}
                     <div className='sb-bot-actions'>
@@ -4110,6 +4297,43 @@ const BotDetail: React.FC<{
                 </div>{/* end sb-detail__terminal-col */}
             </div>{/* end sb-detail__body */}
 
+            {matchesRange && matchesKingVisible && (
+                <div
+                    className='sb-matches-king'
+                    role='dialog'
+                    aria-modal='true'
+                    aria-labelledby='sb-matches-king-title'
+                    data-testid='dialog-matches-king'
+                >
+                    <div className='sb-matches-king__confetti' aria-hidden='true'>
+                        {Array.from({ length: 20 }, (_, index) => (
+                            <span key={index} style={{ ['--spark-index' as any]: index }} />
+                        ))}
+                    </div>
+                    <div className='sb-matches-king__card'>
+                        <button
+                            type='button'
+                            className='sb-matches-king__close'
+                            aria-label='Dismiss King of Matches celebration'
+                            data-testid='button-dismiss-matches-king'
+                            onClick={onDismissMatchesKing}
+                        >
+                            ×
+                        </button>
+                        <div className='sb-matches-king__crown' aria-hidden='true'>
+                            <Crown size={48} strokeWidth={1.8} />
+                        </div>
+                        <p className='sb-matches-king__eyebrow'>SESSION MILESTONE</p>
+                        <h2 id='sb-matches-king-title'>King of Matches</h2>
+                        <p className='sb-matches-king__profit' data-testid='text-matches-session-profit'>
+                            {matchesSessionProfit >= 0 ? '+' : ''}
+                            {fromUsd(matchesSessionProfit).toFixed(2)} {displayCur}
+                        </p>
+                        <p className='sb-matches-king__message'>Two matches won. Keep winning.</p>
+                    </div>
+                </div>
+            )}
+
             {/* ── Bottom Tabs ── */}
             <div className='sb-tabs'>
                 <div className='sb-tabs__nav'>
@@ -4230,6 +4454,37 @@ const ScalperBots: React.FC = observer(() => {
     const [openGroup, setOpenGroup] = useState<SbGroup | null>(null);
     const [search, setSearch]       = useState('');
     const [selectedBot, setSelectedBot] = useState<TScalperBot | null>(null);
+    const [view, setView] = useState<'scalpers' | 'matches'>('scalpers');
+    const [selectedMatchesRange, setSelectedMatchesRange] = useState<MatchesScalperRange | null>(null);
+    const [matchesSessionWins, setMatchesSessionWins] = useState(0);
+    const [matchesSessionProfit, setMatchesSessionProfit] = useState(0);
+    const [matchesKingVisible, setMatchesKingVisible] = useState(false);
+    const matchesSessionWinsRef = useRef(0);
+    const matchesKingShownRef = useRef(false);
+
+    const handleMatchesWin = useCallback((profit: number) => {
+        const wins = matchesSessionWinsRef.current + 1;
+        matchesSessionWinsRef.current = wins;
+        setMatchesSessionWins(wins);
+        setMatchesSessionProfit(previous => +(previous + (Number(profit) || 0)).toFixed(2));
+        if (wins >= 2 && !matchesKingShownRef.current) {
+            matchesKingShownRef.current = true;
+            setMatchesKingVisible(true);
+        }
+    }, []);
+
+    const resetMatchesSession = useCallback(() => {
+        matchesSessionWinsRef.current = 0;
+        matchesKingShownRef.current = false;
+        setMatchesSessionWins(0);
+        setMatchesSessionProfit(0);
+        setMatchesKingVisible(false);
+    }, []);
+
+    const openMatchesLane = useCallback((range: MatchesScalperRange) => {
+        setSelectedMatchesRange(range);
+        setSelectedBot(MATCHES_SCALPER_BOTS[range]);
+    }, []);
 
     const groupCounts = useMemo(() => {
         const counts: Record<string, number> = {};
@@ -4328,40 +4583,90 @@ const ScalperBots: React.FC = observer(() => {
             <BotDetail
                 bot={selectedBot}
                 derivTrade={derivTrade}
-                onBack={() => setSelectedBot(null)}
+                onBack={() => {
+                    setSelectedBot(null);
+                    setSelectedMatchesRange(null);
+                }}
                 onLoadXml={handleLoadXml}
                 onLoadAndRun={handleLoadAndRun}
                 onPreloadXml={handlePreloadXml}
+                matchesRange={selectedMatchesRange ?? undefined}
+                onMatchWin={handleMatchesWin}
+                matchesKingVisible={matchesKingVisible}
+                matchesSessionProfit={matchesSessionProfit}
+                onDismissMatchesKing={() => setMatchesKingVisible(false)}
             />
         );
     }
 
-    const showFolders = !openGroup && !searching;
+    const showFolders = view === 'scalpers' && !openGroup && !searching;
 
     return (
         <div className='scalper-bots'>
             {/* ── Full-width search bar ── */}
-            <div className='scalper-bots__searchbar'>
-                <svg width='16' height='16' viewBox='0 0 20 20' fill='none' stroke='currentColor' strokeWidth='2'>
-                    <circle cx='8.5' cy='8.5' r='6'/><path d='M14 14l4 4'/>
-                </svg>
-                <input
-                    type='text'
-                    placeholder='Search for bots or category...'
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                />
+            {view === 'scalpers' && (
+                <div className='scalper-bots__searchbar'>
+                    <svg width='16' height='16' viewBox='0 0 20 20' fill='none' stroke='currentColor' strokeWidth='2'>
+                        <circle cx='8.5' cy='8.5' r='6'/><path d='M14 14l4 4'/>
+                    </svg>
+                    <input
+                        type='text'
+                        placeholder='Search for bots or category...'
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                    />
+                </div>
+            )}
+
+            <div className='scalper-bots__mode-switch' role='tablist' aria-label='Scalper trading pages'>
+                <button
+                    type='button'
+                    role='tab'
+                    aria-selected={view === 'scalpers'}
+                    data-testid='tab-scalper-bots'
+                    className={view === 'scalpers' ? 'is-active' : ''}
+                    onClick={() => {
+                        setView('scalpers');
+                        setOpenGroup(null);
+                        setSearch('');
+                    }}
+                >
+                    Scalper Bots
+                </button>
+                <button
+                    type='button'
+                    role='tab'
+                    aria-selected={view === 'matches'}
+                    data-testid='tab-matches-scalper'
+                    className={view === 'matches' ? 'is-active' : ''}
+                    onClick={() => {
+                        setView('matches');
+                        setOpenGroup(null);
+                        setSearch('');
+                    }}
+                >
+                    Matches Scalper
+                </button>
             </div>
 
             {/* ── Breadcrumb navbar ── */}
             <div className='scalper-bots__navbar'>
                 <button
                     className='scalper-bots__nav-home'
-                    onClick={() => { setOpenGroup(null); setSearch(''); }}
+                    onClick={() => {
+                        setView('scalpers');
+                        setOpenGroup(null);
+                        setSearch('');
+                    }}
                 >
-                    🏠 Home
+                    ‹ Scalper Bots
                 </button>
-                {(openGroup || searching) && (
+                {view === 'matches' ? (
+                    <>
+                        <span className='scalper-bots__nav-sep'>›</span>
+                        <span className='scalper-bots__nav-crumb'>Matches Scalper · 2 bots</span>
+                    </>
+                ) : (openGroup || searching) && (
                     <>
                         <span className='scalper-bots__nav-sep'>›</span>
                         <span className='scalper-bots__nav-crumb'>
@@ -4382,7 +4687,14 @@ const ScalperBots: React.FC = observer(() => {
                 </div>
             </div>
 
-            {showFolders ? (
+            {view === 'matches' ? (
+                <MatchesScalperHub
+                    sessionWins={matchesSessionWins}
+                    sessionProfit={matchesSessionProfit}
+                    onOpenBot={openMatchesLane}
+                    onResetSession={resetMatchesSession}
+                />
+            ) : showFolders ? (
                 /* ── Folder grid ── */
                 <div className='scalper-bots__folders'>
                     {GROUP_DEFS.map(g => (

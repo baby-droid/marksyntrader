@@ -1,4 +1,4 @@
-import { getExecutionSpeed, getExecutionSpeedDelay, isInstantExecutionForContext, isASpeedBoostEnabled, getPurchasesPerTick, isAutoSignalsContext, shouldSkipDuplicateAutoSignalTick } from '../../../../../utils/execution-speed';
+import { getExecutionSpeed, getExecutionSpeedDelay, isInstantExecutionForContext, isASpeedBoostEnabled, isFastExecutionEnabledForContext, getPurchasesPerTick, isAutoSignalsContext, shouldSkipDuplicateAutoSignalTick } from '../../../../../utils/execution-speed';
 import { recordTradeMeta } from '../../../../../utils/trade-metadata';
 import { isBotPaused } from '../../../../../utils/bot-pause-flag';
 import { LogTypes } from '../../../constants/messages';
@@ -491,11 +491,12 @@ export default Engine =>
             const isSameTickPair = unique_specs.length === 2
                 && unique_specs.every(spec => spec.same_tick_pair === true);
             // Multiple Purchase is also used by strategy blocks that provide
-            // several same-tick contracts. A-SPEED BOOST explicitly means
-            // one contract for one tick, so keep only the first selected
+            // several same-tick contracts. Fast and A-SPEED explicitly mean
+            // one contract per eligible tick, so keep only the first selected
             // contract and do not create untracked side orders. An explicit
-            // paired-entry block is one strategy action, not a bulk fan-out.
-            const effective_specs = isASpeedBoostEnabled() && !isSameTickPair
+            // paired-entry block is one purpose-built strategy action, not a
+            // generic bulk fan-out.
+            const effective_specs = (isFastExecutionEnabledForContext() || isASpeedBoostEnabled()) && !isSameTickPair
                 ? unique_specs.slice(0, 1)
                 : unique_specs;
 
