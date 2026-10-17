@@ -1341,10 +1341,43 @@ const BotDetail: React.FC<{
         ultraTurbo?: boolean;
         onSettled: (info: { profit: number; won: boolean; market: string; buyPrice: number; exitDigit: number | null; consLoss: number }) => void;
         onLog: (msg: string, kind?: string) => void;
-    }): Promise<{ forceStopped: boolean; reason: 'tp' | 'sl' | 'loss_limit' | null; cycleProfit: number; consLoss: number; lastWon: boolean; retryNextCycle?: boolean }> => {
+    }): Promise<{ forceStopped: boolean; reason: 'tp' | 'sl' | 'loss_limit' | null; cycleProfit: number; consLoss: number; lastWon: boolean; retryNextCycle?: boolean; fatalError?: boolean }> => {
         return new Promise(resolve => { (async () => {
             const rp: any = store?.run_panel;
             if (!rp?.onRunButtonClick) { resolve({ forceStopped: false, reason: null, cycleProfit: 0, consLoss: params.priorConsLoss || 0, lastWon: true }); return; }
+
+            /* A Run action is only valid once the selected XML has finished
+               loading into the live Blockly workspace. Starting against a
+               missing/half-loaded workspace looks like a bot stall because
+               the run panel accepts the click but no purchase block executes. */
+            const hasExecutableWorkspace = () => {
+                try {
+                    const workspace = (window as any).Blockly?.derivWorkspace;
+                    const blocks = workspace?.getAllBlocks?.(false) ?? [];
+                    const hasMarket = blocks.some((block: any) => block.type === 'trade_definition_market');
+                    const hasTradeOptions = blocks.some((block: any) => block.type === 'trade_definition_tradeoptions');
+                    const hasPurchase = blocks.some((block: any) =>
+                        block.type === 'purchase' || block.type === 'multiple_purchase'
+                    );
+                    return Boolean(workspace && hasMarket && hasTradeOptions && hasPurchase);
+                } catch {
+                    return false;
+                }
+            };
+
+            const workspaceDeadline = Date.now() + 5000;
+            while (!stopRef.current && !hasExecutableWorkspace() && Date.now() < workspaceDeadline) {
+                await new Promise(r => setTimeout(r, 100));
+            }
+            if (stopRef.current) {
+                resolve({ forceStopped: false, reason: null, cycleProfit: 0, consLoss: params.priorConsLoss || 0, lastWon: false, retryNextCycle: true });
+                return;
+            }
+            if (!hasExecutableWorkspace()) {
+                params.onLog('XML_WORKSPACE_NOT_READY — expected Market, Trade Options, and Purchase blocks were not loaded; no trade was sent.', 'error');
+                resolve({ forceStopped: false, reason: null, cycleProfit: 0, consLoss: params.priorConsLoss || 0, lastWon: false, retryNextCycle: true });
+                return;
+            }
 
             /* ── Wait out any in-flight teardown from the PREVIOUS forced stop ──
                globalObserver emits 'bot.stop' from inside terminateSession()
@@ -1360,10 +1393,14 @@ const BotDetail: React.FC<{
                ULTRA TURBO / ULTRA FAST caps this at 300 ms — enough for normal
                teardown but tight enough to catch the digit window before the
                next tick. */
-            const teardownMax = params.ultraTurbo ? 50 : (isFastExecutionEnabledForContext() ? 150 : 3000);
+            const teardownMax = params.ultraTurbo ? 500 : (isFastExecutionEnabledForContext() ? 1500 : 5000);
             const teardownStart = Date.now();
-            while (api_base.is_stopping && Date.now() - teardownStart < teardownMax) {
+            while ((api_base.is_stopping || rp.is_running) && Date.now() - teardownStart < teardownMax) {
                 await new Promise(r => setTimeout(r, 20));
+            }
+            if (stopRef.current) {
+                resolve({ forceStopped: false, reason: null, cycleProfit: 0, consLoss: params.priorConsLoss || 0, lastWon: false });
+                return;
             }
 
             /* ── Guard: engine still tearing down after timeout ──
@@ -1376,8 +1413,8 @@ const BotDetail: React.FC<{
                Fix: abort this cycle immediately and return retryNextCycle=true so
                the outer loop skips martingale escalation and retries on the next
                iteration until the engine is free. */
-            if (api_base.is_stopping) {
-                params.onLog('⚠ ENGINE_BUSY — previous bot still tearing down, retrying...', 'hack');
+            if (api_base.is_stopping || rp.is_running) {
+                params.onLog('⚠ ENGINE_BUSY — previous bot is still stopping, retrying without changing stake...', 'hack');
                 resolve({ forceStopped: false, reason: null, cycleProfit: 0, consLoss: params.priorConsLoss || 0, lastWon: false, retryNextCycle: true });
                 return;
             }
@@ -1391,8 +1428,12 @@ const BotDetail: React.FC<{
                false "win", stopping the bot after every loss.
                50 ms for ultra/turbo (increased from 25 ms for more reliable drain),
                60 ms normal. */
-            const drainMs = params.ultraTurbo ? 0 : (isFastExecutionEnabledForContext() ? 10 : 60);
+            const drainMs = params.ultraTurbo ? 50 : (isFastExecutionEnabledForContext() ? 30 : 60);
             await new Promise(r => setTimeout(r, drainMs));
+            if (stopRef.current) {
+                resolve({ forceStopped: false, reason: null, cycleProfit: 0, consLoss: params.priorConsLoss || 0, lastWon: false });
+                return;
+            }
 
              patchWorkspaceParams({
                  market: params.market, stake: params.stake,
@@ -1403,7 +1444,11 @@ const BotDetail: React.FC<{
             let cycleProfit = 0;
             let consLoss = params.priorConsLoss || 0;
             let lastWon = true;   // updated on every settled contract; false = last trade was a loss
+            let retryNextCycle = false;
             let forceStopped = false;
+            let fatalError = false;
+            let purchaseSent = false;
+            let purchaseReceived = false;
             let reason: 'tp' | 'sl' | 'loss_limit' | null = null;
             let settled = false;
             let stallTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1412,13 +1457,14 @@ const BotDetail: React.FC<{
                 if (stallTimer) { clearTimeout(stallTimer); stallTimer = null; }
                 try { globalObserver.unregister('bot.contract', onContract); } catch {}
                 try { globalObserver.unregister('bot.stop', onStop); } catch {}
+                try { globalObserver.unregister('contract.status', onPurchaseStatus); } catch {}
                 try { globalObserver.unregister('Error', onError); } catch {}
             };
             const finish = () => {
                 if (settled) return;
                 settled = true;
                 cleanup();
-                resolve({ forceStopped, reason, cycleProfit, consLoss, lastWon });
+                resolve({ forceStopped, reason, cycleProfit, consLoss, lastWon, fatalError, retryNextCycle });
             };
             const onContract = (contract: any) => {
                 if (!contract || !isEnded(contract)) return;
@@ -1466,19 +1512,36 @@ const BotDetail: React.FC<{
                    trade and breaking on a phantom "win". The 45-second stall timer
                    will catch genuine hangs where a trade was placed but never
                    settled. */
-                if (seen.size === 0) return;
+                if (seen.size === 0) {
+                    if (stopRef.current) {
+                        lastWon = false;
+                        finish();
+                    }
+                    return;
+                }
                 finish();
             };
             const onError = (err: any) => {
                 params.onLog(`⚠ ${err?.message || err?.error?.message || 'Bot engine error — stopping cycle.'}`, 'error');
+                try { rp.onStopButtonClick?.(); } catch {}
+                if (seen.size === 0) {
+                    lastWon = false;
+                    if (purchaseSent) fatalError = true;
+                    else retryNextCycle = true;
+                }
                 finish();
+            };
+            const onPurchaseStatus = (status: any) => {
+                if (status?.id === 'contract.purchase_sent') purchaseSent = true;
+                if (status?.id === 'contract.purchase_received') purchaseReceived = true;
             };
 
             globalObserver.register('bot.contract', onContract);
             globalObserver.register('bot.stop', onStop);
+            globalObserver.register('contract.status', onPurchaseStatus);
             globalObserver.register('Error', onError);
 
-            Promise.resolve(rp.onRunButtonClick()).catch(err => onError(err));
+            Promise.resolve().then(() => rp.onRunButtonClick()).catch(err => onError(err));
 
             /* Stall guard — if neither bot.contract nor bot.stop fires within the
                timeout the trade is hung (network issue, Blockly not ready, etc.).
@@ -1489,16 +1552,29 @@ const BotDetail: React.FC<{
                IMPORTANT: when no contract settled (seen.size === 0), resolve with
                lastWon=false so the outer loop retries / continues martingale instead
                of treating the no-op as a phantom win and breaking out of the loop. */
-            const stallMs = params.ultraTurbo ? 10_000 : 45_000;
+            const stallMs = params.ultraTurbo ? 12_000 : 30_000;
             stallTimer = setTimeout(() => {
-                params.onLog(`⚠ TRADE_STALL — no trade response in ${params.ultraTurbo ? '10' : '45'}s, aborting cycle.`, 'error');
+                params.onLog(`⚠ TRADE_STALL — no settled contract within ${params.ultraTurbo ? '12' : '30'}s; stopping this cycle safely.`, 'error');
                 try { rp.onStopButtonClick?.(); } catch {}
                 if (seen.size === 0) {
-                    // No contract was ever placed — don't count as a win.
-                    // The outer loop will retry (or stop cleanly if stopRef is set).
                     lastWon = false;
+                    if (!purchaseSent) {
+                        // No buy request was sent, so retrying cannot duplicate a
+                        // contract and must not increment martingale or loss stats.
+                        retryNextCycle = true;
+                    } else if (purchaseReceived) {
+                        // A buy was acknowledged but never settled; do not place a
+                        // second contract while the first may still be open.
+                        fatalError = true;
+                        params.onLog('TRADE_UNSETTLED — Deriv acknowledged the buy but did not report settlement; stopping to avoid a duplicate position.', 'error');
+                    } else {
+                        // The request may have reached Deriv even though its
+                        // acknowledgment was lost. Stop instead of risking a duplicate.
+                        fatalError = true;
+                        params.onLog('BUY_ACK_TIMEOUT — the buy request was sent but not acknowledged; stopping to avoid a duplicate position.', 'error');
+                    }
                 }
-                setTimeout(finish, 1500); // give bot.stop one last chance to fire cleanly
+                setTimeout(finish, 1000); // give the run panel time to finish teardown
             }, stallMs);
         })(); });
     }, [store, patchWorkspaceParams]);
@@ -2078,6 +2154,7 @@ const BotDetail: React.FC<{
         let lastBuyPrice = curStake;
         /* Total consecutive losses across all cycles — drives market-switch and martingale. */
         let totalConsLoss = 0;
+        let xmlCycleRetries = 0;
         let matchesTargets: MatchesScalperTarget[] = [];
         let matchesTargetIndex = 0;
         let matchesAttemptForTarget = 0;
@@ -2285,7 +2362,13 @@ const BotDetail: React.FC<{
         /* ── FRESH XML RELOAD every time Run is pressed ──
            Await the load so the workspace is ready before the first trade fires. */
         addLog('📂 LOADING BOT STRATEGY...', 'hack');
-        try { await onPreloadXml(bot, { market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit }); } catch { /* non-fatal */ }
+        try {
+            await onPreloadXml(bot, { market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit });
+        } catch (error: any) {
+            addLog(`XML_LOAD_FAILED — ${error?.message || 'the bot strategy could not be loaded; no trade was sent.'}`, 'error');
+            stopRef.current = true;
+            return;
+        }
         patchWorkspaceParams({ duration: cfg.duration, duration_unit: cfg.duration_unit });
         // Re-apply market with staggered delays so it lands AFTER dbot's async
         // submarket onChange reloads the SYMBOL_LIST options (Bear/Bull/Jump need this).
@@ -2955,6 +3038,7 @@ const BotDetail: React.FC<{
                         priorConsLoss: totalConsLoss,
                         onLog: (msg, kind) => addLog(`${contractTag}${msg}`, kind),
                         onSettled: ({ profit, won, market: mkt, buyPrice, exitDigit, consLoss }) => {
+                            xmlCycleRetries = 0;
                             matchesCycleSettled = true;
                             if (matchesRange && won) onMatchWin?.(profit);
                             lastBuyPrice = buyPrice;
@@ -2987,6 +3071,11 @@ const BotDetail: React.FC<{
                             }
                         },
                     });
+                    if (cycle.fatalError) {
+                        addLog('XML_RUN_ABORTED — execution stopped safely. Check the open-contract list and transaction history before starting again.', 'error');
+                        stopRef.current = true;
+                        break;
+                    }
                     if (cycle.forceStopped) break; // TP/SL hit — stop multi-contract loop
                 }
 
@@ -3072,7 +3161,13 @@ const BotDetail: React.FC<{
                        so DO NOT escalate martingale, log a loss, or do a market switch. Just
                        sleep briefly and retry — the engine will be free within a few hundred ms. */
                     if (cycle.retryNextCycle) {
-                        await new Promise(r => setTimeout(r, ultraTurboRef.current ? 80 : 200));
+                        xmlCycleRetries += 1;
+                        if (xmlCycleRetries >= 5) {
+                            addLog('XML_RUN_RETRY_LIMIT — the bot could not start a purchase after five safe retries; stopping instead of increasing stake or repeating indefinitely.', 'error');
+                            stopRef.current = true;
+                            break;
+                        }
+                        await new Promise(r => setTimeout(r, Math.min(1500, 250 * (2 ** (xmlCycleRetries - 1)))));
                         continue;
                     }
 

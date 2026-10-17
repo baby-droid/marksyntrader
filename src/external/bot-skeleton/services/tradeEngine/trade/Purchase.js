@@ -682,7 +682,7 @@ export default Engine =>
                 });
 
                 if (!this.options.timeMachineEnabled) {
-                    return doUntilDone(action).then(onSuccess);
+                    return doUntilDone(action, undefined, api_base).then(onSuccess);
                 }
 
                 return recoverFromError(
@@ -725,7 +725,7 @@ export default Engine =>
             });
 
             if (!this.options.timeMachineEnabled) {
-                return doUntilDone(action).then(onSuccess);
+                return doUntilDone(action, undefined, api_base).then(onSuccess);
             }
 
             return recoverFromError(
