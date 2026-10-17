@@ -49,6 +49,11 @@ export const matchesScalperPipSizeFromIncrement = (candidate: unknown): number |
     return pipSize <= 10 ? pipSize : null;
 };
 
+export const matchesScalperFeedRetryDelayMs = (attempt: number): number => {
+    const retryAttempt = Math.max(1, Math.floor(Number(attempt) || 1));
+    return Math.min(1_500 * (2 ** (retryAttempt - 1)), 30_000);
+};
+
 export const matchesScalperQuoteToTick = (
     quote: unknown,
     epoch: unknown,

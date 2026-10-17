@@ -17,6 +17,7 @@ import VpsMode, { VpsSettings } from './VpsMode';
 import MatchesScalperHub from './matches-scalper-hub';
 import {
     evaluateMatchesScalperEntry,
+    matchesScalperFeedRetryDelayMs,
     matchesScalperHistoryToTicks,
     mergeMatchesScalperTicks,
     matchesScalperPipSizeFromIncrement,
@@ -1566,11 +1567,16 @@ const BotDetail: React.FC<{
     const matchesPipSizeRef = useRef<number | null>(null);
     const matchesFeedGenerationRef = useRef(0);
     const matchesLiveTickSeqRef = useRef(0);
-    const matchesPipSizeResolverRef = useRef<((pipSize: number | null) => void) | null>(null);
     const matchesPrimeHistoryRef = useRef<((market: string) => Promise<void>) | null>(null);
     const matchesHistoryRequestGenerationRef = useRef<number | null>(null);
     const matchesFeedRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const matchesLastFeedErrorLogAtRef = useRef(0);
+    const matchesFeedFirstTickRef = useRef(false);
+    const matchesFeedRecoveryPendingRef = useRef(false);
+    const matchesFeedRetryCountRef = useRef(0);
+    const matchesLastAwaitingTickLogAtRef = useRef(0);
+    const matchesNoTickWarnedGenerationRef = useRef<number | null>(null);
+    const matchesPrecisionWarnedMarketsRef = useRef<Set<string>>(new Set());
     const tickUnsubRef    = useRef<(() => void) | null>(null);
     const marketIdxRef    = useRef(0);
     const lastFiredGroupRef = useRef<StrategyOrGroup | null>(null);
@@ -1712,38 +1718,50 @@ const BotDetail: React.FC<{
        Each new tick immediately wakes the scan loop (tickSignalRef) so the
        condition check runs at true tick-rate with no poll delay. */
     const subscribeMarket = useCallback((market: string) => {
+        if (matchesRange && (!derivTrade.connected || api_base.api?.connection?.readyState !== 1)) {
+            matchesFeedRecoveryPendingRef.current = true;
+            addLog(`MATCH FEED WAIT: authenticated Deriv WebSocket is not open; subscription for ${market} is deferred.`, 'error');
+            setActiveMarket(market);
+            return;
+        }
         if (matchesFeedRetryTimerRef.current) {
             clearTimeout(matchesFeedRetryTimerRef.current);
             matchesFeedRetryTimerRef.current = null;
         }
         if (tickUnsubRef.current) { tickUnsubRef.current(); tickUnsubRef.current = null; }
-        matchesPipSizeResolverRef.current?.(null);
-        matchesPipSizeResolverRef.current = null;
         const feedGeneration = ++matchesFeedGenerationRef.current;
         matchesPipSizeRef.current = null;
         matchesTickWindowRef.current = [];
         matchesRawTickWindowRef.current = [];
         digitWindowRef.current = [];
         priceWindowRef.current = [];
+        matchesFeedFirstTickRef.current = false;
+        matchesNoTickWarnedGenerationRef.current = null;
+        matchesHistoryRequestGenerationRef.current = null;
         setDigitDisplay([]);
         const handleFeedError = (error: unknown) => {
             if (!matchesRange || stopRef.current || feedGeneration !== matchesFeedGenerationRef.current) return;
             const message = error instanceof Error ? error.message : String(error || 'unknown feed error');
             const now = Date.now();
+            matchesFeedRecoveryPendingRef.current = true;
             if (now - matchesLastFeedErrorLogAtRef.current >= 4_000) {
                 matchesLastFeedErrorLogAtRef.current = now;
                 addLog(`MATCH FEED ERROR (${market}): ${message}; reconnecting.`, 'error');
             }
-            if (matchesFeedRetryTimerRef.current) return;
+            if (matchesFeedRetryTimerRef.current || api_base.api?.connection?.readyState !== 1) return;
+            const retryAttempt = ++matchesFeedRetryCountRef.current;
+            const retryDelay = matchesScalperFeedRetryDelayMs(retryAttempt);
+            addLog(`MATCH FEED RETRY: attempt ${retryAttempt} in ${Math.ceil(retryDelay / 1_000)}s.`, 'hack');
             matchesFeedRetryTimerRef.current = setTimeout(() => {
                 matchesFeedRetryTimerRef.current = null;
                 if (stopRef.current || feedGeneration !== matchesFeedGenerationRef.current) return;
+                if (api_base.api?.connection?.readyState !== 1) return;
                 addLog(`MATCH FEED RETRY: resubscribing to ${market} on the authenticated Deriv connection.`, 'hack');
                 subscribeMarket(market);
                 lastTickAtRef.current = Date.now();
                 lastReconnectAtRef.current = Date.now();
                 void matchesPrimeHistoryRef.current?.(market);
-            }, 1_500);
+            }, retryDelay);
         };
         const unsub = derivTrade.subscribeTicks(market, tick => {
             const pipSizeSource = tick.pip_size_source
@@ -1760,6 +1778,23 @@ const BotDetail: React.FC<{
                 ? null
                 : tick.digit != null ? tick.digit : getLastDigit(tick.quote, ps);
             if (matchesRange) {
+                const isFirstTick = !matchesFeedFirstTickRef.current;
+                if (isFirstTick) {
+                    matchesFeedFirstTickRef.current = true;
+                    matchesFeedRetryCountRef.current = 0;
+                    if (matchesFeedRetryTimerRef.current) {
+                        clearTimeout(matchesFeedRetryTimerRef.current);
+                        matchesFeedRetryTimerRef.current = null;
+                    }
+                    const wasRecovering = matchesFeedRecoveryPendingRef.current;
+                    matchesFeedRecoveryPendingRef.current = false;
+                    addLog(
+                        wasRecovering
+                            ? `🔌 FEED_RESTORED — first live tick received from ${market}.`
+                            : `MATCH FEED LIVE: first tick received from ${market}.`,
+                        'hack',
+                    );
+                }
                 const epoch = Number(tick.epoch);
                 const quote = Number(tick.quote);
                 if (Number.isFinite(epoch) && epoch > 0 && Number.isFinite(quote)) {
@@ -1770,6 +1805,7 @@ const BotDetail: React.FC<{
                         .slice(0, 50);
                 }
                 if (ps !== null) {
+                    const pipSizeBecameAvailable = matchesPipSizeRef.current == null;
                     matchesPipSizeRef.current = ps;
                     matchesLiveTickSeqRef.current += 1;
                     matchesTickWindowRef.current = mergeMatchesScalperTicks(
@@ -1778,8 +1814,12 @@ const BotDetail: React.FC<{
                     );
                     digitWindowRef.current = matchesTickWindowRef.current.map(item => item.digit);
                     setDigitDisplay(digitWindowRef.current.slice(0, 20));
-                    matchesPipSizeResolverRef.current?.(ps);
-                    matchesPipSizeResolverRef.current = null;
+                    matchesPrecisionWarnedMarketsRef.current.delete(market);
+                    if (pipSizeBecameAvailable) {
+                        void matchesPrimeHistoryRef.current?.(market);
+                    }
+                } else if (isFirstTick) {
+                    void matchesPrimeHistoryRef.current?.(market);
                 }
             }
             // Also track raw prices for Rise/Fall momentum detection
@@ -1818,11 +1858,49 @@ const BotDetail: React.FC<{
         setActiveMarket(market);
     }, [derivTrade, matchesRange, addLog]);
 
+    /* The APIBase replaces its Deriv API instance after a socket reconnect.
+       A tick subscription bound to the old instance does not migrate, so a
+       running Matches Scalper must explicitly attach to the new authenticated
+       socket when the connection returns. */
+    useEffect(() => {
+        if (!matchesRange) return;
+        if (!running) {
+            prevConnectedRef.current = derivTrade.connected;
+            return;
+        }
+        if (!derivTrade.connected) {
+            if (prevConnectedRef.current) {
+                prevConnectedRef.current = false;
+                matchesFeedRecoveryPendingRef.current = true;
+                if (matchesFeedRetryTimerRef.current) {
+                    clearTimeout(matchesFeedRetryTimerRef.current);
+                    matchesFeedRetryTimerRef.current = null;
+                }
+                if (tickUnsubRef.current) {
+                    tickUnsubRef.current();
+                    tickUnsubRef.current = null;
+                }
+                addLog('MATCH FEED PAUSED: authenticated Deriv connection closed; waiting for reconnection.', 'error');
+            }
+            return;
+        }
+        if (!prevConnectedRef.current) {
+            if (api_base.api?.connection?.readyState !== 1) return;
+            prevConnectedRef.current = true;
+            matchesFeedRecoveryPendingRef.current = true;
+            lastTickAtRef.current = Date.now();
+            lastReconnectAtRef.current = Date.now();
+            const market = curMarketRef.current;
+            addLog(`MATCH FEED: authenticated connection restored; re-subscribing to ${market}.`, 'hack');
+            subscribeMarket(market);
+            void matchesPrimeHistoryRef.current?.(market);
+        }
+    }, [matchesRange, running, derivTrade.connected, subscribeMarket, addLog]);
+
     /* Cleanup on unmount */
     useEffect(() => () => {
         if (tickUnsubRef.current) tickUnsubRef.current();
         if (matchesFeedRetryTimerRef.current) clearTimeout(matchesFeedRetryTimerRef.current);
-        matchesPipSizeResolverRef.current?.(null);
         multiUnsubsRef.current.forEach(u => u());
         multiUnsubsRef.current.clear();
     }, []);
@@ -1903,7 +1981,7 @@ const BotDetail: React.FC<{
     /* ── Start bot (with real tick entry detection) ── */
     const startBot = useCallback(async () => {
         if (running || !derivTrade.authorized) return;
-        if (matchesRange && !derivTrade.connected) {
+        if (matchesRange && (!derivTrade.connected || api_base.api?.connection?.readyState !== 1)) {
             addLog('MATCH FEED WAIT: authenticated Deriv connection is not open yet. Wait for the connection, then start again.', 'error');
             return;
         }
@@ -1915,6 +1993,11 @@ const BotDetail: React.FC<{
         matchesTargetDigitRef.current = null;
         matchesLiveTickSeqRef.current = 0;
         if (matchesRange) {
+            matchesFeedFirstTickRef.current = false;
+            matchesFeedRecoveryPendingRef.current = false;
+            matchesFeedRetryCountRef.current = 0;
+            matchesNoTickWarnedGenerationRef.current = null;
+            matchesPrecisionWarnedMarketsRef.current.clear();
             vhrActiveRef.current = false;
             vhaRecovery1Ref.current = false;
             vhaRecovery2Ref.current = false;
@@ -2011,33 +2094,21 @@ const BotDetail: React.FC<{
         const primeMatchesHistory = async (market: string) => {
             if (!matchesRange) return;
             const generation = matchesFeedGenerationRef.current;
-            let pipSize = matchesPipSizeRef.current;
-            if (pipSize == null && !stopRef.current) {
-                pipSize = await new Promise<number | null>(resolve => {
-                    let settled = false;
-                    let timer: ReturnType<typeof setTimeout>;
-                    const finish = (value: number | null) => {
-                        if (settled) return;
-                        settled = true;
-                        clearTimeout(timer);
-                        if (matchesPipSizeResolverRef.current === finish) {
-                            matchesPipSizeResolverRef.current = null;
-                        }
-                        resolve(value);
-                    };
-                    timer = setTimeout(() => finish(null), 5_000);
-                    matchesPipSizeResolverRef.current = finish;
-                    if (matchesPipSizeRef.current != null) finish(matchesPipSizeRef.current);
-                });
-            }
+            const pipSize = matchesPipSizeRef.current;
             if (stopRef.current || generation !== matchesFeedGenerationRef.current) return;
             if (pipSize == null) {
-                addLog(
-                    `MATCH FEED: ${market} has not supplied accurate pip_size metadata yet; raw live ticks are buffered and entry checks are paused.`,
-                    'error',
-                );
+                if (!matchesFeedFirstTickRef.current) {
+                    if (matchesNoTickWarnedGenerationRef.current !== generation) {
+                        matchesNoTickWarnedGenerationRef.current = generation;
+                        addLog(`MATCH FEED: waiting for the first authenticated live tick on ${market}; history priming will resume when tick precision is available.`, 'hack');
+                    }
+                } else if (!matchesPrecisionWarnedMarketsRef.current.has(market)) {
+                    matchesPrecisionWarnedMarketsRef.current.add(market);
+                    addLog(`MATCH FEED: live ticks arrived for ${market}, but trusted pip_size metadata is missing; raw ticks are buffered and entries remain paused.`, 'error');
+                }
                 return;
             }
+            matchesPrecisionWarnedMarketsRef.current.delete(market);
             if (matchesHistoryRequestGenerationRef.current === generation) return;
             matchesHistoryRequestGenerationRef.current = generation;
             try {
@@ -2066,6 +2137,9 @@ const BotDetail: React.FC<{
                     addLog(`MATCH FEED: live ${market} stream is active; history had no usable timed ticks, so the scan will use live data.`, 'scan');
                 }
             } catch (error: any) {
+                if (matchesHistoryRequestGenerationRef.current === generation) {
+                    matchesHistoryRequestGenerationRef.current = null;
+                }
                 addLog(`MATCH HISTORY unavailable for ${market}: ${error?.message || 'continuing with authenticated live ticks'}`, 'error');
             }
         };
@@ -2419,25 +2493,37 @@ const BotDetail: React.FC<{
                 }
 
                 while (!entry && !stopRef.current) {
-                    /* ── Network/feed watchdog: no real ticks for 8 s → force reconnect ──
-                       lastTickAtRef is updated by every live tick in subscribeMarket, so this
-                       only fires on a genuine feed freeze, not between normal tick intervals.
-                       An 8 s cooldown prevents rapid-reconnect loops while still reacting fast. */
+                    /* The Matches feed is bound to the current authenticated API instance.
+                       Back off silent-feed retries and wait for APIBase to replace the
+                       connection before resubscribing; reconnect is confirmed by a tick. */
                     const now = Date.now();
+                    const matchesRetryCooldown = Math.min(
+                        8_000 * (2 ** Math.min(matchesFeedRetryCountRef.current, 2)),
+                        30_000,
+                    );
+                    const socketReady = api_base.api?.connection?.readyState === 1;
                     if (
                         !multiScan &&
                         !matchesFeedRetryTimerRef.current &&
+                        (!matchesRange || socketReady) &&
                         now - lastTickAtRef.current > 8_000 &&
-                        now - lastReconnectAtRef.current > 8_000
+                        now - lastReconnectAtRef.current > (matchesRange ? matchesRetryCooldown : 8_000)
                     ) {
-                        addLog('⚠ FEED_STALL DETECTED — forcing reconnection...', 'error');
+                        matchesFeedRecoveryPendingRef.current = matchesRange || matchesFeedRecoveryPendingRef.current;
+                        if (matchesRange) matchesFeedRetryCountRef.current += 1;
+                        addLog(
+                            matchesRange
+                                ? `⚠ FEED_STALL DETECTED — reattaching to ${curMarket} (retry ${matchesFeedRetryCountRef.current}).`
+                                : '⚠ FEED_STALL DETECTED — forcing reconnection...',
+                            'error',
+                        );
                         lastReconnectAtRef.current = now;
                         try {
                             if (tickUnsubRef.current) { tickUnsubRef.current(); tickUnsubRef.current = null; }
                             subscribeMarket(curMarket);
                             lastTickAtRef.current = Date.now();
-                            await primeMatchesHistory(curMarket);
-                            addLog('🔌 FEED_RESTORED — reconnected to live market feed', 'hack');
+                            void primeMatchesHistory(curMarket);
+                            if (!matchesRange) addLog('🔌 FEED_RESTORED — reconnected to live market feed', 'hack');
                         } catch { /* retry on next iteration */ }
                         await new Promise(r => setTimeout(r, 800));
                     }
@@ -2559,7 +2645,16 @@ const BotDetail: React.FC<{
                                 addLog(`STREAM: ${recent}  ← latest left`, 'scan');
                             } else {
                                 const staleSec = Math.round((Date.now() - lastTickAtRef.current) / 1000);
-                                addLog(`FEED: AWAITING FIRST TICK... (${staleSec}s) — reconnect in ${Math.max(0, 8 - staleSec)}s if stalled`, 'hack');
+                                const now = Date.now();
+                                if (!matchesRange || now - matchesLastAwaitingTickLogAtRef.current >= 10_000) {
+                                    if (matchesRange) matchesLastAwaitingTickLogAtRef.current = now;
+                                    addLog(
+                                        matchesRange
+                                            ? `FEED: AWAITING FIRST TICK... (${staleSec}s) — retry is connection-aware and backs off.`
+                                            : `FEED: AWAITING FIRST TICK... (${staleSec}s) — reconnect in ${Math.max(0, 8 - staleSec)}s if stalled`,
+                                        'hack',
+                                    );
+                                }
                             }
                         }
                         if (!matchesRange && scanTick % 12 === 5) {
@@ -3261,11 +3356,16 @@ const BotDetail: React.FC<{
                 if (isNetworkErr) {
                     addLog('🔌 NETWORK_ERROR — forcing feed reconnect...', 'error');
                     try {
+                        if (matchesRange) matchesFeedRecoveryPendingRef.current = true;
                         if (tickUnsubRef.current) { tickUnsubRef.current(); tickUnsubRef.current = null; }
                         subscribeMarket(curMarket);
                         lastTickAtRef.current = Date.now();
-                        await primeMatchesHistory(curMarket);
-                        addLog('🔌 FEED_RECONNECTED — resuming scan...', 'hack');
+                        void primeMatchesHistory(curMarket);
+                        if (matchesRange) {
+                            addLog(`MATCH FEED RETRY: waiting for the first live tick on ${curMarket}.`, 'hack');
+                        } else {
+                            addLog('🔌 FEED_RECONNECTED — resuming scan...', 'hack');
+                        }
                     } catch { /* will retry next iteration */ }
                 }
                 await new Promise(r => setTimeout(r, 1500));
@@ -3279,8 +3379,8 @@ const BotDetail: React.FC<{
         if (tickUnsubRef.current) { tickUnsubRef.current(); tickUnsubRef.current = null; }
         if (multiScan) unsubscribeAllMarkets();
         tickSignalRef.current = null;
-        matchesPipSizeResolverRef.current?.(null);
-        matchesPipSizeResolverRef.current = null;
+        matchesFeedFirstTickRef.current = false;
+        matchesFeedRecoveryPendingRef.current = false;
         if (matchesPrimeHistoryRef.current === primeMatchesHistory) matchesPrimeHistoryRef.current = null;
         /* ── Bot-stopped summary in terminal ── */
         const finalPnl   = sessionPnlRef.current;
@@ -3301,8 +3401,6 @@ const BotDetail: React.FC<{
             clearTimeout(matchesFeedRetryTimerRef.current);
             matchesFeedRetryTimerRef.current = null;
         }
-        matchesPipSizeResolverRef.current?.(null);
-        matchesPipSizeResolverRef.current = null;
         /* Immediately kill the XML bot engine — don't wait for the cycle to finish */
         const rp: any = store?.run_panel;
         try { rp?.onStopButtonClick?.(); } catch {}
