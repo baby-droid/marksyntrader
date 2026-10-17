@@ -22,9 +22,13 @@ export const refreshMatchEntryReadiness = (
     }
 
     return candidates.map((candidate) => {
-        if (candidate.strategy !== 'MATCHES' || candidate.entryDigit == null) return candidate;
+        if (candidate.strategy !== 'MATCHES') return candidate;
+        const entryDigits = candidate.entryDigits?.length
+            ? candidate.entryDigits
+            : candidate.entryDigit == null ? [] : [candidate.entryDigit];
+        if (!entryDigits.length) return candidate;
 
-        const entryReady = latestDigit === candidate.entryDigit;
+        const entryReady = entryDigits.includes(latestDigit);
         const relevantWindows = candidate.windows.filter(
             (window) => window.window >= 50 && window.sampleSize >= 5,
         );

@@ -225,7 +225,8 @@ describe('Auto-Signals trade actions', () => {
             contractType: 'DIGITMATCH',
             barrier: 7,
             direction: 'matches' as const,
-            entryDigit: 2,
+            entryDigit: 0,
+            entryDigits: [0, 1, 2],
             entryReady: false,
             recommendedRuns: 4,
         };
@@ -235,6 +236,11 @@ describe('Auto-Signals trade actions', () => {
             candidates: [matchesCandidate],
         };
         render(<AutoSignalsPage {...props} family='MATCHES' markets={[matchesMarket]} />);
+
+        expect(screen.getByTestId('status-entry-R_10-MATCHES-7'))
+            .toHaveTextContent('Entry 0/1/2 → target 7');
+        expect(screen.getByTestId('text-entry-wait-R_10-MATCHES-7'))
+            .toHaveTextContent('no added app wait');
 
         const runInput = screen.getByTestId('input-suggested-runs-R_10-MATCHES-7');
         expect(runInput).toHaveValue('4');

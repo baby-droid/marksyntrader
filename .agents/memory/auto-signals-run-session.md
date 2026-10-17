@@ -51,8 +51,8 @@ Auto-Signals must place at most one contract for each fresh (market, tick epoch)
 
 **How to apply:** Deduplicate at the purchase boundary by market and live tick epoch, keep candidate/readiness checks and the run cap, and allow no app-added wait between distinct eligible ticks.
 
-Matches must predict the next target digit conditional on the current entry digit: choose the pair on the first 70% of the 1,000-tick window and validate it on the held-out final 30%. The Matches Trade Only handoff uses Ahmed SYN Even/Odd Market Killer v1.2, sets its exact target barrier, gates every purchase on the selected entry digit, and carries the card's edited suggested run count into the bot's run cap.
+For Matches targets 6–9, the allowed entry digits are 0, 1, and 2; for targets 0–5, they are 7, 8, and 9. Validate the target's observed next-tick rate over each full entry group using the first 70% of the 1,000-tick window for training and the held-out final 30% for validation. The Matches Trade Only handoff uses Ahmed SYN Even/Odd Market Killer v1.2, sets its exact target barrier, gates every purchase on any allowed entry digit, and carries the card's edited suggested run count into the bot's run cap.
 
-**Why:** Marginal digit frequency does not identify which target follows the current digit; the user asked for more accurate Matches predictions and the named bot.
+**Why:** The user specified target-dependent entry groups and wants the bot to enter on any of those digits without app-added pacing; held-out validation keeps the wider entry gate tied to observed target accuracy.
 
-**How to apply:** Keep the training/holdout split, validation threshold, entry digit, target barrier, and suggested run limit synchronized from the Matches card through the generated bot. Label historical results as evidence, not a guarantee.
+**How to apply:** Keep the group conditional statistics, live readiness gate, UI display, target barrier, and generated Blockly OR condition synchronized. Preserve the training/holdout split, validation threshold, one-tick contracts, deduplication, and run limit; label historical results as evidence, not a guarantee.

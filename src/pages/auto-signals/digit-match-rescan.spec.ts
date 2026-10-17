@@ -22,7 +22,8 @@ const matchCandidate = (): AutoSignalCandidate => ({
         { window: 50, sampleSize: 5, probability: 20, agrees: true },
         { window: 20, sampleSize: 2, probability: 0, agrees: false },
     ],
-    entryDigit: 4,
+    entryDigit: 0,
+    entryDigits: [0, 1, 2],
     entryReady: false,
     createdAt: 1,
     expiresAt: 100_000,
@@ -64,15 +65,16 @@ describe('Digit Match market rescan schedule', () => {
 });
 
 describe('live Matches entry readiness', () => {
-    it('updates the ready gate on the live digit without rescoring the prediction', () => {
+    it('updates readiness for any allowed live entry digit without rescoring the prediction', () => {
         const candidate = matchCandidate();
 
-        const ready = refreshMatchEntryReadiness([candidate], 4, 200)[0];
+        const ready = refreshMatchEntryReadiness([candidate], 2, 200)[0];
         expect(ready.entryReady).toBe(true);
         expect(ready.state).toBe('ready');
         expect(ready.updatedAt).toBe(200);
         expect(ready.score).toBe(candidate.score);
         expect(ready.entryDigit).toBe(candidate.entryDigit);
+        expect(ready.entryDigits).toEqual([0, 1, 2]);
 
         const waiting = refreshMatchEntryReadiness([ready], 9, 300)[0];
         expect(waiting.entryReady).toBe(false);

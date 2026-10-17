@@ -1,10 +1,10 @@
 import { evaluateAutoSignalCandidates } from './auto-signals-engine';
 
-const repeatedDigitTicks = (digit: number) => Array.from({ length: 1000 }, (_, index) => ({
+const validatedMatchEntryTicks = () => Array.from({ length: 1000 }, (_, index) => ({
     symbol: 'R_10',
     epoch: index + 1,
-    quote: 100 + index / 100,
-    digit,
+    quote: 100 + [0, 6, 1, 6, 2, 6][index % 6] / 100,
+    digit: [0, 6, 1, 6, 2, 6][index % 6],
     pip_size: 2,
 }));
 
@@ -20,7 +20,7 @@ describe('Auto-Signals contract-family filtering', () => {
     it('returns only Matches contracts for the Matches card scan', () => {
         const candidates = evaluateAutoSignalCandidates({
             market: { symbol: 'R_10', label: 'Volatility 10' },
-            ticks: repeatedDigitTicks(6),
+            ticks: validatedMatchEntryTicks(),
             family: 'MATCHES',
         });
 
