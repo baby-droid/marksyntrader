@@ -86,4 +86,4 @@
 - [Featured parity isolation](featured-bot-recovery-isolation.md) — keep sequence recovery separate from the generic dominant-parity block used elsewhere.
 - [Auto-Signals run session](auto-signals-run-session.md) — preserve one-contract cycles and minute rescans; Matches targets 6–9 enter on 0/1/2, targets 0–5 on 7/8/9, aligned across UI and XML.
 - [Money Print Neural Link](money-print-neural-link.md) — local quantitative analysis shows one best validated digit-pair route and one target digit per DIGITMATCH contract.
-- [Matches Scalper behavior](matches-scalper.md) — Two lanes, pip_size-accurate rolling scans, attempt rotation, and continuous sessions after wins.
+- [Matches Scalper behavior](matches-scalper.md) — Two lanes, accurate precision, entry-signal ownership, attempt rotation, and continuous sessions after wins.

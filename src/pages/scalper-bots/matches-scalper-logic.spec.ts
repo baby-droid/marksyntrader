@@ -2,6 +2,7 @@ import {
     evaluateMatchesScalperEntry,
     hasAccurateMatchesScalperPipSize,
     matchesScalperHistoryToTicks,
+    matchesScalperPipSizeFromIncrement,
     matchesScalperRawTicksToTicks,
     mergeMatchesScalperTicks,
     rankMatchesScalperTargets,
@@ -63,6 +64,9 @@ describe('matches scalper scanner', () => {
             { epoch: 200, digit: 7 },
             { epoch: 201, digit: 1 },
         ]);
+        expect(matchesScalperPipSizeFromIncrement(0.001)).toBe(3);
+        expect(matchesScalperPipSizeFromIncrement(0.00001)).toBe(5);
+        expect(matchesScalperPipSizeFromIncrement(undefined)).toBeNull();
     });
 
     it('waits for the highest-frequency selected entry digit to touch the latest tick', () => {

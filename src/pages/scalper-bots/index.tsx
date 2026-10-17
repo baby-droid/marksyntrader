@@ -23,6 +23,7 @@ import {
     matchesScalperRawTicksToTicks,
     hasAccurateMatchesScalperPipSize,
     rankMatchesScalperTargets,
+    resolveMatchesScalperPipSize,
     type MatchesScalperEntryMode,
     type MatchesScalperRawTick,
     type MatchesScalperRange,
@@ -1913,6 +1914,11 @@ const BotDetail: React.FC<{
         sessionPnlRef.current = 0;
         matchesTargetDigitRef.current = null;
         matchesLiveTickSeqRef.current = 0;
+        if (matchesRange) {
+            vhrActiveRef.current = false;
+            vhaRecovery1Ref.current = false;
+            vhaRecovery2Ref.current = false;
+        }
         marketIdxRef.current  = 0;
         winsRef.current   = 0;
         lossesRef.current = 0;
@@ -2218,10 +2224,10 @@ const BotDetail: React.FC<{
                 const activeSymbols = await api_base.getActiveSymbols();
                 const symbolInfo = (Array.isArray(activeSymbols) ? activeSymbols : api_base.active_symbols)
                     ?.find((symbol: any) => symbol?.symbol === curMarket || symbol?.underlying_symbol === curMarket);
-                const cachedPipSize = api_base.pip_sizes?.[curMarket];
-                const marketPipSize = cachedPipSize != null
-                    ? Number(cachedPipSize)
-                    : matchesScalperPipSizeFromIncrement(symbolInfo?.pip_size ?? symbolInfo?.pip);
+                const cachedPipSize = resolveMatchesScalperPipSize(api_base.pip_sizes?.[curMarket]);
+                const marketPipSize = cachedPipSize
+                    ?? matchesScalperPipSizeFromIncrement(symbolInfo?.pip_size)
+                    ?? matchesScalperPipSizeFromIncrement(symbolInfo?.pip);
                 if (marketPipSize != null && Number.isInteger(Number(marketPipSize))
                     && Number(marketPipSize) >= 0 && Number(marketPipSize) <= 10) {
                     api_base.pip_sizes = api_base.pip_sizes || {};
@@ -3266,6 +3272,10 @@ const BotDetail: React.FC<{
             }
         }
 
+        if (matchesFeedRetryTimerRef.current) {
+            clearTimeout(matchesFeedRetryTimerRef.current);
+            matchesFeedRetryTimerRef.current = null;
+        }
         if (tickUnsubRef.current) { tickUnsubRef.current(); tickUnsubRef.current = null; }
         if (multiScan) unsubscribeAllMarkets();
         tickSignalRef.current = null;
