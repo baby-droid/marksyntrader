@@ -8,10 +8,55 @@ export type MatchesScalperTarget = {
     count10: number;
 };
 
+export type MatchesScalperTick = {
+    epoch: number;
+    digit: number;
+};
+
 export type MatchesScalperEntrySignal = {
     ready: boolean;
     triggerDigit: number | null;
     reason: string;
+};
+
+export const matchesScalperHistoryToTicks = (
+    prices: unknown[],
+    times: unknown[],
+    pipSize: number,
+): MatchesScalperTick[] => {
+    if (!Number.isInteger(pipSize) || pipSize < 0 || pipSize > 10) return [];
+
+    const ticks: MatchesScalperTick[] = [];
+    const count = Math.min(prices.length, times.length);
+    for (let index = 0; index < count; index += 1) {
+        const price = Number(prices[index]);
+        const epoch = Number(times[index]);
+        if (!Number.isFinite(price) || !Number.isFinite(epoch) || epoch <= 0) continue;
+
+        const digits = price.toFixed(pipSize).replace('.', '');
+        const digit = Number(digits[digits.length - 1]);
+        if (!Number.isInteger(digit) || digit < 0 || digit > 9) continue;
+        ticks.push({ epoch, digit });
+    }
+    return ticks.sort((left, right) => right.epoch - left.epoch);
+};
+
+/** Merge server history and live ticks newest-first, preferring live data on overlap. */
+export const mergeMatchesScalperTicks = (
+    historyNewestFirst: MatchesScalperTick[],
+    liveNewestFirst: MatchesScalperTick[],
+    limit = 50,
+): MatchesScalperTick[] => {
+    const byEpoch = new Map<number, MatchesScalperTick>();
+    historyNewestFirst.forEach(tick => {
+        if (Number.isFinite(tick.epoch) && tick.epoch > 0) byEpoch.set(tick.epoch, tick);
+    });
+    liveNewestFirst.forEach(tick => {
+        if (Number.isFinite(tick.epoch) && tick.epoch > 0) byEpoch.set(tick.epoch, tick);
+    });
+    return [...byEpoch.values()]
+        .sort((left, right) => right.epoch - left.epoch)
+        .slice(0, Math.max(0, limit));
 };
 
 const targetDigits = (range: MatchesScalperRange) =>
@@ -37,7 +82,7 @@ const rankByFrequency = (digits: number[], allowed: number[]) =>
 /**
  * Input is newest-first, matching the scalper terminal's digit window.
  * Top-three agreement between the 20- and 10-tick windows is tried first,
- * then the remaining strongest digits. Tries are capped to four targets.
+ * then the remaining strongest active digits. At most three targets are used.
  */
 export const rankMatchesScalperTargets = (
     latestFirst: number[],
@@ -50,8 +95,8 @@ export const rankMatchesScalperTargets = (
     const window10 = latestFirst.slice(0, 10);
     const rank20 = rankByFrequency(window20, allowed);
     const rank10 = rankByFrequency(window10, allowed);
-    const top20 = rank20.slice(0, 3);
-    const top10 = rank10.slice(0, 3);
+    const top20 = rank20.filter(item => item.count > 0).slice(0, 3);
+    const top10 = rank10.filter(item => item.count > 0).slice(0, 3);
     const rank20ByDigit = new Map(rank20.map(item => [item.digit, item]));
     const rank10ByDigit = new Map(rank10.map(item => [item.digit, item]));
 
@@ -70,6 +115,7 @@ export const rankMatchesScalperTargets = (
     top10.forEach(item => appendUnique(item.digit));
     top20.forEach(item => appendUnique(item.digit));
     [...rank20]
+        .filter(item => item.count > 0)
         .sort((left, right) => {
             const leftScore = left.count + (rank10ByDigit.get(left.digit)?.count ?? 0);
             const rightScore = right.count + (rank10ByDigit.get(right.digit)?.count ?? 0);
@@ -77,9 +123,9 @@ export const rankMatchesScalperTargets = (
         })
         .forEach(item => appendUnique(item.digit));
 
-    return ordered.slice(0, 4).map((digit, index) => ({
+    return ordered.slice(0, 3).map((digit, index) => ({
         digit,
-        attempts: index < 2 ? 3 : 2,
+        attempts: index === 0 ? 3 : 2,
         count20: rank20ByDigit.get(digit)?.count ?? 0,
         count10: rank10ByDigit.get(digit)?.count ?? 0,
     }));

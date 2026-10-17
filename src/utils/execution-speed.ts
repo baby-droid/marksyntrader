@@ -111,6 +111,7 @@ export const isFastExecutionEnabledForContext = (): boolean => {
         || page === 'auto trades'
         || page === 'speed lab'
         || page === 'scalper bots'
+        || page === 'matches scalper'
         || page === 'auto-digits'
         || page === 'free bots'
         || page === 'ai engine'

@@ -305,7 +305,7 @@ export function useDerivTrade() {
     }, []);
 
     const subscribeTicks = useCallback((symbol: string, cb: (t: TickData) => void) => (
-        subscribeSharedDerivTicks(api_base.api, symbol, {
+        subscribeSharedDerivTicks(api_base.api as any, symbol, {
             next: (message: any) => {
                 const tickData = message?.tick ?? message?.data?.tick;
                 const quote = Number(tickData?.quote);

@@ -1,5 +1,7 @@
 import {
     evaluateMatchesScalperEntry,
+    matchesScalperHistoryToTicks,
+    mergeMatchesScalperTicks,
     rankMatchesScalperTargets,
 } from './matches-scalper-logic';
 
@@ -9,14 +11,42 @@ describe('matches scalper scanner', () => {
         const latestTwenty = [...latestTen, 2, 2, 2, 2, 4, 0, 3, 5, 2, 0];
         const plan = rankMatchesScalperTargets(latestTwenty, '0-5');
 
-        expect(plan.map(target => target.digit)).toEqual([4, 0, 1, 2]);
-        expect(plan.map(target => target.attempts)).toEqual([3, 3, 2, 2]);
+        expect(plan.map(target => target.digit)).toEqual([4, 0, 1]);
+        expect(plan.map(target => target.attempts)).toEqual([3, 2, 2]);
     });
 
     it('keeps target digits inside each bot range', () => {
         const digits = Array.from({ length: 20 }, (_, index) => index % 10);
         expect(rankMatchesScalperTargets(digits, '0-5').every(item => item.digit <= 5)).toBe(true);
         expect(rankMatchesScalperTargets(digits, '6-9').every(item => item.digit >= 6)).toBe(true);
+    });
+
+    it('ranks only observed targets instead of suggesting inactive digits', () => {
+        const plan = rankMatchesScalperTargets(Array(20).fill(8), '0-5');
+        expect(plan).toEqual([]);
+    });
+
+    it('uses authoritative live pip size and epoch-deduplicates history with live ticks', () => {
+        const history = matchesScalperHistoryToTicks(
+            [1.234, 1.231, 1.239],
+            [100, 101, 102],
+            3,
+        );
+        expect(history).toEqual([
+            { epoch: 102, digit: 9 },
+            { epoch: 101, digit: 1 },
+            { epoch: 100, digit: 4 },
+        ]);
+
+        expect(mergeMatchesScalperTicks(
+            history,
+            [{ epoch: 102, digit: 7 }, { epoch: 103, digit: 6 }],
+        )).toEqual([
+            { epoch: 103, digit: 6 },
+            { epoch: 102, digit: 7 },
+            { epoch: 101, digit: 1 },
+            { epoch: 100, digit: 4 },
+        ]);
     });
 
     it('waits for the highest-frequency selected entry digit to touch the latest tick', () => {
