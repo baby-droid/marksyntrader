@@ -1,6 +1,8 @@
 import {
     evaluateMatchesScalperEntry,
+    hasAccurateMatchesScalperPipSize,
     matchesScalperHistoryToTicks,
+    matchesScalperRawTicksToTicks,
     mergeMatchesScalperTicks,
     rankMatchesScalperTargets,
 } from './matches-scalper-logic';
@@ -46,6 +48,20 @@ describe('matches scalper scanner', () => {
             { epoch: 102, digit: 7 },
             { epoch: 101, digit: 1 },
             { epoch: 100, digit: 4 },
+        ]);
+    });
+
+    it('only enables entry checks with accurate precision and decodes buffered raw ticks', () => {
+        expect(hasAccurateMatchesScalperPipSize('live')).toBe(true);
+        expect(hasAccurateMatchesScalperPipSize('active_symbols')).toBe(true);
+        expect(hasAccurateMatchesScalperPipSize('fallback')).toBe(false);
+
+        expect(matchesScalperRawTicksToTicks([
+            { epoch: 200, quote: 1.237 },
+            { epoch: 201, quote: 1.231 },
+        ], 3)).toEqual([
+            { epoch: 200, digit: 7 },
+            { epoch: 201, digit: 1 },
         ]);
     });
 

@@ -19,8 +19,12 @@ import {
     evaluateMatchesScalperEntry,
     matchesScalperHistoryToTicks,
     mergeMatchesScalperTicks,
+    matchesScalperPipSizeFromIncrement,
+    matchesScalperRawTicksToTicks,
+    hasAccurateMatchesScalperPipSize,
     rankMatchesScalperTargets,
     type MatchesScalperEntryMode,
+    type MatchesScalperRawTick,
     type MatchesScalperRange,
     type MatchesScalperTick,
     type MatchesScalperTarget,
@@ -1557,11 +1561,15 @@ const BotDetail: React.FC<{
     const priceWindowRef  = useRef<number[]>([]); // raw prices (newest first) for Rise/Fall
     const matchesTargetDigitRef = useRef<number | null>(null);
     const matchesTickWindowRef = useRef<MatchesScalperTick[]>([]);
+    const matchesRawTickWindowRef = useRef<MatchesScalperRawTick[]>([]);
     const matchesPipSizeRef = useRef<number | null>(null);
     const matchesFeedGenerationRef = useRef(0);
     const matchesLiveTickSeqRef = useRef(0);
     const matchesPipSizeResolverRef = useRef<((pipSize: number | null) => void) | null>(null);
     const matchesPrimeHistoryRef = useRef<((market: string) => Promise<void>) | null>(null);
+    const matchesHistoryRequestGenerationRef = useRef<number | null>(null);
+    const matchesFeedRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const matchesLastFeedErrorLogAtRef = useRef(0);
     const tickUnsubRef    = useRef<(() => void) | null>(null);
     const marketIdxRef    = useRef(0);
     const lastFiredGroupRef = useRef<StrategyOrGroup | null>(null);
@@ -1703,46 +1711,88 @@ const BotDetail: React.FC<{
        Each new tick immediately wakes the scan loop (tickSignalRef) so the
        condition check runs at true tick-rate with no poll delay. */
     const subscribeMarket = useCallback((market: string) => {
+        if (matchesFeedRetryTimerRef.current) {
+            clearTimeout(matchesFeedRetryTimerRef.current);
+            matchesFeedRetryTimerRef.current = null;
+        }
         if (tickUnsubRef.current) { tickUnsubRef.current(); tickUnsubRef.current = null; }
         matchesPipSizeResolverRef.current?.(null);
         matchesPipSizeResolverRef.current = null;
-        matchesFeedGenerationRef.current += 1;
+        const feedGeneration = ++matchesFeedGenerationRef.current;
         matchesPipSizeRef.current = null;
         matchesTickWindowRef.current = [];
+        matchesRawTickWindowRef.current = [];
         digitWindowRef.current = [];
         priceWindowRef.current = [];
         setDigitDisplay([]);
+        const handleFeedError = (error: unknown) => {
+            if (!matchesRange || stopRef.current || feedGeneration !== matchesFeedGenerationRef.current) return;
+            const message = error instanceof Error ? error.message : String(error || 'unknown feed error');
+            const now = Date.now();
+            if (now - matchesLastFeedErrorLogAtRef.current >= 4_000) {
+                matchesLastFeedErrorLogAtRef.current = now;
+                addLog(`MATCH FEED ERROR (${market}): ${message}; reconnecting.`, 'error');
+            }
+            if (matchesFeedRetryTimerRef.current) return;
+            matchesFeedRetryTimerRef.current = setTimeout(() => {
+                matchesFeedRetryTimerRef.current = null;
+                if (stopRef.current || feedGeneration !== matchesFeedGenerationRef.current) return;
+                addLog(`MATCH FEED RETRY: resubscribing to ${market} on the authenticated Deriv connection.`, 'hack');
+                subscribeMarket(market);
+                lastTickAtRef.current = Date.now();
+                lastReconnectAtRef.current = Date.now();
+                void matchesPrimeHistoryRef.current?.(market);
+            }, 1_500);
+        };
         const unsub = derivTrade.subscribeTicks(market, tick => {
-            const ps = tick.pip_size ?? 2;
-            const d = tick.digit != null ? tick.digit : getLastDigit(tick.quote, ps);
+            const pipSizeSource = tick.pip_size_source
+                ?? (tick.pip_size != null ? 'live' : 'fallback');
+            const accuratePipSize = hasAccurateMatchesScalperPipSize(pipSizeSource)
+                ? Number(tick.pip_size)
+                : null;
+            const ps = matchesRange
+                ? (Number.isInteger(accuratePipSize) && accuratePipSize! >= 0 && accuratePipSize! <= 10
+                    ? accuratePipSize!
+                    : null)
+                : (tick.pip_size ?? 2);
+            const d = matchesRange
+                ? null
+                : tick.digit != null ? tick.digit : getLastDigit(tick.quote, ps);
             if (matchesRange) {
-                matchesPipSizeRef.current = ps;
-                matchesLiveTickSeqRef.current += 1;
                 const epoch = Number(tick.epoch);
-                if (Number.isFinite(epoch) && epoch > 0) {
+                const quote = Number(tick.quote);
+                if (Number.isFinite(epoch) && epoch > 0 && Number.isFinite(quote)) {
+                    const rawByEpoch = new Map(matchesRawTickWindowRef.current.map(item => [item.epoch, item]));
+                    rawByEpoch.set(epoch, { epoch, quote });
+                    matchesRawTickWindowRef.current = [...rawByEpoch.values()]
+                        .sort((left, right) => right.epoch - left.epoch)
+                        .slice(0, 50);
+                }
+                if (ps !== null) {
+                    matchesPipSizeRef.current = ps;
+                    matchesLiveTickSeqRef.current += 1;
                     matchesTickWindowRef.current = mergeMatchesScalperTicks(
                         matchesTickWindowRef.current,
-                        [{ epoch, digit: d }],
+                        matchesScalperRawTicksToTicks(matchesRawTickWindowRef.current, ps),
                     );
                     digitWindowRef.current = matchesTickWindowRef.current.map(item => item.digit);
-                } else {
-                    digitWindowRef.current = [d, ...digitWindowRef.current].slice(0, 50);
+                    setDigitDisplay(digitWindowRef.current.slice(0, 20));
+                    matchesPipSizeResolverRef.current?.(ps);
+                    matchesPipSizeResolverRef.current = null;
                 }
-                matchesPipSizeResolverRef.current?.(ps);
-                matchesPipSizeResolverRef.current = null;
-            } else {
-                digitWindowRef.current = [d, ...digitWindowRef.current].slice(0, 50);
             }
             // Also track raw prices for Rise/Fall momentum detection
             if (tick.quote != null) {
                 priceWindowRef.current = [Number(tick.quote), ...priceWindowRef.current].slice(0, 50);
             }
-            setDigitDisplay(prev => [d, ...prev].slice(0, 20));
+            if (!matchesRange && d !== null) setDigitDisplay(prev => [d, ...prev].slice(0, 20));
             // ✅ Reset stall timer on every real tick — prevents false-fire watchdog
             lastTickAtRef.current = Date.now();
             // ⚡ Log the live digit stream to terminal on every tick (accurate, from pip_size)
             if (!stopRef.current) {
-                const rawPrice = tick.quote != null ? Number(tick.quote).toFixed(ps) : '?';
+                const rawPrice = tick.quote != null
+                    ? ps !== null ? Number(tick.quote).toFixed(ps) : String(tick.quote)
+                    : '?';
                 /* Stealth mode: mask the middle digits of the price so the exact
                    tick value is not visible in terminal screenshots/recordings.
                    The digit [d] is still shown — it's needed for readability. */
@@ -1750,20 +1800,28 @@ const BotDetail: React.FC<{
                     ? rawPrice.slice(0, 2) + '***' + rawPrice.slice(-2)
                     : rawPrice;
                 setTerminal(prev => [
-                    { t: ts(), msg: `TICK: ${displayPrice}  →  digit [${d}]`, kind: 'tick' },
+                    {
+                        t: ts(),
+                        msg: matchesRange && d === null
+                            ? `MATCH LIVE TICK: ${displayPrice}  →  digit [waiting for accurate pip_size]`
+                            : `TICK: ${displayPrice}  →  digit [${matchesRange ? digitWindowRef.current[0] : d}]`,
+                        kind: 'tick',
+                    },
                     ...prev,
                 ].slice(0, 300));
             }
             // ⚡ Wake the scan loop instantly on every new tick
             if (tickSignalRef.current) { tickSignalRef.current(); tickSignalRef.current = null; }
-        });
+        }, handleFeedError);
         tickUnsubRef.current = unsub;
         setActiveMarket(market);
-    }, [derivTrade, matchesRange]);
+    }, [derivTrade, matchesRange, addLog]);
 
     /* Cleanup on unmount */
     useEffect(() => () => {
         if (tickUnsubRef.current) tickUnsubRef.current();
+        if (matchesFeedRetryTimerRef.current) clearTimeout(matchesFeedRetryTimerRef.current);
+        matchesPipSizeResolverRef.current?.(null);
         multiUnsubsRef.current.forEach(u => u());
         multiUnsubsRef.current.clear();
     }, []);
@@ -1821,10 +1879,14 @@ const BotDetail: React.FC<{
             'SESSION_FINGERPRINT: DECOUPLED FROM ACCOUNT',
             'TRAFFIC_OBFUSCATION: ACTIVE',
             cfg.stealthMode ? '🛡 STEALTH_MODE: TICK_PRICES OBFUSCATED IN LOG' : 'STEALTH_MODE: STANDARD LOGGING',
-            cfg.virtualHook.enabled
+            matchesRange
+                ? 'VIRTUAL_HOOK: INACTIVE — MATCHES ENTRY OWNS SIGNALS'
+                : cfg.virtualHook.enabled
                 ? `🔮 VIRTUAL_HOOK: ARMED — ${cfg.virtualHook.hookLoss}L → ${cfg.virtualHook.hookWin}W pattern${cfg.virtualHook.recoveryMode ? ' + VHR active' : ''}`
                 : cfg.virtualHook.recoveryMode ? '⚡ VHR: RECOVERY MODE ONLY (1-virtual check on each real loss)' : 'VIRTUAL_HOOK: DISABLED',
-            cfg.virtualHookAlt.enabled
+            matchesRange
+                ? 'VIRTUAL_HOOK_ALT: INACTIVE — MATCHES ENTRY OWNS SIGNALS'
+                : cfg.virtualHookAlt.enabled
                 ? `💎 VHA: ARMED — ${cfg.virtualHookAlt.winsRequired}W → ${cfg.virtualHookAlt.lossToTrigger}L pattern${cfg.virtualHookAlt.recoveryEnabled ? ' + VHA-Recovery active' : ''}`
                 : cfg.virtualHookAlt.recoveryEnabled ? '💎 VHA-RECOVERY: ON (2-stage check on each real loss)' : 'VHA: DISABLED',
             'MARKET_FEED_INTEGRITY: OK',
@@ -1840,12 +1902,17 @@ const BotDetail: React.FC<{
     /* ── Start bot (with real tick entry detection) ── */
     const startBot = useCallback(async () => {
         if (running || !derivTrade.authorized) return;
+        if (matchesRange && !derivTrade.connected) {
+            addLog('MATCH FEED WAIT: authenticated Deriv connection is not open yet. Wait for the connection, then start again.', 'error');
+            return;
+        }
         // Record which page + bot is trading so Report can display it
         setTradeContext({ page: matchesRange ? 'Matches Scalper' : 'Scalper Bots', bot: bot.name });
         stopRef.current    = false;
         consLossRef.current = 0;
         sessionPnlRef.current = 0;
         matchesTargetDigitRef.current = null;
+        matchesLiveTickSeqRef.current = 0;
         marketIdxRef.current  = 0;
         winsRef.current   = 0;
         lossesRef.current = 0;
@@ -1959,9 +2026,14 @@ const BotDetail: React.FC<{
             }
             if (stopRef.current || generation !== matchesFeedGenerationRef.current) return;
             if (pipSize == null) {
-                addLog(`MATCH FEED: no live pip_size received for ${market}; collecting live ticks only.`, 'error');
+                addLog(
+                    `MATCH FEED: ${market} has not supplied accurate pip_size metadata yet; raw live ticks are buffered and entry checks are paused.`,
+                    'error',
+                );
                 return;
             }
+            if (matchesHistoryRequestGenerationRef.current === generation) return;
+            matchesHistoryRequestGenerationRef.current = generation;
             try {
                 const response = await derivTrade.send({
                     ticks_history: market,
@@ -2140,6 +2212,29 @@ const BotDetail: React.FC<{
         { const rm = curMarket; setTimeout(() => patchWorkspaceParams({ market: rm }), 500); setTimeout(() => patchWorkspaceParams({ market: rm }), 1100); }
         addLog('📂 XML_TRADING_ACTIVATOR: FRESH STRATEGY LOADED ✓', 'hack');
 
+        if (matchesRange && typeof api_base?.getActiveSymbols === 'function') {
+            addLog(`MATCH PIP SIZE: requesting authenticated market precision for ${curMarket}...`, 'scan');
+            try {
+                const activeSymbols = await api_base.getActiveSymbols();
+                const symbolInfo = (Array.isArray(activeSymbols) ? activeSymbols : api_base.active_symbols)
+                    ?.find((symbol: any) => symbol?.symbol === curMarket || symbol?.underlying_symbol === curMarket);
+                const cachedPipSize = api_base.pip_sizes?.[curMarket];
+                const marketPipSize = cachedPipSize != null
+                    ? Number(cachedPipSize)
+                    : matchesScalperPipSizeFromIncrement(symbolInfo?.pip_size ?? symbolInfo?.pip);
+                if (marketPipSize != null && Number.isInteger(Number(marketPipSize))
+                    && Number(marketPipSize) >= 0 && Number(marketPipSize) <= 10) {
+                    api_base.pip_sizes = api_base.pip_sizes || {};
+                    api_base.pip_sizes[curMarket] = Number(marketPipSize);
+                    addLog(`MATCH PIP SIZE READY: ${curMarket} uses ${marketPipSize} decimal places.`, 'hack');
+                } else {
+                    addLog(`MATCH PIP SIZE: metadata for ${curMarket} is unavailable; waiting for accurate live tick metadata.`, 'error');
+                }
+            } catch (error: any) {
+                addLog(`MATCH PIP SIZE: active-symbol metadata request failed (${error?.message || 'unknown error'}); waiting for accurate live tick metadata.`, 'error');
+            }
+        }
+
         /* Force-fresh market feed subscription — always reconnect on every Run */
         if (tickUnsubRef.current) { tickUnsubRef.current(); tickUnsubRef.current = null; }
         lastTickAtRef.current = Date.now();
@@ -2190,7 +2285,7 @@ const BotDetail: React.FC<{
                    whenever cfg.virtualHook.recoveryMode is enabled, even when the main
                    hookLoss/hookWin gate (cfg.virtualHook.enabled) is off.              */
                 let entry = false;
-                if (vhrActiveRef.current && cfg.virtualHook.recoveryMode) {
+                if (!matchesRange && vhrActiveRef.current && cfg.virtualHook.recoveryMode) {
                     vhrActiveRef.current = false; // consume the flag for this iteration
                     addLog('⚡ VHR: 1-VIRTUAL CHECK — evaluating recovery entry...', 'hack');
 
@@ -2250,7 +2345,7 @@ const BotDetail: React.FC<{
                      Virtual WIN  → advance to stage 2.
                    Stage 2 (vhaRecovery2Ref): run full checkEntry / strategy scan
                      to find the best market setup, then fire the real trade. */
-                if (cfg.virtualHookAlt.recoveryEnabled) {
+                if (!matchesRange && cfg.virtualHookAlt.recoveryEnabled) {
                     if (vhaRecovery1Ref.current && !stopRef.current) {
                         vhaRecovery1Ref.current = false;
                         addLog('💎 VHA-R1: 1-VIRTUAL RECOVERY CHECK — evaluating market...', 'hack');
@@ -2325,6 +2420,7 @@ const BotDetail: React.FC<{
                     const now = Date.now();
                     if (
                         !multiScan &&
+                        !matchesFeedRetryTimerRef.current &&
                         now - lastTickAtRef.current > 8_000 &&
                         now - lastReconnectAtRef.current > 8_000
                     ) {
@@ -2420,7 +2516,7 @@ const BotDetail: React.FC<{
                             entry = true;
                             break;
                         }
-                    } else if (cfg.strategyLogic.active && cfg.strategyLogic.groups.length > 0) {
+                    } else if (!matchesRange && cfg.strategyLogic.active && cfg.strategyLogic.groups.length > 0) {
                         const inRecovery = totalConsLoss > 0;
                         const r = evaluateStrategyLogic(digitWindowRef.current, cfg.strategyLogic.groups, inRecovery, { prices: priceWindowRef.current, contractType: bot.contractType, prediction: bot.prediction });
                         if (r.hit) {
@@ -2519,7 +2615,7 @@ const BotDetail: React.FC<{
                 let realTradeUnlocked = false;
                 let vhaRealUnlocked   = false;
 
-                if ((cfg.virtualHook.enabled || cfg.virtualHookAlt.enabled) && !stopRef.current) {
+                if (!matchesRange && (cfg.virtualHook.enabled || cfg.virtualHookAlt.enabled) && !stopRef.current) {
                     /* ── Shared tick wait: one wait serves both state machines ── */
                     const sharedBarrier = slotBarrier();
                     const sharedTicks   = Math.max(1, cfg.duration);
@@ -2982,7 +3078,7 @@ const BotDetail: React.FC<{
                         }
 
                         /* 3 consecutive losses during recovery → pause and read market health */
-                        if (recoveryCoolLoss >= 3) {
+                        if (!matchesRange && recoveryCoolLoss >= 3) {
                             addLog(`⏸ RECOVERY COOL-OFF: 3 losses in a row — reading market for 3 ticks without trading...`, 'hack');
                             let favorable = 0, unfavorable = 0;
                             for (let _ri = 0; _ri < 3 && !stopRef.current; _ri++) {
@@ -3014,7 +3110,7 @@ const BotDetail: React.FC<{
                        simulation before re-entering. If virtual = LOSS (confirms pattern),
                        the recovery real trade fires immediately — skipping the full entry scan.
                        This fires independently of the main VH hookLoss/hookWin gate. */
-                    if (cfg.virtualHook.recoveryMode) {
+                    if (!matchesRange && cfg.virtualHook.recoveryMode) {
                         vhrActiveRef.current = true;
                         addLog('⚡ VHR: REAL LOSS FLAGGED — instant 1-virtual recovery check queued for next scan', 'hack');
                     }
@@ -3022,7 +3118,7 @@ const BotDetail: React.FC<{
                     /* ── Virtual Hook Alternative recovery: stage-1 virtual check queued ──
                        After any real-money loss, queue a 1-virtual-tick recovery check.
                        The VHA recovery gate at the top of the outer loop will handle it. */
-                    if (cfg.virtualHookAlt.recoveryEnabled) {
+                    if (!matchesRange && cfg.virtualHookAlt.recoveryEnabled) {
                         vhaRecovery1Ref.current = true;
                         addLog('💎 VHA: REAL LOSS → stage-1 recovery virtual check queued for next scan', 'hack');
                     }
@@ -3191,6 +3287,10 @@ const BotDetail: React.FC<{
 
     const stopBot = useCallback(() => {
         stopRef.current = true;
+        if (matchesFeedRetryTimerRef.current) {
+            clearTimeout(matchesFeedRetryTimerRef.current);
+            matchesFeedRetryTimerRef.current = null;
+        }
         matchesPipSizeResolverRef.current?.(null);
         matchesPipSizeResolverRef.current = null;
         /* Immediately kill the XML bot engine — don't wait for the cycle to finish */
@@ -3493,22 +3593,32 @@ const BotDetail: React.FC<{
                     )}
 
                     {/* Strategy Logic */}
-                    <SbAccordion title='💡 Strategy Logic' badge={cfg.strategyLogic.active ? 'ACTIVE' : 'DISABLED'} badgeColor={cfg.strategyLogic.active ? '#22c55e' : '#64748b'} defaultOpen>
+                    <SbAccordion
+                        title='💡 Strategy Logic'
+                        badge={matchesRange ? 'MATCHES ENTRY' : cfg.strategyLogic.active ? 'ACTIVE' : 'DISABLED'}
+                        badgeColor={matchesRange ? '#f59e0b' : cfg.strategyLogic.active ? '#22c55e' : '#64748b'}
+                        defaultOpen
+                    >
+                        {matchesRange && (
+                            <div className='sb-hint' role='status'>
+                                Matches Scalper entry logic owns entry detection for this bot. General Strategy Logic is inactive to prevent competing signals and terminal entries.
+                            </div>
+                        )}
                         <div className='sb-field-row sb-field-row--center'>
                             <label>Global Shared</label>
-                            <button className={`sb-toggle ${cfg.strategyLogic.globalShared ? 'on' : 'off'}`}
-                                onClick={() => slSet({ globalShared: !cfg.strategyLogic.globalShared })} disabled={running}>
-                                {cfg.strategyLogic.globalShared ? 'ENABLED' : 'DISABLED'}
+                            <button className={`sb-toggle ${!matchesRange && cfg.strategyLogic.globalShared ? 'on' : 'off'}`}
+                                onClick={() => slSet({ globalShared: !cfg.strategyLogic.globalShared })} disabled={running || !!matchesRange}>
+                                {matchesRange ? 'INACTIVE' : cfg.strategyLogic.globalShared ? 'ENABLED' : 'DISABLED'}
                             </button>
                         </div>
                         <div className='sb-field-row sb-field-row--center'>
                             <label>Strategy</label>
-                            <button className={`sb-toggle ${cfg.strategyLogic.active ? 'on' : 'off'}`}
-                                onClick={() => slSet({ active: !cfg.strategyLogic.active })} disabled={running}>
-                                {cfg.strategyLogic.active ? 'ACTIVE' : 'INACTIVE'}
+                            <button className={`sb-toggle ${!matchesRange && cfg.strategyLogic.active ? 'on' : 'off'}`}
+                                onClick={() => slSet({ active: !cfg.strategyLogic.active })} disabled={running || !!matchesRange}>
+                                {matchesRange ? 'INACTIVE — MATCHES ENTRY' : cfg.strategyLogic.active ? 'ACTIVE' : 'INACTIVE'}
                             </button>
                         </div>
-                        {cfg.strategyLogic.active && (
+                        {!matchesRange && cfg.strategyLogic.active && (
                             <>
                                 {cfg.strategyLogic.groups.map((g, gIdx) => (
                                     <div key={g.id} className='sb-or-group'>
@@ -3785,13 +3895,18 @@ const BotDetail: React.FC<{
                     </SbAccordion>
 
                     {/* ── Virtual Hook ── */}
-                    <SbAccordion title='🔮 Virtual Hook' badge={cfg.virtualHook.enabled ? `${cfg.virtualHook.hookLoss}L → ${cfg.virtualHook.hookWin}W` : 'OFF'} badgeColor={cfg.virtualHook.enabled ? '#a855f7' : '#64748b'}>
+                    <SbAccordion
+                        title='🔮 Virtual Hook'
+                        badge={matchesRange ? 'MATCHES ENTRY' : cfg.virtualHook.enabled ? `${cfg.virtualHook.hookLoss}L → ${cfg.virtualHook.hookWin}W` : 'OFF'}
+                        badgeColor={matchesRange ? '#f59e0b' : cfg.virtualHook.enabled ? '#a855f7' : '#64748b'}
+                    >
+                        {matchesRange && <p className='sb-hint'>Inactive for Matches Scalper: the dedicated entry scanner controls every real entry.</p>}
                         <p className='sb-hint sb-hint--purple'>Simulates trades using live market data without using real funds. Only after the exact configured pattern (N virtual losses → M virtual wins, in a row) does the bot unlock and place a REAL trade. All virtual trades appear in the Transactions tab as <strong>[VIRTUAL]</strong> rows.</p>
                         <div className='sb-field-row sb-field-row--center'>
                             <label>Enable Virtual Hook</label>
                             <button className={`sb-toggle ${cfg.virtualHook.enabled ? 'on' : 'off'}`}
-                                onClick={() => vhSet({ enabled: !cfg.virtualHook.enabled })} disabled={running}>
-                                {cfg.virtualHook.enabled ? 'ENABLED' : 'DISABLED'}
+                                onClick={() => vhSet({ enabled: !cfg.virtualHook.enabled })} disabled={running || !!matchesRange}>
+                                {matchesRange ? 'INACTIVE — MATCHES ENTRY' : cfg.virtualHook.enabled ? 'ENABLED' : 'DISABLED'}
                             </button>
                         </div>
                         {cfg.virtualHook.enabled && (
@@ -3811,13 +3926,13 @@ const BotDetail: React.FC<{
                                     <div className='sb-field'>
                                         <label>Virtual Losses</label>
                                         <NumberField value={cfg.virtualHook.hookLoss} min={1} max={20}
-                                            onCommit={n => vhSet({ hookLoss: n })} disabled={running} />
+                                            onCommit={n => vhSet({ hookLoss: n })} disabled={running || !!matchesRange} />
                                         <span className='sb-unit'>consecutive virtual losses required</span>
                                     </div>
                                     <div className='sb-field'>
                                         <label>Virtual Wins</label>
                                         <NumberField value={cfg.virtualHook.hookWin} min={0} max={10}
-                                            onCommit={n => vhSet({ hookWin: n })} disabled={running} />
+                                            onCommit={n => vhSet({ hookWin: n })} disabled={running || !!matchesRange} />
                                         <span className='sb-unit'>wins required after losses (0 = skip)</span>
                                     </div>
                                 </div>
@@ -3830,7 +3945,7 @@ const BotDetail: React.FC<{
                                         <button
                                             className={`sb-toggle ${cfg.virtualHook.recoveryMode ? 'on' : 'off'}`}
                                             onClick={() => vhSet({ recoveryMode: !cfg.virtualHook.recoveryMode })}
-                                            disabled={running}
+                                            disabled={running || !!matchesRange}
                                             style={cfg.virtualHook.recoveryMode ? { background: 'linear-gradient(135deg,#a855f7,#7c3aed)', color: '#fff' } : undefined}
                                         >
                                             {cfg.virtualHook.recoveryMode ? '⚡ ON' : 'OFF'}
@@ -3850,16 +3965,17 @@ const BotDetail: React.FC<{
                     {/* ── Virtual Hook Alternative ── */}
                     <SbAccordion
                         title='💎 Virtual Hook Alternative'
-                        badge={cfg.virtualHookAlt.enabled ? `${cfg.virtualHookAlt.winsRequired}W → ${cfg.virtualHookAlt.lossToTrigger}L` : 'OFF'}
-                        badgeColor={cfg.virtualHookAlt.enabled ? '#f59e0b' : '#64748b'}
+                        badge={matchesRange ? 'MATCHES ENTRY' : cfg.virtualHookAlt.enabled ? `${cfg.virtualHookAlt.winsRequired}W → ${cfg.virtualHookAlt.lossToTrigger}L` : 'OFF'}
+                        badgeColor={matchesRange ? '#f59e0b' : cfg.virtualHookAlt.enabled ? '#f59e0b' : '#64748b'}
                     >
+                        {matchesRange && <p className='sb-hint'>Inactive for Matches Scalper: the dedicated entry scanner controls every real entry.</p>}
                         <p className='sb-hint sb-hint--amber'>Opposite pattern to the standard Virtual Hook. After <strong>N consecutive virtual WINS</strong> followed by <strong>M virtual LOSSES</strong> the bot fires a REAL trade. Useful when you want to confirm a downward reversal before entering.</p>
                         <div className='sb-field-row sb-field-row--center'>
                             <label>Enable VH Alternative</label>
                             <button
                                 className={`sb-toggle ${cfg.virtualHookAlt.enabled ? 'on' : 'off'}`}
                                 onClick={() => vhaSet({ enabled: !cfg.virtualHookAlt.enabled })}
-                                disabled={running}
+                                disabled={running || !!matchesRange}
                                 style={cfg.virtualHookAlt.enabled ? { background: 'linear-gradient(135deg,#f59e0b,#d97706)', color: '#000' } : undefined}
                             >
                                 {cfg.virtualHookAlt.enabled ? 'ENABLED' : 'DISABLED'}
@@ -3882,13 +3998,13 @@ const BotDetail: React.FC<{
                                     <div className='sb-field'>
                                         <label>Virtual Wins</label>
                                         <NumberField value={cfg.virtualHookAlt.winsRequired} min={1} max={10}
-                                            onCommit={n => vhaSet({ winsRequired: n })} disabled={running} />
+                                            onCommit={n => vhaSet({ winsRequired: n })} disabled={running || !!matchesRange} />
                                         <span className='sb-unit'>consecutive wins required</span>
                                     </div>
                                     <div className='sb-field'>
                                         <label>Virtual Losses</label>
                                         <NumberField value={cfg.virtualHookAlt.lossToTrigger} min={0} max={5}
-                                            onCommit={n => vhaSet({ lossToTrigger: n })} disabled={running} />
+                                            onCommit={n => vhaSet({ lossToTrigger: n })} disabled={running || !!matchesRange} />
                                         <span className='sb-unit'>losses after wins (0 = immediate)</span>
                                     </div>
                                 </div>
@@ -3901,7 +4017,7 @@ const BotDetail: React.FC<{
                                         <button
                                             className={`sb-toggle ${cfg.virtualHookAlt.recoveryEnabled ? 'on' : 'off'}`}
                                             onClick={() => vhaSet({ recoveryEnabled: !cfg.virtualHookAlt.recoveryEnabled })}
-                                            disabled={running}
+                                            disabled={running || !!matchesRange}
                                             style={cfg.virtualHookAlt.recoveryEnabled ? { background: 'linear-gradient(135deg,#f59e0b,#d97706)', color: '#000' } : undefined}
                                         >
                                             {cfg.virtualHookAlt.recoveryEnabled ? '💎 ON' : 'OFF'}

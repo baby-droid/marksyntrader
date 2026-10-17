@@ -18,6 +18,12 @@ export type MatchesScalperRawTick = {
     quote: number;
 };
 
+export type MatchesScalperPipSizeSource = 'live' | 'active_symbols' | 'fallback';
+
+export const hasAccurateMatchesScalperPipSize = (
+    source: MatchesScalperPipSizeSource | string | undefined,
+): boolean => source === 'live' || source === 'active_symbols';
+
 export type MatchesScalperEntrySignal = {
     ready: boolean;
     triggerDigit: number | null;
@@ -31,6 +37,16 @@ export const resolveMatchesScalperPipSize = (...candidates: unknown[]): number |
         if (Number.isInteger(pipSize) && pipSize >= 0 && pipSize <= 10) return pipSize;
     }
     return null;
+};
+
+export const matchesScalperPipSizeFromIncrement = (candidate: unknown): number | null => {
+    if (candidate === null || candidate === undefined || candidate === '') return null;
+    const increment = Number(candidate);
+    if (!Number.isFinite(increment) || increment <= 0) return null;
+    const exponent = Number(increment.toExponential().split('e')[1]);
+    if (!Number.isInteger(exponent)) return null;
+    const pipSize = Math.max(0, Math.abs(exponent));
+    return pipSize <= 10 ? pipSize : null;
 };
 
 export const matchesScalperQuoteToTick = (
