@@ -22,6 +22,7 @@ import {
 } from './observables/connection-status-stream';
 import ApiHelpers from './api-helpers';
 import { generateDerivApiInstance, V2GetActiveAccountId } from './appId';
+import { installDerivRequestBudget } from './request-budget';
 
 type CurrentSubscription = {
     id: string;
@@ -185,6 +186,7 @@ class APIBase {
             }
 
             this.api = await generateDerivApiInstance();
+            installDerivRequestBudget(this.api);
 
             this.api?.connection.addEventListener('open', this.onsocketopen.bind(this));
             this.api?.connection.addEventListener('close', this.onsocketclose.bind(this));

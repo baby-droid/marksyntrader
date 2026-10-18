@@ -246,7 +246,9 @@ export const shouldThrowError = (error, errors_to_ignore = []) => {
         'WrongResponse',
         'GetProposalFailure',
         'RateLimit',
+        'RateLimitExceeded',
         'DisconnectError',
+        'RequestTimeout',
         'MarketIsClosed',
     ];
     updateErrorMessage(error);

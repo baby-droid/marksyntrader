@@ -33,21 +33,18 @@ export const SPEED_DELAY_MS: Record<ExecutionSpeed, number> = {
 // getMaxInflight below).
 export const SPEED_MAX_INFLIGHT: Record<ExecutionSpeed, number> = {
     normal: 1,    // sequential
-    crazy: 100,   // high pipeline depth
-    turbo: 500,   // unlimited practical cap — saturate the API
+    crazy: 2,     // small, bounded overlap
+    turbo: 3,     // bounded by the shared API request budget
 };
 // Keep Fast responsive without turning a reconnect or duplicate tick into an
 // unbounded burst of buy requests.
 const FAST_EXEC_MAX_INFLIGHT = 3;
 
-// Fast removes client-side pacing, not the strategy's tick gate: it always
-// sends one purchase per eligible tick and never creates same-tick duplicates.
-// Crazy retains its separate legacy fan-out when Fast is off.
+// Accelerated execution removes client-added delay, not the strategy's tick
+// gate: every tier sends at most one purchase per eligible tick.
 export const SPEED_PURCHASES_PER_TICK: Record<ExecutionSpeed, number> = {
     normal: 1,
-    // Keep the burst small enough to leave room under Deriv's shared
-    // proposal/buy/open-contract request budget.
-    crazy: 2,
+    crazy: 1,
     turbo: 1,
 };
 const FAST_EXEC_PURCHASES_PER_TICK = 1;

@@ -1,13 +1,14 @@
 export type PurchaseRetryPolicy = {
     maxRetries?: number;
     stopOnCodes?: readonly string[];
+    retryOnCodes?: readonly string[];
 };
 
 export const getRateLimitRetryDelayMs = (retriesAlreadyMade: number): number => {
     const retry = Number.isFinite(retriesAlreadyMade)
         ? Math.max(0, Math.floor(retriesAlreadyMade))
         : 0;
-    return Math.min(250 * (2 ** retry), 5_000);
+    return Math.min(500 * (2 ** retry), 15_000);
 };
 
 /**
@@ -19,10 +20,15 @@ export const shouldStopPurchaseRetry = (
     retriesAlreadyMade: number,
     policy?: PurchaseRetryPolicy,
 ): boolean => {
+    const errorCode = String(error?.error?.code ?? error?.code ?? error?.name ?? '');
+    // A local request-budget rejection is deliberate: retrying it immediately
+    // would re-enter the same saturated queue and make a Bot Builder run look
+    // frozen. Surface it to the caller instead.
+    if (errorCode === 'RequestBudgetExceeded') return true;
     if (!policy) return false;
 
-    const errorCode = String(error?.error?.code ?? error?.name ?? '');
     if (policy.stopOnCodes?.includes(errorCode)) return true;
+    if (policy.retryOnCodes && !policy.retryOnCodes.includes(errorCode)) return true;
 
     if (Number.isFinite(policy.maxRetries)) {
         return Math.max(0, Math.floor(retriesAlreadyMade)) >= Number(policy.maxRetries);
