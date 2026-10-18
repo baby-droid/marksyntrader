@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">56.01% </span>
+                <span class="strong">56.04% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>219/391</span>
+                <span class='fraction'>218/389</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">50% </span>
+                <span class="strong">40% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>3/6</span>
+                <span class='fraction'>2/5</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">8.82% </span>
+                <span class="strong">5.88% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>3/34</span>
+                <span class='fraction'>2/34</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">56.01% </span>
+                <span class="strong">56.04% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>219/391</span>
+                <span class='fraction'>218/389</span>
             </div>
         
             
@@ -452,10 +452,7 @@
 <a name='L387'></a><a href='#L387'>387</a>
 <a name='L388'></a><a href='#L388'>388</a>
 <a name='L389'></a><a href='#L389'>389</a>
-<a name='L390'></a><a href='#L390'>390</a>
-<a name='L391'></a><a href='#L391'>391</a>
-<a name='L392'></a><a href='#L392'>392</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
+<a name='L390'></a><a href='#L390'>390</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -559,7 +556,6 @@
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -880,19 +876,18 @@ export const SPEED_DELAY_MS: Record&lt;ExecutionSpeed, number&gt; = {
 // getMaxInflight below).
 export const SPEED_MAX_INFLIGHT: Record&lt;ExecutionSpeed, number&gt; = {
     normal: 1,    // sequential
-    crazy: 100,   // high pipeline depth
-    turbo: 500,   // unlimited practical cap — saturate the API
+    crazy: 2,     // small, bounded overlap
+    turbo: 3,     // bounded by the shared API request budget
 };
 // Keep Fast responsive without turning a reconnect or duplicate tick into an
 // unbounded burst of buy requests.
 const FAST_EXEC_MAX_INFLIGHT = 3;
 &nbsp;
-// Fast removes client-side pacing, not the strategy's tick gate: it always
-// sends one purchase per eligible tick and never creates same-tick duplicates.
-// Crazy retains its separate legacy fan-out when Fast is off.
+// Accelerated execution removes client-added delay, not the strategy's tick
+// gate: every tier sends at most one purchase per eligible tick.
 export const SPEED_PURCHASES_PER_TICK: Record&lt;ExecutionSpeed, number&gt; = {
     normal: 1,
-    crazy: 5,
+    crazy: 1,
     turbo: 1,
 };
 const FAST_EXEC_PURCHASES_PER_TICK = 1;
@@ -960,7 +955,6 @@ export const isFastExecutionEnabledForContext = <span class="fstat-no" title="fu
 <span class="cstat-no" title="statement not covered" >        || page === 'scalper bots'</span>
 <span class="cstat-no" title="statement not covered" >        || page === 'matches scalper'</span>
 <span class="cstat-no" title="statement not covered" >        || page === 'auto-digits'</span>
-<span class="cstat-no" title="statement not covered" >        || page === 'free bots'</span>
 <span class="cstat-no" title="statement not covered" >        || page === 'ai engine'</span>
 <span class="cstat-no" title="statement not covered" >        || isNormalKillerBotV3Context()</span>
 <span class="cstat-no" title="statement not covered" >        || isTwoPredictionCycleContext();</span>
@@ -1174,7 +1168,7 @@ const pingListeners   = new Set&lt;(ms: number | null) =&gt; void&gt;();
 const tickRateListeners = new Set&lt;(tps: number) =&gt; void&gt;();
 &nbsp;
 /** Record one live tick arrival (call on every incoming tick event). */
-export const recordTick = (): void =&gt; { tickCountInWindow++; };
+export const recordTick = <span class="fstat-no" title="function not covered" >(): void =&gt; { tickCountInWindow++; };</span>
 &nbsp;
 export const getPingMs = <span class="fstat-no" title="function not covered" >(): number | null =&gt; pingMs;</span>
 export const getTicksPerSec = <span class="fstat-no" title="function not covered" >(): number =&gt; ticksPerSec;</span>
@@ -1243,7 +1237,7 @@ fastExecListeners.add((enabled) =&gt; { _pingRestartHook?.(enabled); });
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-10-17T22:38:45.266Z
+                at 2026-10-18T14:28:35.548Z
             </div>
         <script src="../prettify.js"></script>
         <script>

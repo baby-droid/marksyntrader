@@ -23,9 +23,9 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">41.42% </span>
+                <span class="strong">39.59% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>116/280</span>
+                <span class='fraction'>116/293</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">41.42% </span>
+                <span class="strong">39.59% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>116/280</span>
+                <span class='fraction'>116/293</span>
             </div>
         
             
@@ -343,7 +343,20 @@
 <a name='L278'></a><a href='#L278'>278</a>
 <a name='L279'></a><a href='#L279'>279</a>
 <a name='L280'></a><a href='#L280'>280</a>
-<a name='L281'></a><a href='#L281'>281</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
+<a name='L281'></a><a href='#L281'>281</a>
+<a name='L282'></a><a href='#L282'>282</a>
+<a name='L283'></a><a href='#L283'>283</a>
+<a name='L284'></a><a href='#L284'>284</a>
+<a name='L285'></a><a href='#L285'>285</a>
+<a name='L286'></a><a href='#L286'>286</a>
+<a name='L287'></a><a href='#L287'>287</a>
+<a name='L288'></a><a href='#L288'>288</a>
+<a name='L289'></a><a href='#L289'>289</a>
+<a name='L290'></a><a href='#L290'>290</a>
+<a name='L291'></a><a href='#L291'>291</a>
+<a name='L292'></a><a href='#L292'>292</a>
+<a name='L293'></a><a href='#L293'>293</a>
+<a name='L294'></a><a href='#L294'>294</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -590,6 +603,19 @@
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -891,8 +917,21 @@ export class DerivWSAccountsService {
 <span class="cstat-no" title="statement not covered" >            // localStorage before triggering a WebSocket regeneration, so we honour</span>
 <span class="cstat-no" title="statement not covered" >            // that selection here instead of always falling back to accounts[0].</span>
 <span class="cstat-no" title="statement not covered" >            const activeLoginId = localStorage.getItem('active_loginid');</span>
-<span class="cstat-no" title="statement not covered" >            const targetAccount =</span>
-<span class="cstat-no" title="statement not covered" >                (activeLoginId &amp;&amp; accounts.find(a =&gt; a.account_id === activeLoginId)) || accounts[0];</span>
+<span class="cstat-no" title="statement not covered" >            let targetAccount = activeLoginId</span>
+<span class="cstat-no" title="statement not covered" >                ? accounts.find(a =&gt; a.account_id === activeLoginId)</span>
+<span class="cstat-no" title="statement not covered" >                : accounts[0];</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >            // Do not silently authenticate against the first account when a</span>
+<span class="cstat-no" title="statement not covered" >            // stale sessionStorage account list omits the user's current</span>
+<span class="cstat-no" title="statement not covered" >            // selection. Refresh once, then fail explicitly if it is still</span>
+<span class="cstat-no" title="statement not covered" >            // unavailable; trading against the wrong account is unsafe.</span>
+<span class="cstat-no" title="statement not covered" >            if (activeLoginId &amp;&amp; !targetAccount) {</span>
+<span class="cstat-no" title="statement not covered" >                accounts = await this.fetchAccountsList(accessToken);</span>
+<span class="cstat-no" title="statement not covered" >                targetAccount = accounts.find(a =&gt; a.account_id === activeLoginId);</span>
+<span class="cstat-no" title="statement not covered" >            }</span>
+<span class="cstat-no" title="statement not covered" >            if (!targetAccount) {</span>
+<span class="cstat-no" title="statement not covered" >                throw new Error(`The selected Deriv account ${activeLoginId || ''} is not available for trading.`);</span>
+<span class="cstat-no" title="statement not covered" >            }</span>
 <span class="cstat-no" title="statement not covered" ></span>
 <span class="cstat-no" title="statement not covered" >            // Step 4: Fetch OTP and WebSocket URL for the resolved account (always fresh OTP)</span>
 <span class="cstat-no" title="statement not covered" >            const websocketURL = await this.fetchOTPWebSocketURL(accessToken, targetAccount.account_id);</span>
@@ -910,7 +949,7 @@ export class DerivWSAccountsService {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-10-10T21:32:10.529Z
+                at 2026-10-18T14:28:35.548Z
             </div>
         <script src="../prettify.js"></script>
         <script>
