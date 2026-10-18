@@ -54,10 +54,57 @@ const TransactionItem = ({ row = false, onClickTransaction, active_transaction_i
     }
 };
 
+const getWaitingCopy = (contractStage: number, hasError: boolean) => {
+    if (hasError) {
+        return {
+            title: 'Bot needs attention',
+            message: 'A connection, API, or strategy error interrupted the run. Open the Journal tab for the exact error.',
+        };
+    }
+
+    switch (contractStage) {
+        case contract_stages.STARTING:
+            return {
+                title: 'Starting bot',
+                message: 'Waiting for the authenticated Deriv connection, live market data, and contract setup.',
+            };
+        case contract_stages.RUNNING:
+            return {
+                title: 'Waiting for an entry signal',
+                message: 'The XML strategy is watching live ticks. Run starts the strategy; a contract is bought only when its entry rules match.',
+            };
+        case contract_stages.PURCHASE_SENT:
+            return {
+                title: 'Waiting for Deriv to confirm the buy',
+                message: 'The bot sent a buy request and is waiting for the contract response.',
+            };
+        case contract_stages.PURCHASE_RECEIVED:
+            return {
+                title: 'Contract accepted',
+                message: 'Waiting for the contract update to appear in Transactions.',
+            };
+        case contract_stages.IS_STOPPING:
+            return {
+                title: 'Stopping bot',
+                message: 'An accepted contract may still need to settle before the run closes.',
+            };
+        case contract_stages.CONTRACT_CLOSED:
+            return {
+                title: 'Contract settled',
+                message: 'The XML strategy is checking live ticks for its next entry signal.',
+            };
+        default:
+            return {
+                title: 'Waiting for the next contract',
+                message: 'The bot will trade when its loaded strategy conditions are met.',
+            };
+    }
+};
+
 const Transactions = observer(({ is_drawer_open }: TTransactions) => {
     const [active_transaction_id, setActiveTransactionId] = React.useState<number | null>(null);
     const { run_panel, transactions } = useStore();
-    const { contract_stage } = run_panel;
+    const { contract_stage, error_type } = run_panel;
     const { transactions: transaction_list, toggleTransactionDetailsModal, recoverPendingContracts } = transactions;
     const { isDesktop } = useDevice();
 
@@ -163,7 +210,25 @@ const Transactions = observer(({ is_drawer_open }: TTransactions) => {
                     ) : (
                         <>
                             {contract_stage >= contract_stages.STARTING ? (
-                                <Transaction contract={null} />
+                                <div className='transactions__waiting' role='status' aria-live='polite'>
+                                    <Text
+                                        as='h4'
+                                        size='xs'
+                                        weight='bold'
+                                        align='center'
+                                        className='transactions__waiting-title'
+                                    >
+                                        <Localize i18n_default_text={getWaitingCopy(contract_stage, !!error_type).title} />
+                                    </Text>
+                                    <Text
+                                        size='xxs'
+                                        align='center'
+                                        color='less-prominent'
+                                        className='transactions__waiting-message'
+                                    >
+                                        <Localize i18n_default_text={getWaitingCopy(contract_stage, !!error_type).message} />
+                                    </Text>
+                                </div>
                             ) : (
                                 <ThemedScrollbars>
                                     <div className='transactions-empty-box'>

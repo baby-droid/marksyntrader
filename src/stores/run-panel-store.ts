@@ -211,6 +211,7 @@ export default class RunPanelStore {
         );
         runInAction(() => {
             this.pending_async_error_stop = false;
+            this.error_type = undefined;
             this.setIsRunning(true);
             ui.setPromptHandler(true);
             this.toggleDrawer(true);
