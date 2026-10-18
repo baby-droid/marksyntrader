@@ -25,12 +25,14 @@ class DBot {
         this.before_run_funcs = [];
         this.symbol = null;
         this.is_bot_running = false;
+        this.runGeneration = 0;
     }
 
     /**
      * Initialises the workspace and mounts it to a container element (app_contents).
      */
     async initWorkspace(public_path, store, api_helpers_store, is_mobile, is_dark_mode) {
+        this.runGeneration += 1;
         await loadBlockly(is_dark_mode);
         const recent_files = await getSavedWorkspaces();
         this.interpreter = Interpreter();
@@ -282,6 +284,7 @@ class DBot {
     }
 
     async initializeInterpreter() {
+        this.runGeneration += 1;
         if (this.interpreter) {
             await this.interpreter.terminateSession();
         }
@@ -294,6 +297,7 @@ class DBot {
     async runBot() {
         if (api_base.is_stopping) return;
 
+        const runGeneration = ++this.runGeneration;
         try {
             api_base.is_stopping = false;
             const bestMarketBlock = this.workspace?.getAllBlocks?.(false)
@@ -326,6 +330,7 @@ class DBot {
                             detail: scanError?.message || 'Using the manually selected market.',
                         });
                     }
+                    if (runGeneration !== this.runGeneration || api_base.is_stopping) return;
                     if (result) {
                         marketBlock.setFieldValue(result.market, 'MARKET_LIST');
                         marketBlock.setFieldValue(result.submarket, 'SUBMARKET_LIST');
@@ -354,6 +359,10 @@ class DBot {
                     }
                 }
             }
+            // A best-market scan is asynchronous. If Stop or a new workspace
+            // session replaced this run while scanning, do not start the old
+            // strategy on the replacement interpreter.
+            if (runGeneration !== this.runGeneration || api_base.is_stopping) return;
             const code = this.generateCode();
             if (!this.interpreter.bot.tradeEngine.checkTicksPromiseExists()) this.interpreter = Interpreter();
 
@@ -371,6 +380,7 @@ class DBot {
                 );
                 if (
                     !rescanRequested ||
+                    runGeneration !== this.runGeneration ||
                     this.interpreter !== activeInterpreter ||
                     api_base.is_stopping ||
                     !this.is_bot_running
@@ -384,12 +394,13 @@ class DBot {
                 await this.stopBot();
                 if (!api_base.is_stopping) await this.runBot();
             }).catch(error => {
+                if (runGeneration !== this.runGeneration) return;
                 globalObserver.emit('Error', error);
                 this.stopBot();
             });
         } catch (error) {
+            if (runGeneration !== this.runGeneration) return;
             globalObserver.emit('Error', error);
-
             if (this.interpreter) {
                 this.stopBot();
             }
@@ -518,6 +529,7 @@ class DBot {
      * that trade will be completed first to reflect correct contract status in UI.
      */
     async stopBot() {
+        this.runGeneration += 1;
         if (api_base.is_stopping) return;
 
         api_base.setIsRunning(false);
@@ -535,6 +547,7 @@ class DBot {
      * Immediately instructs the interpreter to terminate the WS connection and bot.
      */
     async terminateBot() {
+        this.runGeneration += 1;
         sellAllSideContracts();
         if (this.interpreter) {
             await this.interpreter.terminateSession();
