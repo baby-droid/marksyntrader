@@ -83,47 +83,58 @@ export default Engine =>
                         undefined,
                         api_base,
                         proposalRetryPolicy,
-                    ).catch(error => {
-                        // We intercept ContractBuyValidationError as user may have specified
-                        // e.g. a DIGITUNDER 0 or DIGITOVER 9, while one proposal may be invalid
-                        // the other is valid. We will error on Purchase rather than here.
+                    )
+                        .then(response => {
+                            const responseData = response?.data ?? response;
+                            if (responseData?.proposal || responseData?.error) {
+                                this.handleProposalResponse({
+                                    ...responseData,
+                                    msg_type: responseData.msg_type ?? 'proposal',
+                                });
+                            }
+                            return response;
+                        })
+                        .catch(error => {
+                            // We intercept ContractBuyValidationError as user may have specified
+                            // e.g. a DIGITUNDER 0 or DIGITOVER 9, while one proposal may be invalid
+                            // the other is valid. We will error on Purchase rather than here.
+                            if (error?.error?.code === 'ContractBuyValidationError') {
+                                const apiError = error.error;
+                                const localizedError = new Error(
+                                    getLocalizedErrorMessage(apiError.code, apiError),
+                                );
+                                localizedError.code = apiError.code;
+                                localizedError.details = apiError.details;
+                                localizedError.message_to_client = apiError.message_to_client;
 
-                        if (error?.error?.code === 'ContractBuyValidationError') {
-                            // Create localized error message for validation errors
-                            const localizedError = new Error(getLocalizedErrorMessage(error.error.code, error.error));
-                            localizedError.code = error.error.code;
-                            localizedError.details = error.error.details;
-                            localizedError.message_to_client = error.error.message_to_client;
+                                this.recordProposalError({
+                                    ...apiError.echo_req?.passthrough,
+                                    ...error?.echo_req?.passthrough,
+                                    ...proposal.passthrough,
+                                }, localizedError);
 
-                            this.recordProposalError({
-                                ...error?.error?.echo_req?.passthrough,
-                                ...error?.echo_req?.passthrough,
-                                ...proposal.passthrough,
-                            }, localizedError);
+                                return null;
+                            }
 
+                            if (!has_informed_error) {
+                                has_informed_error = true;
+                                const apiError = error?.error ?? error ?? {};
+                                const localizedErrorMessage = apiError.code
+                                    ? getLocalizedErrorMessage(apiError.code, apiError)
+                                    : apiError.message || getLocalizedErrorMessage('GeneralError');
+
+                                const localizedError = {
+                                    ...apiError,
+                                    message: localizedErrorMessage,
+                                };
+                                this.$scope.observer.emit('Error', localizedError);
+                                // A failed proposal prevents the bot from entering its
+                                // purchase block. Stop the run rather than leaving it
+                                // waiting forever for proposalsReady.
+                                this.$scope.observer.emit('bot.async_error');
+                            }
                             return null;
-                        }
-
-                        if (!has_informed_error) {
-                            has_informed_error = true;
-                            const apiError = error?.error ?? error ?? {};
-                            // Use localized error message for general errors
-                            const localizedErrorMessage = apiError.code
-                                ? getLocalizedErrorMessage(apiError.code, apiError)
-                                : apiError.message || getLocalizedErrorMessage('GeneralError');
-
-                            const localizedError = {
-                                ...apiError,
-                                message: localizedErrorMessage,
-                            };
-                            this.$scope.observer.emit('Error', localizedError);
-                            // A failed proposal prevents the bot from entering its
-                            // purchase block. Stop the run rather than leaving it
-                            // waiting forever for proposalsReady.
-                            this.$scope.observer.emit('bot.async_error');
-                        }
-                        return null;
-                    });
+                        });
                 })
             );
         }
@@ -149,29 +160,31 @@ export default Engine =>
             this.checkProposalReady();
         }
 
+        handleProposalResponse(data) {
+            const { passthrough, proposal, error } = data;
+            const requestPassthrough = passthrough ?? data.echo_req?.passthrough ?? {};
+
+            if (error) {
+                const localizedError = new Error(getLocalizedErrorMessage(error.code, error));
+                localizedError.code = error.code;
+                localizedError.details = error.details;
+                localizedError.message_to_client = error.message_to_client;
+                this.recordProposalError(requestPassthrough, localizedError);
+                return;
+            }
+
+            if (proposal && this.data.proposals.findIndex(p => p.id === proposal.id) === -1) {
+                // Add proposals based on the ID returned by the API.
+                this.data.proposals.push({ ...proposal, ...requestPassthrough });
+                this.checkProposalReady();
+            }
+        }
+
         observeProposals() {
             if (!api_base.api) return;
             const subscription = api_base.api.onMessage().subscribe(response => {
                 if (response.data.msg_type === 'proposal') {
-                    const { passthrough, proposal, error } = response.data;
-                    const requestPassthrough = passthrough ?? response.data.echo_req?.passthrough ?? {};
-
-                    // Handle proposal errors with localized messages
-                    if (error) {
-                        const localizedError = new Error(getLocalizedErrorMessage(error.code, error));
-                        localizedError.code = error.code;
-                        localizedError.details = error.details;
-                        localizedError.message_to_client = error.message_to_client;
-
-                        this.recordProposalError(requestPassthrough, localizedError);
-                        return;
-                    }
-
-                    if (proposal && this.data.proposals.findIndex(p => p.id === proposal.id) === -1) {
-                        // Add proposals based on the ID returned by the API.
-                        this.data.proposals.push({ ...proposal, ...requestPassthrough });
-                        this.checkProposalReady();
-                    }
+                    this.handleProposalResponse(response.data);
                 }
             });
             api_base.pushSubscription(subscription);
