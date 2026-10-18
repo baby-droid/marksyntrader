@@ -8,7 +8,7 @@ export const getRateLimitRetryDelayMs = (retriesAlreadyMade: number): number => 
     const retry = Number.isFinite(retriesAlreadyMade)
         ? Math.max(0, Math.floor(retriesAlreadyMade))
         : 0;
-    return Math.min(500 * (2 ** retry), 15_000);
+    return Math.min(250 * (2 ** retry), 5_000);
 };
 
 /**
