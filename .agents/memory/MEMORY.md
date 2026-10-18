@@ -4,7 +4,7 @@
 - [BotBuilder architecture](marksyntrader-botbuilder.md) — Single BotBuilder instance only in app-content.jsx (line 203); bot-builder tab content must be transparent (no background); BotBuilder uses position:fixed top:9rem z-index:10 when active_tab===1.
 - [Currency display pattern](marksyntrader-currency.md) — All P/L/profit/stake values must use fromUsd()+displayCur from src/utils/currency-display.ts; subscribeCurrency() for live KSH/USD switch; never hardcode currency string.
 - [Money Print stake guard](money-print-stake-guard.md) — Keep auto stake opt-in and never round a risk-capped stake up to the broker minimum.
-- [Speed Lab / execution speed modes](marksyntrader-speedlab.md) — Profiles remove app-added waits after successful trades; preserve settlement, tick, and API-error constraints.
+- [Speed Lab / execution speed modes](marksyntrader-speedlab.md) — Accelerated modes preserve settlement/tick rules and leave headroom under Deriv's shared trade API budget.
 - [Run panel float-above-everything](marksyntrader-runpanel-float.md) — main.tsx renders both FloatingRunButton (correct) and an older inline RunStrategy panel; the inline one needs position:fixed + high z-index or it silently reverts to scrolling/low-z-index and collides with headers.
 - [Copy-trading app id](marksyntrader-copytrading.md) — follower WS connections must authorize under the same NEXT_PUBLIC_DERIV_APP_ID as the main connection, not a generic/demo app id, or linking and reciprocation become unreliable.
 - [Copy-trading source detection bug](copy-trading-source-bug.md) — account_info never had is_virtual; use getMasterSource() from trade-bus.ts (reads localStorage account_type) everywhere; never use api_base.account_info.is_virtual for source detection.

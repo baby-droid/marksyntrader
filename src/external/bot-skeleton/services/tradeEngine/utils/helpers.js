@@ -6,7 +6,7 @@ import { localize } from '@deriv-com/translations';
 import { observer as globalObserver } from '../../../utils/observer';
 import { error as logError } from './broadcast';
 import { getTicksHistoryRetryDelayMs, isTicksHistoryRequest } from '@/utils/ticks-history-backoff';
-import { shouldStopPurchaseRetry } from './purchase-retry-policy';
+import { getRateLimitRetryDelayMs, shouldStopPurchaseRetry } from './purchase-retry-policy';
 
 export const tradeOptionToProposal = (trade_option, purchase_reference) =>
     trade_option.contractTypes.map(type => {
@@ -136,7 +136,7 @@ export const getLastDigitForList = (tick, pip_size = 0) => {
     return value[value.length - 1];
 };
 
-const getBackoffDelayInMs = (error_obj, delay_index) => {
+const getBackoffDelayInMs = (error_obj, delay_index, retries_already_made = 0) => {
     const { error = {}, msg_type = '', echo_req = {} } = error_obj;
     const { code = '', message = '' } = error;
 
@@ -151,63 +151,18 @@ const getBackoffDelayInMs = (error_obj, delay_index) => {
         return retry_delay_ms;
     }
 
-    // Instant execution profiles retry rate-limit errors with a short 5 ms delay.
     const speed = getExecutionSpeed();
-    if (isRateLimit && isInstantExecutionForContext()) {
-        const resolved_msg_type_fe = msg_type || echo_req?.msg_type || 'buy';
+    if (isRateLimit && (isInstantExecutionForContext() || speed === 'crazy' || speed === 'turbo' || speed === 'supersonic')) {
+        const retry_delay_ms = getRateLimitRetryDelayMs(retries_already_made);
+        const resolved_msg_type_fast = msg_type || echo_req?.msg_type || 'buy';
         logError(getLocalizedErrorMessage('RateLimit', {
-            message_type: resolved_msg_type_fe, delay: 0.005,
-            request: echo_req?.req_id ?? '', message: message || localize('The market is closed'), trade_type: '',
+            message_type: resolved_msg_type_fast,
+            delay: retry_delay_ms / 1000,
+            request: echo_req?.req_id ?? '',
+            message: message || localize('The market is closed'),
+            trade_type: '',
         }));
-        return 5;
-    }
-
-    // In fast modes (crazy/turbo) retry rate-limit errors almost immediately —
-    // 100 ms for crazy, 50 ms for turbo — never let delay_index compound them.
-    if (isRateLimit && speed === 'supersonic') {
-        const fast_ms = 20;
-        const next_delay_in_seconds = 0.02;
-        const resolved_msg_type_fast = msg_type || echo_req?.msg_type || 'buy';
-        const error_details_fast = {
-            message_type: resolved_msg_type_fast,
-            delay: next_delay_in_seconds,
-            request: echo_req?.req_id ?? '',
-            message: message || localize('The market is closed'),
-            trade_type: '',
-        };
-        logError(getLocalizedErrorMessage('RateLimit', error_details_fast));
-        return fast_ms;
-    }
-    if (isRateLimit && speed === 'turbo') {
-        logError && (() => {})(); // suppress — we still need message_to_print below
-        // skip the normal block and return a tiny fixed delay
-        const fast_ms = 50;
-        // We still want to log once, so fall through but with near-zero delay.
-        const next_delay_in_seconds = 0.05;
-        const resolved_msg_type_fast = msg_type || echo_req?.msg_type || 'buy';
-        const error_details_fast = {
-            message_type: resolved_msg_type_fast,
-            delay: next_delay_in_seconds,
-            request: echo_req?.req_id ?? '',
-            message: message || localize('The market is closed'),
-            trade_type: '',
-        };
-        logError(getLocalizedErrorMessage('RateLimit', error_details_fast));
-        return fast_ms;
-    }
-    if (isRateLimit && speed === 'crazy') {
-        const fast_ms = 100;
-        const next_delay_in_seconds = 0.1;
-        const resolved_msg_type_fast = msg_type || echo_req?.msg_type || 'buy';
-        const error_details_fast = {
-            message_type: resolved_msg_type_fast,
-            delay: next_delay_in_seconds,
-            request: echo_req?.req_id ?? '',
-            message: message || localize('The market is closed'),
-            trade_type: '',
-        };
-        logError(getLocalizedErrorMessage('RateLimit', error_details_fast));
-        return fast_ms;
+        return retry_delay_ms;
     }
 
     // Normal mode: standard 1-5 s exponential backoff for rate limits.
@@ -349,7 +304,7 @@ export const recoverFromError = (
                                     globalObserver.setState(global_timeouts);
                                     recoverResolve();
                                 },
-                                getBackoffDelayInMs(error, delay_index)
+                                getBackoffDelayInMs(error, delay_index, retries_already_made)
                             );
 
                             const global_timeouts = getGlobalTimeouts();
@@ -384,13 +339,7 @@ export const doUntilDone = (promiseFn, errors_to_ignore, api_base, retry_policy)
     return new Promise((resolve, reject) => {
         const recoverFn = (error_code, makeDelay) => {
             retries_already_made += 1;
-            const speed = getExecutionSpeed();
-            const isRateLimit = error_code === 'RateLimit' || error_code === 'RateLimitExceeded';
-            // In fast modes, never compound the delay_index for rate limits —
-            // the fixed short backoff in getBackoffDelayInMs is already correct.
-            if (!isRateLimit || (speed !== 'crazy' && speed !== 'turbo' && speed !== 'supersonic')) {
-                delay_index++;
-            }
+            delay_index++;
             makeDelay().then(repeatFn);
         };
 

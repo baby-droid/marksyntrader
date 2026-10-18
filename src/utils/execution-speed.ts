@@ -45,7 +45,9 @@ const FAST_EXEC_MAX_INFLIGHT = 3;
 // Crazy retains its separate legacy fan-out when Fast is off.
 export const SPEED_PURCHASES_PER_TICK: Record<ExecutionSpeed, number> = {
     normal: 1,
-    crazy: 5,
+    // Keep the burst small enough to leave room under Deriv's shared
+    // proposal/buy/open-contract request budget.
+    crazy: 2,
     turbo: 1,
 };
 const FAST_EXEC_PURCHASES_PER_TICK = 1;

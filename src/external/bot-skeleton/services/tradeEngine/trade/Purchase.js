@@ -34,10 +34,12 @@ let delayIndex = 0;
 let purchase_reference;
 
 // --- Rate-limit-aware buy queue ---
-// Normal=1/s sequential. Crazy/Turbo set to 0 = bypass throttle entirely
-// for true zero-delay fire-and-forget (the API server enforces its own limits).
+// Deriv shares a 360/minute budget across proposal, contract-update, buy, and
+// sell requests. Keep headroom for those other calls while allowing a faster
+// buy rate than Normal.
 let _buyTimestamps = [];
-const _buyRateLimit = { normal: 1, crazy: 0, turbo: 0, supersonic: 0 };
+const _buyRateLimit = { normal: 1, crazy: 2, turbo: 2, supersonic: 2 };
+const FAST_BUY_RATE_LIMIT = 2;
 
 /**
  * Build the same copy-trade payload for every Bot Builder purchase path.
@@ -111,9 +113,10 @@ export function sellAllSideContracts() {
 
 function _acquireBuySlot() {
     const speed = getExecutionSpeed();
-    const limit  = _buyRateLimit[speed] ?? 1;
-    // In crazy / turbo / Fast mode skip the throttle entirely — resolve immediately.
-    if (limit === 0 || isInstantExecutionForContext()) return Promise.resolve();
+    const limit = isInstantExecutionForContext()
+        ? FAST_BUY_RATE_LIMIT
+        : (_buyRateLimit[speed] ?? 1);
+    if (limit === 0) return Promise.resolve();
     const now    = Date.now();
     // Remove timestamps older than 1 second
     _buyTimestamps = _buyTimestamps.filter(t => now - t < 1000);
@@ -683,7 +686,7 @@ export default Engine =>
 
                 if (!this.options.timeMachineEnabled) {
                     return doUntilDone(action, undefined, api_base, {
-                        maxRetries: isInstantExecutionForContext() ? 20 : 5,
+                        maxRetries: 5,
                         stopOnCodes: ['MarketIsClosed'],
                     }).then(onSuccess);
                 }
@@ -710,7 +713,7 @@ export default Engine =>
                 ).then(onSuccess);
             }
 
-            // ── Direct-buy path (Crazy/Turbo, or no payout block) ──
+            // ── Direct-buy path (Fast/Crazy/Turbo, or no payout block) ──
             // Build the buy request from current trade options — no proposal ID
             // needed. The rate-limiter slot ensures we stay within API limits.
             const trade_option = tradeOptionToBuy(contract_type, tradeOptions);
@@ -729,7 +732,7 @@ export default Engine =>
 
             if (!this.options.timeMachineEnabled) {
                 return doUntilDone(action, undefined, api_base, {
-                    maxRetries: isInstantExecutionForContext() ? 20 : 5,
+                    maxRetries: 5,
                     stopOnCodes: ['MarketIsClosed'],
                 }).then(onSuccess);
             }

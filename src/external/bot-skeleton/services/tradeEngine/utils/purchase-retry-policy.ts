@@ -3,10 +3,16 @@ export type PurchaseRetryPolicy = {
     stopOnCodes?: readonly string[];
 };
 
+export const getRateLimitRetryDelayMs = (retriesAlreadyMade: number): number => {
+    const retry = Number.isFinite(retriesAlreadyMade)
+        ? Math.max(0, Math.floor(retriesAlreadyMade))
+        : 0;
+    return Math.min(250 * (2 ** retry), 5_000);
+};
+
 /**
  * `retriesAlreadyMade` is independent of the delay/backoff index. Fast tiers
- * intentionally keep the latter fixed for rate limits, but must still have a
- * finite retry budget.
+ * use a separate retry delay and must still have a finite retry budget.
  */
 export const shouldStopPurchaseRetry = (
     error: any,
