@@ -71,6 +71,8 @@ export interface AutoSignalMarket {
     latestQuote: number | null;
     updatedAt: number | null;
     feedState: 'loading' | 'live' | 'stale' | 'error' | 'unavailable';
+    /** True once the initial authenticated history request completed (or failed). */
+    historyLoaded?: boolean;
     candidate: AutoSignalCandidate | null;
     candidates?: AutoSignalCandidate[];
     availableContractTypes: string[];

@@ -3,6 +3,7 @@ import {
     evaluateAutoSignalCandidates,
     getSuggestedAutoSignalRuns,
     hasAutoSignalPriceEntryPattern,
+    isAutoSignalStrategyAllowedForMarket,
     recommendedAutoSignalRuns,
     selectAutoSignalEntryDigit,
     shouldExcludeAutoSignalMarket,
@@ -28,7 +29,7 @@ const makeOneTickTrend = (): AutoLabTick[] => {
 };
 
 describe('Auto-Signals one-tick analysis', () => {
-    it('does not include Jump 100 in the live synthetic-market scan', () => {
+    it('includes supported synthetic families and excludes unsupported markets and Jump 100', () => {
         expect(shouldExcludeAutoSignalMarket({
             symbol: 'JD100',
             market: 'synthetic_index',
@@ -46,6 +47,71 @@ describe('Auto-Signals one-tick analysis', () => {
             market: 'synthetic_index',
             exchange_is_open: 1,
         })).toBe(false);
+        expect(shouldExcludeAutoSignalMarket({
+            symbol: '1HZ50V',
+            display_name: 'Volatility 50 (1s) Index',
+            market: 'synthetic_index',
+            exchange_is_open: 1,
+        })).toBe(false);
+        expect(shouldExcludeAutoSignalMarket({
+            symbol: 'RDBEAR',
+            display_name: 'Bear Market Index',
+            market: 'synthetic_index',
+            exchange_is_open: 1,
+        })).toBe(false);
+        expect(shouldExcludeAutoSignalMarket({
+            symbol: 'RDBULL',
+            display_name: 'Bull Market Index',
+            market: 'synthetic_index',
+            exchange_is_open: 1,
+        })).toBe(false);
+        expect(shouldExcludeAutoSignalMarket({
+            symbol: 'stpRNG',
+            display_name: 'Step Index',
+            market: 'synthetic_index',
+            exchange_is_open: 1,
+        })).toBe(false);
+        expect(shouldExcludeAutoSignalMarket({
+            symbol: 'OTHER',
+            display_name: 'Unlisted Synthetic',
+            market: 'synthetic_index',
+            exchange_is_open: 1,
+        })).toBe(true);
+    });
+
+    it('restricts Step markets to Rise/Fall while permitting other signal routes on volatility markets', () => {
+        const step = { symbol: 'stpRNG', label: 'Step Index', market: 'synthetic_index', submarket: 'step_index' };
+        expect(isAutoSignalStrategyAllowedForMarket('RISE', step)).toBe(true);
+        expect(isAutoSignalStrategyAllowedForMarket('FALL', step)).toBe(true);
+        expect(isAutoSignalStrategyAllowedForMarket('OVER', step)).toBe(false);
+        expect(isAutoSignalStrategyAllowedForMarket('ONLY_UPS', step)).toBe(false);
+        expect(isAutoSignalStrategyAllowedForMarket('MATCHES', {
+            symbol: 'R_10',
+            label: 'Volatility 10',
+            market: 'synthetic_index',
+            submarket: 'random_index',
+        })).toBe(true);
+    });
+
+    it('includes Over 8 as a tradeable digit barrier', () => {
+        const ticks: AutoLabTick[] = Array.from({ length: 1000 }, (_, index) => ({
+            symbol: 'R_10',
+            digit: 9,
+            quote: 100 + index / 100,
+            epoch: index + 1,
+            pip_size: 2,
+        }));
+        const over8 = evaluateAutoSignalCandidates({
+            market: { symbol: 'R_10', label: 'Volatility 10' },
+            ticks,
+            family: 'OVER_UNDER',
+            now: 1_000,
+        }).find((candidate) => candidate.strategy === 'OVER' && candidate.barrier === 8);
+        expect(over8).toMatchObject({
+            contractType: 'DIGITOVER',
+            barrier: 8,
+            recommendedRuns: 20,
+        });
     });
 
     it.each([

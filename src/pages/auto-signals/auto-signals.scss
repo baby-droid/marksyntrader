@@ -374,7 +374,7 @@
     display: grid;
     // Match each desktop track to the existing half-width card; use 25% of the old visible gap.
     grid-template-columns: repeat(3, minmax(0, calc(12.5% - 0.2175rem)));
-    align-items: stretch;
+    align-items: start;
     justify-content: start;
     column-gap: calc(3.125% - 0.018125rem);
     row-gap: 0.145rem;
@@ -397,7 +397,8 @@
     background: #fff;
     box-shadow: 0 5px 16px rgba(15, 23, 42, 0.065);
     overflow: hidden;
-    animation: as-card-in 380ms ease both;
+    // Stable card order is kept after the first complete scan; avoid entry
+    // transforms that make the live board look like cards are changing slots.
 
     &::before { position: absolute; top: 0; right: 0; left: 0; height: 2px; background: linear-gradient(90deg, rgba(98, 214, 223, 0), rgba(98, 214, 223, 0.6), rgba(98, 214, 223, 0)); content: ""; opacity: 0.55; }
     &--ready::before, &--setup::before { background: linear-gradient(90deg, transparent, var(--as-green), transparent); opacity: 0.85; }
@@ -455,11 +456,6 @@
         &:focus-visible { outline: 2px solid var(--as-cyan); outline-offset: 1px; }
         &:disabled { background: #f1f5f9; color: #000; opacity: 0.65; }
     }
-}
-
-@keyframes as-card-in {
-    from { opacity: 0; transform: translateY(7px); }
-    to { opacity: 1; transform: translateY(0); }
 }
 
 .as-market-card__feed {
@@ -668,6 +664,12 @@
     &:disabled { cursor: not-allowed; opacity: 0.43; }
     &--quiet { border-color: #2b5bc9; background: linear-gradient(180deg, #f6f9ff, #eaf0ff); color: #113d9d; box-shadow: 0 0 10px rgba(49, 95, 221, 0.18); }
     &--quiet:hover:not(:disabled) { background: #e6edff; box-shadow: 0 0 14px rgba(49, 95, 221, 0.35); }
+    &--trade-only-under { border-color: #d4a900; background: linear-gradient(135deg, #ffdf45, #f5bd00); color: #382b00; box-shadow: 0 0 12px rgba(245, 189, 0, 0.28); }
+    &--trade-only-under:hover:not(:disabled) { background: linear-gradient(135deg, #ffe66b, #f8c800); box-shadow: 0 0 16px rgba(245, 189, 0, 0.4); }
+    &--trade-only-over { border-color: #16804a; background: linear-gradient(135deg, #22c55e, #15803d); color: #fff; box-shadow: 0 0 12px rgba(34, 197, 94, 0.24); }
+    &--trade-only-over:hover:not(:disabled) { background: linear-gradient(135deg, #34d399, #15803d); box-shadow: 0 0 16px rgba(34, 197, 94, 0.38); }
+    &--trade-only-high-over { border-color: #b91c1c; background: linear-gradient(135deg, #ef4444, #b91c1c); color: #fff; box-shadow: 0 0 12px rgba(239, 68, 68, 0.26); }
+    &--trade-only-high-over:hover:not(:disabled) { background: linear-gradient(135deg, #f87171, #b91c1c); box-shadow: 0 0 16px rgba(239, 68, 68, 0.4); }
     &--primary { border-color: #2854c5; background: linear-gradient(135deg, #3477f5, #1948c2); color: #fff; box-shadow: 0 0 12px rgba(49, 95, 221, 0.32); }
     &--primary:hover:not(:disabled) { background: linear-gradient(135deg, #2869e7, #173fa9); box-shadow: 0 0 16px rgba(49, 95, 221, 0.48); }
 }
@@ -688,6 +690,10 @@
     > button small { color: #475569; font-size: 0.52rem; font-weight: 650; text-align: right; }
     > .as-trade-choice__cancel { justify-content: center; min-height: 1.8rem; color: #475569; font-weight: 750; }
 }
+
+.as-trade-choice__trade-only.as-button--trade-only-under { border-color: #d4a900; background: #ffdf45; color: #382b00; }
+.as-trade-choice__trade-only.as-button--trade-only-over { border-color: #16804a; background: #22c55e; color: #fff; }
+.as-trade-choice__trade-only.as-button--trade-only-high-over { border-color: #b91c1c; background: #ef4444; color: #fff; }
 
 .as-alert {
     display: flex;

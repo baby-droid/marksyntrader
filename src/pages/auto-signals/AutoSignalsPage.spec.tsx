@@ -107,7 +107,7 @@ describe('Auto-Signals trade actions', () => {
         expect(props.onTrade).toHaveBeenCalledWith(market, 'over-dt');
     });
 
-    it('renders alternative barriers as separate cards and shows the exact 20-tick rate', () => {
+    it('renders alternative barriers separately and shows the validated alignment score', () => {
         const over4 = {
             ...market.candidate!,
             windows: [{ window: 20 as const, sampleSize: 20, probability: 35, agrees: true }],
@@ -130,8 +130,9 @@ describe('Auto-Signals trade actions', () => {
 
         expect(screen.getByTestId('card-market-R_10-OVER-4')).toBeInTheDocument();
         expect(screen.getByTestId('card-market-R_10-UNDER-7')).toBeInTheDocument();
-        expect(screen.getByTestId('text-confidence-R_10-OVER-4')).toHaveTextContent('35%');
-        expect(screen.getByTestId('text-confidence-R_10-UNDER-7')).toHaveTextContent('50%');
+        expect(screen.getByTestId('text-confidence-R_10-OVER-4')).toHaveTextContent('76%');
+        expect(screen.getByTestId('text-confidence-R_10-UNDER-7')).toHaveTextContent('76%');
+        expect(screen.getByTestId('text-confidence-R_10-OVER-4')).toHaveTextContent('Historical alignment');
     });
 
     it('sends the candidate from the selected card, not the market default candidate', async () => {
@@ -176,13 +177,90 @@ describe('Auto-Signals trade actions', () => {
             candidates: [suggestedCandidate],
         }]} />);
 
-        expect(screen.getByTestId('text-confidence-R_10-OVER-4')).toHaveTextContent('Waiting for 20 ticks');
+        expect(screen.getByTestId('text-confidence-R_10-OVER-4')).toHaveTextContent('89%');
         expect(screen.getByTestId('text-score-R_10-OVER-4')).toHaveTextContent('89/100');
         expect(screen.getByTestId('text-run-recommendation-R_10-OVER-4')).toHaveTextContent('4');
         expect(screen.getByTestId('panel-bot-settings')).not.toHaveAttribute('open');
 
         fireEvent.click(screen.getByText('SETTINGS'));
         expect(screen.getByTestId('input-setting-stake1')).toBeInTheDocument();
+    });
+
+    it('colors Trade Only by the selected Over/Under barrier bands', () => {
+        const colorCases = [
+            { strategy: 'UNDER' as const, barrier: 1, label: 'Under', contractType: 'DIGITUNDER', direction: 'under' as const, tone: 'under' },
+            { strategy: 'UNDER' as const, barrier: 3, label: 'Under', contractType: 'DIGITUNDER', direction: 'under' as const, tone: 'under' },
+            { strategy: 'OVER' as const, barrier: 4, label: 'Over', contractType: 'DIGITOVER', direction: 'over' as const, tone: 'over' },
+            { strategy: 'OVER' as const, barrier: 5, label: 'Over', contractType: 'DIGITOVER', direction: 'over' as const, tone: 'over' },
+            { strategy: 'OVER' as const, barrier: 6, label: 'Over', contractType: 'DIGITOVER', direction: 'over' as const, tone: 'high-over' },
+            { strategy: 'OVER' as const, barrier: 7, label: 'Over', contractType: 'DIGITOVER', direction: 'over' as const, tone: 'high-over' },
+            { strategy: 'OVER' as const, barrier: 8, label: 'Over', contractType: 'DIGITOVER', direction: 'over' as const, tone: 'high-over' },
+        ];
+        const markets = colorCases.map((item, index) => {
+            const symbol = `R_${index + 10}`;
+            const candidate = {
+                ...market.candidate!,
+                id: `${symbol}:${item.strategy}:${item.contractType}:${item.barrier}`,
+                strategy: item.strategy,
+                label: item.label,
+                contractType: item.contractType,
+                barrier: item.barrier,
+                direction: item.direction,
+            };
+            return {
+                ...market,
+                symbol,
+                candidate,
+                candidates: [candidate],
+            };
+        });
+        render(<AutoSignalsPage {...props} markets={markets} />);
+
+        colorCases.forEach((item, index) => {
+            const symbol = `R_${index + 10}`;
+            expect(screen.getByTestId(`button-trade-only-${symbol}-${item.strategy}-${item.barrier}`))
+                .toHaveClass(`as-button--trade-only-${item.tone}`);
+        });
+    });
+
+    it('ranks cards by initial alignment score, then keeps their slots as scores change', () => {
+        const makeMarket = (symbol: string, label: string, score: number): AutoSignalMarket => {
+            const candidate = {
+                ...market.candidate!,
+                id: `${symbol}:OVER:DIGITOVER:4`,
+                score,
+            };
+            return {
+                ...market,
+                symbol,
+                label,
+                historyLoaded: true,
+                candidate,
+                candidates: [candidate],
+            };
+        };
+        const initial = [
+            makeMarket('R_10', 'Volatility 10', 76),
+            makeMarket('JD50', 'Jump 50', 90),
+        ];
+        const { rerender } = render(<AutoSignalsPage {...props} markets={initial} />);
+        const cardOrder = () => screen.getAllByTestId(/^card-market-/)
+            .map((card) => card.getAttribute('data-testid'));
+        const firstOrder = cardOrder();
+        expect(firstOrder[0]).toBe('card-market-JD50-OVER-4');
+
+        rerender(<AutoSignalsPage {...props} markets={[
+            makeMarket('R_10', 'Volatility 10', 98),
+            makeMarket('JD50', 'Jump 50', 60),
+        ]} />);
+        expect(cardOrder()).toEqual(firstOrder);
+
+        rerender(<AutoSignalsPage {...props} markets={[
+            makeMarket('JD50', 'Jump 50', 60),
+        ]} />);
+        expect(cardOrder()).toHaveLength(2);
+        expect(cardOrder()[1]).toBe('card-market-R_10');
+        expect(within(screen.getByTestId('card-market-R_10')).getByText('No active setup')).toBeInTheDocument();
     });
 
     it('lets each signal card edit the exact run cap sent to Bot Builder', async () => {

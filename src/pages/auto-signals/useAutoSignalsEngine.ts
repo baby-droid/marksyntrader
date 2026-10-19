@@ -62,6 +62,7 @@ type MarketRuntime = {
     info: MarketInfo;
     rawTicks: Map<number, number>;
     ticks: AutoLabTick[];
+    historyLoaded: boolean;
     pipSize: number | null;
     lastTickAt: number | null;
     feedState: AutoSignalMarket['feedState'];
@@ -129,6 +130,7 @@ const marketSnapshot = (runtime: MarketRuntime, now: number): AutoSignalMarket =
         latestQuote: latest?.quote ?? null,
         updatedAt: runtime.lastTickAt,
         feedState: live ? 'live' : runtime.feedState === 'error' ? 'error' : runtime.lastTickAt ? 'stale' : runtime.feedState,
+        historyLoaded: runtime.historyLoaded,
         candidate,
         candidates,
         availableContractTypes: [...new Set(candidates.map((item) => item.contractType))],
@@ -370,17 +372,16 @@ export const useAutoSignalsEngine = ({
     }, []);
 
     useEffect(() => {
-        if (family !== 'MATCHES') return;
-        const filesToWarm = [
-            AUTO_SIGNAL_BOTS['trade-only'].file,
-            AUTO_SIGNAL_BOTS['entry-trade'].file,
-        ];
+        const filesToWarm = new Set([
+            ...Object.values(AUTO_SIGNAL_BOTS).map((bot) => bot.file),
+            '/bots/normal-killer-bot-v3.xml',
+        ]);
+        // Warm all supported templates during the baseline scan so selecting
+        // Trade Only does not wait for a template request.
         filesToWarm.forEach(file => {
-            // Preload while the Matches scanner is gathering a live signal.
-            // A failed warmup is retried by onTrade, where errors are visible.
             void loadAutoSignalTemplate(file).catch(() => undefined);
         });
-    }, [family]);
+    }, []);
 
     useEffect(() => subscribeAutoSignalsRunSession((nextSession) => {
         setRunSession(nextSession);
@@ -456,15 +457,16 @@ export const useAutoSignalsEngine = ({
                         market: String(item.market),
                         submarket: String(item.submarket || 'random_index'),
                     };
-                         const runtime: MarketRuntime = {
+                    const runtime: MarketRuntime = {
                         info,
                         rawTicks: new Map(),
                         ticks: [],
+                        historyLoaded: false,
                         pipSize: null,
                         lastTickAt: null,
                         feedState: 'loading',
                         candidate: null,
-                            candidates: [],
+                        candidates: [],
                     };
                     runtimesRef.current.set(symbol, runtime);
                     return runtime;
@@ -538,10 +540,12 @@ export const useAutoSignalsEngine = ({
                                 }
                             }
                             if (runtime.pipSize) rebuildRuntimeTicks(runtime);
+                            runtime.historyLoaded = true;
                             dirtySymbolsRef.current.add(runtime.info.symbol);
                             queueMarketRefresh();
                         } catch (error: any) {
                             if (cancelled || generation !== generationRef.current) return;
+                            runtime.historyLoaded = true;
                             runtime.error = error?.message || 'Could not load recent tick history.';
                             if (!runtime.lastTickAt) runtime.feedState = 'error';
                             queueMarketRefresh();
@@ -621,7 +625,6 @@ export const useAutoSignalsEngine = ({
 
         isPreparingRunRef.current = true;
         const bot = getAutoSignalBot(action, candidate);
-        let botLoaded = false;
         try {
             setMessage(`Preparing ${bot.name} for ${market.label}…`);
             const template = await loadAutoSignalTemplate(bot.file);
@@ -661,7 +664,6 @@ export const useAutoSignalsEngine = ({
                 bot.name,
                 !builderAlreadyMounted,
             );
-            botLoaded = true;
             if ((window as any).__pendingBotXml === configuredXml) {
                 (window as any).__pendingBotXml = null;
                 (window as any).__pendingBotName = null;
@@ -711,6 +713,8 @@ export const useAutoSignalsEngine = ({
             } else {
                 setAutoSignalsRunMessage(currentSession.message || `${bot.name} started on ${market.symbol}.`);
             }
+            setActiveTab(DBOT_TABS.AUTO_SIGNALS);
+            runPanel.toggleDrawer?.(false);
         } catch (error: any) {
             const errorMessage = error?.message || 'The Bot Builder handoff failed.';
             if ((window as any).__pendingBotName === bot.name) {
@@ -719,11 +723,9 @@ export const useAutoSignalsEngine = ({
             }
             clearAutoSignalsRun(errorMessage);
             setAutoSignalsRunMessage(errorMessage);
-            if (!botLoaded) {
-                setMessage(errorMessage);
-                setActiveTab(DBOT_TABS.AUTO_SIGNALS);
-                runPanel.toggleDrawer?.(false);
-            }
+            setMessage(errorMessage);
+            setActiveTab(DBOT_TABS.AUTO_SIGNALS);
+            runPanel.toggleDrawer?.(false);
         } finally {
             isPreparingRunRef.current = false;
         }

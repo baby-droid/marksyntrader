@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Activity,
     ArrowDownRight,
@@ -109,6 +109,25 @@ function getFamily(candidate: AutoSignalCandidate): AutoSignalFamily {
     return STRATEGY_FAMILY[candidate.strategy] || 'AUTO';
 }
 
+type VisibleSignalCard = {
+    key: string;
+    market: AutoSignalMarket;
+    candidate: AutoSignalCandidate | null;
+};
+
+const tradeOnlyTone = (candidate: AutoSignalCandidate | null) => {
+    if (candidate?.strategy === 'UNDER' && candidate.barrier != null && candidate.barrier >= 1 && candidate.barrier <= 3) {
+        return 'under';
+    }
+    if (candidate?.strategy === 'OVER' && candidate.barrier != null && candidate.barrier >= 4 && candidate.barrier <= 5) {
+        return 'over';
+    }
+    if (candidate?.strategy === 'OVER' && candidate.barrier != null && candidate.barrier >= 6 && candidate.barrier <= 8) {
+        return 'high-over';
+    }
+    return 'default';
+};
+
 function WindowConfidence({ candidate, symbol }: { candidate: AutoSignalCandidate | null; symbol: string }) {
     const windows = candidate?.windows ?? [];
 
@@ -164,7 +183,6 @@ function MarketCard({
     const [showTradeChoices, setShowTradeChoices] = useState(false);
     const [runCountOverride, setRunCountOverride] = useState<number | null>(null);
     const score = Math.max(0, Math.min(100, candidate?.score ?? 0));
-    const recentWindow = candidate?.windows.find((item) => item.window === 20) ?? null;
     const noSignalReason = market.error
         || (market.tickCount < 1000
             ? `Loading the 1,000-tick baseline (${market.tickCount.toLocaleString()}/1,000 ticks).`
@@ -209,6 +227,7 @@ function MarketCard({
     const tradeOnlyDescription = candidate?.strategy === 'MATCHES'
         ? 'Load Ahmed SYN Even/Odd Market Killer v1.2 and run it automatically'
         : 'Load the bot matched to this signal and run it automatically';
+    const tradeTone = tradeOnlyTone(candidate);
     const openTradeChoices = () => {
         if (!canTrade || pendingAction) return;
         setShowTradeChoices((open) => !open);
@@ -246,15 +265,11 @@ function MarketCard({
                     <div
                         className='as-market-card__confidence'
                         data-testid={`text-confidence-${cardId}`}
-                        title={candidate && recentWindow
-                            ? `Observed one-tick rate for ${candidate.label}${candidate.barrier == null ? '' : ` ${candidate.barrier}`} across the latest 20 ticks; descriptive history, not a forecast.`
-                            : 'Waiting for a complete 20-tick sample.'}
+                        title='Historical alignment score from validated tick windows. It is not a calibrated win probability.'
                     >
-                        <span>20-TICK OBSERVED RATE</span>
-                        <strong>{recentWindow ? `${Math.round(recentWindow.probability)}%` : '—'}</strong>
-                        <small>{recentWindow
-                            ? `${recentWindow.sampleSize} one-tick outcomes`
-                            : candidate ? 'Waiting for 20 ticks' : 'No active signal'}</small>
+                        <span>SIGNAL CONFIDENCE</span>
+                        <strong>{candidate ? `${Math.round(score)}%` : '—'}</strong>
+                        <small>{candidate ? 'Historical alignment · not a forecast' : 'No active signal'}</small>
                     </div>
                     <span>LAST QUOTE</span>
                     <strong data-testid={`text-quote-${cardId}`}>{numberText(market.latestQuote, 3)}</strong>
@@ -369,7 +384,7 @@ function MarketCard({
 
             <div className='as-market-card__actions'>
                 <button
-                    className='as-button as-button--quiet'
+                    className={`as-button as-button--quiet as-button--trade-only-${tradeTone}`}
                     type='button'
                     disabled={!canTrade || pendingAction !== null}
                     aria-busy={pendingAction === 'trade-only' || pendingAction === 'over-dt' || pendingAction === 'under-dt'}
@@ -396,7 +411,11 @@ function MarketCard({
             {showTradeChoices && candidate && (
                 <div className='as-trade-choice' role='dialog' aria-label={`Choose a ${candidate.label} bot for ${market.label}`}>
                     <strong>Choose a bot for this signal</strong>
-                    <button type='button' onClick={() => void startTrade('trade-only')}>
+                    <button
+                        className={`as-trade-choice__trade-only as-button--trade-only-${tradeTone}`}
+                        type='button'
+                        onClick={() => void startTrade('trade-only')}
+                    >
                         Trade Only <small>{tradeOnlyDescription}</small>
                     </button>
                     {candidate.strategy === 'OVER' && (
@@ -496,6 +515,7 @@ const AutoSignalsPage = ({
 }: AutoSignalsPageProps) => {
     const [now, setNow] = useState(() => Date.now());
     const [speedBoost, setSpeedBoost] = useState(isASpeedBoostEnabled());
+    const stableCardsByFamily = useRef(new Map<AutoSignalFamily, VisibleSignalCard[]>());
 
     useEffect(() => {
         const interval = window.setInterval(() => setNow(Date.now()), 1000);
@@ -503,8 +523,8 @@ const AutoSignalsPage = ({
     }, []);
     useEffect(() => subscribeASpeedBoost(setSpeedBoost), []);
 
-    const visibleCards = useMemo(
-        () => markets.flatMap((market) => {
+    const visibleCards = useMemo(() => {
+        const cards = markets.flatMap((market) => {
             const candidates = market.candidates?.length
                 ? market.candidates
                 : market.candidate
@@ -523,9 +543,50 @@ const AutoSignalsPage = ({
                 market: { ...market, candidate },
                 candidate,
             }));
-        }),
-        [family, markets],
-    );
+        });
+        const baselineComplete = markets.length > 0
+            && markets.every((market) => market.historyLoaded || market.feedState === 'error');
+        const savedCards = stableCardsByFamily.current.get(family);
+        if (!savedCards && baselineComplete) {
+            const confidenceOrder = [...cards].sort((left, right) =>
+                (right.candidate?.score ?? -1) - (left.candidate?.score ?? -1)
+                || left.market.symbol.localeCompare(right.market.symbol)
+                || left.key.localeCompare(right.key)
+            );
+            stableCardsByFamily.current.set(family, confidenceOrder);
+            return confidenceOrder;
+        }
+        if (!savedCards) return cards;
+
+        const currentByKey = new Map(cards.map((card) => [card.key, card]));
+        const rank = new Map(savedCards.map((card, index) => [card.key, index]));
+        const newCards = cards
+            .filter((card) => !rank.has(card.key))
+            .sort((left, right) =>
+                (right.candidate?.score ?? -1) - (left.candidate?.score ?? -1)
+                || left.market.symbol.localeCompare(right.market.symbol)
+                || left.key.localeCompare(right.key)
+            );
+        const latestMarkets = new Map(markets.map((market) => [market.symbol, market]));
+        const retainedSlots = savedCards.map((savedCard) => {
+            const currentCard = currentByKey.get(savedCard.key);
+            if (currentCard) return currentCard;
+            const latestMarket = latestMarkets.get(savedCard.market.symbol) ?? savedCard.market;
+            return {
+                ...savedCard,
+                market: {
+                    ...latestMarket,
+                    candidate: null,
+                    candidates: [],
+                    availableContractTypes: [],
+                },
+                candidate: null,
+            };
+        });
+        const nextCards = [...retainedSlots, ...newCards];
+        stableCardsByFamily.current.set(family, nextCards);
+        return nextCards;
+    }, [family, markets]);
     const readyCount = markets.reduce(
         (total, market) => total + (market.candidates ?? (market.candidate ? [market.candidate] : []))
             .filter((candidate) => candidate.state === 'ready').length,

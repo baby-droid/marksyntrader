@@ -59,12 +59,21 @@ const isRouteInFamily = (route: Route, family: AutoSignalFamily) => {
     return route.strategy === 'MATCHES';
 };
 
+const isStepMarket = (market: Pick<AutoSignalMarket, 'symbol' | 'label' | 'market' | 'submarket'>) =>
+    /\bstep\b/i.test(`${market.label} ${market.submarket}`)
+    || /^stp/i.test(market.symbol);
+
+export const isAutoSignalStrategyAllowedForMarket = (
+    strategy: AutoSignalStrategy,
+    market: Pick<AutoSignalMarket, 'symbol' | 'label' | 'market' | 'submarket'>,
+) => !isStepMarket(market) || strategy === 'RISE' || strategy === 'FALL';
+
 const digitRoutes = (): Route[] => {
     const routes: Route[] = [
         { strategy: 'EVEN', contractType: 'DIGITEVEN', barrier: null, direction: 'even', baseline: 50 },
         { strategy: 'ODD', contractType: 'DIGITODD', barrier: null, direction: 'odd', baseline: 50 },
     ];
-    for (let barrier = 1; barrier <= 7; barrier += 1) {
+    for (let barrier = 1; barrier <= 8; barrier += 1) {
         routes.push({
             strategy: 'OVER', contractType: 'DIGITOVER', barrier, direction: 'over',
             baseline: ((9 - barrier) / 10) * 100,
@@ -427,7 +436,7 @@ export const evaluateAutoSignalCandidates = ({
     previous,
     now = Date.now(),
 }: {
-    market: Pick<AutoSignalMarket, 'symbol' | 'label'>;
+    market: Pick<AutoSignalMarket, 'symbol' | 'label'> & Partial<Pick<AutoSignalMarket, 'market' | 'submarket'>>;
     ticks: AutoLabTick[];
     family: AutoSignalFamily;
     previous?: AutoSignalCandidate | null;
@@ -437,7 +446,14 @@ export const evaluateAutoSignalCandidates = ({
 
     const patternCandidates = getPatternCandidates(ticks);
     const digitOptions = digitRoutes();
-    const routes = [...digitOptions, ...priceRoutes].filter((route) => isRouteInFamily(route, family));
+    const routes = [...digitOptions, ...priceRoutes].filter((route) =>
+        isRouteInFamily(route, family)
+        && isAutoSignalStrategyAllowedForMarket(route.strategy, {
+            ...market,
+            market: market.market ?? '',
+            submarket: market.submarket ?? '',
+        })
+    );
 
     const ranked = routes.flatMap((route) => {
         const matchPrediction = route.strategy === 'MATCHES'
@@ -581,17 +597,27 @@ export const shouldExcludeAutoSignalMarket = (market: {
     display_name?: unknown;
     underlying_symbol_name?: unknown;
     market?: unknown;
+    submarket?: unknown;
     exchange_is_open?: unknown;
     is_trading_suspended?: unknown;
 }) => {
     const symbol = String(market.symbol ?? '').trim().toUpperCase();
-    const label = `${String(market.display_name ?? '')} ${String(market.underlying_symbol_name ?? '')}`;
+    const label = `${String(market.display_name ?? '')} ${String(market.underlying_symbol_name ?? '')} ${String(market.submarket ?? '')}`;
     const isOpen = market.exchange_is_open !== false
         && Number(market.exchange_is_open) !== 0
         && !market.is_trading_suspended;
+    const isJump100 = symbol === 'JD100' || /\bjump\s*100\b/i.test(label);
+    const isStep = /^STP/i.test(symbol) || /\bstep\b/i.test(label);
+    const isVolatility = /^R_\d+$/.test(symbol)
+        || /^1HZ\d+V?$/.test(symbol)
+        || /\bvolatility\b/i.test(label);
+    const isBearOrBull = /^RD(?:BEAR|BULL)$/i.test(symbol)
+        || /\b(?:bear|bull)\b/i.test(label);
+    const isJump = /^JD\d+$/.test(symbol) || /\bjump\b/i.test(label);
+    const isSupportedFamily = isStep || isVolatility || isBearOrBull || (isJump && !isJump100);
     return !isOpen
         || String(market.market ?? '').toLowerCase() !== 'synthetic_index'
-        || symbol === 'JD100'
-        || /\bjump\s*100\b/i.test(label);
+        || isJump100
+        || !isSupportedFamily;
 };
 
