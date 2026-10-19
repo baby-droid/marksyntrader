@@ -11,7 +11,24 @@ html, body, #root {
     max-width: 100vw;
 }
 
+/* ═══════════════════════════════════════════════════
+   FLOATING RUN BUTTON
+   ═══════════════════════════════════════════════════ */
+
+/* Keep floating run button inside safe area on ALL screens */
+.floating-run-btn {
+    max-width: calc(100vw - 8px);
+    /* Clamp vertically so it never goes under the header or off-screen bottom */
+    max-height: calc(100vh - 120px);
+}
+
 @media (max-width: 600px) {
+    .floating-run-btn {
+        /* On mobile: keep from going under nav, scale down slightly */
+        max-width: calc(100vw - 12px);
+        transform-origin: left center;
+    }
+
     /* Ensure floating WhatsApp button doesn't collide */
     .whatsapp-float {
         right: 10px !important;

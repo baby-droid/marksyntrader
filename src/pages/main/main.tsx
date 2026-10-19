@@ -42,6 +42,7 @@ import ChartModal from '../chart/chart-modal';
 import Dashboard from '../dashboard';
 import RunStrategy from '../dashboard/run-strategy';
 import SettingsPanel from '@/components/settings-panel';
+import FloatingRunButton from '@/components/floating/FloatingRunButton';
 import WhatsAppFloat from '@/components/floating/WhatsAppFloat';
 import { copyEngine, mirrorEngine } from '@/utils/copy-trading';
 import './main.scss';
@@ -549,6 +550,14 @@ const AppWrapper = observer(() => {
                 </div>
             </div>
 
+            {/* Floating runner is not needed on self-contained trading surfaces. */}
+            {![
+                DBOT_TABS.AUTO_DIGITS,
+                DBOT_TABS.AUTO_LAB,
+                DBOT_TABS.CHART,
+                DBOT_TABS.MANUAL_TRADER,
+                DBOT_TABS.TUTORIAL,
+            ].includes(active_tab) && <FloatingRunButton />}
             {/* Keep the mobile experience focused: WhatsApp is a Dashboard
                 affordance on phones, while desktop retains the existing
                 floating contact button on every page. */}

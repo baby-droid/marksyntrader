@@ -61,9 +61,7 @@ export default class TicksService {
         this.ohlcListeners = new Map();
         this.subscriptions = new Map();
         this.liveTickSubscriptions = new globalThis.Map();
-        this.liveTickApis = new globalThis.Map();
         this.seenTickIds = new globalThis.Map();
-        this.historyReadySymbols = new globalThis.Set();
         this.ticks_history_promise = null;
         this.active_symbols_promise = null;
         this.candles_promise = null;
@@ -91,26 +89,12 @@ export default class TicksService {
 
             const style = getType(granularity);
 
-            if (
-                style === 'ticks' &&
-                this.historyReadySymbols.has(symbol) &&
-                this.ticks.has(symbol) &&
-                this.liveTickApis.get(symbol) === api_base.api
-            ) {
+            if (style === 'ticks' && this.ticks.has(symbol)) {
                 resolve(this.ticks.get(symbol));
-                return;
-            }
-            if (style === 'ticks' && this.historyReadySymbols.has(symbol)) {
-                // A cached snapshot is not enough after the authenticated API
-                // instance changes: the old stream is no longer live.
-                this.historyReadySymbols.delete(symbol);
-                this.ticks = this.ticks.delete(symbol);
-                this.seenTickIds.delete(symbol);
             }
 
             if (style === 'candles' && this.candles.hasIn([symbol, Number(granularity)])) {
                 resolve(this.candles.getIn([symbol, Number(granularity)]));
-                return;
             }
             this.requestStream({ ...options, style })
                 .then(res => {
@@ -175,10 +159,8 @@ export default class TicksService {
             this.tickListeners = this.tickListeners.delete(symbol);
             this.ticks = this.ticks.delete(symbol);
             this.seenTickIds.delete(symbol);
-            this.historyReadySymbols.delete(symbol);
             const liveSubscription = this.liveTickSubscriptions.get(symbol);
             this.liveTickSubscriptions.delete(symbol);
-            this.liveTickApis.delete(symbol);
             liveSubscription?.unsubscribe?.();
         }
 
@@ -289,19 +271,10 @@ export default class TicksService {
         if (style === 'ticks') {
             // Check if we already have a promise for these exact options
             if (!this.ticks_history_promise || this.ticks_history_promise.stringified_options !== stringified_options) {
-                const request = {
-                    promise: null,
+                this.ticks_history_promise = {
+                    promise: this.requestPipSizes().then(() => this.requestTicks(options)),
                     stringified_options,
                 };
-                request.promise = this.requestPipSizes()
-                    .then(() => this.requestTicks(options))
-                    .catch(error => {
-                        if (this.ticks_history_promise === request) {
-                            this.ticks_history_promise = null;
-                        }
-                        throw error;
-                    });
-                this.ticks_history_promise = request;
             }
 
             return this.ticks_history_promise.promise;
@@ -310,19 +283,10 @@ export default class TicksService {
         if (style === 'candles') {
             // Check if we already have a promise for these exact options
             if (!this.candles_promise || this.candles_promise.stringified_options !== stringified_options) {
-                const request = {
-                    promise: null,
+                this.candles_promise = {
+                    promise: this.requestPipSizes().then(() => this.requestTicks(options)),
                     stringified_options,
                 };
-                request.promise = this.requestPipSizes()
-                    .then(() => this.requestTicks(options))
-                    .catch(error => {
-                        if (this.candles_promise === request) {
-                            this.candles_promise = null;
-                        }
-                        throw error;
-                    });
-                this.candles_promise = request;
             }
 
             return this.candles_promise.promise;
@@ -353,21 +317,7 @@ export default class TicksService {
             const pendingLiveTicks = [];
             if (style === 'ticks') {
                 if (!this.ticks.has(symbol)) this.ticks = this.ticks.set(symbol, []);
-                const existingLiveApi = this.liveTickApis.get(symbol);
-                if (this.liveTickSubscriptions.has(symbol) && existingLiveApi !== api) {
-                    try {
-                        this.liveTickSubscriptions.get(symbol)?.unsubscribe?.();
-                    } catch {
-                        // The previous API instance may already be closed.
-                    }
-                    this.liveTickSubscriptions.delete(symbol);
-                    this.liveTickApis.delete(symbol);
-                    this.historyReadySymbols.delete(symbol);
-                    this.ticks = this.ticks.delete(symbol).set(symbol, []);
-                    this.seenTickIds.delete(symbol);
-                }
                 if (!this.liveTickSubscriptions.has(symbol)) {
-                    let liveSubscriptionFailed = false;
                     const liveSubscription = subscribeSharedDerivTicks(api, apiSymbol, {
                         next: message => {
                             const tick = parseTick(message?.tick ?? message?.data?.tick);
@@ -379,34 +329,13 @@ export default class TicksService {
                             }
                             this.appendLiveTick(symbol, tick);
                         },
-                        error: error => {
-                            liveSubscriptionFailed = true;
-                            if (this.liveTickApis.get(symbol) === api) {
-                                this.liveTickSubscriptions.delete(symbol);
-                                this.liveTickApis.delete(symbol);
-                                this.historyReadySymbols.delete(symbol);
-                                this.ticks = this.ticks.delete(symbol);
-                                this.seenTickIds.delete(symbol);
-                            }
-                            globalObserver.emit('Error', error);
-                        },
+                        error: error => globalObserver.emit('Error', error),
                     });
-                    if (!liveSubscriptionFailed) {
-                        this.liveTickSubscriptions.set(symbol, liveSubscription);
-                        this.liveTickApis.set(symbol, api);
-                    }
+                    this.liveTickSubscriptions.set(symbol, liveSubscription);
                 }
             }
 
-            doUntilDone(
-                () => api_base.api.send(request_object),
-                ['AlreadySubscribed'],
-                api_base,
-                {
-                    maxRetries: 5,
-                    stopOnCodes: ['AlreadySubscribed', 'MarketIsClosed'],
-                },
-            )
+            doUntilDone(() => api_base.api.send(request_object), ['AlreadySubscribed'], api_base)
                 .then(r => {
                     const subscriptionId = r?.subscription?.id;
                     if (subscriptionId && style === 'candles') {
@@ -417,7 +346,6 @@ export default class TicksService {
                     if (style === 'ticks') {
                         const ticks = historyToTicks(r.history);
                         this.updateTicksAndCallListeners(symbol, ticks);
-                        this.historyReadySymbols.add(symbol);
                         historyReady = true;
                         pendingLiveTicks.forEach(tick => this.appendLiveTick(symbol, tick));
                         resolve(this.ticks.get(symbol) || ticks);
@@ -444,20 +372,6 @@ export default class TicksService {
                     }
                     // Don't clear auth data for InvalidSymbol errors as it causes unwanted logouts
                     // InvalidSymbol errors can occur for various reasons and don't necessarily mean the user is unauthorized
-                    if (style === 'ticks') {
-                        if (this.liveTickApis.get(symbol) === api) {
-                            try {
-                                this.liveTickSubscriptions.get(symbol)?.unsubscribe?.();
-                            } catch {
-                                // The feed may already be closed after a request timeout.
-                            }
-                            this.liveTickSubscriptions.delete(symbol);
-                            this.liveTickApis.delete(symbol);
-                        }
-                        this.historyReadySymbols.delete(symbol);
-                        this.ticks = this.ticks.delete(symbol);
-                        this.seenTickIds.delete(symbol);
-                    }
                     reject(error);
                 });
         });
@@ -522,10 +436,6 @@ export default class TicksService {
         this.candles_promise = null;
         const liveSubscriptions = Array.from(this.liveTickSubscriptions.values());
         this.liveTickSubscriptions.clear();
-        this.liveTickApis.clear();
-        this.historyReadySymbols.clear();
-        this.seenTickIds.clear();
-        this.ticks = new Map();
         liveSubscriptions.forEach(subscription => subscription?.unsubscribe?.());
         return this.forget().then(() => this.forgetCandleSubscription());
     }

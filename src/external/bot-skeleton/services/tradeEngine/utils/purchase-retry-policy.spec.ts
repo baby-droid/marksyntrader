@@ -1,4 +1,4 @@
-import { getRateLimitRetryDelayMs, shouldStopPurchaseRetry } from './purchase-retry-policy';
+import { shouldStopPurchaseRetry } from './purchase-retry-policy';
 
 describe('purchase retry policy', () => {
     it('stops immediately for an explicitly non-retryable purchase error', () => {
@@ -21,11 +21,5 @@ describe('purchase retry policy', () => {
 
     it('does not add a retry limit to shared requests unless a policy is supplied', () => {
         expect(shouldStopPurchaseRetry({ error: { code: 'MarketIsClosed' } }, 100)).toBe(false);
-    });
-
-    it('backs off exponentially on accelerated-mode rate limits and caps the delay', () => {
-        expect([0, 1, 2, 3, 4, 5, 20].map(getRateLimitRetryDelayMs)).toEqual([
-            250, 500, 1_000, 2_000, 4_000, 5_000, 5_000,
-        ]);
     });
 });

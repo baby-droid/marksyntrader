@@ -13,6 +13,9 @@ import main_xml from './xml/main.xml?raw';
 import { forgetAccumulatorsProposalRequest } from './accumulators-proposal-handler';
 import { loadBlockly } from './blockly';
 import DBotStore from './dbot-store';
+import { getKingFisherDigitSetup, scanKingFisherMarket } from '@/utils/king-fisher-market-scanner';
+import { CONTINUOUS_INDEX_SYMBOLS } from '@/utils/continuous-index-rotation';
+import { dispatchBrowserEvent } from '../utils/browser-event';
 import { isAllRequiredBlocksEnabled, updateDisabledBlocks, validateErrorOnBlockDelete } from './utils';
 
 class DBot {
@@ -288,23 +291,105 @@ class DBot {
      * Runs the bot. Does a sanity check before attempting to generate the
      * JavaScript code that's fed to the interpreter.
      */
-    runBot() {
+    async runBot() {
         if (api_base.is_stopping) return;
 
         try {
             api_base.is_stopping = false;
+            const bestMarketBlock = this.workspace?.getAllBlocks?.(false)
+                ?.find(block => block.type === 'king_fisher_best_market_scanner');
+            if (bestMarketBlock && bestMarketBlock.getFieldValue?.('ENABLED') !== 'FALSE') {
+                const workspaceBlocks = this.workspace?.getAllBlocks?.(false) ?? [];
+                const marketBlock = workspaceBlocks
+                    ?.find(block => block.type === 'trade_definition_market');
+                const setup = getKingFisherDigitSetup(workspaceBlocks);
+                if (marketBlock && !setup) {
+                    dispatchBrowserEvent('journal:signal', {
+                        type: 'SCAN',
+                        label: 'BEST MARKET SCAN SKIPPED',
+                        detail: 'No phase has a fixed Over or Under digit barrier, so the manually selected market is kept.',
+                    });
+                } else if (marketBlock && setup) {
+                    let result = null;
+                    try {
+                        const onlyRotatableMarkets =
+                            marketBlock.getFieldValue?.('ALTERNATE_MARKETS') === 'TRUE';
+                        result = await scanKingFisherMarket(
+                            setup.direction,
+                            setup.barrier,
+                            onlyRotatableMarkets ? CONTINUOUS_INDEX_SYMBOLS : undefined,
+                        );
+                    } catch (scanError) {
+                        dispatchBrowserEvent('journal:signal', {
+                            type: 'SCAN',
+                            label: 'BEST MARKET SCAN FAILED',
+                            detail: scanError?.message || 'Using the manually selected market.',
+                        });
+                    }
+                    if (result) {
+                        marketBlock.setFieldValue(result.market, 'MARKET_LIST');
+                        marketBlock.setFieldValue(result.submarket, 'SUBMARKET_LIST');
+                        marketBlock.setFieldValue(result.symbol, 'SYMBOL_LIST');
+                        const detail = {
+                            symbol: result.symbol,
+                            label: result.label,
+                            group: result.group,
+                            lastDigit: result.lastDigit,
+                            score: result.score,
+                            direction: setup.direction,
+                            barrier: setup.barrier,
+                        };
+                        dispatchBrowserEvent('king-fisher:best-market', detail);
+                        dispatchBrowserEvent('journal:signal', {
+                            type: 'SCAN',
+                            label: 'BEST MARKET SELECTED',
+                            detail: `${result.label} · ${result.group} · last digit ${result.lastDigit ?? '—'} · score ${result.score}`,
+                        });
+                    } else {
+                        dispatchBrowserEvent('journal:signal', {
+                            type: 'SCAN',
+                            label: 'BEST MARKET UNAVAILABLE',
+                            detail: 'No market has a qualifying recent digit sequence. Using the manually selected market.',
+                        });
+                    }
+                }
+            }
             const code = this.generateCode();
             if (!this.interpreter.bot.tradeEngine.checkTicksPromiseExists()) this.interpreter = Interpreter();
 
             this.is_bot_running = true;
 
             api_base.setIsRunning(true);
-            this.interpreter.run(code).catch(error => {
+            const activeInterpreter = this.interpreter;
+            activeInterpreter.run(code).then(async () => {
+                // A King Fisher TP/SL ends the current market cycle, not the
+                // user's run request. Cleanly tear down the completed
+                // interpreter, re-scan, update the market fields, and start
+                // the next cycle on the same Run action.
+                const rescanRequested = Boolean(
+                    activeInterpreter.bot?.tradeEngine?.kingFisherRescanRequested
+                );
+                if (
+                    !rescanRequested ||
+                    this.interpreter !== activeInterpreter ||
+                    api_base.is_stopping ||
+                    !this.is_bot_running
+                ) {
+                    return;
+                }
+
+                activeInterpreter.bot.tradeEngine.kingFisherRescanRequested = null;
+                this.is_bot_running = false;
+                api_base.setIsRunning(false);
+                await this.stopBot();
+                if (!api_base.is_stopping) await this.runBot();
+            }).catch(error => {
                 globalObserver.emit('Error', error);
                 this.stopBot();
             });
         } catch (error) {
             globalObserver.emit('Error', error);
+
             if (this.interpreter) {
                 this.stopBot();
             }
@@ -402,6 +487,30 @@ class DBot {
             }
             
             `;
+    }
+
+    /**
+     * Halts the running strategy in place without tearing down the interpreter.
+     * Unlike stopBot(), this keeps all workspace variables (stake, martingale
+     * progression, run counters, etc.) exactly as they are — resumeBot() then
+     * continues execution from that exact point instead of restarting the
+     * strategy from "Run once at start".
+     */
+    pauseBot() {
+        if (this.interpreter) this.interpreter.pause();
+    }
+
+    /**
+     * Resumes a strategy halted via pauseBot(). Continues mid-flight with
+     * whatever stake/variable state was live at the moment of pause (e.g. a
+     * martingale-adjusted stake after a loss), it does not restart the bot.
+     */
+    resumeBot() {
+        if (this.interpreter) this.interpreter.resume();
+    }
+
+    isBotPaused() {
+        return !!(this.interpreter && this.interpreter.isPaused());
     }
 
     /**

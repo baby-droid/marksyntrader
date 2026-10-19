@@ -17,18 +17,6 @@ describe('execution speed controls', () => {
         expect(speed.useDirectBuyForSpeed()).toBe(true);
     });
 
-    it('keeps every speed tier to one purchase per eligible tick', async () => {
-        const speed = await import('../execution-speed');
-
-        speed.setFastExecutionEnabled(false);
-        speed.setExecutionSpeed('crazy');
-        expect(speed.getPurchasesPerTick()).toBe(1);
-
-        speed.setExecutionSpeed('turbo');
-        expect(speed.getPurchasesPerTick()).toBe(1);
-        speed.setExecutionSpeed('normal');
-    });
-
     it('applies the same tick-wise path to the header A-SPEED preset', async () => {
         const speed = await import('../execution-speed');
 

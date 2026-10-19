@@ -43,6 +43,9 @@ export default class RunPanelStore {
             is_drawer_open: observable,
             is_dialog_open: observable,
             is_sell_requested: observable,
+            is_paused: observable,
+            onPauseButtonClick: action,
+            onResumeButtonClick: action,
             run_id: observable,
             error_type: observable,
             show_bot_stop_message: observable,
@@ -107,6 +110,7 @@ export default class RunPanelStore {
     is_drawer_open = true;
     is_dialog_open = false;
     is_sell_requested = false;
+    is_paused = false;
     show_bot_stop_message = false;
     is_contract_buying_in_progress = false;
     pending_async_error_stop = false;
@@ -207,7 +211,6 @@ export default class RunPanelStore {
         );
         runInAction(() => {
             this.pending_async_error_stop = false;
-            this.error_type = undefined;
             this.setIsRunning(true);
             ui.setPromptHandler(true);
             this.toggleDrawer(true);
@@ -222,6 +225,7 @@ export default class RunPanelStore {
 
     onStopButtonClick = () => {
         this.is_contract_buying_in_progress = false;
+        this.is_paused = false;
         const { is_multiplier } = this.root_store.summary_card;
 
         if (is_multiplier) {
@@ -229,6 +233,28 @@ export default class RunPanelStore {
         } else {
             this.stopBot();
         }
+    };
+
+    /**
+     * Halts the bot in place (does NOT stop/reset it). The strategy keeps its
+     * current stake/martingale/variable state exactly as-is — no open contract
+     * is disturbed, no new trades are entered while paused.
+     */
+    onPauseButtonClick = () => {
+        if (!this.is_running || this.is_paused) return;
+        this.dbot.pauseBot();
+        this.is_paused = true;
+    };
+
+    /**
+     * Resumes a paused bot. Continues the strategy mid-flight (e.g. with a
+     * martingale-adjusted stake carried over from the loss that preceded the
+     * pause) instead of restarting from "Run once at start".
+     */
+    onResumeButtonClick = () => {
+        if (!this.is_paused) return;
+        this.dbot.resumeBot();
+        this.is_paused = false;
     };
 
     onStopBotClick = () => {
@@ -249,6 +275,7 @@ export default class RunPanelStore {
     stopBot = () => {
         const { ui } = this.core;
 
+        this.is_paused = false;
         this.dbot.stopBot();
 
         ui.setPromptHandler(false);
