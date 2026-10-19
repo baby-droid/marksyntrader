@@ -27,7 +27,7 @@ export default Engine =>
 
             let delay_index = 1;
 
-            return new Promise((resolve, reject) => {
+            return new Promise(resolve => {
                 const onContractSold = sell_response => {
                     delay_index = 1;
 
@@ -44,22 +44,15 @@ export default Engine =>
                 const contract_id = this.contractId;
 
                 const sellContractAndGetContractInfo = () => {
-                    return api_base.api.send({ sell: contract_id, price: 0 })
+                    return doUntilDone(() => api_base.api.send({ sell: contract_id, price: 0 }))
                         .then(sell_response => {
-                            // Wait for the authoritative contract update before
-                            // resolving the sell cycle. The missing return here
-                            // previously let the trade engine advance early.
-                            return doUntilDone(
-                                () => api_base.api.send({ proposal_open_contract: 1, contract_id }),
-                                undefined,
-                                api_base,
-                                { maxRetries: 3, retryOnCodes: ['RateLimit', 'RateLimitExceeded'] },
-                            ).then(() => sell_response);
+                            doUntilDone(() => api_base.api.send({ proposal_open_contract: 1, contract_id })).then(
+                                () => sell_response
+                            );
                         })
                         .catch(e => {
-                            const error = e?.error ?? e;
-                            const errorCode = error?.code ?? e?.code ?? e?.name;
-                            if (errorCode === 'InvalidOfferings') {
+                            const error = e.error;
+                            if (error.code === 'InvalidOfferings') {
                                 // "InvalidOfferings" may occur when user tries to sell the contract too close
                                 // to the expiry time. We shouldn't interrupt the bot but instead let the contract
                                 // finish.
@@ -67,19 +60,13 @@ export default Engine =>
                             }
 
                             const sell_error = {
-                                name: errorCode,
-                                code: errorCode,
-                                message: getLocalizedErrorMessage(errorCode, error?.details),
+                                name: error.code,
+                                message: getLocalizedErrorMessage(error.code, error.details),
                                 msg_type: e.msg_type,
-                                error: {
-                                    ...error,
-                                    code: errorCode,
-                                    message: error?.message,
-                                },
-                                echo_req: e?.echo_req,
+                                error: { ...error.error },
                             };
 
-                            if (errorCode === 'RateLimit' || errorCode === 'RateLimitExceeded') {
+                            if (error.code === 'RateLimit') {
                                 return Promise.reject(sell_error);
                             }
 
@@ -113,19 +100,9 @@ export default Engine =>
                 // Restart buy/sell on error is enabled, don't recover from sell error.
                 if (!this.options.timeMachineEnabled) {
                     // eslint-disable-next-line no-promise-executor-return
-                    return doUntilDone(sellContractAndGetContractInfo, errors_to_ignore, api_base, {
-                        maxRetries: 5,
-                        stopOnCodes: ['MarketIsClosed'],
-                        retryOnCodes: [
-                            'RateLimit',
-                            'RateLimitExceeded',
-                            'NoOpenPosition',
-                            'InvalidSellContractProposal',
-                            'UnrecognisedRequest',
-                        ],
-                    })
+                    return doUntilDone(sellContractAndGetContractInfo, errors_to_ignore)
                         .then(sell_response => onContractSold(sell_response))
-                        .catch(reject);
+                        .catch(error => error);
                 }
 
                 // If above checkbox not checked, try to recover from sell error.

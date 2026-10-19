@@ -54,7 +54,6 @@ export interface AutoSignalCandidate {
     reason: string;
     windows: AutoSignalWindowResult[];
     entryDigit: number | null;
-    entryDigits?: number[];
     entryReady: boolean;
     createdAt: number | null;
     expiresAt: number | null;

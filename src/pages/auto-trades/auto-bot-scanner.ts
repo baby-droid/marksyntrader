@@ -4,7 +4,6 @@ import {
     CONNECTION_STATUS,
     connectionStatus$,
 } from '@/external/bot-skeleton/services/api/observables/connection-status-stream';
-import { subscribeSharedDerivTicks } from '@/external/bot-skeleton/services/api/shared-deriv-ticks';
 import { classifyAutoBotMarket } from './auto-bot-strategies';
 
 export const AUTO_BOT_MARKETS = [
@@ -307,9 +306,8 @@ export function useAuthenticatedAutoBotScanner(): {
         const generations = new Map<string, number>();
         const marketState = new Map<string, {
             prices: number[];
-            historyEpochs: number[];
-            lastEpoch: number;
-            live: Array<{ epoch: number; price: number; id?: string | number }>;
+            epochs: Set<number>;
+            live: Array<{ epoch: number; price: number }>;
             pipSize: number | null;
         }>();
         const marketLabels = new Map<string, string>(
@@ -338,22 +336,9 @@ export function useAuthenticatedAutoBotScanner(): {
         const publish = (symbol: string, ready = true) => {
             const market = marketState.get(symbol);
             if (!market || !alive) return;
-            const overlapCounts = new Map<string, number>();
-            market.live.forEach(item => {
-                const key = `${item.epoch}:${item.price}`;
-                overlapCounts.set(key, (overlapCounts.get(key) ?? 0) + 1);
-            });
-            const historyPrices = market.prices.filter((price, index) => {
-                const key = `${Number(market.historyEpochs[index])}:${price}`;
-                const count = overlapCounts.get(key) ?? 0;
-                if (!count) return true;
-                if (count === 1) overlapCounts.delete(key);
-                else overlapCounts.set(key, count - 1);
-                return false;
-            });
             const hasPipSize = Number.isFinite(market.pipSize);
-            const historyDigits = hasPipSize
-                ? historyPrices.map(price => digitFromQuote(price, market.pipSize as number))
+            const history = hasPipSize
+                ? market.prices.map(price => digitFromQuote(price, market.pipSize as number))
                 : [];
             const live = hasPipSize
                 ? market.live.map(item => digitFromQuote(item.price, market.pipSize as number))
@@ -363,87 +348,14 @@ export function useAuthenticatedAutoBotScanner(): {
                 [symbol]: {
                     symbol,
                     label: marketLabels.get(symbol) ?? symbol,
-                    digits: [...historyDigits, ...live].slice(-1000),
-                    prices: [...historyPrices, ...market.live.map(item => item.price)].slice(-1000),
+                    digits: [...history, ...live].slice(-1000),
+                    prices: [...market.prices, ...market.live.map(item => item.price)].slice(-1000),
                     livePrice: market.live[market.live.length - 1]?.price ?? null,
                     tickVersion: (previous[symbol]?.tickVersion ?? 0) + (ready ? 1 : 0),
                     ready: ready && hasPipSize,
                 },
             }));
             setTickVersion(version => version + (ready && hasPipSize ? 1 : 0));
-        };
-
-        const startMarket = (api: any, symbol: string, generation: number) => {
-            if (!alive || generation !== feedGeneration || marketState.has(symbol)) return;
-
-            const marketGeneration = (generations.get(symbol) ?? 0) + 1;
-            generations.set(symbol, marketGeneration);
-            const market = {
-                prices: [],
-                historyEpochs: [],
-                lastEpoch: -Infinity,
-                live: [] as Array<{ epoch: number; price: number; id?: string | number }>,
-                pipSize: null as number | null,
-            };
-            marketState.set(symbol, market);
-
-            try {
-                const subscription = subscribeSharedDerivTicks(api, symbol, {
-                    next: (message: any) => {
-                        if (!alive || generation !== feedGeneration || generations.get(symbol) !== marketGeneration) return;
-                        const tick = message?.tick ?? message?.data?.tick;
-                        const price = Number(tick?.quote);
-                        const epoch = Number(tick?.epoch ?? 0);
-                        if (!Number.isFinite(price) || (epoch && epoch < market.lastEpoch)) return;
-                        if (Number.isFinite(Number(tick?.pip_size))) {
-                            market.pipSize = Number(tick.pip_size);
-                        }
-                        if (epoch) market.lastEpoch = Math.max(market.lastEpoch, epoch);
-                        market.live.push({
-                            epoch,
-                            price,
-                            ...(tick?.id !== undefined && tick?.id !== null ? { id: tick.id } : {}),
-                        });
-                        market.live = market.live.slice(-1000);
-                        publish(symbol);
-                    },
-                    error: () => {
-                        scheduleRestart();
-                    },
-                });
-                if (subscription) subscriptions.push(subscription);
-            } catch {
-                // One rejected market must not block the remaining streams.
-            }
-
-            // History is deliberately requested after the live stream is attached:
-            // live ticks can populate the market while the larger history response
-            // is still in flight, and epoch overlap is removed when history arrives.
-            Promise.resolve()
-                .then(() => api.send({
-                    ticks_history: symbol,
-                    count: 1000,
-                    end: 'latest',
-                    style: 'ticks',
-                }))
-                .then((historyResponse: any) => {
-                    if (!alive || generation !== feedGeneration || generations.get(symbol) !== marketGeneration) return;
-                    const prices: unknown[] = historyResponse?.history?.prices ?? [];
-                    const times: unknown[] = historyResponse?.history?.times ?? [];
-                    for (let index = 0; index < Math.min(prices.length, times.length); index += 1) {
-                        const price = Number(prices[index]);
-                        const epoch = Number(times[index]);
-                        if (!Number.isFinite(price) || !Number.isFinite(epoch)) continue;
-                        market.prices.push(price);
-                        market.historyEpochs.push(epoch);
-                    }
-                    market.prices = market.prices.slice(-1000);
-                    market.historyEpochs = market.historyEpochs.slice(-1000);
-                    publish(symbol, false);
-                })
-                .catch(() => {
-                    // The live stream can still populate this market if history is unavailable.
-                });
         };
 
         const start = async () => {
@@ -462,31 +374,78 @@ export function useAuthenticatedAutoBotScanner(): {
             const generation = ++feedGeneration;
             setConnected(true);
             try {
-                // Subscribe to the known supported catalog immediately so the
-                // scanner does not wait behind active_symbols discovery.
-                AUTO_BOT_MARKETS.forEach(({ value: symbol }) => startMarket(api, symbol, generation));
+                let markets = [...AUTO_BOT_MARKETS] as AutoBotMarket[];
+                try {
+                    // Do not include product_type here. Deriv rejects that field
+                    // for active_symbols on some authenticated sessions.
+                    const response = await api.send({ active_symbols: 'full' });
+                    const discovered = (response?.active_symbols ?? [])
+                        .filter(isDigitMarket)
+                        .map((item: any) => ({
+                            value: String(item.symbol),
+                            label: String(item.display_name || item.name || item.symbol),
+                        }));
+                    markets = mergeMarkets(discovered);
+                    markets.forEach(market => marketLabels.set(market.value, market.label));
+                } catch {
+                    // Keep the known synthetic catalog when discovery is delayed
+                    // or unavailable. The authenticated streams still work.
+                }
 
-                // Discover additional supported markets in parallel. mergeMarkets
-                // includes the initial catalog, while startMarket de-duplicates
-                // symbols already subscribed above.
-                Promise.resolve()
-                    .then(() => api.send({ active_symbols: 'full' }))
-                    .then((response: any) => {
-                        if (!alive || generation !== feedGeneration) return;
-                        const discovered = (response?.active_symbols ?? [])
-                            .filter(isDigitMarket)
-                            .map((item: any) => ({
-                                value: String(item.symbol),
-                                label: String(item.display_name || item.name || item.symbol),
-                            }));
-                        mergeMarkets(discovered).forEach(market => {
-                            marketLabels.set(market.value, market.label);
-                            startMarket(api, market.value, generation);
+                if (!alive || generation !== feedGeneration) return;
+
+                await Promise.all(markets.map(async ({ value: symbol }) => {
+                    const marketGeneration = (generations.get(symbol) ?? 0) + 1;
+                    generations.set(symbol, marketGeneration);
+                    const market = {
+                        prices: [],
+                        epochs: new Set<number>(),
+                        live: [],
+                        pipSize: null as number | null,
+                    };
+                    marketState.set(symbol, market);
+
+                    try {
+                        const historyResponse = await api.send({
+                            ticks_history: symbol,
+                            count: 1000,
+                            end: 'latest',
+                            style: 'ticks',
                         });
-                    })
-                    .catch(() => {
-                        // Keep the known synthetic catalog if discovery is unavailable.
-                    });
+                        if (!alive || generation !== feedGeneration || generations.get(symbol) !== marketGeneration) return;
+                        market.prices = (historyResponse?.history?.prices ?? []).map(Number).filter(Number.isFinite);
+                        publish(symbol, false);
+                    } catch {
+                        // The live stream can still populate this market if history is delayed.
+                    }
+
+                    try {
+                        if (!alive || generation !== feedGeneration || generations.get(symbol) !== marketGeneration) return;
+                        const stream = api.subscribe({ ticks: symbol, subscribe: 1 });
+                        const subscription = stream?.subscribe?.({
+                            next: (message: any) => {
+                                if (!alive || generation !== feedGeneration || generations.get(symbol) !== marketGeneration) return;
+                                const tick = message?.tick;
+                                const price = Number(tick?.quote);
+                                const epoch = Number(tick?.epoch ?? 0);
+                                if (!Number.isFinite(price) || (epoch && market.epochs.has(epoch))) return;
+                                if (Number.isFinite(Number(tick?.pip_size))) {
+                                    market.pipSize = Number(tick.pip_size);
+                                }
+                                if (epoch) market.epochs.add(epoch);
+                                market.live.push({ epoch, price });
+                                market.live = market.live.slice(-1000);
+                                publish(symbol);
+                            },
+                            error: () => {
+                                scheduleRestart();
+                            },
+                        });
+                        if (subscription) subscriptions.push(subscription);
+                    } catch {
+                        // Keep the remaining markets alive if one subscription is rejected.
+                    }
+                }));
             } finally {
                 startInFlight = false;
             }

@@ -331,7 +331,7 @@ function MarketCard({
                         <strong>{candidate ? (candidate.entryReady ? 'CONFIRMED' : 'WAITING') : 'NO SETUP'}</strong>
                         <small>
                             {candidate?.strategy === 'MATCHES' && candidate.entryDigit != null
-                                ? `Entry ${candidate.entryDigits?.length ? candidate.entryDigits.join('/') : candidate.entryDigit} → target ${candidate.barrier}`
+                                ? `Entry ${candidate.entryDigit} → target ${candidate.barrier}`
                                 : candidate?.entryDigit != null
                                 ? `Digit ${candidate.entryDigit}`
                         : candidate?.strategy === 'RISE'
@@ -359,7 +359,7 @@ function MarketCard({
                     {candidate && !candidate.entryReady && (
                         <p className='as-entry-note' data-testid={`text-entry-wait-${cardId}`}>
                             {candidate.strategy === 'MATCHES'
-                                ? `Fast entry buys Matches target ${candidate.barrier} on any live digit ${candidate.entryDigits?.length ? candidate.entryDigits.join('/') : candidate.entryDigit}; no added app wait.`
+                                ? `Trade Only waits for entry digit ${candidate.entryDigit}; it buys Matches target ${candidate.barrier} and stops after ${selectedRuns} cycles.`
                                 : 'Entry Trade starts the bot now; it waits for its configured entry condition before buying.'}
                         </p>
                     )}

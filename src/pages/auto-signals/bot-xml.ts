@@ -476,7 +476,7 @@ const unwrapTimeouts = (container: Element) => {
     }
 };
 
-const addMatchEntryGate = (doc: Document, requestedEntryDigits: number[]) => {
+const addMatchEntryGate = (doc: Document, entryDigit: number) => {
     const beforePurchase = blocksOfType(doc, 'before_purchase')[0];
     const stack = beforePurchase
         ? directElement(beforePurchase, 'statement', 'name', 'BEFOREPURCHASE_STACK')
@@ -489,35 +489,15 @@ const addMatchEntryGate = (doc: Document, requestedEntryDigits: number[]) => {
         throw new Error('Matches bot XML has no before-purchase purchase block.');
     }
 
-    const entryDigits = Array.from(new Set(
-        requestedEntryDigits
-            .filter((digit) => Number.isInteger(digit))
-            .map((digit) => boundedInteger(digit, 0, 9)),
-    ));
-    if (!entryDigits.length) {
-        throw new Error('Matches bot XML has no valid entry digits.');
-    }
-
-    const makeEntryDigitGate = (entryDigit: number) => {
-        const gate = makeBlock(doc, 'auto_signal_entry_gate');
-        addField(doc, gate, 'STRATEGY', 'MATCHES');
-        addField(doc, gate, 'ENTRY_DIGIT', String(entryDigit));
-        return gate;
-    };
-    const entryCondition = entryDigits.slice(1).reduce<Element>((condition, entryDigit) => {
-        const eitherGate = makeBlock(doc, 'logic_operation');
-        addField(doc, eitherGate, 'OP', 'OR');
-        appendValue(doc, eitherGate, 'A', condition);
-        appendValue(doc, eitherGate, 'B', makeEntryDigitGate(entryDigit));
-        return eitherGate;
-    }, makeEntryDigitGate(entryDigits[0]));
-
     const purchaseParent = purchase.parentElement;
     const purchaseNext = directElement(purchase, 'next');
     if (purchaseNext) purchase.removeChild(purchaseNext);
 
     const conditional = makeBlock(doc, 'controls_if');
-    appendValue(doc, conditional, 'IF0', entryCondition);
+    const gate = makeBlock(doc, 'auto_signal_entry_gate');
+    addField(doc, gate, 'STRATEGY', 'MATCHES');
+    addField(doc, gate, 'ENTRY_DIGIT', String(boundedInteger(entryDigit, 0, 9)));
+    appendValue(doc, conditional, 'IF0', gate);
     purchaseParent.replaceChild(conditional, purchase);
     const doStatement = makeElement(doc, 'statement');
     doStatement.setAttribute('name', 'DO0');
@@ -674,11 +654,10 @@ export const patchAutoSignalsBotXml = (xml: string, config: AutoSignalBotConfigu
         : null;
     if (beforePurchaseStack) unwrapTimeouts(beforePurchaseStack);
     if (config.action === 'trade-only' && config.candidate.strategy === 'MATCHES') {
-        const entryDigits = config.candidate.entryDigits?.length
-            ? config.candidate.entryDigits
-            : config.candidate.entryDigit == null ? [] : [config.candidate.entryDigit];
-        if (!entryDigits.length) throw new Error('The validated Matches signal has no entry digits.');
-        addMatchEntryGate(doc, entryDigits);
+        if (config.candidate.entryDigit == null) {
+            throw new Error('The validated Matches signal has no entry digit.');
+        }
+        addMatchEntryGate(doc, config.candidate.entryDigit);
     }
     if (
         config.action === 'entry-trade'

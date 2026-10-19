@@ -251,8 +251,7 @@ describe('Auto-Signals bot templates', () => {
     it('sets the Matches bot prediction, waits for its selected entry digit, and caps the suggested cycles', () => {
         const candidate = {
             ...makeCandidate('DIGITMATCH', 'MATCHES', 7, 'matches'),
-            entryDigit: 0,
-            entryDigits: [0, 1, 2],
+            entryDigit: 2,
             recommendedRuns: 6,
         };
         const xml = patchAutoSignalsBotXml(readTemplate('trade-only', candidate), {
@@ -265,17 +264,12 @@ describe('Auto-Signals bot templates', () => {
         const doc = new DOMParser().parseFromString(xml, 'application/xml');
         const tradeOptions = getBlock(doc, 'trade_definition_tradeoptions');
         const runLimit = getBlock(doc, 'trade_again')?.parentElement?.parentElement;
-        const blocks = Array.from(doc.getElementsByTagNameNS(XML_NS, 'block'));
-        const entryGates = blocks.filter((block) => block.getAttribute('type') === 'auto_signal_entry_gate');
-        const orGates = blocks.filter((block) => block.getAttribute('type') === 'logic_operation');
 
         expect(doc.getElementsByTagName('parsererror')).toHaveLength(0);
         expect(getField(getBlock(doc, 'trade_definition_contracttype'), 'TYPE_LIST')).toBe('DIGITMATCH');
         expect(getField(getBlock(doc, 'purchase'), 'PURCHASE_LIST')).toBe('DIGITMATCH');
         expect(getValueNumber(tradeOptions, 'PREDICTION')).toBe('7');
-        expect(entryGates.map((gate) => getField(gate, 'ENTRY_DIGIT')).sort()).toEqual(['0', '1', '2']);
-        expect(orGates).toHaveLength(2);
-        expect(orGates.every((gate) => getField(gate, 'OP') === 'OR')).toBe(true);
+        expect(getField(getBlock(doc, 'auto_signal_entry_gate'), 'ENTRY_DIGIT')).toBe('2');
         expect(getValueNumber(runLimit, 'B')).toBe('6');
         expect(getBlock(doc, 'after_purchase')?.getElementsByTagNameNS(XML_NS, 'data')[0]?.textContent)
             .toBe('auto-signal-v1;max-runs=6');

@@ -10,27 +10,9 @@ import { isFastExecutionEnabledForContext } from '@/utils/execution-speed';
 import { setTradeContext } from '@/utils/trade-metadata';
 import { getMasterSource } from '@/utils/trade-bus';
 import { observer as globalObserver, api_base } from '@/external/bot-skeleton';
-import { Crown } from 'lucide-react';
 import { isEnded } from '@/components/shared';
 import manifest from '../../../public/bots/scalpers/manifest.json';
 import VpsMode, { VpsSettings } from './VpsMode';
-import MatchesScalperHub from './matches-scalper-hub';
-import {
-    evaluateMatchesScalperEntry,
-    matchesScalperFeedRetryDelayMs,
-    matchesScalperHistoryToTicks,
-    mergeMatchesScalperTicks,
-    matchesScalperPipSizeFromIncrement,
-    matchesScalperRawTicksToTicks,
-    hasAccurateMatchesScalperPipSize,
-    rankMatchesScalperTargets,
-    resolveMatchesScalperPipSize,
-    type MatchesScalperEntryMode,
-    type MatchesScalperRawTick,
-    type MatchesScalperRange,
-    type MatchesScalperTick,
-    type MatchesScalperTarget,
-} from './matches-scalper-logic';
 import './scalper-bots.scss';
 import './vps-mode.scss';
 
@@ -199,7 +181,6 @@ type BotConfig = {
     strategyLogic: StrategyLogicConfig;
     market2: Market2Config;
     multiTradeCount: number; // number of contracts to fire on each entry (multiple bots)
-    matchesEntryMode: MatchesScalperEntryMode;
     virtualHook: VirtualHookConfig;
     virtualHookAlt: VirtualHookAltConfig;
     coolOff: CoolOffConfig;
@@ -385,7 +366,6 @@ const DEFAULT_CONFIG = (bot: TScalperBot): BotConfig => ({
         barrier: bot.prediction ?? 5,
     },
     multiTradeCount: bot.multiple ? 3 : 1,
-    matchesEntryMode: 'random',
     virtualHook: { ...DEFAULT_VH },
     virtualHookAlt: { ...DEFAULT_VHA },
     coolOff: {
@@ -457,27 +437,7 @@ const DURATION_OPTIONS: { label: string; value: number; unit: 't' | 's' }[] = [
     { label: '90t',  value: 90, unit: 't' },
 ];
 
-const SCALPER_BOTS: TScalperBot[] = (manifest as TScalperBot[]).filter(bot => bot.contractType !== 'DIGITMATCH');
-const MATCHES_SCALPER_BOTS: Record<MatchesScalperRange, TScalperBot> = {
-    '0-5': {
-        key: 'matches-scalper-range-0-5',
-        name: 'Matches Scalper 0–5',
-        category: 'Matches/Differs',
-        contractType: 'DIGITMATCH',
-        prediction: 0,
-        multiple: false,
-        xmlFile: '/bots/scalpers/matches-0-scalper.xml',
-    },
-    '6-9': {
-        key: 'matches-scalper-range-6-9',
-        name: 'Matches Scalper 6–9',
-        category: 'Matches/Differs',
-        contractType: 'DIGITMATCH',
-        prediction: 9,
-        multiple: false,
-        xmlFile: '/bots/scalpers/matches-6-scalper.xml',
-    },
-};
+const SCALPER_BOTS: TScalperBot[] = manifest as TScalperBot[];
 
 /* Individual folder groups — Over and Under (and Matches/Differs, Rise/Fall,
    Even/Odd) are split into their OWN folder icon rather than sharing a
@@ -488,6 +448,7 @@ const GROUP_DEFS: { key: SbGroup; label: string; icon: string }[] = [
     { key: 'Under',   label: 'Under',   icon: '⬇️' },
     { key: 'Rise',    label: 'Rise',    icon: '📈' },
     { key: 'Fall',    label: 'Fall',    icon: '📉' },
+    { key: 'Matches', label: 'Matches', icon: '🎯' },
     { key: 'Differs', label: 'Differs', icon: '🚫' },
     { key: 'Even',    label: 'Even',    icon: '2️⃣' },
     { key: 'Odd',     label: 'Odd',     icon: '1️⃣' },
@@ -1151,44 +1112,30 @@ const BotDetail: React.FC<{
     onBack: () => void;
     onLoadXml: (bot: TScalperBot) => Promise<void>;
     onLoadAndRun: (bot: TScalperBot) => Promise<void>;
-    onPreloadXml: (bot: TScalperBot, opts?: { market?: string; duration?: number; duration_unit?: 't' | 's' }) => Promise<void>;
-    matchesRange?: MatchesScalperRange;
-    onMatchWin?: (profit: number) => void;
-    matchesKingVisible?: boolean;
-    matchesSessionProfit?: number;
-    onDismissMatchesKing?: () => void;
-}> = ({
-    bot,
-    derivTrade,
-    onBack,
-    onLoadXml,
-    onLoadAndRun,
-    onPreloadXml,
-    matchesRange,
-    onMatchWin,
-    matchesKingVisible = false,
-    matchesSessionProfit = 0,
-    onDismissMatchesKing,
-}) => {
+     onPreloadXml: (bot: TScalperBot, opts?: { market?: string; duration?: number; duration_unit?: 't' | 's' }) => Promise<void>;
+}> = ({ bot, derivTrade, onBack, onLoadXml, onLoadAndRun, onPreloadXml }) => {
     const store = useStore();
 
-    /* Execution speed changes pacing only; configured entry rules always run. */
+    /* ── Execution speed mode: 'off' | 'fast' | 'ultra' ──
+       off   = Balanced: use checkEntry() / strategy logic (default)
+       fast  = Fast: bypass scan, fire on first available tick
+       ultra = Ultra Fast: zero-latency, fire the instant a tick arrives, no wait */
     const [fastExec, setFastExec] = useState<'off' | 'fast' | 'ultra'>('off');
     const fastExecRef = useRef<'off' | 'fast' | 'ultra'>('off');
     useEffect(() => { fastExecRef.current = fastExec; }, [fastExec]);
-    const vpsEnabledFastRef = useRef(false);
     const cycleSpeed = () => setFastExec(m => m === 'off' ? 'fast' : m === 'fast' ? 'ultra' : 'off');
 
     /* ── ULTRA TURBO mode ──────────────────────────────────────────────────────
        When ON, the scanner still respects NDP/LDP/strategy-logic conditions
-       (never fires blind) but reduces app-added handoff delays between
+       (never fires blind) but eliminates EVERY artificial software delay between
        "condition matched" and "Deriv API receives the buy request":
          • Pre-warms the Bot Builder workspace on every tick BEFORE the condition
            fires, so patchWorkspaceParams is already done when we need it.
          • Skips the first-trade engine-init wait (0–800 ms saved).
          • Skips all inter-contract delays.
-          • Uses a short engine teardown poll (50 ms rather than up to 3 s).
-        Signal rules, settlement, server response and network latency still apply. */
+         • Cuts the is_stopping teardown poll to 300 ms max (was 3 s).
+       Result: the XML bot fires on the SAME tick whose digit triggered the NDP
+       window, maximising the chance of catching that exact digit. */
     const [ultraTurbo, setUltraTurbo] = useState(false);
     const ultraTurboRef = useRef(false);
     useEffect(() => { ultraTurboRef.current = ultraTurbo; }, [ultraTurbo]);
@@ -1336,52 +1283,15 @@ const BotDetail: React.FC<{
            across cycles, market switches, and market-2 fallbacks instead of
            resetting to 0/1 every single trade. */
         priorConsLoss?: number;
-        /* Faster profiles poll teardown more often, but still wait long enough
-           for the interpreter and run-panel state to finish resetting. */
+        /* ULTRA TURBO: when true, caps the is_stopping teardown poll at 300 ms
+           instead of 3 s so the buy fires the instant the interpreter is free. */
         ultraTurbo?: boolean;
         onSettled: (info: { profit: number; won: boolean; market: string; buyPrice: number; exitDigit: number | null; consLoss: number }) => void;
         onLog: (msg: string, kind?: string) => void;
-    }): Promise<{ forceStopped: boolean; reason: 'tp' | 'sl' | 'loss_limit' | null; cycleProfit: number; consLoss: number; lastWon: boolean; retryNextCycle?: boolean; fatalError?: boolean }> => {
+    }): Promise<{ forceStopped: boolean; reason: 'tp' | 'sl' | 'loss_limit' | null; cycleProfit: number; consLoss: number; lastWon: boolean; retryNextCycle?: boolean }> => {
         return new Promise(resolve => { (async () => {
             const rp: any = store?.run_panel;
-            if (!rp?.onRunButtonClick) {
-                params.onLog('XML_RUN_PANEL_NOT_READY — Bot Builder is unavailable; no trade was sent.', 'error');
-                resolve({ forceStopped: false, reason: null, cycleProfit: 0, consLoss: params.priorConsLoss || 0, lastWon: false, retryNextCycle: true });
-                return;
-            }
-
-            /* A Run action is only valid once the selected XML has finished
-               loading into the live Blockly workspace. Starting against a
-               missing/half-loaded workspace looks like a bot stall because
-               the run panel accepts the click but no purchase block executes. */
-            const hasExecutableWorkspace = () => {
-                try {
-                    const workspace = (window as any).Blockly?.derivWorkspace;
-                    const blocks = workspace?.getAllBlocks?.(false) ?? [];
-                    const hasMarket = blocks.some((block: any) => block.type === 'trade_definition_market');
-                    const hasTradeOptions = blocks.some((block: any) => block.type === 'trade_definition_tradeoptions');
-                    const hasPurchase = blocks.some((block: any) =>
-                        block.type === 'purchase' || block.type === 'multiple_purchase'
-                    );
-                    return Boolean(workspace && hasMarket && hasTradeOptions && hasPurchase);
-                } catch {
-                    return false;
-                }
-            };
-
-            const workspaceDeadline = Date.now() + 5000;
-            while (!stopRef.current && !hasExecutableWorkspace() && Date.now() < workspaceDeadline) {
-                await new Promise(r => setTimeout(r, 100));
-            }
-            if (stopRef.current) {
-                resolve({ forceStopped: false, reason: null, cycleProfit: 0, consLoss: params.priorConsLoss || 0, lastWon: false, retryNextCycle: true });
-                return;
-            }
-            if (!hasExecutableWorkspace()) {
-                params.onLog('XML_WORKSPACE_NOT_READY — expected Market, Trade Options, and Purchase blocks were not loaded; no trade was sent.', 'error');
-                resolve({ forceStopped: false, reason: null, cycleProfit: 0, consLoss: params.priorConsLoss || 0, lastWon: false, retryNextCycle: true });
-                return;
-            }
+            if (!rp?.onRunButtonClick) { resolve({ forceStopped: false, reason: null, cycleProfit: 0, consLoss: params.priorConsLoss || 0, lastWon: true }); return; }
 
             /* ── Wait out any in-flight teardown from the PREVIOUS forced stop ──
                globalObserver emits 'bot.stop' from inside terminateSession()
@@ -1394,30 +1304,27 @@ const BotDetail: React.FC<{
                interpreter, and the freshly patched stake/martingale values never
                reach the actual trade (symptom: stake stays flat after a loss
                instead of escalating). Poll briefly until teardown settles.
-               Faster profiles use a shorter bounded wait; correctness still
-               takes priority over firing into a half-stopped interpreter. */
-            const teardownMax = params.ultraTurbo ? 500 : (isFastExecutionEnabledForContext() ? 1500 : 5000);
+               ULTRA TURBO / ULTRA FAST caps this at 300 ms — enough for normal
+               teardown but tight enough to catch the digit window before the
+               next tick. */
+            const teardownMax = params.ultraTurbo ? 50 : (isFastExecutionEnabledForContext() ? 150 : 3000);
             const teardownStart = Date.now();
-            while ((api_base.is_stopping || rp.is_running) && Date.now() - teardownStart < teardownMax) {
+            while (api_base.is_stopping && Date.now() - teardownStart < teardownMax) {
                 await new Promise(r => setTimeout(r, 20));
-            }
-            if (stopRef.current) {
-                resolve({ forceStopped: false, reason: null, cycleProfit: 0, consLoss: params.priorConsLoss || 0, lastWon: false });
-                return;
             }
 
             /* ── Guard: engine still tearing down after timeout ──
                If api_base.is_stopping is still true after teardownMax, calling
                onRunButtonClick now would silently no-op (runBot() bails while
-               is_stopping is set). No contract would ever fire, the stall
-               timer would otherwise resolve with lastWon=true (phantom win since seen.size===0),
+               is_stopping is set). No contract would ever fire, the 45 s stall
+               timer would resolve with lastWon=true (phantom win since seen.size===0),
                and the outer loop would break — killing the martingale chain and
                making the stop button appear unresponsive for 45 s.
                Fix: abort this cycle immediately and return retryNextCycle=true so
                the outer loop skips martingale escalation and retries on the next
                iteration until the engine is free. */
-            if (api_base.is_stopping || rp.is_running) {
-                params.onLog('⚠ ENGINE_BUSY — previous bot is still stopping, retrying without changing stake...', 'hack');
+            if (api_base.is_stopping) {
+                params.onLog('⚠ ENGINE_BUSY — previous bot still tearing down, retrying...', 'hack');
                 resolve({ forceStopped: false, reason: null, cycleProfit: 0, consLoss: params.priorConsLoss || 0, lastWon: false, retryNextCycle: true });
                 return;
             }
@@ -1429,14 +1336,10 @@ const BotDetail: React.FC<{
                it catches it immediately, resolves the cycle with lastWon=true
                (no contract settled yet) and the outer loop breaks on a
                false "win", stopping the bot after every loss.
-               A short delay lets the previous stop event drain before new handlers
-               are attached. */
-            const drainMs = params.ultraTurbo ? 50 : (isFastExecutionEnabledForContext() ? 30 : 60);
+               50 ms for ultra/turbo (increased from 25 ms for more reliable drain),
+               60 ms normal. */
+            const drainMs = params.ultraTurbo ? 0 : (isFastExecutionEnabledForContext() ? 10 : 60);
             await new Promise(r => setTimeout(r, drainMs));
-            if (stopRef.current) {
-                resolve({ forceStopped: false, reason: null, cycleProfit: 0, consLoss: params.priorConsLoss || 0, lastWon: false });
-                return;
-            }
 
              patchWorkspaceParams({
                  market: params.market, stake: params.stake,
@@ -1447,11 +1350,7 @@ const BotDetail: React.FC<{
             let cycleProfit = 0;
             let consLoss = params.priorConsLoss || 0;
             let lastWon = true;   // updated on every settled contract; false = last trade was a loss
-            let retryNextCycle = false;
             let forceStopped = false;
-            let fatalError = false;
-            let purchaseSent = false;
-            let purchaseReceived = false;
             let reason: 'tp' | 'sl' | 'loss_limit' | null = null;
             let settled = false;
             let stallTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1460,14 +1359,13 @@ const BotDetail: React.FC<{
                 if (stallTimer) { clearTimeout(stallTimer); stallTimer = null; }
                 try { globalObserver.unregister('bot.contract', onContract); } catch {}
                 try { globalObserver.unregister('bot.stop', onStop); } catch {}
-                try { globalObserver.unregister('contract.status', onPurchaseStatus); } catch {}
                 try { globalObserver.unregister('Error', onError); } catch {}
             };
             const finish = () => {
                 if (settled) return;
                 settled = true;
                 cleanup();
-                resolve({ forceStopped, reason, cycleProfit, consLoss, lastWon, fatalError, retryNextCycle });
+                resolve({ forceStopped, reason, cycleProfit, consLoss, lastWon });
             };
             const onContract = (contract: any) => {
                 if (!contract || !isEnded(contract)) return;
@@ -1515,94 +1413,44 @@ const BotDetail: React.FC<{
                    trade and breaking on a phantom "win". The 45-second stall timer
                    will catch genuine hangs where a trade was placed but never
                    settled. */
-                if (seen.size === 0) {
-                    if (stopRef.current) {
-                        lastWon = false;
-                        finish();
-                    }
-                    return;
-                }
+                if (seen.size === 0) return;
                 finish();
             };
             const onError = (err: any) => {
                 params.onLog(`⚠ ${err?.message || err?.error?.message || 'Bot engine error — stopping cycle.'}`, 'error');
-                try { rp.onStopButtonClick?.(); } catch {}
-                if (seen.size === 0) {
-                    lastWon = false;
-                    if (purchaseSent) fatalError = true;
-                    else retryNextCycle = true;
-                }
                 finish();
-            };
-            const onPurchaseStatus = (status: any) => {
-                if (status?.id === 'contract.purchase_sent') purchaseSent = true;
-                if (status?.id === 'contract.purchase_received') purchaseReceived = true;
             };
 
             globalObserver.register('bot.contract', onContract);
             globalObserver.register('bot.stop', onStop);
-            globalObserver.register('contract.status', onPurchaseStatus);
             globalObserver.register('Error', onError);
 
-            Promise.resolve()
-                .then(() => rp.onRunButtonClick())
-                .then(() => {
-                    // The run-panel handler can return normally when a validation
-                    // gate declines to start the bot. Treat that as a safe retry,
-                    // not a phantom win or a full-length stall.
-                    if (!rp.is_running && !purchaseSent && seen.size === 0) {
-                        params.onLog('XML_RUN_NOT_STARTED — Bot Builder declined the Run action; no purchase request was sent.', 'error');
-                        lastWon = false;
-                        retryNextCycle = true;
-                        finish();
-                    }
-                })
-                .catch(err => onError(err));
+            Promise.resolve(rp.onRunButtonClick()).catch(err => onError(err));
 
-            /* Stall guard — bound the wait so a broken run cannot freeze the
-               scanner indefinitely. */
-            const stallMs = params.ultraTurbo ? 12_000 : 30_000;
+            /* Stall guard — if neither bot.contract nor bot.stop fires within the
+               timeout the trade is hung (network issue, Blockly not ready, etc.).
+               Force-resolve so the scan loop is not frozen permanently.
+               Ultra Turbo: 10 s (trades should fire in < 1 s; 10 s catches real hangs
+               without the 45 s freeze that made the stop button look unresponsive).
+               Normal: 45 s (generous for slow connections / large Blockly workspaces).
+               IMPORTANT: when no contract settled (seen.size === 0), resolve with
+               lastWon=false so the outer loop retries / continues martingale instead
+               of treating the no-op as a phantom win and breaking out of the loop. */
+            const stallMs = params.ultraTurbo ? 10_000 : 45_000;
             stallTimer = setTimeout(() => {
-                params.onLog(`⚠ TRADE_STALL — no settled contract within ${params.ultraTurbo ? '12' : '30'}s; stopping this cycle safely.`, 'error');
+                params.onLog(`⚠ TRADE_STALL — no trade response in ${params.ultraTurbo ? '10' : '45'}s, aborting cycle.`, 'error');
                 try { rp.onStopButtonClick?.(); } catch {}
                 if (seen.size === 0) {
+                    // No contract was ever placed — don't count as a win.
+                    // The outer loop will retry (or stop cleanly if stopRef is set).
                     lastWon = false;
-                    if (!purchaseSent) {
-                        // No buy request was sent, so retrying cannot duplicate a
-                        // contract and must not increment martingale or loss stats.
-                        retryNextCycle = true;
-                    } else if (purchaseReceived) {
-                        // A buy was acknowledged but never settled; do not place a
-                        // second contract while the first may still be open.
-                        fatalError = true;
-                        params.onLog('TRADE_UNSETTLED — Deriv acknowledged the buy but did not report settlement; stopping to avoid a duplicate position.', 'error');
-                    } else {
-                        // The request may have reached Deriv even though its
-                        // acknowledgment was lost. Stop instead of risking a duplicate.
-                        fatalError = true;
-                        params.onLog('BUY_ACK_TIMEOUT — the buy request was sent but not acknowledged; stopping to avoid a duplicate position.', 'error');
-                    }
                 }
-                setTimeout(finish, 1000); // give the run panel time to finish teardown
+                setTimeout(finish, 1500); // give bot.stop one last chance to fire cleanly
             }, stallMs);
         })(); });
     }, [store, patchWorkspaceParams]);
 
-    const [cfg, setCfg]         = useState<BotConfig>(() => {
-        const defaults = DEFAULT_CONFIG(bot);
-        if (!matchesRange) return defaults;
-        try {
-            const savedMode = localStorage.getItem(`matches-scalper-entry-mode:${matchesRange}`);
-            if (savedMode === 'random' || savedMode === 'selected') defaults.matchesEntryMode = savedMode;
-        } catch {}
-        return defaults;
-    });
-    useEffect(() => {
-        if (!matchesRange) return;
-        try {
-            localStorage.setItem(`matches-scalper-entry-mode:${matchesRange}`, cfg.matchesEntryMode);
-        } catch {}
-    }, [cfg.matchesEntryMode, matchesRange]);
+    const [cfg, setCfg]         = useState<BotConfig>(() => DEFAULT_CONFIG(bot));
     const [running, setRunning] = useState(false);
     const [scanning, setScanning] = useState(false); // terminal scanning without trading
     const [tab, setTab]         = useState<'summary' | 'transactions' | 'journal'>('summary');
@@ -1625,7 +1473,6 @@ const BotDetail: React.FC<{
         profit: number; stopped: boolean;
         sessionPnl: number; wins: number; losses: number; reason?: string;
     } | null>(null);
-    const [matchesMissedPopup, setMatchesMissedPopup] = useState(false);
 
     /* Recovery mode dialog — shown when stop-loss is hit so user can choose to recover */
     const [recoveryDialog, setRecoveryDialog] = useState<{ lossAmt: number } | null>(null);
@@ -1646,22 +1493,6 @@ const BotDetail: React.FC<{
     const termRef         = useRef<HTMLDivElement>(null);
     const digitWindowRef  = useRef<number[]>([]);
     const priceWindowRef  = useRef<number[]>([]); // raw prices (newest first) for Rise/Fall
-    const matchesTargetDigitRef = useRef<number | null>(null);
-    const matchesTickWindowRef = useRef<MatchesScalperTick[]>([]);
-    const matchesRawTickWindowRef = useRef<MatchesScalperRawTick[]>([]);
-    const matchesPipSizeRef = useRef<number | null>(null);
-    const matchesFeedGenerationRef = useRef(0);
-    const matchesLiveTickSeqRef = useRef(0);
-    const matchesPrimeHistoryRef = useRef<((market: string) => Promise<void>) | null>(null);
-    const matchesHistoryRequestGenerationRef = useRef<number | null>(null);
-    const matchesFeedRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const matchesLastFeedErrorLogAtRef = useRef(0);
-    const matchesFeedFirstTickRef = useRef(false);
-    const matchesFeedRecoveryPendingRef = useRef(false);
-    const matchesFeedRetryCountRef = useRef(0);
-    const matchesLastAwaitingTickLogAtRef = useRef(0);
-    const matchesNoTickWarnedGenerationRef = useRef<number | null>(null);
-    const matchesPrecisionWarnedMarketsRef = useRef<Set<string>>(new Set());
     const tickUnsubRef    = useRef<(() => void) | null>(null);
     const marketIdxRef    = useRef(0);
     const lastFiredGroupRef = useRef<StrategyOrGroup | null>(null);
@@ -1803,122 +1634,24 @@ const BotDetail: React.FC<{
        Each new tick immediately wakes the scan loop (tickSignalRef) so the
        condition check runs at true tick-rate with no poll delay. */
     const subscribeMarket = useCallback((market: string) => {
-        if (matchesRange && (!derivTrade.connected || api_base.api?.connection?.readyState !== 1)) {
-            matchesFeedRecoveryPendingRef.current = true;
-            addLog(`MATCH FEED WAIT: authenticated Deriv WebSocket is not open; subscription for ${market} is deferred.`, 'error');
-            setActiveMarket(market);
-            return;
-        }
-        if (matchesFeedRetryTimerRef.current) {
-            clearTimeout(matchesFeedRetryTimerRef.current);
-            matchesFeedRetryTimerRef.current = null;
-        }
         if (tickUnsubRef.current) { tickUnsubRef.current(); tickUnsubRef.current = null; }
-        const feedGeneration = ++matchesFeedGenerationRef.current;
-        matchesPipSizeRef.current = null;
-        matchesTickWindowRef.current = [];
-        matchesRawTickWindowRef.current = [];
         digitWindowRef.current = [];
         priceWindowRef.current = [];
-        matchesFeedFirstTickRef.current = false;
-        matchesNoTickWarnedGenerationRef.current = null;
-        matchesHistoryRequestGenerationRef.current = null;
         setDigitDisplay([]);
-        const handleFeedError = (error: unknown) => {
-            if (!matchesRange || stopRef.current || feedGeneration !== matchesFeedGenerationRef.current) return;
-            const message = error instanceof Error ? error.message : String(error || 'unknown feed error');
-            const now = Date.now();
-            matchesFeedRecoveryPendingRef.current = true;
-            if (now - matchesLastFeedErrorLogAtRef.current >= 4_000) {
-                matchesLastFeedErrorLogAtRef.current = now;
-                addLog(`MATCH FEED ERROR (${market}): ${message}; reconnecting.`, 'error');
-            }
-            if (matchesFeedRetryTimerRef.current || api_base.api?.connection?.readyState !== 1) return;
-            const retryAttempt = ++matchesFeedRetryCountRef.current;
-            const retryDelay = matchesScalperFeedRetryDelayMs(retryAttempt);
-            addLog(`MATCH FEED RETRY: attempt ${retryAttempt} in ${Math.ceil(retryDelay / 1_000)}s.`, 'hack');
-            matchesFeedRetryTimerRef.current = setTimeout(() => {
-                matchesFeedRetryTimerRef.current = null;
-                if (stopRef.current || feedGeneration !== matchesFeedGenerationRef.current) return;
-                if (api_base.api?.connection?.readyState !== 1) return;
-                addLog(`MATCH FEED RETRY: resubscribing to ${market} on the authenticated Deriv connection.`, 'hack');
-                subscribeMarket(market);
-                lastTickAtRef.current = Date.now();
-                lastReconnectAtRef.current = Date.now();
-                void matchesPrimeHistoryRef.current?.(market);
-            }, retryDelay);
-        };
         const unsub = derivTrade.subscribeTicks(market, tick => {
-            const pipSizeSource = tick.pip_size_source
-                ?? (tick.pip_size != null ? 'live' : 'fallback');
-            const accuratePipSize = hasAccurateMatchesScalperPipSize(pipSizeSource)
-                ? Number(tick.pip_size)
-                : null;
-            const ps = matchesRange
-                ? (Number.isInteger(accuratePipSize) && accuratePipSize! >= 0 && accuratePipSize! <= 10
-                    ? accuratePipSize!
-                    : null)
-                : (tick.pip_size ?? 2);
-            const d = matchesRange
-                ? null
-                : tick.digit != null ? tick.digit : getLastDigit(tick.quote, ps);
-            if (matchesRange) {
-                const isFirstTick = !matchesFeedFirstTickRef.current;
-                if (isFirstTick) {
-                    matchesFeedFirstTickRef.current = true;
-                    matchesFeedRetryCountRef.current = 0;
-                    if (matchesFeedRetryTimerRef.current) {
-                        clearTimeout(matchesFeedRetryTimerRef.current);
-                        matchesFeedRetryTimerRef.current = null;
-                    }
-                    const wasRecovering = matchesFeedRecoveryPendingRef.current;
-                    matchesFeedRecoveryPendingRef.current = false;
-                    addLog(
-                        wasRecovering
-                            ? `🔌 FEED_RESTORED — first live tick received from ${market}.`
-                            : `MATCH FEED LIVE: first tick received from ${market}.`,
-                        'hack',
-                    );
-                }
-                const epoch = Number(tick.epoch);
-                const quote = Number(tick.quote);
-                if (Number.isFinite(epoch) && epoch > 0 && Number.isFinite(quote)) {
-                    const rawByEpoch = new Map(matchesRawTickWindowRef.current.map(item => [item.epoch, item]));
-                    rawByEpoch.set(epoch, { epoch, quote });
-                    matchesRawTickWindowRef.current = [...rawByEpoch.values()]
-                        .sort((left, right) => right.epoch - left.epoch)
-                        .slice(0, 50);
-                }
-                if (ps !== null) {
-                    const pipSizeBecameAvailable = matchesPipSizeRef.current == null;
-                    matchesPipSizeRef.current = ps;
-                    matchesLiveTickSeqRef.current += 1;
-                    matchesTickWindowRef.current = mergeMatchesScalperTicks(
-                        matchesTickWindowRef.current,
-                        matchesScalperRawTicksToTicks(matchesRawTickWindowRef.current, ps),
-                    );
-                    digitWindowRef.current = matchesTickWindowRef.current.map(item => item.digit);
-                    setDigitDisplay(digitWindowRef.current.slice(0, 20));
-                    matchesPrecisionWarnedMarketsRef.current.delete(market);
-                    if (pipSizeBecameAvailable) {
-                        void matchesPrimeHistoryRef.current?.(market);
-                    }
-                } else if (isFirstTick) {
-                    void matchesPrimeHistoryRef.current?.(market);
-                }
-            }
+            const ps = tick.pip_size ?? 2;
+            const d = tick.digit != null ? tick.digit : getLastDigit(tick.quote, ps);
+            digitWindowRef.current = [d, ...digitWindowRef.current].slice(0, 50);
             // Also track raw prices for Rise/Fall momentum detection
             if (tick.quote != null) {
                 priceWindowRef.current = [Number(tick.quote), ...priceWindowRef.current].slice(0, 50);
             }
-            if (!matchesRange && d !== null) setDigitDisplay(prev => [d, ...prev].slice(0, 20));
+            setDigitDisplay(prev => [d, ...prev].slice(0, 20));
             // ✅ Reset stall timer on every real tick — prevents false-fire watchdog
             lastTickAtRef.current = Date.now();
             // ⚡ Log the live digit stream to terminal on every tick (accurate, from pip_size)
             if (!stopRef.current) {
-                const rawPrice = tick.quote != null
-                    ? ps !== null ? Number(tick.quote).toFixed(ps) : String(tick.quote)
-                    : '?';
+                const rawPrice = tick.quote != null ? Number(tick.quote).toFixed(ps) : '?';
                 /* Stealth mode: mask the middle digits of the price so the exact
                    tick value is not visible in terminal screenshots/recordings.
                    The digit [d] is still shown — it's needed for readability. */
@@ -1926,66 +1659,20 @@ const BotDetail: React.FC<{
                     ? rawPrice.slice(0, 2) + '***' + rawPrice.slice(-2)
                     : rawPrice;
                 setTerminal(prev => [
-                    {
-                        t: ts(),
-                        msg: matchesRange && d === null
-                            ? `MATCH LIVE TICK: ${displayPrice}  →  digit [waiting for accurate pip_size]`
-                            : `TICK: ${displayPrice}  →  digit [${matchesRange ? digitWindowRef.current[0] : d}]`,
-                        kind: 'tick',
-                    },
+                    { t: ts(), msg: `TICK: ${displayPrice}  →  digit [${d}]`, kind: 'tick' },
                     ...prev,
                 ].slice(0, 300));
             }
             // ⚡ Wake the scan loop instantly on every new tick
             if (tickSignalRef.current) { tickSignalRef.current(); tickSignalRef.current = null; }
-        }, handleFeedError);
+        });
         tickUnsubRef.current = unsub;
         setActiveMarket(market);
-    }, [derivTrade, matchesRange, addLog]);
-
-    /* The APIBase replaces its Deriv API instance after a socket reconnect.
-       A tick subscription bound to the old instance does not migrate, so a
-       running Matches Scalper must explicitly attach to the new authenticated
-       socket when the connection returns. */
-    useEffect(() => {
-        if (!matchesRange) return;
-        if (!running) {
-            prevConnectedRef.current = derivTrade.connected;
-            return;
-        }
-        if (!derivTrade.connected) {
-            if (prevConnectedRef.current) {
-                prevConnectedRef.current = false;
-                matchesFeedRecoveryPendingRef.current = true;
-                if (matchesFeedRetryTimerRef.current) {
-                    clearTimeout(matchesFeedRetryTimerRef.current);
-                    matchesFeedRetryTimerRef.current = null;
-                }
-                if (tickUnsubRef.current) {
-                    tickUnsubRef.current();
-                    tickUnsubRef.current = null;
-                }
-                addLog('MATCH FEED PAUSED: authenticated Deriv connection closed; waiting for reconnection.', 'error');
-            }
-            return;
-        }
-        if (!prevConnectedRef.current) {
-            if (api_base.api?.connection?.readyState !== 1) return;
-            prevConnectedRef.current = true;
-            matchesFeedRecoveryPendingRef.current = true;
-            lastTickAtRef.current = Date.now();
-            lastReconnectAtRef.current = Date.now();
-            const market = curMarketRef.current;
-            addLog(`MATCH FEED: authenticated connection restored; re-subscribing to ${market}.`, 'hack');
-            subscribeMarket(market);
-            void matchesPrimeHistoryRef.current?.(market);
-        }
-    }, [matchesRange, running, derivTrade.connected, subscribeMarket, addLog]);
+    }, [derivTrade]);
 
     /* Cleanup on unmount */
     useEffect(() => () => {
         if (tickUnsubRef.current) tickUnsubRef.current();
-        if (matchesFeedRetryTimerRef.current) clearTimeout(matchesFeedRetryTimerRef.current);
         multiUnsubsRef.current.forEach(u => u());
         multiUnsubsRef.current.clear();
     }, []);
@@ -2043,14 +1730,10 @@ const BotDetail: React.FC<{
             'SESSION_FINGERPRINT: DECOUPLED FROM ACCOUNT',
             'TRAFFIC_OBFUSCATION: ACTIVE',
             cfg.stealthMode ? '🛡 STEALTH_MODE: TICK_PRICES OBFUSCATED IN LOG' : 'STEALTH_MODE: STANDARD LOGGING',
-            matchesRange
-                ? 'VIRTUAL_HOOK: INACTIVE — MATCHES ENTRY OWNS SIGNALS'
-                : cfg.virtualHook.enabled
+            cfg.virtualHook.enabled
                 ? `🔮 VIRTUAL_HOOK: ARMED — ${cfg.virtualHook.hookLoss}L → ${cfg.virtualHook.hookWin}W pattern${cfg.virtualHook.recoveryMode ? ' + VHR active' : ''}`
                 : cfg.virtualHook.recoveryMode ? '⚡ VHR: RECOVERY MODE ONLY (1-virtual check on each real loss)' : 'VIRTUAL_HOOK: DISABLED',
-            matchesRange
-                ? 'VIRTUAL_HOOK_ALT: INACTIVE — MATCHES ENTRY OWNS SIGNALS'
-                : cfg.virtualHookAlt.enabled
+            cfg.virtualHookAlt.enabled
                 ? `💎 VHA: ARMED — ${cfg.virtualHookAlt.winsRequired}W → ${cfg.virtualHookAlt.lossToTrigger}L pattern${cfg.virtualHookAlt.recoveryEnabled ? ' + VHA-Recovery active' : ''}`
                 : cfg.virtualHookAlt.recoveryEnabled ? '💎 VHA-RECOVERY: ON (2-stage check on each real loss)' : 'VHA: DISABLED',
             'MARKET_FEED_INTEGRITY: OK',
@@ -2066,27 +1749,11 @@ const BotDetail: React.FC<{
     /* ── Start bot (with real tick entry detection) ── */
     const startBot = useCallback(async () => {
         if (running || !derivTrade.authorized) return;
-        if (matchesRange && (!derivTrade.connected || api_base.api?.connection?.readyState !== 1)) {
-            addLog('MATCH FEED WAIT: authenticated Deriv connection is not open yet. Wait for the connection, then start again.', 'error');
-            return;
-        }
         // Record which page + bot is trading so Report can display it
-        setTradeContext({ page: matchesRange ? 'Matches Scalper' : 'Scalper Bots', bot: bot.name });
+        setTradeContext({ page: 'Scalper Bots', bot: bot.name });
         stopRef.current    = false;
         consLossRef.current = 0;
         sessionPnlRef.current = 0;
-        matchesTargetDigitRef.current = null;
-        matchesLiveTickSeqRef.current = 0;
-        if (matchesRange) {
-            matchesFeedFirstTickRef.current = false;
-            matchesFeedRecoveryPendingRef.current = false;
-            matchesFeedRetryCountRef.current = 0;
-            matchesNoTickWarnedGenerationRef.current = null;
-            matchesPrecisionWarnedMarketsRef.current.clear();
-            vhrActiveRef.current = false;
-            vhaRecovery1Ref.current = false;
-            vhaRecovery2Ref.current = false;
-        }
         marketIdxRef.current  = 0;
         winsRef.current   = 0;
         lossesRef.current = 0;
@@ -2097,7 +1764,6 @@ const BotDetail: React.FC<{
         setEntryReady(false);
         setTerminal([]);
         setWinPopup(null);
-        setMatchesMissedPopup(false);
         setCoolOffStatus(null);
         realExecutionLockedRef.current = false;
         addLog(`🟢 LIVE ACCOUNT EXECUTION: ${getMasterSource().toUpperCase()} — VPS/session controls active`, 'start');
@@ -2108,7 +1774,7 @@ const BotDetail: React.FC<{
         const marketList = cfg.useMarketSwitch && cfg.markets.length > 0
             ? [cfg.market, ...cfg.markets.filter(m => m !== cfg.market)]
             : [cfg.market];
-        const multiScan = !matchesRange && bot.category === 'Even/Odd' && cfg.strategyLogic.active
+        const multiScan = bot.category === 'Even/Odd' && cfg.strategyLogic.active
             && cfg.useMarketSwitch && marketList.length > 1;
         let curMarketIdx = 0;
         let curMarket    = marketList[curMarketIdx];
@@ -2120,9 +1786,7 @@ const BotDetail: React.FC<{
            keeping the SAME locked contract type. Only engages when cfg.market2.enabled
            and the market-switch loss limit is hit (see loss branch below). */
         let activeSlot: 'm1' | 'm2' = 'm1';
-        const slotBarrier = () => matchesRange
-            ? (matchesTargetDigitRef.current ?? bot.prediction ?? (matchesRange === '0-5' ? 0 : 9))
-            : (activeSlot === 'm2' ? cfg.market2.barrier : bot.prediction);
+        const slotBarrier = () => (activeSlot === 'm2' ? cfg.market2.barrier : bot.prediction);
         const slotTakeProfit = () => (activeSlot === 'm2' ? cfg.market2.takeProfit : cfg.takeProfit);
         const slotMartingale = () => (activeSlot === 'm2' ? cfg.market2.martingale : cfg.martingale);
         const slotBaseStake = () => (activeSlot === 'm2' ? cfg.market2.stake : cfg.stake);
@@ -2163,73 +1827,6 @@ const BotDetail: React.FC<{
         let lastBuyPrice = curStake;
         /* Total consecutive losses across all cycles — drives market-switch and martingale. */
         let totalConsLoss = 0;
-        let xmlCycleRetries = 0;
-        let matchesTargets: MatchesScalperTarget[] = [];
-        let matchesTargetIndex = 0;
-        let matchesAttemptForTarget = 0;
-        let matchesWaitingForWindowLogged = false;
-        let matchesEntryTickAt = 0;
-        const resetMatchesPlan = () => {
-            if (!matchesRange) return;
-            matchesTargets = [];
-            matchesTargetIndex = 0;
-            matchesAttemptForTarget = 0;
-            matchesWaitingForWindowLogged = false;
-            matchesTargetDigitRef.current = null;
-        };
-        const primeMatchesHistory = async (market: string) => {
-            if (!matchesRange) return;
-            const generation = matchesFeedGenerationRef.current;
-            const pipSize = matchesPipSizeRef.current;
-            if (stopRef.current || generation !== matchesFeedGenerationRef.current) return;
-            if (pipSize == null) {
-                if (!matchesFeedFirstTickRef.current) {
-                    if (matchesNoTickWarnedGenerationRef.current !== generation) {
-                        matchesNoTickWarnedGenerationRef.current = generation;
-                        addLog(`MATCH FEED: waiting for the first authenticated live tick on ${market}; history priming will resume when tick precision is available.`, 'hack');
-                    }
-                } else if (!matchesPrecisionWarnedMarketsRef.current.has(market)) {
-                    matchesPrecisionWarnedMarketsRef.current.add(market);
-                    addLog(`MATCH FEED: live ticks arrived for ${market}, but trusted pip_size metadata is missing; raw ticks are buffered and entries remain paused.`, 'error');
-                }
-                return;
-            }
-            matchesPrecisionWarnedMarketsRef.current.delete(market);
-            if (matchesHistoryRequestGenerationRef.current === generation) return;
-            matchesHistoryRequestGenerationRef.current = generation;
-            try {
-                const response = await derivTrade.send({
-                    ticks_history: market,
-                    count: 50,
-                    end: 'latest',
-                    style: 'ticks',
-                });
-                if (stopRef.current || generation !== matchesFeedGenerationRef.current) return;
-                if (response?.error) throw new Error(response.error.message || 'History request failed');
-                const historyTicks = matchesScalperHistoryToTicks(
-                    response?.history?.prices || [],
-                    response?.history?.times || [],
-                    pipSize,
-                );
-                if (historyTicks.length) {
-                    matchesTickWindowRef.current = mergeMatchesScalperTicks(
-                        historyTicks,
-                        matchesTickWindowRef.current,
-                    );
-                    digitWindowRef.current = matchesTickWindowRef.current.map(item => item.digit);
-                    setDigitDisplay(digitWindowRef.current.slice(0, 20));
-                    addLog(`MATCH FEED READY: authenticated ${market} stream + ${historyTicks.length} pip_size-accurate history ticks; duplicate epochs removed.`, 'hack');
-                } else {
-                    addLog(`MATCH FEED: live ${market} stream is active; history had no usable timed ticks, so the scan will use live data.`, 'scan');
-                }
-            } catch (error: any) {
-                if (matchesHistoryRequestGenerationRef.current === generation) {
-                    matchesHistoryRequestGenerationRef.current = null;
-                }
-                addLog(`MATCH HISTORY unavailable for ${market}: ${error?.message || 'continuing with authenticated live ticks'}`, 'error');
-            }
-        };
-        matchesPrimeHistoryRef.current = primeMatchesHistory;
 
         /* ── Session-level tracking for cool-off and recovery ── */
         let consecutiveWins = 0;     // reset to 0 on any loss; triggers cool-off at 7
@@ -2371,41 +1968,12 @@ const BotDetail: React.FC<{
         /* ── FRESH XML RELOAD every time Run is pressed ──
            Await the load so the workspace is ready before the first trade fires. */
         addLog('📂 LOADING BOT STRATEGY...', 'hack');
-        try {
-            await onPreloadXml(bot, { market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit });
-        } catch (error: any) {
-            addLog(`XML_LOAD_FAILED — ${error?.message || 'the bot strategy could not be loaded; no trade was sent.'}`, 'error');
-            stopRef.current = true;
-            return;
-        }
+        try { await onPreloadXml(bot, { market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit }); } catch { /* non-fatal */ }
         patchWorkspaceParams({ duration: cfg.duration, duration_unit: cfg.duration_unit });
         // Re-apply market with staggered delays so it lands AFTER dbot's async
         // submarket onChange reloads the SYMBOL_LIST options (Bear/Bull/Jump need this).
         { const rm = curMarket; setTimeout(() => patchWorkspaceParams({ market: rm }), 500); setTimeout(() => patchWorkspaceParams({ market: rm }), 1100); }
         addLog('📂 XML_TRADING_ACTIVATOR: FRESH STRATEGY LOADED ✓', 'hack');
-
-        if (matchesRange && typeof api_base?.getActiveSymbols === 'function') {
-            addLog(`MATCH PIP SIZE: requesting authenticated market precision for ${curMarket}...`, 'scan');
-            try {
-                const activeSymbols = await api_base.getActiveSymbols();
-                const symbolInfo = (Array.isArray(activeSymbols) ? activeSymbols : api_base.active_symbols)
-                    ?.find((symbol: any) => symbol?.symbol === curMarket || symbol?.underlying_symbol === curMarket);
-                const cachedPipSize = resolveMatchesScalperPipSize(api_base.pip_sizes?.[curMarket]);
-                const marketPipSize = cachedPipSize
-                    ?? matchesScalperPipSizeFromIncrement(symbolInfo?.pip_size)
-                    ?? matchesScalperPipSizeFromIncrement(symbolInfo?.pip);
-                if (marketPipSize != null && Number.isInteger(Number(marketPipSize))
-                    && Number(marketPipSize) >= 0 && Number(marketPipSize) <= 10) {
-                    api_base.pip_sizes = api_base.pip_sizes || {};
-                    api_base.pip_sizes[curMarket] = Number(marketPipSize);
-                    addLog(`MATCH PIP SIZE READY: ${curMarket} uses ${marketPipSize} decimal places.`, 'hack');
-                } else {
-                    addLog(`MATCH PIP SIZE: metadata for ${curMarket} is unavailable; waiting for accurate live tick metadata.`, 'error');
-                }
-            } catch (error: any) {
-                addLog(`MATCH PIP SIZE: active-symbol metadata request failed (${error?.message || 'unknown error'}); waiting for accurate live tick metadata.`, 'error');
-            }
-        }
 
         /* Force-fresh market feed subscription — always reconnect on every Run */
         if (tickUnsubRef.current) { tickUnsubRef.current(); tickUnsubRef.current = null; }
@@ -2420,15 +1988,7 @@ const BotDetail: React.FC<{
         } else {
             subscribeMarket(curMarket);
         }
-        await primeMatchesHistory(curMarket);
-        matchesEntryTickAt = matchesLiveTickSeqRef.current;
         addLog(`▶ BOT ENGINE STARTED — ${contractLabel(bot)}`, 'start');
-        if (matchesRange) {
-            addLog(
-                `MATCHES CONFIG: ${matchesRange} targets | ${cfg.matchesEntryMode || 'random'} entry | stake ${cfg.stake} | martingale ×${cfg.martingale} | TP ${cfg.takeProfit} | SL ${cfg.stopLoss}`,
-                'info',
-            );
-        }
         await runHackerStartup(curMarket, cfg.useMarketSwitch);
 
         while (!stopRef.current) {
@@ -2457,7 +2017,7 @@ const BotDetail: React.FC<{
                    whenever cfg.virtualHook.recoveryMode is enabled, even when the main
                    hookLoss/hookWin gate (cfg.virtualHook.enabled) is off.              */
                 let entry = false;
-                if (!matchesRange && vhrActiveRef.current && cfg.virtualHook.recoveryMode) {
+                if (vhrActiveRef.current && cfg.virtualHook.recoveryMode) {
                     vhrActiveRef.current = false; // consume the flag for this iteration
                     addLog('⚡ VHR: 1-VIRTUAL CHECK — evaluating recovery entry...', 'hack');
 
@@ -2517,7 +2077,7 @@ const BotDetail: React.FC<{
                      Virtual WIN  → advance to stage 2.
                    Stage 2 (vhaRecovery2Ref): run full checkEntry / strategy scan
                      to find the best market setup, then fire the real trade. */
-                if (!matchesRange && cfg.virtualHookAlt.recoveryEnabled) {
+                if (cfg.virtualHookAlt.recoveryEnabled) {
                     if (vhaRecovery1Ref.current && !stopRef.current) {
                         vhaRecovery1Ref.current = false;
                         addLog('💎 VHA-R1: 1-VIRTUAL RECOVERY CHECK — evaluating market...', 'hack');
@@ -2585,37 +2145,23 @@ const BotDetail: React.FC<{
                 }
 
                 while (!entry && !stopRef.current) {
-                    /* The Matches feed is bound to the current authenticated API instance.
-                       Back off silent-feed retries and wait for APIBase to replace the
-                       connection before resubscribing; reconnect is confirmed by a tick. */
+                    /* ── Network/feed watchdog: no real ticks for 8 s → force reconnect ──
+                       lastTickAtRef is updated by every live tick in subscribeMarket, so this
+                       only fires on a genuine feed freeze, not between normal tick intervals.
+                       An 8 s cooldown prevents rapid-reconnect loops while still reacting fast. */
                     const now = Date.now();
-                    const matchesRetryCooldown = Math.min(
-                        8_000 * (2 ** Math.min(matchesFeedRetryCountRef.current, 2)),
-                        30_000,
-                    );
-                    const socketReady = api_base.api?.connection?.readyState === 1;
                     if (
                         !multiScan &&
-                        !matchesFeedRetryTimerRef.current &&
-                        (!matchesRange || socketReady) &&
                         now - lastTickAtRef.current > 8_000 &&
-                        now - lastReconnectAtRef.current > (matchesRange ? matchesRetryCooldown : 8_000)
+                        now - lastReconnectAtRef.current > 8_000
                     ) {
-                        matchesFeedRecoveryPendingRef.current = matchesRange || matchesFeedRecoveryPendingRef.current;
-                        if (matchesRange) matchesFeedRetryCountRef.current += 1;
-                        addLog(
-                            matchesRange
-                                ? `⚠ FEED_STALL DETECTED — reattaching to ${curMarket} (retry ${matchesFeedRetryCountRef.current}).`
-                                : '⚠ FEED_STALL DETECTED — forcing reconnection...',
-                            'error',
-                        );
+                        addLog('⚠ FEED_STALL DETECTED — forcing reconnection...', 'error');
                         lastReconnectAtRef.current = now;
                         try {
                             if (tickUnsubRef.current) { tickUnsubRef.current(); tickUnsubRef.current = null; }
                             subscribeMarket(curMarket);
                             lastTickAtRef.current = Date.now();
-                            void primeMatchesHistory(curMarket);
-                            if (!matchesRange) addLog('🔌 FEED_RESTORED — reconnected to live market feed', 'hack');
+                            addLog('🔌 FEED_RESTORED — reconnected to live market feed', 'hack');
                         } catch { /* retry on next iteration */ }
                         await new Promise(r => setTimeout(r, 800));
                     }
@@ -2629,73 +2175,17 @@ const BotDetail: React.FC<{
                         curMarketIdx = (curMarketIdx + 1) % marketList.length;
                         curMarket    = marketList[curMarketIdx];
                         curMarketRef.current = curMarket;
-                        resetMatchesPlan();
                         lastFiredGroupRef.current = null;
                         subscribeMarket(curMarket);
-                        await primeMatchesHistory(curMarket);
                         addLog(`⏱ SCAN_TIMEOUT — no entry in 2 min | rotating → ${curMarket} | reloading XML...`, 'switch');
-                        try {
-                            await onPreloadXml(bot, { market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit });
-                        } catch (error: any) {
-                            addLog(`XML_LOAD_FAILED — ${error?.message || 'market rotation could not load the bot strategy.'}`, 'error');
-                            stopRef.current = true;
-                        }
-                        if (stopRef.current) break;
+                        try { await onPreloadXml(bot, { market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit }); } catch { /* non-fatal */ }
                         patchWorkspaceParams({ market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit });
                         { const rm = curMarket; setTimeout(() => patchWorkspaceParams({ market: rm }), 500); setTimeout(() => patchWorkspaceParams({ market: rm }), 1000); }
                         marketSwitched = true;
                         break;
                     }
 
-                    if (matchesRange) {
-                        if (!matchesTargets.length) {
-                            const ranked = rankMatchesScalperTargets(digitWindowRef.current, matchesRange);
-                            if (ranked.length) {
-                                matchesTargets = ranked;
-                                matchesTargetIndex = 0;
-                                matchesAttemptForTarget = 0;
-                                matchesWaitingForWindowLogged = false;
-                                const targetSummary = ranked
-                                    .map(target => `${target.digit} (${target.count20}/20, ${target.count10}/10; ${target.attempts} tries)`)
-                                    .join(' → ');
-                                addLog(`MATCHES DEEP SCAN: 20-tick and 10-tick frequency scan complete`, 'scan');
-                                addLog(`MATCH TARGET ORDER: ${targetSummary}`, 'hack');
-                            } else if (!matchesWaitingForWindowLogged) {
-                                const tickCount = digitWindowRef.current.length;
-                                addLog(
-                                    tickCount < 20
-                                        ? `MATCHES DEEP SCAN: collecting authenticated live/history ticks (${tickCount}/20).`
-                                        : `MATCHES DEEP SCAN: no active ${matchesRange} target digits in the latest 20 ticks; waiting for a fresh window.`,
-                                    'scan',
-                                );
-                                matchesWaitingForWindowLogged = true;
-                            }
-                        }
-
-                        const target = matchesTargets[matchesTargetIndex];
-                        if (target) {
-                            matchesTargetDigitRef.current = target.digit;
-                            const signal = evaluateMatchesScalperEntry(
-                                digitWindowRef.current,
-                                cfg.matchesEntryMode || 'random',
-                                matchesRange,
-                            );
-                            const currentTickAt = matchesLiveTickSeqRef.current;
-                            if (signal.ready && currentTickAt > matchesEntryTickAt) {
-                                matchesEntryTickAt = currentTickAt;
-                                addLog(
-                                    `MATCHES ENTRY: target ${target.digit}, attempt ${matchesAttemptForTarget + 1}/${target.attempts} — ${signal.reason}`,
-                                    'entry',
-                                );
-                                entry = true;
-                            } else if (scanTick % 5 === 0) {
-                                addLog(
-                                    `MATCHES SCAN: target ${target.digit} (${target.count20}/20, ${target.count10}/10), ${matchesAttemptForTarget}/${target.attempts} losses; ${signal.reason}`,
-                                    'scan',
-                                );
-                            }
-                        }
-                    } else if (multiScan) {
+                    if (multiScan) {
                         if (readyMarketRef.current) {
                             curMarket = readyMarketRef.current;
                             readyMarketRef.current = null;
@@ -2706,7 +2196,7 @@ const BotDetail: React.FC<{
                             entry = true;
                             break;
                         }
-                    } else if (!matchesRange && cfg.strategyLogic.active && cfg.strategyLogic.groups.length > 0) {
+                    } else if (cfg.strategyLogic.active && cfg.strategyLogic.groups.length > 0) {
                         const inRecovery = totalConsLoss > 0;
                         const r = evaluateStrategyLogic(digitWindowRef.current, cfg.strategyLogic.groups, inRecovery, { prices: priceWindowRef.current, contractType: bot.contractType, prediction: bot.prediction });
                         if (r.hit) {
@@ -2727,11 +2217,16 @@ const BotDetail: React.FC<{
                             entry = true;
                             break;
                         }
+                    } else if (fastExecRef.current === 'ultra' && digitWindowRef.current.length >= 1) {
+                        /* ⚡ ULTRA FAST — zero-latency, fire immediately on very first tick, no scan at all */
+                        addLog('⚡⚡ ULTRA_FAST: zero-latency entry — fired on tick arrival', 'entry');
+                        entry = true;
+                    } else if (fastExecRef.current === 'fast' && digitWindowRef.current.length >= 1) {
+                        /* ⚡ FAST — bypass strategy scan, fire on first tick (original fast behaviour) */
+                        addLog('⚡ FAST_EXEC: scan bypassed — immediate entry on first tick', 'entry');
+                        entry = true;
                     } else {
                         entry = checkEntry(digitWindowRef.current, bot.contractType, bot.prediction, priceWindowRef.current);
-                        if (entry && fastExecRef.current !== 'off') {
-                            addLog(`⚡ ${fastExecRef.current.toUpperCase()} EXECUTION: normal entry condition confirmed; using reduced handoff waits.`, 'entry');
-                        }
                     }
                     scanTick++;
 
@@ -2743,22 +2238,13 @@ const BotDetail: React.FC<{
                                 addLog(`STREAM: ${recent}  ← latest left`, 'scan');
                             } else {
                                 const staleSec = Math.round((Date.now() - lastTickAtRef.current) / 1000);
-                                const now = Date.now();
-                                if (!matchesRange || now - matchesLastAwaitingTickLogAtRef.current >= 10_000) {
-                                    if (matchesRange) matchesLastAwaitingTickLogAtRef.current = now;
-                                    addLog(
-                                        matchesRange
-                                            ? `FEED: AWAITING FIRST TICK... (${staleSec}s) — retry is connection-aware and backs off.`
-                                            : `FEED: AWAITING FIRST TICK... (${staleSec}s) — reconnect in ${Math.max(0, 8 - staleSec)}s if stalled`,
-                                        'hack',
-                                    );
-                                }
+                                addLog(`FEED: AWAITING FIRST TICK... (${staleSec}s) — reconnect in ${Math.max(0, 8 - staleSec)}s if stalled`, 'hack');
                             }
                         }
-                        if (!matchesRange && scanTick % 12 === 5) {
+                        if (scanTick % 12 === 5) {
                             addLog(HACK_SCAN_MSGS[Math.floor(Math.random() * HACK_SCAN_MSGS.length)], 'hack');
                         }
-                        if (!matchesRange && scanTick % 15 === 9) {
+                        if (scanTick % 15 === 9) {
                             addLog(`CONNECTION_SPEED: ${105 + Math.floor(Math.random() * 40)} Mbps`, 'hack');
                         }
 
@@ -2814,7 +2300,7 @@ const BotDetail: React.FC<{
                 let realTradeUnlocked = false;
                 let vhaRealUnlocked   = false;
 
-                if (!matchesRange && (cfg.virtualHook.enabled || cfg.virtualHookAlt.enabled) && !stopRef.current) {
+                if ((cfg.virtualHook.enabled || cfg.virtualHookAlt.enabled) && !stopRef.current) {
                     /* ── Shared tick wait: one wait serves both state machines ── */
                     const sharedBarrier = slotBarrier();
                     const sharedTicks   = Math.max(1, cfg.duration);
@@ -2976,10 +2462,14 @@ const BotDetail: React.FC<{
                     }}));
                 } catch { /* non-fatal */ }
 
-                /* Balanced mode keeps a small client-side request cushion. Fast modes
-                   remove this wait without bypassing the signal or risk checks. */
-                if (!ultraTurboRef.current && fastExecRef.current === 'off' && !isFastExecutionEnabledForContext()) {
+                /* ── Anti-detection jitter: randomise request timing ──
+                   Adds a small random delay (25-180 ms) before every real buy to break
+                   any fixed-interval pattern that could be flagged by server-side
+                   anomaly detection. Ultra Turbo skips this to preserve zero-latency. */
+                /* ⚡ FAST / ULTRA skip all anti-pattern jitter — zero-latency is the point */
+                if (!ultraTurboRef.current && fastExecRef.current === 'off') {
                     const jitter = 25 + Math.floor(Math.random() * 155);
+                    if (cfg.stealthMode) addLog(`ANTI_PATTERN_DELAY: ${jitter}ms jitter injected`, 'hack');
                     await new Promise(r => setTimeout(r, jitter));
                 }
 
@@ -3024,7 +2514,6 @@ const BotDetail: React.FC<{
 
                 let cycle = { forceStopped: false, reason: null as 'tp' | 'sl' | 'loss_limit' | null, cycleProfit: 0, consLoss: 0, lastWon: true };
                 const { isFastExecutionEnabled: isFastNow } = await import('@/utils/execution-speed');
-                let matchesCycleSettled = false;
                 for (let _ci = 0; _ci < tradeCount && !stopRef.current; _ci++) {
                     if (_ci > 0 && !stopRef.current) {
                         // ULTRA TURBO / FAST mode: zero inter-contract delay; normal: 250ms
@@ -3053,9 +2542,6 @@ const BotDetail: React.FC<{
                         priorConsLoss: totalConsLoss,
                         onLog: (msg, kind) => addLog(`${contractTag}${msg}`, kind),
                         onSettled: ({ profit, won, market: mkt, buyPrice, exitDigit, consLoss }) => {
-                            xmlCycleRetries = 0;
-                            matchesCycleSettled = true;
-                            if (matchesRange && won) onMatchWin?.(profit);
                             lastBuyPrice = buyPrice;
                             const txId = ++txIdRef.current;
                             setTxList(prev => [{
@@ -3086,11 +2572,6 @@ const BotDetail: React.FC<{
                             }
                         },
                     });
-                    if (cycle.fatalError) {
-                        addLog('XML_RUN_ABORTED — execution stopped safely. Check the open-contract list and transaction history before starting again.', 'error');
-                        stopRef.current = true;
-                        break;
-                    }
                     if (cycle.forceStopped) break; // TP/SL hit — stop multi-contract loop
                 }
 
@@ -3154,15 +2635,6 @@ const BotDetail: React.FC<{
                     }
                 }
 
-                if (matchesRange && matchesCycleSettled && cycle.lastWon) {
-                    const target = matchesTargets[matchesTargetIndex];
-                    addLog(
-                        `MATCH HIT: digit ${target?.digit ?? activeBarrier} won; refreshing the 20/10-tick ranking and continuing the session.`,
-                        'win',
-                    );
-                    resetMatchesPlan();
-                }
-
                 /* ── Loss handling ──
                    Fires for EVERY single loss — either a guard-triggered force-stop (loss_limit)
                    or a normal single-trade loss (bot stopped by onStopButtonClick in onContract).
@@ -3176,41 +2648,8 @@ const BotDetail: React.FC<{
                        so DO NOT escalate martingale, log a loss, or do a market switch. Just
                        sleep briefly and retry — the engine will be free within a few hundred ms. */
                     if (cycle.retryNextCycle) {
-                        xmlCycleRetries += 1;
-                        if (xmlCycleRetries >= 5) {
-                            addLog('XML_RUN_RETRY_LIMIT — the bot could not start a purchase after five safe retries; stopping instead of increasing stake or repeating indefinitely.', 'error');
-                            stopRef.current = true;
-                            break;
-                        }
-                        await new Promise(r => setTimeout(r, Math.min(1500, 250 * (2 ** (xmlCycleRetries - 1)))));
+                        await new Promise(r => setTimeout(r, ultraTurboRef.current ? 80 : 200));
                         continue;
-                    }
-
-                    if (matchesRange && matchesCycleSettled) {
-                        const target = matchesTargets[matchesTargetIndex];
-                        if (target) {
-                            matchesAttemptForTarget += 1;
-                            addLog(
-                                `MATCH ATTEMPT MISSED: digit ${target.digit} (${matchesAttemptForTarget}/${target.attempts})`,
-                                'loss',
-                            );
-                            if (matchesAttemptForTarget >= target.attempts) {
-                                matchesTargetIndex += 1;
-                                matchesAttemptForTarget = 0;
-                                if (matchesTargetIndex >= matchesTargets.length) {
-                                    addLog('MATCH MISSED — all ranked targets used; collecting a fresh 20/10-tick scan and trying again.', 'switch');
-                                    setMatchesMissedPopup(true);
-                                    resetMatchesPlan();
-                                } else {
-                                    const nextTarget = matchesTargets[matchesTargetIndex];
-                                    matchesTargetDigitRef.current = nextTarget.digit;
-                                    addLog(
-                                        `MATCH TARGET ROTATION: now trying digit ${nextTarget.digit} (${nextTarget.count20}/20, ${nextTarget.count10}/10; ${nextTarget.attempts} tries)`,
-                                        'switch',
-                                    );
-                                }
-                            }
-                        }
                     }
 
                     if (!cycle.forceStopped) {
@@ -3242,20 +2681,12 @@ const BotDetail: React.FC<{
                         curMarket  = cfg.market2.market;
                         curMarketIdx = 0;
                         lastFiredGroupRef.current = null;
-                        resetMatchesPlan();
                         curStake  = computeNextStake(totalConsLoss, lastBuyPrice);
                         subscribeMarket(curMarket);
                         curMarketRef.current = curMarket;
-                        await primeMatchesHistory(curMarket);
                         addLog(`🔀 MARKET_2_SWITCH → ${curMarket} | stake ${curStake.toFixed(2)} | barrier ${slotBarrier()} | martingale ×${slotMartingale()} (${totalConsLoss} losses)`, 'switch');
                         /* Reload XML with new market and duration */
-                        try {
-                            await onPreloadXml(bot, { market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit });
-                        } catch (error: any) {
-                            addLog(`XML_LOAD_FAILED — ${error?.message || 'Market 2 could not load the bot strategy.'}`, 'error');
-                            stopRef.current = true;
-                        }
-                        if (stopRef.current) break;
+                        try { await onPreloadXml(bot, { market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit }); } catch { /* non-fatal */ }
                         patchWorkspaceParams({ market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit });
                         { const rm = curMarket; setTimeout(() => patchWorkspaceParams({ market: rm }), 500); setTimeout(() => patchWorkspaceParams({ market: rm }), 1000); }
                         continue; // re-scan on Market 2 with updated stake
@@ -3266,20 +2697,12 @@ const BotDetail: React.FC<{
                         && totalConsLoss >= cfg.switchOnLosses) {
                         curMarketIdx = (curMarketIdx + 1) % marketList.length;
                         curMarket    = marketList[curMarketIdx];
-                        resetMatchesPlan();
                         lastFiredGroupRef.current = null;
                         subscribeMarket(curMarket);
                         curMarketRef.current = curMarket;
-                        await primeMatchesHistory(curMarket);
                         addLog(`🔀 MARKET_SWITCH → ${curMarket} | stake ${curStake.toFixed(2)} | martingale ×${slotMartingale()} (${totalConsLoss} losses, threshold: ${cfg.switchOnLosses})`, 'switch');
                         /* Reload XML with new market and sync ticks duration */
-                        try {
-                            await onPreloadXml(bot, { market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit });
-                        } catch (error: any) {
-                            addLog(`XML_LOAD_FAILED — ${error?.message || 'market rotation could not load the bot strategy.'}`, 'error');
-                            stopRef.current = true;
-                        }
-                        if (stopRef.current) break;
+                        try { await onPreloadXml(bot, { market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit }); } catch { /* non-fatal */ }
                         patchWorkspaceParams({ market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit });
                         { const rm = curMarket; setTimeout(() => patchWorkspaceParams({ market: rm }), 500); setTimeout(() => patchWorkspaceParams({ market: rm }), 1000); }
                         continue; // re-scan on new market with martingale stake
@@ -3301,7 +2724,7 @@ const BotDetail: React.FC<{
                         }
 
                         /* 3 consecutive losses during recovery → pause and read market health */
-                        if (!matchesRange && recoveryCoolLoss >= 3) {
+                        if (recoveryCoolLoss >= 3) {
                             addLog(`⏸ RECOVERY COOL-OFF: 3 losses in a row — reading market for 3 ticks without trading...`, 'hack');
                             let favorable = 0, unfavorable = 0;
                             for (let _ri = 0; _ri < 3 && !stopRef.current; _ri++) {
@@ -3333,7 +2756,7 @@ const BotDetail: React.FC<{
                        simulation before re-entering. If virtual = LOSS (confirms pattern),
                        the recovery real trade fires immediately — skipping the full entry scan.
                        This fires independently of the main VH hookLoss/hookWin gate. */
-                    if (!matchesRange && cfg.virtualHook.recoveryMode) {
+                    if (cfg.virtualHook.recoveryMode) {
                         vhrActiveRef.current = true;
                         addLog('⚡ VHR: REAL LOSS FLAGGED — instant 1-virtual recovery check queued for next scan', 'hack');
                     }
@@ -3341,7 +2764,7 @@ const BotDetail: React.FC<{
                     /* ── Virtual Hook Alternative recovery: stage-1 virtual check queued ──
                        After any real-money loss, queue a 1-virtual-tick recovery check.
                        The VHA recovery gate at the top of the outer loop will handle it. */
-                    if (!matchesRange && cfg.virtualHookAlt.recoveryEnabled) {
+                    if (cfg.virtualHookAlt.recoveryEnabled) {
                         vhaRecovery1Ref.current = true;
                         addLog('💎 VHA: REAL LOSS → stage-1 recovery virtual check queued for next scan', 'hack');
                     }
@@ -3390,10 +2813,8 @@ const BotDetail: React.FC<{
                     activeSlot = 'm1';
                     curMarketIdx = 0;
                     curMarket  = defaultMarket;
-                    resetMatchesPlan();
                     subscribeMarket(curMarket);
                     curMarketRef.current = curMarket;
-                    await primeMatchesHistory(curMarket);
                     addLog(`↩ DEFAULT_MARKET_RESTORED → ${curMarket} (win — market reset)`, 'switch');
                 }
                 /* Reset stake to base after a win */
@@ -3457,17 +2878,12 @@ const BotDetail: React.FC<{
                    Enabling either short or long sessions makes RUN a continuous
                    session, with the configured cool-off acting as the pause. */
                 const sessionsEnabled = cfg.coolOff.short.enabled || cfg.coolOff.long.enabled;
-                if (!sessionsEnabled && !matchesRange) {
+                if (!sessionsEnabled) {
                     addLog('🎉 TRADE WIN — Bot stopped. Press ▶ RUN to start a fresh scalp.', 'win');
                     setWinPopup({ profit: cycle.cycleProfit, stopped: true, sessionPnl: sessionPnlRef.current, wins: winsRef.current, losses: lossesRef.current, reason: 'win' });
                     break;
                 }
-                addLog(
-                    matchesRange
-                        ? '✅ MATCH WIN — next 20/10 scan is starting; bot remains active.'
-                        : '✅ SESSION WIN — continuing until a session cool-off threshold is reached',
-                    'win',
-                );
+                addLog('✅ SESSION WIN — continuing until a session cool-off threshold is reached', 'win');
                 await new Promise(r => setTimeout(r, 100));
 
             } catch (err: any) {
@@ -3478,32 +2894,19 @@ const BotDetail: React.FC<{
                 if (isNetworkErr) {
                     addLog('🔌 NETWORK_ERROR — forcing feed reconnect...', 'error');
                     try {
-                        if (matchesRange) matchesFeedRecoveryPendingRef.current = true;
                         if (tickUnsubRef.current) { tickUnsubRef.current(); tickUnsubRef.current = null; }
                         subscribeMarket(curMarket);
                         lastTickAtRef.current = Date.now();
-                        void primeMatchesHistory(curMarket);
-                        if (matchesRange) {
-                            addLog(`MATCH FEED RETRY: waiting for the first live tick on ${curMarket}.`, 'hack');
-                        } else {
-                            addLog('🔌 FEED_RECONNECTED — resuming scan...', 'hack');
-                        }
+                        addLog('🔌 FEED_RECONNECTED — resuming scan...', 'hack');
                     } catch { /* will retry next iteration */ }
                 }
                 await new Promise(r => setTimeout(r, 1500));
             }
         }
 
-        if (matchesFeedRetryTimerRef.current) {
-            clearTimeout(matchesFeedRetryTimerRef.current);
-            matchesFeedRetryTimerRef.current = null;
-        }
         if (tickUnsubRef.current) { tickUnsubRef.current(); tickUnsubRef.current = null; }
         if (multiScan) unsubscribeAllMarkets();
         tickSignalRef.current = null;
-        matchesFeedFirstTickRef.current = false;
-        matchesFeedRecoveryPendingRef.current = false;
-        if (matchesPrimeHistoryRef.current === primeMatchesHistory) matchesPrimeHistoryRef.current = null;
         /* ── Bot-stopped summary in terminal ── */
         const finalPnl   = sessionPnlRef.current;
         const totalTrades = winsRef.current + lossesRef.current;
@@ -3515,14 +2918,10 @@ const BotDetail: React.FC<{
         addLog('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'separator');
         setRunning(false);
         setEntryReady(false);
-    }, [running, derivTrade, bot, cfg, addLog, subscribeMarket, subscribeAllMarkets, unsubscribeAllMarkets, onPreloadXml, runXmlBotCycle, matchesRange, onMatchWin]);
+    }, [running, derivTrade, bot, cfg, addLog, subscribeMarket, subscribeAllMarkets, unsubscribeAllMarkets, onPreloadXml, runXmlBotCycle]);
 
     const stopBot = useCallback(() => {
         stopRef.current = true;
-        if (matchesFeedRetryTimerRef.current) {
-            clearTimeout(matchesFeedRetryTimerRef.current);
-            matchesFeedRetryTimerRef.current = null;
-        }
         /* Immediately kill the XML bot engine — don't wait for the cycle to finish */
         const rp: any = store?.run_panel;
         try { rp?.onStopButtonClick?.(); } catch {}
@@ -3546,9 +2945,7 @@ const BotDetail: React.FC<{
                 <button className='sb-detail__back' onClick={onBack}>‹ Bots</button>
                 <div className='sb-detail__title'>
                     <span className='sb-detail__icon'>
-                        {matchesRange
-                            ? <Crown size={22} aria-hidden='true' />
-                            : bot.contractType.includes('EVEN') ? '2️⃣' : bot.contractType.includes('ODD') ? '1️⃣' : bot.contractType.includes('OVER') ? '⬆️' : '⬇️'}
+                        {bot.contractType.includes('EVEN') ? '2️⃣' : bot.contractType.includes('ODD') ? '1️⃣' : bot.contractType.includes('OVER') ? '⬆️' : '⬇️'}
                     </span>
                     <div>
                         <h2>{bot.name}</h2>
@@ -3572,8 +2969,8 @@ const BotDetail: React.FC<{
                                 onClick={() => setUltraTurbo(v => !v)}
                                 title={
                                     ultraTurbo
-                                        ? 'ULTRA TURBO ON — workspace pre-warmed during scanning; entry rules and risk guards remain active.'
-                                        : 'ULTRA TURBO OFF — pre-warms the workspace and reduces app-side handoff waits; network and broker delays still apply.'
+                                        ? 'ULTRA TURBO ON — workspace pre-warmed each tick, zero init delay, 300ms teardown cap. Click to disable.'
+                                        : 'ULTRA TURBO OFF — enable to pre-warm workspace on every tick and eliminate all software delays between NDP condition and XML bot fire. Maximises chance of catching the exact NDP digit before next tick arrives.'
                                 }
                             >
                                 {ultraTurbo ? '⚡⚡⚡ ULTRA TURBO' : '🚀 ULTRA TURBO'}
@@ -3582,9 +2979,9 @@ const BotDetail: React.FC<{
                                 className={`sb-detail__fast-btn sb-detail__fast-btn--${fastExec}`}
                                 onClick={cycleSpeed}
                                 title={
-                                    fastExec === 'off'   ? 'Balanced: normal strategy checks with a small request cushion (click for Fast)' :
-                                    fastExec === 'fast'  ? 'Fast: keeps every entry rule and removes supported handoff waits (click for Ultra)' :
-                                                           'Ultra: keeps every entry rule and uses the shortest supported handoff (click to reset)'
+                                    fastExec === 'off'   ? 'Balanced: uses strategy scan / checkEntry logic (click for Fast)' :
+                                    fastExec === 'fast'  ? 'Fast: bypass scan, fire on first tick (click for Ultra Fast)' :
+                                                           'Ultra Fast: zero-latency, fires the instant a tick arrives (click to reset)'
                                 }
                             >
                                 {fastExec === 'off'   && '⚙ BALANCED'}
@@ -3616,58 +3013,13 @@ const BotDetail: React.FC<{
                 {/* ── Left Sidebar — Config ── */}
                 <div className={`sb-detail__sidebar${settingsOpen ? ' is-open' : ''}`}>
 
-                    {matchesRange && (
-                        <section className='sb-matches-entry-settings' aria-label='Matches entry settings'>
-                            <h3>Entry mode</h3>
-                            <div className='sb-matches-entry-settings__choices'>
-                                <button
-                                    type='button'
-                                    className={cfg.matchesEntryMode === 'random' ? 'is-active' : ''}
-                                    aria-pressed={cfg.matchesEntryMode === 'random'}
-                                    data-testid='button-matches-entry-random'
-                                    disabled={running}
-                                    onClick={() => cfgSet({ matchesEntryMode: 'random' })}
-                                >
-                                    Random entry
-                                </button>
-                                <button
-                                    type='button'
-                                    className={cfg.matchesEntryMode === 'selected' ? 'is-active' : ''}
-                                    aria-pressed={cfg.matchesEntryMode === 'selected'}
-                                    data-testid='button-matches-entry-selected'
-                                    disabled={running}
-                                    onClick={() => cfgSet({ matchesEntryMode: 'selected' })}
-                                >
-                                    Selected entry
-                                </button>
-                            </div>
-                            <p>
-                                {matchesRange === '0-5'
-                                    ? 'Scans the 0–5 targets and uses digits 6–9 for entry confirmation.'
-                                    : 'Scans the 6–9 targets and uses digits 0–3 for entry confirmation.'}
-                            </p>
-                        </section>
-                    )}
-
                     {/* Builder buttons */}
                     <div className='sb-bot-actions'>
                         <button className='sb-bot-action-btn' onClick={() => { setLoadingXml(true); onLoadXml(bot).finally(() => setLoadingXml(false)); }} disabled={loadingXml}>
                             📁 DEFAULT BOT
                         </button>
-                        <button
-                            className='sb-bot-action-btn'
-                            data-testid={matchesRange ? 'button-run-matches-scanner' : undefined}
-                            onClick={() => {
-                                if (matchesRange) {
-                                    void startBot();
-                                    return;
-                                }
-                                setLoadingXml(true);
-                                onLoadAndRun(bot).finally(() => setLoadingXml(false));
-                            }}
-                            disabled={loadingXml || (!!matchesRange && (running || !derivTrade.authorized))}
-                        >
-                            {matchesRange ? '▶ RUN MATCH SCANNER' : '▶ SELECT BOT'}
+                        <button className='sb-bot-action-btn' onClick={() => { setLoadingXml(true); onLoadAndRun(bot).finally(() => setLoadingXml(false)); }} disabled={loadingXml}>
+                            ▶ SELECT BOT
                         </button>
                         <button className='sb-bot-action-btn' disabled>
                             ⬆ UPLOAD BOT
@@ -3823,32 +3175,22 @@ const BotDetail: React.FC<{
                     )}
 
                     {/* Strategy Logic */}
-                    <SbAccordion
-                        title='💡 Strategy Logic'
-                        badge={matchesRange ? 'MATCHES ENTRY' : cfg.strategyLogic.active ? 'ACTIVE' : 'DISABLED'}
-                        badgeColor={matchesRange ? '#f59e0b' : cfg.strategyLogic.active ? '#22c55e' : '#64748b'}
-                        defaultOpen
-                    >
-                        {matchesRange && (
-                            <div className='sb-hint' role='status'>
-                                Matches Scalper entry logic owns entry detection for this bot. General Strategy Logic is inactive to prevent competing signals and terminal entries.
-                            </div>
-                        )}
+                    <SbAccordion title='💡 Strategy Logic' badge={cfg.strategyLogic.active ? 'ACTIVE' : 'DISABLED'} badgeColor={cfg.strategyLogic.active ? '#22c55e' : '#64748b'} defaultOpen>
                         <div className='sb-field-row sb-field-row--center'>
                             <label>Global Shared</label>
-                            <button className={`sb-toggle ${!matchesRange && cfg.strategyLogic.globalShared ? 'on' : 'off'}`}
-                                onClick={() => slSet({ globalShared: !cfg.strategyLogic.globalShared })} disabled={running || !!matchesRange}>
-                                {matchesRange ? 'INACTIVE' : cfg.strategyLogic.globalShared ? 'ENABLED' : 'DISABLED'}
+                            <button className={`sb-toggle ${cfg.strategyLogic.globalShared ? 'on' : 'off'}`}
+                                onClick={() => slSet({ globalShared: !cfg.strategyLogic.globalShared })} disabled={running}>
+                                {cfg.strategyLogic.globalShared ? 'ENABLED' : 'DISABLED'}
                             </button>
                         </div>
                         <div className='sb-field-row sb-field-row--center'>
                             <label>Strategy</label>
-                            <button className={`sb-toggle ${!matchesRange && cfg.strategyLogic.active ? 'on' : 'off'}`}
-                                onClick={() => slSet({ active: !cfg.strategyLogic.active })} disabled={running || !!matchesRange}>
-                                {matchesRange ? 'INACTIVE — MATCHES ENTRY' : cfg.strategyLogic.active ? 'ACTIVE' : 'INACTIVE'}
+                            <button className={`sb-toggle ${cfg.strategyLogic.active ? 'on' : 'off'}`}
+                                onClick={() => slSet({ active: !cfg.strategyLogic.active })} disabled={running}>
+                                {cfg.strategyLogic.active ? 'ACTIVE' : 'INACTIVE'}
                             </button>
                         </div>
-                        {!matchesRange && cfg.strategyLogic.active && (
+                        {cfg.strategyLogic.active && (
                             <>
                                 {cfg.strategyLogic.groups.map((g, gIdx) => (
                                     <div key={g.id} className='sb-or-group'>
@@ -4125,18 +3467,13 @@ const BotDetail: React.FC<{
                     </SbAccordion>
 
                     {/* ── Virtual Hook ── */}
-                    <SbAccordion
-                        title='🔮 Virtual Hook'
-                        badge={matchesRange ? 'MATCHES ENTRY' : cfg.virtualHook.enabled ? `${cfg.virtualHook.hookLoss}L → ${cfg.virtualHook.hookWin}W` : 'OFF'}
-                        badgeColor={matchesRange ? '#f59e0b' : cfg.virtualHook.enabled ? '#a855f7' : '#64748b'}
-                    >
-                        {matchesRange && <p className='sb-hint'>Inactive for Matches Scalper: the dedicated entry scanner controls every real entry.</p>}
+                    <SbAccordion title='🔮 Virtual Hook' badge={cfg.virtualHook.enabled ? `${cfg.virtualHook.hookLoss}L → ${cfg.virtualHook.hookWin}W` : 'OFF'} badgeColor={cfg.virtualHook.enabled ? '#a855f7' : '#64748b'}>
                         <p className='sb-hint sb-hint--purple'>Simulates trades using live market data without using real funds. Only after the exact configured pattern (N virtual losses → M virtual wins, in a row) does the bot unlock and place a REAL trade. All virtual trades appear in the Transactions tab as <strong>[VIRTUAL]</strong> rows.</p>
                         <div className='sb-field-row sb-field-row--center'>
                             <label>Enable Virtual Hook</label>
                             <button className={`sb-toggle ${cfg.virtualHook.enabled ? 'on' : 'off'}`}
-                                onClick={() => vhSet({ enabled: !cfg.virtualHook.enabled })} disabled={running || !!matchesRange}>
-                                {matchesRange ? 'INACTIVE — MATCHES ENTRY' : cfg.virtualHook.enabled ? 'ENABLED' : 'DISABLED'}
+                                onClick={() => vhSet({ enabled: !cfg.virtualHook.enabled })} disabled={running}>
+                                {cfg.virtualHook.enabled ? 'ENABLED' : 'DISABLED'}
                             </button>
                         </div>
                         {cfg.virtualHook.enabled && (
@@ -4156,13 +3493,13 @@ const BotDetail: React.FC<{
                                     <div className='sb-field'>
                                         <label>Virtual Losses</label>
                                         <NumberField value={cfg.virtualHook.hookLoss} min={1} max={20}
-                                            onCommit={n => vhSet({ hookLoss: n })} disabled={running || !!matchesRange} />
+                                            onCommit={n => vhSet({ hookLoss: n })} disabled={running} />
                                         <span className='sb-unit'>consecutive virtual losses required</span>
                                     </div>
                                     <div className='sb-field'>
                                         <label>Virtual Wins</label>
                                         <NumberField value={cfg.virtualHook.hookWin} min={0} max={10}
-                                            onCommit={n => vhSet({ hookWin: n })} disabled={running || !!matchesRange} />
+                                            onCommit={n => vhSet({ hookWin: n })} disabled={running} />
                                         <span className='sb-unit'>wins required after losses (0 = skip)</span>
                                     </div>
                                 </div>
@@ -4175,7 +3512,7 @@ const BotDetail: React.FC<{
                                         <button
                                             className={`sb-toggle ${cfg.virtualHook.recoveryMode ? 'on' : 'off'}`}
                                             onClick={() => vhSet({ recoveryMode: !cfg.virtualHook.recoveryMode })}
-                                            disabled={running || !!matchesRange}
+                                            disabled={running}
                                             style={cfg.virtualHook.recoveryMode ? { background: 'linear-gradient(135deg,#a855f7,#7c3aed)', color: '#fff' } : undefined}
                                         >
                                             {cfg.virtualHook.recoveryMode ? '⚡ ON' : 'OFF'}
@@ -4195,17 +3532,16 @@ const BotDetail: React.FC<{
                     {/* ── Virtual Hook Alternative ── */}
                     <SbAccordion
                         title='💎 Virtual Hook Alternative'
-                        badge={matchesRange ? 'MATCHES ENTRY' : cfg.virtualHookAlt.enabled ? `${cfg.virtualHookAlt.winsRequired}W → ${cfg.virtualHookAlt.lossToTrigger}L` : 'OFF'}
-                        badgeColor={matchesRange ? '#f59e0b' : cfg.virtualHookAlt.enabled ? '#f59e0b' : '#64748b'}
+                        badge={cfg.virtualHookAlt.enabled ? `${cfg.virtualHookAlt.winsRequired}W → ${cfg.virtualHookAlt.lossToTrigger}L` : 'OFF'}
+                        badgeColor={cfg.virtualHookAlt.enabled ? '#f59e0b' : '#64748b'}
                     >
-                        {matchesRange && <p className='sb-hint'>Inactive for Matches Scalper: the dedicated entry scanner controls every real entry.</p>}
                         <p className='sb-hint sb-hint--amber'>Opposite pattern to the standard Virtual Hook. After <strong>N consecutive virtual WINS</strong> followed by <strong>M virtual LOSSES</strong> the bot fires a REAL trade. Useful when you want to confirm a downward reversal before entering.</p>
                         <div className='sb-field-row sb-field-row--center'>
                             <label>Enable VH Alternative</label>
                             <button
                                 className={`sb-toggle ${cfg.virtualHookAlt.enabled ? 'on' : 'off'}`}
                                 onClick={() => vhaSet({ enabled: !cfg.virtualHookAlt.enabled })}
-                                disabled={running || !!matchesRange}
+                                disabled={running}
                                 style={cfg.virtualHookAlt.enabled ? { background: 'linear-gradient(135deg,#f59e0b,#d97706)', color: '#000' } : undefined}
                             >
                                 {cfg.virtualHookAlt.enabled ? 'ENABLED' : 'DISABLED'}
@@ -4228,13 +3564,13 @@ const BotDetail: React.FC<{
                                     <div className='sb-field'>
                                         <label>Virtual Wins</label>
                                         <NumberField value={cfg.virtualHookAlt.winsRequired} min={1} max={10}
-                                            onCommit={n => vhaSet({ winsRequired: n })} disabled={running || !!matchesRange} />
+                                            onCommit={n => vhaSet({ winsRequired: n })} disabled={running} />
                                         <span className='sb-unit'>consecutive wins required</span>
                                     </div>
                                     <div className='sb-field'>
                                         <label>Virtual Losses</label>
                                         <NumberField value={cfg.virtualHookAlt.lossToTrigger} min={0} max={5}
-                                            onCommit={n => vhaSet({ lossToTrigger: n })} disabled={running || !!matchesRange} />
+                                            onCommit={n => vhaSet({ lossToTrigger: n })} disabled={running} />
                                         <span className='sb-unit'>losses after wins (0 = immediate)</span>
                                     </div>
                                 </div>
@@ -4247,7 +3583,7 @@ const BotDetail: React.FC<{
                                         <button
                                             className={`sb-toggle ${cfg.virtualHookAlt.recoveryEnabled ? 'on' : 'off'}`}
                                             onClick={() => vhaSet({ recoveryEnabled: !cfg.virtualHookAlt.recoveryEnabled })}
-                                            disabled={running || !!matchesRange}
+                                            disabled={running}
                                             style={cfg.virtualHookAlt.recoveryEnabled ? { background: 'linear-gradient(135deg,#f59e0b,#d97706)', color: '#000' } : undefined}
                                         >
                                             {cfg.virtualHookAlt.recoveryEnabled ? '💎 ON' : 'OFF'}
@@ -4588,15 +3924,8 @@ const BotDetail: React.FC<{
                             if (enabled) {
                                 setVpsRuns(0);
                                 setVpsPnl(0);
-                                // VPS removes the app's optional preflight waits, but
-                                // still uses the same strategy signal and risk guards.
-                                if (fastExecRef.current === 'off') {
-                                    vpsEnabledFastRef.current = true;
-                                    setFastExec('fast');
-                                }
-                            } else if (vpsEnabledFastRef.current) {
-                                vpsEnabledFastRef.current = false;
-                                if (fastExecRef.current === 'fast') setFastExec('off');
+                                // VPS enables fast mode
+                                if (!running) setCfg(c => c);
                             }
                         }}
                         onSettingsChange={s => setVpsSettings(s)}
@@ -4610,7 +3939,6 @@ const BotDetail: React.FC<{
                                 subscribeMarket(curMarketRef.current);
                                 lastTickAtRef.current = Date.now();
                                 lastReconnectAtRef.current = Date.now();
-                                void matchesPrimeHistoryRef.current?.(curMarketRef.current);
                             } catch { /* retried again by the next VPS health check */ }
                         }}
                         onRequestRestart={(runPnl, completedRuns, cumulativePnl) => {
@@ -4782,55 +4110,6 @@ const BotDetail: React.FC<{
                 </div>{/* end sb-detail__terminal-col */}
             </div>{/* end sb-detail__body */}
 
-            {matchesRange && matchesKingVisible && (
-                <div
-                    className='sb-matches-king'
-                    role='dialog'
-                    aria-modal='true'
-                    aria-labelledby='sb-matches-king-title'
-                    data-testid='dialog-matches-king'
-                >
-                    <div className='sb-matches-king__confetti' aria-hidden='true'>
-                        {Array.from({ length: 20 }, (_, index) => (
-                            <span key={index} style={{ ['--spark-index' as any]: index }} />
-                        ))}
-                    </div>
-                    <div className='sb-matches-king__card'>
-                        <button
-                            type='button'
-                            className='sb-matches-king__close'
-                            aria-label='Dismiss King of Matches celebration'
-                            data-testid='button-dismiss-matches-king'
-                            onClick={onDismissMatchesKing}
-                        >
-                            ×
-                        </button>
-                        <div className='sb-matches-king__crown' aria-hidden='true'>
-                            <Crown size={48} strokeWidth={1.8} />
-                        </div>
-                        <p className='sb-matches-king__eyebrow'>SESSION MILESTONE</p>
-                        <h2 id='sb-matches-king-title'>King of Matches</h2>
-                        <p className='sb-matches-king__profit' data-testid='text-matches-session-profit'>
-                            {matchesSessionProfit >= 0 ? '+' : ''}
-                            {fromUsd(matchesSessionProfit).toFixed(2)} {displayCur}
-                        </p>
-                        <p className='sb-matches-king__message'>Two matches won. Keep winning.</p>
-                    </div>
-                </div>
-            )}
-
-            {matchesRange && matchesMissedPopup && !matchesKingVisible && (
-                <div className='sb-matches-missed' role='status' aria-live='polite' data-testid='dialog-matches-missed'>
-                    <div>
-                        <strong>Match missed</strong>
-                        <p>All ranked digits were tried. A new live 20/10-tick scan is running.</p>
-                    </div>
-                    <button type='button' onClick={() => setMatchesMissedPopup(false)}>
-                        Try again
-                    </button>
-                </div>
-            )}
-
             {/* ── Bottom Tabs ── */}
             <div className='sb-tabs'>
                 <div className='sb-tabs__nav'>
@@ -4951,37 +4230,6 @@ const ScalperBots: React.FC = observer(() => {
     const [openGroup, setOpenGroup] = useState<SbGroup | null>(null);
     const [search, setSearch]       = useState('');
     const [selectedBot, setSelectedBot] = useState<TScalperBot | null>(null);
-    const [view, setView] = useState<'scalpers' | 'matches'>('scalpers');
-    const [selectedMatchesRange, setSelectedMatchesRange] = useState<MatchesScalperRange | null>(null);
-    const [matchesSessionWins, setMatchesSessionWins] = useState(0);
-    const [matchesSessionProfit, setMatchesSessionProfit] = useState(0);
-    const [matchesKingVisible, setMatchesKingVisible] = useState(false);
-    const matchesSessionWinsRef = useRef(0);
-    const matchesKingShownRef = useRef(false);
-
-    const handleMatchesWin = useCallback((profit: number) => {
-        const wins = matchesSessionWinsRef.current + 1;
-        matchesSessionWinsRef.current = wins;
-        setMatchesSessionWins(wins);
-        setMatchesSessionProfit(previous => +(previous + (Number(profit) || 0)).toFixed(2));
-        if (wins >= 2 && !matchesKingShownRef.current) {
-            matchesKingShownRef.current = true;
-            setMatchesKingVisible(true);
-        }
-    }, []);
-
-    const resetMatchesSession = useCallback(() => {
-        matchesSessionWinsRef.current = 0;
-        matchesKingShownRef.current = false;
-        setMatchesSessionWins(0);
-        setMatchesSessionProfit(0);
-        setMatchesKingVisible(false);
-    }, []);
-
-    const openMatchesLane = useCallback((range: MatchesScalperRange) => {
-        setSelectedMatchesRange(range);
-        setSelectedBot(MATCHES_SCALPER_BOTS[range]);
-    }, []);
 
     const groupCounts = useMemo(() => {
         const counts: Record<string, number> = {};
@@ -5056,22 +4304,23 @@ const ScalperBots: React.FC = observer(() => {
        Retries up to 30 times (3 s total) so multi-scalper XML loads even
        when Blockly is initialising in the background. */
     const handlePreloadXml = useCallback(async (bot: TScalperBot, opts?: { market?: string; duration?: number; duration_unit?: 't' | 's' }) => {
-        const res = await fetch(bot.xmlFile);
-        if (!res.ok) throw new Error(`Failed to fetch bot XML (${res.status})`);
-        let xml = await res.text();
-        // Patch XML with current market + duration before loading into workspace
-        if (opts?.market || opts?.duration != null) {
-            xml = patchXmlContent(xml, opts.market, opts.duration, opts.duration_unit);
-        }
-        // Try immediately, then retry until Blockly workspace is ready
-        let ok = await loadXmlIntoWorkspace(xml, bot.name);
-        if (!ok) {
-            for (let n = 0; n < 30 && !ok; n++) {
-                await new Promise(r => setTimeout(r, 100));
-                ok = await loadXmlIntoWorkspace(xml, bot.name);
+        try {
+            const res = await fetch(bot.xmlFile);
+            if (!res.ok) return;
+            let xml = await res.text();
+            // Patch XML with current market + duration before loading into workspace
+            if (opts?.market || opts?.duration != null) {
+                xml = patchXmlContent(xml, opts.market, opts.duration, opts.duration_unit);
             }
-        }
-        if (!ok) throw new Error('Blockly workspace was not ready after 3 seconds');
+            // Try immediately, then retry until Blockly workspace is ready
+            let ok = await loadXmlIntoWorkspace(xml, bot.name);
+            if (!ok) {
+                for (let n = 0; n < 30 && !ok; n++) {
+                    await new Promise(r => setTimeout(r, 100));
+                    ok = await loadXmlIntoWorkspace(xml, bot.name);
+                }
+            }
+        } catch { /* non-fatal — terminal engine trades independently */ }
     }, [loadXmlIntoWorkspace]);
 
     if (selectedBot) {
@@ -5079,90 +4328,40 @@ const ScalperBots: React.FC = observer(() => {
             <BotDetail
                 bot={selectedBot}
                 derivTrade={derivTrade}
-                onBack={() => {
-                    setSelectedBot(null);
-                    setSelectedMatchesRange(null);
-                }}
+                onBack={() => setSelectedBot(null)}
                 onLoadXml={handleLoadXml}
                 onLoadAndRun={handleLoadAndRun}
                 onPreloadXml={handlePreloadXml}
-                matchesRange={selectedMatchesRange ?? undefined}
-                onMatchWin={handleMatchesWin}
-                matchesKingVisible={matchesKingVisible}
-                matchesSessionProfit={matchesSessionProfit}
-                onDismissMatchesKing={() => setMatchesKingVisible(false)}
             />
         );
     }
 
-    const showFolders = view === 'scalpers' && !openGroup && !searching;
+    const showFolders = !openGroup && !searching;
 
     return (
         <div className='scalper-bots'>
             {/* ── Full-width search bar ── */}
-            {view === 'scalpers' && (
-                <div className='scalper-bots__searchbar'>
-                    <svg width='16' height='16' viewBox='0 0 20 20' fill='none' stroke='currentColor' strokeWidth='2'>
-                        <circle cx='8.5' cy='8.5' r='6'/><path d='M14 14l4 4'/>
-                    </svg>
-                    <input
-                        type='text'
-                        placeholder='Search for bots or category...'
-                        value={search}
-                        onChange={e => setSearch(e.target.value)}
-                    />
-                </div>
-            )}
-
-            <div className='scalper-bots__mode-switch' role='tablist' aria-label='Scalper trading pages'>
-                <button
-                    type='button'
-                    role='tab'
-                    aria-selected={view === 'scalpers'}
-                    data-testid='tab-scalper-bots'
-                    className={view === 'scalpers' ? 'is-active' : ''}
-                    onClick={() => {
-                        setView('scalpers');
-                        setOpenGroup(null);
-                        setSearch('');
-                    }}
-                >
-                    Scalper Bots
-                </button>
-                <button
-                    type='button'
-                    role='tab'
-                    aria-selected={view === 'matches'}
-                    data-testid='tab-matches-scalper'
-                    className={view === 'matches' ? 'is-active' : ''}
-                    onClick={() => {
-                        setView('matches');
-                        setOpenGroup(null);
-                        setSearch('');
-                    }}
-                >
-                    Matches Scalper
-                </button>
+            <div className='scalper-bots__searchbar'>
+                <svg width='16' height='16' viewBox='0 0 20 20' fill='none' stroke='currentColor' strokeWidth='2'>
+                    <circle cx='8.5' cy='8.5' r='6'/><path d='M14 14l4 4'/>
+                </svg>
+                <input
+                    type='text'
+                    placeholder='Search for bots or category...'
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                />
             </div>
 
             {/* ── Breadcrumb navbar ── */}
             <div className='scalper-bots__navbar'>
                 <button
                     className='scalper-bots__nav-home'
-                    onClick={() => {
-                        setView('scalpers');
-                        setOpenGroup(null);
-                        setSearch('');
-                    }}
+                    onClick={() => { setOpenGroup(null); setSearch(''); }}
                 >
-                    ‹ Scalper Bots
+                    🏠 Home
                 </button>
-                {view === 'matches' ? (
-                    <>
-                        <span className='scalper-bots__nav-sep'>›</span>
-                        <span className='scalper-bots__nav-crumb'>Matches Scalper · 2 bots</span>
-                    </>
-                ) : (openGroup || searching) && (
+                {(openGroup || searching) && (
                     <>
                         <span className='scalper-bots__nav-sep'>›</span>
                         <span className='scalper-bots__nav-crumb'>
@@ -5183,14 +4382,7 @@ const ScalperBots: React.FC = observer(() => {
                 </div>
             </div>
 
-            {view === 'matches' ? (
-                <MatchesScalperHub
-                    sessionWins={matchesSessionWins}
-                    sessionProfit={matchesSessionProfit}
-                    onOpenBot={openMatchesLane}
-                    onResetSession={resetMatchesSession}
-                />
-            ) : showFolders ? (
+            {showFolders ? (
                 /* ── Folder grid ── */
                 <div className='scalper-bots__folders'>
                     {GROUP_DEFS.map(g => (

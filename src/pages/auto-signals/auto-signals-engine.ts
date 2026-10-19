@@ -137,21 +137,16 @@ const probabilityFor = (route: Route, ticks: AutoLabTick[]) => {
 type MatchDigitStats = { samples: number; hits: number };
 
 type ValidatedMatchPrediction = {
-    entryDigits: number[];
+    entryDigit: number;
     training: MatchDigitStats;
     validation: MatchDigitStats;
     validationRate: number;
     validationLowerBound: number;
 };
 
-export const matchEntryDigitsForTarget = (targetDigit: number): number[] => {
-    if (!Number.isInteger(targetDigit) || targetDigit < 0 || targetDigit > 9) return [];
-    return targetDigit >= 6 ? [0, 1, 2] : [7, 8, 9];
-};
-
 const conditionalMatchStats = (
     ticks: AutoLabTick[],
-    entryDigits: number | number[],
+    entryDigit: number,
     targetDigit: number,
     startIndex = 0,
     endIndex = ticks.length - 1,
@@ -159,9 +154,8 @@ const conditionalMatchStats = (
     let samples = 0;
     let hits = 0;
     const end = Math.min(endIndex, ticks.length - 1);
-    const allowedEntries = new Set(Array.isArray(entryDigits) ? entryDigits : [entryDigits]);
     for (let index = Math.max(0, startIndex); index < end; index += 1) {
-        if (!allowedEntries.has(ticks[index].digit)) continue;
+        if (ticks[index].digit !== entryDigit) continue;
         samples += 1;
         hits += Number(ticks[index + 1].digit === targetDigit);
     }
@@ -174,14 +168,20 @@ const validateMatchPrediction = (
 ): ValidatedMatchPrediction | null => {
     if (ticks.length < MIN_ANALYSIS_TICKS) return null;
     const splitIndex = Math.floor(ticks.length * MATCH_TRAINING_SHARE);
-    const entryDigits = matchEntryDigitsForTarget(targetDigit);
-    if (!entryDigits.length) return null;
-    const training = conditionalMatchStats(ticks, entryDigits, targetDigit, 0, splitIndex - 1);
-    if (training.samples < MATCH_MIN_TRAINING_SAMPLES) return null;
+    const trainingByEntry = Array.from({ length: 10 }, (_, entryDigit) => ({
+        entryDigit,
+        ...conditionalMatchStats(ticks, entryDigit, targetDigit, 0, splitIndex - 1),
+    })).filter(({ samples }) => samples >= MATCH_MIN_TRAINING_SAMPLES);
+    const bestEntry = trainingByEntry.sort((left, right) =>
+        right.hits / right.samples - left.hits / left.samples
+        || right.samples - left.samples
+        || left.entryDigit - right.entryDigit
+    )[0];
+    if (!bestEntry) return null;
 
     const validation = conditionalMatchStats(
         ticks,
-        entryDigits,
+        bestEntry.entryDigit,
         targetDigit,
         splitIndex,
     );
@@ -196,8 +196,8 @@ const validateMatchPrediction = (
     if (validationLowerBound <= 0.1) return null;
 
     return {
-        entryDigits,
-        training,
+        entryDigit: bestEntry.entryDigit,
+        training: { samples: bestEntry.samples, hits: bestEntry.hits },
         validation,
         validationRate,
         validationLowerBound,
@@ -207,7 +207,7 @@ const validateMatchPrediction = (
 const makeMatchWindowResults = (
     route: Route,
     ticks: AutoLabTick[],
-    entryDigits: number[],
+    entryDigit: number,
     validation: MatchDigitStats,
 ): AutoSignalWindowResult[] => {
     const recentTicks = ticks.slice(-MIN_ANALYSIS_TICKS);
@@ -216,7 +216,7 @@ const makeMatchWindowResults = (
         const sample = recentTicks.slice(-window);
         const stats = window === MIN_ANALYSIS_TICKS
             ? validation
-            : conditionalMatchStats(sample, entryDigits, route.barrier ?? -1);
+            : conditionalMatchStats(sample, entryDigit, route.barrier ?? -1);
         const probability = stats.samples
             ? (stats.hits / stats.samples) * 100
             : 0;
@@ -348,11 +348,7 @@ export const hasAutoSignalPriceEntryPattern = (
         && movementStreakEndingAt(ticks, lastMove - 1, -1) === 2;
 };
 
-const entryConditionConfirmed = (
-    route: Route,
-    ticks: AutoLabTick[],
-    entry: number | number[] | null,
-) => {
+const entryConditionConfirmed = (route: Route, ticks: AutoLabTick[], entryDigit: number | null) => {
     const latest = ticks[ticks.length - 1];
     if (!latest) return false;
 
@@ -367,10 +363,7 @@ const entryConditionConfirmed = (
             : latest.quote < previous.quote;
     }
 
-    const allowedEntries = Array.isArray(entry)
-        ? entry
-        : entry == null ? [] : [entry];
-    if (!allowedEntries.includes(latest.digit)) return false;
+    if (entryDigit == null || latest.digit !== entryDigit) return false;
     if (
         route.strategy === 'OVER'
         || route.strategy === 'UNDER'
@@ -454,12 +447,10 @@ export const evaluateAutoSignalCandidates = ({
             )
             : null;
         if (route.strategy === 'MATCHES' && !matchPrediction) return [];
-        const entryDigit = matchPrediction?.entryDigits[0]
+        const entryDigit = matchPrediction?.entryDigit
             ?? entryDigitFor(route, ticks.slice(-50));
-        const entryDigits = matchPrediction?.entryDigits
-            ?? (entryDigit == null ? [] : [entryDigit]);
         const windows = route.strategy === 'MATCHES' && matchPrediction
-            ? makeMatchWindowResults(route, ticks, entryDigits, matchPrediction.validation)
+            ? makeMatchWindowResults(route, ticks, entryDigit!, matchPrediction.validation)
             : makeWindowResults(route, ticks);
         if (!windows.length) return [];
         const relevant = windows.filter((item) =>
@@ -495,11 +486,7 @@ export const evaluateAutoSignalCandidates = ({
         if (weightedEdge < 1.25 || agreements < 2 || !longWindowHasPositiveEvidence) return [];
 
         const score = clamp(48 + weightedEdge * 2.2 + agreementRatio * 19 + patternBoost, 0, 99.9);
-        const entryReady = entryConditionConfirmed(
-            route,
-            ticks,
-            route.strategy === 'MATCHES' ? entryDigits : entryDigit,
-        );
+        const entryReady = entryConditionConfirmed(route, ticks, entryDigit);
         const sameSignal = previous?.id === routeId(market.symbol, route);
         const stillValid = Boolean(sameSignal && previous?.expiresAt && previous.expiresAt > now);
         const createdAt = stillValid ? previous!.createdAt : now;
@@ -512,14 +499,14 @@ export const evaluateAutoSignalCandidates = ({
                 : 'watch';
         const latest = ticks[ticks.length - 1];
         const entryDescription = route.strategy === 'MATCHES' && matchPrediction
-            ? `entry digits ${entryDigits.join(', ')} predicted target ${route.barrier}`
+            ? `entry digit ${entryDigit} predicted target ${route.barrier}`
             : route.strategy === 'RISE'
             ? 'Rise entry (2 falls, 2 falls then 1 rise, or 3 falls)'
             : route.strategy === 'FALL'
                 ? 'Fall entry (3/4 rises then 1 fall, or 5 consecutive rises)'
                 : entryDigit == null ? 'price-direction entry' : `entry digit ${entryDigit}`;
         const reason = route.strategy === 'MATCHES' && matchPrediction
-            ? `Held-out ticks: target ${route.barrier} followed entry digits ${entryDigits.join(', ')} ${matchPrediction.validation.hits}/${matchPrediction.validation.samples} times; the 99% lower bound exceeded the 10% baseline. ${entryReady ? 'Entry is confirmed' : 'Waiting for one of the entry digits'}.`
+            ? `Held-out ticks: target ${route.barrier} followed entry ${entryDigit} ${matchPrediction.validation.hits}/${matchPrediction.validation.samples} times; the 99% lower bound exceeded the 10% baseline. ${entryReady ? 'Entry is confirmed' : 'Waiting for the entry digit'}.`
             : `${agreements}/${evidenceWindows.length} longer windows show observed outcomes above baseline; ${entryDescription} ${entryReady ? 'is confirmed' : 'is waiting'}.`;
 
         return [{
@@ -539,7 +526,6 @@ export const evaluateAutoSignalCandidates = ({
             reason,
             windows,
             entryDigit,
-            entryDigits: route.strategy === 'MATCHES' ? entryDigits : undefined,
             entryReady,
             createdAt,
             expiresAt,

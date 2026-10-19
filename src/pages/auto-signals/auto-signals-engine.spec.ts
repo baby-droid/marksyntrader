@@ -3,7 +3,6 @@ import {
     evaluateAutoSignalCandidates,
     getSuggestedAutoSignalRuns,
     hasAutoSignalPriceEntryPattern,
-    matchEntryDigitsForTarget,
     recommendedAutoSignalRuns,
     selectAutoSignalEntryDigit,
     shouldExcludeAutoSignalMarket,
@@ -201,26 +200,37 @@ describe('Auto-Signals one-tick analysis', () => {
         expect(candidates.filter((candidate) => candidate.strategy === 'UNDER').length).toBeGreaterThan(1);
     });
 
-    it('uses the configured entry-digit groups for each Matches target range', () => {
-        expect(matchEntryDigitsForTarget(0)).toEqual([7, 8, 9]);
-        expect(matchEntryDigitsForTarget(5)).toEqual([7, 8, 9]);
-        expect(matchEntryDigitsForTarget(6)).toEqual([0, 1, 2]);
-        expect(matchEntryDigitsForTarget(9)).toEqual([0, 1, 2]);
-        expect(matchEntryDigitsForTarget(10)).toEqual([]);
-    });
-
-    it('gates Matches 6 on any configured entry digit and validates the target on held-out ticks', () => {
-        const makeTicks = (entryAtEnd: boolean): AutoLabTick[] => {
-            const digits = Array.from({ length: 1000 }, (_, index) => [0, 6, 1, 6, 2, 6][index % 6]);
-            digits[digits.length - 1] = entryAtEnd ? 2 : 5;
-            return digits.map((digit, index) => ({
+    it('uses the exact Match digit as the DIGITMATCH barrier and waits until that digit is current', () => {
+        const makeTicks = (matchAtEnd: boolean): AutoLabTick[] => [
+            ...Array.from({ length: 900 }, (_, index) => ({
                 symbol: 'R_10',
-                digit,
-                quote: 100 + digit / 100,
+                digit: 6,
+                quote: 100.06,
                 epoch: index + 1,
                 pip_size: 2,
-            }));
-        };
+            })),
+            ...Array.from({ length: matchAtEnd ? 80 : 79 }, (_, index) => ({
+                symbol: 'R_10',
+                digit: 1,
+                quote: 100.01,
+                epoch: index + 901,
+                pip_size: 2,
+            })),
+            ...Array.from({ length: 20 }, (_, index) => ({
+                symbol: 'R_10',
+                digit: 6,
+                quote: 100.06,
+                epoch: (matchAtEnd ? 980 : 979) + index + 1,
+                pip_size: 2,
+            })),
+            ...(!matchAtEnd ? [{
+                symbol: 'R_10',
+                digit: 1,
+                quote: 100.01,
+                epoch: 1000,
+                pip_size: 2,
+            }] : []),
+        ];
         const readyCandidates = evaluateAutoSignalCandidates({
             market: { symbol: 'R_10', label: 'Volatility 10' },
             ticks: makeTicks(true),
@@ -244,15 +254,13 @@ describe('Auto-Signals one-tick analysis', () => {
         expect(digitSix).toMatchObject({
             contractType: 'DIGITMATCH',
             barrier: 6,
-            entryDigit: 0,
-            entryDigits: [0, 1, 2],
+            entryDigit: 6,
             entryReady: true,
         });
         expect(digitSixWaiting).toMatchObject({
             contractType: 'DIGITMATCH',
             barrier: 6,
-            entryDigit: 0,
-            entryDigits: [0, 1, 2],
+            entryDigit: 6,
             entryReady: false,
         });
     });
@@ -285,15 +293,15 @@ describe('Auto-Signals one-tick analysis', () => {
             strategy: 'MATCHES',
             contractType: 'DIGITMATCH',
             barrier: 7,
-            entryDigit: 0,
-            entryDigits: [0, 1, 2],
+            entryDigit: 2,
             entryReady: false,
         });
-        const heldOut = predictedSeven?.windows.find((item) => item.window === 1000);
-        expect(heldOut?.sampleSize).toEqual(expect.any(Number));
-        expect(heldOut?.probability).toBeCloseTo(100 / 3, 1);
-        expect(heldOut?.agrees).toBe(true);
-        expect(predictedSeven?.reason).toMatch(/held-out ticks: target 7 followed entry digits 0, 1, 2/i);
+        expect(predictedSeven?.windows.find((item) => item.window === 1000)).toMatchObject({
+            sampleSize: expect.any(Number),
+            probability: 100,
+            agrees: true,
+        });
+        expect(predictedSeven?.reason).toMatch(/held-out ticks: target 7 followed entry 2/i);
     });
 
     it.each([

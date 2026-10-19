@@ -1,11 +1,10 @@
-import { getExecutionSpeed, getExecutionSpeedDelay, isInstantExecutionForContext, isASpeedBoostEnabled, isFastExecutionEnabledForContext, getPurchasesPerTick, isAutoSignalsContext, shouldSkipDuplicateAutoSignalTick } from '../../../../../utils/execution-speed';
+import { getExecutionSpeed, getExecutionSpeedDelay, isInstantExecutionForContext, isASpeedBoostEnabled, getPurchasesPerTick, isAutoSignalsContext, shouldSkipDuplicateAutoSignalTick } from '../../../../../utils/execution-speed';
 import { recordTradeMeta } from '../../../../../utils/trade-metadata';
 import { isBotPaused } from '../../../../../utils/bot-pause-flag';
 import { LogTypes } from '../../../constants/messages';
 import { api_base } from '../../api/api-base';
 import { contract as broadcastContract, contractStatus, info, log } from '../utils/broadcast';
 import { doUntilDone, getUUID, recoverFromError, tradeOptionToBuy } from '../utils/helpers';
-import { getRateLimitRetryDelayMs, shouldStopPurchaseRetry } from '../utils/purchase-retry-policy';
 import { purchaseSuccessful } from './state/actions';
 import { BEFORE_PURCHASE, DURING_PURCHASE } from './state/constants';
 import { applyCommission } from '@/utils/commission';
@@ -34,51 +33,11 @@ import {
 let delayIndex = 0;
 let purchase_reference;
 
-// Local buy pacing is a small per-second guard; the authenticated API send
-// layer applies the shared rolling request budget across all Bot Builder calls.
+// --- Rate-limit-aware buy queue ---
+// Normal=1/s sequential. Crazy/Turbo set to 0 = bypass throttle entirely
+// for true zero-delay fire-and-forget (the API server enforces its own limits).
 let _buyTimestamps = [];
-const _buyRateLimit = { normal: 1, crazy: 2, turbo: 2, supersonic: 2 };
-const FAST_BUY_RATE_LIMIT = 2;
-const SAFE_BUY_RETRY_POLICY = {
-    maxRetries: 5,
-    stopOnCodes: ['MarketIsClosed'],
-    retryOnCodes: ['RateLimit', 'RateLimitExceeded'],
-};
-
-const getPurchaseErrorCode = error =>
-    String(error?.error?.code ?? error?.code ?? error?.name ?? '');
-
-const waitBeforeSafeRetry = retriesAlreadyMade =>
-    new Promise(resolve => setTimeout(resolve, getRateLimitRetryDelayMs(retriesAlreadyMade)));
-
-async function buyWithSafeRetries(action, { refreshProposal = null } = {}) {
-    let retriesAlreadyMade = 0;
-    while (true) {
-        try {
-            return await action();
-        } catch (error) {
-            const errorCode = getPurchaseErrorCode(error);
-            const retryPolicy = refreshProposal
-                ? {
-                    ...SAFE_BUY_RETRY_POLICY,
-                    retryOnCodes: [
-                        ...SAFE_BUY_RETRY_POLICY.retryOnCodes,
-                        'PriceMoved',
-                        'InvalidContractProposal',
-                    ],
-                }
-                : SAFE_BUY_RETRY_POLICY;
-            if (shouldStopPurchaseRetry(error, retriesAlreadyMade, retryPolicy)) throw error;
-
-            retriesAlreadyMade += 1;
-            if (errorCode === 'PriceMoved' || errorCode === 'InvalidContractProposal') {
-                await refreshProposal();
-            } else {
-                await waitBeforeSafeRetry(retriesAlreadyMade - 1);
-            }
-        }
-    }
-}
+const _buyRateLimit = { normal: 1, crazy: 0, turbo: 0, supersonic: 0 };
 
 /**
  * Build the same copy-trade payload for every Bot Builder purchase path.
@@ -132,7 +91,7 @@ function publishBotCopySignal(tradeOptions, contract_type, contract_id, trade_ke
     return key;
 }
 
-// Purpose-built paired side purchases are NOT tracked by
+// Side purchases (Crazy/Turbo's extra per-tick contracts) are NOT tracked by
 // the main single-contract state machine, so Stop/Terminate cannot see them
 // through the normal contractId/isSold path. We keep our own registry here
 // and force-sell everything in it whenever the bot is stopped, so pressing
@@ -152,10 +111,9 @@ export function sellAllSideContracts() {
 
 function _acquireBuySlot() {
     const speed = getExecutionSpeed();
-    const limit = isInstantExecutionForContext()
-        ? FAST_BUY_RATE_LIMIT
-        : (_buyRateLimit[speed] ?? 1);
-    if (limit === 0) return Promise.resolve();
+    const limit  = _buyRateLimit[speed] ?? 1;
+    // In crazy / turbo / Fast mode skip the throttle entirely — resolve immediately.
+    if (limit === 0 || isInstantExecutionForContext()) return Promise.resolve();
     const now    = Date.now();
     // Remove timestamps older than 1 second
     _buyTimestamps = _buyTimestamps.filter(t => now - t < 1000);
@@ -181,6 +139,7 @@ function fireSidePurchase(
     contract_type,
     tradeOptionsOverride = tradeOptions,
     {
+        bypassRateLimit = false,
         trackSettlement = false,
         settlementTimeoutMs = 10000,
         onPurchased,
@@ -211,7 +170,7 @@ function fireSidePurchase(
         // The confirmation below registers the contract ID for deduplication.
         const tradeKey = createTradeKey('bot-side');
         publishBotCopySignal(tradeOptionsOverride, contract_type, undefined, tradeKey);
-        _acquireBuySlot()
+        (bypassRateLimit ? Promise.resolve() : _acquireBuySlot())
             .then(() => api_base.api.send(trade_option))
             .then(response => {
                 const { buy } = response;
@@ -328,18 +287,11 @@ export default Engine =>
             return this.normalKillerPipeline?.currentStake ?? null;
         }
 
-        setNormalKillerPurchaseEpoch(
-            epoch,
-            symbol = this.tradeOptions?.symbol || this.options?.symbol,
-            tickId = null,
-        ) {
+        setNormalKillerPurchaseEpoch(epoch, symbol = this.tradeOptions?.symbol || this.options?.symbol) {
             this.normalKillerNextPurchaseEpoch = Number(epoch);
-            const tickIdentity = tickId !== undefined && tickId !== null && String(tickId) !== ''
-                ? String(tickId)
-                : String(Number(epoch));
             this.normalKillerNextPurchaseKey = symbol
-                ? `${String(symbol)}:${tickIdentity}`
-                : tickIdentity;
+                ? `${String(symbol)}:${Number(epoch)}`
+                : String(Number(epoch));
         }
 
         normalKillerRiskReached() {
@@ -380,7 +332,7 @@ export default Engine =>
             voidNormalKillerEntry(this.normalKillerPipeline, entry);
         }
 
-        purchaseNormalKillerTick(contract_type, epoch, tickId = null, tickSlot = 0) {
+        purchaseNormalKillerTick(contract_type, epoch, tickSlot = 0) {
             const pipeline = this.normalKillerPipeline;
             if (
                 !isNormalKillerBotV3Context()
@@ -399,7 +351,7 @@ export default Engine =>
                 kind: 'side',
                 stake: pipeline.currentStake,
                 maxOpen: NORMAL_KILLER_MAX_OPEN_CONTRACTS,
-                tickKey: `${this.tradeOptions?.symbol || this.options?.symbol || ''}:${tickId !== undefined && tickId !== null && String(tickId) !== '' ? String(tickId) : Number(epoch)}`,
+                tickKey: `${this.tradeOptions?.symbol || this.options?.symbol || ''}:${Number(epoch)}`,
                 tickSlot,
                 maxPerTick: getPurchasesPerTick(),
             });
@@ -484,15 +436,15 @@ export default Engine =>
                     ...this.tradeOptions,
                     amount: entry.stake,
                 };
-                return this._executePurchase(contract_type, tradeOptions, true, null, entry)
+                return this._executePurchase(contract_type, tradeOptions, true, false, null, entry)
                     .catch(error => {
                         this.voidNormalKillerContract(entry);
                         throw error;
                     });
             }
 
-            // Every speed tier is one purchase per eligible tick. Explicit
-            // paired-entry strategies are the only same-tick multi-buy path.
+            // Fast stays at one purchase per eligible tick. Only the separate
+            // Crazy tier retains its legacy same-tick side-purchase fan-out.
             const purchases_per_tick = getPurchasesPerTick();
             if (purchases_per_tick > 1 && this.tradeOptions) {
                 for (let i = 0; i < purchases_per_tick - 1; i++) {
@@ -532,12 +484,11 @@ export default Engine =>
             const isSameTickPair = unique_specs.length === 2
                 && unique_specs.every(spec => spec.same_tick_pair === true);
             // Multiple Purchase is also used by strategy blocks that provide
-            // several same-tick contracts. Fast and A-SPEED explicitly mean
-            // one contract per eligible tick, so keep only the first selected
+            // several same-tick contracts. A-SPEED BOOST explicitly means
+            // one contract for one tick, so keep only the first selected
             // contract and do not create untracked side orders. An explicit
-            // paired-entry block is one purpose-built strategy action, not a
-            // generic bulk fan-out.
-            const effective_specs = (isFastExecutionEnabledForContext() || isASpeedBoostEnabled()) && !isSameTickPair
+            // paired-entry block is one strategy action, not a bulk fan-out.
+            const effective_specs = isASpeedBoostEnabled() && !isSameTickPair
                 ? unique_specs.slice(0, 1)
                 : unique_specs;
 
@@ -568,6 +519,7 @@ export default Engine =>
                         },
                         pairExecution
                             ? {
+                                bypassRateLimit: true,
                                 trackSettlement: true,
                                 onSettled: contract => {
                                     this.updateTotals(contract);
@@ -588,6 +540,7 @@ export default Engine =>
                         prediction: effective_specs[0].prediction,
                     },
                     true,
+                    Boolean(pairExecution),
                     pairExecution,
                 );
             }
@@ -605,6 +558,7 @@ export default Engine =>
             contract_type,
             tradeOptions = this.tradeOptions,
             forceDirect = false,
+            bypassRateLimit = false,
             pairExecution = null,
             normalKillerEntry = null,
         ) {
@@ -615,22 +569,14 @@ export default Engine =>
                     || this.options?.symbol
                     || '',
                 );
-                const tickState = this.store?.getState?.()?.newTick;
-                const epoch = Number(
-                    tickState && typeof tickState === 'object'
-                        ? tickState.epoch
-                        : tickState,
-                );
+                const epoch = Number(this.store?.getState?.()?.newTick);
                 this.autoSignalPurchaseEpochs ||= new Map();
-                if (
-                    Number.isFinite(epoch)
-                    && shouldSkipDuplicateAutoSignalTick(this.autoSignalPurchaseEpochs, symbol, epoch)
-                ) {
+                if (shouldSkipDuplicateAutoSignalTick(this.autoSignalPurchaseEpochs, symbol, epoch)) {
                     return Promise.resolve();
                 }
             }
             let tradeKey = null;
-            const acquireBuySlot = () => _acquireBuySlot();
+            const acquireBuySlot = () => bypassRateLimit ? Promise.resolve() : _acquireBuySlot();
             const onSuccess = response => {
                 const { buy } = response;
 
@@ -704,30 +650,23 @@ export default Engine =>
 
             if (this.is_proposal_subscription_required && !useDirectBuy) {
                 // ── Original proposal-based path (Normal speed / timeMachine) ──
+                const { id, askPrice } = this.selectProposal(contract_type);
                 tradeKey = createTradeKey('bot');
                 publishBotCopySignal(tradeOptions, contract_type, undefined, tradeKey);
 
-                const action = () => {
-                    // Re-read the proposal on every attempt. PriceMoved and
-                    // InvalidContractProposal must refresh the quote before
-                    // retrying; replaying a stale proposal id only stalls.
-                    const { id, askPrice } = this.selectProposal(contract_type);
-                    return acquireBuySlot().then(() =>
-                        api_base.api.send({ buy: id, price: askPrice })
-                    );
-                };
+                const action = () => acquireBuySlot().then(() =>
+                    api_base.api.send({ buy: id, price: askPrice })
+                );
 
                 this.isSold = false;
 
                 contractStatus({
                     id: 'contract.purchase_sent',
-                    data: this.selectProposal(contract_type).askPrice,
+                    data: askPrice,
                 });
 
                 if (!this.options.timeMachineEnabled) {
-                    return buyWithSafeRetries(action, {
-                        refreshProposal: () => this.renewProposalsOnPurchase(),
-                    }).then(onSuccess);
+                    return doUntilDone(action).then(onSuccess);
                 }
 
                 return recoverFromError(
@@ -748,20 +687,11 @@ export default Engine =>
                         });
                     },
                     ['PriceMoved', 'InvalidContractProposal'],
-                    delayIndex++,
-                    api_base,
-                    {
-                        ...SAFE_BUY_RETRY_POLICY,
-                        retryOnCodes: [
-                            ...SAFE_BUY_RETRY_POLICY.retryOnCodes,
-                            'PriceMoved',
-                            'InvalidContractProposal',
-                        ],
-                    }
+                    delayIndex++
                 ).then(onSuccess);
             }
 
-            // ── Direct-buy path (Fast/Crazy/Turbo, or no payout block) ──
+            // ── Direct-buy path (Crazy/Turbo, or no payout block) ──
             // Build the buy request from current trade options — no proposal ID
             // needed. The rate-limiter slot ensures we stay within API limits.
             const trade_option = tradeOptionToBuy(contract_type, tradeOptions);
@@ -779,7 +709,7 @@ export default Engine =>
             });
 
             if (!this.options.timeMachineEnabled) {
-                return buyWithSafeRetries(action).then(onSuccess);
+                return doUntilDone(action).then(onSuccess);
             }
 
             return recoverFromError(
@@ -797,9 +727,7 @@ export default Engine =>
                     });
                 },
                 ['PriceMoved', 'InvalidContractProposal'],
-                delayIndex++,
-                api_base,
-                SAFE_BUY_RETRY_POLICY
+                delayIndex++
             ).then(onSuccess);
         }
 

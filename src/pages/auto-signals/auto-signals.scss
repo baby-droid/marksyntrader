@@ -836,21 +836,6 @@
     .main:has(#id-auto-signals) { overflow: auto; }
 }
 
-/* Keep Auto-Signals at desktop workspace width on phones; the app viewport
-   remains the scroll surface so users can pan across the full board. */
-@media (max-width: 760px) {
-    .main:has(#id-auto-signals) > .main__container,
-    .main:has(#id-auto-signals) .dc-tabs--main__tabs,
-    .main:has(#id-auto-signals) .dc-tabs__content--main__tabs,
-    #id-auto-signals {
-        min-width: 1366px;
-    }
-
-    .main:has(#id-auto-signals) > .main__container {
-        max-width: none;
-    }
-}
-
 #id-auto-signals .as-market-card {
     color: #000;
     font-size: 0.78rem;
