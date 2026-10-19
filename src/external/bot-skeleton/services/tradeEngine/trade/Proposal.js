@@ -3,11 +3,6 @@ import { api_base } from '../../api/api-base';
 import { doUntilDone, tradeOptionToProposal } from '../utils/helpers';
 import { clearProposals, proposalsReady } from './state/actions';
 
-const proposalRetryPolicy = {
-    maxRetries: 5,
-    stopOnCodes: ['MarketIsClosed'],
-};
-
 export default Engine =>
     class Proposal extends Engine {
         makeProposals(trade_option) {
@@ -71,19 +66,9 @@ export default Engine =>
             // flip this boolean on error.
             let has_informed_error = false;
 
-            return Promise.all(
+            Promise.all(
                 this.proposal_templates.map(proposal => {
-                    return doUntilDone(
-                        () => {
-                            if (!api_base.api) {
-                                throw new Error('Deriv API connection is not ready for price proposals.');
-                            }
-                            return api_base.api.send(proposal);
-                        },
-                        undefined,
-                        api_base,
-                        proposalRetryPolicy,
-                    ).catch(error => {
+                    doUntilDone(() => api_base.api.send(proposal)).catch(error => {
                         // We intercept ContractBuyValidationError as user may have specified
                         // e.g. a DIGITUNDER 0 or DIGITOVER 9, while one proposal may be invalid
                         // the other is valid. We will error on Purchase rather than here.
@@ -95,32 +80,26 @@ export default Engine =>
                             localizedError.details = error.error.details;
                             localizedError.message_to_client = error.error.message_to_client;
 
-                            this.recordProposalError({
-                                ...error?.error?.echo_req?.passthrough,
-                                ...error?.echo_req?.passthrough,
-                                ...proposal.passthrough,
-                            }, localizedError);
+                            this.data.proposals.push({
+                                ...error.error.echo_req,
+                                ...error.echo_req.passthrough,
+                                error: localizedError,
+                            });
 
                             return null;
                         }
-
                         if (!has_informed_error) {
                             has_informed_error = true;
-                            const apiError = error?.error ?? error ?? {};
                             // Use localized error message for general errors
-                            const localizedErrorMessage = apiError.code
-                                ? getLocalizedErrorMessage(apiError.code, apiError)
-                                : apiError.message || getLocalizedErrorMessage('GeneralError');
+                            const localizedErrorMessage = error.error.code
+                                ? getLocalizedErrorMessage(error.error.code, error.error)
+                                : error.error.message || getLocalizedErrorMessage('GeneralError');
 
                             const localizedError = {
-                                ...apiError,
+                                ...error.error,
                                 message: localizedErrorMessage,
                             };
                             this.$scope.observer.emit('Error', localizedError);
-                            // A failed proposal prevents the bot from entering its
-                            // purchase block. Stop the run rather than leaving it
-                            // waiting forever for proposalsReady.
-                            this.$scope.observer.emit('bot.async_error');
                         }
                         return null;
                     });
@@ -128,33 +107,11 @@ export default Engine =>
             );
         }
 
-        recordProposalError(passthrough, error) {
-            const existing = this.data.proposals.find(
-                proposal =>
-                    proposal.contract_type === passthrough?.contract_type &&
-                    proposal.purchase_reference === passthrough?.purchase_reference,
-            );
-
-            if (existing) {
-                // Don't replace an already-valid proposal with a duplicate
-                // error delivered through the promise and message observers.
-                if (!existing.id) existing.error = error;
-            } else {
-                this.data.proposals.push({ ...passthrough, error });
-            }
-
-            // Error results count as completed proposal responses. This is
-            // essential when every requested contract type is invalid; without
-            // this, the before-purchase gate remains closed indefinitely.
-            this.checkProposalReady();
-        }
-
         observeProposals() {
             if (!api_base.api) return;
             const subscription = api_base.api.onMessage().subscribe(response => {
                 if (response.data.msg_type === 'proposal') {
                     const { passthrough, proposal, error } = response.data;
-                    const requestPassthrough = passthrough ?? response.data.echo_req?.passthrough ?? {};
 
                     // Handle proposal errors with localized messages
                     if (error) {
@@ -163,13 +120,16 @@ export default Engine =>
                         localizedError.details = error.details;
                         localizedError.message_to_client = error.message_to_client;
 
-                        this.recordProposalError(requestPassthrough, localizedError);
+                        this.data.proposals.push({
+                            ...passthrough,
+                            error: localizedError,
+                        });
                         return;
                     }
 
                     if (proposal && this.data.proposals.findIndex(p => p.id === proposal.id) === -1) {
                         // Add proposals based on the ID returned by the API.
-                        this.data.proposals.push({ ...proposal, ...requestPassthrough });
+                        this.data.proposals.push({ ...proposal, ...passthrough });
                         this.checkProposalReady();
                     }
                 }
