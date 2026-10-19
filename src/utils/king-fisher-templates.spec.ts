@@ -236,9 +236,7 @@ describe('King Fisher virtual-hook purchase gate', () => {
         expect(source).toContain('state.purchaseAuthorizationEpoch = tick.epoch;');
         expect(source).toContain('if (purchaseTiming === "IMMEDIATE") {');
         expect(source).toContain('pipelineMode === "SIDE"');
-        expect(source).toContain(
-            'Bot.purchaseNormalKillerTick(contractType, Number(tick.epoch), tick.id)',
-        );
+        expect(source).toContain('Bot.purchaseNormalKillerTick(contractType, Number(tick.epoch))');
         expect(source).toContain('Bot.configureNormalKillerPipeline');
         expect(source).toContain('hookType: result === "won" ? "HOOK PROFIT" : "HOOK LOSS"');
         expect(source).toContain('state.confirmations = 0;');

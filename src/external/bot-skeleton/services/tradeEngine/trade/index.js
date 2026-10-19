@@ -183,14 +183,7 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
                 if (data.msg_type === 'transaction' && data.transaction.action === 'sell') {
                     this.transaction_recovery_timeout = setTimeout(() => { /* 0ms recovery */ 
                         const { contract } = this.data;
-                        const contractId = contract.contract_id;
-                        const transactionContractId = data.transaction.contract_id;
-                        const is_same_contract =
-                            contractId !== undefined &&
-                            contractId !== null &&
-                            transactionContractId !== undefined &&
-                            transactionContractId !== null &&
-                            String(contractId) === String(transactionContractId);
+                        const is_same_contract = contract.contract_id === data.transaction.contract_id;
                         const is_open_contract = contract.status === 'open';
                         if (is_same_contract && is_open_contract) {
                             doUntilDone(() => {

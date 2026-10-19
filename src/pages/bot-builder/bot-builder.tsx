@@ -1,7 +1,9 @@
 // @ts-nocheck — vendored bot code with known upstream type gaps; see AGENTS.md
-import React from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import classNames from 'classnames';
 import { observer } from 'mobx-react-lite';
+import { load, registerXmlBlockFallbacks, save_types } from '@/external/bot-skeleton';
+import { installBotBuilderTradeTypeCompatibility } from './bot-builder-trade-compat';
 import { botNotification } from '@/components/bot-notification/bot-notification';
 import { notification_message } from '@/components/bot-notification/bot-notification-utils';
 import { useStore } from '@/hooks/useStore';
@@ -9,11 +11,281 @@ import { DBOT_TABS } from '@/constants/bot-contents';
 import { localize } from '@deriv-com/translations';
 import { useDevice } from '@deriv-com/ui';
 import { TBlocklyEvents } from 'Types';
+import AIScanner from '@/components/floating/AIScanner';
 import LoadModal from '../../components/load-modal';
 import SaveModal from '../dashboard/bot-list/save-modal';
 import BotBuilderTourHandler from '../tutorials/dbot-tours/bot-builder-tour';
 import QuickStrategy1 from './quick-strategy';
 import WorkspaceWrapper from './workspace-wrapper';
+import StrategyEngineChecker, { StrategyCheck } from './strategy-engine-checker';
+import { normalizeKingFisherXml } from '@/utils/king-fisher-xml-normalizer';
+
+const PALE_BLUE = '#7ec8e3';
+const PALE_BLUE2 = '#89c4f4';
+const PALE_BLUE3 = '#5ab9ea';
+const PALE_BLUE4 = '#add8e6';
+const PALE_BLUE5 = '#6cb4e4';
+
+const FREE_BOTS_LIST = [
+    // ── Signature bots (top of panel) ─────────────────────────────────────────
+    { id: 'ahmed-differ-over-under-cycle-v1', name: 'AHMED DIFFER OVER/UNDER CYCLE V1', market: 'V50 1s', badge: 'DIFFER CYCLE', badgeColor: '#38bdf8', xmlFile: '/bots/ahmed-differ-over-under-cycle-v1.xml', icon: '🔁' },
+    { id: 'ahmed-differ-recovery-cycle-v2', name: 'AHMED DIFFER RECOVERY CYCLE V2', market: 'V25 1s', badge: 'RECOVERY V2', badgeColor: '#fb7185', xmlFile: '/bots/ahmed-differ-recovery-cycle-v2.xml', icon: '⚡' },
+    { id: 'ahmed-best-market-pair-cycle-v1', name: 'AHMED BEST MARKET 10-PHASE CYCLE V1', market: 'Best market', badge: 'CYCLE SCAN', badgeColor: '#34d399', xmlFile: '/bots/ahmed-best-market-pair-cycle-v1.xml', icon: '🧠' },
+    { id: 'ahmed-best-market-pair-cycle-v2', name: 'AHMED BEST MARKET PAIR CYCLE V2', market: 'Best market', badge: 'PAIR CYCLE', badgeColor: '#a78bfa', xmlFile: '/bots/ahmed-best-market-pair-cycle-v2.xml', icon: '🔎' },
+    { id: 'acc-flipper', name: 'ACC FLIPPER', market: 'Best market', badge: 'ACC FLIPPER', badgeColor: '#a78bfa', xmlFile: '/bots/acc-flipper.xml', icon: '🤖' },
+    { id: 'ahmed-killer-bot-myth-v1', name: 'AHMED KILLER BOT MYTH V1', market: 'Best market', badge: 'MYTH V1', badgeColor: '#f59e0b', xmlFile: '/bots/ahmed-killer-bot-myth-v1.xml', icon: '👑' },
+    { id: 'under-cycle-auto', name: 'Under Cycle Auto', market: 'V50 1s', badge: 'UNDER CYCLE', badgeColor: '#38bdf8', xmlFile: '/bots/under-cycle-auto.xml', icon: '🔄' },
+    { id: 'ahmed-over-cycle', name: 'Ahmed Over Cycle', market: 'V50 1s', badge: 'AHMED OVER', badgeColor: '#fb7185', xmlFile: '/bots/ahmed-over-cycle.xml', icon: '⚡' },
+    { id: 'differs-edge-scanner', name: 'Differs Edge Scanner — Recovery Matrix', market: 'V50 1s', badge: 'SCAN 🧠', badgeColor: '#34d399', xmlFile: '/bots/differs-edge-scanner.xml', icon: '🔎' },
+    { id: 'odd-auto-cycle', name: 'ODD AUTO CYCLE', market: 'V10 1s', badge: 'ODD CYCLE', badgeColor: '#f43f5e', xmlFile: '/bots/odd-auto-cycle.xml', icon: '🔴' },
+    { id: 'even-auto-cycle', name: 'EVEN AUTO CYCLE', market: 'V10 1s', badge: 'EVEN CYCLE', badgeColor: '#3b82f6', xmlFile: '/bots/even-auto-cycle.xml', icon: '🔵' },
+    {
+        id: 'ahmed-differs-cycle',
+        name: 'AHMED DIFFERS CYCLE',
+        market: 'V10 1s',
+        badge: 'SHARED BLOCKS',
+        badgeColor: '#f59e0b',
+        // The complete executable cycle is maintained in the canonical
+        // Differs XML: Differs with three-parity recovery — three evens
+        // select Odd and three odds select Even.
+        xmlFile: '/bots/ahmed-differs-cycle.xml',
+        icon: '🔁',
+        sharedBlockAssets: [
+            { id: 'gt.seq.applySequence', file: '/attached_assets/block_(1)_1788162838185.xml' },
+            { id: 'gt.seq.beforePurchase', file: '/attached_assets/block_(2)_1788162844415.xml' },
+            { id: 'gt.seq.tradeDef', file: '/attached_assets/block_(3)_1788162852532.xml' },
+            { id: 'gt.seq.afterPurchase', file: '/attached_assets/block_(4)_1788162858212.xml' },
+        ],
+    },
+    { id: 'king-fisher-over-2', name: 'King Fisher Over 2', market: 'Best market · V50 1s', badge: 'KING FISHER', badgeColor: '#f59e0b', xmlFile: '/bots/king-fisher-over-2.xml', icon: '🐟' },
+    { id: 'king-fisher-over-3', name: 'King Fisher Over 3', market: 'Best market · V50 1s', badge: 'KING FISHER', badgeColor: '#f59e0b', xmlFile: '/bots/king-fisher-over-3.xml', icon: '🐟' },
+    { id: 'king-fisher-under-6', name: 'King Fisher Under 6', market: 'Best market · V50 1s', badge: 'KING FISHER', badgeColor: '#7c3aed', xmlFile: '/bots/king-fisher-under-6.xml', icon: '🐟' },
+    { id: 'king-fisher-under-7', name: 'King Fisher Under 7', market: 'Best market · V50 1s', badge: 'KING FISHER', badgeColor: '#7c3aed', xmlFile: '/bots/king-fisher-under-7.xml', icon: '🐟' },
+    { id: 'omni-cycle-trader-pro', name: 'Omni Cycle Trader Pro', market: 'V75 1s', badge: 'CYCLE 🔄', badgeColor: '#a78bfa', xmlFile: '/bots/omni-cycle-trader-pro.xml', icon: '🔄' },
+    { id: 'smart-entry-pattern-pro-v2', name: 'Smart Entry Pattern Pro V2', market: 'V25 1s', badge: 'SMART 🧠', badgeColor: '#34d399', xmlFile: '/bots/smart-entry-pattern-pro-v2.xml', icon: '🧠' },
+    { id: 'ahmed-cycle-master', name: 'Ahmed Cycle Master', market: 'V50 1s', badge: 'CYCLE 🔄', badgeColor: '#a78bfa', xmlFile: '/bots/ahmed-cycle-master.xml', icon: '🔄' },
+    { id: 'ahmed-pattern-scanner', name: 'Ahmed Pattern Scanner', market: 'V25 1s', badge: 'SCAN 🧠', badgeColor: '#34d399', xmlFile: '/bots/ahmed-pattern-scanner.xml', icon: '🧠' },
+    // ── Standard library ──────────────────────────────────────────────────────
+    { id: 'ahmed-syn-even-odd', name: 'Ahmed SYN Even/Odd v1.2', market: 'V25 1s', badge: 'AHMED ★', badgeColor: PALE_BLUE, xmlFile: '/bots/ahmed-syn-even-odd.xml', icon: '🤖' },
+    { id: 'over1', name: 'AI Auto SYN Over 1', market: 'V50 1s', badge: 'HOT', badgeColor: PALE_BLUE2, xmlFile: '/bots/over1.xml', icon: '⚡' },
+    { id: 'over2', name: 'AI Auto SYN Over 2', market: 'V50 1s', badge: 'HOT', badgeColor: PALE_BLUE3, xmlFile: '/bots/over2.xml', icon: '🎯' },
+    { id: 'over3', name: 'AI Auto SYN Over 3', market: 'V50 1s', badge: 'STRONG', badgeColor: PALE_BLUE4, xmlFile: '/bots/over3.xml', icon: '💪' },
+    { id: 'under8', name: 'AI Auto SYN Under 8', market: 'V100 1s', badge: 'NEW', badgeColor: PALE_BLUE5, xmlFile: '/bots/under8.xml', icon: '🎰' },
+    { id: 'under7', name: 'AI Auto SYN Under 7', market: 'V100 1s', badge: 'NEW', badgeColor: PALE_BLUE2, xmlFile: '/bots/under7.xml', icon: '🔥' },
+    { id: 'under6', name: 'AI Auto SYN Under 6', market: 'V50 1s', badge: 'SOLID', badgeColor: PALE_BLUE3, xmlFile: '/bots/under6.xml', icon: '⚔' },
+    { id: 'evenodd', name: 'Ahmed SpeedBot Even/Odd v3', market: 'V10 1s', badge: 'AI', badgeColor: PALE_BLUE, xmlFile: '/bots/evenodd.xml', icon: '🤖' },
+    { id: 'mrvunja', name: 'Mr Vunja Deriv V2026', market: 'V75 1s', badge: '2026', badgeColor: PALE_BLUE4, xmlFile: '/bots/mrvunja.xml', icon: '💎' },
+    { id: 'market-killer-prime-v1', name: 'Market Killer Prime v1', market: 'V25 1s', badge: 'PRIME ★', badgeColor: PALE_BLUE5, xmlFile: '/bots/market-killer-prime-v1.xml', icon: '🎯' },
+];
+
+type TFreeBotsPanelProps = {
+    onClose: () => void;
+    /** Called after XML is loaded into the workspace. shouldRun=true triggers auto-trade. */
+    onLoadDone: (shouldRun: boolean, bot?: any, check?: any) => void;
+};
+
+const FreeBotsSidePanel: React.FC<TFreeBotsPanelProps> = ({ onClose, onLoadDone }) => {
+    // Single global lock: only one action at a time across all cards
+    const [activeBotId, setActiveBotId] = useState<string | null>(null);
+    const [actionType, setActionType] = useState<'load' | 'run' | null>(null);
+    const [loadedId, setLoadedId] = useState<string | null>(null);
+
+    /** Fetch XML from the bot's URL and load it into the workspace via the official
+     *  DBot `load()` pipeline — same path the Load Modal uses — so BlockConversion,
+     *  removeLimitedBlocks, asyncClear, and clearWorkspaceAndLoadFromXml all run
+     *  in the correct order and the trade engine receives properly initialised blocks. */
+    const fetchAndLoad = useCallback(async (bot: typeof FREE_BOTS_LIST[0]): Promise<any> => {
+        const response = await fetch(bot.xmlFile);
+        if (!response.ok) throw new Error(`Failed to fetch bot XML: ${response.status}`);
+        const fetchedBlockString = await response.text();
+        const block_string = bot.id.startsWith('king-fisher-')
+            ? normalizeKingFisherXml(fetchedBlockString)
+            : fetchedBlockString;
+        const sharedChecks = await Promise.all((bot.sharedBlockAssets || []).map(async asset => {
+            // The uploaded files are rendered Blockly SVG fragments. Validate
+            // their preserved IDs against the executable bot metadata instead
+            // of fetching them as if they were runnable XML routes.
+            if (!block_string.includes(`>${asset.id}<`)) {
+                throw new Error(`Shared block ${asset.id} is not present in ${bot.xmlFile}`);
+            }
+            return { id: asset.id, ok: true, file: asset.file };
+        }));
+
+        const workspace = (window as any).Blockly?.derivWorkspace;
+        if (!workspace) {
+            // Workspace not mounted yet — wait up to 10 s
+            await new Promise<void>((resolve, reject) => {
+                let attempts = 0;
+                const poll = setInterval(() => {
+                    attempts++;
+                    if ((window as any).Blockly?.derivWorkspace) { clearInterval(poll); resolve(); }
+                    else if (attempts >= 100) { clearInterval(poll); reject(new Error('Workspace unavailable after 10 s')); }
+                }, 100);
+            });
+        }
+
+        const Blockly = (window as any).Blockly;
+        if (!installBotBuilderTradeTypeCompatibility(Blockly)) {
+            throw new Error('Bot Builder trade-type compatibility could not be initialized.');
+        }
+
+        // ── Unsupported-block guard ──────────────────────────────────────────
+        // Use the same connection-aware fallback as the core loader. A Blockly
+        // block cannot expose output and statement connections simultaneously.
+        try {
+            if (Blockly?.Blocks && block_string) {
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(block_string, 'text/xml');
+                const missingTypes = registerXmlBlockFallbacks(xmlDoc, Blockly);
+                if (missingTypes.length > 0) {
+                    console.info(`[Bot Loader] Registered ${missingTypes.length} unsupported-block placeholder(s):`, missingTypes);
+                }
+            }
+        } catch (e) {
+            console.warn('[Bot Loader] Unsupported-block pre-scan failed:', e);
+        }
+        // ────────────────────────────────────────────────────────────────────
+
+        await load({
+            block_string,
+            drop_event: null,
+            file_name: bot.name,
+            strategy_id: '',
+            from: save_types.LOCAL,
+            workspace: (window as any).Blockly.derivWorkspace,
+            showIncompatibleStrategyDialog: false,
+            show_snackbar: false,
+        });
+        return {
+            xmlBlocks: (block_string.match(/<block\b/g) || []).length,
+            sharedChecks,
+        };
+    }, []);
+
+    /** Load only — puts the bot into the builder then closes the panel. */
+    const handleLoad = useCallback(async (bot: typeof FREE_BOTS_LIST[0]) => {
+        if (activeBotId) return;
+        setActiveBotId(bot.id);
+        setActionType('load');
+        try {
+            const check = await fetchAndLoad(bot);
+            setLoadedId(bot.id);
+            // Show success briefly, then hand control back to parent
+            setTimeout(() => {
+                setLoadedId(null);
+                 onLoadDone(false, bot, check); // false = load only, don't auto-run
+            }, 1500);
+        } catch (e) {
+            console.error('Load bot error', e);
+        } finally {
+            setActiveBotId(null);
+            setActionType(null);
+        }
+    }, [activeBotId, fetchAndLoad, onLoadDone]);
+
+    /** Load & Run — loads the bot then signals parent to start trading. */
+    const handleLoadAndRun = useCallback(async (bot: typeof FREE_BOTS_LIST[0]) => {
+        if (activeBotId) return;
+        setActiveBotId(bot.id);
+        setActionType('run');
+        try {
+            const check = await fetchAndLoad(bot);
+            // Signal parent immediately — parent is responsible for closing
+            // panel and triggering the run in the correct order/lifecycle.
+            onLoadDone(true, bot, check); // true = auto-run after panel closes
+        } catch (e) {
+            console.error('Load & Run bot error', e);
+            setActiveBotId(null);
+            setActionType(null);
+        }
+        // Note: we don't reset activeBotId here for the run case because the
+        // component will unmount shortly (parent closes it). Resetting would
+        // cause a flicker. If load fails the catch above resets it.
+    }, [activeBotId, fetchAndLoad, onLoadDone]);
+
+    return (
+        <div style={{
+            position: 'absolute', top: 0, left: 0, width: '300px', height: '100%',
+            background: '#11143a', borderRight: '1.5px solid rgba(99,102,241,0.35)',
+            zIndex: 20, display: 'flex', flexDirection: 'column', boxShadow: '6px 0 24px rgba(0,0,0,0.5)',
+        }}>
+            <div style={{
+                padding: '14px 16px', borderBottom: '1px solid rgba(99,102,241,0.25)',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#0d0f2e',
+            }}>
+                <span style={{ color: '#c7d2fe', fontWeight: 700, fontSize: '14px', letterSpacing: '0.05em' }}>📥 FREE BOTS LIBRARY</span>
+                <button onClick={onClose} style={{
+                    background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer',
+                    fontSize: '18px', lineHeight: 1, padding: '2px 6px', borderRadius: '4px',
+                }}>✕</button>
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
+                {FREE_BOTS_LIST.map(bot => {
+                    const anyBusy  = activeBotId !== null;
+                    const isThis   = activeBotId === bot.id;
+                    const isDone   = loadedId === bot.id;
+                    const isLoading  = isThis && actionType === 'load';
+                    const isStarting = isThis && actionType === 'run';
+                    return (
+                        <div key={bot.id} style={{
+                            background: isDone ? 'rgba(34,197,94,0.1)' : 'rgba(255,255,255,0.04)',
+                            border: `1px solid ${isDone ? 'rgba(34,197,94,0.5)' : 'rgba(99,102,241,0.18)'}`,
+                            borderRadius: '10px', padding: '11px 13px', marginBottom: '7px', transition: 'all 0.2s',
+                        }}>
+                            {/* Bot info row */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                                <span style={{ fontSize: '18px' }}>{bot.icon}</span>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ color: '#e0e7ff', fontSize: '12px', fontWeight: 600, lineHeight: 1.3, marginBottom: '2px' }}>{bot.name}</div>
+                                    <div style={{ color: '#6b7280', fontSize: '11px' }}>{bot.market}</div>
+                                </div>
+                                <span style={{
+                                    background: bot.badgeColor, color: '#fff', fontSize: '9px', fontWeight: 700,
+                                    padding: '2px 6px', borderRadius: '4px', whiteSpace: 'nowrap', flexShrink: 0,
+                                }}>{bot.badge}</span>
+                            </div>
+
+                            {/* Load into Builder */}
+                            <button
+                                onClick={() => handleLoad(bot)}
+                                disabled={anyBusy || isDone}
+                                style={{
+                                    width: '100%', padding: '6px', borderRadius: '7px', border: 'none',
+                                    cursor: anyBusy || isDone ? 'not-allowed' : 'pointer',
+                                    background: isDone ? '#16a34a' : 'rgba(99,102,241,0.85)',
+                                    color: '#fff', fontSize: '11px', fontWeight: 600, transition: 'all 0.15s',
+                                    opacity: anyBusy && !isThis ? 0.4 : isLoading ? 0.7 : 1,
+                                    marginBottom: '5px',
+                                }}
+                            >
+                                {isLoading ? '⏳ Loading...' : isDone ? '✅ Loaded!' : '📥 Load into Builder'}
+                            </button>
+
+                            {/* Load & Run */}
+                            <button
+                                onClick={() => handleLoadAndRun(bot)}
+                                disabled={anyBusy}
+                                style={{
+                                    width: '100%', padding: '6px', borderRadius: '7px', border: 'none',
+                                    cursor: anyBusy ? 'not-allowed' : 'pointer',
+                                    background: isStarting
+                                        ? 'linear-gradient(90deg,#16a34a,#15803d)'
+                                        : 'linear-gradient(90deg,#f59e0b,#d97706)',
+                                    color: '#fff', fontSize: '11px', fontWeight: 700, transition: 'all 0.15s',
+                                    opacity: anyBusy && !isThis ? 0.4 : isStarting ? 0.8 : 1,
+                                    boxShadow: anyBusy ? 'none' : '0 0 8px rgba(245,158,11,0.5)',
+                                }}
+                            >
+                                {isStarting ? '⏳ Loading bot...' : '▶ Load & Run'}
+                            </button>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+};
 
 const BotBuilder = observer(() => {
     const { dashboard, app, run_panel, toolbar, quick_strategy, blockly_store } = useStore();
@@ -111,6 +383,103 @@ const BotBuilder = observer(() => {
         });
     };
 
+    const [showFreeBots, setShowFreeBots] = useState(false);
+    const [showScanner, setShowScanner] = useState(false);
+    const [strategyCheck, setStrategyCheck] = useState<StrategyCheck | null>(null);
+    // When true, fire onRunButtonClick as soon as the panel finishes unmounting
+    const pendingAutoRun = React.useRef(false);
+
+    // ── Draggable Free Bots button ──
+    const FREE_BOTS_POS_KEY = 'free_bots_btn_pos_v2';
+    const getInitialFreeBotPos = () => {
+        try {
+            const saved = localStorage.getItem(FREE_BOTS_POS_KEY);
+            if (saved) {
+                const p = JSON.parse(saved);
+                if (typeof p.x === 'number' && typeof p.y === 'number') return p;
+            }
+        } catch { /* ignore */ }
+        // Default: middle-left
+        return { x: 12, y: Math.max(60, window.innerHeight / 2 - 20) };
+    };
+    const [freeBotPos, setFreeBotPos] = useState(getInitialFreeBotPos);
+    const freeBotDragging = useRef(false);
+    const freeBotWasDragged = useRef(false);
+    const freeBotOffset = useRef({ x: 0, y: 0 });
+    const freeBotBtnRef = useRef<HTMLButtonElement | null>(null);
+
+    const onFreeBotPointerDown = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
+        freeBotDragging.current = true;
+        freeBotWasDragged.current = false;
+        freeBotOffset.current = { x: e.clientX - freeBotPos.x, y: e.clientY - freeBotPos.y };
+        // Use currentTarget (the button) not target (could be icon/text inside)
+        e.currentTarget.setPointerCapture?.(e.pointerId);
+    }, [freeBotPos]);
+
+    const onFreeBotPointerMove = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
+        if (!freeBotDragging.current) return;
+        const dx = e.clientX - freeBotOffset.current.x - freeBotPos.x;
+        const dy = e.clientY - freeBotOffset.current.y - freeBotPos.y;
+        if (!freeBotWasDragged.current && Math.hypot(dx, dy) < 4) return;
+        freeBotWasDragged.current = true;
+        const btn = freeBotBtnRef.current;
+        const w = btn?.offsetWidth ?? 110;
+        const h = btn?.offsetHeight ?? 34;
+        const x = Math.max(4, Math.min(window.innerWidth - w - 4, e.clientX - freeBotOffset.current.x));
+        const y = Math.max(4, Math.min(window.innerHeight - h - 4, e.clientY - freeBotOffset.current.y));
+        setFreeBotPos({ x, y });
+    }, [freeBotPos]);
+
+    const onFreeBotPointerUp = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
+        e.currentTarget.releasePointerCapture?.(e.pointerId);
+        freeBotDragging.current = false;
+        if (freeBotWasDragged.current) {
+            setFreeBotPos(p => {
+                try { localStorage.setItem(FREE_BOTS_POS_KEY, JSON.stringify(p)); } catch { /* ignore */ }
+                return p;
+            });
+            // Suppress the click that follows drag
+            const btn = freeBotBtnRef.current;
+            if (btn) {
+                const suppress = (ev: MouseEvent) => { ev.stopPropagation(); ev.preventDefault(); };
+                btn.addEventListener('click', suppress, { capture: true, once: true });
+            }
+        }
+    }, []);
+
+    // After the panel fully unmounts (showFreeBots flips to false), trigger the run.
+    // Using double requestAnimationFrame so Blockly has had its own paint cycle to
+    // finalise block layout before shouldRunBot / generateCode execute.
+    React.useEffect(() => {
+        if (!showFreeBots && pendingAutoRun.current) {
+            pendingAutoRun.current = false;
+            // Skip if a bot is already running
+            if (run_panel.is_running) return;
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    run_panel.onRunButtonClick();
+                });
+            });
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [showFreeBots]);
+
+    /** Called by FreeBotsSidePanel once XML is loaded. */
+    const handleBotLoadDone = useCallback((shouldRun: boolean, bot?: any, check?: any) => {
+        if (bot && check) {
+            setStrategyCheck({
+                botName: bot.name,
+                xmlBlocks: check.xmlBlocks || 0,
+                sharedChecks: check.sharedChecks || [],
+                updatedAt: new Date().toLocaleTimeString('en', { hour12: false }),
+            });
+        }
+        if (shouldRun) {
+            pendingAutoRun.current = true;
+        }
+        setShowFreeBots(false); // unmount panel → triggers the useEffect above
+    }, []);
+
     return (
         <>
             <div
@@ -123,7 +492,76 @@ const BotBuilder = observer(() => {
                 <div id='scratch_div' ref={el_ref}>
                     <WorkspaceWrapper />
                 </div>
+
+                {/* Free Bots toggle button — draggable, position persisted, hidden while panel is open */}
+                {active_tab === DBOT_TABS.BOT_BUILDER && !showFreeBots && (
+                    <button
+                        ref={freeBotBtnRef}
+                        onClick={() => setShowFreeBots(true)}
+                        onPointerDown={onFreeBotPointerDown}
+                        onPointerMove={onFreeBotPointerMove}
+                        onPointerUp={onFreeBotPointerUp}
+                        onPointerCancel={onFreeBotPointerUp}
+                        title='Free Bots Library (drag to move)'
+                        style={{
+                            position: 'fixed',
+                            left: freeBotPos.x,
+                            top: freeBotPos.y,
+                            zIndex: 120,
+                            background: 'rgba(99,102,241,0.92)',
+                            border: '1.5px solid rgba(129,140,248,0.5)',
+                            borderRadius: '8px',
+                            color: '#fff', fontSize: '12px', fontWeight: 700, padding: '7px 13px',
+                            cursor: 'grab', touchAction: 'none',
+                            boxShadow: '0 2px 10px rgba(0,0,0,0.4)',
+                            display: 'flex', alignItems: 'center', gap: '6px',
+                            userSelect: 'none',
+                        }}
+                    >
+                        📥 <span>Free Bots</span>
+                    </button>
+                )}
+
+                {/* Free Bots side panel */}
+                {active_tab === DBOT_TABS.BOT_BUILDER && showFreeBots && (
+                    <FreeBotsSidePanel
+                        onClose={() => setShowFreeBots(false)}
+                        onLoadDone={handleBotLoadDone}
+                    />
+                )}
+
+                {/* ── Scanner button — fixed to right side of builder, above Free Bots ── */}
+                {active_tab === DBOT_TABS.BOT_BUILDER && !showFreeBots && (
+                    <button
+                        onClick={() => setShowScanner(s => !s)}
+                        title='AI Market Scanner — live digit frequency analysis + trading signals'
+                        style={{
+                            position: 'fixed',
+                            left: freeBotPos.x,
+                            top: freeBotPos.y + 46,
+                            zIndex: 120,
+                            background: showScanner
+                                ? 'linear-gradient(135deg,#059669,#047857)'
+                                : 'linear-gradient(135deg,rgba(16,185,129,0.9),rgba(5,150,105,0.9))',
+                            border: '1.5px solid rgba(52,211,153,0.5)',
+                            borderRadius: '8px',
+                            color: '#fff', fontSize: '12px', fontWeight: 700, padding: '7px 13px',
+                            cursor: 'pointer', touchAction: 'none',
+                            boxShadow: showScanner
+                                ? '0 0 12px rgba(52,211,153,0.6)'
+                                : '0 2px 10px rgba(0,0,0,0.4)',
+                            display: 'flex', alignItems: 'center', gap: '6px',
+                            userSelect: 'none',
+                            transition: 'all 0.2s',
+                        }}
+                    >
+                        🔍 <span>{showScanner ? 'Hide Scanner' : 'Scanner'}</span>
+                    </button>
+                )}
             </div>
+            {/* AI Scanner floating panel — shown when scanner button is active */}
+            {active_tab === DBOT_TABS.BOT_BUILDER && showScanner && <AIScanner />}
+            {active_tab === DBOT_TABS.BOT_BUILDER && <StrategyEngineChecker check={strategyCheck} />}
             {active_tab === DBOT_TABS.BOT_BUILDER && <BotBuilderTourHandler is_mobile={!isDesktop} />}
             {/* removed this outside from toolbar becuase it needs to loaded seperately without dependency */}
             <LoadModal />

@@ -290,7 +290,7 @@ export const load = async ({
         child => child.tagName === 'block' && child.getAttribute('type') === 'trade_definition_market'
     );
     if (topLevelBestMarket && tradeOptions && tradeMarket) {
-        const next = xml.ownerDocument.createElementNS(xml.namespaceURI, 'next');
+        const next = xml.ownerDocument.createElement('next');
         next.appendChild(tradeMarket);
         topLevelBestMarket.appendChild(next);
         tradeOptions.replaceChild(topLevelBestMarket, tradeMarket);

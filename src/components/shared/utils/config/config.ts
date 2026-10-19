@@ -73,48 +73,23 @@ const getDefaultServerURL = () => {
 
 /**
  * Gets the WebSocket URL using the authenticated flow
- * 1. Get the active OAuth access token (or the account token stored by the legacy login flow)
+ * 1. Get access token from auth_info (localStorage via vendored deriv-core)
  * 2. Fetch OTP WebSocket URL from DerivWSAccountsService
  *
  * @returns Promise with WebSocket URL or fallback to default server
  */
 export const getSocketURL = async (): Promise<string> => {
-    const activeLoginId = typeof window === 'undefined' ? null : window.localStorage.getItem('active_loginid');
-    let accessToken: string | null | undefined;
-
     try {
         const authInfo = getAuthInfo();
-        accessToken = authInfo?.access_token;
-    } catch (error) {
-        console.error('[DerivWS] Could not read the saved OAuth session:', error);
-    }
-
-    if (!accessToken && activeLoginId && activeLoginId !== 'null') {
-        try {
-            const storedAccounts = JSON.parse(window.localStorage.getItem('accountsList') || '{}');
-            const accountToken = storedAccounts?.[activeLoginId];
-            if (typeof accountToken === 'string') {
-                accessToken = accountToken;
-            } else if (accountToken && typeof accountToken === 'object') {
-                accessToken = accountToken.access_token || accountToken.token;
-            }
-        } catch (error) {
-            console.error('[DerivWS] Could not read the saved account token:', error);
+        if (!authInfo || !authInfo.access_token) {
+            return getDefaultServerURL();
         }
-    }
 
-    if (!accessToken) {
-        if (activeLoginId && activeLoginId !== 'null') {
-            throw new Error('Your saved Deriv account has no valid access token. Sign in again to trade.');
-        }
-        return getDefaultServerURL();
-    }
-
-    try {
-        return await DerivWSAccountsService.getAuthenticatedWebSocketURL(accessToken);
+        const wsUrl = await DerivWSAccountsService.getAuthenticatedWebSocketURL(authInfo.access_token);
+        return wsUrl;
     } catch (error) {
         console.error('[DerivWS] Error in getSocketURL:', error);
-        throw error;
+        return getDefaultServerURL();
     }
 };
 
