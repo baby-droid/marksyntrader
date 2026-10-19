@@ -13,9 +13,6 @@ import main_xml from './xml/main.xml?raw';
 import { forgetAccumulatorsProposalRequest } from './accumulators-proposal-handler';
 import { loadBlockly } from './blockly';
 import DBotStore from './dbot-store';
-import { getKingFisherDigitSetup, scanKingFisherMarket } from '@/utils/king-fisher-market-scanner';
-import { CONTINUOUS_INDEX_SYMBOLS } from '@/utils/continuous-index-rotation';
-import { dispatchBrowserEvent } from '../utils/browser-event';
 import { isAllRequiredBlocksEnabled, updateDisabledBlocks, validateErrorOnBlockDelete } from './utils';
 
 class DBot {
@@ -25,14 +22,12 @@ class DBot {
         this.before_run_funcs = [];
         this.symbol = null;
         this.is_bot_running = false;
-        this.runGeneration = 0;
     }
 
     /**
      * Initialises the workspace and mounts it to a container element (app_contents).
      */
     async initWorkspace(public_path, store, api_helpers_store, is_mobile, is_dark_mode) {
-        this.runGeneration += 1;
         await loadBlockly(is_dark_mode);
         const recent_files = await getSavedWorkspaces();
         this.interpreter = Interpreter();
@@ -284,7 +279,6 @@ class DBot {
     }
 
     async initializeInterpreter() {
-        this.runGeneration += 1;
         if (this.interpreter) {
             await this.interpreter.terminateSession();
         }
@@ -294,112 +288,22 @@ class DBot {
      * Runs the bot. Does a sanity check before attempting to generate the
      * JavaScript code that's fed to the interpreter.
      */
-    async runBot() {
+    runBot() {
         if (api_base.is_stopping) return;
 
-        const runGeneration = ++this.runGeneration;
         try {
             api_base.is_stopping = false;
-            const bestMarketBlock = this.workspace?.getAllBlocks?.(false)
-                ?.find(block => block.type === 'king_fisher_best_market_scanner');
-            if (bestMarketBlock && bestMarketBlock.getFieldValue?.('ENABLED') !== 'FALSE') {
-                const workspaceBlocks = this.workspace?.getAllBlocks?.(false) ?? [];
-                const marketBlock = workspaceBlocks
-                    ?.find(block => block.type === 'trade_definition_market');
-                const setup = getKingFisherDigitSetup(workspaceBlocks);
-                if (marketBlock && !setup) {
-                    dispatchBrowserEvent('journal:signal', {
-                        type: 'SCAN',
-                        label: 'BEST MARKET SCAN SKIPPED',
-                        detail: 'No phase has a fixed Over or Under digit barrier, so the manually selected market is kept.',
-                    });
-                } else if (marketBlock && setup) {
-                    let result = null;
-                    try {
-                        const onlyRotatableMarkets =
-                            marketBlock.getFieldValue?.('ALTERNATE_MARKETS') === 'TRUE';
-                        result = await scanKingFisherMarket(
-                            setup.direction,
-                            setup.barrier,
-                            onlyRotatableMarkets ? CONTINUOUS_INDEX_SYMBOLS : undefined,
-                        );
-                    } catch (scanError) {
-                        dispatchBrowserEvent('journal:signal', {
-                            type: 'SCAN',
-                            label: 'BEST MARKET SCAN FAILED',
-                            detail: scanError?.message || 'Using the manually selected market.',
-                        });
-                    }
-                    if (runGeneration !== this.runGeneration || api_base.is_stopping) return;
-                    if (result) {
-                        marketBlock.setFieldValue(result.market, 'MARKET_LIST');
-                        marketBlock.setFieldValue(result.submarket, 'SUBMARKET_LIST');
-                        marketBlock.setFieldValue(result.symbol, 'SYMBOL_LIST');
-                        const detail = {
-                            symbol: result.symbol,
-                            label: result.label,
-                            group: result.group,
-                            lastDigit: result.lastDigit,
-                            score: result.score,
-                            direction: setup.direction,
-                            barrier: setup.barrier,
-                        };
-                        dispatchBrowserEvent('king-fisher:best-market', detail);
-                        dispatchBrowserEvent('journal:signal', {
-                            type: 'SCAN',
-                            label: 'BEST MARKET SELECTED',
-                            detail: `${result.label} · ${result.group} · last digit ${result.lastDigit ?? '—'} · score ${result.score}`,
-                        });
-                    } else {
-                        dispatchBrowserEvent('journal:signal', {
-                            type: 'SCAN',
-                            label: 'BEST MARKET UNAVAILABLE',
-                            detail: 'No market has a qualifying recent digit sequence. Using the manually selected market.',
-                        });
-                    }
-                }
-            }
-            // A best-market scan is asynchronous. If Stop or a new workspace
-            // session replaced this run while scanning, do not start the old
-            // strategy on the replacement interpreter.
-            if (runGeneration !== this.runGeneration || api_base.is_stopping) return;
             const code = this.generateCode();
             if (!this.interpreter.bot.tradeEngine.checkTicksPromiseExists()) this.interpreter = Interpreter();
 
             this.is_bot_running = true;
 
             api_base.setIsRunning(true);
-            const activeInterpreter = this.interpreter;
-            activeInterpreter.run(code).then(async () => {
-                // A King Fisher TP/SL ends the current market cycle, not the
-                // user's run request. Cleanly tear down the completed
-                // interpreter, re-scan, update the market fields, and start
-                // the next cycle on the same Run action.
-                const rescanRequested = Boolean(
-                    activeInterpreter.bot?.tradeEngine?.kingFisherRescanRequested
-                );
-                if (
-                    !rescanRequested ||
-                    runGeneration !== this.runGeneration ||
-                    this.interpreter !== activeInterpreter ||
-                    api_base.is_stopping ||
-                    !this.is_bot_running
-                ) {
-                    return;
-                }
-
-                activeInterpreter.bot.tradeEngine.kingFisherRescanRequested = null;
-                this.is_bot_running = false;
-                api_base.setIsRunning(false);
-                await this.stopBot();
-                if (!api_base.is_stopping) await this.runBot();
-            }).catch(error => {
-                if (runGeneration !== this.runGeneration) return;
+            this.interpreter.run(code).catch(error => {
                 globalObserver.emit('Error', error);
                 this.stopBot();
             });
         } catch (error) {
-            if (runGeneration !== this.runGeneration) return;
             globalObserver.emit('Error', error);
             if (this.interpreter) {
                 this.stopBot();
@@ -529,7 +433,6 @@ class DBot {
      * that trade will be completed first to reflect correct contract status in UI.
      */
     async stopBot() {
-        this.runGeneration += 1;
         if (api_base.is_stopping) return;
 
         api_base.setIsRunning(false);
@@ -547,7 +450,6 @@ class DBot {
      * Immediately instructs the interpreter to terminate the WS connection and bot.
      */
     async terminateBot() {
-        this.runGeneration += 1;
         sellAllSideContracts();
         if (this.interpreter) {
             await this.interpreter.terminateSession();
