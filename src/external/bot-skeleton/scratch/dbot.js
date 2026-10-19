@@ -405,30 +405,6 @@ class DBot {
     }
 
     /**
-     * Halts the running strategy in place without tearing down the interpreter.
-     * Unlike stopBot(), this keeps all workspace variables (stake, martingale
-     * progression, run counters, etc.) exactly as they are — resumeBot() then
-     * continues execution from that exact point instead of restarting the
-     * strategy from "Run once at start".
-     */
-    pauseBot() {
-        if (this.interpreter) this.interpreter.pause();
-    }
-
-    /**
-     * Resumes a strategy halted via pauseBot(). Continues mid-flight with
-     * whatever stake/variable state was live at the moment of pause (e.g. a
-     * martingale-adjusted stake after a loss), it does not restart the bot.
-     */
-    resumeBot() {
-        if (this.interpreter) this.interpreter.resume();
-    }
-
-    isBotPaused() {
-        return !!(this.interpreter && this.interpreter.isPaused());
-    }
-
-    /**
      * Instructs the interpreter to stop the bot. If there is an active trade
      * that trade will be completed first to reflect correct contract status in UI.
      */
