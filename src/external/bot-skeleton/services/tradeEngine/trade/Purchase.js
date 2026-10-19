@@ -1,4 +1,4 @@
-import { getExecutionSpeed, getExecutionSpeedDelay, isInstantExecutionForContext, isASpeedBoostEnabled, getPurchasesPerTick, isAutoSignalsContext, shouldSkipDuplicateAutoSignalTick } from '../../../../../utils/execution-speed';
+import { getExecutionSpeed, getExecutionSpeedDelay, isInstantExecutionForContext, isASpeedBoostEnabled, getPurchasesPerTick, isAutoSignalsContext, shouldSkipDuplicateAutoSignalTick, isFastBotBuilderExecutionEnabled, shouldSkipDuplicatePurchaseTick, normalizeFastBotBuilderTradeOptions } from '../../../../../utils/execution-speed';
 import { recordTradeMeta } from '../../../../../utils/trade-metadata';
 import { isBotPaused } from '../../../../../utils/bot-pause-flag';
 import { LogTypes } from '../../../constants/messages';
@@ -562,6 +562,20 @@ export default Engine =>
             pairExecution = null,
             normalKillerEntry = null,
         ) {
+            if (isFastBotBuilderExecutionEnabled() && !this.options.timeMachineEnabled) {
+                const symbol = String(
+                    tradeOptions?.symbol
+                    || this.symbol
+                    || this.options?.symbol
+                    || '',
+                );
+                const epoch = Number(this.store?.getState?.()?.newTick);
+                this.fastBotBuilderPurchaseEpochs ||= new Map();
+                if (shouldSkipDuplicatePurchaseTick(this.fastBotBuilderPurchaseEpochs, symbol, epoch)) {
+                    return Promise.resolve();
+                }
+                tradeOptions = normalizeFastBotBuilderTradeOptions(contract_type, tradeOptions || {});
+            }
             if (isAutoSignalsContext()) {
                 const symbol = String(
                     tradeOptions?.symbol

@@ -39,6 +39,22 @@ export const SPEED_MAX_INFLIGHT: Record<ExecutionSpeed, number> = {
 // Keep Fast responsive without turning a reconnect or duplicate tick into an
 // unbounded burst of buy requests.
 const FAST_EXEC_MAX_INFLIGHT = 3;
+const FAST_TICK_DURATION_CONTRACTS = new Set([
+    'CALL',
+    'PUT',
+    'DIGITEVEN',
+    'DIGITODD',
+    'DIGITOVER',
+    'DIGITUNDER',
+    'DIGITMATCH',
+    'DIGITDIFF',
+    'TICKHIGH',
+    'TICKLOW',
+    'ONETOUCH',
+    'NOTOUCH',
+    'RANGE',
+    'UPORDOWN',
+]);
 
 // Fast removes client-side pacing, not the strategy's tick gate: it always
 // sends one purchase per eligible tick and never creates same-tick duplicates.
@@ -115,10 +131,15 @@ export const isFastExecutionEnabledForContext = (): boolean => {
         || isTwoPredictionCycleContext();
 };
 
+/** Fast Bot Builder execution is deliberately narrower than the app-wide toggle. */
+export const isFastBotBuilderExecutionEnabled = (): boolean =>
+    fastExecutionEnabled
+    && String(getTradeContext().page || '').trim().toLowerCase() === 'bot builder';
+
 export const isAutoSignalsContext = (): boolean =>
     String(getTradeContext().page || '').trim().toLowerCase() === 'auto-signals';
 
-export const shouldSkipDuplicateAutoSignalTick = (
+export const shouldSkipDuplicatePurchaseTick = (
     purchaseEpochs: Map<string, number>,
     symbol: string,
     epoch: number,
@@ -132,6 +153,30 @@ export const shouldSkipDuplicateAutoSignalTick = (
         if (oldestMarket) purchaseEpochs.delete(oldestMarket);
     }
     return false;
+};
+
+export const shouldSkipDuplicateAutoSignalTick = (
+    purchaseEpochs: Map<string, number>,
+    symbol: string,
+    epoch: number,
+): boolean => shouldSkipDuplicatePurchaseTick(purchaseEpochs, symbol, epoch);
+
+/**
+ * Fast uses one-tick contracts only for contract types known to accept tick
+ * durations. Other XML products keep their configured terms rather than
+ * risking a broker rejection.
+ */
+export const normalizeFastBotBuilderTradeOptions = (
+    contractType: unknown,
+    tradeOptions: Record<string, unknown>,
+): Record<string, unknown> => {
+    const contract = String(contractType || '').trim().toUpperCase();
+    if (!FAST_TICK_DURATION_CONTRACTS.has(contract)) return tradeOptions;
+    return {
+        ...tradeOptions,
+        duration: 1,
+        duration_unit: 't',
+    };
 };
 
 /** True while the header's app-wide A-SPEED BOOST preset is active. */
@@ -158,13 +203,14 @@ export const getExecutionSpeedDelay = (): number => {
     return SPEED_DELAY_MS[current];
 };
 
-/** Effective max concurrent in-flight contracts — the higher of the active tier or Fast Execution's cap. */
-export const getMaxInflight = (): number =>
-    isAutoSignalsContext()
-        ? 1
-        : isFastExecutionEnabledForContext() || aSpeedBoostEnabled
-        ? Math.max(SPEED_MAX_INFLIGHT[current], FAST_EXEC_MAX_INFLIGHT)
-        : SPEED_MAX_INFLIGHT[current];
+/** Fast has a hard in-flight ceiling so a reconnect or delayed API response
+ * cannot turn tick-wise execution into a large purchase burst. */
+export const getMaxInflight = (): number => {
+    if (isAutoSignalsContext()) return 1;
+    if (isFastExecutionEnabledForContext()) return FAST_EXEC_MAX_INFLIGHT;
+    if (aSpeedBoostEnabled) return 1;
+    return SPEED_MAX_INFLIGHT[current];
+};
 
 /** Effective purchases fired per tick, independent from the latency override. */
 export const getPurchasesPerTick = (): number => {

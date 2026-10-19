@@ -6,7 +6,9 @@ describe('execution speed controls', () => {
 
     it('allows one Fast purchase per eligible tick and removes client pacing', async () => {
         const speed = await import('../execution-speed');
+        const { setTradeContext } = await import('../trade-metadata');
 
+        setTradeContext({ page: 'Bot Builder', bot: 'Imported XML' });
         speed.setExecutionSpeed('normal');
         speed.setFastExecutionEnabled(true);
 
@@ -14,7 +16,60 @@ describe('execution speed controls', () => {
         expect(speed.isTickWiseExecutionEnabled()).toBe(true);
         expect(speed.getExecutionSpeedDelay()).toBe(0);
         expect(speed.getPurchasesPerTick()).toBe(1);
+        expect(speed.getMaxInflight()).toBe(3);
         expect(speed.useDirectBuyForSpeed()).toBe(true);
+    });
+
+    it('limits Fast XML execution to one 1-tick purchase per live market tick', async () => {
+        const speed = await import('../execution-speed');
+        const { setTradeContext } = await import('../trade-metadata');
+
+        setTradeContext({ page: 'Bot Builder', bot: 'Imported XML' });
+        speed.setFastExecutionEnabled(true);
+        expect(speed.isFastBotBuilderExecutionEnabled()).toBe(true);
+        expect(speed.normalizeFastBotBuilderTradeOptions('DIGITOVER', {
+            symbol: '1HZ10V',
+            duration: 5,
+            duration_unit: 's',
+            amount: 1,
+        })).toEqual({
+            symbol: '1HZ10V',
+            duration: 1,
+            duration_unit: 't',
+            amount: 1,
+        });
+        expect(speed.normalizeFastBotBuilderTradeOptions('ACCU', {
+            symbol: '1HZ10V',
+            growth_rate: 0.05,
+        })).toEqual({
+            symbol: '1HZ10V',
+            growth_rate: 0.05,
+        });
+        expect(speed.normalizeFastBotBuilderTradeOptions('LBHIGHLOW', {
+            symbol: '1HZ10V',
+            duration: 5,
+            duration_unit: 'm',
+        })).toEqual({
+            symbol: '1HZ10V',
+            duration: 5,
+            duration_unit: 'm',
+        });
+
+        const purchaseEpochs = new Map<string, number>();
+        expect(speed.shouldSkipDuplicatePurchaseTick(purchaseEpochs, '1HZ10V', 100)).toBe(false);
+        expect(speed.shouldSkipDuplicatePurchaseTick(purchaseEpochs, '1HZ10V', 100)).toBe(true);
+        expect(speed.shouldSkipDuplicatePurchaseTick(purchaseEpochs, '1HZ10V', 101)).toBe(false);
+        expect(speed.shouldSkipDuplicatePurchaseTick(purchaseEpochs, 'R_10', 100)).toBe(false);
+        expect(speed.shouldSkipDuplicatePurchaseTick(purchaseEpochs, '1HZ10V', 0)).toBe(false);
+
+        for (const tier of ['normal', 'crazy', 'turbo'] as const) {
+            speed.setExecutionSpeed(tier);
+            expect(speed.getPurchasesPerTick()).toBe(1);
+            expect(speed.getMaxInflight()).toBe(3);
+        }
+        speed.setFastExecutionEnabled(false);
+        setTradeContext({ page: 'Bot Builder', bot: '' });
+        speed.setExecutionSpeed('normal');
     });
 
     it('applies the same tick-wise path to the header A-SPEED preset', async () => {

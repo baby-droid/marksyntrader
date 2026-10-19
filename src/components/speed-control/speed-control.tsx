@@ -113,8 +113,8 @@ const SpeedControl: React.FC<TSpeedControl> = ({ className, compact }) => {
             <button
                 type='button'
                 title={fastExec
-                    ? 'FAST MODE ACTIVE — no app-added waits or same-tick duplicate orders; one purchase per eligible strategy tick. Deriv limits and network latency still apply. Click to disable.'
-                    : 'Fast removes app-added waits and sends one purchase per eligible strategy tick. Deriv limits and network latency still apply.'}
+                    ? 'FAST MODE ACTIVE — supported XML contracts use one 1-tick buy per eligible live tick with no app-added wait. Other contract types keep their configured terms. Deriv and network latency still apply. Click to disable.'
+                    : 'Fast removes app-added waits; supported XML contracts use one 1-tick buy per eligible live tick. Other contract types keep their configured terms. Deriv and network latency still apply.'}
                 aria-pressed={fastExec}
                 className={`speed-control__fast ${fastExec ? 'active' : ''}`}
                 onClick={() => setFastExecutionEnabled(!fastExec)}

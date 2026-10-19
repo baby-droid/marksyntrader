@@ -7,6 +7,7 @@ import {
 } from '@/external/bot-skeleton/services/api/observables/connection-status-stream';
 import { useDerivTrade } from '@/hooks/useDerivTrade';
 import { isInstantExecutionForContext } from '@/utils/execution-speed';
+import { analyzePriceDirection } from '@/utils/price-direction';
 import NumberField from '@/components/number-field';
 import { setTradeContext } from '@/utils/trade-metadata';
 import {
@@ -710,12 +711,9 @@ const AI_BOTS: AiBotDef[] = [
     },
 ];
 
-// Auto Bots run a complete eligible market cohort. Every fresh entry gets one
-// contract per market, and each market remains in the cohort for seven
-// settled runs before the next cohort is selected.
-// A positive value can be used to cap a cohort, but zero means all eligible
-// markets as required by the Auto Bots execution contract.
-const AUTO_BOT_ROTATION_MARKETS = 0;
+// Each Auto Bot watches a ranked pair, dispatches both markets independently,
+// and rotates after seven settled runs per market.
+const AUTO_BOT_ROTATION_MARKETS = 2;
 const AUTO_BOT_RUNS_PER_MARKET = 7;
 
 // ── Per-bot session state ─────────────────────────────────────────────────────
@@ -776,6 +774,10 @@ function AiBotCard({
     }, []);
     const runVersionRef = useRef(0);
     const stopRef = useRef(false);
+    const selectedRotationSymbolsRef = useRef<string[]>([]);
+    const requestedRotationSymbolsRef = useRef<string[] | null>(null);
+    const manualRescanPendingRef = useRef(false);
+    const [scanPending, setScanPending] = useState(false);
     useEffect(() => {
         const changed = scannerTickVersionRef.current !== scannerTickVersion;
         scannerTickVersionRef.current = scannerTickVersion;
@@ -822,11 +824,26 @@ function AiBotCard({
         ),
         [bot, scannerSnapshots, isCycleBot, cycleConfig],
     );
-    const visibleMarketCandidates = usesPairRotation && rotationStatus.symbols.length
-        ? marketCandidates.filter(candidate => rotationStatus.symbols.includes(candidate.symbol))
+    const visibleMarketCandidates = usesPairRotation
+        ? rotationStatus.symbols.length
+            ? marketCandidates.filter(candidate => rotationStatus.symbols.includes(candidate.symbol))
+            : selectAutoBotMarketsForExecution(marketCandidates, AUTO_BOT_ROTATION_MARKETS)
         : marketCandidates;
     const qualifyingMarketCount = marketCandidates.filter(candidate => candidate.qualifies).length;
     useEffect(() => { marketCandidatesRef.current = marketCandidates; }, [marketCandidates]);
+    const currentMarketSymbols = selectedRotationSymbolsRef.current.length
+        ? selectedRotationSymbolsRef.current
+        : rotationStatus.symbols.length
+            ? rotationStatus.symbols
+            : visibleMarketCandidates.map(candidate => candidate.symbol);
+    const currentMarketSymbolSet = new Set(currentMarketSymbols);
+    const canScanNextMarkets = selectAutoBotMarketsForExecution(
+        marketCandidates.filter(candidate =>
+            !marketRiskStatus[candidate.symbol]?.stopped
+            && !currentMarketSymbolSet.has(candidate.symbol),
+        ),
+        AUTO_BOT_ROTATION_MARKETS,
+    ).length === AUTO_BOT_ROTATION_MARKETS;
     const defaultMarketRisk: MarketRiskConfig = {
         takeProfit: isCycleBot ? cycleConfig.takeProfit : riskConfig.takeProfit,
         stopLoss: isCycleBot ? cycleConfig.stopLoss : riskConfig.stopLoss,
@@ -842,6 +859,40 @@ function AiBotCard({
             },
         }));
     }, [defaultMarketRisk.takeProfit, defaultMarketRisk.stopLoss]);
+    const scanNextMarkets = useCallback(() => {
+        const rankedMarkets = selectAutoBotMarketsForExecution(
+            marketCandidatesRef.current.filter(candidate =>
+                !marketRiskStatus[candidate.symbol]?.stopped,
+            ),
+        );
+        const currentSymbols = new Set(
+            selectedRotationSymbolsRef.current.length
+                ? selectedRotationSymbolsRef.current
+                : rotationStatus.symbols.length
+                    ? rotationStatus.symbols
+                    : rankedMarkets.slice(0, AUTO_BOT_ROTATION_MARKETS).map(candidate => candidate.symbol),
+        );
+        const nextMarkets = selectAutoBotMarketsForExecution(
+            rankedMarkets.filter(candidate => !currentSymbols.has(candidate.symbol)),
+            AUTO_BOT_ROTATION_MARKETS,
+        );
+        if (nextMarkets.length !== AUTO_BOT_ROTATION_MARKETS) return;
+
+        const symbols = nextMarkets.map(candidate => candidate.symbol);
+        selectedRotationSymbolsRef.current = symbols;
+        requestedRotationSymbolsRef.current = symbols;
+        setRotationStatus(previous => ({
+            symbols,
+            counts: Object.fromEntries(symbols.map(symbol => [symbol, 0])),
+            cycle: previous.cycle + 1,
+        }));
+        if (session.active) {
+            manualRescanPendingRef.current = true;
+            setScanPending(true);
+            wakeScannerTickWaiters();
+        }
+        onLog(`🔎 Rescan selected the next two markets by confidence: ${nextMarkets.map(candidate => candidate.label).join(' + ')}`);
+    }, [marketRiskStatus, onLog, rotationStatus.symbols, session.active, wakeScannerTickWaiters]);
     const updateCycleConfig = useCallback((patch: Partial<CycleBotConfig>) => {
         setCycleConfig(previous => {
             const next = { ...previous, ...patch };
@@ -894,12 +945,14 @@ function AiBotCard({
         const marketLossStreakBySymbol = new Map<string, number>();
         const lossCooldownUntilTick = new Map<string, number>();
         const stoppedMarkets = new Set<string>();
-        let rotationSymbols: string[] = [];
-        let rotationCycle = 0;
-        const rotationUsedSymbols = new Set<string>();
+        let rotationSymbols = selectedRotationSymbolsRef.current.slice(0, AUTO_BOT_ROTATION_MARKETS);
+        let rotationCycle = rotationStatus.cycle;
+        const rotationUsedSymbols = new Set<string>(rotationSymbols);
         let carryStakeToNextMarket = false;
+        manualRescanPendingRef.current = false;
+        requestedRotationSymbolsRef.current = null;
+        setScanPending(false);
         setMarketRiskStatus({});
-        setRotationStatus({ symbols: [], counts: {}, cycle: 0 });
         onLog(`🚀 ${bot.name} started | Stake: $${stk.toFixed(2)} | Martingale:${martingale.toFixed(2)}× TP:$${tp.toFixed(2)} SL:$${sl.toFixed(2)}`);
 
         const publishRotationStatus = () => {
@@ -909,7 +962,12 @@ function AiBotCard({
                 marketRunsBySymbol.get(symbol) ?? 0,
             ]));
             setRotationStatus({ symbols: [...rotationSymbols], counts, cycle: rotationCycle });
+            if (!manualRescanPendingRef.current) {
+                selectedRotationSymbolsRef.current = [...rotationSymbols];
+            }
         };
+        if (rotationSymbols.length) publishRotationStatus();
+        else setRotationStatus(previous => ({ ...previous, symbols: [], counts: {} }));
 
         const recordSettlement = (candidate: AutoBotMarketCandidate, profit: number) => {
             if (runVersionRef.current !== runVersion) return;
@@ -1008,15 +1066,29 @@ function AiBotCard({
                         && isValidatedAutoBotEntry(candidate, lossStreak);
                 });
 
+                if (manualRescanPendingRef.current) {
+                    manualRescanPendingRef.current = false;
+                    setScanPending(false);
+                    rotationSymbols = (requestedRotationSymbolsRef.current
+                        ?? selectedRotationSymbolsRef.current)
+                        .slice(0, AUTO_BOT_ROTATION_MARKETS);
+                    requestedRotationSymbolsRef.current = null;
+                    rotationCycle += 1;
+                    rotationSymbols.forEach(symbol => {
+                        rotationUsedSymbols.add(symbol);
+                        marketRunsBySymbol.set(symbol, 0);
+                    });
+                    publishRotationStatus();
+                    onLog(`🔎 Manual rescan active: ${rotationSymbols.map(symbol => scannerSnapshots[symbol]?.label ?? symbol).join(' + ')}`);
+                }
+
                 if (!rotationSymbols.length) {
-                    // Select the complete eligible cohort, then execute one
-                    // contract per fresh entry on each member. Once every
-                    // member reaches seven settled runs, select the next
-                    // cohort without immediately reusing the prior one.
+                    // Select the two highest-ranked live markets, even if they
+                    // are currently watch-only. Each market still needs its
+                    // own fresh validated strategy entry before it can buy.
                     let rankedMarkets = selectAutoBotMarketsForExecution(
                         marketCandidatesRef.current.filter(candidate =>
-                            !stoppedMarkets.has(candidate.symbol)
-                            && isValidatedAutoBotEntry(candidate, marketLossStreakBySymbol.get(candidate.symbol) ?? 0),
+                            !stoppedMarkets.has(candidate.symbol),
                         ),
                     ).filter(candidate => !rotationUsedSymbols.has(candidate.symbol));
                     if (
@@ -1026,14 +1098,14 @@ function AiBotCard({
                         rotationUsedSymbols.clear();
                         rankedMarkets = selectAutoBotMarketsForExecution(
                             marketCandidatesRef.current.filter(candidate =>
-                                !stoppedMarkets.has(candidate.symbol)
-                                && isValidatedAutoBotEntry(candidate, marketLossStreakBySymbol.get(candidate.symbol) ?? 0),
+                                !stoppedMarkets.has(candidate.symbol),
                             ),
                         );
                     }
-                    const nextCohort = AUTO_BOT_ROTATION_MARKETS > 0
-                        ? rankedMarkets.slice(0, AUTO_BOT_ROTATION_MARKETS)
-                        : rankedMarkets;
+                    const nextCohort = selectAutoBotMarketsForExecution(
+                        rankedMarkets,
+                        AUTO_BOT_ROTATION_MARKETS,
+                    );
                     if (!nextCohort.length) continue;
                     rotationSymbols = nextCohort.map(candidate => candidate.symbol);
                     rotationSymbols.forEach(symbol => {
@@ -1113,12 +1185,15 @@ function AiBotCard({
             onSessionUpdate({ active: false });
             onLog(`⏹ Stopped. Session P/L: ${fmtProfit(localProfit)}`);
         }
-    }, [bot, globalStake, globalMartingale, cycleConfig, riskConfig, isCycleBot, buyAndWait, onLog, onSessionUpdate]);
+    }, [bot, globalStake, globalMartingale, cycleConfig, riskConfig, isCycleBot, buyAndWait, onLog, onSessionUpdate, rotationStatus.cycle]);
 
     const toggle = useCallback(() => {
         if (session.active) {
             stopRef.current = true;
             runVersionRef.current += 1;
+            manualRescanPendingRef.current = false;
+            requestedRotationSymbolsRef.current = null;
+            setScanPending(false);
             wakeScannerTickWaiters();
             onSessionUpdate({ active: false });
             onLog('⏹ Stop requested. Waiting for any open contract to settle safely.');
@@ -1167,8 +1242,19 @@ function AiBotCard({
             )}
             <div className='autotrades__botcard-markets'>
                 <div className='autotrades__botcard-markets-title'>
-                    <span>Best markets · live tick entry · 1-tick execution</span>
-                    <span>{visibleMarketCandidates.length ? `${visibleMarketCandidates.length} visible slots` : 'Waiting'}</span>
+                    <span>Top 2 by confidence · parallel scan · 1-tick execution</span>
+                    <div className='autotrades__botcard-markets-actions'>
+                        <button
+                            type='button'
+                            className='autotrades__botcard-scan'
+                            disabled={!canScanNextMarkets || scanPending}
+                            onClick={scanNextMarkets}
+                            title='Select the next two highest-confidence markets outside the current pair'
+                        >
+                            {scanPending ? 'Switching…' : 'Scan next 2'}
+                        </button>
+                        <span>{visibleMarketCandidates.length ? `${visibleMarketCandidates.length} selected` : 'Waiting'}</span>
+                    </div>
                 </div>
                 {visibleMarketCandidates.length ? (
                     <div className='autotrades__botcard-market-tape'>
@@ -1966,9 +2052,11 @@ const AutoTrades: React.FC = () => {
                 const n = last.length;
 
                 // Rise/Fall
-                const riseCount = last.slice(1).filter((d, i) => d > last[i]).length;
-                const riseProb = n > 1 ? (riseCount / (n - 1)) * 100 : 50;
-                const fallProb = 100 - riseProb;
+                const direction = analyzePriceDirection(
+                    smartFeed.prices.slice(-Math.max(depth, 20)),
+                );
+                const riseProb = direction.risePercent;
+                const fallProb = direction.fallPercent;
 
                 // Even/Odd
                 const evenCount = last.filter(d => d % 2 === 0).length;
@@ -2031,7 +2119,7 @@ const AutoTrades: React.FC = () => {
                         <div className='st__data-status'>
                             <span className={`st__dot ${autoBotScannerConnected ? 'live' : ''}`} />
                             {autoBotScannerConnected
-                                ? `${Object.keys(autoBotSnapshots).length} priority markets scanning · up to 5 fresh entries`
+                                ? `${Object.keys(autoBotSnapshots).length} markets scanned · top-2 parallel cohorts`
                                 : 'Priority market scanner connecting…'}
                         </div>
                         <div className='st__data-status'>

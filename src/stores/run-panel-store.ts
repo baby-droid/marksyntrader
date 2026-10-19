@@ -12,6 +12,7 @@ import { handleBackendError, isBackendError } from '@/utils/error-handler';
 import GTM from '@/utils/gtm';
 import { helpers } from '@/utils/store-helpers';
 import { generateUrlWithRedirect } from '@/utils/url-redirect-utils';
+import { getTradeContext, setTradeContext } from '@/utils/trade-metadata';
 import { Buy, ProposalOpenContract } from '@deriv/api-types';
 import { TStores } from '@deriv/stores/types';
 import { localize } from '@deriv-com/translations';
@@ -165,6 +166,14 @@ export default class RunPanelStore {
     };
 
     onRunButtonClick = async () => {
+        // The shared execution context can still name the last automated page
+        // after the user navigates back to the visible Bot Builder. Refresh it
+        // for ordinary workspace runs, while preserving contexts set by
+        // programmatic Auto-Signals and Free Bots handoffs.
+        const tradePage = String(getTradeContext().page || '').trim().toLowerCase();
+        if (tradePage !== 'auto-signals' && tradePage !== 'free bots') {
+            setTradeContext({ page: 'Bot Builder', bot: '' });
+        }
         let timer_counter = 1;
         if (window.sendRequestsStatistic) {
             performance.clearMeasures();

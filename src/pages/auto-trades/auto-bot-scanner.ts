@@ -129,13 +129,18 @@ export function getFreshAutoBotMarkets(
 
 export function selectAutoBotMarketsForExecution(
     freshMarkets: AutoBotMarketCandidate[],
+    maxMarkets = Number.POSITIVE_INFINITY,
 ): AutoBotMarketCandidate[] {
     // Every market with a fresh qualifying entry is independently tradable.
     // Do not downgrade a ready market to "watch" just because another market
     // has a weaker score; the user's enabled market set owns execution.
-    return freshMarkets
+    const ranked = freshMarkets
         .slice()
         .sort(compareAutoBotMarkets);
+    const limit = Number.isFinite(maxMarkets)
+        ? Math.max(0, Math.floor(maxMarkets))
+        : ranked.length;
+    return ranked.slice(0, limit);
 }
 
 export function isValidatedAutoBotEntry(

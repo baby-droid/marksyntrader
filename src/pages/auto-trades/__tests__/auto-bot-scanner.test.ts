@@ -104,6 +104,24 @@ describe('Auto Bot market execution rules', () => {
         expect(strongBurst.map(item => item.symbol)).toEqual(['V10', 'V25', 'V50', 'V75', 'V100', 'JD10']);
     });
 
+    it('selects a confidence-ranked pair and can return the next pair', () => {
+        const markets = [
+            candidate('V10', 91, 1),
+            candidate('V25', 98, 1),
+            candidate('V50', 95, 1),
+            candidate('V75', 88, 1),
+        ];
+
+        const firstPair = selectAutoBotMarketsForExecution(markets, 2);
+        const nextPair = selectAutoBotMarketsForExecution(
+            markets.filter(item => !firstPair.some(first => first.symbol === item.symbol)),
+            2,
+        );
+
+        expect(firstPair.map(item => item.symbol)).toEqual(['V25', 'V50']);
+        expect(nextPair.map(item => item.symbol)).toEqual(['V10', 'V75']);
+    });
+
     it('allows only the requested Auto Bot market families', () => {
         expect(isSupportedAutoBotMarket('1HZ100V')).toBe(true);
         expect(isSupportedAutoBotMarket('JD50')).toBe(true);

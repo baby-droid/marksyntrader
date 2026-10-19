@@ -991,13 +991,41 @@
     &__botcard-markets-title {
         display: flex;
         justify-content: space-between;
+        align-items: center;
         gap: 8px;
+        flex-wrap: wrap;
         margin-bottom: 5px;
         color: rgba(255,255,255,0.45);
         font-size: 9px;
         font-weight: 800;
         letter-spacing: 0.04em;
         text-transform: uppercase;
+    }
+
+    &__botcard-markets-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    &__botcard-scan {
+        padding: 4px 8px;
+        border: 1px solid rgba(0, 255, 136, 0.28);
+        border-radius: 6px;
+        background: rgba(0, 255, 136, 0.08);
+        color: #9fffc6;
+        font: inherit;
+        font-weight: 800;
+        text-transform: uppercase;
+        cursor: pointer;
+        &:hover:not(:disabled) {
+            background: rgba(0, 255, 136, 0.16);
+            border-color: rgba(0, 255, 136, 0.55);
+        }
+        &:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
     }
 
     &__botcard-market-tape {
@@ -1397,8 +1425,10 @@
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 10px;
-        width: min(100%, 380px);
-        align-self: center;
+        width: min(760px, calc(100% - 9cm));
+        margin-left: 4cm;
+        margin-right: 5cm;
+        align-self: flex-start;
         padding: 10px 12px;
         flex: 0 0 auto;
     }
@@ -1922,6 +1952,9 @@
 
         &__cards {
             grid-template-columns: repeat(2, minmax(0, 1fr));
+            width: 100%;
+            margin: 0;
+            align-self: stretch;
             padding: 0.65rem;
             gap: 0.65rem;
         }

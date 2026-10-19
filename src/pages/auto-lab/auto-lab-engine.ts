@@ -1,3 +1,5 @@
+import { analyzePriceDirection } from '../../utils/price-direction';
+
 export type AutoLabMode =
     | 'Multimarket'
     | 'RC Even/Odd'
@@ -355,23 +357,15 @@ const evaluateRiseFall = (
     requiredStreak: number,
 ): AutoLabCandidate | null => {
     if (market.ticks.length < requiredStreak + 1) return null;
-    let direction = 0;
-    let streak = 0;
-    for (let index = market.ticks.length - 1; index > 0; index -= 1) {
-        const delta = market.ticks[index].quote - market.ticks[index - 1].quote;
-        const nextDirection = delta > 0 ? 1 : delta < 0 ? -1 : 0;
-        if (nextDirection === 0 || (direction !== 0 && nextDirection !== direction)) break;
-        direction = nextDirection;
-        streak += 1;
-    }
-    if (!direction || streak < requiredStreak) return null;
-    const contract = direction > 0 ? 'CALL' : 'PUT';
+    const direction = analyzePriceDirection(market.ticks.map(tick => tick.quote));
+    if (!direction.trailingDirection || direction.trailingStreak < requiredStreak) return null;
+    const contract = direction.trailingDirection === 'rise' ? 'CALL' : 'PUT';
     return candidate(
         market,
         'Rise/Fall',
         contract,
-        62 + (streak - requiredStreak) * 4,
-        `${streak} consecutive ${direction > 0 ? 'upward' : 'downward'} price moves.`,
+        62 + (direction.trailingStreak - requiredStreak) * 4,
+        `${direction.trailingStreak} consecutive ${direction.trailingDirection === 'rise' ? 'upward' : 'downward'} price moves.`,
     );
 };
 

@@ -26,16 +26,28 @@ const config = (overrides: Partial<SmartCardConfig> = {}): SmartCardConfig => ({
 
 describe('Smart Trading decisions', () => {
     it.each([
-        ['Rise', 'Buy Rise', [1, 2, 3], 'CALL'],
-        ['Fall', 'Buy Fall', [8, 7, 6], 'PUT'],
-    ])('maps %s to the correct Deriv contract', (condition, action, digits, contract) => {
+        ['Rise', 'Buy Rise', [1, 2, 3], [100, 101, 102], 'CALL'],
+        ['Fall', 'Buy Fall', [8, 7, 6], [102, 101, 100], 'PUT'],
+    ])('maps %s to the correct Deriv contract', (condition, action, digits, prices, contract) => {
         const decision = pickSmartTradeDecision(
             'risefall',
             digits,
             config({ ifValue: condition, thenAction: action }),
+            100,
+            prices,
         );
 
         expect(decision).toMatchObject({ contract, barrier: null, meetsCondition: true });
+    });
+
+    it('fails closed instead of inferring Rise/Fall from last digits when prices are missing', () => {
+        const decision = pickSmartTradeDecision(
+            'rise',
+            [9, 0, 1],
+            config({ lookback: 2 }),
+        );
+
+        expect(decision).toMatchObject({ contract: 'CALL', meetsCondition: false });
     });
 
     it.each([
