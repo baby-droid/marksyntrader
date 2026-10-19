@@ -2,14 +2,12 @@
 import localForage from 'localforage';
 import LZString from 'lz-string';
 import { action, makeObservable, observable } from 'mobx';
-import { DBOT_TABS, MAX_STRATEGIES } from '@/constants/bot-contents';
+import { MAX_STRATEGIES } from '@/constants/bot-contents';
 import { button_status } from '@/constants/button-status';
 import {
     getSavedWorkspaces,
     observer as globalObserver,
-    save,
     save_types,
-    saveWorkspaceToRecent,
 } from '@/external/bot-skeleton';
 import { localize } from '@deriv-com/translations';
 import { TStrategy } from 'Types';
@@ -31,8 +29,6 @@ interface ISaveModalStore {
     updateBotName: (bot_name: string) => void;
     setButtonStatus: (status: { [key: string]: string } | string | number) => void;
 }
-
-const Blockly = window.Blockly;
 
 export default class SaveModalStore implements ISaveModalStore {
     root_store: RootStore;
@@ -57,11 +53,9 @@ export default class SaveModalStore implements ISaveModalStore {
     bot_name = '';
 
     toggleSaveModal = (): void => {
-        if (!this.is_save_modal_open) {
-            this.setButtonStatus(button_status.NORMAL);
-        }
-
-        this.is_save_modal_open = !this.is_save_modal_open;
+        // Saving bots is disabled for this site. Keep this guard in the store
+        // as well as the UI so alternate entry points cannot open the modal.
+        this.is_save_modal_open = false;
     };
 
     validateBotName = (values: string): { [key: string]: string } => {
@@ -131,47 +125,8 @@ export default class SaveModalStore implements ISaveModalStore {
         }
     };
 
-    onConfirmSave = async ({ is_local, save_as_collection, bot_name }: IOnConfirmProps) => {
-        const { load_modal, dashboard, google_drive } = this.root_store;
-        const { loadStrategyToBuilder, selected_strategy } = load_modal;
-        const { active_tab } = dashboard;
-        this.setButtonStatus(button_status.LOADING);
-        const { saveFile } = google_drive;
-        let xml;
-        let main_strategy = null;
-        if (active_tab === DBOT_TABS.BOT_BUILDER) {
-            xml = window.Blockly?.Xml?.workspaceToDom(window.Blockly?.derivWorkspace);
-        } else {
-            const recent_files = await getSavedWorkspaces();
-            main_strategy = recent_files.filter((strategy: TStrategy) => strategy.id === selected_strategy.id)?.[0];
-            main_strategy.name = bot_name;
-            main_strategy.save_type = is_local ? save_types.LOCAL : save_types.GOOGLE_DRIVE;
-            xml = window.Blockly.utils.xml.textToDom(main_strategy.xml);
-        }
-        xml.setAttribute('is_dbot', 'true');
-        xml.setAttribute('collection', save_as_collection ? 'true' : 'false');
-
-        if (is_local) {
-            save(bot_name, save_as_collection, xml);
-        } else {
-            await saveFile({
-                name: bot_name,
-                content: window.Blockly?.Xml?.domToPrettyText(xml),
-                mimeType: 'application/xml',
-            });
-            this.setButtonStatus(button_status.COMPLETED);
-        }
-
-        this.updateBotName(bot_name);
-
-        if (active_tab === 0) {
-            const workspace_id = selected_strategy.id ?? Blockly?.utils?.genUid();
-            await this.addStrategyToWorkspace(workspace_id, is_local, save_as_collection, bot_name, xml);
-            if (main_strategy) await loadStrategyToBuilder(main_strategy);
-        } else {
-            await saveWorkspaceToRecent(xml, is_local ? save_types.LOCAL : save_types.GOOGLE_DRIVE);
-        }
-        this.toggleSaveModal();
+    onConfirmSave = async (_props: IOnConfirmProps): Promise<void> => {
+        // Defense in depth: no user-triggered save path may persist a bot.
     };
 
     updateBotName = (bot_name: string): void => {

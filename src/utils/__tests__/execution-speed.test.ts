@@ -66,6 +66,8 @@ describe('execution speed controls', () => {
             speed.setExecutionSpeed(tier);
             expect(speed.getPurchasesPerTick()).toBe(1);
             expect(speed.getMaxInflight()).toBe(3);
+            expect(speed.getExecutionSpeedDelay()).toBe(0);
+            expect(speed.useDirectBuyForSpeed()).toBe(true);
         }
         speed.setFastExecutionEnabled(false);
         setTradeContext({ page: 'Bot Builder', bot: '' });
@@ -169,7 +171,7 @@ describe('execution speed controls', () => {
         speed.setExecutionSpeed('normal');
     });
 
-    it('enables zero-delay Fast for 2 Prediction Cycle but not other Free Bots', async () => {
+    it('enables zero-delay Fast for XML bots launched from Free Bots', async () => {
         const speed = await import('../execution-speed');
         const { setTradeContext } = await import('../trade-metadata');
 
@@ -188,8 +190,21 @@ describe('execution speed controls', () => {
         expect(speed.useDirectBuyForSpeed()).toBe(true);
 
         setTradeContext({ page: 'Free Bots', bot: 'ACC FLIPPER' });
-        expect(speed.isFastExecutionEnabledForContext()).toBe(false);
+        expect(speed.isFastExecutionEnabledForContext()).toBe(true);
+        expect(speed.isFastBotBuilderExecutionEnabled()).toBe(true);
         expect(speed.getExecutionSpeedDelay()).toBe(0);
+        expect(speed.getPurchasesPerTick()).toBe(1);
+        expect(
+            speed.normalizeFastBotBuilderTradeOptions('DIGITOVER', {
+                symbol: 'R_10',
+                duration: 5,
+                duration_unit: 't',
+            }),
+        ).toEqual({
+            symbol: 'R_10',
+            duration: 1,
+            duration_unit: 't',
+        });
 
         speed.setFastExecutionEnabled(false);
         setTradeContext({ page: 'Bot Builder', bot: '' });

@@ -13,7 +13,6 @@ import { useDevice } from '@deriv-com/ui';
 import { TBlocklyEvents } from 'Types';
 import AIScanner from '@/components/floating/AIScanner';
 import LoadModal from '../../components/load-modal';
-import SaveModal from '../dashboard/bot-list/save-modal';
 import BotBuilderTourHandler from '../tutorials/dbot-tours/bot-builder-tour';
 import QuickStrategy1 from './quick-strategy';
 import WorkspaceWrapper from './workspace-wrapper';
@@ -565,7 +564,6 @@ const BotBuilder = observer(() => {
             {active_tab === DBOT_TABS.BOT_BUILDER && <BotBuilderTourHandler is_mobile={!isDesktop} />}
             {/* removed this outside from toolbar becuase it needs to loaded seperately without dependency */}
             <LoadModal />
-            <SaveModal />
             {is_open && <QuickStrategy1 />}
         </>
     );

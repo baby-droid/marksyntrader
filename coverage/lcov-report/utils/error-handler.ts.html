@@ -23,16 +23,16 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">57.85% </span>
+                <span class="strong">58.74% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>81/140</span>
+                <span class='fraction'>84/143</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">75% </span>
+                <span class="strong">72.72% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>6/8</span>
+                <span class='fraction'>8/11</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">57.85% </span>
+                <span class="strong">58.74% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>81/140</span>
+                <span class='fraction'>84/143</span>
             </div>
         
             
@@ -203,7 +203,10 @@
 <a name='L138'></a><a href='#L138'>138</a>
 <a name='L139'></a><a href='#L139'>139</a>
 <a name='L140'></a><a href='#L140'>140</a>
-<a name='L141'></a><a href='#L141'>141</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
+<a name='L141'></a><a href='#L141'>141</a>
+<a name='L142'></a><a href='#L142'>142</a>
+<a name='L143'></a><a href='#L143'>143</a>
+<a name='L144'></a><a href='#L144'>144</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -226,15 +229,18 @@
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">5x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">4x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">3x</span>
-<span class="cline-any cline-yes">3x</span>
-<span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-yes">4x</span>
+<span class="cline-any cline-yes">4x</span>
+<span class="cline-any cline-yes">5x</span>
+<span class="cline-any cline-yes">5x</span>
+<span class="cline-any cline-yes">5x</span>
+<span class="cline-any cline-yes">5x</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -246,10 +252,10 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-yes">3x</span>
-<span class="cline-any cline-yes">3x</span>
-<span class="cline-any cline-yes">3x</span>
-<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">4x</span>
+<span class="cline-any cline-yes">4x</span>
+<span class="cline-any cline-yes">4x</span>
+<span class="cline-any cline-yes">4x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -369,16 +375,19 @@ export interface ApiErrorResponse {
  */
 export const handleBackendError = (error: BackendError): string =&gt; {
     if (!error?.code) {
-        return getLocalizedErrorMessage('GeneralError');
+        return error?.message<span class="branch-0 cbranch-no" title="branch not covered" > || getLocalizedErrorMessage('GeneralError');</span>
     }
 &nbsp;
     // Handle code_args format specifically for parameter replacement
-    let details = error.details;
-    if (error.details?.code_args<span class="branch-0 cbranch-no" title="branch not covered" > &amp;&amp; Array.isArray(error.details.code_args))</span> <span class="branch-0 cbranch-no" title="branch not covered" >{</span>
+    let details = {
+        ...(error.details || {}),
+        ...(error.message ? { message: error.message } : {}),
+    };
+    if (details.code_args<span class="branch-0 cbranch-no" title="branch not covered" > &amp;&amp; Array.isArray(details.code_args))</span> <span class="branch-0 cbranch-no" title="branch not covered" >{</span>
 <span class="cstat-no" title="statement not covered" >        // Convert code_args array to parameter object for easier processing</span>
-<span class="cstat-no" title="statement not covered" >        const code_args = error.details.code_args;</span>
+<span class="cstat-no" title="statement not covered" >        const code_args = details.code_args;</span>
 <span class="cstat-no" title="statement not covered" >        details = {</span>
-<span class="cstat-no" title="statement not covered" >            ...error.details,</span>
+<span class="cstat-no" title="statement not covered" >            ...details,</span>
 <span class="cstat-no" title="statement not covered" >            param1: code_args[0],</span>
 <span class="cstat-no" title="statement not covered" >            param2: code_args[1],</span>
 <span class="cstat-no" title="statement not covered" >            param3: code_args[2],</span>
@@ -490,7 +499,7 @@ export const isApiErrorResponse = <span class="fstat-no" title="function not cov
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-10-10T21:32:10.529Z
+                at 2026-10-19T13:45:05.731Z
             </div>
         <script src="../prettify.js"></script>
         <script>

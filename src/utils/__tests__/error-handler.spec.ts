@@ -9,6 +9,9 @@ jest.mock('../../constants/backend-error-messages', () => ({
         if (errorCode === 'RateLimit' && details) {
             return `You are rate limited for: ${details.message_type}, retrying in ${details.delay}s`;
         }
+        if (details?.message) {
+            return details.message;
+        }
         return 'An error occurred. Please try again.';
     }),
 }));
@@ -61,7 +64,15 @@ describe('Error Handler', () => {
             expect(result).toBe('You are rate limited for: buy, retrying in 5s');
         });
 
-        it('should return fallback message for unknown error codes', () => {
+        it('preserves the backend message for unknown error codes', () => {
+            const unknownError = {
+                code: 'UnknownErrorCode123',
+                message: 'The requested contract parameters were rejected.',
+            };
+            expect(handleBackendError(unknownError)).toBe('The requested contract parameters were rejected.');
+        });
+
+        it('returns the generic fallback when an unknown backend error has no message', () => {
             const unknownError = {
                 code: 'UnknownErrorCode123',
             };
@@ -69,12 +80,12 @@ describe('Error Handler', () => {
             expect(result).toBe('An error occurred. Please try again.');
         });
 
-        it('should handle errors without code property', () => {
+        it('preserves a useful message when an error has no code property', () => {
             const invalidError = {
                 message: 'Generic error message',
             } as any;
             const result = handleBackendError(invalidError);
-            expect(result).toBe('An error occurred. Please try again.');
+        expect(result).toBe('Generic error message');
         });
     });
 });

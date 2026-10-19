@@ -123,6 +123,7 @@ export const isFastExecutionEnabledForContext = (): boolean => {
     const context = getTradeContext();
     const page = String(context.page || '').trim().toLowerCase();
     return page === 'bot builder'
+        || page === 'free bots'
         || page === 'auto-signals'
         || page === 'auto trades'
         || page === 'speed lab'
@@ -131,10 +132,12 @@ export const isFastExecutionEnabledForContext = (): boolean => {
         || isTwoPredictionCycleContext();
 };
 
-/** Fast Bot Builder execution is deliberately narrower than the app-wide toggle. */
+/** Fast tick-wise XML execution for bots loaded in Builder or Free Bots. */
 export const isFastBotBuilderExecutionEnabled = (): boolean =>
     fastExecutionEnabled
-    && String(getTradeContext().page || '').trim().toLowerCase() === 'bot builder';
+    && ['bot builder', 'free bots'].includes(
+        String(getTradeContext().page || '').trim().toLowerCase()
+    );
 
 export const isAutoSignalsContext = (): boolean =>
     String(getTradeContext().page || '').trim().toLowerCase() === 'auto-signals';

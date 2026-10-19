@@ -13,7 +13,7 @@ import {
     LabelPairedPageCircleArrowRightSmRegularIcon,
     LabelPairedTrashSmRegularIcon,
 } from '@deriv/quill-icons/LabelPaired';
-import { LegacyMenuDots1pxIcon, LegacySave1pxIcon } from '@deriv/quill-icons/Legacy';
+import { LegacyMenuDots1pxIcon } from '@deriv/quill-icons/Legacy';
 import { Localize } from '@deriv-com/translations';
 import { useDevice } from '@deriv-com/ui';
 /* [AI] - Analytics event tracking removed - see migrate-docs/MONITORING_PACKAGES.md for re-implementation guide */
@@ -26,19 +26,6 @@ export const CONTEXT_MENU = [
         type: STRATEGY.OPEN,
         icon: <LabelPairedPageCircleArrowRightSmRegularIcon fill='var(--text-general)' />,
         label: <Localize i18n_default_text='Open' />,
-    },
-    {
-        type: STRATEGY.SAVE,
-        icon: (
-            <LegacySave1pxIcon
-                fill='var(--text-general)'
-                className='icon-general-fill-path'
-                iconSize='xs'
-                path=''
-                opacity={0.8}
-            />
-        ),
-        label: <Localize i18n_default_text='Save' />,
     },
     {
         type: STRATEGY.DELETE,
@@ -54,9 +41,8 @@ type TRecentWorkspace = {
 };
 
 const RecentWorkspace = observer(({ workspace, index }: TRecentWorkspace) => {
-    const { dashboard, load_modal, save_modal } = useStore();
+    const { dashboard, load_modal } = useStore();
     const { setActiveTab } = dashboard;
-    const { toggleSaveModal, updateBotName } = save_modal;
     const {
         dashboard_strategies = [],
         getSaveType,
@@ -104,13 +90,6 @@ const RecentWorkspace = observer(({ workspace, index }: TRecentWorkspace) => {
         /* [/AI] */
     };
 
-    const handleSave = () => {
-        updateBotName(workspace?.name);
-        toggleSaveModal();
-        /* [AI] - Analytics event tracking removed - see migrate-docs/MONITORING_PACKAGES.md for re-implementation guide */
-        /* [/AI] */
-    };
-
     const viewRecentStrategy = async (type: string) => {
         setSelectedStrategyId(workspace.id);
 
@@ -119,10 +98,6 @@ const RecentWorkspace = observer(({ workspace, index }: TRecentWorkspace) => {
             case STRATEGY.INIT:
                 // Both explicit Open and row-click (INIT) load the bot and go to Bot Builder
                 await handleOpen();
-                break;
-
-            case STRATEGY.SAVE:
-                handleSave();
                 break;
 
             case STRATEGY.DELETE:

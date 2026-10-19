@@ -24,16 +24,19 @@ export interface ApiErrorResponse {
  */
 export const handleBackendError = (error: BackendError): string => {
     if (!error?.code) {
-        return getLocalizedErrorMessage('GeneralError');
+        return error?.message || getLocalizedErrorMessage('GeneralError');
     }
 
     // Handle code_args format specifically for parameter replacement
-    let details = error.details;
-    if (error.details?.code_args && Array.isArray(error.details.code_args)) {
+    let details: Record<string, any> = {
+        ...(error.details || {}),
+        ...(error.message ? { message: error.message } : {}),
+    };
+    if (details.code_args && Array.isArray(details.code_args)) {
         // Convert code_args array to parameter object for easier processing
-        const code_args = error.details.code_args;
+        const code_args = details.code_args;
         details = {
-            ...error.details,
+            ...details,
             param1: code_args[0],
             param2: code_args[1],
             param3: code_args[2],

@@ -1,4 +1,4 @@
-import { getExecutionSpeed, getExecutionSpeedDelay, isInstantExecutionForContext, isASpeedBoostEnabled, getPurchasesPerTick, isAutoSignalsContext, shouldSkipDuplicateAutoSignalTick, isFastBotBuilderExecutionEnabled, shouldSkipDuplicatePurchaseTick, normalizeFastBotBuilderTradeOptions } from '../../../../../utils/execution-speed';
+import { getExecutionSpeed, getExecutionSpeedDelay, isInstantExecutionForContext, isASpeedBoostEnabled, isFastExecutionEnabledForContext, getPurchasesPerTick, isAutoSignalsContext, shouldSkipDuplicateAutoSignalTick, isFastBotBuilderExecutionEnabled, shouldSkipDuplicatePurchaseTick, normalizeFastBotBuilderTradeOptions } from '../../../../../utils/execution-speed';
 import { recordTradeMeta } from '../../../../../utils/trade-metadata';
 import { isBotPaused } from '../../../../../utils/bot-pause-flag';
 import { LogTypes } from '../../../constants/messages';
@@ -152,6 +152,9 @@ function fireSidePurchase(
 ) {
     // Do NOT fire side purchases while the bot is paused.
     if (isBotPaused()) return trackSettlement ? Promise.resolve() : undefined;
+    const effectiveTradeOptions = isFastBotBuilderExecutionEnabled()
+        ? normalizeFastBotBuilderTradeOptions(contract_type, tradeOptionsOverride || {})
+        : tradeOptionsOverride;
     let resolveSettlement;
     const settlementPromise = trackSettlement
         ? new Promise(resolve => {
@@ -165,11 +168,11 @@ function fireSidePurchase(
         }
     };
     try {
-        const trade_option = tradeOptionToBuy(contract_type, tradeOptionsOverride);
+        const trade_option = tradeOptionToBuy(contract_type, effectiveTradeOptions);
         // Publish before the direct buy so followers enter on the same tick.
         // The confirmation below registers the contract ID for deduplication.
         const tradeKey = createTradeKey('bot-side');
-        publishBotCopySignal(tradeOptionsOverride, contract_type, undefined, tradeKey);
+        publishBotCopySignal(effectiveTradeOptions, contract_type, undefined, tradeKey);
         (bypassRateLimit ? Promise.resolve() : _acquireBuySlot())
             .then(() => api_base.api.send(trade_option))
             .then(response => {
@@ -483,12 +486,11 @@ export default Engine =>
 
             const isSameTickPair = unique_specs.length === 2
                 && unique_specs.every(spec => spec.same_tick_pair === true);
-            // Multiple Purchase is also used by strategy blocks that provide
-            // several same-tick contracts. A-SPEED BOOST explicitly means
-            // one contract for one tick, so keep only the first selected
-            // contract and do not create untracked side orders. An explicit
-            // paired-entry block is one strategy action, not a bulk fan-out.
-            const effective_specs = isASpeedBoostEnabled() && !isSameTickPair
+            // Fast and A-SPEED explicitly mean one contract per live tick.
+            // Preserve the purpose-built paired-entry block, but do not let
+            // ordinary Multiple Purchase blocks fan out same-tick side orders.
+            const effective_specs =
+                (isASpeedBoostEnabled() || isFastExecutionEnabledForContext()) && !isSameTickPair
                 ? unique_specs.slice(0, 1)
                 : unique_specs;
 

@@ -688,6 +688,8 @@ export default class RunPanelStore {
                 param1: error.code_args[0],
                 param2: error.code_args[1],
                 param3: error.code_args[2],
+                code_args: error.code_args,
+                ...(error.message ? { message: error.message } : {}),
             };
 
             const localizedMessage = getLocalizedErrorMessage(error.subcode, details);

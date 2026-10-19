@@ -625,6 +625,7 @@ export const useAutoSignalsEngine = ({
 
         isPreparingRunRef.current = true;
         const bot = getAutoSignalBot(action, candidate);
+        let builderHandoffStarted = false;
         try {
             setMessage(`Preparing ${bot.name} for ${market.label}…`);
             const template = await loadAutoSignalTemplate(bot.file);
@@ -654,6 +655,7 @@ export const useAutoSignalsEngine = ({
                 (window as any).__pendingBotXml = configuredXml;
                 (window as any).__pendingBotName = bot.name;
             }
+            builderHandoffStarted = true;
             setActiveTab(DBOT_TABS.BOT_BUILDER);
             runPanel.toggleDrawer?.(true);
             // The pending values cover a workspace that is still mounting.
@@ -696,9 +698,9 @@ export const useAutoSignalsEngine = ({
                 `${bot.name} is starting on ${market.symbol} for ${selectedRuns} validated signal cycles, with one purchase per eligible tick.`,
             );
 
-            // Automatically start after the selected XML is ready. The single
-            // app-level Builder keeps running when this page returns to the
-            // signal board.
+            // Automatically start after the selected XML is ready. Keep the
+            // app-level Builder active so the loaded workspace and run panel
+            // remain available while this session runs.
             await startAutoSignalsBot(runPanel, (error: any) => {
                     const startError = error?.message || 'Bot Builder could not start this bot.';
                     clearAutoSignalsRun(startError);
@@ -713,8 +715,6 @@ export const useAutoSignalsEngine = ({
             } else {
                 setAutoSignalsRunMessage(currentSession.message || `${bot.name} started on ${market.symbol}.`);
             }
-            setActiveTab(DBOT_TABS.AUTO_SIGNALS);
-            runPanel.toggleDrawer?.(false);
         } catch (error: any) {
             const errorMessage = error?.message || 'The Bot Builder handoff failed.';
             if ((window as any).__pendingBotName === bot.name) {
@@ -724,8 +724,13 @@ export const useAutoSignalsEngine = ({
             clearAutoSignalsRun(errorMessage);
             setAutoSignalsRunMessage(errorMessage);
             setMessage(errorMessage);
-            setActiveTab(DBOT_TABS.AUTO_SIGNALS);
-            runPanel.toggleDrawer?.(false);
+            // Once XML has been handed to Builder, keep that workspace visible
+            // on both success and failure so the user can inspect the bot and
+            // its Summary/Transactions/Journal panel.
+            if (builderHandoffStarted) {
+                setActiveTab(DBOT_TABS.BOT_BUILDER);
+                runPanel.toggleDrawer?.(true);
+            }
         } finally {
             isPreparingRunRef.current = false;
         }

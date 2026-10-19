@@ -20,10 +20,9 @@ import { useDevice } from '@deriv-com/ui';
 import ToolbarIcon from './toolbar-icon';
 
 const WorkspaceGroup = observer(() => {
-    const { dashboard, toolbar, load_modal, save_modal } = useStore();
+    const { dashboard, toolbar, load_modal } = useStore();
     const { setPreviewOnPopup, setChartModalVisibility, setTradingViewModalVisibility } = dashboard;
     const { has_redo_stack, has_undo_stack, onResetClick, onSortClick, onUndoClick, onZoomInOutClick } = toolbar;
-    const { toggleSaveModal } = save_modal;
     const { toggleLoadModal } = load_modal;
     const { isDesktop } = useDevice();
 
@@ -62,13 +61,15 @@ const WorkspaceGroup = observer(() => {
                     }
                 />
                 <ToolbarIcon
-                    popover_message={localize('Save')}
+                    popover_message={localize('Saving bots is disabled')}
                     icon={
                         <span
-                            className='toolbar__icon'
+                            className='toolbar__icon toolbar__icon--disabled'
                             id='db-toolbar__save-button'
                             data-testid='dt_toolbar_save_button'
-                            onClick={toggleSaveModal}
+                            role='img'
+                            aria-label={localize('Saving bots is disabled')}
+                            aria-disabled='true'
                         >
                             <LabelPairedFloppyDiskMdRegularIcon />
                         </span>
