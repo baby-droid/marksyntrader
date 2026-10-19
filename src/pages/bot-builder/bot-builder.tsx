@@ -3,6 +3,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import classNames from 'classnames';
 import { observer } from 'mobx-react-lite';
 import { load, registerXmlBlockFallbacks, save_types } from '@/external/bot-skeleton';
+import { installBotBuilderTradeTypeCompatibility } from './bot-builder-trade-compat';
 import { botNotification } from '@/components/bot-notification/bot-notification';
 import { notification_message } from '@/components/bot-notification/bot-notification-utils';
 import { useStore } from '@/hooks/useStore';
@@ -123,11 +124,15 @@ const FreeBotsSidePanel: React.FC<TFreeBotsPanelProps> = ({ onClose, onLoadDone 
             });
         }
 
+        const Blockly = (window as any).Blockly;
+        if (!installBotBuilderTradeTypeCompatibility(Blockly)) {
+            throw new Error('Bot Builder trade-type compatibility could not be initialized.');
+        }
+
         // ── Unsupported-block guard ──────────────────────────────────────────
         // Use the same connection-aware fallback as the core loader. A Blockly
         // block cannot expose output and statement connections simultaneously.
         try {
-            const Blockly = (window as any).Blockly;
             if (Blockly?.Blocks && block_string) {
                 const parser = new DOMParser();
                 const xmlDoc = parser.parseFromString(block_string, 'text/xml');
