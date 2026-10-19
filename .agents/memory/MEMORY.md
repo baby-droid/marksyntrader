@@ -4,7 +4,7 @@
 - [BotBuilder architecture](marksyntrader-botbuilder.md) — Single BotBuilder instance only in app-content.jsx (line 203); bot-builder tab content must be transparent (no background); BotBuilder uses position:fixed top:9rem z-index:10 when active_tab===1.
 - [Currency display pattern](marksyntrader-currency.md) — All P/L/profit/stake values must use fromUsd()+displayCur from src/utils/currency-display.ts; subscribeCurrency() for live KSH/USD switch; never hardcode currency string.
 - [Money Print stake guard](money-print-stake-guard.md) — Keep auto stake opt-in and never round a risk-capped stake up to the broker minimum.
-- [Speed Lab / execution speed modes](marksyntrader-speedlab.md) — Profiles remove app-added waits after successful trades; preserve settlement, tick, and API-error constraints.
+- [Speed Lab / execution speed modes](marksyntrader-speedlab.md) — Accelerated modes preserve settlement/tick rules and leave headroom under Deriv's shared trade API budget.
 - [Run panel float-above-everything](marksyntrader-runpanel-float.md) — main.tsx renders both FloatingRunButton (correct) and an older inline RunStrategy panel; the inline one needs position:fixed + high z-index or it silently reverts to scrolling/low-z-index and collides with headers.
 - [Copy-trading app id](marksyntrader-copytrading.md) — follower WS connections must authorize under the same NEXT_PUBLIC_DERIV_APP_ID as the main connection, not a generic/demo app id, or linking and reciprocation become unreliable.
 - [Copy-trading source detection bug](copy-trading-source-bug.md) — account_info never had is_virtual; use getMasterSource() from trade-bus.ts (reads localStorage account_type) everywhere; never use api_base.account_info.is_virtual for source detection.
@@ -73,7 +73,7 @@
 - [Development preview routing](preview-routing.md) — local `/bot/preview` can omit the build flag, so preview mode must also detect the pathname.
 - [Deriv OAuth endpoint](deriv-oauth.md) — production authorization uses `/oauth2/auth`; the Deriv app must be live before an interactive callback test can succeed.
 - [Dependency repair](dependency-repair.md) — restore an empty node_modules tree without unintentionally upgrading the checked-in manifest.
-- [Tick-history retry scope](ticks-history-retry.md) — target history-feed backoff narrowly because the shared retry wrapper also handles purchases.
+- [Tick-history retry scope](ticks-history-retry.md) — bound history retries, propagate Blockly API failures, and clear rejected caches without changing purchase retry behavior.
 - [Blockly fallback execution](unsupported-block-execution.md) — unknown imported blocks need both a visible definition and a JavaScript generator fallback to remain runnable.
 - [Vite merge guardrails](vite-merge-guardrails.md) — resolve the active toolchain before regenerating the lockfile; Vite 8 may need CSS minification disabled for malformed vendor CSS.
 - [King Fisher continuation](king-fisher-continuation.md) — King Fisher after-purchase generation must force trade_again after settlement; TP/SL branches otherwise can end the interpreter after one run.

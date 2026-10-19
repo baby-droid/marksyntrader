@@ -19,8 +19,14 @@ Normal Killer Bot V3 must not use Virtual Hook settings; its dedicated tick-wise
 
 **How to apply:** Keep the XML hook-free, use `normal_killer_` block types, preserve the three-open-contract ceiling and per-tick deduplication, and pass the workspace multiplier into the pipeline. Fast and A-SPEED remove app-added pacing only; neither can guarantee a network/API purchase time of 0.0001 seconds.
 
-Purchase retry limits need an attempt counter separate from the backoff index: high-speed modes can intentionally hold the backoff index flat. Keep bounded retry policy scoped to purchases, and stop the run panel when an async Blockly block rejects because its interpreter callback cannot resume. If a contract was accepted, preserve its feed until settlement before stopping.
+Respect Deriv's current shared request budget for `proposal`, `proposal_open_contract`, `buy`, and `sell`; do not let accelerated modes bypass all local buy pacing. Use bounded exponential backoff on rate-limit errors and cap high-speed purchase retries.
 
-**Why:** Reusing the fixed backoff index can leave purchase retries unbounded, while an unhandled async block error can strand the panel at PURCHASE_SENT.
+**Why:** the documented trade-request budget is shared across prices, contract updates, buys, and sells; 5–100 ms retries or unpaced bursts can keep orders over budget and make otherwise valid buys fail.
+
+**How to apply:** Recheck Deriv's current published limits before changing concurrency. Keep a buy-rate ceiling with headroom for proposal/contract calls, count retries independently of delay, and surface terminal async errors; preserve any accepted contract's settlement feed before stopping.
+
+Purchase retry limits need an attempt counter separate from the backoff index. When an async Blockly block rejects, stop the run panel instead of leaving it at PURCHASE_SENT; if a contract was accepted, preserve its feed until settlement before stopping.
+
+**Why:** a fixed backoff index can leave retries unbounded, while an unhandled async-block error can strand the panel at PURCHASE_SENT.
 
 **How to apply:** Count every retry independently of its delay. On terminal async errors, show the error and halt the strategy; defer halting until an already-open contract settles.

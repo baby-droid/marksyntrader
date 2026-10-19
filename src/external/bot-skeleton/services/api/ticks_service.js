@@ -91,10 +91,12 @@ export default class TicksService {
 
             if (style === 'ticks' && this.ticks.has(symbol)) {
                 resolve(this.ticks.get(symbol));
+                return;
             }
 
             if (style === 'candles' && this.candles.hasIn([symbol, Number(granularity)])) {
                 resolve(this.candles.getIn([symbol, Number(granularity)]));
+                return;
             }
             this.requestStream({ ...options, style })
                 .then(res => {
@@ -271,10 +273,19 @@ export default class TicksService {
         if (style === 'ticks') {
             // Check if we already have a promise for these exact options
             if (!this.ticks_history_promise || this.ticks_history_promise.stringified_options !== stringified_options) {
-                this.ticks_history_promise = {
-                    promise: this.requestPipSizes().then(() => this.requestTicks(options)),
+                const request = {
+                    promise: null,
                     stringified_options,
                 };
+                request.promise = this.requestPipSizes()
+                    .then(() => this.requestTicks(options))
+                    .catch(error => {
+                        if (this.ticks_history_promise === request) {
+                            this.ticks_history_promise = null;
+                        }
+                        throw error;
+                    });
+                this.ticks_history_promise = request;
             }
 
             return this.ticks_history_promise.promise;
@@ -283,10 +294,19 @@ export default class TicksService {
         if (style === 'candles') {
             // Check if we already have a promise for these exact options
             if (!this.candles_promise || this.candles_promise.stringified_options !== stringified_options) {
-                this.candles_promise = {
-                    promise: this.requestPipSizes().then(() => this.requestTicks(options)),
+                const request = {
+                    promise: null,
                     stringified_options,
                 };
+                request.promise = this.requestPipSizes()
+                    .then(() => this.requestTicks(options))
+                    .catch(error => {
+                        if (this.candles_promise === request) {
+                            this.candles_promise = null;
+                        }
+                        throw error;
+                    });
+                this.candles_promise = request;
             }
 
             return this.candles_promise.promise;
@@ -335,7 +355,15 @@ export default class TicksService {
                 }
             }
 
-            doUntilDone(() => api_base.api.send(request_object), ['AlreadySubscribed'], api_base)
+            doUntilDone(
+                () => api_base.api.send(request_object),
+                ['AlreadySubscribed'],
+                api_base,
+                {
+                    maxRetries: 5,
+                    stopOnCodes: ['AlreadySubscribed', 'MarketIsClosed'],
+                },
+            )
                 .then(r => {
                     const subscriptionId = r?.subscription?.id;
                     if (subscriptionId && style === 'candles') {
