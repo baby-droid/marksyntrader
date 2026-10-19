@@ -63,7 +63,7 @@ export default Engine =>
         renewProposalsOnPurchase() {
             this.data.proposals = [];
             this.store.dispatch(clearProposals());
-            return this.requestProposals();
+            this.requestProposals();
         }
 
         requestProposals() {

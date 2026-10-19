@@ -17,12 +17,12 @@ describe('execution speed controls', () => {
         expect(speed.useDirectBuyForSpeed()).toBe(true);
     });
 
-    it('keeps every speed tier to one purchase per eligible tick', async () => {
+    it('caps Crazy fan-out at two contracts per tick to preserve API headroom', async () => {
         const speed = await import('../execution-speed');
 
         speed.setFastExecutionEnabled(false);
         speed.setExecutionSpeed('crazy');
-        expect(speed.getPurchasesPerTick()).toBe(1);
+        expect(speed.getPurchasesPerTick()).toBe(2);
 
         speed.setExecutionSpeed('turbo');
         expect(speed.getPurchasesPerTick()).toBe(1);
