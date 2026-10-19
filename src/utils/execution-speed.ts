@@ -164,6 +164,17 @@ export const shouldSkipDuplicateAutoSignalTick = (
     epoch: number,
 ): boolean => shouldSkipDuplicatePurchaseTick(purchaseEpochs, symbol, epoch);
 
+export const limitPurchaseSpecsToOnePerTick = <T extends object>(
+    specs: T[],
+    singlePurchaseMode: boolean,
+): T[] => {
+    if (!singlePurchaseMode) return specs;
+    const isExplicitPair = specs.length === 2 && specs.every(
+        spec => (spec as { same_tick_pair?: boolean }).same_tick_pair === true,
+    );
+    return isExplicitPair ? specs : specs.slice(0, 1);
+};
+
 /**
  * Fast uses one-tick contracts only for contract types known to accept tick
  * durations. Other XML products keep their configured terms rather than

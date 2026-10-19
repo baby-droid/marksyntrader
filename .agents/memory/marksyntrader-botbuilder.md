@@ -33,3 +33,10 @@ There must be exactly ONE `<BotBuilder />` instance — rendered in `src/app/app
 
 ## Reload prevention
 `BotStopped` dialog: "Back to Bot" and close-X now call `setWebSocketState(true)` instead of `reloadPage()`. The connection is auto-restored in `main.tsx` — when `connectionStatus === OPENED`, `setWebSocketState(true)` is called automatically.
+
+## User save controls
+Manual bot saving is disabled across the site. Keep the Bot Builder Save control non-interactive, do not expose a save action in the recent-bot menu, and keep the Save Modal store from opening or persisting user-triggered saves. Existing bots must remain loadable.
+
+**Why:** the user requested that visitors cannot save bots from this site.
+
+**How to apply:** preserve the existing bot load/import flows while keeping every user-facing save entry point disabled; do not delete existing saved bot data as part of disabling saves.

@@ -1,4 +1,4 @@
-import { getExecutionSpeed, getExecutionSpeedDelay, isInstantExecutionForContext, isASpeedBoostEnabled, isFastExecutionEnabledForContext, getPurchasesPerTick, isAutoSignalsContext, shouldSkipDuplicateAutoSignalTick, isFastBotBuilderExecutionEnabled, shouldSkipDuplicatePurchaseTick, normalizeFastBotBuilderTradeOptions } from '../../../../../utils/execution-speed';
+import { getExecutionSpeed, getExecutionSpeedDelay, isInstantExecutionForContext, isASpeedBoostEnabled, isFastExecutionEnabledForContext, getPurchasesPerTick, isAutoSignalsContext, shouldSkipDuplicateAutoSignalTick, isFastBotBuilderExecutionEnabled, shouldSkipDuplicatePurchaseTick, normalizeFastBotBuilderTradeOptions, limitPurchaseSpecsToOnePerTick } from '../../../../../utils/execution-speed';
 import { recordTradeMeta } from '../../../../../utils/trade-metadata';
 import { isBotPaused } from '../../../../../utils/bot-pause-flag';
 import { LogTypes } from '../../../constants/messages';
@@ -486,13 +486,12 @@ export default Engine =>
 
             const isSameTickPair = unique_specs.length === 2
                 && unique_specs.every(spec => spec.same_tick_pair === true);
-            // Fast and A-SPEED explicitly mean one contract per live tick.
-            // Preserve the purpose-built paired-entry block, but do not let
-            // ordinary Multiple Purchase blocks fan out same-tick side orders.
-            const effective_specs =
-                (isASpeedBoostEnabled() || isFastExecutionEnabledForContext()) && !isSameTickPair
-                ? unique_specs.slice(0, 1)
-                : unique_specs;
+            // Fast and A-SPEED limit ordinary Multi Purchase fan-out, while a
+            // purpose-built paired entry remains two legs from the same call.
+            const effective_specs = limitPurchaseSpecsToOnePerTick(
+                unique_specs,
+                isASpeedBoostEnabled() || isFastExecutionEnabledForContext(),
+            );
 
             /* A prediction supplied by the XML purchase block is intentionally
                bought directly. Proposals are created once by Bot.start(), so

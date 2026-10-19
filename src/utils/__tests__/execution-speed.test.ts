@@ -20,6 +20,19 @@ describe('execution speed controls', () => {
         expect(speed.useDirectBuyForSpeed()).toBe(true);
     });
 
+    it('caps ordinary Fast multi-purchase blocks but retains intentional paired entries', async () => {
+        const speed = await import('../execution-speed');
+        const twoOrders = [
+            { contract_type: 'DIGITOVER', prediction: 2 },
+            { contract_type: 'DIGITUNDER', prediction: 7 },
+        ];
+        const pairedOrders = twoOrders.map(order => ({ ...order, same_tick_pair: true }));
+
+        expect(speed.limitPurchaseSpecsToOnePerTick(twoOrders, true)).toEqual([twoOrders[0]]);
+        expect(speed.limitPurchaseSpecsToOnePerTick(pairedOrders, true)).toEqual(pairedOrders);
+        expect(speed.limitPurchaseSpecsToOnePerTick(twoOrders, false)).toEqual(twoOrders);
+    });
+
     it('limits Fast XML execution to one 1-tick purchase per live market tick', async () => {
         const speed = await import('../execution-speed');
         const { setTradeContext } = await import('../trade-metadata');

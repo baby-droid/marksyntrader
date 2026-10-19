@@ -51,6 +51,12 @@ Auto-Signals must place at most one contract for each fresh (market, tick epoch)
 
 **How to apply:** Deduplicate at the purchase boundary by market and live tick epoch, keep candidate/readiness checks and the run cap, and allow no app-added wait between distinct eligible ticks.
 
+After an Auto-Signals bot is handed to Bot Builder, keep Bot Builder selected and the Run Panel drawer open on success and on errors that occur after handoff.
+
+**Why:** the user wants the loaded bot to stay visible in Builder with Summary/Transactions available instead of returning to Auto-Signals or collapsing the right-side panel.
+
+**How to apply:** once the handoff switches to Builder, do not route back to Auto-Signals or close the drawer when the run starts or fails; preserve the shared run-session observer across the tab unmount.
+
 Matches must predict the next target digit conditional on the current entry digit: choose the pair on the first 70% of the 1,000-tick window and validate it on the held-out final 30%. The Matches Trade Only handoff uses Ahmed SYN Even/Odd Market Killer v1.2, sets its exact target barrier, gates every purchase on the selected entry digit, and carries the card's edited suggested run count into the bot's run cap.
 
 **Why:** Marginal digit frequency does not identify which target follows the current digit; the user asked for more accurate Matches predictions and the named bot.

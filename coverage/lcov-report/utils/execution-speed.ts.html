@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">79.12% </span>
+                <span class="strong">79.55% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>345/436</span>
+                <span class='fraction'>354/445</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">74.15% </span>
+                <span class="strong">75.78% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>66/89</span>
+                <span class='fraction'>72/95</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">56.75% </span>
+                <span class="strong">57.89% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>21/37</span>
+                <span class='fraction'>22/38</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">79.12% </span>
+                <span class="strong">79.55% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>345/436</span>
+                <span class='fraction'>354/445</span>
             </div>
         
             
@@ -499,7 +499,16 @@
 <a name='L434'></a><a href='#L434'>434</a>
 <a name='L435'></a><a href='#L435'>435</a>
 <a name='L436'></a><a href='#L436'>436</a>
-<a name='L437'></a><a href='#L437'>437</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
+<a name='L437'></a><a href='#L437'>437</a>
+<a name='L438'></a><a href='#L438'>438</a>
+<a name='L439'></a><a href='#L439'>439</a>
+<a name='L440'></a><a href='#L440'>440</a>
+<a name='L441'></a><a href='#L441'>441</a>
+<a name='L442'></a><a href='#L442'>442</a>
+<a name='L443'></a><a href='#L443'>443</a>
+<a name='L444'></a><a href='#L444'>444</a>
+<a name='L445'></a><a href='#L445'>445</a>
+<a name='L446'></a><a href='#L446'>446</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -576,22 +585,22 @@
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">6x</span>
-<span class="cline-any cline-yes">6x</span>
-<span class="cline-any cline-yes">6x</span>
-<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">7x</span>
+<span class="cline-any cline-yes">7x</span>
+<span class="cline-any cline-yes">7x</span>
+<span class="cline-any cline-yes">7x</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-yes">6x</span>
-<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">7x</span>
+<span class="cline-any cline-yes">7x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">6x</span>
-<span class="cline-any cline-yes">6x</span>
-<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">7x</span>
+<span class="cline-any cline-yes">7x</span>
+<span class="cline-any cline-yes">7x</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">7x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -664,6 +673,15 @@
 <span class="cline-any cline-yes">5x</span>
 <span class="cline-any cline-yes">5x</span>
 <span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -1101,6 +1119,15 @@ export const shouldSkipDuplicateAutoSignalTick = (
     epoch: number,
 ): boolean =&gt; shouldSkipDuplicatePurchaseTick(purchaseEpochs, symbol, epoch);
 &nbsp;
+export const limitPurchaseSpecsToOnePerTick = &lt;T extends { same_tick_pair?: boolean }&gt;(
+    specs: T[],
+    singlePurchaseMode: boolean,
+): T[] =&gt; {
+    if (!singlePurchaseMode) return specs;
+    const isExplicitPair = specs.length === 2 &amp;&amp; specs.every(spec =&gt; spec.same_tick_pair === true);
+    return isExplicitPair ? specs : specs.slice(0, 1);
+};
+&nbsp;
 /**
  * Fast uses one-tick contracts only for contract types known to accept tick
  * durations. Other XML products keep their configured terms rather than
@@ -1378,7 +1405,7 @@ fastExecListeners.add((enabled) =&gt; { _pingRestartHook<span class="branch-0 cb
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-10-19T13:45:05.731Z
+                at 2026-10-19T13:52:37.567Z
             </div>
         <script src="../prettify.js"></script>
         <script>
