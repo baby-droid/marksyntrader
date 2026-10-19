@@ -240,7 +240,13 @@ class APIBase {
     }
 
     async createNewInstance(account_id: string) {
-        if (this.account_id !== account_id) {
+        const requestedAccountId = String(account_id || '').trim();
+        if (this.account_id !== requestedAccountId) {
+            if (requestedAccountId && requestedAccountId !== 'null') {
+                localStorage.setItem('active_loginid', requestedAccountId);
+            } else {
+                localStorage.removeItem('active_loginid');
+            }
             // OTP WebSocket URLs are account-bound. Reusing an open public or
             // previous-account socket after login/account switch leaves
             // authenticated balance, tick, and trade requests unanswered.

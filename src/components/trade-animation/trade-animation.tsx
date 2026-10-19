@@ -14,6 +14,7 @@ import Button from '../shared_ui/button';
 import Tooltip from '../shared_ui/tooltip/tooltip';
 import CircularWrapper from './circular-wrapper';
 import ContractStageText from './contract-stage-text';
+import ExecutionSpeedControl from './execution-speed-control';
 import './run-panel-tooltip.scss';
 
 type TTradeAnimation = {
@@ -193,28 +194,31 @@ const TradeAnimation = observer(({ className, should_show_overlay }: TTradeAnima
                     </div>
                 </div>
             ) : (
-                <Button
-                    is_disabled={(is_disabled && !is_unavailable_for_payment_agent) || contract_stage === 3}
-                    className={button_props.class}
-                    id={button_props.id}
-                    icon={button_props.icon}
-                    onClick={() => {
-                        setShouldDisable(true);
-                        if (is_stop_button_visible) {
-                            onStopBotClick();
-                            return;
-                        }
-                        onRunButtonClick();
-                        /* [AI] - Analytics event tracking removed - see migrate-docs/MONITORING_PACKAGES.md for re-implementation guide */
-                        /* [/AI] */
-                    }}
-                    has_effect
-                    {...(is_stop_button_visible || !is_unavailable_for_payment_agent
-                        ? { primary: true }
-                        : { green: true })}
-                >
-                    {button_props.text}
-                </Button>
+                <>
+                    {is_bot_builder_tab && <ExecutionSpeedControl disabled={is_stop_button_visible} />}
+                    <Button
+                        is_disabled={(is_disabled && !is_unavailable_for_payment_agent) || contract_stage === 3}
+                        className={button_props.class}
+                        id={button_props.id}
+                        icon={button_props.icon}
+                        onClick={() => {
+                            setShouldDisable(true);
+                            if (is_stop_button_visible) {
+                                onStopBotClick();
+                                return;
+                            }
+                            onRunButtonClick();
+                            /* [AI] - Analytics event tracking removed - see migrate-docs/MONITORING_PACKAGES.md for re-implementation guide */
+                            /* [/AI] */
+                        }}
+                        has_effect
+                        {...(is_stop_button_visible || !is_unavailable_for_payment_agent
+                            ? { primary: true }
+                            : { green: true })}
+                    >
+                        {button_props.text}
+                    </Button>
+                </>
             )}
             <div
                 className={classNames('animation__container', className, {
