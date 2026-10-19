@@ -266,8 +266,21 @@ export class DerivWSAccountsService {
             // localStorage before triggering a WebSocket regeneration, so we honour
             // that selection here instead of always falling back to accounts[0].
             const activeLoginId = localStorage.getItem('active_loginid');
-            const targetAccount =
-                (activeLoginId && accounts.find(a => a.account_id === activeLoginId)) || accounts[0];
+            let targetAccount = activeLoginId
+                ? accounts.find(a => a.account_id === activeLoginId)
+                : accounts[0];
+
+            // Do not silently authenticate against the first account when a
+            // stale sessionStorage account list omits the user's current
+            // selection. Refresh once, then fail explicitly if it is still
+            // unavailable; trading against the wrong account is unsafe.
+            if (activeLoginId && !targetAccount) {
+                accounts = await this.fetchAccountsList(accessToken);
+                targetAccount = accounts.find(a => a.account_id === activeLoginId);
+            }
+            if (!targetAccount) {
+                throw new Error(`The selected Deriv account ${activeLoginId || ''} is not available for trading.`);
+            }
 
             // Step 4: Fetch OTP and WebSocket URL for the resolved account (always fresh OTP)
             const websocketURL = await this.fetchOTPWebSocketURL(accessToken, targetAccount.account_id);

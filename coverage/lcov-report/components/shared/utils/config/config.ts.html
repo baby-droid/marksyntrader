@@ -23,9 +23,9 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">42.44% </span>
+                <span class="strong">37.05% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>73/172</span>
+                <span class='fraction'>73/197</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">42.44% </span>
+                <span class="strong">37.05% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>73/172</span>
+                <span class='fraction'>73/197</span>
             </div>
         
             
@@ -235,7 +235,32 @@
 <a name='L170'></a><a href='#L170'>170</a>
 <a name='L171'></a><a href='#L171'>171</a>
 <a name='L172'></a><a href='#L172'>172</a>
-<a name='L173'></a><a href='#L173'>173</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
+<a name='L173'></a><a href='#L173'>173</a>
+<a name='L174'></a><a href='#L174'>174</a>
+<a name='L175'></a><a href='#L175'>175</a>
+<a name='L176'></a><a href='#L176'>176</a>
+<a name='L177'></a><a href='#L177'>177</a>
+<a name='L178'></a><a href='#L178'>178</a>
+<a name='L179'></a><a href='#L179'>179</a>
+<a name='L180'></a><a href='#L180'>180</a>
+<a name='L181'></a><a href='#L181'>181</a>
+<a name='L182'></a><a href='#L182'>182</a>
+<a name='L183'></a><a href='#L183'>183</a>
+<a name='L184'></a><a href='#L184'>184</a>
+<a name='L185'></a><a href='#L185'>185</a>
+<a name='L186'></a><a href='#L186'>186</a>
+<a name='L187'></a><a href='#L187'>187</a>
+<a name='L188'></a><a href='#L188'>188</a>
+<a name='L189'></a><a href='#L189'>189</a>
+<a name='L190'></a><a href='#L190'>190</a>
+<a name='L191'></a><a href='#L191'>191</a>
+<a name='L192'></a><a href='#L192'>192</a>
+<a name='L193'></a><a href='#L193'>193</a>
+<a name='L194'></a><a href='#L194'>194</a>
+<a name='L195'></a><a href='#L195'>195</a>
+<a name='L196'></a><a href='#L196'>196</a>
+<a name='L197'></a><a href='#L197'>197</a>
+<a name='L198'></a><a href='#L198'>198</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -316,6 +341,31 @@
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -482,23 +532,48 @@ const getDefaultServerURL = <span class="fstat-no" title="function not covered" 
 &nbsp;
 /**
  * Gets the WebSocket URL using the authenticated flow
- * 1. Get access token from auth_info (localStorage via vendored deriv-core)
+ * 1. Get the active OAuth access token (or the account token stored by the legacy login flow)
  * 2. Fetch OTP WebSocket URL from DerivWSAccountsService
  *
  * @returns Promise with WebSocket URL or fallback to default server
  */
 export const getSocketURL = <span class="fstat-no" title="function not covered" >async (): Promise&lt;string&gt; =&gt; {</span>
+<span class="cstat-no" title="statement not covered" >    const activeLoginId = typeof window === 'undefined' ? null : window.localStorage.getItem('active_loginid');</span>
+<span class="cstat-no" title="statement not covered" >    let accessToken: string | null | undefined;</span>
+<span class="cstat-no" title="statement not covered" ></span>
 <span class="cstat-no" title="statement not covered" >    try {</span>
 <span class="cstat-no" title="statement not covered" >        const authInfo = getAuthInfo();</span>
-<span class="cstat-no" title="statement not covered" >        if (!authInfo || !authInfo.access_token) {</span>
-<span class="cstat-no" title="statement not covered" >            return getDefaultServerURL();</span>
-<span class="cstat-no" title="statement not covered" >        }</span>
+<span class="cstat-no" title="statement not covered" >        accessToken = authInfo?.access_token;</span>
+<span class="cstat-no" title="statement not covered" >    } catch (error) {</span>
+<span class="cstat-no" title="statement not covered" >        console.error('[DerivWS] Could not read the saved OAuth session:', error);</span>
+<span class="cstat-no" title="statement not covered" >    }</span>
 <span class="cstat-no" title="statement not covered" ></span>
-<span class="cstat-no" title="statement not covered" >        const wsUrl = await DerivWSAccountsService.getAuthenticatedWebSocketURL(authInfo.access_token);</span>
-<span class="cstat-no" title="statement not covered" >        return wsUrl;</span>
+<span class="cstat-no" title="statement not covered" >    if (!accessToken &amp;&amp; activeLoginId &amp;&amp; activeLoginId !== 'null') {</span>
+<span class="cstat-no" title="statement not covered" >        try {</span>
+<span class="cstat-no" title="statement not covered" >            const storedAccounts = JSON.parse(window.localStorage.getItem('accountsList') || '{}');</span>
+<span class="cstat-no" title="statement not covered" >            const accountToken = storedAccounts?.[activeLoginId];</span>
+<span class="cstat-no" title="statement not covered" >            if (typeof accountToken === 'string') {</span>
+<span class="cstat-no" title="statement not covered" >                accessToken = accountToken;</span>
+<span class="cstat-no" title="statement not covered" >            } else if (accountToken &amp;&amp; typeof accountToken === 'object') {</span>
+<span class="cstat-no" title="statement not covered" >                accessToken = accountToken.access_token || accountToken.token;</span>
+<span class="cstat-no" title="statement not covered" >            }</span>
+<span class="cstat-no" title="statement not covered" >        } catch (error) {</span>
+<span class="cstat-no" title="statement not covered" >            console.error('[DerivWS] Could not read the saved account token:', error);</span>
+<span class="cstat-no" title="statement not covered" >        }</span>
+<span class="cstat-no" title="statement not covered" >    }</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >    if (!accessToken) {</span>
+<span class="cstat-no" title="statement not covered" >        if (activeLoginId &amp;&amp; activeLoginId !== 'null') {</span>
+<span class="cstat-no" title="statement not covered" >            throw new Error('Your saved Deriv account has no valid access token. Sign in again to trade.');</span>
+<span class="cstat-no" title="statement not covered" >        }</span>
+<span class="cstat-no" title="statement not covered" >        return getDefaultServerURL();</span>
+<span class="cstat-no" title="statement not covered" >    }</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >    try {</span>
+<span class="cstat-no" title="statement not covered" >        return await DerivWSAccountsService.getAuthenticatedWebSocketURL(accessToken);</span>
 <span class="cstat-no" title="statement not covered" >    } catch (error) {</span>
 <span class="cstat-no" title="statement not covered" >        console.error('[DerivWS] Error in getSocketURL:', error);</span>
-<span class="cstat-no" title="statement not covered" >        return getDefaultServerURL();</span>
+<span class="cstat-no" title="statement not covered" >        throw error;</span>
 <span class="cstat-no" title="statement not covered" >    }</span>
 <span class="cstat-no" title="statement not covered" >};</span>
 &nbsp;
@@ -586,7 +661,7 @@ export const generateOAuthURL = <span class="fstat-no" title="function not cover
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-10-10T21:32:10.529Z
+                at 2026-10-19T09:06:24.561Z
             </div>
         <script src="../../../../prettify.js"></script>
         <script>

@@ -87,7 +87,21 @@ export default Engine =>
         }
 
         expectedContractId(contractId) {
-            return this.contractId && contractId === this.contractId;
+            if (
+                this.contractId === undefined ||
+                this.contractId === null ||
+                this.contractId === '' ||
+                contractId === undefined ||
+                contractId === null ||
+                contractId === ''
+            ) {
+                return false;
+            }
+            // Deriv documents contract_id as an integer, but websocket adapters
+            // may surface it as a numeric string. Normalize both paths so a
+            // type-only mismatch cannot discard the settlement event and leave
+            // the bot waiting forever in its open-contract stage.
+            return String(contractId) === String(this.contractId);
         }
 
         getSellPrice() {

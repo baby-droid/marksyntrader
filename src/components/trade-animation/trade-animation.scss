@@ -76,6 +76,79 @@
         flex-wrap: nowrap;
     }
 
+    &__execution-controls {
+        display: flex;
+        flex: 0 0 auto;
+        align-items: center;
+        gap: 3px;
+        height: 32px;
+        padding: 2px 3px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 7px;
+        background: rgba(0, 0, 0, 0.28);
+    }
+
+    &__execution-speeds {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+    }
+
+    &__speed-button {
+        min-width: 43px;
+        height: 26px;
+        padding: 0 7px;
+        border: 1px solid transparent;
+        border-radius: 5px;
+        background: transparent;
+        color: var(--text-less-prominent);
+        font-size: 10px;
+        font-weight: 700;
+        line-height: 24px;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+
+        &:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.09);
+            color: var(--text-general);
+        }
+
+        &:focus-visible {
+            outline: 2px solid var(--status-info);
+            outline-offset: 1px;
+        }
+
+        &:disabled {
+            cursor: not-allowed;
+            opacity: 0.58;
+        }
+
+        &--active {
+            color: #fff;
+        }
+
+        &--normal.animation__speed-button--active {
+            background: rgba(34, 197, 94, 0.25);
+            border-color: rgba(34, 197, 94, 0.55);
+        }
+
+        &--crazy.animation__speed-button--active {
+            background: rgba(245, 158, 11, 0.25);
+            border-color: rgba(245, 158, 11, 0.6);
+        }
+
+        &--turbo.animation__speed-button--active {
+            background: rgba(239, 68, 68, 0.25);
+            border-color: rgba(239, 68, 68, 0.6);
+        }
+
+        &--fast.animation__speed-button--active {
+            background: rgba(59, 130, 246, 0.27);
+            border-color: rgba(59, 130, 246, 0.65);
+        }
+    }
+
     &__pause-button,
     &__resume-button {
         width: fit-content;

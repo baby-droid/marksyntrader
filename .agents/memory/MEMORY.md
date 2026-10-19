@@ -71,7 +71,7 @@
 - [Two Prediction Cycle phase binding](two-prediction-cycle-phase-binding.md) — recovery block and phase router must use the same canonical state variables; stale IDs can leave recovery_phase2 undefined.
 - [SmartChart proxy rail scoping](smartchart-proxy-rail.md) — scope native control lookups to the nearest chart wrapper when normal and modal charts can coexist.
 - [Development preview routing](preview-routing.md) — local `/bot/preview` can omit the build flag, so preview mode must also detect the pathname.
-- [Deriv OAuth endpoint](deriv-oauth.md) — production authorization uses `/oauth2/auth`; the Deriv app must be live before an interactive callback test can succeed.
+- [Deriv OAuth and authenticated WebSockets](deriv-oauth.md) — production auth uses `/oauth2/auth`; trading needs a fresh account-bound OTP socket, never a public fallback for signed-in accounts.
 - [Dependency repair](dependency-repair.md) — restore an empty node_modules tree without unintentionally upgrading the checked-in manifest.
 - [Tick-history retry scope](ticks-history-retry.md) — bound history retries, propagate Blockly API failures, and clear rejected caches without changing purchase retry behavior.
 - [Blockly fallback execution](unsupported-block-execution.md) — unknown imported blocks need both a visible definition and a JavaScript generator fallback to remain runnable.

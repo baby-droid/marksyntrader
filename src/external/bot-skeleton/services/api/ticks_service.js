@@ -61,7 +61,9 @@ export default class TicksService {
         this.ohlcListeners = new Map();
         this.subscriptions = new Map();
         this.liveTickSubscriptions = new globalThis.Map();
+        this.liveTickApis = new globalThis.Map();
         this.seenTickIds = new globalThis.Map();
+        this.historyReadySymbols = new globalThis.Set();
         this.ticks_history_promise = null;
         this.active_symbols_promise = null;
         this.candles_promise = null;
@@ -89,9 +91,21 @@ export default class TicksService {
 
             const style = getType(granularity);
 
-            if (style === 'ticks' && this.ticks.has(symbol)) {
+            if (
+                style === 'ticks' &&
+                this.historyReadySymbols.has(symbol) &&
+                this.ticks.has(symbol) &&
+                this.liveTickApis.get(symbol) === api_base.api
+            ) {
                 resolve(this.ticks.get(symbol));
                 return;
+            }
+            if (style === 'ticks' && this.historyReadySymbols.has(symbol)) {
+                // A cached snapshot is not enough after the authenticated API
+                // instance changes: the old stream is no longer live.
+                this.historyReadySymbols.delete(symbol);
+                this.ticks = this.ticks.delete(symbol);
+                this.seenTickIds.delete(symbol);
             }
 
             if (style === 'candles' && this.candles.hasIn([symbol, Number(granularity)])) {
@@ -161,8 +175,10 @@ export default class TicksService {
             this.tickListeners = this.tickListeners.delete(symbol);
             this.ticks = this.ticks.delete(symbol);
             this.seenTickIds.delete(symbol);
+            this.historyReadySymbols.delete(symbol);
             const liveSubscription = this.liveTickSubscriptions.get(symbol);
             this.liveTickSubscriptions.delete(symbol);
+            this.liveTickApis.delete(symbol);
             liveSubscription?.unsubscribe?.();
         }
 
@@ -337,7 +353,21 @@ export default class TicksService {
             const pendingLiveTicks = [];
             if (style === 'ticks') {
                 if (!this.ticks.has(symbol)) this.ticks = this.ticks.set(symbol, []);
+                const existingLiveApi = this.liveTickApis.get(symbol);
+                if (this.liveTickSubscriptions.has(symbol) && existingLiveApi !== api) {
+                    try {
+                        this.liveTickSubscriptions.get(symbol)?.unsubscribe?.();
+                    } catch {
+                        // The previous API instance may already be closed.
+                    }
+                    this.liveTickSubscriptions.delete(symbol);
+                    this.liveTickApis.delete(symbol);
+                    this.historyReadySymbols.delete(symbol);
+                    this.ticks = this.ticks.delete(symbol).set(symbol, []);
+                    this.seenTickIds.delete(symbol);
+                }
                 if (!this.liveTickSubscriptions.has(symbol)) {
+                    let liveSubscriptionFailed = false;
                     const liveSubscription = subscribeSharedDerivTicks(api, apiSymbol, {
                         next: message => {
                             const tick = parseTick(message?.tick ?? message?.data?.tick);
@@ -349,9 +379,22 @@ export default class TicksService {
                             }
                             this.appendLiveTick(symbol, tick);
                         },
-                        error: error => globalObserver.emit('Error', error),
+                        error: error => {
+                            liveSubscriptionFailed = true;
+                            if (this.liveTickApis.get(symbol) === api) {
+                                this.liveTickSubscriptions.delete(symbol);
+                                this.liveTickApis.delete(symbol);
+                                this.historyReadySymbols.delete(symbol);
+                                this.ticks = this.ticks.delete(symbol);
+                                this.seenTickIds.delete(symbol);
+                            }
+                            globalObserver.emit('Error', error);
+                        },
                     });
-                    this.liveTickSubscriptions.set(symbol, liveSubscription);
+                    if (!liveSubscriptionFailed) {
+                        this.liveTickSubscriptions.set(symbol, liveSubscription);
+                        this.liveTickApis.set(symbol, api);
+                    }
                 }
             }
 
@@ -374,6 +417,7 @@ export default class TicksService {
                     if (style === 'ticks') {
                         const ticks = historyToTicks(r.history);
                         this.updateTicksAndCallListeners(symbol, ticks);
+                        this.historyReadySymbols.add(symbol);
                         historyReady = true;
                         pendingLiveTicks.forEach(tick => this.appendLiveTick(symbol, tick));
                         resolve(this.ticks.get(symbol) || ticks);
@@ -400,6 +444,20 @@ export default class TicksService {
                     }
                     // Don't clear auth data for InvalidSymbol errors as it causes unwanted logouts
                     // InvalidSymbol errors can occur for various reasons and don't necessarily mean the user is unauthorized
+                    if (style === 'ticks') {
+                        if (this.liveTickApis.get(symbol) === api) {
+                            try {
+                                this.liveTickSubscriptions.get(symbol)?.unsubscribe?.();
+                            } catch {
+                                // The feed may already be closed after a request timeout.
+                            }
+                            this.liveTickSubscriptions.delete(symbol);
+                            this.liveTickApis.delete(symbol);
+                        }
+                        this.historyReadySymbols.delete(symbol);
+                        this.ticks = this.ticks.delete(symbol);
+                        this.seenTickIds.delete(symbol);
+                    }
                     reject(error);
                 });
         });
@@ -464,6 +522,10 @@ export default class TicksService {
         this.candles_promise = null;
         const liveSubscriptions = Array.from(this.liveTickSubscriptions.values());
         this.liveTickSubscriptions.clear();
+        this.liveTickApis.clear();
+        this.historyReadySymbols.clear();
+        this.seenTickIds.clear();
+        this.ticks = new Map();
         liveSubscriptions.forEach(subscription => subscription?.unsubscribe?.());
         return this.forget().then(() => this.forgetCandleSubscription());
     }

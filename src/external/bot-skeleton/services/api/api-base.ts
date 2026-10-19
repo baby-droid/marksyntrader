@@ -22,6 +22,7 @@ import {
 } from './observables/connection-status-stream';
 import ApiHelpers from './api-helpers';
 import { generateDerivApiInstance, V2GetActiveAccountId } from './appId';
+import { installDerivRequestBudget } from './request-budget';
 
 type CurrentSubscription = {
     id: string;
@@ -184,7 +185,8 @@ class APIBase {
                 this.api.connection.removeEventListener('close', this.onsocketclose.bind(this));
             }
 
-            this.api = await generateDerivApiInstance();
+            this.api = await generateDerivApiInstance(force_create_connection);
+            installDerivRequestBudget(this.api);
 
             this.api?.connection.addEventListener('open', this.onsocketopen.bind(this));
             this.api?.connection.addEventListener('close', this.onsocketclose.bind(this));
@@ -238,8 +240,17 @@ class APIBase {
     }
 
     async createNewInstance(account_id: string) {
-        if (this.account_id !== account_id) {
-            await this.init();
+        const requestedAccountId = String(account_id || '').trim();
+        if (this.account_id !== requestedAccountId) {
+            if (requestedAccountId && requestedAccountId !== 'null') {
+                localStorage.setItem('active_loginid', requestedAccountId);
+            } else {
+                localStorage.removeItem('active_loginid');
+            }
+            // OTP WebSocket URLs are account-bound. Reusing an open public or
+            // previous-account socket after login/account switch leaves
+            // authenticated balance, tick, and trade requests unanswered.
+            await this.init(true);
         }
     }
 

@@ -23,9 +23,9 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">22.47% </span>
+                <span class="strong">22.45% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>127/565</span>
+                <span class='fraction'>128/570</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">22.47% </span>
+                <span class="strong">22.45% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>127/565</span>
+                <span class='fraction'>128/570</span>
             </div>
         
             
@@ -628,7 +628,12 @@
 <a name='L563'></a><a href='#L563'>563</a>
 <a name='L564'></a><a href='#L564'>564</a>
 <a name='L565'></a><a href='#L565'>565</a>
-<a name='L566'></a><a href='#L566'>566</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
+<a name='L566'></a><a href='#L566'>566</a>
+<a name='L567'></a><a href='#L567'>567</a>
+<a name='L568'></a><a href='#L568'>568</a>
+<a name='L569'></a><a href='#L569'>569</a>
+<a name='L570'></a><a href='#L570'>570</a>
+<a name='L571'></a><a href='#L571'>571</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -709,6 +714,7 @@
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -790,6 +796,7 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -868,6 +875,9 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -1217,6 +1227,7 @@ import {
 } from './observables/connection-status-stream';
 import ApiHelpers from './api-helpers';
 import { generateDerivApiInstance, V2GetActiveAccountId } from './appId';
+import { installDerivRequestBudget } from './request-budget';
 &nbsp;
 type CurrentSubscription = {
     id: string;
@@ -1379,7 +1390,8 @@ class APIBase {
 <span class="cstat-no" title="statement not covered" >                this.api.connection.removeEventListener('close', this.onsocketclose.bind(this));</span>
 <span class="cstat-no" title="statement not covered" >            }</span>
 <span class="cstat-no" title="statement not covered" ></span>
-<span class="cstat-no" title="statement not covered" >            this.api = await generateDerivApiInstance();</span>
+<span class="cstat-no" title="statement not covered" >            this.api = await generateDerivApiInstance(force_create_connection);</span>
+<span class="cstat-no" title="statement not covered" >            installDerivRequestBudget(this.api);</span>
 <span class="cstat-no" title="statement not covered" ></span>
 <span class="cstat-no" title="statement not covered" >            this.api?.connection.addEventListener('open', this.onsocketopen.bind(this));</span>
 <span class="cstat-no" title="statement not covered" >            this.api?.connection.addEventListener('close', this.onsocketclose.bind(this));</span>
@@ -1434,7 +1446,10 @@ class APIBase {
 &nbsp;
 <span class="fstat-no" title="function not covered" >    async createNewInstance(account_id: string) {</span>
 <span class="cstat-no" title="statement not covered" >        if (this.account_id !== account_id) {</span>
-<span class="cstat-no" title="statement not covered" >            await this.init();</span>
+<span class="cstat-no" title="statement not covered" >            // OTP WebSocket URLs are account-bound. Reusing an open public or</span>
+<span class="cstat-no" title="statement not covered" >            // previous-account socket after login/account switch leaves</span>
+<span class="cstat-no" title="statement not covered" >            // authenticated balance, tick, and trade requests unanswered.</span>
+<span class="cstat-no" title="statement not covered" >            await this.init(true);</span>
 <span class="cstat-no" title="statement not covered" >        }</span>
 <span class="cstat-no" title="statement not covered" >    }</span>
 &nbsp;
@@ -1765,7 +1780,7 @@ export const api_base = new APIBase();
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-10-10T21:32:10.529Z
+                at 2026-10-19T09:06:24.561Z
             </div>
         <script src="../../../../prettify.js"></script>
         <script>
