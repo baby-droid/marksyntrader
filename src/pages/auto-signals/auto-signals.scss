@@ -414,6 +414,18 @@
     &--tone-blue::before { background: linear-gradient(90deg, transparent, #2563eb, transparent); opacity: 0.95; }
     &--tone-blue .as-signal-strip { border-color: rgba(37, 99, 235, 0.3); background: #eff6ff; }
     &--tone-blue .as-signal-strip__main > strong em { color: #1d4ed8; }
+    &--tone-yellow { border-color: rgba(202, 138, 4, 0.45); }
+    &--tone-yellow::before { background: linear-gradient(90deg, transparent, #eab308, transparent); opacity: 0.95; }
+    &--tone-yellow .as-signal-strip { border-color: rgba(202, 138, 4, 0.3); background: #fefce8; }
+    &--tone-yellow .as-signal-strip__main > strong em { color: #a16207; }
+    &--tone-green { border-color: rgba(22, 163, 74, 0.4); }
+    &--tone-green::before { background: linear-gradient(90deg, transparent, #16a34a, transparent); opacity: 0.95; }
+    &--tone-green .as-signal-strip { border-color: rgba(22, 163, 74, 0.3); background: #f0fdf4; }
+    &--tone-green .as-signal-strip__main > strong em { color: #15803d; }
+    &--tone-red { border-color: rgba(220, 38, 38, 0.4); }
+    &--tone-red::before { background: linear-gradient(90deg, transparent, #dc2626, transparent); opacity: 0.95; }
+    &--tone-red .as-signal-strip { border-color: rgba(220, 38, 38, 0.3); background: #fef2f2; }
+    &--tone-red .as-signal-strip__main > strong em { color: #b91c1c; }
     &__head { display: flex; justify-content: space-between; gap: 0.5rem; min-width: 0; }
     &__identity { min-width: 0; }
     &__identity h3 { margin: 0.2rem 0 0.1rem; color: #05070a; font-size: 0.88rem; font-weight: 900; letter-spacing: -0.025em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -682,6 +694,12 @@
     &--trade-only-burgundy:hover:not(:disabled) { background: linear-gradient(135deg, #e11d48, #881337); box-shadow: 0 0 16px rgba(136, 19, 55, 0.4); }
     &--trade-only-blue { border-color: #1d4ed8; background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: #fff; box-shadow: 0 0 12px rgba(37, 99, 235, 0.26); }
     &--trade-only-blue:hover:not(:disabled) { background: linear-gradient(135deg, #60a5fa, #1d4ed8); box-shadow: 0 0 16px rgba(37, 99, 235, 0.4); }
+    &--trade-only-yellow { border-color: #ca8a04; background: linear-gradient(135deg, #facc15, #eab308); color: #422006; box-shadow: 0 0 12px rgba(234, 179, 8, 0.28); }
+    &--trade-only-yellow:hover:not(:disabled) { background: linear-gradient(135deg, #fde047, #ca8a04); box-shadow: 0 0 16px rgba(234, 179, 8, 0.4); }
+    &--trade-only-green { border-color: #15803d; background: linear-gradient(135deg, #22c55e, #15803d); color: #fff; box-shadow: 0 0 12px rgba(22, 163, 74, 0.28); }
+    &--trade-only-green:hover:not(:disabled) { background: linear-gradient(135deg, #4ade80, #15803d); box-shadow: 0 0 16px rgba(22, 163, 74, 0.4); }
+    &--trade-only-red { border-color: #b91c1c; background: linear-gradient(135deg, #ef4444, #b91c1c); color: #fff; box-shadow: 0 0 12px rgba(220, 38, 38, 0.28); }
+    &--trade-only-red:hover:not(:disabled) { background: linear-gradient(135deg, #f87171, #b91c1c); box-shadow: 0 0 16px rgba(220, 38, 38, 0.4); }
     &--primary { border-color: #2854c5; background: linear-gradient(135deg, #3477f5, #1948c2); color: #fff; box-shadow: 0 0 12px rgba(49, 95, 221, 0.32); }
     &--primary:hover:not(:disabled) { background: linear-gradient(135deg, #2869e7, #173fa9); box-shadow: 0 0 16px rgba(49, 95, 221, 0.48); }
 }
@@ -706,12 +724,21 @@
 .as-trade-choice__trade-only.as-button--trade-only-pink { border-color: #be185d; background: #db2777; color: #fff; }
 .as-trade-choice__trade-only.as-button--trade-only-burgundy { border-color: #881337; background: #9f1239; color: #fff; }
 .as-trade-choice__trade-only.as-button--trade-only-blue { border-color: #1d4ed8; background: #2563eb; color: #fff; }
+.as-trade-choice__trade-only.as-button--trade-only-yellow { border-color: #ca8a04; background: #eab308; color: #422006; }
+.as-trade-choice__trade-only.as-button--trade-only-green { border-color: #15803d; background: #16a34a; color: #fff; }
+.as-trade-choice__trade-only.as-button--trade-only-red { border-color: #b91c1c; background: #dc2626; color: #fff; }
 .as-trade-choice > .as-trade-choice__dt--pink { border-color: #db2777; background: #fce7f3; color: #9d174d; }
 .as-trade-choice > .as-trade-choice__dt--pink small { color: #9d174d; }
 .as-trade-choice > .as-trade-choice__dt--burgundy { border-color: #9f1239; background: #fff1f2; color: #881337; }
 .as-trade-choice > .as-trade-choice__dt--burgundy small { color: #881337; }
 .as-trade-choice > .as-trade-choice__dt--blue { border-color: #2563eb; background: #eff6ff; color: #1e40af; }
 .as-trade-choice > .as-trade-choice__dt--blue small { color: #1e40af; }
+.as-trade-choice > .as-trade-choice__dt--yellow { border-color: #ca8a04; background: #fef9c3; color: #854d0e; }
+.as-trade-choice > .as-trade-choice__dt--yellow small { color: #854d0e; }
+.as-trade-choice > .as-trade-choice__dt--green { border-color: #16a34a; background: #f0fdf4; color: #166534; }
+.as-trade-choice > .as-trade-choice__dt--green small { color: #166534; }
+.as-trade-choice > .as-trade-choice__dt--red { border-color: #dc2626; background: #fef2f2; color: #991b1b; }
+.as-trade-choice > .as-trade-choice__dt--red small { color: #991b1b; }
 
 .as-alert {
     display: flex;

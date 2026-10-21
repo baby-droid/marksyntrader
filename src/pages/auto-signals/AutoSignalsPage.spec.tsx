@@ -196,6 +196,14 @@ describe('Auto-Signals trade actions', () => {
             { strategy: 'UNDER' as const, barrier: 6, label: 'Under', contractType: 'DIGITUNDER', direction: 'under' as const, tone: 'blue' },
             { strategy: 'UNDER' as const, barrier: 7, label: 'Under', contractType: 'DIGITUNDER', direction: 'under' as const, tone: 'blue' },
             { strategy: 'UNDER' as const, barrier: 8, label: 'Under', contractType: 'DIGITUNDER', direction: 'under' as const, tone: 'blue' },
+            { strategy: 'UNDER' as const, barrier: 1, label: 'Under', contractType: 'DIGITUNDER', direction: 'under' as const, tone: 'yellow' },
+            { strategy: 'UNDER' as const, barrier: 2, label: 'Under', contractType: 'DIGITUNDER', direction: 'under' as const, tone: 'yellow' },
+            { strategy: 'UNDER' as const, barrier: 3, label: 'Under', contractType: 'DIGITUNDER', direction: 'under' as const, tone: 'yellow' },
+            { strategy: 'OVER' as const, barrier: 4, label: 'Over', contractType: 'DIGITOVER', direction: 'over' as const, tone: 'green' },
+            { strategy: 'OVER' as const, barrier: 5, label: 'Over', contractType: 'DIGITOVER', direction: 'over' as const, tone: 'green' },
+            { strategy: 'OVER' as const, barrier: 6, label: 'Over', contractType: 'DIGITOVER', direction: 'over' as const, tone: 'red' },
+            { strategy: 'OVER' as const, barrier: 7, label: 'Over', contractType: 'DIGITOVER', direction: 'over' as const, tone: 'red' },
+            { strategy: 'OVER' as const, barrier: 8, label: 'Over', contractType: 'DIGITOVER', direction: 'over' as const, tone: 'red' },
         ];
         const markets = colorCases.map((item, index) => {
             const symbol = `R_${index + 10}`;

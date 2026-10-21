@@ -125,6 +125,15 @@ const tradeOnlyTone = (candidate: AutoSignalCandidate | null) => {
     if (candidate?.strategy === 'UNDER' && candidate.barrier != null && candidate.barrier >= 6 && candidate.barrier <= 8) {
         return 'blue';
     }
+    if (candidate?.strategy === 'UNDER' && candidate.barrier != null && candidate.barrier >= 1 && candidate.barrier <= 3) {
+        return 'yellow';
+    }
+    if (candidate?.strategy === 'OVER' && candidate.barrier != null && candidate.barrier >= 4 && candidate.barrier <= 5) {
+        return 'green';
+    }
+    if (candidate?.strategy === 'OVER' && candidate.barrier != null && candidate.barrier >= 6 && candidate.barrier <= 8) {
+        return 'red';
+    }
     return 'default';
 };
 
