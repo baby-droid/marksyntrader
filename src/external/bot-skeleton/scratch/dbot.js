@@ -149,6 +149,9 @@ class DBot {
                     scrollbars: true,
                     theme: window.Blockly.Themes.zelos_renderer,
                 });
+                if (!this.workspace || typeof this.workspace.getVariableMap !== 'function') {
+                    throw new Error('Blockly could not initialize the Bot Builder workspace.');
+                }
 
                 this.workspace.RTL = isDbotRTL();
 
@@ -170,7 +173,7 @@ class DBot {
                 window.Blockly.derivWorkspace = this.workspace;
 
                 const varDB = new window.Blockly.Names('window');
-                varDB.variableMap = window.Blockly.derivWorkspace.getVariableMap();
+                varDB.variableMap = this.workspace.getVariableMap();
 
                 window.Blockly.JavaScript.variableDB_ = varDB;
 

@@ -116,14 +116,14 @@ type VisibleSignalCard = {
 };
 
 const tradeOnlyTone = (candidate: AutoSignalCandidate | null) => {
-    if (candidate?.strategy === 'UNDER' && candidate.barrier != null && candidate.barrier >= 1 && candidate.barrier <= 3) {
-        return 'under';
+    if (candidate?.strategy === 'UNDER' && (candidate.barrier === 4 || candidate.barrier === 5)) {
+        return 'pink';
     }
-    if (candidate?.strategy === 'OVER' && candidate.barrier != null && candidate.barrier >= 4 && candidate.barrier <= 5) {
-        return 'over';
+    if (candidate?.strategy === 'OVER' && candidate.barrier != null && candidate.barrier >= 1 && candidate.barrier <= 3) {
+        return 'burgundy';
     }
-    if (candidate?.strategy === 'OVER' && candidate.barrier != null && candidate.barrier >= 6 && candidate.barrier <= 8) {
-        return 'high-over';
+    if (candidate?.strategy === 'UNDER' && candidate.barrier != null && candidate.barrier >= 6 && candidate.barrier <= 8) {
+        return 'blue';
     }
     return 'default';
 };
@@ -234,7 +234,10 @@ function MarketCard({
     };
 
     return (
-        <article className={`as-market-card as-market-card--${candidate?.state ?? 'no-signal'}`} data-testid={`card-market-${cardId}`}>
+        <article
+            className={`as-market-card as-market-card--${candidate?.state ?? 'no-signal'} as-market-card--tone-${tradeTone}`}
+            data-testid={`card-market-${cardId}`}
+        >
             <div className='as-card-run-control' data-testid={`run-count-control-${cardId}`}>
                 <label htmlFor={`input-suggested-runs-${cardId}`}>SUGGESTED RUNS</label>
                 <NumberField
@@ -419,12 +422,20 @@ function MarketCard({
                         Trade Only <small>{tradeOnlyDescription}</small>
                     </button>
                     {candidate.strategy === 'OVER' && (
-                        <button type='button' onClick={() => void startTrade('over-dt')}>
+                        <button
+                            className={`as-trade-choice__dt as-trade-choice__dt--${tradeTone}`}
+                            type='button'
+                            onClick={() => void startTrade('over-dt')}
+                        >
                             Over DT <small>Use Ahmed OVER DT Oppo Killer</small>
                         </button>
                     )}
                     {candidate.strategy === 'UNDER' && (
-                        <button type='button' onClick={() => void startTrade('under-dt')}>
+                        <button
+                            className={`as-trade-choice__dt as-trade-choice__dt--${tradeTone}`}
+                            type='button'
+                            onClick={() => void startTrade('under-dt')}
+                        >
                             Under DT <small>Use Ahmed UNDER DT Oppo Killer</small>
                         </button>
                     )}

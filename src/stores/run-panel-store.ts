@@ -7,7 +7,7 @@ import { contract_stages, TContractStage } from '@/constants/contract-stage';
 import { run_panel } from '@/constants/run-panel';
 import { ErrorTypes, MessageTypes, observer, unrecoverable_errors } from '@/external/bot-skeleton';
 import { getSelectedTradeType } from '@/external/bot-skeleton/scratch/utils';
-import { handleBackendError, isBackendError } from '@/utils/error-handler';
+import { getErrorMessage, handleBackendError, isBackendError } from '@/utils/error-handler';
 // import { journalError, switch_account_notification } from '@/utils/bot-notifications';
 import GTM from '@/utils/gtm';
 import { helpers } from '@/utils/store-helpers';
@@ -32,6 +32,7 @@ export default class RunPanelStore {
     core: TStores;
     disposeReactionsFn: () => void;
     timer: NodeJS.Timeout | null;
+    botListenersRegistered = false;
 
     constructor(root_store: RootStore, core: TStores) {
         makeObservable(this, {
@@ -166,6 +167,11 @@ export default class RunPanelStore {
     };
 
     onRunButtonClick = async () => {
+        // Run can be triggered from the toolbar, floating control, or an
+        // automated handoff. Ignore duplicate starts while the current run is
+        // active so a long press/repeated click cannot add subscriptions.
+        if (this.is_running || this.is_contract_buying_in_progress) return;
+
         // The shared execution context can still name the last automated page
         // after the user navigates back to the visible Bot Builder. Refresh it
         // for ordinary workspace runs, while preserving contexts set by
@@ -178,6 +184,7 @@ export default class RunPanelStore {
         if (window.sendRequestsStatistic) {
             performance.clearMeasures();
             // Log is sent every 10 seconds for 5 minutes
+            if (this.timer) clearInterval(this.timer);
             this.timer = setInterval(() => {
                 window.sendRequestsStatistic(true);
                 performance.clearMeasures();
@@ -476,6 +483,7 @@ export default class RunPanelStore {
     };
 
     registerBotListeners = () => {
+        if (this.botListenersRegistered) return;
         const { summary_card, transactions } = this.root_store;
 
         observer.register('bot.running', this.onBotRunningEvent);
@@ -491,6 +499,7 @@ export default class RunPanelStore {
         observer.register('bot.stop_button_click', this.onStopBotClick);
         observer.register('Error', this.onError);
         observer.register('bot.setPurchaseInProgress', this.SetpurchaseInProgress);
+        this.botListenersRegistered = true;
     };
 
     SetpurchaseInProgress = () => {
@@ -611,7 +620,7 @@ export default class RunPanelStore {
 
     onBotReadyEvent = () => {
         this.setIsRunning(false);
-        observer.unregisterAll('bot.bot_ready');
+        observer.unregister('bot.bot_ready', this.onBotReadyEvent);
     };
 
     onBotTradeAgain = (is_trade_again: boolean) => {
@@ -698,7 +707,7 @@ export default class RunPanelStore {
         }
 
         // Use localized error message if it's a backend error, otherwise fallback to original message
-        let error_message = error?.message;
+        let error_message = getErrorMessage(error);
         if (isBackendError(error)) {
             error_message = handleBackendError(error);
         } else if (error?.code && typeof error.code === 'string') {
@@ -779,15 +788,30 @@ export default class RunPanelStore {
     };
 
     unregisterBotListeners = () => {
-        observer.unregisterAll('bot.running');
-        observer.unregisterAll('bot.stop');
-        observer.unregisterAll('bot.click_stop');
-        observer.unregisterAll('bot.stop_button_click');
-        observer.unregisterAll('bot.trade_again');
-        observer.unregisterAll('contract.status');
-        observer.unregisterAll('bot.contract');
-        observer.unregisterAll('Error');
-        observer.unregisterAll('bot.setPurchaseInProgress');
+        if (!this.botListenersRegistered) return;
+        const listenerBindings: Array<[string, (...args: any[]) => any]> = [
+            ['bot.running', this.onBotRunningEvent],
+            ['bot.sell', this.onBotSellEvent],
+            ['bot.stop', this.onBotStopEvent],
+            ['bot.bot_ready', this.onBotReadyEvent],
+            ['bot.click_stop', this.onStopButtonClick],
+            ['bot.trade_again', this.onBotTradeAgain],
+            ['contract.status', this.onContractStatusEvent],
+            ['bot.contract', this.onBotContractEvent],
+            ['bot.contract', this.root_store.summary_card.onBotContractEvent],
+            ['bot.contract', this.root_store.transactions.onBotContractEvent],
+            ['bot.stop_button_click', this.onStopBotClick],
+            ['Error', this.onError],
+            ['bot.setPurchaseInProgress', this.SetpurchaseInProgress],
+        ];
+        listenerBindings.forEach(([event, handler]) => {
+            try {
+                observer.unregister(event, handler);
+            } catch {
+                // Observer event maps may already have been cleared during teardown.
+            }
+        });
+        this.botListenersRegistered = false;
     };
 
     setContractStage = (contract_stage: TContractStage) => {

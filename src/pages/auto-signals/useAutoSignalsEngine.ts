@@ -311,6 +311,15 @@ export const useAutoSignalsEngine = ({
     const [refreshToken, setRefreshToken] = useState(0);
     const runtimesRef = useRef(new Map<string, MarketRuntime>());
     const unsubscribeRef = useRef<Array<() => void>>([]);
+    const releaseScannerFeeds = useCallback(() => {
+        unsubscribeRef.current.splice(0).forEach((unsubscribe) => {
+            try {
+                unsubscribe();
+            } catch (error) {
+                console.warn('[Auto-Signals] Could not release a market tick feed:', error);
+            }
+        });
+    }, []);
     const generationRef = useRef(0);
     const isPreparingRunRef = useRef(false);
     const forceScoreRefreshRef = useRef(false);
@@ -427,8 +436,7 @@ export const useAutoSignalsEngine = ({
         setMessage('Loading open synthetic markets and attaching authenticated tick feeds…');
 
         const detachFeeds = () => {
-            unsubscribeRef.current.forEach((unsubscribe) => unsubscribe());
-            unsubscribeRef.current = [];
+            releaseScannerFeeds();
             runtimesRef.current.clear();
         };
 
@@ -573,7 +581,7 @@ export const useAutoSignalsEngine = ({
             dirtySymbolsRef.current.clear();
             flushQueuedRef.current = false;
         };
-    }, [authorized, connected, queueMarketRefresh, refreshToken, send, subscribeTicks]);
+    }, [authorized, connected, queueMarketRefresh, refreshToken, releaseScannerFeeds, send, subscribeTicks]);
 
     const onFamilyChange = useCallback((nextFamily: AutoSignalFamily) => {
         familyRef.current = nextFamily;
@@ -626,6 +634,7 @@ export const useAutoSignalsEngine = ({
         isPreparingRunRef.current = true;
         const bot = getAutoSignalBot(action, candidate);
         let builderHandoffStarted = false;
+        let signalValidatedAt: number | null = null;
         try {
             setMessage(`Preparing ${bot.name} for ${market.label}…`);
             const template = await loadAutoSignalTemplate(bot.file);
@@ -651,6 +660,21 @@ export const useAutoSignalsEngine = ({
             // removes client-added waits; it must not fan out duplicate orders.
             const purchasesPerTick = 1;
             const builderAlreadyMounted = isLiveBuilderWorkspace(getBlocklyWorkspace());
+            const handoffRuntime = runtimesRef.current.get(market.symbol) ?? runtime;
+            const handoffCandidate = handoffRuntime.candidates.find((item) => item.id === candidate.id);
+            signalValidatedAt = Date.now();
+            if (
+                !handoffCandidate
+                || !handoffRuntime.lastTickAt
+                || signalValidatedAt - handoffRuntime.lastTickAt > LIVE_TICK_STALE_MS
+                || handoffCandidate.expiresAt == null
+                || handoffCandidate.expiresAt <= signalValidatedAt
+            ) {
+                throw new Error('The signal is no longer live. Wait for the authenticated feed to rescan it.');
+            }
+            // Release Auto-Signals' multi-market streams before Bot Builder
+            // opens its own tick and contract subscriptions.
+            releaseScannerFeeds();
             if (!builderAlreadyMounted) {
                 (window as any).__pendingBotXml = configuredXml;
                 (window as any).__pendingBotName = bot.name;
@@ -672,11 +696,12 @@ export const useAutoSignalsEngine = ({
             }
             if (runPanel.is_running) throw new Error('Stop the currently running Bot Builder bot before loading another.');
 
-            const latestRuntime = runtimesRef.current.get(market.symbol);
+            const latestRuntime = runtimesRef.current.get(market.symbol) ?? runtime;
             const latestCandidate = latestRuntime?.candidates.find((item) => item.id === candidate.id);
-            const latestTickIsLive = latestRuntime?.lastTickAt != null
-                && Date.now() - latestRuntime.lastTickAt <= LIVE_TICK_STALE_MS;
-            if (!latestCandidate || latestCandidate.id !== candidate.id || !latestTickIsLive
+            const signalWasLiveAtHandoff = signalValidatedAt != null
+                && latestRuntime?.lastTickAt != null
+                && signalValidatedAt - latestRuntime.lastTickAt <= LIVE_TICK_STALE_MS;
+            if (!latestCandidate || latestCandidate.id !== candidate.id || !signalWasLiveAtHandoff
                 || latestCandidate.expiresAt == null || latestCandidate.expiresAt <= Date.now()) {
                 throw new Error('The signal changed while the bot was loading. Return to Auto-Signals and choose the latest signal.');
             }
@@ -739,6 +764,7 @@ export const useAutoSignalsEngine = ({
         currency,
         displayCurrency,
         queueMarketRefresh,
+        releaseScannerFeeds,
         runPanel,
         setActiveTab,
         settings,

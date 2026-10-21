@@ -117,6 +117,9 @@ export default class FlyoutStore implements IFlyoutStore {
 
     initFlyout() {
         const workspace = window.Blockly.derivWorkspace;
+        if (!workspace || typeof workspace.getVariableMap !== 'function') {
+            throw new Error('Bot Builder workspace is not ready to open the block flyout.');
+        }
 
         const flyoutWorkspaceOptions = new window.Blockly.Options({
             parentWorkspace: workspace,
@@ -138,7 +141,11 @@ export default class FlyoutStore implements IFlyoutStore {
         this.flyout.workspace_.getGesture = this.flyout.targetWorkspace.getGesture.bind(this.flyout.targetWorkspace_);
 
         // Get variables from the main workspace rather than the target workspace.
-        workspace.VariableMap = this.flyout.targetWorkspace.getVariableMap();
+        const targetWorkspace = this.flyout?.targetWorkspace;
+        if (!targetWorkspace || typeof targetWorkspace.getVariableMap !== 'function') {
+            throw new Error('Blockly could not attach the block flyout to the active workspace.');
+        }
+        workspace.VariableMap = targetWorkspace.getVariableMap();
 
         this.flyout.workspace_.createPotentialVariableMap();
     }

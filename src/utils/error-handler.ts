@@ -17,6 +17,21 @@ export interface ApiErrorResponse {
     msg_type?: string;
 }
 
+export const getErrorMessage = (error: any): string | undefined => {
+    const candidates = [
+        error?.message,
+        error?.details?.message,
+        error?.error?.message,
+        error?.response?.data?.error?.message,
+        error?.data?.error?.message,
+        error?.cause?.message,
+    ].filter((value): value is string => typeof value === 'string' && Boolean(value.trim()))
+        .map((value) => value.trim());
+    return candidates.find((value) =>
+        !/^(an error occurred\. please try again\.|a general error has occurred\.?)$/i.test(value),
+    ) || candidates[0];
+};
+
 /**
  * Handles backend errors and returns localized error messages
  * @param error - The error object from backend
@@ -24,13 +39,13 @@ export interface ApiErrorResponse {
  */
 export const handleBackendError = (error: BackendError): string => {
     if (!error?.code) {
-        return error?.message || getLocalizedErrorMessage('GeneralError');
+        return getErrorMessage(error) || getLocalizedErrorMessage('GeneralError');
     }
 
     // Handle code_args format specifically for parameter replacement
     let details: Record<string, any> = {
         ...(error.details || {}),
-        ...(error.message ? { message: error.message } : {}),
+        ...(getErrorMessage(error) ? { message: getErrorMessage(error) } : {}),
     };
     if (details.code_args && Array.isArray(details.code_args)) {
         // Convert code_args array to parameter object for easier processing

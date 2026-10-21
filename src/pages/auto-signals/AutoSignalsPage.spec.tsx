@@ -186,15 +186,16 @@ describe('Auto-Signals trade actions', () => {
         expect(screen.getByTestId('input-setting-stake1')).toBeInTheDocument();
     });
 
-    it('colors Trade Only by the selected Over/Under barrier bands', () => {
+    it('colors the matching signal cards and Trade Only choices by the selected Over/Under barrier bands', () => {
         const colorCases = [
-            { strategy: 'UNDER' as const, barrier: 1, label: 'Under', contractType: 'DIGITUNDER', direction: 'under' as const, tone: 'under' },
-            { strategy: 'UNDER' as const, barrier: 3, label: 'Under', contractType: 'DIGITUNDER', direction: 'under' as const, tone: 'under' },
-            { strategy: 'OVER' as const, barrier: 4, label: 'Over', contractType: 'DIGITOVER', direction: 'over' as const, tone: 'over' },
-            { strategy: 'OVER' as const, barrier: 5, label: 'Over', contractType: 'DIGITOVER', direction: 'over' as const, tone: 'over' },
-            { strategy: 'OVER' as const, barrier: 6, label: 'Over', contractType: 'DIGITOVER', direction: 'over' as const, tone: 'high-over' },
-            { strategy: 'OVER' as const, barrier: 7, label: 'Over', contractType: 'DIGITOVER', direction: 'over' as const, tone: 'high-over' },
-            { strategy: 'OVER' as const, barrier: 8, label: 'Over', contractType: 'DIGITOVER', direction: 'over' as const, tone: 'high-over' },
+            { strategy: 'UNDER' as const, barrier: 4, label: 'Under', contractType: 'DIGITUNDER', direction: 'under' as const, tone: 'pink' },
+            { strategy: 'UNDER' as const, barrier: 5, label: 'Under', contractType: 'DIGITUNDER', direction: 'under' as const, tone: 'pink' },
+            { strategy: 'OVER' as const, barrier: 1, label: 'Over', contractType: 'DIGITOVER', direction: 'over' as const, tone: 'burgundy' },
+            { strategy: 'OVER' as const, barrier: 2, label: 'Over', contractType: 'DIGITOVER', direction: 'over' as const, tone: 'burgundy' },
+            { strategy: 'OVER' as const, barrier: 3, label: 'Over', contractType: 'DIGITOVER', direction: 'over' as const, tone: 'burgundy' },
+            { strategy: 'UNDER' as const, barrier: 6, label: 'Under', contractType: 'DIGITUNDER', direction: 'under' as const, tone: 'blue' },
+            { strategy: 'UNDER' as const, barrier: 7, label: 'Under', contractType: 'DIGITUNDER', direction: 'under' as const, tone: 'blue' },
+            { strategy: 'UNDER' as const, barrier: 8, label: 'Under', contractType: 'DIGITUNDER', direction: 'under' as const, tone: 'blue' },
         ];
         const markets = colorCases.map((item, index) => {
             const symbol = `R_${index + 10}`;
@@ -218,8 +219,18 @@ describe('Auto-Signals trade actions', () => {
 
         colorCases.forEach((item, index) => {
             const symbol = `R_${index + 10}`;
+            const card = screen.getByTestId(`card-market-${symbol}-${item.strategy}-${item.barrier}`);
             expect(screen.getByTestId(`button-trade-only-${symbol}-${item.strategy}-${item.barrier}`))
                 .toHaveClass(`as-button--trade-only-${item.tone}`);
+            expect(card).toHaveClass(`as-market-card--tone-${item.tone}`);
+            fireEvent.click(screen.getByTestId(`button-trade-only-${symbol}-${item.strategy}-${item.barrier}`));
+            const dialog = screen.getByRole('dialog', { name: new RegExp(`${item.label} bot`) });
+            expect(within(dialog).getByRole('button', { name: /Trade Only/ }))
+                .toHaveClass(`as-button--trade-only-${item.tone}`);
+            const dtName = item.strategy === 'OVER' ? /Over DT/ : /Under DT/;
+            expect(within(dialog).getByRole('button', { name: dtName }))
+                .toHaveClass(`as-trade-choice__dt--${item.tone}`);
+            fireEvent.click(within(dialog).getByRole('button', { name: /Cancel/ }));
         });
     });
 
