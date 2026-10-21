@@ -57,6 +57,12 @@ After an Auto-Signals bot is handed to Bot Builder, keep Bot Builder selected an
 
 **How to apply:** once the handoff switches to Builder, do not route back to Auto-Signals or close the drawer when the run starts or fails; preserve the shared run-session observer across the tab unmount.
 
+Before handing a bot to Bot Builder, release Auto-Signals' multi-market tick streams and retain the validated runtime snapshot until the handoff finishes.
+
+**Why:** Auto-Signals holds one feed per scanned market on the authenticated API connection. Keeping those feeds while Bot Builder opens its own subscriptions can contribute to the reported subscription limit; the live failure was not reproduced.
+
+**How to apply:** call each returned unsubscribe once before switching tabs, validate against the captured runtime snapshot, and keep effect cleanup safe to call afterward.
+
 Matches must predict the next target digit conditional on the current entry digit: choose the pair on the first 70% of the 1,000-tick window and validate it on the held-out final 30%. The Matches Trade Only handoff uses Ahmed SYN Even/Odd Market Killer v1.2, sets its exact target barrier, gates every purchase on the selected entry digit, and carries the card's edited suggested run count into the bot's run cap.
 
 **Why:** Marginal digit frequency does not identify which target follows the current digit; the user asked for more accurate Matches predictions and the named bot.
