@@ -32,3 +32,17 @@ For run errors, distinguish a failed attempt from an unknown open trade:
 retry without changing the loss count only when no purchase was sent, and wait
 for settlement or stop safely if a purchase was already sent. Never treat a
 cycle with no settled contract as a win or loss.
+
+Before starting an XML cycle, require both the RunPanel and api_base to be idle:
+RunPanel silently ignores onRunButtonClick while a run or purchase is active.
+Wrap the call in Promise.resolve().then(...) so synchronous Blockly/RunPanel
+errors reach the cycle's error handler. The XML loader must verify the live
+workspace exposes getVariableMap and contains the loaded trade_definition,
+before_purchase, and after_purchase blocks before reporting success.
+
+**Why:** a RunPanel no-op or a workspace that has not finished initializing can
+look like a valid terminal entry while no purchase is ever sent.
+
+**How to apply:** keep idle-state checks in the shared XML run path, report
+purchase_sent/purchase_received explicitly, and fail closed on an unready or
+rejected workspace rather than waiting for the trade-stall timeout.

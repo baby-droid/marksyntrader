@@ -1290,12 +1290,12 @@ const BotDetail: React.FC<{
         ultraTurbo?: boolean;
         onSettled: (info: { profit: number; won: boolean; market: string; buyPrice: number; exitDigit: number | null; consLoss: number }) => void;
         onLog: (msg: string, kind?: string) => void;
-    }): Promise<{ forceStopped: boolean; reason: 'tp' | 'sl' | 'loss_limit' | null; cycleProfit: number; consLoss: number; lastWon: boolean; retryNextCycle?: boolean; aborted?: boolean }> => {
+    }): Promise<{ forceStopped: boolean; reason: 'tp' | 'sl' | 'loss_limit' | null; cycleProfit: number; consLoss: number; lastWon: boolean; retryNextCycle?: boolean; aborted?: boolean; abortReason?: 'engine-busy' | 'run-not-started' | 'unknown-settlement' }> => {
         return new Promise(resolve => { (async () => {
             const rp: any = store?.run_panel;
             if (!rp?.onRunButtonClick) {
                 params.onLog('⚠ Bot Builder is not ready — stopping this run instead of executing a stale strategy.', 'error');
-                resolve({ forceStopped: false, reason: null, cycleProfit: 0, consLoss: params.priorConsLoss || 0, lastWon: false, aborted: true });
+                resolve({ forceStopped: false, reason: null, cycleProfit: 0, consLoss: params.priorConsLoss || 0, lastWon: false, aborted: true, abortReason: 'run-not-started' });
                 return;
             }
 
@@ -1313,25 +1313,25 @@ const BotDetail: React.FC<{
                ULTRA TURBO / ULTRA FAST caps this at 300 ms — enough for normal
                teardown but tight enough to catch the digit window before the
                next tick. */
-            const teardownMax = params.ultraTurbo ? 50 : (isFastExecutionEnabledForContext() ? 150 : 3000);
+            const teardownMax = params.ultraTurbo ? 300 : (isFastExecutionEnabledForContext() ? 500 : 3000);
+            const isRunnerBusy = () => Boolean(
+                api_base.is_stopping ||
+                api_base.is_running ||
+                rp.is_running ||
+                rp.is_contract_buying_in_progress
+            );
             const teardownStart = Date.now();
-            while (api_base.is_stopping && Date.now() - teardownStart < teardownMax) {
+            while (isRunnerBusy() && Date.now() - teardownStart < teardownMax) {
                 await new Promise(r => setTimeout(r, 20));
             }
 
-            /* ── Guard: engine still tearing down after timeout ──
-               If api_base.is_stopping is still true after teardownMax, calling
-               onRunButtonClick now would silently no-op (runBot() bails while
-               is_stopping is set). No contract would ever fire, the 45 s stall
-               timer would resolve with lastWon=true (phantom win since seen.size===0),
-               and the outer loop would break — killing the martingale chain and
-               making the stop button appear unresponsive for 45 s.
-               Fix: abort this cycle immediately and return retryNextCycle=true so
-               the outer loop skips martingale escalation and retries on the next
-               iteration until the engine is free. */
-            if (api_base.is_stopping) {
-                params.onLog('⚠ ENGINE_BUSY — previous bot still tearing down, retrying...', 'hack');
-                resolve({ forceStopped: false, reason: null, cycleProfit: 0, consLoss: params.priorConsLoss || 0, lastWon: false, retryNextCycle: true });
+            /* RunPanel silently ignores onRunButtonClick while either a bot run or
+               purchase is active. Check both its state and the lower-level API
+               state first, otherwise a valid terminal signal can become a
+               45-second no-trade stall. */
+            if (isRunnerBusy()) {
+                params.onLog('⛔ BOT_BUILDER_BUSY — no trade was sent. Stop the other run or wait for its purchase to finish, then start the scalper again.', 'error');
+                resolve({ forceStopped: false, reason: null, cycleProfit: 0, consLoss: params.priorConsLoss || 0, lastWon: false, aborted: true, abortReason: 'engine-busy' });
                 return;
             }
 
@@ -1363,6 +1363,7 @@ const BotDetail: React.FC<{
             let stopReceived = false;
             let retryNextCycle = false;
             let aborted = false;
+            let abortReason: 'engine-busy' | 'run-not-started' | 'unknown-settlement' | undefined;
             let stallTimer: ReturnType<typeof setTimeout> | null = null;
 
             const cleanup = () => {
@@ -1376,11 +1377,19 @@ const BotDetail: React.FC<{
                 if (settled) return;
                 settled = true;
                 cleanup();
-                resolve({ forceStopped, reason, cycleProfit, consLoss, lastWon, retryNextCycle, aborted });
+                resolve({ forceStopped, reason, cycleProfit, consLoss, lastWon, retryNextCycle, aborted, abortReason });
             };
             const onContractStatus = (status: any) => {
-                if (status?.id === 'contract.purchase_sent' || status?.id === 'contract.purchase_received') {
+                if (status?.id === 'contract.purchase_sent') {
                     purchaseStarted = true;
+                    params.onLog('🛒 XML_PURCHASE_SENT — Deriv received the scalper purchase request.', 'entry');
+                } else if (status?.id === 'contract.purchase_received') {
+                    purchaseStarted = true;
+                    const buyPrice = Number(status?.buy?.buy_price);
+                    params.onLog(
+                        `✅ XML_PURCHASE_CONFIRMED${Number.isFinite(buyPrice) && buyPrice > 0 ? ` — stake ${buyPrice.toFixed(2)}` : ''}`,
+                        'entry'
+                    );
                 }
             };
             const onContract = (contract: any) => {
@@ -1460,7 +1469,20 @@ const BotDetail: React.FC<{
             globalObserver.register('contract.status', onContractStatus);
             globalObserver.register('Error', onError);
 
-            Promise.resolve(rp.onRunButtonClick()).catch(err => onError(err));
+            Promise.resolve().then(() => rp.onRunButtonClick()).then(() => {
+                /* The RunPanel action resolves immediately when shouldRunBot()
+                   rejects an empty/invalid workspace, and also silently returns
+                   if its busy guard wins a race after our preflight check. Starting
+                   through a promise callback also catches synchronous Blockly errors
+                   thrown by shouldRunBot instead of leaving this cycle unresolved. */
+                if (settled) return;
+                if (!rp.is_running && !api_base.is_running && !purchaseStarted) {
+                    params.onLog('⛔ XML_RUN_NOT_STARTED — Bot Builder rejected the run; no trade was sent.', 'error');
+                    aborted = true;
+                    abortReason = 'run-not-started';
+                    finish();
+                }
+            }).catch(err => onError(err));
 
             /* Stall guard — if neither bot.contract nor bot.stop fires within the
                timeout the trade is hung (network issue, Blockly not ready, etc.).
@@ -1480,6 +1502,7 @@ const BotDetail: React.FC<{
                         // The API accepted a buy request but no settlement arrived.
                         // Stop the session rather than risk duplicating an open trade.
                         aborted = true;
+                        abortReason = 'unknown-settlement';
                         params.onLog('⛔ SETTLEMENT_UNKNOWN — run stopped to prevent a duplicate purchase.', 'error');
                     } else {
                         // No purchase was sent — don't count a win or loss.
@@ -2647,7 +2670,13 @@ const BotDetail: React.FC<{
                 if (stopRef.current) break;
                 setEntryReady(false);
                 if (cycle.aborted) {
-                    addLog('⛔ RUN_ABORTED — the trade result is unknown; stop and check the account before restarting.', 'error');
+                    if (cycle.abortReason === 'engine-busy') {
+                        addLog('⛔ SCALPER_STOPPED — Bot Builder is occupied; no scalper trade was sent. Stop the other bot and run this scalper again.', 'error');
+                    } else if (cycle.abortReason === 'run-not-started') {
+                        addLog('⛔ SCALPER_STOPPED — Bot Builder did not start the loaded Rise/Fall XML. Reload the scalper bot before trying again.', 'error');
+                    } else {
+                        addLog('⛔ RUN_ABORTED — the trade result is unknown; stop and check the account before restarting.', 'error');
+                    }
                     break;
                 }
 
@@ -4328,27 +4357,45 @@ const ScalperBots: React.FC = observer(() => {
     });
 
     /* Robust XML loader — tries the store API first, falls back to direct Blockly DOM inject.
-       Returns true when the workspace was successfully updated. */
+       Returns true only after the live workspace is ready and contains this bot. */
     const loadXmlIntoWorkspace = useCallback(async (xml: string, name: string): Promise<boolean> => {
+        const B = (window as any).Blockly;
+        const workspace = B?.derivWorkspace;
+        if (
+            !workspace ||
+            typeof workspace.getVariableMap !== 'function' ||
+            typeof workspace.getAllBlocks !== 'function'
+        ) return false;
+
+        const hasLoadedBot = () => {
+            try {
+                if (workspace.strategy_to_load !== xml) return false;
+                const types = new Set<string>(workspace.getAllBlocks(false).map((block: any) => block.type));
+                return types.has('trade_definition') &&
+                    types.has('before_purchase') &&
+                    types.has('after_purchase');
+            } catch {
+                return false;
+            }
+        };
+
         // Attempt 1: store's loadStrategyToBuilder (handles unsupported elements gracefully)
         const lm: any = store?.load_modal;
         if (lm?.loadStrategyToBuilder) {
             try {
                 await lm.loadStrategyToBuilder({ id: name, xml, name, save_type: 'unsaved' }, false);
-                return true;
+                if (hasLoadedBot()) return true;
             } catch { /* fall through to direct Blockly approach */ }
         }
         // Attempt 2: direct Blockly workspace injection (bypasses unsupported-element validation)
         try {
-            const B = (window as any).Blockly;
-            if (!B?.derivWorkspace) return false;
             const dom = B.Xml.textToDom(xml);
-            try { B.derivWorkspace.asyncClear?.(); } catch {}
-            B.Xml.domToWorkspace(dom, B.derivWorkspace);
-            B.derivWorkspace.strategy_to_load = xml;
-            try { B.svgResize?.(B.derivWorkspace); } catch {}
-            try { B.derivWorkspace.scrollCenter?.(); } catch {}
-            return true;
+            try { await workspace.asyncClear?.(); } catch {}
+            B.Xml.domToWorkspace(dom, workspace);
+            workspace.strategy_to_load = xml;
+            try { B.svgResize?.(workspace); } catch {}
+            try { workspace.scrollCenter?.(); } catch {}
+            return hasLoadedBot();
         } catch { return false; }
     }, [store]);
 
