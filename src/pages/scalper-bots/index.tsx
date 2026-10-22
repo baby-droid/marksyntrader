@@ -514,7 +514,9 @@ function checkEntry(
     barrier: number | null,
     prices?: number[],  // raw price window (newest first) — used for Rise/Fall
 ): boolean {
-    if (digits.length < 5) return false;
+    const hasRiseFallPriceWindow =
+        (contractType === 'CALL' || contractType === 'PUT') && Boolean(prices && prices.length >= 4);
+    if (digits.length < 5 && !hasRiseFallPriceWindow) return false;
     const recent = digits.slice(0, 10);
 
     switch (contractType) {
@@ -1110,9 +1112,9 @@ const BotDetail: React.FC<{
     bot: TScalperBot;
     derivTrade: ReturnType<typeof useDerivTrade>;
     onBack: () => void;
-    onLoadXml: (bot: TScalperBot) => Promise<void>;
+    onLoadXml: (bot: TScalperBot) => Promise<boolean>;
     onLoadAndRun: (bot: TScalperBot) => Promise<void>;
-     onPreloadXml: (bot: TScalperBot, opts?: { market?: string; duration?: number; duration_unit?: 't' | 's' }) => Promise<void>;
+    onPreloadXml: (bot: TScalperBot, opts?: { market?: string; duration?: number; duration_unit?: 't' | 's' }) => Promise<boolean>;
 }> = ({ bot, derivTrade, onBack, onLoadXml, onLoadAndRun, onPreloadXml }) => {
     const store = useStore();
 
@@ -1263,9 +1265,9 @@ const BotDetail: React.FC<{
     }, [store, setWorkspaceMarket]);
 
     /* Trigger the real Bot Builder Run button with zero artificial delay and
-       await this run cycle's outcome. The XML bot's own before_purchase /
-       after_purchase / trade_again blocks own the actual buy + martingale —
-       this only (a) syncs market/stake/martingale/prediction into the
+       await this run cycle's outcome. The XML before_purchase / after_purchase
+       blocks own the actual buy and stake updates; the terminal owns recovery
+       and restarts the XML only after a fresh entry signal. This only (a) syncs market/stake/martingale/prediction into the
        workspace right before firing, (b) listens to every settled contract
        via globalObserver('bot.contract') so the terminal log stays accurate,
        and (c) force-stops the XML bot the moment a terminal-level guard
@@ -1288,10 +1290,14 @@ const BotDetail: React.FC<{
         ultraTurbo?: boolean;
         onSettled: (info: { profit: number; won: boolean; market: string; buyPrice: number; exitDigit: number | null; consLoss: number }) => void;
         onLog: (msg: string, kind?: string) => void;
-    }): Promise<{ forceStopped: boolean; reason: 'tp' | 'sl' | 'loss_limit' | null; cycleProfit: number; consLoss: number; lastWon: boolean; retryNextCycle?: boolean }> => {
+    }): Promise<{ forceStopped: boolean; reason: 'tp' | 'sl' | 'loss_limit' | null; cycleProfit: number; consLoss: number; lastWon: boolean; retryNextCycle?: boolean; aborted?: boolean }> => {
         return new Promise(resolve => { (async () => {
             const rp: any = store?.run_panel;
-            if (!rp?.onRunButtonClick) { resolve({ forceStopped: false, reason: null, cycleProfit: 0, consLoss: params.priorConsLoss || 0, lastWon: true }); return; }
+            if (!rp?.onRunButtonClick) {
+                params.onLog('⚠ Bot Builder is not ready — stopping this run instead of executing a stale strategy.', 'error');
+                resolve({ forceStopped: false, reason: null, cycleProfit: 0, consLoss: params.priorConsLoss || 0, lastWon: false, aborted: true });
+                return;
+            }
 
             /* ── Wait out any in-flight teardown from the PREVIOUS forced stop ──
                globalObserver emits 'bot.stop' from inside terminateSession()
@@ -1349,28 +1355,40 @@ const BotDetail: React.FC<{
             const seen = new Set<number | string>();
             let cycleProfit = 0;
             let consLoss = params.priorConsLoss || 0;
-            let lastWon = true;   // updated on every settled contract; false = last trade was a loss
+            let lastWon = false;  // stays false until a contract actually settles
             let forceStopped = false;
             let reason: 'tp' | 'sl' | 'loss_limit' | null = null;
             let settled = false;
+            let purchaseStarted = false;
+            let stopReceived = false;
+            let retryNextCycle = false;
+            let aborted = false;
             let stallTimer: ReturnType<typeof setTimeout> | null = null;
 
             const cleanup = () => {
                 if (stallTimer) { clearTimeout(stallTimer); stallTimer = null; }
                 try { globalObserver.unregister('bot.contract', onContract); } catch {}
                 try { globalObserver.unregister('bot.stop', onStop); } catch {}
+                try { globalObserver.unregister('contract.status', onContractStatus); } catch {}
                 try { globalObserver.unregister('Error', onError); } catch {}
             };
             const finish = () => {
                 if (settled) return;
                 settled = true;
                 cleanup();
-                resolve({ forceStopped, reason, cycleProfit, consLoss, lastWon });
+                resolve({ forceStopped, reason, cycleProfit, consLoss, lastWon, retryNextCycle, aborted });
+            };
+            const onContractStatus = (status: any) => {
+                if (status?.id === 'contract.purchase_sent' || status?.id === 'contract.purchase_received') {
+                    purchaseStarted = true;
+                }
             };
             const onContract = (contract: any) => {
                 if (!contract || !isEnded(contract)) return;
                 const cid = contract.contract_id ?? contract.transaction_ids?.buy ?? contract.transaction_id;
                 if (cid != null) { if (seen.has(cid)) return; seen.add(cid); }
+                purchaseStarted = false;
+                aborted = false;
                 const profit = applyCommission(Number(contract.profit) || 0);
                 const won = profit > 0;
                 const exitDigit = contract.exit_tick != null ? getLastDigit(Number(contract.exit_tick), Number(contract.pip_size ?? 2)) : null;
@@ -1388,9 +1406,9 @@ const BotDetail: React.FC<{
                 const lossLimitHit = params.stopOnLoss && consLoss >= params.consecutiveLossLimit;
 
                 if (!won) {
-                    /* Always stop the XML bot after every single loss — the terminal owns the
-                       full martingale + market-switch recovery loop. The XML's trade_again
-                       block must NOT run on loss; each new scan cycle is a fresh controlled entry. */
+                    /* Always stop the XML bot after every single loss — the terminal owns
+                       martingale + market-switch recovery. Each new XML run is a fresh,
+                       controlled entry after the scanner finds another signal. */
                     if (tpHit || slHit || lossLimitHit) {
                         forceStopped = true;
                         reason = tpHit ? 'tp' : slHit ? 'sl' : 'loss_limit';
@@ -1403,8 +1421,10 @@ const BotDetail: React.FC<{
                     try { rp.onStopButtonClick?.(); } catch {}
                 }
                 // Win without guard: XML stops naturally → bot.stop → onStop → finish()
+                if (stopReceived) finish();
             };
             const onStop = () => {
+                stopReceived = true;
                 /* Safety net: if bot.stop fires before ANY contract has settled in
                    this cycle, it is almost certainly the previous cycle's residual
                    event leaking through (the drain delay above catches most cases
@@ -1418,11 +1438,26 @@ const BotDetail: React.FC<{
             };
             const onError = (err: any) => {
                 params.onLog(`⚠ ${err?.message || err?.error?.message || 'Bot engine error — stopping cycle.'}`, 'error');
+                if (seen.size > 0) {
+                    finish();
+                    return;
+                }
+                try { rp.onStopButtonClick?.(); } catch {}
+                if (purchaseStarted) {
+                    // A buy request was already sent. Keep listening for its settlement,
+                    // and never retry it as a fresh trade while its outcome is unknown.
+                    params.onLog('⚠ BUY_REQUEST_PENDING — waiting for settlement; no duplicate trade will be sent.', 'error');
+                    return;
+                }
+                lastWon = false;
+                retryNextCycle = true;
+                params.onLog('↻ NO_PURCHASE_CONFIRMED — preserving stake and waiting for a fresh tick before retry.', 'hack');
                 finish();
             };
 
             globalObserver.register('bot.contract', onContract);
             globalObserver.register('bot.stop', onStop);
+            globalObserver.register('contract.status', onContractStatus);
             globalObserver.register('Error', onError);
 
             Promise.resolve(rp.onRunButtonClick()).catch(err => onError(err));
@@ -1441,9 +1476,16 @@ const BotDetail: React.FC<{
                 params.onLog(`⚠ TRADE_STALL — no trade response in ${params.ultraTurbo ? '10' : '45'}s, aborting cycle.`, 'error');
                 try { rp.onStopButtonClick?.(); } catch {}
                 if (seen.size === 0) {
-                    // No contract was ever placed — don't count as a win.
-                    // The outer loop will retry (or stop cleanly if stopRef is set).
-                    lastWon = false;
+                    if (purchaseStarted) {
+                        // The API accepted a buy request but no settlement arrived.
+                        // Stop the session rather than risk duplicating an open trade.
+                        aborted = true;
+                        params.onLog('⛔ SETTLEMENT_UNKNOWN — run stopped to prevent a duplicate purchase.', 'error');
+                    } else {
+                        // No purchase was sent — don't count a win or loss.
+                        lastWon = false;
+                        retryNextCycle = true;
+                    }
                 }
                 setTimeout(finish, 1500); // give bot.stop one last chance to fire cleanly
             }, stallMs);
@@ -1503,6 +1545,8 @@ const BotDetail: React.FC<{
     /* Supersonic scanning — the tick subscriber calls this to wake the scan
        loop immediately on every new tick instead of polling on a fixed timer. */
     const tickSignalRef   = useRef<(() => void) | null>(null);
+    const tickSequenceRef = useRef(0);
+    const lastEntryAttemptSequenceRef = useRef(0);
     /* Hard execution gate used during cool-off. Tick subscriptions and all
        terminal analysis continue, but no real XML run may cross this gate. */
     const realExecutionLockedRef = useRef(false);
@@ -1639,6 +1683,7 @@ const BotDetail: React.FC<{
         priceWindowRef.current = [];
         setDigitDisplay([]);
         const unsub = derivTrade.subscribeTicks(market, tick => {
+            tickSequenceRef.current += 1;
             const ps = tick.pip_size ?? 2;
             const d = tick.digit != null ? tick.digit : getLastDigit(tick.quote, ps);
             digitWindowRef.current = [d, ...digitWindowRef.current].slice(0, 50);
@@ -1684,6 +1729,8 @@ const BotDetail: React.FC<{
             if (multiUnsubsRef.current.has(market)) return;
             multiWindowsRef.current.set(market, []);
             const unsub = derivTrade.subscribeTicks(market, tick => {
+                tickSequenceRef.current += 1;
+                lastTickAtRef.current = Date.now();
                 const d = tick.digit != null ? tick.digit : getLastDigit(tick.quote, tick.pip_size ?? 2);
                 const win = [d, ...(multiWindowsRef.current.get(market) || [])].slice(0, 50);
                 multiWindowsRef.current.set(market, win);
@@ -1694,6 +1741,7 @@ const BotDetail: React.FC<{
                         lastFiredGroupRef.current = r.group ?? null;
                     }
                 }
+                if (tickSignalRef.current) { tickSignalRef.current(); tickSignalRef.current = null; }
             });
             multiUnsubsRef.current.set(market, unsub);
         });
@@ -1752,6 +1800,7 @@ const BotDetail: React.FC<{
         // Record which page + bot is trading so Report can display it
         setTradeContext({ page: 'Scalper Bots', bot: bot.name });
         stopRef.current    = false;
+        lastEntryAttemptSequenceRef.current = tickSequenceRef.current;
         consLossRef.current = 0;
         sessionPnlRef.current = 0;
         marketIdxRef.current  = 0;
@@ -1968,7 +2017,16 @@ const BotDetail: React.FC<{
         /* ── FRESH XML RELOAD every time Run is pressed ──
            Await the load so the workspace is ready before the first trade fires. */
         addLog('📂 LOADING BOT STRATEGY...', 'hack');
-        try { await onPreloadXml(bot, { market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit }); } catch { /* non-fatal */ }
+        let xmlLoaded = false;
+        try {
+            xmlLoaded = await onPreloadXml(bot, { market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit });
+        } catch { /* handled below */ }
+        if (!xmlLoaded) {
+            addLog('⛔ XML_LOAD_FAILED — scalper stopped; no trade was sent and the previous workspace was not used.', 'error');
+            if (tickUnsubRef.current) { tickUnsubRef.current(); tickUnsubRef.current = null; }
+            setRunning(false);
+            return;
+        }
         patchWorkspaceParams({ duration: cfg.duration, duration_unit: cfg.duration_unit });
         // Re-apply market with staggered delays so it lands AFTER dbot's async
         // submarket onChange reloads the SYMBOL_LIST options (Bear/Bull/Jump need this).
@@ -2178,14 +2236,23 @@ const BotDetail: React.FC<{
                         lastFiredGroupRef.current = null;
                         subscribeMarket(curMarket);
                         addLog(`⏱ SCAN_TIMEOUT — no entry in 2 min | rotating → ${curMarket} | reloading XML...`, 'switch');
-                        try { await onPreloadXml(bot, { market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit }); } catch { /* non-fatal */ }
+                        const reloaded = await onPreloadXml(bot, { market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit });
+                        if (!reloaded) {
+                            addLog('⛔ XML_RELOAD_FAILED — stopping instead of trading with the previous market strategy.', 'error');
+                            stopRef.current = true;
+                            break;
+                        }
                         patchWorkspaceParams({ market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit });
                         { const rm = curMarket; setTimeout(() => patchWorkspaceParams({ market: rm }), 500); setTimeout(() => patchWorkspaceParams({ market: rm }), 1000); }
                         marketSwitched = true;
                         break;
                     }
 
-                    if (multiScan) {
+                    const hasFreshEntryTick = multiScan
+                        || tickSequenceRef.current > lastEntryAttemptSequenceRef.current;
+                    if (!hasFreshEntryTick) {
+                        entry = false;
+                    } else if (multiScan) {
                         if (readyMarketRef.current) {
                             curMarket = readyMarketRef.current;
                             readyMarketRef.current = null;
@@ -2491,8 +2558,9 @@ const BotDetail: React.FC<{
                 }
 
                 /* ── Fire the REAL Bot Builder XML bot ──
-                   The loaded XML owns the actual buy plus its own martingale /
-                   trade_again recovery loop; this call only (a) syncs market,
+                   The loaded XML owns the actual buy plus stake updates; the
+                   terminal owns martingale/recovery between XML runs. This call only
+                   (a) syncs market,
                    stake, martingale size and barrier into the workspace right
                    before triggering, (b) mirrors every settled contract into this
                    terminal log/summary, and (c) force-stops the XML bot the
@@ -2500,6 +2568,7 @@ const BotDetail: React.FC<{
                    consecutive-loss limit) is breached — guards the XML itself
                    has no knowledge of. There is exactly ONE buyer: the XML bot. */
                 const activeBarrier = slotBarrier();
+                lastEntryAttemptSequenceRef.current = tickSequenceRef.current;
                 addLog(`📂 XML_RUN_TRIGGER: ${contractLabel(bot)} @ ${curMarket} | stake ${curStake.toFixed(2)} | mart x${slotMartingale()} | barrier ${activeBarrier ?? 'auto'}`, 'hack');
 
                 const effectiveLossLimit = lastFiredGroupRef.current
@@ -2512,7 +2581,7 @@ const BotDetail: React.FC<{
                 const tradeCount = bot.multiple ? Math.max(1, cfg.multiTradeCount || 1) : 1;
                 if (tradeCount > 1) addLog(`📊 MULTI_CONTRACT: executing ${tradeCount} contracts on this entry signal`, 'hack');
 
-                let cycle = { forceStopped: false, reason: null as 'tp' | 'sl' | 'loss_limit' | null, cycleProfit: 0, consLoss: 0, lastWon: true };
+                let cycle = { forceStopped: false, reason: null as 'tp' | 'sl' | 'loss_limit' | null, cycleProfit: 0, consLoss: 0, lastWon: false, retryNextCycle: false, aborted: false };
                 const { isFastExecutionEnabled: isFastNow } = await import('@/utils/execution-speed');
                 for (let _ci = 0; _ci < tradeCount && !stopRef.current; _ci++) {
                     if (_ci > 0 && !stopRef.current) {
@@ -2572,11 +2641,15 @@ const BotDetail: React.FC<{
                             }
                         },
                     });
-                    if (cycle.forceStopped) break; // TP/SL hit — stop multi-contract loop
+                    if (cycle.forceStopped || cycle.retryNextCycle || cycle.aborted) break;
                 }
 
                 if (stopRef.current) break;
                 setEntryReady(false);
+                if (cycle.aborted) {
+                    addLog('⛔ RUN_ABORTED — the trade result is unknown; stop and check the account before restarting.', 'error');
+                    break;
+                }
 
                 /* ── Guard-triggered stops ── */
                 if (cycle.forceStopped) {
@@ -2686,7 +2759,12 @@ const BotDetail: React.FC<{
                         curMarketRef.current = curMarket;
                         addLog(`🔀 MARKET_2_SWITCH → ${curMarket} | stake ${curStake.toFixed(2)} | barrier ${slotBarrier()} | martingale ×${slotMartingale()} (${totalConsLoss} losses)`, 'switch');
                         /* Reload XML with new market and duration */
-                        try { await onPreloadXml(bot, { market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit }); } catch { /* non-fatal */ }
+                        const reloaded = await onPreloadXml(bot, { market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit });
+                        if (!reloaded) {
+                            addLog('⛔ XML_RELOAD_FAILED — stopping instead of trading with the previous market strategy.', 'error');
+                            stopRef.current = true;
+                            break;
+                        }
                         patchWorkspaceParams({ market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit });
                         { const rm = curMarket; setTimeout(() => patchWorkspaceParams({ market: rm }), 500); setTimeout(() => patchWorkspaceParams({ market: rm }), 1000); }
                         continue; // re-scan on Market 2 with updated stake
@@ -2702,7 +2780,12 @@ const BotDetail: React.FC<{
                         curMarketRef.current = curMarket;
                         addLog(`🔀 MARKET_SWITCH → ${curMarket} | stake ${curStake.toFixed(2)} | martingale ×${slotMartingale()} (${totalConsLoss} losses, threshold: ${cfg.switchOnLosses})`, 'switch');
                         /* Reload XML with new market and sync ticks duration */
-                        try { await onPreloadXml(bot, { market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit }); } catch { /* non-fatal */ }
+                        const reloaded = await onPreloadXml(bot, { market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit });
+                        if (!reloaded) {
+                            addLog('⛔ XML_RELOAD_FAILED — stopping instead of trading with the previous market strategy.', 'error');
+                            stopRef.current = true;
+                            break;
+                        }
                         patchWorkspaceParams({ market: curMarket, duration: cfg.duration, duration_unit: cfg.duration_unit });
                         { const rm = curMarket; setTimeout(() => patchWorkspaceParams({ market: rm }), 500); setTimeout(() => patchWorkspaceParams({ market: rm }), 1000); }
                         continue; // re-scan on new market with martingale stake
@@ -4278,7 +4361,7 @@ const ScalperBots: React.FC = observer(() => {
         }
     }, [store]);
 
-    const handleLoadXml = useCallback(async (bot: TScalperBot) => {
+    const handleLoadXml = useCallback(async (bot: TScalperBot): Promise<boolean> => {
         try {
             const res = await fetch(bot.xmlFile);
             if (!res.ok) throw new Error(`Failed to fetch ${bot.xmlFile}`);
@@ -4292,21 +4375,26 @@ const ScalperBots: React.FC = observer(() => {
                 ok = await loadXmlIntoWorkspace(xml, bot.name);
                 if (!ok) await new Promise(r => setTimeout(r, 100));
             }
-        } catch { store?.dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING); }
+            return ok;
+        } catch (error) {
+            console.error(`Unable to load scalper XML for ${bot.name}.`, error);
+            store?.dashboard?.setActiveTab?.(DBOT_TABS.AHMED_LEARNING);
+            return false;
+        }
     }, [store, loadXmlIntoWorkspace]);
 
     const handleLoadAndRun = useCallback(async (bot: TScalperBot) => {
-        await handleLoadXml(bot);
-        setTimeout(() => autoRun(), 900);
+        const loaded = await handleLoadXml(bot);
+        if (loaded) setTimeout(() => autoRun(), 900);
     }, [handleLoadXml, autoRun]);
 
     /* Silently sync the Bot Builder workspace with this bot's default XML.
        Retries up to 30 times (3 s total) so multi-scalper XML loads even
        when Blockly is initialising in the background. */
-    const handlePreloadXml = useCallback(async (bot: TScalperBot, opts?: { market?: string; duration?: number; duration_unit?: 't' | 's' }) => {
+    const handlePreloadXml = useCallback(async (bot: TScalperBot, opts?: { market?: string; duration?: number; duration_unit?: 't' | 's' }): Promise<boolean> => {
         try {
             const res = await fetch(bot.xmlFile);
-            if (!res.ok) return;
+            if (!res.ok) throw new Error(`Failed to fetch ${bot.xmlFile} (${res.status})`);
             let xml = await res.text();
             // Patch XML with current market + duration before loading into workspace
             if (opts?.market || opts?.duration != null) {
@@ -4320,7 +4408,12 @@ const ScalperBots: React.FC = observer(() => {
                     ok = await loadXmlIntoWorkspace(xml, bot.name);
                 }
             }
-        } catch { /* non-fatal — terminal engine trades independently */ }
+            if (!ok) throw new Error('Blockly workspace did not accept the scalper XML.');
+            return true;
+        } catch (error) {
+            console.error(`Unable to preload scalper XML for ${bot.name}.`, error);
+            return false;
+        }
     }, [loadXmlIntoWorkspace]);
 
     if (selectedBot) {

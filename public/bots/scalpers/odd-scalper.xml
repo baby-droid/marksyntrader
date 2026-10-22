@@ -25,7 +25,7 @@
                           <field name="TIME_MACHINE_ENABLED">FALSE</field>
                           <next>
                             <block type="trade_definition_restartonerror" id="tdrestarterr1" deletable="false" movable="false">
-                              <field name="RESTARTONERROR">TRUE</field>
+                              <field name="RESTARTONERROR">FALSE</field>
                             </block>
                           </next>
                         </block>
