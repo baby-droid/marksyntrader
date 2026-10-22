@@ -36,6 +36,25 @@ type TxRecord = {
     virtual?: boolean;  // true = simulated virtual-hook trade (no real money placed)
 };
 
+type TerminalLogEntry = { t: string; msg: string; kind: string };
+const terminalLogKey = (botKey: string) => `scalper-terminal-log:${botKey}:v1`;
+const readTerminalLogs = (botKey: string): TerminalLogEntry[] => {
+    try {
+        const saved = JSON.parse(window.sessionStorage.getItem(terminalLogKey(botKey)) || '[]');
+        if (!Array.isArray(saved)) return [];
+        return saved
+            .filter((line): line is TerminalLogEntry =>
+                !!line &&
+                typeof line.t === 'string' &&
+                typeof line.msg === 'string' &&
+                typeof line.kind === 'string'
+            )
+            .slice(0, 300);
+    } catch {
+        return [];
+    }
+};
+
 type RiskManagerConfig = {
     inject: boolean;
     active: boolean;
@@ -962,6 +981,41 @@ function groupRecoveryLimit(g: StrategyOrGroup): number {
     return Math.min(...g.conditions.map(c => c.recoveryLimit));
 }
 
+function describeStrategySet(groups: StrategyOrGroup[], inRecovery: boolean): string {
+    return groups.map((group, groupIndex) => {
+        const conditions = group.conditions.map(cond => {
+            const count = Math.max(1, inRecovery ? cond.recoveryLimit : cond.ifLast);
+            const barrier = ['OVER', 'UNDER', 'MATCHES', 'DIFFERS'].includes(cond.digitsIs)
+                ? ` ${cond.digitValue}`
+                : '';
+            let detail = `${cond.algorithm} ${cond.digitsIs}${barrier}`;
+            switch (cond.algorithm) {
+                case 'LDP':
+                case 'NDP':
+                    detail += ` across ${count} tick${count === 1 ? '' : 's'} (${cond.strict ? 'strict' : 'majority'})`;
+                    break;
+                case 'Touches':
+                    detail += `, ${cond.touches} touch${cond.touches === 1 ? '' : 'es'} in ${count} ticks`;
+                    break;
+                case 'Market Percentage':
+                    detail += `, at least ${cond.percentageThreshold}% of ${cond.ifLast} ticks`;
+                    break;
+                case 'Sequence Radar':
+                    detail += `, ${(cond.sequenceType || 'alternating').toUpperCase()} in ${cond.ifLast} ticks`;
+                    break;
+                case 'Complex Patterns':
+                    detail += `, ${(cond.complexPattern || 'high-low').toUpperCase()} over ${cond.ifLast} ticks`;
+                    break;
+                case 'Entry Point Pattern':
+                    detail += `, ${(cond.sensitivity || 'medium').toUpperCase()} sensitivity`;
+                    break;
+            }
+            return detail;
+        });
+        return `G${groupIndex + 1} [${conditions.join(' AND ')}]`;
+    }).join(' OR ');
+}
+
 /* ─── Map Deriv symbol → Blockly SUBMARKET_LIST value ─── *
    Values must match what the Deriv active_symbols API returns as submarket names.
    Blockly populates its SUBMARKET_LIST dropdown directly from those API values,
@@ -1519,7 +1573,7 @@ const BotDetail: React.FC<{
     const [running, setRunning] = useState(false);
     const [scanning, setScanning] = useState(false); // terminal scanning without trading
     const [tab, setTab]         = useState<'summary' | 'transactions' | 'journal'>('summary');
-    const [terminal, setTerminal] = useState<{ t: string; msg: string; kind: string }[]>([]);
+    const [terminal, setTerminal] = useState<TerminalLogEntry[]>(() => readTerminalLogs(bot.key));
     const [txList, setTxList]   = useState<TxRecord[]>([]);
     const [displayCur, setDisplayCur] = useState(getDisplayCurrency());
     const [loadingXml, setLoadingXml] = useState(false);
@@ -1598,6 +1652,11 @@ const BotDetail: React.FC<{
     const publishedHookIdsRef = useRef<Set<number>>(new Set());
 
     useEffect(() => subscribeCurrency(() => setDisplayCur(getDisplayCurrency())), []);
+    useEffect(() => {
+        try {
+            window.sessionStorage.setItem(terminalLogKey(bot.key), JSON.stringify(terminal.slice(0, 300)));
+        } catch { /* session storage may be disabled or full */ }
+    }, [bot.key, terminal]);
     useEffect(() => { setActiveMarket(cfg.market); }, [cfg.market]);
 
     const summary = useMemo(() => {
@@ -1633,8 +1692,12 @@ const BotDetail: React.FC<{
     const ts = () => new Date().toLocaleTimeString('en', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
     const addLog = useCallback((msg: string, kind = 'info') => {
-        setTerminal(prev => [{ t: ts(), msg, kind }, ...prev].slice(0, 300));
-    }, []);
+        const entry = { t: ts(), msg, kind };
+        setTerminal(prev => [entry, ...prev].slice(0, 300));
+        if (['entry', 'error', 'start', 'win', 'loss', 'stop'].includes(kind)) {
+            console.info(`[Scalper:${bot.key}] ${msg}`);
+        }
+    }, [bot.key]);
 
     useEffect(() => {
         if (termRef.current) termRef.current.scrollTop = 0;
@@ -1819,9 +1882,16 @@ const BotDetail: React.FC<{
 
     /* ── Start bot (with real tick entry detection) ── */
     const startBot = useCallback(async () => {
-        if (running || !derivTrade.authorized) return;
+        if (running) {
+            addLog('RUN_BLOCKED — this scalper session is already running.', 'error');
+            return;
+        }
+        if (!derivTrade.authorized) {
+            addLog('RUN_BLOCKED — connect and authorize a Deriv account before starting this scalper.', 'error');
+            return;
+        }
         // Record which page + bot is trading so Report can display it
-        setTradeContext({ page: 'Scalper Bots', bot: bot.name });
+        try { setTradeContext({ page: 'Scalper Bots', bot: bot.name }); } catch {}
         stopRef.current    = false;
         lastEntryAttemptSequenceRef.current = tickSequenceRef.current;
         consLossRef.current = 0;
@@ -1838,7 +1908,10 @@ const BotDetail: React.FC<{
         setWinPopup(null);
         setCoolOffStatus(null);
         realExecutionLockedRef.current = false;
-        addLog(`🟢 LIVE ACCOUNT EXECUTION: ${getMasterSource().toUpperCase()} — VPS/session controls active`, 'start');
+        addLog(`▶ RUN_REQUEST_ACCEPTED — starting ${bot.name}.`, 'start');
+        let accountSource = 'UNKNOWN';
+        try { accountSource = String(getMasterSource() || 'unknown').toUpperCase(); } catch {}
+        addLog(`🟢 LIVE ACCOUNT EXECUTION: ${accountSource} — VPS/session controls active`, 'start');
 
         /* Determine market list — the MARKET field in Trade Parameters is always the
            starting market; the Market Switcher's added markets are additional
@@ -2076,6 +2149,12 @@ const BotDetail: React.FC<{
             try {
                 /* ── Scan for entry signal ── */
                 addLog(`📡 SCANNING → ${multiScan ? marketList.join(', ') : curMarket} | ${contractLabel(bot)}`, 'scan');
+                if (bot.contractType === 'CALL' || bot.contractType === 'PUT') {
+                    const strategyMode = cfg.strategyLogic.active && cfg.strategyLogic.groups.length > 0
+                        ? `configured set logic (${cfg.strategyLogic.groups.length} group${cfg.strategyLogic.groups.length === 1 ? '' : 's'})`
+                        : `default ${bot.contractType === 'CALL' ? 'three falling-price' : 'three rising-price'} entry rule`;
+                    addLog(`ENTRY_RULE: ${bot.contractType === 'CALL' ? 'RISE / CALL' : 'FALL / PUT'} uses ${strategyMode}.`, 'scan');
+                }
                 setEntryReady(false);
 
                 /* Track when we started scanning on the current market.
@@ -2324,7 +2403,22 @@ const BotDetail: React.FC<{
                         /* Periodic status messages — kept light so they don't flood the log */
                         if (scanTick % 3 === 1) {
                             const recent = digitWindowRef.current.slice(0, 20).join(', ');
-                            if (recent) {
+                            if (bot.contractType === 'CALL' || bot.contractType === 'PUT') {
+                                const pricePath = priceWindowRef.current
+                                    .slice(0, 4)
+                                    .reverse()
+                                    .map(price => String(price))
+                                    .join(' → ');
+                                const logicMode = cfg.strategyLogic.active && cfg.strategyLogic.groups.length > 0
+                                    ? `configured set logic (${cfg.strategyLogic.groups.length} group${cfg.strategyLogic.groups.length === 1 ? '' : 's'})`
+                                    : bot.contractType === 'CALL'
+                                        ? 'three consecutive falling prices'
+                                        : 'three consecutive rising prices';
+                                addLog(
+                                    `ENTRY_CHECK: no ${bot.contractType === 'CALL' ? 'RISE' : 'FALL'} setup yet | ${logicMode} | oldest→newest prices: ${pricePath || 'waiting for price ticks'}`,
+                                    'scan'
+                                );
+                            } else if (recent) {
                                 addLog(`STREAM: ${recent}  ← latest left`, 'scan');
                             } else {
                                 const staleSec = Math.round((Date.now() - lastTickAtRef.current) / 1000);
@@ -4208,7 +4302,11 @@ const BotDetail: React.FC<{
                         <div className='sb-terminal__body' ref={termRef}>
                             {terminal.length === 0 ? (
                                 <div className='sb-terminal__idle'>
-                                    {running ? '> Initializing scanner...' : '> Idle — press RUN to start market scan'}
+                                    {running
+                                        ? '> Initializing scanner...'
+                                        : !derivTrade.authorized
+                                            ? '> Waiting for Deriv authorization — RUN is disabled until the account connects'
+                                            : '> Idle — press RUN to start market scan'}
                                 </div>
                             ) : terminal.map((e, i) => (
                                 <div key={i} className={`sb-terminal__line ${e.kind}`}>
@@ -4466,6 +4564,7 @@ const ScalperBots: React.FC = observer(() => {
     if (selectedBot) {
         return (
             <BotDetail
+                key={selectedBot.key}
                 bot={selectedBot}
                 derivTrade={derivTrade}
                 onBack={() => setSelectedBot(null)}
